@@ -110,6 +110,7 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
         'Tests Run',
         'Attacks Successful',
         'Attack Success Rate (%)',
+        'Status',
       ],
     ];
 
@@ -142,59 +143,126 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
               }
             });
 
-            // Add tested plugins
-            Array.from(expandedPlugins)
-              .filter((plugin) => categoryStats[plugin] && categoryStats[plugin].total > 0)
-              .forEach((plugin) => {
-                const stats = categoryStats[plugin];
-                const pluginSeverity =
-                  riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] ||
-                  Severity.Low;
-                const pluginName =
-                  displayNameOverrides[plugin as keyof typeof displayNameOverrides] ||
-                  categoryAliases[plugin as keyof typeof categoryAliases] ||
-                  plugin;
-                const attacksSuccessful = stats.total - stats.pass;
-                const asr = ((attacksSuccessful / stats.total) * 100).toFixed(2);
+            // Categorize plugins into tested and untested
+            const testedPlugins = Array.from(expandedPlugins).filter(
+              (plugin) => categoryStats[plugin] && categoryStats[plugin].total > 0,
+            );
+            const untestedPlugins = Array.from(expandedPlugins).filter(
+              (plugin) => !categoryStats[plugin] || categoryStats[plugin].total === 0,
+            );
 
-                csvRows.push([
-                  framework,
-                  `${categoryNumber}. ${categoryName}`,
-                  pluginName,
-                  pluginSeverity,
-                  stats.total.toString(),
-                  attacksSuccessful.toString(),
-                  asr,
-                ]);
-              });
+            // Add tested plugins
+            testedPlugins.forEach((plugin) => {
+              const stats = categoryStats[plugin];
+              const pluginSeverity =
+                riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] ||
+                Severity.Low;
+              const pluginName =
+                displayNameOverrides[plugin as keyof typeof displayNameOverrides] ||
+                categoryAliases[plugin as keyof typeof categoryAliases] ||
+                plugin;
+              const attacksSuccessful = stats.total - stats.pass;
+              const asr = ((attacksSuccessful / stats.total) * 100).toFixed(2);
+              const status = stats.pass / stats.total >= pluginPassRateThreshold ? 'Pass' : 'Fail';
+
+              csvRows.push([
+                framework,
+                `${categoryNumber}. ${categoryName}`,
+                pluginName,
+                pluginSeverity,
+                stats.total.toString(),
+                attacksSuccessful.toString(),
+                asr,
+                status,
+              ]);
+            });
+
+            // Add untested plugins
+            untestedPlugins.forEach((plugin) => {
+              const pluginSeverity =
+                riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] ||
+                Severity.Low;
+              const pluginName =
+                displayNameOverrides[plugin as keyof typeof displayNameOverrides] ||
+                categoryAliases[plugin as keyof typeof categoryAliases] ||
+                plugin;
+
+              csvRows.push([
+                framework,
+                `${categoryNumber}. ${categoryName}`,
+                pluginName,
+                pluginSeverity,
+                '0',
+                '0',
+                '0',
+                'Not Tested',
+              ]);
+            });
           },
         );
       } else {
         // Add data for other frameworks (without categories)
-        Object.keys(categoryStats)
-          .filter((plugin) => categoryStats[plugin].total > 0)
-          .forEach((plugin) => {
-            const stats = categoryStats[plugin];
-            const pluginSeverity =
-              riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] ||
-              Severity.Low;
-            const pluginName =
-              displayNameOverrides[plugin as keyof typeof displayNameOverrides] ||
-              categoryAliases[plugin as keyof typeof categoryAliases] ||
-              plugin;
-            const attacksSuccessful = stats.total - stats.pass;
-            const asr = ((attacksSuccessful / stats.total) * 100).toFixed(2);
-
-            csvRows.push([
-              framework,
-              'N/A',
-              pluginName,
-              pluginSeverity,
-              stats.total.toString(),
-              attacksSuccessful.toString(),
-              asr,
-            ]);
+        // First get all plugins defined for this framework
+        const frameworkPlugins = new Set<string>();
+        if (ALIASED_PLUGIN_MAPPINGS[framework]) {
+          Object.values(ALIASED_PLUGIN_MAPPINGS[framework]).forEach(({ plugins }) => {
+            plugins.forEach((plugin) => {
+              if (plugin === 'harmful') {
+                // Add all harmful:* plugins
+                Object.keys(categoryStats)
+                  .filter((key) => key.startsWith('harmful:'))
+                  .forEach((key) => frameworkPlugins.add(key));
+              } else {
+                frameworkPlugins.add(plugin);
+              }
+            });
           });
+        }
+
+        // Categorize plugins
+        const testedPlugins = Array.from(frameworkPlugins).filter(
+          (plugin) => categoryStats[plugin] && categoryStats[plugin].total > 0,
+        );
+        const untestedPlugins = Array.from(frameworkPlugins).filter(
+          (plugin) => !categoryStats[plugin] || categoryStats[plugin].total === 0,
+        );
+
+        // Add tested plugins
+        testedPlugins.forEach((plugin) => {
+          const stats = categoryStats[plugin];
+          const pluginSeverity =
+            riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] || Severity.Low;
+          const pluginName =
+            displayNameOverrides[plugin as keyof typeof displayNameOverrides] ||
+            categoryAliases[plugin as keyof typeof categoryAliases] ||
+            plugin;
+          const attacksSuccessful = stats.total - stats.pass;
+          const asr = ((attacksSuccessful / stats.total) * 100).toFixed(2);
+          const status = stats.pass / stats.total >= pluginPassRateThreshold ? 'Pass' : 'Fail';
+
+          csvRows.push([
+            framework,
+            'N/A',
+            pluginName,
+            pluginSeverity,
+            stats.total.toString(),
+            attacksSuccessful.toString(),
+            asr,
+            status,
+          ]);
+        });
+
+        // Add untested plugins
+        untestedPlugins.forEach((plugin) => {
+          const pluginSeverity =
+            riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] || Severity.Low;
+          const pluginName =
+            displayNameOverrides[plugin as keyof typeof displayNameOverrides] ||
+            categoryAliases[plugin as keyof typeof categoryAliases] ||
+            plugin;
+
+          csvRows.push([framework, 'N/A', pluginName, pluginSeverity, '0', '0', '0', 'Not Tested']);
+        });
       }
     });
 
@@ -346,17 +414,27 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
       (plugin) => categoryStats[plugin] && categoryStats[plugin].total > 0,
     );
 
-    // Count compliant plugins
-    const compliantPlugins = pluginsWithData.filter(
-      (plugin) =>
-        categoryStats[plugin].pass / categoryStats[plugin].total >= pluginPassRateThreshold,
-    ).length;
+    // Count compliant plugins and calculate actual attack success rate
+    let totalTests = 0;
+    let totalFailedTests = 0;
+    const compliantPlugins = pluginsWithData.filter((plugin) => {
+      const stats = categoryStats[plugin];
+      totalTests += stats.total;
+      totalFailedTests += stats.total - stats.pass;
+      return stats.pass / stats.total >= pluginPassRateThreshold;
+    }).length;
+
+    // Calculate the true attack success rate based on all test runs
+    const attackSuccessRate = totalTests > 0 ? (totalFailedTests / totalTests) * 100 : 0;
 
     return {
       total: pluginsWithData.length,
       compliant: compliantPlugins,
       percentage:
         pluginsWithData.length > 0 ? (compliantPlugins / pluginsWithData.length) * 100 : 0,
+      attackSuccessRate,
+      failedTests: totalFailedTests,
+      totalTests,
     };
   }, [categoryStats, pluginPassRateThreshold]);
 
@@ -410,14 +488,14 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
         <CardContent>
           <Box display="flex" alignItems="center" sx={{ mb: 1 }}>
             <Typography variant="subtitle1" color="textSecondary">
-              {(100 - pluginComplianceStats.percentage).toFixed(0)}% Attack Success Rate (
-              {pluginComplianceStats.total - pluginComplianceStats.compliant}/
-              {pluginComplianceStats.total} plugins)
+              {pluginComplianceStats.attackSuccessRate.toFixed(1)}% Attack Success Rate (
+              {pluginComplianceStats.failedTests}/{pluginComplianceStats.totalTests} tests failed
+              across {pluginComplianceStats.total} plugins)
             </Typography>
           </Box>
           <LinearProgress
             variant="determinate"
-            value={100 - pluginComplianceStats.percentage} // Show attack success rate (failure rate)
+            value={pluginComplianceStats.attackSuccessRate} // Show attack success rate (failure rate)
             sx={{
               mb: 3,
               height: 8,
@@ -425,7 +503,7 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
               backgroundColor: 'rgba(0, 0, 0, 0.1)',
               '& .MuiLinearProgress-bar': {
                 borderRadius: 4,
-                backgroundColor: getProgressColor(100 - pluginComplianceStats.percentage, true), // Invert color scale
+                backgroundColor: getProgressColor(pluginComplianceStats.attackSuccessRate, true), // Invert color scale
               },
             }}
           />
@@ -483,7 +561,7 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
                         {(framework === 'owasp:api' || framework === 'owasp:llm') &&
                         Object.keys(ALIASED_PLUGIN_MAPPINGS[framework]).length > 0 ? (
                           // Show categorized plugins for OWASP frameworks
-                          <>
+                          <div>
                             {Object.entries(ALIASED_PLUGIN_MAPPINGS[framework]).map(
                               ([categoryId, { plugins: categoryPlugins }]) => {
                                 const categoryNumber = categoryId.split(':').pop();
@@ -507,37 +585,48 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
                                   }
                                 });
 
-                                // Filter to plugins with test data
-                                const testedPlugins = Array.from(expandedPlugins).filter(
-                                  (plugin) =>
-                                    categoryStats[plugin] && categoryStats[plugin].total > 0,
-                                );
-
-                                // Split plugins into compliant and non-compliant
+                                // Categorize all plugins: tested-compliant, tested-non-compliant, and not-tested
                                 const compliantCategoryPlugins: string[] = [];
                                 const nonCompliantCategoryPlugins: string[] = [];
+                                const untestedPlugins: string[] = [];
 
-                                testedPlugins.forEach((plugin) => {
-                                  const stats = categoryStats[plugin];
-                                  if (stats.pass / stats.total >= pluginPassRateThreshold) {
-                                    compliantCategoryPlugins.push(plugin);
+                                // Process all plugins in the category
+                                Array.from(expandedPlugins).forEach((plugin) => {
+                                  // Check if plugin has test data
+                                  if (categoryStats[plugin] && categoryStats[plugin].total > 0) {
+                                    // Plugin was tested
+                                    const stats = categoryStats[plugin];
+                                    if (stats.pass / stats.total >= pluginPassRateThreshold) {
+                                      compliantCategoryPlugins.push(plugin);
+                                    } else {
+                                      nonCompliantCategoryPlugins.push(plugin);
+                                    }
                                   } else {
-                                    nonCompliantCategoryPlugins.push(plugin);
+                                    // Plugin was not tested
+                                    untestedPlugins.push(plugin);
                                   }
                                 });
 
-                                // Sort both sets by severity and pass rate
+                                // Sort all sets by severity
                                 const sortedNonCompliantItems = sortedNonCompliantPlugins(
                                   nonCompliantCategoryPlugins,
                                 );
                                 const sortedCompliantItems =
                                   sortedNonCompliantPlugins(compliantCategoryPlugins);
+                                const sortedUntestedItems =
+                                  sortedNonCompliantPlugins(untestedPlugins);
 
-                                // Are all plugins compliant or not tested?
+                                // Get all tested plugins
+                                const testedPlugins = [
+                                  ...compliantCategoryPlugins,
+                                  ...nonCompliantCategoryPlugins,
+                                ];
+
+                                // Are all plugins compliant or are there no tested plugins?
                                 const allCompliant =
                                   testedPlugins.length > 0 &&
                                   nonCompliantCategoryPlugins.length === 0;
-                                const notTested = testedPlugins.length === 0;
+                                const noTestedPlugins = testedPlugins.length === 0;
 
                                 return (
                                   <Box
@@ -557,7 +646,7 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
                                       sx={{
                                         bgcolor: 'rgba(0, 0, 0, 0.05)',
                                         borderBottom:
-                                          allCompliant || notTested
+                                          allCompliant || noTestedPlugins
                                             ? 'none'
                                             : '1px solid rgba(0, 0, 0, 0.08)',
                                       }}
@@ -565,9 +654,10 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
                                       <Typography variant="subtitle2">
                                         {categoryNumber}. {categoryName}
                                       </Typography>
-                                      {notTested ? (
+                                      {testedPlugins.length === 0 &&
+                                      untestedPlugins.length === 0 ? (
                                         <Chip
-                                          label="Not Tested"
+                                          label="No Plugins"
                                           size="small"
                                           sx={{
                                             backgroundColor: '#9e9e9e',
@@ -576,12 +666,19 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
                                             height: 20,
                                           }}
                                         />
-                                      ) : allCompliant ? (
+                                      ) : testedPlugins.length > 0 ? (
                                         <Chip
-                                          label="0%"
+                                          label={
+                                            nonCompliantCategoryPlugins.length === 0
+                                              ? '0% ASR'
+                                              : `${Math.round((nonCompliantCategoryPlugins.length / testedPlugins.length) * 100)}% ASR`
+                                          }
                                           size="small"
                                           sx={{
-                                            backgroundColor: '#4caf50',
+                                            backgroundColor:
+                                              nonCompliantCategoryPlugins.length === 0
+                                                ? '#4caf50'
+                                                : '#f44336',
                                             color: 'white',
                                             fontSize: '0.7rem',
                                             height: 20,
@@ -589,10 +686,10 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
                                         />
                                       ) : (
                                         <Chip
-                                          label={`${Math.round((nonCompliantCategoryPlugins.length / testedPlugins.length) * 100)}%`}
+                                          label={`${untestedPlugins.length} Untested`}
                                           size="small"
                                           sx={{
-                                            backgroundColor: '#f44336',
+                                            backgroundColor: '#9e9e9e',
                                             color: 'white',
                                             fontSize: '0.7rem',
                                             height: 20,
@@ -601,165 +698,237 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
                                       )}
                                     </Box>
 
-                                    {!notTested && (
-                                      <List dense sx={{ py: 0 }}>
-                                        {/* Failed plugins first */}
-                                        {sortedNonCompliantItems.length > 0 && (
+                                    <List dense sx={{ py: 0 }}>
+                                      {/* Failed plugins first */}
+                                      {sortedNonCompliantItems.length > 0 && (
+                                        <ListItem
+                                          sx={{
+                                            py: 0.5,
+                                            px: 1,
+                                            bgcolor: 'rgba(244, 67, 54, 0.05)',
+                                          }}
+                                        >
+                                          <Typography
+                                            variant="caption"
+                                            fontWeight="bold"
+                                            color="error.main"
+                                          >
+                                            Failed:
+                                          </Typography>
+                                        </ListItem>
+                                      )}
+                                      {sortedNonCompliantItems.map((plugin) => {
+                                        const passRate = getPluginPassRate(plugin);
+                                        const pluginSeverity =
+                                          riskCategorySeverityMap[
+                                            plugin as keyof typeof riskCategorySeverityMap
+                                          ] || Severity.Low;
+
+                                        return (
                                           <ListItem
+                                            key={plugin}
                                             sx={{
-                                              py: 0.5,
-                                              px: 1,
-                                              bgcolor: 'rgba(244, 67, 54, 0.05)',
+                                              borderLeft: `3px solid ${getSeverityColor(pluginSeverity)}`,
+                                              pl: 2,
+                                              mb: 0.5,
+                                              bgcolor: 'rgba(0, 0, 0, 0.02)',
+                                              borderRadius: '0 4px 4px 0',
                                             }}
                                           >
-                                            <Typography
-                                              variant="caption"
-                                              fontWeight="bold"
-                                              color="error.main"
-                                            >
-                                              Failed:
-                                            </Typography>
-                                          </ListItem>
-                                        )}
-                                        {sortedNonCompliantItems.map((plugin) => {
-                                          const passRate = getPluginPassRate(plugin);
-                                          const pluginSeverity =
-                                            riskCategorySeverityMap[
-                                              plugin as keyof typeof riskCategorySeverityMap
-                                            ] || Severity.Low;
-
-                                          return (
-                                            <ListItem
-                                              key={plugin}
-                                              sx={{
-                                                borderLeft: `3px solid ${getSeverityColor(pluginSeverity)}`,
-                                                pl: 2,
-                                                mb: 0.5,
-                                                bgcolor: 'rgba(0, 0, 0, 0.02)',
-                                                borderRadius: '0 4px 4px 0',
-                                              }}
-                                            >
-                                              <ListItemIcon sx={{ minWidth: 30 }}>
-                                                <CancelIcon fontSize="small" color="error" />
-                                              </ListItemIcon>
-                                              <ListItemText
-                                                primary={
-                                                  <Box
-                                                    display="flex"
-                                                    alignItems="center"
-                                                    justifyContent="space-between"
-                                                  >
-                                                    <Typography variant="body2">
-                                                      {displayNameOverrides[
-                                                        plugin as keyof typeof displayNameOverrides
+                                            <ListItemIcon sx={{ minWidth: 30 }}>
+                                              <CancelIcon fontSize="small" color="error" />
+                                            </ListItemIcon>
+                                            <ListItemText
+                                              primary={
+                                                <Box
+                                                  display="flex"
+                                                  alignItems="center"
+                                                  justifyContent="space-between"
+                                                >
+                                                  <Typography variant="body2">
+                                                    {displayNameOverrides[
+                                                      plugin as keyof typeof displayNameOverrides
+                                                    ] ||
+                                                      categoryAliases[
+                                                        plugin as keyof typeof categoryAliases
                                                       ] ||
-                                                        categoryAliases[
-                                                          plugin as keyof typeof categoryAliases
-                                                        ] ||
-                                                        plugin}
-                                                    </Typography>
-                                                    <Tooltip
-                                                      title={`${passRate.total - passRate.pass}/${passRate.total} attacks successful`}
+                                                      plugin}
+                                                  </Typography>
+                                                  <Tooltip
+                                                    title={`${passRate.total - passRate.pass}/${passRate.total} attacks successful`}
+                                                  >
+                                                    <Typography
+                                                      variant="caption"
+                                                      sx={{
+                                                        fontWeight: 'bold',
+                                                        color: 'error.main',
+                                                      }}
                                                     >
-                                                      <Typography
-                                                        variant="caption"
-                                                        sx={{
-                                                          fontWeight: 'bold',
-                                                          color: 'error.main',
-                                                        }}
-                                                      >
-                                                        {(100 - passRate.rate).toFixed(0)}%
-                                                      </Typography>
-                                                    </Tooltip>
-                                                  </Box>
-                                                }
-                                              />
-                                            </ListItem>
-                                          );
-                                        })}
+                                                      {(100 - passRate.rate).toFixed(0)}%
+                                                    </Typography>
+                                                  </Tooltip>
+                                                </Box>
+                                              }
+                                            />
+                                          </ListItem>
+                                        );
+                                      })}
 
-                                        {/* Passing plugins */}
-                                        {sortedCompliantItems.length > 0 && (
+                                      {/* Passing plugins */}
+                                      {sortedCompliantItems.length > 0 && (
+                                        <ListItem
+                                          sx={{
+                                            py: 0.5,
+                                            px: 1,
+                                            bgcolor: 'rgba(76, 175, 80, 0.05)',
+                                            mt: 1,
+                                          }}
+                                        >
+                                          <Typography
+                                            variant="caption"
+                                            fontWeight="bold"
+                                            color="success.main"
+                                          >
+                                            Passed:
+                                          </Typography>
+                                        </ListItem>
+                                      )}
+                                      {sortedCompliantItems.map((plugin) => {
+                                        const passRate = getPluginPassRate(plugin);
+                                        const pluginSeverity =
+                                          riskCategorySeverityMap[
+                                            plugin as keyof typeof riskCategorySeverityMap
+                                          ] || Severity.Low;
+
+                                        return (
+                                          <ListItem
+                                            key={plugin}
+                                            sx={{
+                                              borderLeft: `3px solid ${getSeverityColor(pluginSeverity)}`,
+                                              pl: 2,
+                                              mb: 0.5,
+                                              bgcolor: 'rgba(0, 0, 0, 0.01)',
+                                              borderRadius: '0 4px 4px 0',
+                                            }}
+                                          >
+                                            <ListItemIcon sx={{ minWidth: 30 }}>
+                                              <CheckCircleIcon fontSize="small" color="success" />
+                                            </ListItemIcon>
+                                            <ListItemText
+                                              primary={
+                                                <Box
+                                                  display="flex"
+                                                  alignItems="center"
+                                                  justifyContent="space-between"
+                                                >
+                                                  <Typography variant="body2">
+                                                    {displayNameOverrides[
+                                                      plugin as keyof typeof displayNameOverrides
+                                                    ] ||
+                                                      categoryAliases[
+                                                        plugin as keyof typeof categoryAliases
+                                                      ] ||
+                                                      plugin}
+                                                  </Typography>
+                                                  <Tooltip
+                                                    title={`${passRate.total - passRate.pass}/${passRate.total} attacks successful`}
+                                                  >
+                                                    <Typography
+                                                      variant="caption"
+                                                      sx={{
+                                                        fontWeight: 'bold',
+                                                        color: 'success.main',
+                                                      }}
+                                                    >
+                                                      {(100 - passRate.rate).toFixed(0)}%
+                                                    </Typography>
+                                                  </Tooltip>
+                                                </Box>
+                                              }
+                                            />
+                                          </ListItem>
+                                        );
+                                      })}
+
+                                      {/* Untested plugins */}
+                                      {sortedUntestedItems.length > 0 && (
+                                        <>
                                           <ListItem
                                             sx={{
                                               py: 0.5,
                                               px: 1,
-                                              bgcolor: 'rgba(76, 175, 80, 0.05)',
+                                              bgcolor: 'rgba(158, 158, 158, 0.1)',
                                               mt: 1,
                                             }}
                                           >
                                             <Typography
                                               variant="caption"
                                               fontWeight="bold"
-                                              color="success.main"
+                                              color="text.secondary"
                                             >
-                                              Passed:
+                                              Not Tested:
                                             </Typography>
                                           </ListItem>
-                                        )}
-                                        {sortedCompliantItems.map((plugin) => {
-                                          const passRate = getPluginPassRate(plugin);
-                                          const pluginSeverity =
-                                            riskCategorySeverityMap[
-                                              plugin as keyof typeof riskCategorySeverityMap
-                                            ] || Severity.Low;
+                                          {sortedUntestedItems.map((plugin) => {
+                                            const pluginSeverity =
+                                              riskCategorySeverityMap[
+                                                plugin as keyof typeof riskCategorySeverityMap
+                                              ] || Severity.Low;
 
-                                          return (
-                                            <ListItem
-                                              key={plugin}
-                                              sx={{
-                                                borderLeft: `3px solid ${getSeverityColor(pluginSeverity)}`,
-                                                pl: 2,
-                                                mb: 0.5,
-                                                bgcolor: 'rgba(0, 0, 0, 0.01)',
-                                                borderRadius: '0 4px 4px 0',
-                                              }}
-                                            >
-                                              <ListItemIcon sx={{ minWidth: 30 }}>
-                                                <CheckCircleIcon fontSize="small" color="success" />
-                                              </ListItemIcon>
-                                              <ListItemText
-                                                primary={
-                                                  <Box
-                                                    display="flex"
-                                                    alignItems="center"
-                                                    justifyContent="space-between"
-                                                  >
-                                                    <Typography variant="body2">
-                                                      {displayNameOverrides[
-                                                        plugin as keyof typeof displayNameOverrides
-                                                      ] ||
-                                                        categoryAliases[
-                                                          plugin as keyof typeof categoryAliases
-                                                        ] ||
-                                                        plugin}
-                                                    </Typography>
-                                                    <Tooltip
-                                                      title={`${passRate.total - passRate.pass}/${passRate.total} attacks successful`}
+                                            return (
+                                              <ListItem
+                                                key={plugin}
+                                                sx={{
+                                                  borderLeft: `3px solid ${getSeverityColor(pluginSeverity)}`,
+                                                  pl: 2,
+                                                  mb: 0.5,
+                                                  bgcolor: 'rgba(0, 0, 0, 0.01)',
+                                                  borderRadius: '0 4px 4px 0',
+                                                  opacity: 0.7,
+                                                }}
+                                              >
+                                                <ListItemIcon sx={{ minWidth: 30 }}>
+                                                  <InfoIcon fontSize="small" color="action" />
+                                                </ListItemIcon>
+                                                <ListItemText
+                                                  primary={
+                                                    <Box
+                                                      display="flex"
+                                                      alignItems="center"
+                                                      justifyContent="space-between"
                                                     >
+                                                      <Typography variant="body2">
+                                                        {displayNameOverrides[
+                                                          plugin as keyof typeof displayNameOverrides
+                                                        ] ||
+                                                          categoryAliases[
+                                                            plugin as keyof typeof categoryAliases
+                                                          ] ||
+                                                          plugin}
+                                                      </Typography>
                                                       <Typography
                                                         variant="caption"
                                                         sx={{
-                                                          fontWeight: 'bold',
-                                                          color: 'success.main',
+                                                          fontWeight: 'medium',
+                                                          color: 'text.secondary',
                                                         }}
                                                       >
-                                                        {(100 - passRate.rate).toFixed(0)}%
+                                                        Not Tested
                                                       </Typography>
-                                                    </Tooltip>
-                                                  </Box>
-                                                }
-                                              />
-                                            </ListItem>
-                                          );
-                                        })}
-                                      </List>
-                                    )}
+                                                    </Box>
+                                                  }
+                                                />
+                                              </ListItem>
+                                            );
+                                          })}
+                                        </>
+                                      )}
+                                    </List>
                                   </Box>
                                 );
                               },
                             )}
-                          </>
+                          </div>
                         ) : (
                           // Standard list view for other frameworks but with same format
                           <Box
@@ -967,6 +1136,144 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
                                                 {(100 - passRate.rate).toFixed(0)}%
                                               </Typography>
                                             </Tooltip>
+                                          </Box>
+                                        }
+                                      />
+                                    </ListItem>
+                                  );
+                                })}
+
+                              {/* Untested plugins for this framework */}
+                              {Object.keys(ALIASED_PLUGIN_MAPPINGS[framework] || {}).flatMap(
+                                (categoryId) => {
+                                  // Get all plugins from this category
+                                  const categoryPlugins =
+                                    ALIASED_PLUGIN_MAPPINGS[framework]?.[categoryId]?.plugins || [];
+                                  // Expand harmful plugins
+                                  const expandedPlugins = new Set<string>();
+                                  categoryPlugins.forEach((plugin) => {
+                                    if (plugin === 'harmful') {
+                                      // Add all harmful:* plugins
+                                      Object.keys(categoryStats)
+                                        .filter((key) => key.startsWith('harmful:'))
+                                        .forEach((key) => expandedPlugins.add(key));
+                                    } else {
+                                      expandedPlugins.add(plugin);
+                                    }
+                                  });
+                                  // Return only untested plugins
+                                  return Array.from(expandedPlugins).filter(
+                                    (plugin) =>
+                                      !categoryStats[plugin] || categoryStats[plugin].total === 0,
+                                  );
+                                },
+                              ).length > 0 && (
+                                <ListItem
+                                  sx={{
+                                    py: 0.5,
+                                    px: 1,
+                                    bgcolor: 'rgba(158, 158, 158, 0.1)',
+                                    mt: 1,
+                                  }}
+                                >
+                                  <Typography
+                                    variant="caption"
+                                    fontWeight="bold"
+                                    color="text.secondary"
+                                  >
+                                    Not Tested:
+                                  </Typography>
+                                </ListItem>
+                              )}
+                              {Object.keys(ALIASED_PLUGIN_MAPPINGS[framework] || {})
+                                .flatMap((categoryId) => {
+                                  // Get all plugins from this category
+                                  const categoryPlugins =
+                                    ALIASED_PLUGIN_MAPPINGS[framework]?.[categoryId]?.plugins || [];
+                                  // Expand harmful plugins
+                                  const expandedPlugins = new Set<string>();
+                                  categoryPlugins.forEach((plugin) => {
+                                    if (plugin === 'harmful') {
+                                      // Add all harmful:* plugins
+                                      Object.keys(categoryStats)
+                                        .filter((key) => key.startsWith('harmful:'))
+                                        .forEach((key) => expandedPlugins.add(key));
+                                    } else {
+                                      expandedPlugins.add(plugin);
+                                    }
+                                  });
+                                  // Return only untested plugins
+                                  return Array.from(expandedPlugins).filter(
+                                    (plugin) =>
+                                      !categoryStats[plugin] || categoryStats[plugin].total === 0,
+                                  );
+                                })
+                                .sort((a, b) => {
+                                  // Sort by severity first
+                                  const severityA =
+                                    riskCategorySeverityMap[
+                                      a as keyof typeof riskCategorySeverityMap
+                                    ] || Severity.Low;
+                                  const severityB =
+                                    riskCategorySeverityMap[
+                                      b as keyof typeof riskCategorySeverityMap
+                                    ] || Severity.Low;
+
+                                  const severityOrder = {
+                                    [Severity.Critical]: 0,
+                                    [Severity.High]: 1,
+                                    [Severity.Medium]: 2,
+                                    [Severity.Low]: 3,
+                                  };
+
+                                  return severityOrder[severityA] - severityOrder[severityB];
+                                })
+                                .map((plugin) => {
+                                  const pluginSeverity =
+                                    riskCategorySeverityMap[
+                                      plugin as keyof typeof riskCategorySeverityMap
+                                    ] || Severity.Low;
+
+                                  return (
+                                    <ListItem
+                                      key={plugin}
+                                      sx={{
+                                        borderLeft: `3px solid ${getSeverityColor(pluginSeverity)}`,
+                                        pl: 2,
+                                        mb: 0.5,
+                                        bgcolor: 'rgba(0, 0, 0, 0.01)',
+                                        borderRadius: '0 4px 4px 0',
+                                        opacity: 0.7,
+                                      }}
+                                    >
+                                      <ListItemIcon sx={{ minWidth: 30 }}>
+                                        <InfoIcon fontSize="small" color="action" />
+                                      </ListItemIcon>
+                                      <ListItemText
+                                        primary={
+                                          <Box
+                                            display="flex"
+                                            alignItems="center"
+                                            justifyContent="space-between"
+                                          >
+                                            <Typography variant="body2">
+                                              {displayNameOverrides[
+                                                plugin as keyof typeof displayNameOverrides
+                                              ] ||
+                                                categoryAliases[
+                                                  plugin as keyof typeof categoryAliases
+                                                ] ||
+                                                plugin}
+                                            </Typography>
+                                            <Typography
+                                              variant="caption"
+                                              sx={{
+                                                fontWeight: 'medium',
+                                                color: 'text.secondary',
+                                              }}
+                                            >
+                                              Not Tested
+                                            </Typography>
                                           </Box>
                                         }
                                       />
