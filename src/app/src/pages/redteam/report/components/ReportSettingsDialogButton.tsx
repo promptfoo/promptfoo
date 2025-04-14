@@ -17,8 +17,6 @@ const ReportSettingsDialogButton: React.FC = () => {
     setShowPercentagesOnRiskCards,
     pluginPassRateThreshold,
     setPluginPassRateThreshold,
-    showComplianceSection,
-    setShowComplianceSection,
   } = useReportStore();
   const [open, setOpen] = React.useState(false);
 
