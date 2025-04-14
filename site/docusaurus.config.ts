@@ -173,6 +173,10 @@ const config: Config = {
               label: 'Foundation Model Reports',
             },
             {
+              to: 'https://www.promptfoo.dev/lm-security-db/',
+              label: 'Language Model Security DB',
+            },
+            {
               href: 'https://github.com/promptfoo/promptfoo',
               label: 'GitHub',
             },
@@ -235,6 +239,10 @@ const config: Config = {
             {
               label: 'Foundation Model Reports',
               to: 'https://www.promptfoo.dev/models/',
+            },
+            {
+              label: 'Language Model Security DB',
+              to: 'https://www.promptfoo.dev/lm-security-db/',
             },
             {
               label: 'Running Benchmarks',
