@@ -1,3 +1,5 @@
+import type winston from 'winston';
+import type { EnvOverrides } from './env';
 import type { Prompt } from './prompts';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
 
@@ -9,6 +11,17 @@ export type ProviderOptionsMap = Record<ProviderId, ProviderOptions>;
 export type ProviderType = 'embedding' | 'classification' | 'text' | 'moderation';
 
 export type ProviderTypeMap = Partial<Record<ProviderType, string | ProviderOptions | ApiProvider>>;
+
+// Local interface to avoid circular dependency with src/types/index.ts
+interface AtomicTestCase {
+  description?: string;
+  vars?: Record<string, string | object>;
+  providerResponse?: ProviderResponse;
+  tokenUsage?: TokenUsage;
+  success?: boolean;
+  score?: number;
+  failureReason?: string;
+}
 
 export interface ProviderModerationResponse {
   error?: string;
@@ -35,10 +48,14 @@ export interface CallApiContextParams {
   fetchWithCache?: any;
   filters?: NunjucksFilterMap;
   getCache?: any;
-  logger?: any;
-  originalProvider?: any;
+  logger?: winston.Logger;
+  originalProvider?: ApiProvider;
   prompt: Prompt;
   vars: Record<string, string | object>;
+  debug?: boolean;
+  // This was added so we have access to the grader inside the provider.
+  // Vars and prompts should be access using the arguments above.
+  test?: AtomicTestCase;
 }
 
 export interface CallApiOptionsParams {
@@ -48,12 +65,14 @@ export interface CallApiOptionsParams {
 export interface ApiProvider {
   id: () => string;
   callApi: CallApiFunction;
-  callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;
   callClassificationApi?: (prompt: string) => Promise<ProviderClassificationResponse>;
+  callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;
+  config?: any;
+  delay?: number;
+  getSessionId?: () => string;
   label?: ProviderLabel;
   transform?: string;
-  delay?: number;
-  config?: any;
+  toJSON?: () => any;
 }
 
 export interface ApiEmbeddingProvider extends ApiProvider {
@@ -72,6 +91,12 @@ export interface ApiModerationProvider extends ApiProvider {
   callModerationApi: (prompt: string, response: string) => Promise<ProviderModerationResponse>;
 }
 
+export interface GuardrailResponse {
+  flaggedInput?: boolean;
+  flaggedOutput?: boolean;
+  flagged?: boolean;
+}
+
 export interface ProviderResponse {
   cached?: boolean;
   cost?: number;
@@ -81,14 +106,31 @@ export interface ProviderResponse {
     redteamFinalPrompt?: string;
     [key: string]: any;
   };
+  raw?: string | any;
   output?: string | any;
   tokenUsage?: TokenUsage;
+  isRefusal?: boolean;
+  sessionId?: string;
+  guardrails?: GuardrailResponse;
+  audio?: {
+    id?: string;
+    expiresAt?: number;
+    data?: string; // base64 encoded audio data
+    transcript?: string;
+    format?: string;
+  };
 }
 
 export interface ProviderEmbeddingResponse {
+  cost?: number;
   error?: string;
   embedding?: number[];
   tokenUsage?: Partial<TokenUsage>;
+  metadata?: {
+    transformed?: boolean;
+    originalText?: string;
+    [key: string]: any;
+  };
 }
 
 export interface ProviderSimilarityResponse {
@@ -101,43 +143,6 @@ export interface ProviderClassificationResponse {
   error?: string;
   classification?: Record<string, number>;
 }
-
-export type EnvOverrides = {
-  AI21_API_BASE_URL?: string;
-  AI21_API_KEY?: string;
-  ANTHROPIC_API_KEY?: string;
-  AWS_BEDROCK_REGION?: string;
-  AZURE_OPENAI_API_BASE_URL?: string;
-  AZURE_OPENAI_API_HOST?: string;
-  AZURE_OPENAI_API_KEY?: string;
-  AZURE_OPENAI_BASE_URL?: string;
-  BAM_API_HOST?: string;
-  BAM_API_KEY?: string;
-  CLOUDFLARE_ACCOUNT_ID?: string;
-  CLOUDFLARE_API_KEY?: string;
-  COHERE_API_KEY?: string;
-  GOOGLE_API_HOST?: string;
-  GOOGLE_API_KEY?: string;
-  GROQ_API_KEY?: string;
-  LOCALAI_BASE_URL?: string;
-  MISTRAL_API_BASE_URL?: string;
-  MISTRAL_API_HOST?: string;
-  MISTRAL_API_KEY?: string;
-  OPENAI_API_BASE_URL?: string;
-  OPENAI_API_HOST?: string;
-  OPENAI_API_KEY?: string;
-  OPENAI_BASE_URL?: string;
-  OPENAI_ORGANIZATION?: string;
-  PALM_API_HOST?: string;
-  PALM_API_KEY?: string;
-  REPLICATE_API_KEY?: string;
-  REPLICATE_API_TOKEN?: string;
-  VERTEX_API_HOST?: string;
-  VERTEX_API_KEY?: string;
-  VERTEX_PROJECT_ID?: string;
-  VERTEX_PUBLISHER?: string;
-  VERTEX_REGION?: string;
-};
 
 export type FilePath = string;
 
@@ -160,5 +165,36 @@ export function isApiProvider(provider: any): provider is ApiProvider {
 }
 
 export function isProviderOptions(provider: any): provider is ProviderOptions {
-  return !isApiProvider(provider) && typeof provider === 'object' && provider != null;
+  return (
+    typeof provider === 'object' &&
+    provider != null &&
+    'id' in provider &&
+    typeof provider.id === 'string'
+  );
+}
+
+export interface ProviderTestResponse {
+  testResult: {
+    error?: string;
+    changes_needed?: boolean;
+    changes_needed_reason?: string;
+    changes_needed_suggestions?: string[];
+  };
+  providerResponse: ProviderResponse;
+  unalignedProviderResult?: ProviderResponse;
+  redteamProviderResult?: ProviderResponse;
+}
+
+/**
+ * Interface defining the default providers used by the application
+ */
+export interface DefaultProviders {
+  datasetGenerationProvider: ApiProvider;
+  embeddingProvider: ApiProvider;
+  gradingJsonProvider: ApiProvider;
+  gradingProvider: ApiProvider;
+  llmRubricProvider?: ApiProvider;
+  moderationProvider: ApiProvider;
+  suggestionsProvider: ApiProvider;
+  synthesizeProvider: ApiProvider;
 }

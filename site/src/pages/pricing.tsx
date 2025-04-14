@@ -38,7 +38,11 @@ function PricingTable() {
     {
       name: 'Enterprise',
       price: 'Custom',
-      description: 'For teams that need advanced features and support',
+      description: (
+        <>
+          For teams that need advanced features. <Link to="/docs/enterprise/">Learn more</Link>
+        </>
+      ),
       features: [
         'All Community features',
         'Team sharing & collaboration',
@@ -46,12 +50,26 @@ function PricingTable() {
         'Centralized security/compliance dashboard',
         'Customized red teaming plugins',
         'SSO and Access Control',
-        'On-premises or private cloud deployment',
+        'Cloud deployment',
         'Priority support & SLA guarantees',
       ],
       cta: 'Schedule Demo',
       ctaLink: 'https://cal.com/team/promptfoo/intro2',
       highlighted: true,
+    },
+    {
+      name: 'On-Premise',
+      price: 'Custom',
+      description: 'For organizations that require full control over their infrastructure',
+      features: [
+        'All Enterprise features',
+        'Deployment on your own infrastructure',
+        'Complete data isolation',
+        'Dedicated support team',
+      ],
+      cta: 'Contact Us',
+      ctaLink: '/contact/',
+      highlighted: false,
     },
   ];
 
@@ -92,6 +110,45 @@ function PricingTable() {
   );
 }
 
+function EnterpriseFeatures() {
+  const features = [
+    {
+      title: 'Reports & Continuous Monitoring',
+      description:
+        'Understand your LLM security status across all projects with real-time alerts and automated evaluations.',
+      image: '/img/continuous-monitoring@2x.png',
+    },
+    {
+      title: 'Issue Tracking & Guided Remediation',
+      description: 'Track remediation progress and get suggested steps for each issue.',
+      image: '/img/riskreport-2@2x.png',
+    },
+    {
+      title: 'Comprehensive Scanning & Compliance',
+      description:
+        'Additional plugins, help with creating custom plugins, and support for common standards frameworks.',
+      image: '/img/report-with-compliance@2x.png',
+    },
+  ];
+
+  return (
+    <section className={styles.enterpriseFeaturesSection}>
+      <h2>Enterprise Features</h2>
+      {features.map((feature, index) => (
+        <div key={index} className={clsx(styles.featureRow, index % 2 === 1 && styles.reverse)}>
+          <div className={styles.featureContent}>
+            <h3>{feature.title}</h3>
+            <p>{feature.description}</p>
+          </div>
+          <div className={styles.featureImageWrapper}>
+            <img src={feature.image} alt={feature.title} className={styles.featureImage} />
+          </div>
+        </div>
+      ))}
+    </section>
+  );
+}
+
 function FAQSection() {
   const faqs = [
     {
@@ -129,6 +186,21 @@ function FAQSection() {
   );
 }
 
+function DemoCTA() {
+  return (
+    <section className={styles.demoCTA}>
+      <h2>Ready to get started?</h2>
+      <p>Schedule a demo to see how Promptfoo can help secure your LLM applications</p>
+      <Link
+        to="https://cal.com/team/promptfoo/intro2"
+        className={clsx('button', 'button--lg', 'button--primary', styles.demoButton)}
+      >
+        Schedule a Demo
+      </Link>
+    </section>
+  );
+}
+
 export default function Pricing(): JSX.Element {
   return (
     <Layout
@@ -138,7 +210,9 @@ export default function Pricing(): JSX.Element {
       <main className={styles.pricingPage}>
         <PricingHeader />
         <PricingTable />
+        <EnterpriseFeatures />
         <FAQSection />
+        <DemoCTA />
       </main>
     </Layout>
   );

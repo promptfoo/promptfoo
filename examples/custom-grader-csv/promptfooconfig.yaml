@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Custom grader in CSV
+prompts:
+  - file://prompts.txt
+providers:
+  - openai:gpt-4o-mini
+tests: file://tests.csv

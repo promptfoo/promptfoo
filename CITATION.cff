@@ -3,15 +3,17 @@ message: If you use this software, please cite it as below.
 authors:
   - family-names: Webster
     given-names: Ian
+  - family-names: D'Angelo
+    given-names: Michael
+  - family-names: Klein
+    given-names: Steven
+  - family-names: Zang
+    given-names: Guangshuo
 title: promptfoo
-version: 0.73.9
-date-released: '2024-07-30'
+version: 0.109.1
+date-released: '2025-04-08'
 url: https://promptfoo.dev
 repository-code: https://github.com/promptfoo/promptfoo
 license: MIT
 type: software
-description: >-
-  LLM evaluation and testing toolkit for prompts, agents, and RAGs. 
-  Supports redteaming, pentesting, and vulnerability scanning for LLMs. 
-  Compare performance across various models (GPT, Claude, Gemini, Llama, etc.). 
-  Features declarative configs, CLI, and CI/CD integration.
+description: LLM evaluation and testing toolkit for prompts, agents, and RAGs.  Supports redteaming, pentesting, and vulnerability scanning for LLMs.  Compare performance across various models (GPT, Claude, Gemini, Llama, etc.).  Features declarative configs, CLI, and CI/CD integration.

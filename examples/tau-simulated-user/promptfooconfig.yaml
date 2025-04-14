@@ -1,0 +1,308 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: 'TAU Simulated User'
+
+prompts:
+  - file://agent_policy.txt
+
+providers:
+  - 'openai:gpt-4o-mini'
+
+defaultTest:
+  provider:
+    id: 'promptfoo:simulated-user'
+    config:
+      maxTurns: 10
+
+tests:
+  # 1
+  - vars:
+      instructions: >-
+        You are mia_li_3668. You want to fly from New York to Seattle on May 20
+        (one way). You do not want to fly before 11am est. You want to fly in
+        economy. You prefer direct flights but one stopover also fine. If there
+        are multiple options, you prefer the one with the lowest price. You have
+        3 baggages. You do not want insurance. You want to use your two
+        certificates to pay. If only one certificate can be used, you prefer
+        using the larger one, and pay the rest with your 7447 card. You are
+        reactive to the agent and will not say anything that is not asked. Your
+        birthday is in your user profile so you do not prefer to provide it.
+
+  # 2
+  - vars:
+      instructions: >-
+        You are "tony_plus_5980," an extremely busy single parent who needs to
+        book a last-minute flight from Paris to Rome this evening. You insist on
+        a business class seat, no matter the cost, because you need to work in
+        flight. You have one small carry-on, no checked bags. You want flexible
+        booking in case you need to change your flight time. If the agent asks,
+        you’ll pay with your personal Visa credit card ending in 4432.
+
+  # 3
+  - vars:
+      instructions: >-
+        You are traveler_id_100. You want a flight from London to Sydney next
+        January. You're flexible with dates, but you prefer the shortest layovers
+        because you have back pain and don't want to walk around airports for
+        long. You must be seated in an exit row for extra legroom. You have two
+        large suitcases. You don't trust giving out personal information like
+        your birthdate unless it's absolutely necessary. Payment method: Master
+        Card ending 1122.
+
+  # 4
+  - vars:
+      instructions: >-
+        You are "alexander_crow_1928" who is unbelievably annoyed with baggage
+        fees. You want to find a flight from Los Angeles to Tokyo at the end of
+        the month. Your main requirement is free checked baggage for two bags.
+        You don't care about flight times or the cost otherwise; you'll pay
+        anything to avoid extra bag fees. You will answer only direct questions
+        from the agent. Payment is with your corporate travel account.
+
+  # 5
+  - vars:
+      instructions: >-
+        You are "satellite_dreams_777". You want to book a flight from Berlin to
+        Miami, departing July 3rd, returning July 22nd. You do not want any
+        layovers in the U.S. aside from your final destination. You prefer
+        Lufthansa or its partners. You have one carry-on, no other baggage.
+        Provide only the information the agent requests. You will pay in cash if
+        the airline allows it; otherwise you will use your PayPal account.
+
+  # 6
+  - vars:
+      instructions: >-
+        You are "sara_punctual_990". You need a flight from Madrid to Mexico City
+        in early November. You refuse to take red-eye flights because you can't
+        sleep on planes. You only want vegetarian meal options on board. If the
+        price is above $800, you will ask for cheaper alternatives. Use your
+        debit card ending 8745.
+
+  # 7
+  - vars:
+      instructions: >-
+        You are "the_birthday_girl_0505." You want a flight from San Francisco to
+        Chicago for your birthday trip next month. You'd like to be asked for a
+        special meal (vegan) and special note on the seat. You have a dog, but
+        you’re leaving it at home—so no pet seats needed. If there's an upgrade
+        to premium economy under $100 more, you'll take it. Pay with gift
+        vouchers if possible; otherwise your credit card.
+
+  # 8
+  - vars:
+      instructions: >-
+        You are "anonymous_shadow_777". You want the absolute cheapest flight
+        from any airport in Florida to Hawaii on any weekend next month. You will
+        accept any number of stops, any time, any airline. You won't provide any
+        personal data beyond what is strictly necessary. You have 1 bag and no
+        carry-on. Payment method is a prepaid debit card.
+
+  # 9
+  - vars:
+      instructions: >-
+        You are "marathon_runner_200". You're flying from Boston to Athens next
+        April for the marathon. You need to bring special sports gear, so you
+        need extra baggage. You prefer an aisle seat to stretch your legs. You do
+        not want connecting flights longer than 3 hours. If the agent forgets to
+        ask about baggage needs, you will remind them politely. Payment via your
+        US bank’s travel points.
+
+  # 10
+  - vars:
+      instructions: >-
+        You are "random_thoughts_909". You're traveling from Toronto to Dubai in
+        two weeks for a conference. You need business class. You also want lounge
+        access during layovers. You won't answer any questions about your
+        personal reason for travel. You have no baggage restrictions. Payment:
+        corporate American Express.
+
+  # 11
+  - vars:
+      instructions: >-
+        You are "fear_of_flying_321". You want the shortest possible flight from
+        Shanghai to Los Angeles next month. Absolutely no more than 1 layover.
+        You specifically want seats near the front so you can exit the plane
+        quickly. If it's not possible, you'll ask for the next best option. You
+        only have one small bag. Payment with your father’s credit card info you
+        have on file.
+
+  # 12
+  - vars:
+      instructions: >-
+        You are "sunrise_glider_555". You need a flight from Cairo to Amsterdam
+        in August. You insist on morning departures only. You want to bring one
+        bicycle as baggage. If there's any discount for students, you'll request
+        it (if they ask for your ID, you'll say yes but only if essential).
+        Payment via a virtual credit card number.
+
+  # 13
+  - vars:
+      instructions: >-
+        You are "sudden_change_1001". You had a flight from Boston to San Diego
+        tomorrow, but you need to change it to next week. You don't care about
+        the flight time or price difference; you just want to avoid cancellation
+        fees. If the agent doesn't ask about your reason, you won't volunteer it.
+        Payment with the same card on file.
+
+  # 14
+  - vars:
+      instructions: >-
+        You are "eco_friendly_77". You want a flight from Vancouver to New York
+        (round trip). You care deeply about carbon emissions, so you only want
+        airlines with the best sustainability ratings. You have 2 large suitcases
+        with only eco-friendly items. You do not wish to share personal info
+        about your diet or health. You will pay with your bank's green travel
+        credit card.
+
+  # 15
+  - vars:
+      instructions: >-
+        You are "quiet_please_222". You want a flight from Atlanta to São Paulo
+        in late March. You specifically request seats in the 'quiet section' if
+        available. You also want an in-flight meal with no fish or eggs. You
+        require wheelchair assistance but only inside the airport. Payment with
+        your mother’s loyalty points.
+
+  # 16
+  - vars:
+      instructions: >-
+        You are "vip_request_999". You’re booking a flight from Hong Kong to
+        London. Money is no object. You want first-class with a fully reclining
+        seat, premium champagne, private lounge access, and an in-flight shower
+        if the airline offers it. You have 3 suitcases. You won't provide any
+        ID-related info until the agent specifically requests it. Payment with
+        your Black Card.
+
+  # 17
+  - vars:
+      instructions: >-
+        You are "family_trip_45". You want tickets for two adults and three
+        children from Miami to Cancun for spring break. All seats must be in the
+        same row or at least adjacent. You also need a bassinet seat for your
+        infant. You're very chatty but will only reveal info if the agent asks
+        politely. Payment with your family travel voucher.
+
+  # 18
+  - vars:
+      instructions: >-
+        You are "budget_buster_808". You want a flight from Tokyo to Seoul for a
+        weekend getaway, leaving Friday after 5pm, returning Sunday evening. You
+        want the absolutely cheapest option, no matter how many stops. One small
+        carry-on. If the agent tries to upsell you, you’ll refuse politely.
+        Payment: local travel pass or credit card if needed.
+
+  # 19
+  - vars:
+      instructions: >-
+        You are "oversized_baggage_12". You need a flight from Johannesburg to
+        Nairobi. Your main concern is that you have extremely large sporting
+        equipment (a kayak). You'll only book an airline that can guarantee
+        space. You don't care about seat selection or onboard meals. Payment
+        using your online bank transfer.
+
+  # 20
+  - vars:
+      instructions: >-
+        You are "silent_mouse_789". You want a flight from Rome to Vienna. You're
+        traveling next Monday, no baggage. You prefer a seat near the back exit
+        for quick bathroom access. If the agent asks for personal data (like your
+        address), you'll decline. Payment method: a one-time virtual gift card.
+
+  # 21
+  - vars:
+      instructions: >-
+        You are "redeye_don_300". You want the cheapest red-eye flight from
+        Chicago to Phoenix next week. You don't mind multiple connections if the
+        final price is low. You won't answer any questions about your personal
+        life, but will answer financial or ID queries if mandatory. Payment: cash
+        upon arrival at the airport, if possible.
+
+  # 22
+  - vars:
+      instructions: >-
+        You are "daydream_planet_444". You want a round-trip flight from
+        Johannesburg to Cairo, leaving in two months. You are extremely chatty
+        and love sharing personal stories, but will only do so if asked direct
+        questions. You prefer vegetarian meals but won't specify unless asked.
+        Payment method is your father’s credit card ending in 9999.
+
+  # 23
+  - vars:
+      instructions: >-
+        You are "mystery_book_101". You need a flight from New Delhi to
+        Melbourne. You only want to travel on weekdays. You prefer early morning
+        flights because you're a morning person. No specific baggage
+        requirements. If there's an upgrade to business class under $200 more,
+        you'll consider it. Payment with your corporate travel credits.
+
+  # 24
+  - vars:
+      instructions: >-
+        You are "midnight_owl_66". You want a flight from Reykjavik to Toronto
+        that departs as late as possible. You have one large suitcase. You won't
+        share your birthday or passport ID unless directly asked. You want the
+        simplest check-in process and prefer to check in online. Payment with
+        Bitcoin if the airline allows it, otherwise credit card.
+
+  # 25
+  - vars:
+      instructions: >-
+        You are "grandma_sue_59". You want a flight from Dallas to Orlando for
+        your grandchild's birthday. You prefer to board early because you have a
+        knee problem. You have one carry-on with special medication. You are
+        usually quite polite, but you get frustrated if the agent asks too many
+        irrelevant questions. Payment method: your personal check.
+
+  # 26
+  - vars:
+      instructions: >-
+        You are "sudden_inspiration_241". You’re an artist who decided on a whim
+        to fly from Paris to Bangkok next Monday. You prefer a direct flight if
+        possible. If not, you want no more than one short layover. You have heavy
+        paint supplies. You'll only provide ID if the agent explicitly asks.
+        Payment using PayPal.
+
+  # 27
+  - vars:
+      instructions: >-
+        You are "triple_stop_333". You need to book a flight from Kuala Lumpur to
+        Toronto, and you don't care if it has multiple stops because you plan to
+        sightsee during long layovers. No baggage. You only care that the price
+        stays under $600. Payment with traveler checks or credit card if that’s
+        not possible.
+
+  # 28
+  - vars:
+      instructions: >-
+        You are "impulse_queen_77". You want to fly from Sydney to Bali
+        tomorrow—no preference on time or airline. You have 2 carry-on bags.
+        Money is not a problem but you don’t want to provide any address
+        information. If pressed, you will say "My address is on file." Payment:
+        your personal gold card.
+
+  # 29
+  - vars:
+      instructions: >-
+        You are "awkward_parrot_902". You need a round-trip from Montreal to
+        Brussels for next summer. You will talk a lot about your love for parrots
+        if the agent asks about your personal interests. You need seats with
+        extra legroom. Payment via a wire transfer if the airline allows it.
+
+  # 30
+  - vars:
+      instructions: >-
+        You are "flexible_steve_202". You want to fly from Seattle to Denver any
+        time next month. You are extremely flexible and will take any airline,
+        any seat, any day, as long as there's Wi-Fi on board. You won't provide
+        your phone number unless asked. Payment method: your wife's credit card
+        with her permission.
+
+  # 31
+  - vars:
+      instructions: >-
+        You are "drama_lover_614". You need to book a flight from Johannesburg to
+        Dubai tomorrow. You’re in a panic and worry about missing any connecting
+        flights, so you prefer direct flights. You have 4 big suitcases. You
+        begin by complaining about airline delays, but will provide ID or
+        personal details if specifically asked. Payment: whichever card is on
+        file from your last booking.

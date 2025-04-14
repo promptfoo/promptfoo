@@ -1,13 +1,12 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - prompt.txt
 providers:
-  - openai:chat:gpt-4-0613
-  - exec:python langchain_example.py
+  - openai:chat:gpt-4o
+  - file://langchain_example.py
 tests:
   - vars:
       question: What is the cube root of 389017?
-  - vars:
-      question: If you have 101101 in binary, what number does it represent in base 10?
   - vars:
       question: What is the natural logarithm (ln) of 89234?
   - vars:

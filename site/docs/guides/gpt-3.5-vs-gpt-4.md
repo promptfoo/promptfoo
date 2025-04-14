@@ -31,8 +31,8 @@ Edit `promptfooconfig.yaml` to include GPT-3.5 and GPT-4:
 
 ```yaml title=promptfooconfig.yaml
 providers:
-  - openai:gpt-3.5-turbo
-  - openai:gpt-4
+  - openai:gpt-4o-mini
+  - openai:gpt-4o
 ```
 
 ## Step 2: Crafting the prompts
@@ -125,8 +125,8 @@ Finally, we'll use `defaultTest` to clean things up a bit and apply global `late
 
 ```yaml
 providers:
-  - openai:gpt-3.5-turbo
-  - openai:gpt-4
+  - openai:gpt-4o-mini
+  - openai:gpt-4o
 
 prompts:
   - 'Solve this riddle: {{riddle}}'

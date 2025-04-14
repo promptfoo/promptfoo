@@ -1,5 +1,4 @@
 import type Cloudflare from 'cloudflare';
-import invariant from 'tiny-invariant';
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
@@ -7,10 +6,11 @@ import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
-  EnvOverrides,
   ProviderEmbeddingResponse,
   ProviderResponse,
 } from '../types';
+import type { EnvOverrides } from '../types/env';
+import invariant from '../util/invariant';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
 /**
@@ -160,7 +160,7 @@ abstract class CloudflareAiGenericProvider implements ApiProvider {
    * fill in this implementation
    */
   protected getTokenUsageFromResponse(
-    _response: IBuildCloudflareResponse<{}>,
+    _response: IBuildCloudflareResponse<Record<string, unknown>>,
   ): ProviderEmbeddingResponse['tokenUsage'] {
     // TODO: Figure out token usage for invoked + cache situations
     const tokenUsage: ProviderEmbeddingResponse['tokenUsage'] = {
@@ -181,8 +181,10 @@ abstract class CloudflareAiGenericProvider implements ApiProvider {
    * @returns
    */
   protected async handleApiCall<
-    InitialResponse extends IBuildCloudflareResponse<{}>,
-    SuccessResponse extends InitialResponse = InitialResponse extends ICloudflareSuccessResponse<{}>
+    InitialResponse extends IBuildCloudflareResponse<Record<string, unknown>>,
+    SuccessResponse extends InitialResponse = InitialResponse extends ICloudflareSuccessResponse<
+      Record<string, unknown>
+    >
       ? InitialResponse
       : never,
   >(
@@ -271,7 +273,9 @@ export class CloudflareAiEmbeddingProvider extends CloudflareAiGenericProvider {
     try {
       const embedding = data.result.data[0];
       if (!embedding) {
-        logger.error('No data could be found in the Cloudflare API response', JSON.stringify(data));
+        logger.error(
+          `No data could be found in the Cloudflare API response: ${JSON.stringify(data)}`,
+        );
         throw new Error('No embedding returned');
       }
       const ret = {

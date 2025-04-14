@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: 'LM Studio Eval Example'
 prompts:
   - file://prompts.json
@@ -11,8 +12,8 @@ providers:
         messages: '{{ prompt }}'
         model: 'bartowski/gemma-2-9b-it-GGUF'
         temperature: 0.7
-        max_tokens: -1
-      responseParser: 'json.choices[0].message.content'
+        max_tokens: 100
+      transformResponse: 'file://parser.js'
 tests:
   - vars:
       topic: bananas

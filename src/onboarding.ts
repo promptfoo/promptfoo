@@ -1,15 +1,23 @@
 import checkbox from '@inquirer/checkbox';
-import rawlist from '@inquirer/rawlist';
+import confirm from '@inquirer/confirm';
+import { ExitPromptError } from '@inquirer/core';
+import select from '@inquirer/select';
 import chalk from 'chalk';
+import dedent from 'dedent';
 import fs from 'fs';
 import path from 'path';
-import { redteamInit } from './commands/redteam/init';
 import { getEnvString } from './envars';
 import logger from './logger';
-import telemetry, { type EventValue } from './telemetry';
+import { redteamInit } from './redteam/commands/init';
+import telemetry, { type EventProperties } from './telemetry';
+import type { EnvOverrides } from './types/env';
+import { isRunningUnderNpx } from './util';
 import { getNunjucksEngine } from './util/templates';
 
-export const CONFIG_TEMPLATE = `# Learn more about building a configuration: https://promptfoo.dev/docs/configuration/guide
+export const CONFIG_TEMPLATE = `# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+# Learn more about building a configuration: https://promptfoo.dev/docs/configuration/guide
+
 description: "My eval"
 
 prompts:
@@ -108,8 +116,10 @@ def call_api(prompt, options, context):
     # The prompt is the final prompt string after the variables have been processed.
     # Custom logic to process the prompt goes here.
     # For instance, you might call an external API or run some computations.
+    # TODO: Replace with actual LLM API implementation.
+    def call_llm(prompt):
+        return f"Stub response for prompt: {prompt}"
     output = call_llm(prompt)
-
 
     # The result should be a dictionary with at least an 'output' field.
     result = {
@@ -123,12 +133,15 @@ def call_api(prompt, options, context):
         # If you want to report token usage, you can set the 'tokenUsage' field.
         result['tokenUsage'] = {"total": token_count, "prompt": prompt_token_count, "completion": completion_token_count}
 
+    if failed_guardrails:
+        # If guardrails triggered, you can set the 'guardrails' field.
+        result['guardrails'] = {"flagged": True}
+
     return result
 `;
 
 export const JAVASCRIPT_PROVIDER = `// Learn more about building a JavaScript provider: https://promptfoo.dev/docs/providers/custom-api
 // customApiProvider.js
-import fetch from 'node-fetch';
 
 class CustomApiProvider {
   constructor(options) {
@@ -228,7 +241,7 @@ promptfoo eval
 Afterwards, you can view the results by running \`promptfoo view\`
 `;
 
-function recordOnboardingStep(step: string, properties: Record<string, EventValue> = {}) {
+function recordOnboardingStep(step: string, properties: EventProperties = {}) {
   telemetry.recordAndSend('funnel', {
     type: 'eval onboarding',
     step,
@@ -236,32 +249,102 @@ function recordOnboardingStep(step: string, properties: Record<string, EventValu
   });
 }
 
-export async function createDummyFiles(directory: string | null, interactive: boolean = true) {
-  if (
-    directory && // Make the directory if it doesn't exist
-    !fs.existsSync(directory)
-  ) {
-    fs.mkdirSync(directory);
+/**
+ * Iterate through user choices and determine if the user has selected a provider that needs an API key
+ * but has not set and API key in their environment.
+ */
+export function reportProviderAPIKeyWarnings(providerChoices: (string | object)[]): string[] {
+  const ids = providerChoices.map((c) => (typeof c === 'object' ? (c as any).id : c));
+
+  const map: Record<string, keyof EnvOverrides> = {
+    openai: 'OPENAI_API_KEY',
+    anthropic: 'ANTHROPIC_API_KEY',
+  };
+
+  return Object.entries(map)
+    .filter(([prefix, key]) => ids.some((id) => id.startsWith(prefix)) && !getEnvString(key))
+    .map(
+      ([prefix, key]) => dedent`
+    ${chalk.bold(`Warning: ${key} environment variable is not set.`)}
+    Please set this environment variable like: export ${key}=<my-api-key>
+  `,
+    );
+}
+
+async function askForPermissionToOverwrite({
+  absolutePath,
+  relativePath,
+  required,
+}: {
+  absolutePath: string;
+  relativePath: string;
+  required: boolean;
+}): Promise<boolean> {
+  if (!fs.existsSync(absolutePath)) {
+    return true;
   }
 
-  if (directory) {
-    if (!fs.existsSync(directory)) {
-      logger.info(`Creating directory ${directory} ...`);
-      fs.mkdirSync(directory);
+  const requiredText = required ? '(required)' : '(optional)';
+  const hasPermissionToWrite = await confirm({
+    message: `${relativePath} ${requiredText} already exists. Do you want to overwrite it?`,
+    default: false,
+  });
+
+  if (required && !hasPermissionToWrite) {
+    throw new Error(`User did not grant permission to overwrite ${relativePath}`);
+  }
+
+  return hasPermissionToWrite;
+}
+
+export async function createDummyFiles(directory: string | null, interactive: boolean = true) {
+  console.clear();
+  const outDirectory = directory || '.';
+  const outDirAbsolute = path.join(process.cwd(), outDirectory);
+
+  async function writeFile({
+    file,
+    contents,
+    required,
+  }: {
+    file: string;
+    contents: string;
+    required: boolean;
+  }) {
+    const relativePath = path.join(outDirectory, file);
+    const absolutePath = path.join(outDirAbsolute, file);
+
+    if (interactive) {
+      const hasPermissionToWrite = await askForPermissionToOverwrite({
+        absolutePath,
+        relativePath,
+        required,
+      });
+
+      if (!hasPermissionToWrite) {
+        logger.info(`⏩ Skipping ${relativePath}`);
+        return;
+      }
     }
-  } else {
-    directory = '.';
+
+    fs.writeFileSync(absolutePath, contents);
+    logger.info(`⌛ Wrote ${relativePath}`);
   }
 
   const prompts: string[] = [];
   const providers: (string | object)[] = [];
   let action: string;
   let language: string;
+
+  if (!fs.existsSync(outDirAbsolute)) {
+    fs.mkdirSync(outDirAbsolute, { recursive: true });
+  }
+
   if (interactive) {
     recordOnboardingStep('start');
 
     // Choose use case
-    action = await rawlist({
+    action = await select({
       message: 'What would you like to do?',
       choices: [
         { name: 'Not sure yet', value: 'compare' },
@@ -277,7 +360,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     });
 
     if (action === 'redteam') {
-      await redteamInit(directory || '.');
+      await redteamInit(outDirectory);
       return {
         numPrompts: 0,
         providerPrefixes: [],
@@ -288,7 +371,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
 
     language = 'not_sure';
     if (action === 'rag' || action === 'agent') {
-      language = await rawlist({
+      language = await select({
         message: 'What programming language are you developing the app in?',
         choices: [
           { name: 'Not sure yet', value: 'not_sure' },
@@ -303,9 +386,9 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     }
 
     const choices: { name: string; value: (string | object)[] }[] = [
-      { name: 'Choose later', value: ['openai:gpt-4o-mini', 'openai:gpt-4o'] },
+      { name: `I'll choose later`, value: ['openai:gpt-4o-mini', 'openai:gpt-4o'] },
       {
-        name: '[OpenAI] GPT 4o, GPT 4o-mini, GPT-3.5, ...',
+        name: '[OpenAI] o1, o3, GPT 4o, GPT 4o-mini, GPT-3.5, ...',
         value:
           action === 'agent'
             ? [
@@ -339,8 +422,8 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       {
         name: '[Anthropic] Claude Opus, Sonnet, Haiku, ...',
         value: [
-          'anthropic:messages:claude-3-5-sonnet-20240620',
-          'anthropic:messages:claude-3-opus-20240307',
+          'anthropic:messages:claude-3-7-sonnet-20250219',
+          'anthropic:messages:claude-3-5-haiku-20241022',
         ],
       },
       {
@@ -353,7 +436,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       },
       {
         name: 'Local Python script',
-        value: ['python:provider.py'],
+        value: ['file://provider.py'],
       },
       {
         name: 'Local Javascript script',
@@ -369,25 +452,38 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       },
       {
         name: '[AWS Bedrock] Claude, Llama, Titan, ...',
-        value: [
-          'bedrock:anthropic.claude-3-haiku-20240307-v1:0',
-          'bedrock:anthropic.claude-3-opus-20240307-v1:0',
-        ],
+        value: ['bedrock:us.anthropic.claude-3-7-sonnet-20250219-v1:0'],
       },
       {
         name: '[Cohere] Command R, Command R+, ...',
         value: ['cohere:command-r', 'cohere:command-r-plus'],
       },
-      { name: '[Google] Gemini Pro, Gemini Ultra, ...', value: ['vertex:gemini-pro'] },
+      { name: '[Google] Gemini, ...', value: ['vertex:gemini-2.0-flash-001'] },
       {
-        name: '[Ollama] Llama 3, Mixtral, ...',
-        value: ['ollama:chat:llama3', 'ollama:chat:mixtral:8x22b'],
+        name: '[Ollama] Llama, Qwen, Phi, ...',
+        value: ['ollama:chat:llama3.3', 'ollama:chat:phi4'],
+      },
+      {
+        name: '[WatsonX] Llama, IBM Granite, ...',
+        value: [
+          'watsonx:meta-llama/llama-3-2-11b-vision-instruct',
+          'watsonx:ibm/granite-13b-chat-v2',
+        ],
       },
     ];
-    const providerChoices: (string | object)[] = await checkbox({
-      message: 'Which model providers would you like to use? (press enter to skip)',
-      choices,
-    });
+
+    /**
+     * The potential of the object type here is given by the agent action conditional
+     * for openai as a value choice
+     */
+    const providerChoices: (string | object)[] = (
+      await checkbox({
+        message: 'Which model providers would you like to use?',
+        choices,
+        loop: false,
+        pageSize: process.stdout.rows - 6,
+      })
+    ).flat();
 
     recordOnboardingStep('choose providers', {
       value: providerChoices.map((choice) =>
@@ -395,33 +491,54 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       ),
     });
 
+    // Tell the user if they have providers selected without relevant API keys set in env.
+    reportProviderAPIKeyWarnings(providerChoices).forEach((warningText) =>
+      logger.warn(warningText),
+    );
+
     if (providerChoices.length > 0) {
-      const flatProviders = providerChoices.flat();
-      if (flatProviders.length > 3) {
+      if (providerChoices.length > 3) {
         providers.push(
           ...providerChoices.map((choice) => (Array.isArray(choice) ? choice[0] : choice)),
         );
       } else {
-        providers.push(...flatProviders);
+        providers.push(...providerChoices);
       }
 
       if (
-        flatProviders.some((choice) => typeof choice === 'string' && choice.startsWith('file://'))
+        providerChoices.some(
+          (choice) =>
+            typeof choice === 'string' && choice.startsWith('file://') && choice.endsWith('.js'),
+        )
       ) {
-        fs.writeFileSync(path.join(process.cwd(), directory, 'provider.js'), JAVASCRIPT_PROVIDER);
-        logger.info('⌛ Wrote provider.js');
+        await writeFile({
+          file: 'provider.js',
+          contents: JAVASCRIPT_PROVIDER,
+          required: true,
+        });
       }
       if (
-        flatProviders.some((choice) => typeof choice === 'string' && choice.startsWith('exec:'))
+        providerChoices.some((choice) => typeof choice === 'string' && choice.startsWith('exec:'))
       ) {
-        fs.writeFileSync(path.join(process.cwd(), directory, 'provider.sh'), BASH_PROVIDER);
-        logger.info('⌛ Wrote provider.sh');
+        await writeFile({
+          file: 'provider.sh',
+          contents: BASH_PROVIDER,
+          required: true,
+        });
       }
       if (
-        flatProviders.some((choice) => typeof choice === 'string' && choice.startsWith('python:'))
+        providerChoices.some(
+          (choice) =>
+            typeof choice === 'string' &&
+            (choice.startsWith('python:') ||
+              (choice.startsWith('file://') && choice.endsWith('.py'))),
+        )
       ) {
-        fs.writeFileSync(path.join(process.cwd(), directory, 'provider.py'), PYTHON_PROVIDER);
-        logger.info('⌛ Wrote provider.py');
+        await writeFile({
+          file: 'provider.py',
+          contents: PYTHON_PROVIDER,
+          required: true,
+        });
       }
     } else {
       providers.push('openai:gpt-4o-mini');
@@ -443,11 +560,17 @@ export async function createDummyFiles(directory: string | null, interactive: bo
 
     if (action === 'rag' || action === 'agent') {
       if (language === 'javascript') {
-        fs.writeFileSync(path.join(process.cwd(), directory, 'context.js'), JAVASCRIPT_VAR);
-        logger.info('⌛ Wrote context.js');
+        await writeFile({
+          file: 'context.js',
+          contents: JAVASCRIPT_VAR,
+          required: true,
+        });
       } else {
-        fs.writeFileSync(path.join(process.cwd(), directory, 'context.py'), PYTHON_VAR);
-        logger.info('⌛ Wrote context.py');
+        await writeFile({
+          file: 'context.py',
+          contents: PYTHON_VAR,
+          required: true,
+        });
       }
     }
 
@@ -468,32 +591,65 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     type: action,
     language,
   });
-  fs.writeFileSync(path.join(process.cwd(), directory, 'promptfooconfig.yaml'), config);
-  fs.writeFileSync(path.join(process.cwd(), directory, 'README.md'), DEFAULT_README);
 
-  const isNpx = getEnvString('npm_execpath')?.includes('npx');
-  const runCommand = isNpx ? 'npx promptfoo@latest eval' : 'promptfoo eval';
-  if (directory === '.') {
-    logger.info(
-      chalk.green(
-        `✅ Wrote promptfooconfig.yaml. Run \`${chalk.bold(runCommand)}\` to get started!`,
-      ),
-    );
-  } else {
-    logger.info(`✅ Wrote promptfooconfig.yaml to ./${directory}`);
-    logger.info(
-      chalk.green(
-        `Run \`${chalk.bold(`cd ${directory}`)}\` and then \`${chalk.bold(
-          runCommand,
-        )}\` to get started!`,
-      ),
-    );
-  }
+  await writeFile({
+    file: 'README.md',
+    contents: DEFAULT_README,
+    required: false,
+  });
+
+  await writeFile({
+    file: 'promptfooconfig.yaml',
+    contents: config,
+    required: true,
+  });
 
   return {
     numPrompts: prompts.length,
     providerPrefixes: providers.map((p) => (typeof p === 'string' ? p.split(':')[0] : 'unknown')),
     action,
     language,
+    outDirectory,
   };
+}
+
+export async function initializeProject(directory: string | null, interactive: boolean = true) {
+  try {
+    const result = await createDummyFiles(directory, interactive);
+    const { outDirectory, ...telemetryDetails } = result;
+
+    const runCommand = isRunningUnderNpx() ? 'npx promptfoo eval' : 'promptfoo eval';
+
+    if (outDirectory === '.') {
+      logger.info(chalk.green(`✅ Run \`${chalk.bold(runCommand)}\` to get started!`));
+    } else {
+      logger.info(`✅ Wrote promptfooconfig.yaml to ./${outDirectory}`);
+      logger.info(
+        chalk.green(
+          `Run \`${chalk.bold(`cd ${outDirectory}`)}\` and then \`${chalk.bold(
+            runCommand,
+          )}\` to get started!`,
+        ),
+      );
+    }
+
+    return telemetryDetails;
+  } catch (err) {
+    if (err instanceof ExitPromptError) {
+      const runCommand = isRunningUnderNpx() ? 'npx promptfoo@latest init' : 'promptfoo init';
+      logger.info(
+        '\n' +
+          chalk.blue('Initialization paused. To continue setup later, use the command: ') +
+          chalk.bold(runCommand),
+      );
+      logger.info(
+        chalk.blue('For help or feedback, visit ') +
+          chalk.green('https://www.promptfoo.dev/contact/'),
+      );
+      await recordOnboardingStep('early exit');
+      process.exit(130);
+    } else {
+      throw err;
+    }
+  }
 }

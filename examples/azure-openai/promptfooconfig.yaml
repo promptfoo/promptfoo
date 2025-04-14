@@ -1,10 +1,18 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'Generate one very interesting fact about {{topic}}'
 
 providers:
-  - id: azureopenai:chat:gpt-35-turbo-deployment1
+  - id: azure:chat:gpt-4o-deployment1
     config:
       apiHost: 'your-org.openai.azure.com'
+
+  # Example of reasoning model setup
+  - id: azure:chat:o3-mini-deployment
+    config:
+      apiHost: 'your-org.openai.azure.com'
+      # Flag to indicate this is a reasoning model (o1, o3-mini, etc.)
+      isReasoningModel: true
 
 defaultTest:
   assert:
@@ -20,6 +28,6 @@ tests:
       - type: similar
         value: Bananas are naturally radioactive.
         provider:
-          id: azureopenai:embeddings:ada-deployment1
+          id: azure:embeddings:ada-deployment1
           config:
             apiHost: 'your-org.openai.azure.com'

@@ -1,0 +1,70 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Comparison of Mistral AI Models'
+
+prompts:
+  - file://./prompt.yaml
+
+providers:
+  # AKA mistral-tiny-latest
+  - mistral:open-mistral-nemo
+  - mistral:mistral-small-latest
+  - mistral:mistral-medium-latest
+  - mistral:mistral-large-latest
+
+defaultTest:
+  assert:
+    - type: cost
+      threshold: 0.05
+    - type: javascript
+      value: 'output.length >= 100 && output.length <= 500'
+
+tests:
+  - vars:
+      concept: 'Explain quantum entanglement to a 10-year-old child.'
+    assert:
+      - type: llm-rubric
+        value: Uses simple analogies or examples
+      - type: llm-rubric
+        value: Avoids technical jargon
+      - type: llm-rubric
+        value: Maintains scientific accuracy
+  - vars:
+      concept: 'Describe how CRISPR gene editing works in terms a high school student would understand.'
+    assert:
+      - type: llm-rubric
+        value: Explains the concept of DNA editing clearly
+      - type: llm-rubric
+        value: Uses appropriate metaphors or comparisons
+      - type: llm-rubric
+        value: Mentions potential applications or ethical considerations
+  - vars:
+      concept: 'Explain the concept of dark matter in the universe to someone with no background in physics.'
+    assert:
+      - type: llm-rubric
+        value: Conveys the mysterious nature of dark matter
+      - type: llm-rubric
+        value: Explains why scientists believe it exists
+      - type: llm-rubric
+        value: Uses everyday analogies to make the concept relatable
+  - vars:
+      concept: 'Describe how machine learning algorithms can identify objects in images to a curious teenager.'
+    assert:
+      - type: llm-rubric
+        value: Explains the concept of pattern recognition
+      - type: llm-rubric
+        value: Uses an example or analogy that a teenager can relate to
+      - type: llm-rubric
+        value: Mentions the need for large datasets or training
+  - vars:
+      concept: 'Explain the greenhouse effect and its role in climate change to a middle school student.'
+    assert:
+      - type: llm-rubric
+        value: Clearly explains the basic mechanism of the greenhouse effect
+      - type: llm-rubric
+        value: Connects the greenhouse effect to human activities and climate change
+      - type: llm-rubric
+        value: Uses relatable examples or analogies
+      - type: similar
+        value: 'The greenhouse effect is like a blanket around Earth that traps heat. Greenhouse gases in the atmosphere, such as carbon dioxide, act like the glass in a greenhouse. They let sunlight in but prevent some of the heat from escaping back into space. This natural process keeps Earth warm enough for life. However, human activities, especially burning fossil fuels, increase the amount of greenhouse gases in the atmosphere. This enhanced greenhouse effect leads to global warming and climate change, causing rising temperatures, changing weather patterns, and other environmental impacts.'
+        threshold: 0.7
+        provider: mistral:embedding:mistral-embed

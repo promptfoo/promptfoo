@@ -1,12 +1,30 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
-  - 'In the style of Van Gogh: {{subject}}'
-  - 'In the style of Dali: {{subject}}'
+  - 'In the style of {{artist}}: {{subject}}'
 
 providers:
-  - openai:image:dall-e-3
+  - id: openai:image:dall-e-3
+    config:
+      size: 1024x1024 # Valid sizes for DALL-E 3: 1024x1024, 1792x1024, 1024x1792
+
+  - id: openai:image:dall-e-2
+    config:
+      size: 512x512 # Valid sizes for DALL-E 2: 256x256, 512x512, 1024x1024
+      # response_format: b64_json # Returns the raw JSON response with base64-encoded image data
 
 tests:
   - vars:
-      subject: bananas
+      artist: Van Gogh
+      subject: sunset over mountains
   - vars:
-      subject: new york city
+      artist: Dali
+      subject: melting clocks
+  - vars:
+      artist: Picasso
+      subject: abstract faces
+  - vars:
+      artist: Monet
+      subject: water lilies
+  - vars:
+      artist: Warhol
+      subject: colorful soup cans

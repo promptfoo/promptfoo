@@ -34,7 +34,7 @@ Promptfoo supports a wide range of LLM providers, including:
 1. OpenAI (GPT-4o, GPT-3.5)
 2. Anthropic (Claude)
 3. Google (PaLM, Gemini)
-4. Amazon Bedrock
+4. Amazon Bedrock (Claude, Llama)
 5. Azure OpenAI
 6. Replicate
 7. Hugging Face
@@ -60,8 +60,57 @@ No, we do not collect any personally identifiable information (PII).
 
 ### How do I use a proxy with Promptfoo?
 
-Requests to most providers are made via [proxy-agent](https://www.npmjs.com/package/proxy-agent), which respects `HTTP_PROXY` and `HTTPS_PROXY` [environment variables](https://www.npmjs.com/package/proxy-from-env#environment-variables) of the form `[protocol://]<host>[:port]`.
+Promptfoo proxy settings are configured through environment variables:
+
+1. `HTTP_PROXY`: For HTTP requests
+2. `HTTPS_PROXY`: For HTTPS requests
+3. `NO_PROXY`: Comma-separated list of hosts to exclude from proxying
+
+The proxy URL format is: `[protocol://][user:password@]host[:port]`
+
+For example:
+
+```bash
+# Basic proxy
+export HTTPS_PROXY=http://proxy.company.com:8080
+
+# Proxy with authentication
+export HTTPS_PROXY=http://username:password@proxy.company.com:8080
+
+# Exclude specific hosts from proxying
+export NO_PROXY=localhost,127.0.0.1,internal.domain.com
+```
+
+Note: Environment variables are specific to your terminal/shell instance. If you need them permanently, add them to your shell's startup file (e.g., `~/.bashrc`, `~/.zshrc`).
+
+### How do I configure SSL certificates and security?
+
+For environments with custom certificate authorities (like corporate environments), configure SSL/TLS settings using these environment variables:
+
+1. `PROMPTFOO_CA_CERT_PATH`: Path to a custom CA certificate bundle. The path can be absolute or relative to your working directory. Invalid paths will log a warning:
+
+   ```bash
+   # Absolute path
+   export PROMPTFOO_CA_CERT_PATH=/path/to/ca-bundle.crt
+
+   # Relative path
+   export PROMPTFOO_CA_CERT_PATH=./certs/ca-bundle.crt
+   ```
+
+2. `PROMPTFOO_INSECURE_SSL`: Set to `true` to disable SSL certificate verification:
+   ```bash
+   export PROMPTFOO_INSECURE_SSL=true
+   ```
+
+Remember that like all environment variables, these settings are specific to your terminal/shell instance.
 
 ### How does Promptfoo integrate with existing development workflows?
 
 Promptfoo can be integrated into CI/CD pipelines via [GitHub Action](https://github.com/promptfoo/promptfoo-action), used with testing frameworks like Jest and Vitest, and incorporated into various stages of the development process.
+
+### Further Reading
+
+- [General Troubleshooting Guide](/docs/usage/troubleshooting) - Memory optimization, API keys, timeouts, and debugging
+- [Red Team Troubleshooting Guide](/docs/red-team/troubleshooting/overview) - Common issues with LLM red teaming
+- [Configuration Guide](/docs/configuration/guide)
+- [LLM Red Teaming Guide](/docs/guides/llm-redteaming)

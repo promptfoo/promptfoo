@@ -31,6 +31,4 @@ jobs:
       - run: npm ci
       - run: npm publish
         env:
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

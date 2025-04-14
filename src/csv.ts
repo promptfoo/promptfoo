@@ -1,17 +1,33 @@
 // Helpers for parsing CSV eval files, shared by frontend and backend. Cannot import native modules.
-import type { Assertion, AssertionType, CsvRow, TestCase } from './types';
+import logger from './logger';
+import type { Assertion, AssertionType, CsvRow, TestCase, BaseAssertionTypes } from './types';
+import { BaseAssertionTypesSchema } from './types';
+import { isJavascriptFile } from './util/file';
+import invariant from './util/invariant';
 
 const DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD = 0.8;
+
+let _assertionRegex: RegExp | null = null;
+function getAssertionRegex(): RegExp {
+  if (!_assertionRegex) {
+    const assertionTypesRegex = BaseAssertionTypesSchema.options.join('|');
+    _assertionRegex = new RegExp(
+      `^(not-)?(${assertionTypesRegex})(?:\\((\\d+(?:\\.\\d+)?)\\))?(?::([\\s\\S]*))?$`,
+    );
+  }
+  return _assertionRegex;
+}
 
 export function assertionFromString(expected: string): Assertion {
   // Legacy options
   if (
     expected.startsWith('javascript:') ||
     expected.startsWith('fn:') ||
-    expected.startsWith('eval:')
+    expected.startsWith('eval:') ||
+    (expected.startsWith('file://') && isJavascriptFile(expected.slice('file://'.length)))
   ) {
     // TODO(1.0): delete eval: legacy option
-    let sliceLength;
+    let sliceLength = 0;
     if (expected.startsWith('javascript:')) {
       sliceLength = 'javascript:'.length;
     }
@@ -31,11 +47,14 @@ export function assertionFromString(expected: string): Assertion {
   if (expected.startsWith('grade:') || expected.startsWith('llm-rubric:')) {
     return {
       type: 'llm-rubric',
-      value: expected.slice(6),
+      value: expected.slice(expected.startsWith('grade:') ? 6 : 11),
     };
   }
-  if (expected.startsWith('python:')) {
-    const sliceLength = 'python:'.length;
+  if (
+    expected.startsWith('python:') ||
+    (expected.startsWith('file://') && (expected.endsWith('.py') || expected.includes('.py:')))
+  ) {
+    const sliceLength = expected.startsWith('python:') ? 'python:'.length : 'file://'.length;
     const functionBody = expected.slice(sliceLength).trim();
     return {
       type: 'python',
@@ -43,21 +62,25 @@ export function assertionFromString(expected: string): Assertion {
     };
   }
 
-  // New options
-  const assertionRegex =
-    /^(not-)?(equals|contains-any|contains-all|icontains-any|icontains-all|contains-json|is-json|is-sql|regex|icontains|contains|webhook|rouge-n|similar|starts-with|levenshtein|classifier|model-graded-factuality|factuality|model-graded-closedqa|answer-relevance|context-recall|context-relevance|context-faithfulness|is-valid-openai-function-call|is-valid-openai-tools-call|latency|perplexity|perplexity-score|cost)(?:\((\d+(?:\.\d+)?)\))?(?::([\s\S]*))?$/;
-  const regexMatch = expected.match(assertionRegex);
+  const regexMatch = expected.match(getAssertionRegex());
 
   if (regexMatch) {
-    const [_, notPrefix, type, thresholdStr, value] = regexMatch;
-    const fullType = notPrefix ? `not-${type}` : type;
-    const threshold = Number.parseFloat(thresholdStr);
+    const [_, notPrefix, type, thresholdStr, value] = regexMatch as [
+      string,
+      string,
+      BaseAssertionTypes,
+      string,
+      string,
+    ];
+    const fullType: AssertionType = notPrefix ? `not-${type}` : type;
+    const parsedThreshold = thresholdStr ? Number.parseFloat(thresholdStr) : Number.NaN;
+    const threshold = Number.isFinite(parsedThreshold) ? parsedThreshold : undefined;
 
     if (
-      type === 'contains-any' ||
       type === 'contains-all' ||
-      type === 'icontains-any' ||
-      type === 'icontains-all'
+      type === 'contains-any' ||
+      type === 'icontains-all' ||
+      type === 'icontains-any'
     ) {
       return {
         type: fullType as AssertionType,
@@ -69,24 +92,25 @@ export function assertionFromString(expected: string): Assertion {
         value,
       };
     } else if (
-      type === 'rouge-n' ||
-      type === 'similar' ||
-      type === 'starts-with' ||
-      type === 'levenshtein' ||
-      type === 'classifier' ||
       type === 'answer-relevance' ||
+      type === 'classifier' ||
+      type === 'context-faithfulness' ||
       type === 'context-recall' ||
       type === 'context-relevance' ||
-      type === 'context-faithfulness' ||
+      type === 'cost' ||
       type === 'latency' ||
-      type === 'perplexity' ||
+      type === 'levenshtein' ||
       type === 'perplexity-score' ||
-      type === 'cost'
+      type === 'perplexity' ||
+      type === 'rouge-n' ||
+      type === 'similar' ||
+      type === 'starts-with'
     ) {
+      const defaultThreshold = type === 'similar' ? DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD : 0.75;
       return {
         type: fullType as AssertionType,
         value,
-        threshold: threshold || (type === 'similar' ? DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD : 0.75),
+        threshold: threshold ?? defaultThreshold,
       };
     } else {
       return {
@@ -103,18 +127,47 @@ export function assertionFromString(expected: string): Assertion {
   };
 }
 
+const uniqueErrorMessages = new Set<string>();
+
 export function testCaseFromCsvRow(row: CsvRow): TestCase {
   const vars: Record<string, string> = {};
   const asserts: Assertion[] = [];
   const options: TestCase['options'] = {};
+  const metadata: Record<string, any> = {};
   let providerOutput: string | object | undefined;
   let description: string | undefined;
   let metric: string | undefined;
   let threshold: number | undefined;
-  for (const [key, value] of Object.entries(row)) {
+
+  const specialKeys = [
+    'expected',
+    'prefix',
+    'suffix',
+    'description',
+    'providerOutput',
+    'metric',
+    'threshold',
+    'metadata',
+  ].map((k) => `_${k}`);
+
+  // Remove leading and trailing whitespace from keys, as leading/trailing whitespace interferes with
+  // meta key parsing.
+  const sanitizedRows = Object.entries(row).map(([key, value]) => [key.trim(), value]);
+
+  for (const [key, value] of sanitizedRows) {
+    // Check for single underscore usage with reserved keys
+    if (
+      !key.startsWith('__') &&
+      specialKeys.some((k) => key.startsWith(k)) &&
+      !uniqueErrorMessages.has(key)
+    ) {
+      const error = `You used a single underscore for the key "${key}". Did you mean to use "${key.replace('_', '__')}" instead?`;
+      uniqueErrorMessages.add(key);
+      logger.warn(error);
+    }
     if (key.startsWith('__expected')) {
       if (value.trim() !== '') {
-        asserts.push(assertionFromString(value));
+        asserts.push(assertionFromString(value.trim()));
       }
     } else if (key === '__prefix') {
       options.prefix = value;
@@ -128,6 +181,25 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
       metric = value;
     } else if (key === '__threshold') {
       threshold = Number.parseFloat(value);
+    } else if (key.startsWith('__metadata:')) {
+      const metadataKey = key.slice('__metadata:'.length);
+      if (metadataKey.endsWith('[]')) {
+        // Handle array metadata with comma splitting and escape support
+        const arrayKey = metadataKey.slice(0, -2);
+        if (value.trim() !== '') {
+          // Split by commas, but respect escaped commas (\,)
+          const values = value
+            .split(/(?<!\\),/)
+            .map((v) => v.trim())
+            .map((v) => v.replace('\\,', ','));
+          metadata[arrayKey] = values;
+        }
+      } else {
+        // Handle single value metadata
+        if (value.trim() !== '') {
+          metadata[metadataKey] = value;
+        }
+      }
     } else {
       vars[key] = value;
     }
@@ -144,5 +216,25 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
     ...(description ? { description } : {}),
     ...(providerOutput ? { providerOutput } : {}),
     ...(threshold ? { threshold } : {}),
+    ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
   };
+}
+
+/**
+ * Serialize a list of VarMapping objects as a CSV string.
+ * @param vars - The list of VarMapping objects to serialize.
+ * @returns A CSV string.
+ */
+export function serializeObjectArrayAsCSV(vars: object[]): string {
+  invariant(vars.length > 0, 'No variables to serialize');
+  const columnNames = Object.keys(vars[0]).join(',');
+  const rows = vars
+    .map(
+      (result) =>
+        `"${Object.values(result)
+          .map((value) => value.toString().replace(/"/g, '""'))
+          .join('","')}"`,
+    )
+    .join('\n');
+  return [columnNames, rows].join('\n') + '\n';
 }

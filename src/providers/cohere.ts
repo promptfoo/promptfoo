@@ -3,12 +3,12 @@ import { getEnvString } from '../envars';
 import logger from '../logger';
 import type {
   ApiProvider,
-  EnvOverrides,
   ProviderResponse,
   TokenUsage,
   ApiEmbeddingProvider,
   ProviderEmbeddingResponse,
 } from '../types';
+import type { EnvOverrides } from '../types/env';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
 interface CohereChatOptions {
@@ -111,7 +111,7 @@ export class CohereChatCompletionProvider implements ApiProvider {
       } else {
         throw new Error('Prompt is not a JSON object');
       }
-    } catch (error) {
+    } catch {
       body = {
         message: prompt,
         ...params,

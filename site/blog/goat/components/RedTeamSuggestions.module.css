@@ -1,0 +1,215 @@
+/* Suggestions Component */
+.suggestionsGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  margin: 0.1rem 0;
+}
+
+.suggestionCard {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 1rem;
+  background: #ffffff;
+  border: 1px solid #e5e5e5;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.suggestionCard:hover {
+  border-color: #2563eb;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.cardContent {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.textContent {
+  flex: 1;
+  min-width: 0;
+}
+
+.title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0;
+  transition: color 0.2s ease;
+}
+
+.suggestionCard:hover .title {
+  color: #2563eb;
+}
+
+.description {
+  font-size: 0.875rem;
+  color: #666666;
+  margin: 0.25rem 0 0 0;
+  line-height: 1.4;
+}
+
+@media (min-width: 768px) {
+  .suggestionsGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Dark mode styles for suggestions */
+html[data-theme='dark'] .suggestionCard {
+  background: #262626;
+  border-color: #404040;
+}
+
+html[data-theme='dark'] .suggestionCard:hover {
+  border-color: #3b82f6;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+html[data-theme='dark'] .title {
+  color: #ffffff;
+}
+
+html[data-theme='dark'] .suggestionCard:hover .title {
+  color: #3b82f6;
+}
+
+html[data-theme='dark'] .description {
+  color: #a3a3a3;
+}
+
+/* Here's how the complete dark mode section should look now */
+html[data-theme='dark'] .container {
+  background: #1a1a1a;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+html[data-theme='dark'] h2,
+html[data-theme='dark'] h3 {
+  color: #ffffff;
+}
+
+html[data-theme='dark'] .goalInput {
+  background: #262626;
+  border-color: #404040;
+  color: #ffffff;
+}
+
+html[data-theme='dark'] .goalInput:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+html[data-theme='dark'] .attackCard {
+  background: #262626;
+  border-color: #404040;
+}
+
+html[data-theme='dark'] .iconWrapper {
+  background: #333333;
+}
+
+html[data-theme='dark'] .attackInfo p {
+  color: #a3a3a3;
+}
+
+html[data-theme='dark'] .messageContainer {
+  background: #262626;
+}
+
+html[data-theme='dark'] .target .messageContent {
+  background: #333333;
+  color: #ffffff;
+}
+
+html[data-theme='dark'] .messageTimestamp {
+  color: #a3a3a3;
+}
+
+html[data-theme='dark'] .button {
+  background: #262626;
+  border-color: #404040;
+  color: #ffffff;
+}
+
+html[data-theme='dark'] .button:hover {
+  border-color: #3b82f6;
+  color: #3b82f6;
+}
+
+html[data-theme='dark'] .cancelButton {
+  background: #262626;
+  border-color: #404040;
+  color: #a3a3a3;
+}
+
+html[data-theme='dark'] .cancelButton:hover {
+  border-color: #3b82f6;
+  color: #3b82f6;
+}
+
+html[data-theme='dark'] .progressBar {
+  background: #404040;
+}
+
+html[data-theme='dark'] .messageContainer::-webkit-scrollbar-track,
+html[data-theme='dark'] .attacksGrid::-webkit-scrollbar-track {
+  background: #262626;
+}
+
+html[data-theme='dark'] .messageContainer::-webkit-scrollbar-thumb,
+html[data-theme='dark'] .attacksGrid::-webkit-scrollbar-thumb {
+  background: #404040;
+}
+
+html[data-theme='dark'] .messageContainer::-webkit-scrollbar-thumb:hover,
+html[data-theme='dark'] .attacksGrid::-webkit-scrollbar-thumb:hover {
+  background: #525252;
+}
+
+html[data-theme='dark'] .tryAgainButtonUnsafe {
+  background: #262626;
+  color: #ffffff;
+}
+
+html[data-theme='dark'] .tryAgainButtonUnsafe:hover {
+  background: #333333;
+}
+
+html[data-theme='dark'] .tryAgainButton {
+  background: #333333;
+  color: #22c55e;
+}
+
+html[data-theme='dark'] .tryAgainButton:hover {
+  background: #404040;
+}
+
+html[data-theme='dark'] .runButton:disabled {
+  background: #333333;
+  color: #666666;
+}
+
+html[data-theme='dark'] .additionalTurnButton:disabled {
+  background: #333333;
+  color: #666666;
+}
+
+html[data-theme='dark'] .messageMetadata {
+  border-top-color: rgba(255, 255, 255, 0.1);
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+html[data-theme='dark'] .metadataLabel,
+html[data-theme='dark'] .metadataValue {
+  color: #e5e5e5;
+}

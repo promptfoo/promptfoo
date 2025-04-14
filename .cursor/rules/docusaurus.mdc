@@ -1,0 +1,399 @@
+---
+description: Guidelines for updating Docusaurus documentation following best practices
+globs: 'site/docs/**/*.md,site/docs/**/*.mdx,site/blog/**/*.md,site/blog/**/*.mdx,site/src/pages/**/*.md,site/src/pages/**/*.mdx'
+alwaysApply: false
+---
+
+# Docusaurus Documentation Guidelines
+
+Files: "site/docs/**/\*.md,site/docs/**/_.mdx,site/blog/\*\*/_.md,site/blog/**/\*.mdx,site/src/pages/**/_.md,site/src/pages/\*\*/_.mdx"
+
+This rule provides guidance for updating and maintaining Docusaurus documentation in the promptfoo project, ensuring consistency and best practices.
+
+## Core Principles
+
+### Minimal Edits
+
+- Prioritize minimal edits when updating existing documentation
+- Avoid creating entirely new sections or rewriting substantial portions
+- Focus edits on improving grammar, spelling, clarity, fixing typos, and structural improvements where needed
+- Do not modify existing headings (h1, h2, h3, etc.) as they are often linked externally
+
+### Progressive Disclosure
+
+- Structure content to reveal information progressively
+- Begin with essential actions and information, then provide deeper context as necessary
+- Organize information from most important to least important
+
+### Action-Oriented Language
+
+- Clearly outline actionable steps users should take
+- Use concise and direct language
+- Prefer active voice over passive voice
+- Use imperative mood for instructions (e.g., "Install the package" instead of "You should install the package")
+
+## Terminology and Naming Conventions
+
+### Preferred Terms
+
+- Use "eval" instead of "evaluation" in all documentation
+- When referring to command line usage, use `npx promptfoo eval` rather than `npx promptfoo evaluation`
+- Maintain consistency with this terminology across all examples, code blocks, and explanations
+
+### Project Name Capitalization
+
+- The project name can be written as either "Promptfoo" (capitalized) or "promptfoo" (lowercase) depending on context
+- Use "Promptfoo" (capitalized) at the beginning of sentences or in headings
+- Use "promptfoo" (lowercase) in code examples, terminal commands, or when referring to the package name
+- Be consistent with the chosen capitalization within each document or section
+
+## Front Matter and SEO
+
+Docusaurus automatically adds metadata to pages for search engines and social media sharing. Use front matter at the top of markdown files to optimize these elements.
+
+### Required Front Matter Fields
+
+- `title`: The page title shown in search results and browser tabs (can differ from the main heading)
+- `description`: A concise summary of the page content (ideally 150-160 characters)
+
+### Optional Front Matter Fields
+
+- `image`: Path to a thumbnail image for social media cards
+- `keywords`: Array of relevant search terms related to the page content
+- `sidebar_position`: Control the order of items in the sidebar navigation
+
+### Examples:
+
+#### Markdown Pages
+
+```markdown
+---
+title: Configuring Promptfoo for Multiple Models
+description: Learn how to set up evaluations across different LLM providers with consistent metrics
+image: /img/docs/multi-model-comparison.png
+keywords: [benchmarking, llm comparison, model evaluation, gpt-4, claude]
+sidebar_position: 3
+---
+
+# Comparing Multiple LLM Models
+```
+
+#### React Pages
+
+When creating React pages, add SEO metadata in the Layout component:
+
+```jsx
+import Layout from '@theme/Layout';
+
+function CustomPage() {
+  return (
+    <Layout
+      title="Custom Page Title"
+      description="Description that will go into a meta tag in <head>"
+      keywords={['keyword1', 'keyword2']}
+    >
+      <main>{/* Page content */}</main>
+    </Layout>
+  );
+}
+```
+
+### SEO Best Practices
+
+- Keep titles under 60 characters for optimal display in search results
+- Write description meta tags between 150-160 characters
+- Include relevant keywords naturally in both title and description
+- Use unique titles and descriptions for each page
+- For image thumbnails, use 1200×630 pixels for optimal social media display
+
+## Code Block Formatting
+
+### Code Block Titles
+
+- Only add a title attribute to code blocks that represent complete, runnable files
+- Do not add titles to code fragments, partial examples, or snippets that aren't meant to be used as standalone files
+- This rule applies to all code blocks regardless of language (YAML, JavaScript, TypeScript, Python, etc.)
+
+#### Examples of properly titled complete files:
+
+```yaml title="promptfooconfig.yaml"
+# Complete YAML configuration file
+description: Basic evaluation setup
+prompts:
+  - file://prompts/my-prompt.txt
+providers:
+  - openai:gpt-4
+```
+
+```javascript title="example.js"
+// Complete JavaScript file
+const promptfoo = require('promptfoo');
+
+async function runEval() {
+  const results = await promptfoo.evaluate({
+    prompts: ['Hello, world'],
+    providers: ['openai:gpt-4'],
+  });
+  console.log(results);
+}
+
+runEval();
+```
+
+```python title="example.py"
+# Complete Python file
+from promptfoo import Evaluator
+
+evaluator = Evaluator(
+    prompts=["Hello, world"],
+    providers=["openai:gpt-4"]
+)
+results = evaluator.evaluate()
+print(results)
+```
+
+#### Examples of untitled code fragments:
+
+```yaml
+# YAML fragment
+prompts:
+  - 'What is the capital of {{country}}?'
+```
+
+```javascript
+// JavaScript fragment
+const score = results.getScore();
+```
+
+```python
+# Python fragment
+data = {"input": "example"}
+```
+
+### Code Block Highlighting
+
+- Use special comment directives to highlight specific lines in code blocks
+- Available directives:
+  - `highlight-next-line`: Highlights the line immediately after the comment
+  - `highlight-start` and `highlight-end`: Highlight all lines between these two comments
+  - Line numbers: You can highlight specific line numbers using `{1,4-6,8}` after the language
+- Never remove existing highlight directives when editing a document
+- Preserve the original author's intent by maintaining their highlighting
+
+#### Examples:
+
+Highlighting the next line:
+
+```javascript
+// highlight-next-line
+const result = calculateScore(input);
+console.log(result);
+```
+
+Highlighting a range:
+
+```javascript
+function example() {
+  // highlight-start
+  const a = 1;
+  const b = 2;
+  return a + b;
+  // highlight-end
+}
+```
+
+Highlighting specific lines:
+
+```javascript {1,3-5}
+import { evaluate } from 'promptfoo';
+
+const config = {
+  prompts: ['Hello'],
+  providers: ['openai:gpt-4'],
+};
+```
+
+### Code Block Best Practices
+
+- Always specify the language for syntax highlighting
+- Use meaningful titles for code blocks when appropriate
+- Keep code examples concise and focused
+- Ensure code examples are correct and up-to-date
+- Include comments in code examples where helpful
+
+## Admonitions
+
+Docusaurus supports special callout blocks called admonitions. Use these to highlight important information.
+
+### Admonition Types
+
+- `note`: General information
+- `tip`: Useful advice
+- `info`: Additional details
+- `warning`: Important caution
+- `danger`: Critical warning
+
+### Admonition Syntax
+
+- Create admonitions by wrapping content with three colons `:::` followed by the type
+- Always include empty lines before and after the content inside admonitions (especially when using Prettier)
+- You can include Markdown formatting within admonitions
+
+### Examples:
+
+```markdown
+:::note
+
+Some **content** with _Markdown_ `syntax`.
+
+:::
+
+:::tip
+
+Some **content** with _Markdown_ `syntax`.
+
+:::
+
+:::info
+
+Some **content** with _Markdown_ `syntax`.
+
+:::
+
+:::warning
+
+Some **content** with _Markdown_ `syntax`.
+
+:::
+
+:::danger
+
+Some **content** with _Markdown_ `syntax`.
+
+:::
+```
+
+### Prettier Compatibility
+
+When using Prettier to format Markdown files, always include empty lines around admonition content:
+
+```markdown
+<!-- Correct usage with Prettier -->
+
+:::note
+
+Hello world
+
+:::
+
+<!-- Incorrect usage with Prettier -->
+
+:::note
+Hello world
+:::
+```
+
+Without empty lines, Prettier might reformat admonitions to invalid syntax, breaking the rendering.
+
+## Documentation Structure
+
+### Backlinks
+
+- Search the codebase to provide accurate and relevant backlinks within the documentation
+- Include references to specific files, functions, or concepts
+- Ensure backlinks are relevant to the current section
+
+### Related Concepts
+
+- End each documentation section with a concise 'See Also' or 'Related Concepts' heading
+- Link to related documentation or concepts
+- Format the 'See Also' section consistently:
+
+  ```markdown
+  ## See Also
+
+  - [Related Topic 1](mdc:../path/to/related-topic-1.md)
+  - [Related Topic 2](mdc:../path/to/related-topic-2.md)
+  - [External Resource](mdc:https://example.com)
+  ```
+
+## Content Guidelines
+
+### Writing Style
+
+- Use clear, concise language
+- Maintain a consistent tone throughout the documentation
+- Write for an international audience (avoid idioms, colloquialisms, and culturally specific references)
+- Spell out acronyms on first use, followed by the acronym in parentheses
+
+### Examples
+
+- Include practical examples where appropriate
+- Make examples realistic and applicable to common use cases
+- When showing configuration examples, include all necessary fields
+- Demonstrate both basic and advanced usage when relevant
+
+### Visual Elements
+
+- Use diagrams, screenshots, or illustrations to explain complex concepts
+- Ensure images have appropriate alt text for accessibility
+- Maintain a consistent visual style across all documentation
+- Optimize images for web display
+
+## Documentation Maintenance
+
+### Versioning
+
+- Be aware of documentation versioning when making changes
+- Ensure changes are appropriate for the current version
+- Document version-specific features or changes clearly
+
+### Reviewing Changes
+
+- Preview changes before submitting
+- Check for broken links or formatting issues
+- Ensure code examples work as expected
+- Verify that changes adhere to these guidelines
+
+## Example Format
+
+### Good Documentation Section
+
+````markdown
+## Using Configuration Files
+
+To use a configuration file with promptfoo, create a `promptfooconfig.yaml` file in your project root:
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Basic evaluation setup
+prompts:
+  - file://prompts/my-prompt.txt
+providers:
+  - openai:gpt-4
+tests:
+  - vars:
+      input: 'Hello world'
+    assert:
+      - type: contains
+        value: greeting
+```
+````
+
+Run your evaluation with:
+
+```bash
+npx promptfoo@latest eval
+```
+
+The evaluation will use the configuration from your `promptfooconfig.yaml` file.
+
+## See Also
+
+- [Configuration Reference](mdc:../reference/configuration.md)
+- [Command Line Interface](mdc:../reference/cli.md)
+- [Provider Options](mdc:../reference/providers.md)
+
+```
+
+```

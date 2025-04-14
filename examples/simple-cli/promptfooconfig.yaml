@@ -1,9 +1,5 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: 'Simple test'
-
-tags:
-  env: staging
-  app: footgpt
-  branch: fix/issue-123
 
 prompts:
   - 'Rephrase this in {{language}}: {{body}}'

@@ -1,10 +1,8 @@
 import type { Command } from 'commander';
-import { eq, desc } from 'drizzle-orm';
-import fs from 'fs';
-import { getDb } from '../database';
-import { evals } from '../database/tables';
 import logger from '../logger';
+import Eval from '../models/eval';
 import telemetry from '../telemetry';
+import { writeOutput } from '../util';
 
 export function exportCommand(program: Command) {
   program
@@ -13,46 +11,25 @@ export function exportCommand(program: Command) {
     .option('-o, --output [outputPath]', 'Output path for the exported file')
     .action(async (evalId, cmdObj) => {
       try {
-        const db = getDb();
         let result;
         if (evalId === 'latest') {
-          result = await db
-            .select({
-              id: evals.id,
-              createdAt: evals.createdAt,
-              description: evals.description,
-              results: evals.results,
-              config: evals.config,
-            })
-            .from(evals)
-            .orderBy(desc(evals.createdAt))
-            .limit(1)
-            .execute();
+          result = await Eval.latest();
         } else {
-          result = await db
-            .select({
-              id: evals.id,
-              createdAt: evals.createdAt,
-              description: evals.description,
-              results: evals.results,
-              config: evals.config,
-            })
-            .from(evals)
-            .where(eq(evals.id, evalId))
-            .execute();
+          result = await Eval.findById(evalId);
         }
 
-        if (!result || result.length === 0) {
+        if (!result) {
           logger.error(`No eval found with ID ${evalId}`);
           process.exit(1);
         }
-
-        const jsonData = JSON.stringify(result[0], null, 2);
+        const summary = await result.toEvaluateSummary();
+        const jsonData = JSON.stringify(summary, null, 2);
         if (cmdObj.output) {
-          fs.writeFileSync(cmdObj.output, jsonData);
+          await writeOutput(cmdObj.output, result, null);
+
           logger.info(`Eval with ID ${evalId} has been successfully exported to ${cmdObj.output}.`);
         } else {
-          console.log(jsonData);
+          logger.info(jsonData);
         }
 
         telemetry.record('command_used', {

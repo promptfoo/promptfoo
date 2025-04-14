@@ -1,0 +1,66 @@
+.risk-category-drawer .MuiListItem-root.failure-item {
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  padding: 16px;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.risk-category-drawer .MuiListItem-root.failure-item:hover {
+  border-color: #bdbdbd;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.risk-category-drawer .prompt {
+  font-weight: 500;
+  margin-bottom: 8px;
+  word-break: break-word;
+  max-width: 100%;
+  overflow-wrap: break-all;
+}
+
+.risk-category-drawer .output {
+  color: #555;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 100px;
+  overflow-y: auto;
+  overflow-wrap: break-all;
+  background-color: #f5f5f5;
+  padding: 8px;
+  border-radius: 4px;
+}
+
+.risk-category-drawer .failed-tests-header {
+  margin-top: 8px;
+  margin-bottom: 8px;
+  font-weight: 500;
+  border-top: 2px solid #e0e0e0;
+  padding-top: 1.5rem;
+}
+
+[data-theme='dark'] .risk-category-drawer .MuiListItem-root.failure-item {
+  border-color: #424242;
+  background-color: #2c2c2c;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+[data-theme='dark'] .risk-category-drawer .MuiListItem-root.failure-item:hover {
+  border-color: #616161;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme='dark'] .risk-category-drawer .prompt {
+  color: #e0e0e0;
+}
+
+[data-theme='dark'] .risk-category-drawer .output {
+  color: #b0b0b0;
+  background-color: #1e1e1e;
+}
+
+[data-theme='dark'] .risk-category-drawer .failed-tests-header {
+  color: #e0e0e0;
+  border-top-color: #424242;
+}

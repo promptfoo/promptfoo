@@ -27,7 +27,7 @@ assert:
     value:
       - The expected output
       - Expected output
-      - Expected... output
+      - file://my_expected_output.txt
     threshold: 0.8
 ```
 

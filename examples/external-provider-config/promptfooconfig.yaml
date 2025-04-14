@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts: 'Tell me about the weather in {{city}}.'
 providers:
   - file://gpt-4o-mini.yaml

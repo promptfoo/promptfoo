@@ -1,7 +1,12 @@
-import { assertionFromString, testCaseFromCsvRow } from '../src/csv';
+import { assertionFromString, serializeObjectArrayAsCSV, testCaseFromCsvRow } from '../src/csv';
+import logger from '../src/logger';
 import type { Assertion, CsvRow, TestCase } from '../src/types';
 
 describe('testCaseFromCsvRow', () => {
+  afterEach(() => {
+    jest.resetAllMocks();
+  });
+
   it('should create a TestCase with assertions and options from a CSV row', () => {
     const row: CsvRow = {
       __expected1: 'equals:Expected output',
@@ -38,6 +43,28 @@ describe('testCaseFromCsvRow', () => {
     expect(result).toEqual(expectedTestCase);
   });
 
+  it('should properly trim whitespace and newlines from assertion values', () => {
+    const row: CsvRow = {
+      __expected1: 'equals:Expected output\n',
+      __expected2: ' contains:part of output  ',
+      var1: 'value1',
+    };
+
+    const expectedTestCase: TestCase = {
+      vars: {
+        var1: 'value1',
+      },
+      assert: [
+        { type: 'equals', value: 'Expected output' },
+        { type: 'contains', value: 'part of output' },
+      ],
+      options: {},
+    };
+
+    const result = testCaseFromCsvRow(row);
+    expect(result).toEqual(expectedTestCase);
+  });
+
   it('should handle CSV row with only variables', () => {
     const row: CsvRow = {
       var1: 'value1',
@@ -56,9 +83,118 @@ describe('testCaseFromCsvRow', () => {
     const result = testCaseFromCsvRow(row);
     expect(result).toEqual(expectedTestCase);
   });
+
+  it('should log a warning for single underscore usage with reserved keys', () => {
+    const row: CsvRow = {
+      _expected: 'equals:Expected output',
+      var1: 'value1',
+    };
+
+    testCaseFromCsvRow(row);
+    testCaseFromCsvRow(row);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'You used a single underscore for the key "_expected". Did you mean to use "__expected" instead?',
+    );
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('should handle array metadata with comma splitting', () => {
+    const row: CsvRow = {
+      '__metadata:tags[]': 'tag1,tag2,tag3',
+      var1: 'value1',
+    };
+
+    const expectedTestCase: TestCase = {
+      vars: {
+        var1: 'value1',
+      },
+      assert: [],
+      options: {},
+      metadata: {
+        tags: ['tag1', 'tag2', 'tag3'],
+      },
+    };
+
+    const result = testCaseFromCsvRow(row);
+    expect(result).toEqual(expectedTestCase);
+  });
+
+  it('should handle escaped commas in array metadata', () => {
+    const row: CsvRow = {
+      '__metadata:tags[]': 'tag1,tag with\\, comma,tag3',
+      var1: 'value1',
+    };
+
+    const expectedTestCase: TestCase = {
+      vars: {
+        var1: 'value1',
+      },
+      assert: [],
+      options: {},
+      metadata: {
+        tags: ['tag1', 'tag with, comma', 'tag3'],
+      },
+    };
+
+    const result = testCaseFromCsvRow(row);
+    expect(result).toEqual(expectedTestCase);
+  });
+
+  it('should handle single value metadata', () => {
+    const row: CsvRow = {
+      '__metadata:category': 'test-category',
+      '__metadata:priority': 'high',
+      var1: 'value1',
+    };
+
+    const expectedTestCase: TestCase = {
+      vars: {
+        var1: 'value1',
+      },
+      assert: [],
+      options: {},
+      metadata: {
+        category: 'test-category',
+        priority: 'high',
+      },
+    };
+
+    const result = testCaseFromCsvRow(row);
+    expect(result).toEqual(expectedTestCase);
+  });
+
+  it('should properly trim whitespace from keys', () => {
+    const row: CsvRow = {
+      '  var1  ': 'value1',
+      ' __expected1 ': 'equals:Expected output',
+      __expected2: 'contains:part of output',
+      '  __metadata:category  ': 'test-category',
+    };
+
+    const expectedTestCase: TestCase = {
+      vars: {
+        var1: 'value1',
+      },
+      assert: [
+        { type: 'equals', value: 'Expected output' },
+        { type: 'contains', value: 'part of output' },
+      ],
+      options: {},
+      metadata: {
+        category: 'test-category',
+      },
+    };
+
+    const result = testCaseFromCsvRow(row);
+    expect(result).toEqual(expectedTestCase);
+  });
 });
 
 describe('assertionFromString', () => {
+  afterEach(() => {
+    jest.resetAllMocks();
+  });
+
   it('should create an equality assertion', () => {
     const expected = 'Expected output';
 
@@ -276,6 +412,13 @@ describe('assertionFromString', () => {
     expect(result.threshold).toBe(0.001);
   });
 
+  it('should create a function call assertion', () => {
+    const expected = 'is-valid-function-call';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('is-valid-function-call');
+  });
+
   it('should create an openai function call assertion', () => {
     const expected = 'is-valid-openai-function-call';
 
@@ -291,11 +434,198 @@ describe('assertionFromString', () => {
     expect(result.value).toBe('file://file.py');
   });
 
+  it('should parse python: assertion', () => {
+    const assertion = assertionFromString('python:some_python_code');
+    expect(assertion).toEqual({
+      type: 'python',
+      value: 'some_python_code',
+    });
+  });
+
+  it(`should parse file:// prefix assertion`, () => {
+    const assertion = assertionFromString('file://script.py');
+    expect(assertion).toEqual({
+      type: 'python',
+      value: 'script.py',
+    });
+  });
+
+  it(`should parse file:// prefix assertion with function name`, () => {
+    const assertion = assertionFromString('file://script.py:function_name');
+    expect(assertion).toEqual({
+      type: 'python',
+      value: 'script.py:function_name',
+    });
+  });
+
   it('should create a javascript assertion', () => {
     const expected = 'javascript: x > 10';
 
     const result: Assertion = assertionFromString(expected);
     expect(result.type).toBe('javascript');
     expect(result.value).toBe('x > 10');
+  });
+
+  it('should create an llm-rubric assertion with "grade:" prefix', () => {
+    const expected = 'grade:Evaluate the response based on clarity and accuracy';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('llm-rubric');
+    expect(result.value).toBe('Evaluate the response based on clarity and accuracy');
+  });
+
+  it('should create an llm-rubric assertion with "llm-rubric:" prefix', () => {
+    const expected = 'llm-rubric:Rate the answer on a scale of 1-10 for completeness';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('llm-rubric');
+    expect(result.value).toBe('Rate the answer on a scale of 1-10 for completeness');
+  });
+
+  it('should handle legacy javascript option', () => {
+    const expected = 'javascript:output === "Expected output"';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('javascript');
+    expect(result.value).toBe('output === "Expected output"');
+  });
+
+  it('should handle legacy eval option', () => {
+    const expected = 'eval:output === "Expected output"';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('javascript');
+    expect(result.value).toBe('output === "Expected output"');
+  });
+
+  it('should handle legacy fn option', () => {
+    const expected = 'fn:output === "Expected output"';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('javascript');
+    expect(result.value).toBe('output === "Expected output"');
+  });
+
+  it('should use DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD for similar assertion without threshold', () => {
+    const expected = 'similar:Expected output';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('similar');
+    expect(result.value).toBe('Expected output');
+    expect(result.threshold).toBe(0.8); // DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD
+  });
+
+  it('should use 0.75 as default threshold for other assertions requiring threshold', () => {
+    const assertionTypes = [
+      'answer-relevance',
+      'classifier',
+      'context-faithfulness',
+      'context-recall',
+      'context-relevance',
+      'cost',
+      'latency',
+      'levenshtein',
+      'perplexity-score',
+      'perplexity',
+      'rouge-n',
+      'starts-with',
+    ];
+
+    for (const type of assertionTypes) {
+      const expected = `${type}:Expected output`;
+      const result: Assertion = assertionFromString(expected);
+      expect(result.type).toBe(type);
+      expect(result.value).toBe('Expected output');
+      expect(result.threshold).toBe(0.75);
+    }
+  });
+
+  it('should use provided threshold when specified', () => {
+    const expected = 'similar(0.9):Expected output';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('similar');
+    expect(result.value).toBe('Expected output');
+    expect(result.threshold).toBe(0.9);
+  });
+
+  it('should preserve zero threshold when explicitly specified', () => {
+    const expected = 'levenshtein(0):Expected output';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('levenshtein');
+    expect(result.value).toBe('Expected output');
+    expect(result.threshold).toBe(0);
+    // This is especially important to test with the nullish coalescing operator (??),
+    // since it behaves differently than logical OR (||) for the value 0
+  });
+});
+
+describe('serializeObjectArrayAsCSV', () => {
+  it('should serialize an array of objects as a CSV string', () => {
+    expect(
+      serializeObjectArrayAsCSV([
+        { name: 'John', age: 30 },
+        { name: 'Jane', age: 25 },
+      ]),
+    ).toBe('name,age\n"John","30"\n"Jane","25"\n');
+  });
+
+  it('should escape commas in values', () => {
+    expect(
+      serializeObjectArrayAsCSV([
+        { name: 'John, Smith', age: 30 },
+        { name: 'Jane, Doe', age: 25 },
+      ]),
+    ).toBe('name,age\n"John, Smith","30"\n"Jane, Doe","25"\n');
+  });
+
+  it('should escape double quotes in values', () => {
+    expect(
+      serializeObjectArrayAsCSV([
+        { name: 'John "Smithy" Smith', age: 30 },
+        { name: 'Jane "Doge" Doe', age: 25 },
+      ]),
+    ).toBe('name,age\n"John ""Smithy"" Smith","30"\n"Jane ""Doge"" Doe","25"\n');
+  });
+
+  it('should handle multiline values', () => {
+    expect(serializeObjectArrayAsCSV([{ name: 'John Smith\nSmithy', age: 30 }])).toBe(
+      'name,age\n"John Smith\nSmithy","30"\n',
+    );
+  });
+
+  it('should serialize vars to CSV format', () => {
+    const vars = [
+      { name: 'John', age: '30' },
+      { name: 'Jane', age: '25' },
+    ];
+
+    const expected = 'name,age\n"John","30"\n"Jane","25"\n';
+    expect(serializeObjectArrayAsCSV(vars)).toBe(expected);
+  });
+
+  it('should handle empty vars array', () => {
+    const vars: any[] = [];
+    expect(() => serializeObjectArrayAsCSV(vars)).toThrow(
+      'Invariant failed: No variables to serialize',
+    );
+  });
+
+  it('should handle single var mapping', () => {
+    const vars = [{ name: 'John', age: '30' }];
+    const expected = 'name,age\n"John","30"\n';
+    expect(serializeObjectArrayAsCSV(vars)).toBe(expected);
+  });
+
+  it('should handle vars with different properties', () => {
+    const vars = [
+      { name: 'John', age: '30' },
+      { name: 'Jane', age: '25', city: 'NY' },
+    ];
+
+    // Note: The actual implementation includes quotes around values and a trailing newline
+    const expected = 'name,age\n"John","30"\n"Jane","25","NY"\n';
+    expect(serializeObjectArrayAsCSV(vars)).toBe(expected);
   });
 });

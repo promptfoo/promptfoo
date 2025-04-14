@@ -1,81 +1,132 @@
+import confirm from '@inquirer/confirm';
 import chalk from 'chalk';
 import type { Command } from 'commander';
-import readline from 'readline';
-import { URL } from 'url';
-import { getEnvString } from '../envars';
+import dedent from 'dedent';
+import { DEFAULT_SHARE_VIEW_BASE_URL } from '../constants';
 import logger from '../logger';
-import { createShareableUrl } from '../share';
+import Eval from '../models/eval';
+import { createShareableUrl, hasEvalBeenShared, isSharingEnabled, getShareableUrl } from '../share';
 import telemetry from '../telemetry';
-import type { ResultsFile } from '../types';
-import { getLatestEval, readResult, setupEnv } from '../util';
+import { setupEnv } from '../util';
+import { loadDefaultConfig } from '../util/config/default';
 
-async function createPublicUrl(results: ResultsFile, showAuth: boolean) {
-  const url = await createShareableUrl(results.results, results.config, showAuth);
-  logger.info(`View results: ${chalk.greenBright.bold(url)}`);
+export function notCloudEnabledShareInstructions(): void {
+  const cloudUrl = DEFAULT_SHARE_VIEW_BASE_URL;
+  const welcomeUrl = `${cloudUrl}/welcome`;
+
+  logger.info(dedent`
+    
+    » You need to have a cloud account to securely share your results.
+    
+    1. Please go to ${chalk.greenBright.bold(cloudUrl)} to sign up or log in.
+    2. Follow the instructions at ${chalk.greenBright.bold(welcomeUrl)} to login to the command line.
+    3. Run ${chalk.greenBright.bold('promptfoo share')}
+  `);
+}
+
+export async function createAndDisplayShareableUrl(
+  evalRecord: Eval,
+  showAuth: boolean,
+): Promise<string | null> {
+  if (!isSharingEnabled(evalRecord)) {
+    notCloudEnabledShareInstructions();
+    process.exitCode = 1;
+    return null;
+  }
+
+  const url = await createShareableUrl(evalRecord, showAuth);
+
+  if (url) {
+    logger.info(`View results: ${chalk.greenBright.bold(url)}`);
+  } else {
+    logger.error('Failed to create shareable URL');
+    process.exitCode = 1;
+  }
+  return url;
 }
 
 export function shareCommand(program: Command) {
   program
     .command('share [evalId]')
-    .description('Create a shareable URL of an eval (defaults to most recent)')
-    .option('-y, --yes', 'Skip confirmation')
-    .option('--env-file <path>', 'Path to .env file')
+    .description('Create a shareable URL of an eval (defaults to most recent)' + '\n\n')
+    .option('--env-file, --env-path <path>', 'Path to .env file')
     .option(
       '--show-auth',
       'Show username/password authentication information in the URL if exists',
       false,
     )
+    // NOTE: Added in 0.109.1 after migrating sharing to promptfoo.app in 0.108.0
+    .option(
+      '-y, --yes',
+      'Flag does nothing (maintained for backwards compatibility only - shares are now private by default)',
+      false,
+    )
     .action(
       async (
         evalId: string | undefined,
-        cmdObj: { yes: boolean; envFile?: string; showAuth: boolean } & Command,
+        cmdObj: { yes: boolean; envPath?: string; showAuth: boolean } & Command,
       ) => {
-        setupEnv(cmdObj.envFile);
-        telemetry.maybeShowNotice();
+        setupEnv(cmdObj.envPath);
         telemetry.record('command_used', {
           name: 'share',
         });
         await telemetry.send();
 
-        let results;
+        let eval_: Eval | undefined | null = null;
         if (evalId) {
-          results = (await readResult(evalId))?.result;
-          if (!results) {
-            logger.error(`Could not load results for eval ID ${evalId}.`);
-            process.exit(1);
+          eval_ = await Eval.findById(evalId);
+          if (!eval_) {
+            logger.error(`Could not find eval with ID ${chalk.bold(evalId)}.`);
+            process.exitCode = 1;
+            return;
           }
         } else {
-          results = await getLatestEval();
-          if (!results) {
+          eval_ = await Eval.latest();
+          if (!eval_) {
             logger.error('Could not load results. Do you need to run `promptfoo eval` first?');
-            process.exit(1);
+            process.exitCode = 1;
+            return;
+          }
+          logger.info(`Sharing latest eval (${eval_.id})`);
+        }
+
+        try {
+          const { defaultConfig: currentConfig } = await loadDefaultConfig();
+          if (currentConfig && currentConfig.sharing) {
+            eval_.config.sharing = currentConfig.sharing;
+            logger.debug(
+              `Applied sharing config from promptfooconfig.yaml: ${JSON.stringify(currentConfig.sharing)}`,
+            );
+          }
+        } catch (err) {
+          logger.debug(`Could not load config: ${err}`);
+        }
+
+        if (eval_.prompts.length === 0) {
+          // FIXME(ian): Handle this on the server side.
+          logger.error(
+            dedent`
+              Eval ${chalk.bold(eval_.id)} cannot be shared.
+              This may be because the eval is still running or because it did not complete successfully.
+              If your eval is still running, wait for it to complete and try again.
+            `,
+          );
+          process.exitCode = 1;
+          return;
+        }
+
+        if (await hasEvalBeenShared(eval_)) {
+          const url = await getShareableUrl(eval_, cmdObj.showAuth);
+          const shouldContinue = await confirm({
+            message: `This eval is already shared at ${url}. Sharing it again will overwrite the existing data. Continue?`,
+          });
+          if (!shouldContinue) {
+            process.exitCode = 0;
+            return;
           }
         }
 
-        if (cmdObj.yes || getEnvString('PROMPTFOO_DISABLE_SHARE_WARNING')) {
-          await createPublicUrl(results, cmdObj.showAuth);
-        } else {
-          const reader = readline.createInterface({
-            input: process.stdin,
-            output: process.stdout,
-          });
-
-          const baseUrl = getEnvString('PROMPTFOO_SHARING_APP_BASE_URL');
-          const hostname = baseUrl ? new URL(baseUrl).hostname : 'app.promptfoo.dev';
-
-          reader.question(
-            `Create a private shareable URL of your eval on ${hostname}?\n\nTo proceed, please confirm [Y/n] `,
-            async function (answer: string) {
-              if (answer.toLowerCase() !== 'yes' && answer.toLowerCase() !== 'y' && answer !== '') {
-                reader.close();
-                process.exit(1);
-              }
-              reader.close();
-
-              await createPublicUrl(results, cmdObj.showAuth);
-            },
-          );
-        }
+        await createAndDisplayShareableUrl(eval_, cmdObj.showAuth);
       },
     );
 }

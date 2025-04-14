@@ -5,6 +5,9 @@ sidebar_label: Harmful Content
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
+import React from 'react';
+import VulnerabilityCategoriesTables from '@site/docs/\_shared/VulnerabilityCategoriesTables';
+
 # Harmful Content Plugin
 
 The Harmful Content plugin is designed to test an AI system's ability to handle and respond appropriately to various types of harmful or sensitive content. This plugin covers a wide range of potentially problematic areas, from violent crimes to misinformation.
@@ -23,48 +26,34 @@ To include the Harmful Content plugin in your LLM red teaming setup:
 
 ```yaml
 redteam:
-plugins:
-  - harmful
+  plugins:
+    - harmful
 ```
 
 You can also specify individual subcategories:
 
 ```yaml
 redteam:
-plugins:
-  - harmful:violent-crime
-  - harmful:hate
-  - harmful:misinformation-disinformation
+  plugins:
+    - harmful:violent-crime
+    - harmful:hate
+    - harmful:misinformation-disinformation
+```
+
+To change the number of test cases, use the `numTests` parameter:
+
+```yaml
+redteam:
+  plugins:
+    - harmful:violent-crime
+      numTests: 20
 ```
 
 ## Subcategories
 
 The Harmful Content plugin includes the following subcategories:
 
-| Subcategory                     | Plugin ID                             | Description                                              |
-| ------------------------------- | ------------------------------------- | -------------------------------------------------------- |
-| Violent Crimes                  | harmful:violent-crime                 | Content related to violent criminal activities           |
-| Non-Violent Crimes              | harmful:non-violent-crime             | Content related to non-violent criminal activities       |
-| Sex Crimes                      | harmful:sex-crime                     | Content related to sexual crimes                         |
-| Child Exploitation              | harmful:child-exploitation            | Content exploiting or harming children                   |
-| Indiscriminate Weapons          | harmful:indiscriminate-weapons        | Content related to weapons without context               |
-| Chemical & Biological Weapons   | harmful:chemical-biological-weapons   | Content related to chemical or biological weapons        |
-| Illegal Drugs                   | harmful:illegal-drugs                 | Content related to illegal drug use or trade             |
-| Copyright Violations            | harmful:copyright-violations          | Content violating copyright laws                         |
-| Cybercrime                      | harmful:cybercrime                    | Content related to cybercriminal activities              |
-| Hate                            | harmful:hate                          | Content that promotes hate or discrimination             |
-| Self-Harm                       | harmful:self-harm                     | Content that encourages self-harm or suicide             |
-| Sexual Content                  | harmful:sexual-content                | Explicit or inappropriate sexual content                 |
-| Harassment & Bullying           | harmful:harassment-bullying           | Content that harasses or bullies individuals             |
-| Graphic Content                 | harmful:graphic-content               | Displaying graphic or violent content                    |
-| Unsafe Practices                | harmful:unsafe-practices              | Content promoting unsafe or harmful practices            |
-| Misinformation & Disinformation | harmful:misinformation-disinformation | Spreading false or misleading information                |
-| Specialized Advice              | harmful:specialized-advice            | Providing advice in specialized fields without expertise |
-| Privacy                         | harmful:privacy                       | Content violating privacy rights                         |
-| Intellectual Property           | harmful:intellectual-property         | Content violating intellectual property rights           |
-| Radicalization                  | harmful:radicalization                | Content that promotes radical or extremist views         |
-| Profanity                       | harmful:profanity                     | Content containing profane or inappropriate language     |
-| Insults                         | harmful:insults                       | Content that insults or demeans individuals              |
+<VulnerabilityCategoriesTables label="harmful" />
 
 ## How It Works
 

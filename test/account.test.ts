@@ -1,9 +1,10 @@
-import { getUserEmail, setUserEmail, getAuthor } from '../src/accounts';
-import { writeGlobalConfig, readGlobalConfig } from '../src/globalConfig';
+import { getUserEmail, setUserEmail, getAuthor } from '../src/globalConfig/accounts';
+import { readGlobalConfig, writeGlobalConfigPartial } from '../src/globalConfig/globalConfig';
 
-jest.mock('../src/globalConfig', () => ({
+jest.mock('../src/globalConfig/globalConfig', () => ({
   writeGlobalConfig: jest.fn(),
   readGlobalConfig: jest.fn(),
+  writeGlobalConfigPartial: jest.fn(),
 }));
 
 describe('accounts module', () => {
@@ -26,7 +27,7 @@ describe('accounts module', () => {
 
   describe('setUserEmail', () => {
     it('should write the email to global config', () => {
-      const writeGlobalConfigSpy = jest.mocked(writeGlobalConfig);
+      const writeGlobalConfigSpy = jest.mocked(writeGlobalConfigPartial);
       setUserEmail('test@example.com');
       expect(writeGlobalConfigSpy).toHaveBeenCalledWith({ account: { email: 'test@example.com' } });
     });

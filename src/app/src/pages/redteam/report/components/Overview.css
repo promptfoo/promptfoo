@@ -1,0 +1,28 @@
+.severity-card {
+  transition:
+    transform 0.3s ease-in-out,
+    box-shadow 0.3s ease-in-out;
+}
+
+.severity-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+}
+
+[data-theme='dark'] .severity-card:hover {
+  box-shadow: none;
+}
+
+.card-critical {
+  border-left: 5px solid #ff1744 !important;
+}
+.card-high {
+  border-left: 5px solid #ff9100 !important;
+}
+.card-medium {
+  border-left: 5px solid #ffc400 !important;
+}
+.card-low {
+  border-left: 5px solid #00e676 !important;
+}

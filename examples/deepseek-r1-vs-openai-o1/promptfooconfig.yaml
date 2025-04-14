@@ -1,0 +1,40 @@
+description: 'DeepSeek-R1 vs o1 comparison on MMLU reasoning tasks'
+
+prompts:
+  - |
+    You are an expert test taker. Please solve the following multiple choice question step by step.
+
+    Question: {{question}}
+
+    Options:
+    A) {{choices[0]}}
+    B) {{choices[1]}}
+    C) {{choices[2]}}
+    D) {{choices[3]}}
+
+    Think through this step by step, then provide your final answer in the format "Therefore, the answer is A/B/C/D."
+
+providers:
+  - openai:o1
+  - deepseek:deepseek-reasoner
+
+defaultTest:
+  assert:
+    # Inference should complete within 60 seconds
+    - type: latency
+      threshold: 60000
+    # Check for step-by-step reasoning
+    - type: llm-rubric
+      value: Response must include clear step-by-step reasoning
+    # Check that it ends with a clear answer choice
+    - type: regex
+      value: "Therefore, the answer is [ABCD]\\."
+
+tests:
+  # Load MMLU test sets for reasoning-heavy subjects
+  - huggingface://datasets/cais/mmlu?split=test&subset=abstract_algebra&config=abstract_algebra&limit=10
+  # Optionally load other subjects
+  # - huggingface://datasets/cais/mmlu?split=test&subset=formal_logic&config=formal_logic&limit=10
+  # - huggingface://datasets/cais/mmlu?split=test&subset=high_school_mathematics&config=high_school_mathematics&limit=10
+  # - huggingface://datasets/cais/mmlu?split=test&subset=college_mathematics&config=college_mathematics&limit=10
+  # - huggingface://datasets/cais/mmlu?split=test&subset=logical_fallacies&config=logical_fallacies&limit=10

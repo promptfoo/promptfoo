@@ -6,23 +6,36 @@ sidebar_label: Quickstart
 import CodeBlock from '@theme/CodeBlock';
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
+import styles from '@site/src/pages/quickstart.module.css';
 
 # Quickstart
 
-This guide describes how to get started with Promptfoo's gen AI red teaming tool.
+Promptfoo is an [open-source](https://github.com/promptfoo/promptfoo) tool for red teaming gen AI applications.
+
+- **Automatically scans 50+ vulnerability types**:
+  - <a href="/docs/red-team/llm-vulnerability-types/#privacy-and-security" className={styles.badge}>Security & data privacy</a>: jailbreaks, injections, RAG poisoning, etc.
+  - <a href="/docs/red-team/llm-vulnerability-types/" className={styles.badge}>Compliance & ethics</a>: harmful & biased content, content filter validation, OWASP/NIST/EU compliance, etc.
+  - <a href="/docs/red-team/configuration/#custom-policies" className={styles.badge}>Custom policies</a>: enforce organizational guidelines.
+- Generates **dynamic attack probes** tailored to your application using specialized uncensored models.
+- Implements state-of-the-art **adversarial ML research** from [Microsoft](/docs/red-team/strategies/multi-turn/), [Meta](/docs/red-team/strategies/goat/), and others.
+- Integrates with [CI/CD](/docs/integrations/ci-cd/).
+- Tests via [HTTP API](#attacking-an-api-endpoint), [browser](/docs/providers/browser/), or [direct model access](#alternative-test-specific-prompts-and-models).
+
+<div className={styles.imageContainer}>
+  ![llm red team report](/img/riskreport-1@2x.png)
+</div>
 
 ## Prerequisites
 
 - Install [Node 18 or later](https://nodejs.org/en/download/package-manager/)
-- Set the `OPENAI_API_KEY` environment variable or [override the provider](/docs/red-team/configuration/#providers) with your preferred service.
+- Optional: Set your `OPENAI_API_KEY` environment variable
 
 ## Initialize the project
 
 <Tabs groupId="installation-method">
   <TabItem value="npx" label="npx" default>
     <CodeBlock language="bash">
-      npx promptfoo@latest redteam init my-project
-      cd my-project
+      npx promptfoo@latest redteam setup
     </CodeBlock>
   </TabItem>
   <TabItem value="npm" label="npm">
@@ -33,8 +46,7 @@ This guide describes how to get started with Promptfoo's gen AI red teaming tool
 
     Run:
     <CodeBlock language="bash">
-      promptfoo redteam init my-project
-      cd my-project
+      promptfoo redteam setup
     </CodeBlock>
 
   </TabItem>
@@ -46,150 +58,130 @@ This guide describes how to get started with Promptfoo's gen AI red teaming tool
 
     Run:
     <CodeBlock language="bash">
-      promptfoo redteam init my-project
-      cd my-project
+      promptfoo redteam setup
     </CodeBlock>
 
   </TabItem>
 </Tabs>
 
-The `init` command creates some placeholders, including a `promptfooconfig.yaml` file. We'll use this config file to do most of our setup.
+The `setup` command will open a web UI that asks questions to help you configure your red teaming project.
 
-## Set the prompt & models to test
+### Provide application details
 
-Edit the config to set up the prompt(s) and the LLM(s) you want to test:
+Start by providing some details about the target application. The more details we provide, the more tailored the generated test cases will be.
 
-```yaml
-prompts:
-  - 'Act as a travel agent and help the user plan their trip. User query: {{query}}'
+At a minimum, be sure to fill out the **Purpose** field with a description of your application.
 
-providers:
-  - openai:gpt-4o-mini
-  - anthropic:messages:claude-3.5-sonnet-20240620
+:::tip
+If you just want to try out a quick example, click "Load Example" at the top of the Application Details page.
+:::
+
+![llm red team setup](/img/docs/setup/application-details.png)
+
+---
+
+### Configure the target
+
+Next, configure Promptfoo to communicate with your target application or model.
+
+Because the Promptfoo scanner runs locally on your machine, it can attack any endpoint accessible from your machine or network.
+
+[See below](#alternative-test-specific-prompts-and-models) for more info on how to talk with non-HTTP targets such as models (local or remote) or custom code.
+
+![llm red team setup](/img/docs/setup/target.png)
+
+### Select plugins
+
+Next, select the plugins that you want to use. [Plugins](/docs/red-team/plugins/) are adversarial generators. They produce malicious inputs that are sent to your application.
+
+Check off the individual plugins you want to use, or select a preset that includes a combination of plugins (if in doubt, stick with "Default").
+
+![llm red team setup](/img/docs/setup/plugins.png)
+
+### Select attack strategies
+
+Now we select strategies. [Strategies](/docs/red-team/strategies/) are techniques that wrap the generated inputs in a specific attack pattern.
+
+This is how Promptfoo generates more sophisticated jailbreaks and injections.
+
+![llm red team setup](/img/docs/setup/strategy.png)
+
+### Review and save
+
+Finally, download the generated configuration file. You'll use this to run the red team from your local machine.
+
+![llm red team setup](/img/docs/setup/review.png)
+
+Save the file as `promptfooconfig.yaml`. Then, navigate to the directory where you saved the file and run `promptfoo redteam run`.
+
+:::info
+If you don't want to use the UI to start a red team, you can use the `init` command instead:
+
+```sh
+promptfoo redteam init --no-gui
 ```
 
-### Talking to your app
+:::
 
-Promptfoo can hook directly into your existing LLM app (Python, Javascript, etc), RAG or agent workflows, or send requests to your API. See [custom providers](/docs/red-team/configuration/#custom-providers) for details on setting up:
-
-- [HTTP requests](/docs/red-team/configuration/#http-requests) to your API
-- [Custom Python scripts](/docs/red-team/configuration/#custom-scripts) for precise control
-- [Javascript](/docs/providers/custom-api/), [any executable](/docs/providers/custom-script/), local providers like [ollama](/docs/providers/ollama/), or other [provider types](/docs/providers/)
-
-### Prompting
-
-Your prompt may be [dynamic](/docs/configuration/parameters/#prompt-functions), or maybe it's constructed entirely on the application side and you just want to [pass through](/docs/red-team/configuration/#passthrough-prompts) the adversarial input. Also note that files are accepted:
-
-```yaml
-prompts:
-  - file://path/to/prompt.json
-```
-
-Learn more about [prompt formats](/docs/configuration/parameters/#prompts).
-
-## Generate adversarial test cases
-
-The `init` step will do this for you automatically, but in case you'd like to manually re-generate your adversarial inputs:
-
-<Tabs groupId="installation-method">
-  <TabItem value="npx" label="npx" default>
-    <CodeBlock language="bash">
-      npx promptfoo@latest redteam generate
-    </CodeBlock>
-  </TabItem>
-  <TabItem value="npm" label="npm">
-    <CodeBlock language="bash">
-      promptfoo redteam generate
-    </CodeBlock>
-  </TabItem>
-  <TabItem value="brew" label="brew">
-    <CodeBlock language="bash">
-      promptfoo redteam generate
-    </CodeBlock>
-  </TabItem>
-</Tabs>
-
-This will generate several hundred adversarial inputs across many categories of potential harm and save them in `redteam.yaml`.
-
-You can reduce the number of test cases by setting the specific [plugins](/docs/guides/llm-redteaming#step-3-generate-adversarial-test-cases) you want to run. For example, to only generate harmful inputs:
-
-<Tabs groupId="installation-method">
-  <TabItem value="npx" label="npx" default>
-    <CodeBlock language="bash">
-      npx promptfoo@latest redteam generate --plugins harmful
-    </CodeBlock>
-  </TabItem>
-  <TabItem value="npm" label="npm">
-    <CodeBlock language="bash">
-      promptfoo redteam generate --plugins harmful
-    </CodeBlock>
-  </TabItem>
-  <TabItem value="brew" label="brew">
-    <CodeBlock language="bash">
-      promptfoo redteam generate --plugins harmful
-    </CodeBlock>
-  </TabItem>
-</Tabs>
-
-Run `npx promptfoo@latest redteam generate --help` to see all available plugins.
-
-### Changing the provider
-
-By default we use OpenAI's `gpt-4o` model to generate the adversarial inputs, but we support hundreds of other models. Learn more about [setting the provider](/docs/red-team/configuration/#providers).
-
-## Run the eval
+## Run the scan
 
 Now that we've generated the test cases, we're ready to run the adversarial evaluation.
 
+Run this command in the same directory as your `promptfooconfig.yaml` file:
+
 <Tabs groupId="installation-method">
   <TabItem value="npx" label="npx" default>
     <CodeBlock language="bash">
-      npx promptfoo@latest eval -c redteam.yaml
+      npx promptfoo@latest redteam run
     </CodeBlock>
   </TabItem>
   <TabItem value="npm" label="npm">
     <CodeBlock language="bash">
-      promptfoo eval -c redteam.yaml
+      promptfoo redteam run
     </CodeBlock>
   </TabItem>
   <TabItem value="brew" label="brew">
     <CodeBlock language="bash">
-      promptfoo eval -c redteam.yaml
+      promptfoo redteam run
     </CodeBlock>
   </TabItem>
 </Tabs>
+
+This command will generate several hundred adversarial inputs across many categories of potential harm and save them in `redteam.yaml`. Then, it will run the test cases against the target.
+
+![llm red team run](/img/docs/redteam-run.png)
 
 ## View the results
 
 <Tabs groupId="installation-method">
   <TabItem value="npx" label="npx" default>
     <CodeBlock language="bash">
-      npx promptfoo@latest view
+      npx promptfoo@latest redteam report
     </CodeBlock>
   </TabItem>
   <TabItem value="npm" label="npm">
     <CodeBlock language="bash">
-      promptfoo view
+      promptfoo redteam report
     </CodeBlock>
   </TabItem>
   <TabItem value="brew" label="brew">
     <CodeBlock language="bash">
-      promptfoo view
+      promptfoo redteam report
     </CodeBlock>
   </TabItem>
 </Tabs>
 
-Promptfoo provides a detailed eval view that lets you dig into specific red team failure cases:
-
-![llm red team evals](/img/docs/redteam-results.png)
-
-You also get a view that summarizes your LLM app's vulnerabilities:
+Promptfoo provides a report view that lets you dig into specific red team failure cases:
 
 ![llm red team report](/img/riskreport-1@2x.png)
 
 That view includes a breakdown of specific test types that are connected to the eval view:
 
 ![llm red team remediations](/img/riskreport-2.png)
+
+Clicking into a specific test case to view logs will display the raw inputs and outputs:
+
+![llm red team evals](/img/docs/redteam-results.png)
 
 ### Understanding the report view
 
@@ -199,6 +191,60 @@ The red teaming results provide insights into various aspects of your LLM applic
 2. **Severity levels**: Classifies vulnerabilities based on their potential impact and likelihood of occurrence.
 3. **Logs**: Provides concrete instances of inputs that triggered vulnerabilities.
 4. **Suggested mitigations**: Recommendations for addressing identified vulnerabilities, which may include prompt engineering, additional safeguards, or architectural changes.
+
+## Common target types
+
+### Attacking an API endpoint
+
+The configuration file includes a description of the target endpoint. You can edit the config to make changes to the target. For example:
+
+```yaml
+targets:
+  - id: https
+    label: 'travel-agent-agent'
+    config:
+      url: 'https://example.com/generate'
+      method: 'POST'
+      headers:
+        'Content-Type': 'application/json'
+      body:
+        myPrompt: '{{prompt}}'
+
+purpose: 'The user is a budget traveler looking for the best deals. The system is a travel agent that helps the user plan their trip. The user is anonymous and should not be able to access any information about other users, employees, or other individuals.'
+```
+
+The `label` is used to create issues and report the results of the red teaming. Make sure to re-use the same `label` when generating new redteam configs for the same target.
+
+Setting the `purpose` is optional, but it will significantly improve the quality of the generated test cases and grading. Be specific about who the user of the system is and what information and actions they should be able to access.
+
+:::info
+For more information on configuring an HTTP target, see [HTTP requests](/docs/providers/http/).
+:::
+
+### Alternative: Test specific prompts and models
+
+If you don't have a live endpoint, you can edit the config to set the specific prompt(s) and the LLM model(s) to test:
+
+```yaml
+prompts:
+  - 'Act as a travel agent and help the user plan their trip. User query: {{query}}'
+  # Paths to prompts also work:
+  # - file://path/to/prompt.txt
+
+targets:
+  - id: openai:gpt-4o-mini
+    label: 'travel-agent-mini'
+```
+
+Promptfoo supports dozens of model providers. For more information on supported targets, see [Custom Providers](/docs/red-team/configuration/#custom-providerstargets). For more information on supported prompt formats, see [prompts](/docs/configuration/parameters/#prompts).
+
+### Alternative: Talking directly to your app
+
+Promptfoo hooks directly into your existing LLM app to attack targets via Python, Javascript, RAG or agent workflows, HTTP API, and more. See [custom providers](/docs/red-team/configuration/#custom-providerstargets) for details on setting up:
+
+- [HTTP requests](/docs/red-team/configuration/#http-requests) to your API
+- [Custom Python scripts](/docs/red-team/configuration/#custom-scripts) for precise control
+- [Javascript](/docs/providers/custom-api/), [any executable](/docs/providers/custom-script/), local providers like [ollama](/docs/providers/ollama/), or other [provider types](/docs/providers/)
 
 ## Continuous improvement
 
@@ -214,5 +260,5 @@ Check out the [CI/CD integration](/docs/integrations/ci-cd/) docs for more info.
 
 - [Configuration guide](/docs/red-team/configuration/) for detailed info on configuring your red team
 - [Full guide](/docs/guides/llm-redteaming) for info examples of dynamically generated prompts, RAG/chain, etc.
-- [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) for an overview of supported [plugins](/docs/category/plugins/)
+- [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) for an overview of supported [plugins](/docs/red-team/plugins/)
 - Guides on red teaming [agents](/docs/red-team/agents/) and [RAGs](/docs/red-team/rag/)

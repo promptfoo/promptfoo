@@ -27,6 +27,8 @@
       td {
         padding: 5px;
         min-width: 200px;
+        white-space: pre-line;
+        vertical-align: top;
       }
 
       tr > td[data-content^='[PASS]'] {
@@ -44,9 +46,9 @@
 
         <th>language</th>
 
-        <th>Rephrase this in {{language}}: {{body}}</th>
+        <th>[openai:gpt-4o-mini] Rephrase this in {{language}}: {{body}}</th>
 
-        <th>Translate this to conversational {{language}}: {{body}}</th>
+        <th>[openai:gpt-4o-mini] Translate this to conversational {{language}}: {{body}}</th>
       </thead>
       <tbody>
         <tr>
@@ -54,21 +56,51 @@
 
           <td data-content="French">French</td>
 
-          <td data-content="[PASS] (1.00) Bonjour le monde">[PASS] (1.00) Bonjour le monde</td>
+          <td
+            data-content="[PASS] (1.00)
 
-          <td data-content="[PASS] (1.00) Bonjour tout le monde">
-            [PASS] (1.00) Bonjour tout le monde
+Bonjour le monde.
+
+Pass Reason: No assertions"
+          >
+            [PASS] (1.00) Bonjour le monde. Pass Reason: No assertions
+          </td>
+
+          <td
+            data-content="[PASS] (1.00)
+
+Salut tout le monde !
+
+Pass Reason: No assertions"
+          >
+            [PASS] (1.00) Salut tout le monde ! Pass Reason: No assertions
           </td>
         </tr>
 
         <tr>
-          <td data-content="I'm hungry">I'm hungry</td>
+          <td data-content="I&#39;m hungry">I'm hungry</td>
 
           <td data-content="French">French</td>
 
-          <td data-content="[PASS] (1.00) J'ai faim.">[PASS] (1.00) J'ai faim.</td>
+          <td
+            data-content="[PASS] (1.00)
 
-          <td data-content="[PASS] (1.00) J'ai faim.">[PASS] (1.00) J'ai faim.</td>
+J&#39;ai faim.
+
+Pass Reason: No assertions"
+          >
+            [PASS] (1.00) J'ai faim. Pass Reason: No assertions
+          </td>
+
+          <td
+            data-content="[PASS] (1.00)
+
+J&#39;ai faim.
+
+Pass Reason: No assertions"
+          >
+            [PASS] (1.00) J'ai faim. Pass Reason: No assertions
+          </td>
         </tr>
 
         <tr>
@@ -76,26 +108,51 @@
 
           <td data-content="Pirate">Pirate</td>
 
-          <td data-content="[PASS] (1.00) Ahoy, me hearties!">[PASS] (1.00) Ahoy, me hearties!</td>
+          <td
+            data-content="[PASS] (1.00)
 
-          <td data-content="[PASS] (1.00) Ahoy matey! Avast ye, world!">
-            [PASS] (1.00) Ahoy matey! Avast ye, world!
+Ahoy, me hearties!
+
+Pass Reason: No assertions"
+          >
+            [PASS] (1.00) Ahoy, me hearties! Pass Reason: No assertions
+          </td>
+
+          <td
+            data-content="[PASS] (1.00)
+
+Ahoy, me hearty! Greetings to ye, world!
+
+Pass Reason: No assertions"
+          >
+            [PASS] (1.00) Ahoy, me hearty! Greetings to ye, world! Pass Reason: No assertions
           </td>
         </tr>
 
         <tr>
-          <td data-content="I'm hungry">I'm hungry</td>
+          <td data-content="I&#39;m hungry">I'm hungry</td>
 
           <td data-content="Pirate">Pirate</td>
 
-          <td data-content="[PASS] (1.00) I be feelin' a mighty hunger in me belly.">
-            [PASS] (1.00) I be feelin' a mighty hunger in me belly.
+          <td
+            data-content="[PASS] (1.00)
+
+Arrr, me belly be grumblin&#39;!
+
+Pass Reason: No assertions"
+          >
+            [PASS] (1.00) Arrr, me belly be grumblin'! Pass Reason: No assertions
           </td>
 
           <td
-            data-content="[PASS] (1.00) Arr, me belly be rumblin'! I be needin' some grub, matey!"
+            data-content="[PASS] (1.00)
+
+Arrr, me belly be rumblin&#39;! I be feelin&#39; mighty hungry, matey!
+
+Pass Reason: No assertions"
           >
-            [PASS] (1.00) Arr, me belly be rumblin'! I be needin' some grub, matey!
+            [PASS] (1.00) Arrr, me belly be rumblin'! I be feelin' mighty hungry, matey! Pass
+            Reason: No assertions
           </td>
         </tr>
       </tbody>

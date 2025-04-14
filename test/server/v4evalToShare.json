@@ -1,0 +1,421 @@
+{
+  "createdAt": 1727905040496,
+  "id": "eval-2024-10-02T21:37:20-kMQ",
+  "config": {
+    "tags": {},
+    "description": "A translator built with LLM",
+    "prompts": ["file:///Users/steve/src/promptfoo/examples/simple-csv/prompts.txt"],
+    "providers": ["openai:gpt-4o-mini"],
+    "tests": [
+      {
+        "vars": { "language": "French", "body": "Hello world" },
+        "assert": [],
+        "options": {},
+        "description": "Row #1"
+      },
+      {
+        "vars": { "language": "French", "body": "I'm hungry" },
+        "assert": [],
+        "options": {},
+        "description": "Row #2"
+      },
+      {
+        "vars": { "language": "Pirate", "body": "Hello world" },
+        "assert": [],
+        "options": {},
+        "description": "Row #3"
+      },
+      {
+        "vars": { "language": "Pirate", "body": "I'm hungry" },
+        "assert": [],
+        "options": {},
+        "description": "Row #4"
+      }
+    ],
+    "scenarios": [],
+    "env": {},
+    "sharing": true,
+    "defaultTest": { "vars": {}, "assert": [], "options": {}, "metadata": {} },
+    "outputPath": [],
+    "extensions": [],
+    "metadata": {},
+    "redteam": { "plugins": [], "strategies": [] }
+  },
+  "results": [
+    {
+      "id": "14c141a7-be6f-460f-b3cf-711e0a64fe88",
+      "evalId": "eval-2024-10-02T21:37:20-kMQ",
+      "promptIdx": 0,
+      "testIdx": 0,
+      "testCase": {
+        "vars": { "language": "French", "body": "Hello world" },
+        "assert": [],
+        "options": {},
+        "description": "Row #1",
+        "metadata": {}
+      },
+      "prompt": {
+        "raw": "Rephrase this in French: Hello world",
+        "label": "examples/simple-csv/prompts.txt: Rephrase this in {{language}}: {{body}}"
+      },
+      "promptId": "ad447337160016cbd0a5c7f2626d0c1fe2ade0d4d653e20bed9250632bc56e03",
+      "error": null,
+      "score": 1,
+      "success": true,
+      "providerResponse": {
+        "output": "Bonjour le monde.",
+        "tokenUsage": { "cached": 19, "total": 19 },
+        "cached": true,
+        "cost": 0.0000046499999999999995
+      },
+      "gradingResult": {
+        "pass": true,
+        "score": 1,
+        "reason": "No assertions",
+        "tokensUsed": { "total": 0, "prompt": 0, "completion": 0, "cached": 0 },
+        "assertion": null
+      },
+      "namedScores": {},
+      "provider": {
+        "id": "openai:gpt-4o-mini",
+        "label": "",
+        "config": { "basePath": "examples/simple-csv" }
+      },
+      "latencyMs": 3,
+      "cost": 0.0000046499999999999995
+    },
+    {
+      "id": "013a4746-4051-4dc5-87d1-1c8414bc124f",
+      "evalId": "eval-2024-10-02T21:37:20-kMQ",
+      "promptIdx": 1,
+      "testIdx": 0,
+      "testCase": {
+        "vars": { "language": "French", "body": "Hello world" },
+        "assert": [],
+        "options": {},
+        "description": "Row #1",
+        "metadata": {}
+      },
+      "prompt": {
+        "raw": "Translate this to conversational French: Hello world",
+        "label": "examples/simple-csv/prompts.txt: Translate this to conversational {{language}}: {{body}}"
+      },
+      "promptId": "0ceccef5d40adcbf45bda7be485d2ee420e4d5943975932e7a38c5468d97c6ee",
+      "error": null,
+      "score": 1,
+      "success": true,
+      "providerResponse": {
+        "output": "Salut tout le monde !",
+        "tokenUsage": { "cached": 20, "total": 20 },
+        "cached": true,
+        "cost": 0.0000052500000000000006
+      },
+      "gradingResult": {
+        "pass": true,
+        "score": 1,
+        "reason": "No assertions",
+        "tokensUsed": { "total": 0, "prompt": 0, "completion": 0, "cached": 0 },
+        "assertion": null
+      },
+      "namedScores": {},
+      "provider": {
+        "id": "openai:gpt-4o-mini",
+        "label": "",
+        "config": { "basePath": "examples/simple-csv" }
+      },
+      "latencyMs": 7,
+      "cost": 0.0000052500000000000006
+    },
+    {
+      "id": "7791f530-38e0-431a-b8ef-fc2a64b14cb5",
+      "evalId": "eval-2024-10-02T21:37:20-kMQ",
+      "promptIdx": 1,
+      "testIdx": 1,
+      "testCase": {
+        "vars": { "language": "French", "body": "I'm hungry" },
+        "assert": [],
+        "options": {},
+        "description": "Row #2",
+        "metadata": {}
+      },
+      "prompt": {
+        "raw": "Translate this to conversational French: I'm hungry",
+        "label": "examples/simple-csv/prompts.txt: Translate this to conversational {{language}}: {{body}}"
+      },
+      "promptId": "0ceccef5d40adcbf45bda7be485d2ee420e4d5943975932e7a38c5468d97c6ee",
+      "error": null,
+      "score": 1,
+      "success": true,
+      "providerResponse": {
+        "output": "J'ai faim.",
+        "tokenUsage": { "cached": 19, "total": 19 },
+        "cached": true,
+        "cost": 0.0000046499999999999995
+      },
+      "gradingResult": {
+        "pass": true,
+        "score": 1,
+        "reason": "No assertions",
+        "tokensUsed": { "total": 0, "prompt": 0, "completion": 0, "cached": 0 },
+        "assertion": null
+      },
+      "namedScores": {},
+      "provider": {
+        "id": "openai:gpt-4o-mini",
+        "label": "",
+        "config": { "basePath": "examples/simple-csv" }
+      },
+      "latencyMs": 8,
+      "cost": 0.0000046499999999999995
+    },
+    {
+      "id": "1720b007-3e86-4920-a738-95fb0dcf2a3f",
+      "evalId": "eval-2024-10-02T21:37:20-kMQ",
+      "promptIdx": 0,
+      "testIdx": 1,
+      "testCase": {
+        "vars": { "language": "French", "body": "I'm hungry" },
+        "assert": [],
+        "options": {},
+        "description": "Row #2",
+        "metadata": {}
+      },
+      "prompt": {
+        "raw": "Rephrase this in French: I'm hungry",
+        "label": "examples/simple-csv/prompts.txt: Rephrase this in {{language}}: {{body}}"
+      },
+      "promptId": "ad447337160016cbd0a5c7f2626d0c1fe2ade0d4d653e20bed9250632bc56e03",
+      "error": null,
+      "score": 1,
+      "success": true,
+      "providerResponse": {
+        "output": "J'ai faim.",
+        "tokenUsage": { "cached": 19, "total": 19 },
+        "cached": true,
+        "cost": 0.0000046499999999999995
+      },
+      "gradingResult": {
+        "pass": true,
+        "score": 1,
+        "reason": "No assertions",
+        "tokensUsed": { "total": 0, "prompt": 0, "completion": 0, "cached": 0 },
+        "assertion": null
+      },
+      "namedScores": {},
+      "provider": {
+        "id": "openai:gpt-4o-mini",
+        "label": "",
+        "config": { "basePath": "examples/simple-csv" }
+      },
+      "latencyMs": 10,
+      "cost": 0.0000046499999999999995
+    },
+    {
+      "id": "4540d2da-9a5a-402e-9243-41be20f63b1f",
+      "evalId": "eval-2024-10-02T21:37:20-kMQ",
+      "promptIdx": 0,
+      "testIdx": 2,
+      "testCase": {
+        "vars": { "language": "Pirate", "body": "Hello world" },
+        "assert": [],
+        "options": {},
+        "description": "Row #3",
+        "metadata": {}
+      },
+      "prompt": {
+        "raw": "Rephrase this in Pirate: Hello world",
+        "label": "examples/simple-csv/prompts.txt: Rephrase this in {{language}}: {{body}}"
+      },
+      "promptId": "ad447337160016cbd0a5c7f2626d0c1fe2ade0d4d653e20bed9250632bc56e03",
+      "error": null,
+      "score": 1,
+      "success": true,
+      "providerResponse": {
+        "output": "Ahoy, me hearties!",
+        "tokenUsage": { "cached": 22, "total": 22 },
+        "cached": true,
+        "cost": 0.000006449999999999999
+      },
+      "gradingResult": {
+        "pass": true,
+        "score": 1,
+        "reason": "No assertions",
+        "tokensUsed": { "total": 0, "prompt": 0, "completion": 0, "cached": 0 },
+        "assertion": null
+      },
+      "namedScores": {},
+      "provider": {
+        "id": "openai:gpt-4o-mini",
+        "label": "",
+        "config": { "basePath": "examples/simple-csv" }
+      },
+      "latencyMs": 5,
+      "cost": 0.000006449999999999999
+    },
+    {
+      "id": "467d9521-22f8-45ae-a3c2-0777dd7b1bb0",
+      "evalId": "eval-2024-10-02T21:37:20-kMQ",
+      "promptIdx": 1,
+      "testIdx": 2,
+      "testCase": {
+        "vars": { "language": "Pirate", "body": "Hello world" },
+        "assert": [],
+        "options": {},
+        "description": "Row #3",
+        "metadata": {}
+      },
+      "prompt": {
+        "raw": "Translate this to conversational Pirate: Hello world",
+        "label": "examples/simple-csv/prompts.txt: Translate this to conversational {{language}}: {{body}}"
+      },
+      "promptId": "0ceccef5d40adcbf45bda7be485d2ee420e4d5943975932e7a38c5468d97c6ee",
+      "error": null,
+      "score": 1,
+      "success": true,
+      "providerResponse": {
+        "output": "Ahoy, me hearty! Greetings to ye, world!",
+        "tokenUsage": { "cached": 27, "total": 27 },
+        "cached": true,
+        "cost": 0.00000945
+      },
+      "gradingResult": {
+        "pass": true,
+        "score": 1,
+        "reason": "No assertions",
+        "tokensUsed": { "total": 0, "prompt": 0, "completion": 0, "cached": 0 },
+        "assertion": null
+      },
+      "namedScores": {},
+      "provider": {
+        "id": "openai:gpt-4o-mini",
+        "label": "",
+        "config": { "basePath": "examples/simple-csv" }
+      },
+      "latencyMs": 5,
+      "cost": 0.00000945
+    },
+    {
+      "id": "70b1ebd1-f748-4969-9d38-b6460ff6107f",
+      "evalId": "eval-2024-10-02T21:37:20-kMQ",
+      "promptIdx": 0,
+      "testIdx": 3,
+      "testCase": {
+        "vars": { "language": "Pirate", "body": "I'm hungry" },
+        "assert": [],
+        "options": {},
+        "description": "Row #4",
+        "metadata": {}
+      },
+      "prompt": {
+        "raw": "Rephrase this in Pirate: I'm hungry",
+        "label": "examples/simple-csv/prompts.txt: Rephrase this in {{language}}: {{body}}"
+      },
+      "promptId": "ad447337160016cbd0a5c7f2626d0c1fe2ade0d4d653e20bed9250632bc56e03",
+      "error": null,
+      "score": 1,
+      "success": true,
+      "providerResponse": {
+        "output": "Arrr, me belly be grumblin'!",
+        "tokenUsage": { "cached": 27, "total": 27 },
+        "cached": true,
+        "cost": 0.00000945
+      },
+      "gradingResult": {
+        "pass": true,
+        "score": 1,
+        "reason": "No assertions",
+        "tokensUsed": { "total": 0, "prompt": 0, "completion": 0, "cached": 0 },
+        "assertion": null
+      },
+      "namedScores": {},
+      "provider": {
+        "id": "openai:gpt-4o-mini",
+        "label": "",
+        "config": { "basePath": "examples/simple-csv" }
+      },
+      "latencyMs": 3,
+      "cost": 0.00000945
+    },
+    {
+      "id": "5b65ede9-f787-4637-b18d-9e0ff69dd778",
+      "evalId": "eval-2024-10-02T21:37:20-kMQ",
+      "promptIdx": 1,
+      "testIdx": 3,
+      "testCase": {
+        "vars": { "language": "Pirate", "body": "I'm hungry" },
+        "assert": [],
+        "options": {},
+        "description": "Row #4",
+        "metadata": {}
+      },
+      "prompt": {
+        "raw": "Translate this to conversational Pirate: I'm hungry",
+        "label": "examples/simple-csv/prompts.txt: Translate this to conversational {{language}}: {{body}}"
+      },
+      "promptId": "0ceccef5d40adcbf45bda7be485d2ee420e4d5943975932e7a38c5468d97c6ee",
+      "error": null,
+      "score": 1,
+      "success": true,
+      "providerResponse": {
+        "output": "Arrr, me belly be rumblin'! I be feelin' mighty hungry, matey!",
+        "tokenUsage": { "cached": 37, "total": 37 },
+        "cached": true,
+        "cost": 0.00001545
+      },
+      "gradingResult": {
+        "pass": true,
+        "score": 1,
+        "reason": "No assertions",
+        "tokensUsed": { "total": 0, "prompt": 0, "completion": 0, "cached": 0 },
+        "assertion": null
+      },
+      "namedScores": {},
+      "provider": {
+        "id": "openai:gpt-4o-mini",
+        "label": "",
+        "config": { "basePath": "examples/simple-csv" }
+      },
+      "latencyMs": 4,
+      "cost": 0.00001545
+    }
+  ],
+  "prompts": [
+    {
+      "raw": "Rephrase this in {{language}}: {{body}}",
+      "label": "examples/simple-csv/prompts.txt: Rephrase this in {{language}}: {{body}}",
+      "id": "ad447337160016cbd0a5c7f2626d0c1fe2ade0d4d653e20bed9250632bc56e03",
+      "provider": "openai:gpt-4o-mini",
+      "metrics": {
+        "score": 4,
+        "testPassCount": 4,
+        "testFailCount": 0,
+        "assertPassCount": 0,
+        "assertFailCount": 0,
+        "totalLatencyMs": 21,
+        "tokenUsage": { "total": 87, "prompt": 0, "completion": 0, "cached": 87 },
+        "namedScores": {},
+        "namedScoresCount": {},
+        "cost": 0.000025199999999999996
+      }
+    },
+    {
+      "raw": "Translate this to conversational {{language}}: {{body}}",
+      "label": "examples/simple-csv/prompts.txt: Translate this to conversational {{language}}: {{body}}",
+      "id": "0ceccef5d40adcbf45bda7be485d2ee420e4d5943975932e7a38c5468d97c6ee",
+      "provider": "openai:gpt-4o-mini",
+      "metrics": {
+        "score": 4,
+        "testPassCount": 4,
+        "testFailCount": 0,
+        "assertPassCount": 0,
+        "assertFailCount": 0,
+        "totalLatencyMs": 24,
+        "tokenUsage": { "total": 103, "prompt": 0, "completion": 0, "cached": 103 },
+        "namedScores": {},
+        "namedScoresCount": {},
+        "cost": 0.0000348
+      }
+    }
+  ],
+  "datasetId": "27018c2ea4e47d8af2fc1b2d69c131ed777f1d89e9069bf38622701b7e1e786a"
+}

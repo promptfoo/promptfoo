@@ -21,8 +21,8 @@ Specify your extensions in the `promptfooconfig.yaml` file:
 
 ```yaml
 extensions:
-  - file:./path/to/your/extension.py:extension_hook
-  - file:./path/to/your/extension.js:extensionHook
+  - file://path/to/your/extension.py:extension_hook
+  - file://path/to/your/extension.js:extensionHook
 ```
 
 Note: You must include the function name after the file path, separated by a colon (`:`).

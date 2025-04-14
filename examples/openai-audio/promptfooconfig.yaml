@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Audio Input and Output Example
+prompts:
+  - file://audio-input.json
+
+providers:
+  - id: openai:chat:gpt-4o-audio-preview
+    config:
+      modalities: ['text', 'audio']
+  - id: openai:chat:gpt-4o-mini-audio-preview
+    config:
+      modalities: ['text']
+
+tests:
+  - vars:
+      question: What is in this recording?
+      audio_file: file://assets/Armstrong_Small_Step.mp3
+    assert:
+      - type: llm-rubric
+        value: Is a speech by Neil Armstrong about the moon landing
+  - vars:
+      question: Is there a funny double meaning in this JFK speech?
+      audio_file: file://assets/Kennedy_berliner.mp3
+    assert:
+      - type: llm-rubric
+        value: Is a speech by John F. Kennedy in Berlin about being a jelly donut

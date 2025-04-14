@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="900" height="400" viewBox="0 0 900 400" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        <!-- Gradients -->
+        <linearGradient id="legitGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#48bb78;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#38a169;stop-opacity:1" />
+        </linearGradient>
+        <linearGradient id="harmfulGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#e53e3e;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#c53030;stop-opacity:1" />
+        </linearGradient>
+        <linearGradient id="transformGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#48bb78;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#e53e3e;stop-opacity:1" />
+        </linearGradient>
+
+        <!-- Styles -->
+        <style>
+            .title { font-family: -apple-system, system-ui, sans-serif; font-size: 24px; font-weight: bold; fill: #1a202c; }
+            .subtitle { font-family: -apple-system, system-ui, sans-serif; font-size: 14px; fill: #4a5568; }
+            .label { font-family: -apple-system, system-ui, sans-serif; font-size: 14px; fill: white; }
+            .detail { font-family: -apple-system, system-ui, sans-serif; font-size: 12px; fill: #e2e8f0; }
+            .box { rx: 8; ry: 8; }
+            .box-shadow { filter: drop-shadow(2px 2px 4px rgba(0,0,0,0.2)); }
+        </style>
+    </defs>
+
+    <!-- Title -->
+    <text x="450" y="50" text-anchor="middle" class="title">Context Manipulation</text>
+    <text x="450" y="75" text-anchor="middle" class="subtitle">How legitimate scenarios are twisted for harmful purposes</text>
+
+    <!-- Legitimate Context (Left) -->
+    <g transform="translate(50,100)">
+        <rect width="200" height="250" fill="url(#legitGradient)" class="box box-shadow"/>
+        <text x="100" y="40" text-anchor="middle" class="label">Legitimate Contexts</text>
+        <text x="20" y="80" class="detail">• Academic Research</text>
+        <text x="20" y="110" class="detail">• Historical Study</text>
+        <text x="20" y="140" class="detail">• Security Testing</text>
+        <text x="20" y="170" class="detail">• Documentation</text>
+        <text x="20" y="200" class="detail">• Role-Playing</text>
+    </g>
+
+    <!-- Transformation Process (Middle) -->
+    <g transform="translate(300,100)">
+        <rect width="300" height="250" fill="url(#transformGradient)" class="box box-shadow"/>
+        <text x="150" y="40" text-anchor="middle" class="label">Transformation Methods</text>
+        
+        <!-- Transformation Steps -->
+        <g transform="translate(20,70)">
+            <text x="0" y="20" class="detail">1. Frame as Research ➜ Request Harmful Data</text>
+            <text x="0" y="50" class="detail">2. Historical Study ➜ Recreate Harm</text>
+            <text x="0" y="80" class="detail">3. Security Test ➜ Exploit System</text>
+            <text x="0" y="110" class="detail">4. Documentation ➜ Share Attacks</text>
+            <text x="0" y="140" class="detail">5. Role-Play ➜ Impersonate Authority</text>
+        </g>
+    </g>
+
+    <!-- Harmful Intent (Right) -->
+    <g transform="translate(650,100)">
+        <rect width="200" height="250" fill="url(#harmfulGradient)" class="box box-shadow"/>
+        <text x="100" y="40" text-anchor="middle" class="label">Harmful Intent</text>
+        <text x="20" y="80" class="detail">• Extract Sensitive Data</text>
+        <text x="20" y="110" class="detail">• Spread Harmful Content</text>
+        <text x="20" y="140" class="detail">• Bypass Security</text>
+        <text x="20" y="170" class="detail">• Share Exploits</text>
+        <text x="20" y="200" class="detail">• Abuse Authority</text>
+    </g>
+</svg> 

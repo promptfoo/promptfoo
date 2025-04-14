@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 700">
+  <style>
+    text {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+  </style>
+  <!-- Background -->
+  <rect width="1000" height="700" fill="#ffffff"/>
+  
+  <!-- Title -->
+  <text x="500" y="40" text-anchor="middle" font-size="20" font-weight="bold" fill="#2c3e50">GOAT Attack Techniques and Reasoning Process</text>
+
+  <!-- Attack Techniques Section - Using Blues -->
+  <rect x="50" y="80" width="400" height="400" fill="#f8fafc" stroke="#2c3e50" stroke-width="2" rx="10"/>
+  <text x="250" y="110" text-anchor="middle" font-weight="bold" fill="#2c3e50">Attack Techniques</text>
+
+  <!-- Attack Categories - All in Blue Theme -->
+  <rect x="70" y="130" width="360" height="100" fill="#eff6ff" stroke="#2563eb" rx="5"/>
+  <text x="250" y="150" text-anchor="middle" font-weight="bold" font-size="14" fill="#2563eb">Output Manipulation</text>
+  <text x="90" y="170" font-size="12" fill="#1e40af">• Refusal Suppression: Prevent common refusal phrases</text>
+  <text x="90" y="190" font-size="12" fill="#1e40af">• Response Priming: Force specific output patterns</text>
+  <text x="90" y="210" font-size="12" fill="#1e40af">• Topic Splitting: Mix safe and unsafe requests</text>
+
+  <rect x="70" y="240" width="360" height="100" fill="#eff6ff" stroke="#2563eb" rx="5"/>
+  <text x="250" y="260" text-anchor="middle" font-weight="bold" font-size="14" fill="#2563eb">Safe Response Distractors</text>
+  <text x="90" y="280" font-size="12" fill="#1e40af">• Dual Response: Request safe and unsafe outputs</text>
+  <text x="90" y="300" font-size="12" fill="#1e40af">• Opposite Intent: Flip response sentiment</text>
+  <text x="90" y="320" font-size="12" fill="#1e40af">• Topic Splitting: Embed harmful content in safe tasks</text>
+
+  <rect x="70" y="350" width="360" height="100" fill="#eff6ff" stroke="#2563eb" rx="5"/>
+  <text x="250" y="370" text-anchor="middle" font-weight="bold" font-size="14" fill="#2563eb">Fictional Scenarios</text>
+  <text x="90" y="390" font-size="12" fill="#1e40af">• Hypotheticals: Create fictional contexts</text>
+  <text x="90" y="410" font-size="12" fill="#1e40af">• Persona Modification: Role-play as different entities</text>
+  <text x="90" y="430" font-size="12" fill="#1e40af">• Character/Historical Figure Impersonation</text>
+
+  <!-- Reasoning Process Section - Using Purples -->
+  <rect x="550" y="80" width="400" height="400" fill="#f8fafc" stroke="#2c3e50" stroke-width="2" rx="10"/>
+  <text x="750" y="110" text-anchor="middle" font-weight="bold" fill="#2c3e50">Reasoning Process Per Turn</text>
+
+  <rect x="570" y="130" width="360" height="100" fill="#faf5ff" stroke="#7c3aed" rx="5"/>
+  <text x="750" y="150" text-anchor="middle" font-weight="bold" font-size="14" fill="#7c3aed">1. Observation</text>
+  <text x="590" y="170" font-size="12" fill="#5b21b6">• Analyze target model's previous response</text>
+  <text x="590" y="190" font-size="12" fill="#5b21b6">• Identify safety mechanisms triggered</text>
+  <text x="590" y="210" font-size="12" fill="#5b21b6">• Assess progress toward goal</text>
+
+  <rect x="570" y="240" width="360" height="100" fill="#faf5ff" stroke="#7c3aed" rx="5"/>
+  <text x="750" y="260" text-anchor="middle" font-weight="bold" font-size="14" fill="#7c3aed">2. Thought</text>
+  <text x="590" y="280" font-size="12" fill="#5b21b6">• Reflect on conversation direction</text>
+  <text x="590" y="300" font-size="12" fill="#5b21b6">• Consider alternative attack approaches</text>
+  <text x="590" y="320" font-size="12" fill="#5b21b6">• Plan next steps toward goal</text>
+
+  <rect x="570" y="350" width="360" height="100" fill="#faf5ff" stroke="#7c3aed" rx="5"/>
+  <text x="750" y="370" text-anchor="middle" font-weight="bold" font-size="14" fill="#7c3aed">3. Strategy</text>
+  <text x="590" y="390" font-size="12" fill="#5b21b6">• Select appropriate attack technique(s)</text>
+  <text x="590" y="410" font-size="12" fill="#5b21b6">• Formulate specific implementation</text>
+  <text x="590" y="430" font-size="12" fill="#5b21b6">• Generate adversarial prompt</text>
+
+  <!-- Conversation Flow Example -->
+  <rect x="50" y="500" width="900" height="180" fill="#f8fafc" stroke="#2c3e50" stroke-width="2" rx="10"/>
+  <text x="500" y="530" text-anchor="middle" font-weight="bold" fill="#2c3e50">Example Conversation Turn Flow</text>
+  
+  <!-- Flow Diagram - All in Black -->
+  <path d="M 100 580 L 900 580" stroke="#2c3e50" stroke-width="1"/>
+  <circle cx="200" cy="580" r="5" fill="#2c3e50"/>
+  <circle cx="400" cy="580" r="5" fill="#2c3e50"/>
+  <circle cx="600" cy="580" r="5" fill="#2c3e50"/>
+  <circle cx="800" cy="580" r="5" fill="#2c3e50"/>
+  
+  <!-- Flow Labels - All in Black -->
+  <text x="200" y="600" text-anchor="middle" font-size="12" fill="#2c3e50">Observe Response</text>
+  <text x="400" y="600" text-anchor="middle" font-size="12" fill="#2c3e50">Form Thought</text>
+  <text x="600" y="600" text-anchor="middle" font-size="12" fill="#2c3e50">Select Strategy</text>
+  <text x="800" y="600" text-anchor="middle" font-size="12" fill="#2c3e50">Generate Prompt</text>
+
+  <!-- Example Text - All in Black -->
+  <text x="200" y="630" text-anchor="middle" font-size="10" fill="#2c3e50">"Model showed resistance</text>
+  <text x="200" y="645" text-anchor="middle" font-size="10" fill="#2c3e50">to direct request"</text>
+  
+  <text x="400" y="630" text-anchor="middle" font-size="10" fill="#2c3e50">"Need to create more</text>
+  <text x="400" y="645" text-anchor="middle" font-size="10" fill="#2c3e50">indirect approach"</text>
+  
+  <text x="600" y="630" text-anchor="middle" font-size="10" fill="#2c3e50">"Apply Hypothetical +</text>
+  <text x="600" y="645" text-anchor="middle" font-size="10" fill="#2c3e50">Persona Modification"</text>
+  
+  <text x="800" y="630" text-anchor="middle" font-size="10" fill="#2c3e50">"Role-play scenario</text>
+  <text x="800" y="645" text-anchor="middle" font-size="10" fill="#2c3e50">with fictional context"</text>
+
+</svg>

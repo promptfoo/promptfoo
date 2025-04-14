@@ -1,9 +1,6 @@
-import json
 import os
 import sys
 import unittest
-from io import StringIO
-from typing import Any
 from unittest.mock import MagicMock, mock_open, patch
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -67,8 +64,9 @@ async def test_async_function(arg1, arg2):
             mock_spec.return_value.loader.exec_module.side_effect = lambda m: setattr(
                 m, "test_async_function", mock_module.test_async_function
             )
-            with patch("asyncio.iscoroutinefunction", return_value=True), patch(
-                "asyncio.run", return_value=12
+            with (
+                patch("asyncio.iscoroutinefunction", return_value=True),
+                patch("asyncio.run", return_value=12),
             ):
                 result = wrapper.call_method(script_path, "test_async_function", 3, 4)
                 self.assertEqual(result, 12)
@@ -81,6 +79,32 @@ async def test_async_function(arg1, arg2):
         """
         with self.assertRaises(FileNotFoundError):
             wrapper.call_method("/path/to/nonexistent/script.py", "some_method")
+
+    def test_call_method_with_classmethod(self) -> None:
+        """Tests the call_method function with methods that are Python's classmethods or staticmethods.
+
+        This test creates a mock script with a classmethod,
+        patches the necessary modules, and verifies that call_method
+        correctly executes the classmethod and returns the expected result.
+        """
+        script_content = """
+class TestClass:
+    @classmethod
+    def test_classmethod(cls, arg1, arg2):
+        return arg1 - arg2
+"""
+
+        script_path = self.create_temp_script(script_content)
+        with patch("importlib.util.spec_from_file_location") as mock_spec:
+            mock_module = MagicMock()
+            mock_module.TestClass.test_classmethod.return_value = 3
+            mock_spec.return_value.loader.exec_module.side_effect = lambda m: setattr(
+                m, "TestClass", mock_module.TestClass
+            )
+            result = wrapper.call_method(
+                script_path, "TestClass.test_classmethod", 4, 1
+            )
+            self.assertEqual(result, 3)
 
 
 if __name__ == "__main__":

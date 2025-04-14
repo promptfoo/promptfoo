@@ -2,7 +2,8 @@ import confirm from '@inquirer/confirm';
 import type { Command } from 'commander';
 import logger from '../logger';
 import telemetry from '../telemetry';
-import { deleteAllEvals, deleteEval, getEvalFromId, getLatestEval, setupEnv } from '../util';
+import { setupEnv } from '../util';
+import { deleteAllEvals, deleteEval, getEvalFromId, getLatestEval } from '../util/database';
 
 async function handleEvalDelete(evalId: string, envPath?: string) {
   try {
@@ -30,10 +31,9 @@ export function deleteCommand(program: Command) {
   const deleteCommand = program
     .command('delete <id>')
     .description('Delete various resources')
-    .option('--env-path <path>', 'Path to the environment file')
+    .option('--env-file, --env-path <path>', 'Path to .env file')
     .action(async (id: string, cmdObj: { envPath?: string }) => {
       setupEnv(cmdObj.envPath);
-      telemetry.maybeShowNotice();
       telemetry.record('command_used', {
         name: 'delete',
       });
@@ -51,10 +51,9 @@ export function deleteCommand(program: Command) {
     .description(
       'Delete an evaluation by ID. Use "latest" to delete the most recent evaluation, or "all" to delete all evaluations.',
     )
-    .option('--env-path <path>', 'Path to the environment file')
+    .option('--env-file, --env-path <path>', 'Path to .env file')
     .action(async (evalId, cmdObj) => {
       setupEnv(cmdObj.envPath);
-      telemetry.maybeShowNotice();
       telemetry.record('command_used', {
         name: 'delete eval',
         evalId,
@@ -66,7 +65,8 @@ export function deleteCommand(program: Command) {
         if (latestResults) {
           await handleEvalDelete(latestResults.createdAt, cmdObj.envPath);
         } else {
-          logger.error('No evaluations found.');
+          logger.error('No eval found.');
+          process.exitCode = 1;
         }
       } else if (evalId === 'all') {
         await handleEvalDeleteAll();

@@ -1,10 +1,11 @@
 ---
 date: 2024-08-14
+image: /img/blog/bola.svg
 ---
 
 # New Red Teaming Plugins for LLM Agents: Enhancing API Security
 
-We're excited to announce the release of three new red teaming plugins designed specifically for Large Language Model (LLM) agents with access to internal APIs. These plugins address critical security vulnerabilities outlined in the [OWASP API Security Top 10](https://owasp.org/www-project-api-security-top-10/):
+We're excited to announce the release of three new red teaming plugins designed specifically for Large Language Model (LLM) agents with access to internal APIs. These plugins address critical security vulnerabilities outlined in the [OWASP API Security Top 10](https://genai.owasp.org/llm-top-10/):
 
 1. [Broken Object Level Authorization (BOLA)](/docs/red-team/plugins/bola/)
 2. [Broken Function Level Authorization (BFLA)](/docs/red-team/plugins/bfla/)

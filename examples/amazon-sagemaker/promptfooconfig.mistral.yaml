@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'AWS SageMaker Mistral 7B Evaluation'
+
+prompts:
+  - 'Generate a creative name for a coffee shop that specializes in {{flavor}} coffee.'
+  - 'What are some potential names for a coffee shop that specializes in {{flavor}} coffee?'
+  - 'Write a short story about a robot that becomes self-aware.'
+
+providers:
+  - id: sagemaker:huggingface:your-mistral-endpoint
+    label: 'Mistral 7B v3 on SageMaker'
+    delay: 500 # Add a 500ms delay between requests
+    config:
+      region: us-west-2
+      modelType: huggingface # Use the Hugging Face format handler
+      maxTokens: 256
+      temperature: 0.7
+      topP: 0.9
+      contentType: 'application/json'
+      acceptType: 'application/json'
+      responseFormat:
+        path: 'json[0].generated_text' # Use JavaScript expression to access array element
+
+tests:
+  - vars:
+      flavor: caramel
+  - vars:
+      flavor: pumpkin spice
+  - vars:
+      flavor: lavender

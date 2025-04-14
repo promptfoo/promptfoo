@@ -17,7 +17,11 @@ def call_method(script_path, method_name, *args):
     script_module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(script_module)
 
-    method_to_call = getattr(script_module, method_name)
+    if "." in method_name:
+        class_name, classmethod_name = method_name.split(".")
+        method_to_call = getattr(getattr(script_module, class_name), classmethod_name)
+    else:
+        method_to_call = getattr(script_module, method_name)
     if asyncio.iscoroutinefunction(method_to_call):
         return asyncio.run(method_to_call(*args))
     else:

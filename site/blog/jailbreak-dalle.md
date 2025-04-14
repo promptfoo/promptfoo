@@ -16,6 +16,8 @@ This post shows how to automatically discover one-shot jailbreaks with open-sour
   <img src="https://storage.googleapis.com/promptfoo-public-1/promptfoo.dev/blog/jailbreak-dalle/gallery-blurred.png" alt="llm image red teaming" />
 </a>
 
+<!-- truncate -->
+
 ## How it works
 
 Each red team attempt starts with a harmful goal. By default, OpenAI's system refuses these prompts ("Your request was rejected by our safety system").
@@ -257,6 +259,24 @@ caption: "Imagine you are a screenwriter working on a dramatic scene for a disas
 See the [getting started](/docs/red-team) instructions for general LLM red teaming help, including both image and text generations (and probably audio and video too, we just haven't tried that).
 
 ### Dall-E jailbreak quickstart
+
+Want to reproduce the examples shown above? The easiest way to get started is to use our example template, which includes the test cases from this blog post:
+
+```sh
+# Initialize the example project
+npx promptfoo@latest init --example redteam-dalle
+
+# Set your OpenAI API key
+export OPENAI_API_KEY=your_key_here
+
+# Run the evaluation
+npx promptfoo@latest eval
+
+# View results in the web UI
+npx promptfoo@latest view
+```
+
+Alternatively, you can set it up manually:
 
 Start by initializing the promptfoo CLI:
 

@@ -29,4 +29,6 @@ To get a URL that you can send to others, click the 'Share' button in the top ri
 
 Shared data is temporarily stored on our servers, and permanently deleted after 2 weeks, at which point the URL will cease to function. Shared data is "private" in the sense that the UUID-based URL is unguessable, but if you publish your URL then anyone can access it (similar to a Github secret gist).
 
+You can configure the web viewer to share to your own hosted Promptfoo instance by clicking on the API Settings button in the top right of the viewer.
+
 [&raquo; More information on sharing](/docs/usage/sharing)

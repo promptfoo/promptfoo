@@ -1,0 +1,20 @@
+[
+  {
+    "role": "system",
+    "content": [
+      {
+        "modality": "text",
+        "value": "You are a math assistant and respond with a yes or no before you solve the question."
+      }
+    ]
+  },
+  {
+    "role": "user",
+    "content": [
+      {
+        "modality": "text",
+        "value": "{{question}}"
+      }
+    ]
+  }
+]

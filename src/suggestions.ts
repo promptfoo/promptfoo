@@ -1,5 +1,5 @@
 import { SUGGEST_PROMPTS_SYSTEM_MESSAGE } from './prompts';
-import { DefaultSuggestionsProvider } from './providers/openai';
+import { DefaultSuggestionsProvider } from './providers/openai/defaults';
 import type { TokenUsage } from './types';
 
 interface GeneratePromptsOutput {
@@ -31,6 +31,11 @@ export async function generatePrompts(prompt: string, num: number): Promise<Gene
         total: resp.tokenUsage?.total || 0,
         prompt: resp.tokenUsage?.prompt || 0,
         completion: resp.tokenUsage?.completion || 0,
+        completionDetails: resp.tokenUsage?.completionDetails || {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       },
     };
   }
@@ -42,15 +47,25 @@ export async function generatePrompts(prompt: string, num: number): Promise<Gene
         total: resp.tokenUsage?.total || 0,
         prompt: resp.tokenUsage?.prompt || 0,
         completion: resp.tokenUsage?.completion || 0,
+        completionDetails: resp.tokenUsage?.completionDetails || {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       },
     };
-  } catch (err) {
+  } catch {
     return {
       error: `Output is not valid JSON: ${resp.output}`,
       tokensUsed: {
         total: resp.tokenUsage?.total || 0,
         prompt: resp.tokenUsage?.prompt || 0,
         completion: resp.tokenUsage?.completion || 0,
+        completionDetails: resp.tokenUsage?.completionDetails || {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       },
     };
   }

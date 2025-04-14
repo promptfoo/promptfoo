@@ -1,59 +1,131 @@
+import yaml from 'js-yaml';
+import invariant from '../util/invariant';
+
 export function isValidJson(str: string): boolean {
   try {
     JSON.parse(str);
     return true;
-  } catch (e) {
+  } catch {
     return false;
   }
 }
 
-export function safeJsonStringify(value: any, prettyPrint: boolean = false): string {
+export function safeJsonStringify<T>(value: T, prettyPrint: boolean = false): string | undefined {
   // Prevent circular references
   const cache = new Set();
   const space = prettyPrint ? 2 : undefined;
-  return JSON.stringify(
-    value,
-    (key, val) => {
-      if (typeof val === 'object' && val !== null) {
-        if (cache.has(val)) {
-          return;
+  return (
+    JSON.stringify(
+      value,
+      (key, val) => {
+        if (typeof val === 'object' && val !== null) {
+          if (cache.has(val)) {
+            return;
+          }
+          cache.add(val);
         }
-        cache.add(val);
-      }
-      return val;
-    },
-    space,
+        return val;
+      },
+      space,
+    ) || undefined
   );
 }
 
-export function extractJsonObjects(str: string): object[] {
-  // This will extract all json objects from a string
+export function convertSlashCommentsToHash(str: string): string {
+  // Split into lines, process each line, then join back
+  return str
+    .split('\n')
+    .map((line) => {
+      let state = 'normal'; // 'normal' | 'singleQuote' | 'doubleQuote'
+      let result = '';
+      let i = 0;
 
-  const jsonObjects = [];
-  let openBracket = str.indexOf('{');
-  let closeBracket = str.indexOf('}', openBracket);
-  // Iterate over the string until we find a valid JSON-like pattern
-  // Iterate over all trailing } until the contents parse as json
-  while (openBracket !== -1) {
-    const jsonStr = str.slice(openBracket, closeBracket + 1);
-    try {
-      jsonObjects.push(JSON.parse(jsonStr));
-      // This is a valid JSON object, so start looking for
-      // an opening bracket after the last closing bracket
-      openBracket = str.indexOf('{', closeBracket + 1);
-      closeBracket = str.indexOf('}', openBracket);
-    } catch (err) {
-      // Not a valid object, move on to the next closing bracket
-      closeBracket = str.indexOf('}', closeBracket + 1);
-      while (closeBracket === -1) {
-        // No closing brackets made a valid json object, so
-        // start looking with the next opening bracket
-        openBracket = str.indexOf('{', openBracket + 1);
-        closeBracket = str.indexOf('}', openBracket);
+      while (i < line.length) {
+        const char = line[i];
+        const nextChar = line[i + 1];
+        const prevChar = i > 0 ? line[i - 1] : '';
+
+        switch (state) {
+          case 'normal':
+            // Check for string start, but ignore apostrophes in words
+            if (char === "'" && !/[a-zA-Z]/.test(prevChar)) {
+              state = 'singleQuote';
+              result += char;
+            } else if (char === '"') {
+              state = 'doubleQuote';
+              result += char;
+            } else if (char === '/' && nextChar === '/') {
+              // Count consecutive slashes
+              let slashCount = 2;
+              while (i + slashCount < line.length && line[i + slashCount] === '/') {
+                slashCount++;
+              }
+              // Convert to equivalent number of #s
+              const hashes = '#'.repeat(Math.floor(slashCount / 2));
+              return result + hashes + line.slice(i + slashCount);
+            } else {
+              result += char;
+            }
+            break;
+
+          case 'singleQuote':
+            result += char;
+            // Check for string end, but ignore apostrophes in words
+            if (char === "'" && prevChar !== '\\' && !/[a-zA-Z]/.test(nextChar)) {
+              state = 'normal';
+            }
+            break;
+
+          case 'doubleQuote':
+            result += char;
+            if (char === '"' && prevChar !== '\\') {
+              state = 'normal';
+            }
+            break;
+        }
+
+        i++;
+      }
+
+      return result;
+    })
+    .join('\n');
+}
+
+export function extractJsonObjects(str: string): object[] {
+  const jsonObjects: object[] = [];
+  const maxJsonLength = 100000; // Prevent processing extremely large invalid JSON
+
+  for (let i = 0; i < str.length; i++) {
+    if (str[i] === '{') {
+      for (let j = i + 1; j <= Math.min(i + maxJsonLength, str.length); j++) {
+        try {
+          const potentialJson = str.slice(i, j);
+          const processedJson = convertSlashCommentsToHash(potentialJson);
+          const parsedObj = yaml.load(processedJson, { json: true });
+          if (typeof parsedObj === 'object' && parsedObj !== null) {
+            jsonObjects.push(parsedObj);
+            i = j - 1; // Move i to the end of the valid JSON object
+            break;
+          }
+        } catch {
+          // If it's not valid YAML yet, continue to the next character
+          if (j === str.length || j === i + maxJsonLength) {
+            // If we've reached the end of the string or max length, stop trying with this starting point
+            break;
+          }
+        }
       }
     }
   }
+
   return jsonObjects;
+}
+
+export function extractFirstJsonObject<T>(str: string): T {
+  const jsonObjects = extractJsonObjects(str);
+  invariant(jsonObjects.length >= 1, `Expected a JSON object, but got ${JSON.stringify(str)}`);
+  return jsonObjects[0] as T;
 }
 
 /**

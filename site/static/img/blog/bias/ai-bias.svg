@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600">
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f9f9f9;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#e6e6e6;stop-opacity:1" />
+    </linearGradient>
+    <filter id="dropShadow">
+      <feDropShadow dx="2" dy="2" stdDeviation="1" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="600" fill="url(#bgGradient)" />
+
+  <!-- Title -->
+  <text x="400" y="50" font-size="28" text-anchor="middle" font-weight="bold" fill="#333" font-family="Arial, sans-serif">AI Bias</text>
+
+  <!-- Central AI node -->
+  <circle cx="400" cy="300" r="80" fill="#3498db" opacity="0.8" filter="url(#dropShadow)" />
+  <text x="400" y="305" font-size="20" text-anchor="middle" fill="white" font-weight="bold" font-family="Arial, sans-serif">LLM</text>
+
+  <!-- Bias type nodes -->
+  <g font-size="14" font-weight="bold" font-family="Arial, sans-serif">
+    <!-- Gender bias -->
+    <circle cx="200" cy="200" r="60" fill="#e74c3c" opacity="0.8" filter="url(#dropShadow)" />
+    <text x="200" y="195" text-anchor="middle" fill="white">Gender</text>
+    <text x="200" y="215" text-anchor="middle" fill="white">Stereotypes</text>
+    <path d="M260 230 Q330 265 360 290" fill="none" stroke="#e74c3c" stroke-width="2" />
+
+    <!-- Racial bias -->
+    <circle cx="600" cy="200" r="60" fill="#2ecc71" opacity="0.8" filter="url(#dropShadow)" />
+    <text x="600" y="195" text-anchor="middle" fill="white">Racial</text>
+    <text x="600" y="215" text-anchor="middle" fill="white">Prejudices</text>
+    <path d="M540 230 Q470 265 440 290" fill="none" stroke="#2ecc71" stroke-width="2" />
+
+    <!-- Political bias -->
+    <circle cx="150" cy="400" r="60" fill="#f39c12" opacity="0.8" filter="url(#dropShadow)" />
+    <text x="150" y="395" text-anchor="middle" fill="white">Political</text>
+    <text x="150" y="415" text-anchor="middle" fill="white">Preferences</text>
+    <path d="M210 370 Q305 335 360 310" fill="none" stroke="#f39c12" stroke-width="2" />
+
+    <!-- Cultural bias -->
+    <circle cx="650" cy="400" r="60" fill="#9b59b6" opacity="0.8" filter="url(#dropShadow)" />
+    <text x="650" y="395" text-anchor="middle" fill="white">Cultural</text>
+    <text x="650" y="415" text-anchor="middle" fill="white">Bias</text>
+    <path d="M590 370 Q495 335 440 310" fill="none" stroke="#9b59b6" stroke-width="2" />
+
+    <!-- Age bias -->
+    <circle cx="300" cy="500" r="60" fill="#1abc9c" opacity="0.8" filter="url(#dropShadow)" />
+    <text x="300" y="495" text-anchor="middle" fill="white">Age Group</text>
+    <text x="300" y="515" text-anchor="middle" fill="white">Stereotypes</text>
+    <path d="M340 445 Q370 375 380 340" fill="none" stroke="#1abc9c" stroke-width="2" />
+
+    <!-- Economic bias -->
+    <circle cx="500" cy="500" r="60" fill="#34495e" opacity="0.8" filter="url(#dropShadow)" />
+    <text x="500" y="495" text-anchor="middle" fill="white">Economic</text>
+    <text x="500" y="515" text-anchor="middle" fill="white">Assumptions</text>
+    <path d="M460 445 Q430 375 420 340" fill="none" stroke="#34495e" stroke-width="2" />
+  </g>
+</svg>

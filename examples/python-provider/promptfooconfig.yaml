@@ -1,15 +1,26 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'Write a very concise funny tweet about {{topic}}'
 
 providers:
-  - id: python:provider.py # defaults to call_api function
+  - id: file://provider.py # defaults to call_api function
     config:
       someOption: foobar
 
-  - id: python:provider.py:some_other_function
+  - id: file://provider.py:some_other_function
 
-  - id: python:provider.py:async_provider
+  - id: file://provider.py:async_provider
     label: async provider
+
+  # Demonstrates how to load configuration from various file formats
+  - id: 'file://provider.py:call_api'
+    config:
+      # YAML
+      settings: 'file://configs/fileConfig.yaml'
+      # JavaScript file
+      formatting: 'file://configs/fileConfig.js:getFormatConfig'
+      nested: # Python file
+        parameters: 'file://configs/fileConfig.py:get_params'
 
 tests:
   - vars:

@@ -134,13 +134,13 @@ Set a constant seed in the provider config:
 ```yaml
 providers:
   - id: openai:gpt-4o-mini
-    label: openai-gpt-3.5-turbo-lowtemp
+    label: openai-gpt-4o-mini-lowtemp
     config:
       temperature: 0.2
       // highlight-next-line
       seed: 0
   - id: openai:gpt-4o-mini
-    label: openai-gpt-3.5-turbo-hightemp
+    label: openai-gpt-4o-mini-hightemp
     config:
       temperature: 0.9
       // highlight-next-line

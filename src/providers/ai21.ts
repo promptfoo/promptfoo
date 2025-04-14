@@ -1,8 +1,9 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import type { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types';
-import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
+import type { ApiProvider, ProviderResponse, TokenUsage } from '../types';
+import type { EnvOverrides } from '../types/env';
+import { calculateCost, REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
 const AI21_CHAT_MODELS = [
   {
@@ -47,24 +48,13 @@ function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
   return {};
 }
 
-function calculateCost(
+function calculateAI21Cost(
   modelName: string,
   config: AI21ChatCompletionOptions,
   promptTokens?: number,
   completionTokens?: number,
 ): number | undefined {
-  if (!promptTokens || !completionTokens) {
-    return undefined;
-  }
-
-  const model = AI21_CHAT_MODELS.find((m) => m.id === modelName);
-  if (!model || !model.cost) {
-    return undefined;
-  }
-
-  const inputCost = config.cost ?? model.cost.input;
-  const outputCost = config.cost ?? model.cost.output;
-  return inputCost * promptTokens + outputCost * completionTokens || undefined;
+  return calculateCost(modelName, config, promptTokens, completionTokens, AI21_CHAT_MODELS);
 }
 
 export class AI21ChatCompletionProvider implements ApiProvider {
@@ -185,7 +175,7 @@ export class AI21ChatCompletionProvider implements ApiProvider {
       output: data.choices[0].message.content,
       tokenUsage: getTokenUsage(data, cached),
       cached,
-      cost: calculateCost(
+      cost: calculateAI21Cost(
         this.modelName,
         this.config,
         data.usage?.prompt_tokens,

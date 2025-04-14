@@ -1,7 +1,8 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - file://prompt.json
 providers:
-  - openai:gpt-3.5-turbo
+  - openai:gpt-4o-mini
 
 # Set up the conversation history
 defaultTest:

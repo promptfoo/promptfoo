@@ -1,29 +1,47 @@
 // Declared to avoid circular dependency with providers.ts
-declare class ApiProvider {
+declare interface ApiProvider {
   id: () => string;
   callApi: (prompt: string, context?: any, options?: any) => Promise<any>;
   label?: string;
 }
 
-export type PromptConfig = {
+export type PromptContent = string | any;
+
+export interface PromptConfig {
   prefix?: string;
   suffix?: string;
-};
+}
 
-export type PromptFunctionContext = {
+export interface PromptFunctionContext {
   vars: Record<string, string | object>;
+  config: Record<string, any>;
   provider: {
     id: string;
     label?: string;
   };
-};
+}
 
-export type PromptFunction = (context: {
-  vars: Record<string, string | any>;
-  provider?: ApiProvider;
-}) => Promise<string | any>;
+/**
+ * Result type for prompt functions.
+ *
+ * Prompt functions can return:
+ * - A string (used directly as the prompt)
+ * - An object/array (JSON stringified and used as the prompt)
+ * - A PromptFunctionResult object with prompt and optional config
+ */
+export interface PromptFunctionResult {
+  prompt: PromptContent;
+  config?: Record<string, any>;
+}
 
-export type Prompt = {
+export interface PromptFunction {
+  (context: {
+    vars: Record<string, string | any>;
+    provider?: ApiProvider;
+  }): Promise<PromptContent | PromptFunctionResult>;
+}
+
+export interface Prompt {
   id?: string;
   raw: string;
   display?: string;
@@ -32,4 +50,4 @@ export type Prompt = {
 
   // These config options are merged into the provider config.
   config?: any;
-};
+}

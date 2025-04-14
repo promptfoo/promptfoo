@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'Think deeply and answer concisely: {{query}}'
 
@@ -8,7 +9,7 @@ providers:
   - id: openrouter:mistralai/mixtral-8x7b-instruct
     config:
       temperature: 0
-  - id: openai:gpt-3.5-turbo-0125
+  - id: openai:gpt-4o-mini
     config:
       temperature: 0
 

@@ -72,8 +72,10 @@ By incorporating the Prompt Extraction plugin in your LLM red teaming strategy, 
 
 ## Related Concepts
 
-- [Information Disclosure](../llm-vulnerability-types.md#privacy-and-security)
-- [Social Engineering](../llm-vulnerability-types.md#social-engineering)
-- [Model Inversion Attacks](../llm-vulnerability-types.md#model-inversion)
+The Prompt Extraction plugin is closely related to several other security testing approaches:
+
+- [**Tool Discovery**](/docs/red-team/plugins/tool-discovery) - While Prompt Extraction focuses on revealing system instructions, Tool Discovery attempts to uncover the tools and functions that an AI system has access to.
+- [**System Prompt Override**](/docs/red-team/plugins/system-prompt-override) - Tests if a user can override system instructions, which is related to but different from extracting those instructions.
+- [**Debug Access**](/docs/red-team/plugins/debug-access) - Tests if an AI system has an exposed debugging interface, which could provide access to system prompts.
 
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.

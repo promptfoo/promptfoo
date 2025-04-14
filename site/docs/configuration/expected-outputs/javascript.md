@@ -98,15 +98,30 @@ assert:
 
 ## Using test context
 
-The `context` variable contains the prompt and test case variables:
+The `context` variable contains information about the test case and execution environment:
 
 ```ts
-interface AssertContext {
+interface AssertionValueFunctionContext {
   // Raw prompt sent to LLM
-  prompt: string;
+  prompt: string | undefined;
 
   // Test case variables
   vars: Record<string, string | object>;
+
+  // The complete test case
+  test: AtomicTestCase;
+
+  // Log probabilities from the LLM response, if available
+  logProbs: number[] | undefined;
+
+  // Configuration passed to the assertion
+  config?: Record<string, any>;
+
+  // The provider that generated the response
+  provider: ApiProvider | undefined;
+
+  // The complete provider response
+  providerResponse: ProviderResponse | undefined;
 }
 ```
 
@@ -142,13 +157,39 @@ To reference an external file, use the `file://` prefix:
 assert:
   - type: javascript
     value: file://relative/path/to/script.js
+    config:
+      maximumOutputSize: 10
 ```
 
-The Javascript file must export an assertion function. Here's an example:
+You can specify a particular function to use by appending it after a colon:
+
+```yaml
+assert:
+  - type: javascript
+    value: file://relative/path/to/script.js:customFunction
+```
+
+The JavaScript file must export an assertion function. Here are examples:
+
+```js
+// Default export
+module.exports = (output, context) => {
+  return output.length > 10;
+};
+```
+
+```js
+// Named exports
+module.exports.customFunction = (output, context) => {
+  return output.includes('specific text');
+};
+```
+
+Here's an example using configuration data defined in the assertion's YAML file:
 
 ```js
 module.exports = (output, context) => {
-  return output.length > 10;
+  return output.length <= context.config.maximumOutputSize;
 };
 ```
 

@@ -8,31 +8,40 @@ import TabItem from '@theme/TabItem';
 
 # Getting started
 
-To get started, run this command:
+Install promptfoo and set up your first config file by running this command with [npx](https://nodejs.org/en/download), [npm](https://nodejs.org/en/download), or [brew](https://brew.sh/):
 
-<Tabs groupId="promptfoo-command">
-  <TabItem value="npx" label="npx" default>
-    <CodeBlock language="bash">
-      npx promptfoo@latest init
-    </CodeBlock>
-  </TabItem>
-  <TabItem value="npm" label="npm">
-    <CodeBlock language="bash">
-      {`npm install -g promptfoo
-promptfoo init`}
-    </CodeBlock>
-  </TabItem>
-  <TabItem value="brew" label="brew">
-    <CodeBlock language="bash">
-      {`brew install promptfoo
-promptfoo init`}
-    </CodeBlock>
-  </TabItem>
-</Tabs>
+  <Tabs groupId="promptfoo-command">
+    <TabItem value="npx" label="npx" default>
+      <CodeBlock language="bash">
+        npx promptfoo@latest init --example getting-started
+      </CodeBlock>
+    </TabItem>
+    <TabItem value="npm" label="npm">
+      <CodeBlock language="bash">
+        {`npm install -g promptfoo
+  promptfoo init --example getting-started`}
+      </CodeBlock>
+    </TabItem>
+    <TabItem value="brew" label="brew">
+      <CodeBlock language="bash">
+        {`brew install promptfoo
+  promptfoo init --example getting-started`}
+      </CodeBlock>
+    </TabItem>
+  </Tabs>
 
-This will create a `promptfooconfig.yaml` file in your current directory.
+This will create a new directory with a basic example that tests translation prompts across different models. The example includes:
 
-1. **Set up your prompts**: Open `promptfooconfig.yaml` and prompts that you want to test. Use double curly braces as placeholders for variables: `{{variable_name}}`. For example:
+- A configuration file `promptfooconfig.yaml` with sample prompts, providers, and test cases.
+- A `README.md` file explaining how the example works.
+
+If you prefer to start from scratch instead of using the example, simply run `promptfoo init` without the `--example` flag. The command will guide you through an interactive setup process.
+
+## Configuration
+
+Next, we can review the example configuration file and make changes to it.
+
+1. **Set up your prompts**: Open `promptfooconfig.yaml` and add prompts that you want to test. Use double curly braces as placeholders for variables: `{{variable_name}}`. For example:
 
    ```yaml
    prompts:
@@ -42,24 +51,38 @@ This will create a `promptfooconfig.yaml` file in your current directory.
 
    [&raquo; More information on setting up prompts](/docs/configuration/parameters)
 
-1. Add `providers` and specify the models you want to test:
+2. Add `providers` to specify which AI models you want to test. promptfoo supports 50+ providers including OpenAI, Anthropic, Google, and many others:
 
    ```yaml
    providers:
-     - openai:gpt-4o-mini
-     - openai:gpt-4
+     - openai:o3-mini
+     - anthropic:messages:claude-3-5-sonnet-20241022
+     - vertex:gemini-pro
+     # Or use your own custom provider
+     - file://path/to/custom/provider.py
    ```
 
-   - **OpenAI**: if testing with an OpenAI model, you'll need to set the `OPENAI_API_KEY` environment variable (see [OpenAI provider docs](/docs/providers/openai) for more info):
+   Each provider is specified using a simple format: `provider_name:model_name`. For example:
 
-     ```sh
-     export OPENAI_API_KEY=sk-abc123
-     ```
+   - `openai:o3-mini` for OpenAI's o3-mini
+   - `anthropic:messages:claude-3-5-sonnet-20241022` for Anthropic's Claude
+   - `bedrock:us.meta.llama3-3-70b-instruct-v1:0` for Meta's Llama 3.3 70B via AWS Bedrock
 
-   - **Custom**: See how to call your existing [Javascript](/docs/providers/custom-api), [Python](/docs/providers/python), [any other executable](/docs/providers/custom-script) or [API endpoint](/docs/providers/http).
-   - **APIs**: See setup instructions for [Azure](/docs/providers/azure), [Anthropic](/docs/providers/anthropic), [Mistral](/docs/providers/mistral), [HuggingFace](/docs/providers/huggingface), [AWS Bedrock](/docs/providers/aws-bedrock), and [more](/docs/providers).
+   Most providers need authentication. For example, with OpenAI:
 
-1. **Add test inputs**: Add some example inputs for your prompts. Optionally, add [assertions](/docs/configuration/expected-outputs) to set output requirements that are checked automatically.
+   ```sh
+   export OPENAI_API_KEY=sk-abc123
+   ```
+
+   You can use:
+
+   - **Cloud APIs**: [OpenAI](/docs/providers/openai), [Anthropic](/docs/providers/anthropic), [Google](/docs/providers/google), [Mistral](/docs/providers/mistral), and [many more](/docs/providers)
+   - **Local Models**: [Ollama](/docs/providers/ollama), [llama.cpp](/docs/providers/llama.cpp), [LocalAI](/docs/providers/localai)
+   - **Custom Code**: [Python](/docs/providers/python), [JavaScript](/docs/providers/custom-api), or any [executable](/docs/providers/custom-script)
+
+   [&raquo; See our full providers documentation](/docs/providers) for detailed setup instructions for each provider.
+
+3. **Add test inputs**: Add some example inputs for your prompts. Optionally, add [assertions](/docs/configuration/expected-outputs) to set output requirements that are checked automatically.
 
    For example:
 
@@ -77,7 +100,7 @@ This will create a `promptfooconfig.yaml` file in your current directory.
 
    [&raquo; More information on setting up tests](/docs/configuration/guide)
 
-1. **Run the evaluation**: This tests every prompt, model, and test case:
+4. **Run the evaluation**: Make sure you're in the directory containing `promptfooconfig.yaml`, then run:
 
    <Tabs groupId="promptfoo-command">
      <TabItem value="npx" label="npx" default>
@@ -97,7 +120,9 @@ This will create a `promptfooconfig.yaml` file in your current directory.
      </TabItem>
    </Tabs>
 
-1. After the evaluation is complete, open the web viewer to review the outputs:
+   This tests every prompt, model, and test case.
+
+5. After the evaluation is complete, open the web viewer to review the outputs:
 
    <Tabs groupId="promptfoo-command">
      <TabItem value="npx" label="npx" default>
@@ -117,6 +142,8 @@ This will create a `promptfooconfig.yaml` file in your current directory.
      </TabItem>
    </Tabs>
 
+![Promptfoo Web UI showing evaluation results](/img/getting-started-web-ui.png)
+
 ### Configuration
 
 The YAML configuration format runs each prompt through a series of example inputs (aka "test case") and checks if they meet requirements (aka "assert").
@@ -130,7 +157,8 @@ See the [Configuration docs](/docs/configuration/guide) for a detailed guide.
 <details>
 <summary>Show example YAML</summary>
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - file://prompts.txt
 providers:
@@ -144,7 +172,7 @@ tests:
     assert:
       - type: equals
         value: expected LLM output goes here
-      - type: function
+      - type: javascript
         value: output.includes('some text')
 
   - description: Second test case - manual review
@@ -177,7 +205,8 @@ In [this example](https://github.com/promptfoo/promptfoo/tree/main/examples/self
 
 Here is the configuration:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 # Load prompts
 prompts:
   - file://prompt1.txt
@@ -254,7 +283,7 @@ You can also output a nice [spreadsheet](https://docs.google.com/spreadsheets/d/
 
 ### Model quality
 
-In [this next example](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-3.5-vs-4), we evaluate the difference between GPT 3 and GPT 4 outputs for a given prompt:
+In [this next example](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-4o-vs-4o-mini), we evaluate the difference between GPT 4o and GPT 4o mini outputs for a given prompt:
 
 ```yaml title=promptfooconfig.yaml
 prompts:
@@ -264,7 +293,7 @@ prompts:
 # Set the LLMs we want to test
 providers:
   - openai:gpt-4o-mini
-  - openai:gpt-4
+  - openai:gpt-4o
 ```
 
 A simple `npx promptfoo@latest eval` will run the example. Also note that you can override parameters directly from the command line. For example, this command:
@@ -289,22 +318,22 @@ A simple `npx promptfoo@latest eval` will run the example. Also note that you ca
 
 Produces this HTML table:
 
-![Side-by-side evaluation of LLM model quality, gpt3 vs gpt4, html output](https://user-images.githubusercontent.com/310310/235490527-e0c31f40-00a0-493a-8afc-8ed6322bb5ca.png)
+![Side-by-side evaluation of LLM model quality, gpt-4o vs gpt-4o-mini, html output](https://user-images.githubusercontent.com/310310/235490527-e0c31f40-00a0-493a-8afc-8ed6322bb5ca.png)
 
-Full setup and output [here](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-3.5-vs-4).
+Full setup and output [here](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-4o-vs-4o-mini).
 
 A similar approach can be used to run other model comparisons. For example, you can:
 
-- Compare same models with different temperatures (see [GPT temperature comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-3.5-temperature-comparison))
+- Compare same models with different temperatures (see [GPT temperature comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-4o-temperature-comparison))
 - Compare Llama vs. GPT (see [Llama vs GPT benchmark](/docs/guides/compare-llama2-vs-gpt))
-- Compare Retrieval-Augmented Generation (RAG) with LangChain vs. regular GPT-4 (see [LangChain example](https://promptfoo.dev/docs/configuration/testing-llm-chains))
+- Compare Retrieval-Augmented Generation (RAG) with LangChain vs. regular GPT-4 (see [LangChain example](/docs/configuration/testing-llm-chains))
 
 ## Other examples
 
-There are many examples available in the [`examples/` directory](https://github.com/promptfoo/promptfoo/tree/main/examples) of our Github repository.
+There are many examples available in the [`examples/`](https://github.com/promptfoo/promptfoo/tree/main/examples) directory of our Github repository.
 
 ## Automatically assess outputs
 
 The above examples create a table of outputs that can be manually reviewed. By setting up assertions, you can automatically grade outputs on a pass/fail basis.
 
-For more information on automatically assessing outputs, see [Expected Outputs](/docs/configuration/expected-outputs).
+For more information on automatically assessing outputs, see [Assertions & Metrics](/docs/configuration/expected-outputs).

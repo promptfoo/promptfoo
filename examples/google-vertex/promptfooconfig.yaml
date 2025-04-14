@@ -1,16 +1,20 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 # This configuration runs each prompt through a series of example inputs and checks if they meet requirements.
 
 prompts:
   - "You are a helpful assistant. Reply with a concise answer to this inquiry: '{{question}}'"
 
 providers:
-  - id: vertex:gemini-1.5-pro-preview-0514
+  - id: 'vertex:gemini-1.5-flash'
+    config:
+      systemInstruction:
+      parts:
+        - text: Always talk like a cow. Mooo!
+  - id: 'vertex:gemini-2.0-flash-thinking-exp-1219'
     config:
       systemInstruction:
         parts:
-          - text: Always talk like a cow. Mooo!
-  - id: vertex:chat-bison
-    # or use the Google AI Studio API: google:gemini-pro
+          - text: Always talk like a sheep. Baaaah!
 
 defaultTest:
   options:
@@ -21,6 +25,8 @@ defaultTest:
       embedding: vertex:embedding:text-embedding-004
 
 tests:
+  - vars:
+      question: 'Solve 3*x^3-5*x=1'
   - vars:
       question: What's the weather in New York?
     assert:

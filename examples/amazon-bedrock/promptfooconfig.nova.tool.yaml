@@ -1,0 +1,110 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Bedrock Nova Tool Use Eval'
+
+prompts:
+  - 'What is the color of {{topic}}? ONLY answer using the "color_json" tool.'
+
+providers:
+  - id: bedrock:amazon.nova-micro-v1:0
+    config:
+      region: 'us-east-1'
+      inferenceConfig:
+        temperature: 0.7
+        max_new_tokens: 256
+      toolConfig:
+        toolChoice:
+          auto: {}
+        tools:
+          - toolSpec:
+              name: color_json
+              description: 'Outputs the color of a thing'
+              inputSchema:
+                json:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                      description: 'The name of the thing'
+                    color:
+                      type: string
+                      description: 'The color of the thing'
+                  required:
+                    - name
+                    - color
+  - id: bedrock:amazon.nova-lite-v1:0
+    config:
+      region: 'us-east-1'
+      inferenceConfig:
+        temperature: 0.7
+        max_new_tokens: 256
+      toolConfig:
+        toolChoice:
+          auto: {}
+        tools:
+          - toolSpec:
+              name: color_json
+              description: 'Outputs the color of a thing'
+              inputSchema:
+                json:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                      description: 'The name of the thing'
+                    color:
+                      type: string
+                      description: 'The color of the thing'
+                  required:
+                    - name
+                    - color
+  - id: bedrock:amazon.nova-pro-v1:0
+    config:
+      region: 'us-east-1'
+      inferenceConfig:
+        temperature: 0.7
+        max_new_tokens: 256
+      toolConfig:
+        toolChoice:
+          auto: {}
+        tools:
+          - toolSpec:
+              name: color_json
+              description: 'Outputs the color of a thing'
+              inputSchema:
+                json:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                      description: 'The name of the thing'
+                    color:
+                      type: string
+                      description: 'The color of the thing'
+                  required:
+                    - name
+                    - color
+
+defaultTest:
+  options:
+    transform: 'JSON.parse(output).input.color'
+tests:
+  - vars:
+      topic: sky
+    assert:
+      - type: equals
+        value: blue
+  - vars:
+      topic: ocean
+    assert:
+      - type: equals
+        value: blue
+  - vars:
+      topic: banana
+    assert:
+      - type: equals
+        value: yellow
+  - vars:
+      topic: grass
+    assert:
+      - type: equals
+        value: green

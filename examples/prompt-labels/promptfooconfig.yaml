@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - id: file://prompts1.txt
     label: content_generation

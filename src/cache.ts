@@ -2,12 +2,12 @@ import cacheManager from 'cache-manager';
 import type { Cache } from 'cache-manager';
 import fsStore from 'cache-manager-fs-hash';
 import fs from 'fs';
-import type { RequestInfo, RequestInit } from 'node-fetch';
 import path from 'path';
 import { getEnvBool, getEnvString, getEnvInt } from './envars';
 import { fetchWithRetries } from './fetch';
 import logger from './logger';
-import { getConfigDirectoryPath } from './util/config';
+import { REQUEST_TIMEOUT_MS } from './providers/shared';
+import { getConfigDirectoryPath } from './util/config/manage';
 
 let cacheInstance: Cache | undefined;
 
@@ -41,31 +41,47 @@ export function getCache() {
   return cacheInstance;
 }
 
-export async function fetchWithCache(
+export type FetchWithCacheResult<T> = {
+  data: T;
+  cached: boolean;
+  status: number;
+  statusText: string;
+  headers?: Record<string, string>;
+  deleteFromCache?: () => Promise<void>;
+};
+
+export async function fetchWithCache<T = any>(
   url: RequestInfo,
   options: RequestInit = {},
-  timeout: number,
+  timeout: number = REQUEST_TIMEOUT_MS,
   format: 'json' | 'text' = 'json',
   bust: boolean = false,
-): Promise<{ data: any; cached: boolean }> {
+  maxRetries?: number,
+): Promise<FetchWithCacheResult<T>> {
   if (!enabled || bust) {
-    const resp = await fetchWithRetries(url, options, timeout);
+    const resp = await fetchWithRetries(url, options, timeout, maxRetries);
+
     const respText = await resp.text();
     try {
       return {
         cached: false,
         data: format === 'json' ? JSON.parse(respText) : respText,
+        status: resp.status,
+        statusText: resp.statusText,
+        headers: Object.fromEntries(resp.headers.entries()),
+        deleteFromCache: async () => {
+          // No-op when cache is disabled
+        },
       };
-    } catch (error) {
+    } catch {
       throw new Error(`Error parsing response as JSON: ${respText}`);
     }
   }
 
-  const cache = await getCache();
-
   const copy = Object.assign({}, options);
   delete copy.headers;
-  const cacheKey = `fetch:${url}:${JSON.stringify(copy)}`;
+  const cacheKey = `fetch:v2:${url}:${JSON.stringify(copy)}`;
+  const cache = await getCache();
 
   let cached = true;
   let errorResponse = null;
@@ -74,18 +90,40 @@ export async function fetchWithCache(
   const cachedResponse = await cache.wrap(cacheKey, async () => {
     // Fetch the actual data and store it in the cache
     cached = false;
-    const response = await fetchWithRetries(url, options, timeout);
+    const response = await fetchWithRetries(url, options, timeout, maxRetries);
     const responseText = await response.text();
+    const headers = Object.fromEntries(response.headers.entries());
+
     try {
-      const data = JSON.stringify(format === 'json' ? JSON.parse(responseText) : responseText);
+      const parsedData = format === 'json' ? JSON.parse(responseText) : responseText;
+      const data = JSON.stringify({
+        data: parsedData,
+        status: response.status,
+        statusText: response.statusText,
+        headers,
+      });
       if (!response.ok) {
-        errorResponse = data;
+        if (responseText == '') {
+          errorResponse = JSON.stringify({
+            data: `Empty Response: ${response.status}: ${response.statusText}`,
+            status: response.status,
+            statusText: response.statusText,
+            headers,
+          });
+        } else {
+          errorResponse = data;
+        }
         // Don't cache error responses
         return;
       }
       if (!data) {
         // Don't cache empty responses
         return;
+      }
+      // Don't cache if the parsed data contains an error
+      if (format === 'json' && parsedData?.error) {
+        logger.debug(`Not caching ${url} because it contains an 'error' key: ${parsedData.error}`);
+        return data;
       }
       logger.debug(`Storing ${url} response in cache: ${data}`);
       return data;
@@ -102,9 +140,17 @@ export async function fetchWithCache(
     logger.debug(`Returning cached response for ${url}: ${cachedResponse}`);
   }
 
+  const parsedResponse = JSON.parse((cachedResponse ?? errorResponse) as string);
   return {
     cached,
-    data: JSON.parse((cachedResponse ?? errorResponse) as string),
+    data: parsedResponse.data as T,
+    status: parsedResponse.status,
+    statusText: parsedResponse.statusText,
+    headers: parsedResponse.headers,
+    deleteFromCache: async () => {
+      await cache.del(cacheKey);
+      logger.debug(`Evicted from cache: ${cacheKey}`);
+    },
   };
 }
 

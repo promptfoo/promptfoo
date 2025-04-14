@@ -1,24 +1,13 @@
 import chalk from 'chalk';
-import * as fs from 'fs';
-import * as path from 'path';
+import { engines } from '../package.json';
 import logger from './logger';
-
-/**
- * Function to get the required Node version from package.json
- * @returns {string} The required Node version specified in package.json
- */
-const getRequiredNodeVersion = (): string => {
-  const packageJsonPath = path.resolve(__dirname, '../package.json');
-  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
-  return packageJson.engines.node;
-};
 
 /**
  * Function to check the current Node version against the required version
  * Logs a warning and exits the process if the current Node version is not supported
  */
 export const checkNodeVersion = (): void => {
-  const requiredVersion = getRequiredNodeVersion();
+  const requiredVersion = engines.node;
 
   const versionMatch = process.version.match(/^v(\d+)\.(\d+)\.(\d+)/);
   if (!versionMatch) {
@@ -41,11 +30,11 @@ export const checkNodeVersion = (): void => {
     (major === requiredMajor && minor < requiredMinor) ||
     (major === requiredMajor && minor === requiredMinor && patch < requiredPatch)
   ) {
-    logger.warn(
+    process.exitCode = 1;
+    throw new Error(
       chalk.yellow(
         `You are using Node.js ${major}.${minor}.${patch}. This version is not supported. Please use Node.js ${requiredVersion}.`,
       ),
     );
-    process.exit(1);
   }
 };

@@ -1,7 +1,8 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - file://prompt*.txt
 providers:
-  - openai:gpt-3.5-turbo
+  - openai:gpt-4o-mini
 
 # The defaultTest configuration is applied to every test case in this config.
 defaultTest:
@@ -11,10 +12,10 @@ defaultTest:
 # Loads & runs all test cases matching these filepaths
 tests:
   # You can supply an exact filepath
-  - tests/tests2.yaml
+  - file://tests/tests2.yaml
 
   # Or a glob (wildcard)
-  - tests/*
+  - file://tests/*
 
   # Mix and match with actual test cases
   - vars:

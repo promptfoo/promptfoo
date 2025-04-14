@@ -1,0 +1,620 @@
+pre {
+  white-space: pre-wrap;
+}
+
+.font-bold {
+  font-weight: bold;
+}
+
+table.results-table,
+.divTable {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1rem 0;
+  background-color: #fff;
+}
+
+[data-theme='dark'] table.results-table,
+[data-theme='dark'] .divTable {
+  background-color: #1a1a1a;
+}
+
+.results-table ins {
+  background-color: var(--insert-highlight-color);
+  text-decoration: none;
+}
+
+.results-table del {
+  background-color: var(--delete-highlight-color);
+  text-decoration: strikethrough;
+}
+
+.tr {
+  display: flex;
+}
+
+.results-table tr,
+.tr {
+  width: fit-content;
+}
+
+.results-table tr:hover,
+.tr:hover {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+.results-table th,
+.th,
+.results-table td,
+.td {
+  position: relative;
+  border: 1px solid var(--border-color);
+  vertical-align: top;
+}
+
+.compact.results-table th,
+.compact .th,
+.compact.results-table td,
+.compact .td {
+  padding: 0.5rem;
+}
+
+.results-table th.variable,
+.th.variable,
+.results-table td.variable,
+.td.variable {
+  background-color: var(--variable-background-color);
+}
+
+.variable .cell {
+  max-height: 100%;
+  overflow-y: auto;
+}
+
+.results-table tr.header {
+  background-color: var(--header-background-color);
+}
+
+.results-table th,
+.th {
+  padding: 1rem;
+  position: relative;
+  vertical-align: bottom;
+  text-align: left;
+  white-space: pre-wrap;
+  font-weight: normal;
+}
+
+.results-table th .action {
+  cursor: pointer;
+  margin-left: 0.5rem;
+}
+
+.results-table th .action svg {
+  vertical-align: middle;
+}
+
+/* https://stackoverflow.com/questions/36575846/how-to-make-div-fill-td-height-in-firefox/36576083#36576083 */
+.results-table td,
+.results-table th {
+  height: 1px;
+}
+
+@-moz-document url-prefix() {
+  /* Firefox fix */
+  .results-table td,
+  .results-table th {
+    height: 100%;
+  }
+}
+
+.firefox-fix {
+  /* Seems to be needed on the entire table for Firefox to render the table correctly. When applied to a div within a specific td or th, it breaks the element but fixes the other rows */
+  display: table;
+  height: 100%;
+}
+
+.results-table tr .cell {
+  display: flex;
+  flex-direction: column;
+  white-space: pre-wrap;
+  height: 100%;
+  padding: 1rem;
+}
+
+.results-table tr .cell img {
+  max-width: var(--max-image-width, 256px);
+  max-height: var(--max-image-height, 256px);
+  cursor: zoom-in;
+}
+
+.results-table tr .variable > *,
+.compact.results-table tr .cell > * {
+  /* Header and vars always inline, cells are inline in compact mode. */
+  /*display: inline;*/
+}
+
+.results-table tr .cell .prompt {
+  background-color: var(--variable-background-color);
+  border: 1px solid var(--border-color);
+  padding: 1rem;
+  border-radius: 4px;
+  margin-bottom: 0.5rem;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.8rem;
+}
+
+.results-table tr .cell .prompt .pill {
+  display: block;
+  background-color: var(--neutral-background-color);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 0.25rem;
+  width: fit-content;
+  margin-bottom: 0.5rem;
+}
+
+.results-table tr .cell-actions {
+  display: flex;
+  gap: 0.5rem;
+  visibility: hidden;
+  position: absolute;
+  top: 1.25rem;
+  right: 0.75rem;
+  line-height: 0;
+  font-size: 1.25rem;
+}
+
+/* Show all actions on hover */
+.results-table .first-prompt-col:hover .cell-actions,
+.results-table .second-prompt-column:hover .cell-actions {
+  visibility: visible;
+}
+
+/* Always show active thumbs */
+.results-table tr .cell-actions .action.active {
+  visibility: visible !important;
+}
+
+.results-table tr .cell-detail {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 0.5rem;
+  row-gap: 0.25rem;
+
+  padding-top: 1rem;
+  margin-top: auto; /* Floats element to the bottom of the container */
+}
+
+.results-table tr .stat-item {
+  font-weight: normal;
+  font-size: 0.75rem;
+  color: #888;
+}
+
+.results-table tr .cell-actions .action {
+  cursor: pointer;
+}
+
+.results-table tr .cell-actions .action.active span {
+  filter: saturate(1.5);
+}
+
+/* Table-within-a-cell, used for markdown tables */
+.results-table tr .cell table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+}
+
+.results-table tr .cell table th,
+.results-table tr .cell table td {
+  border: 1px solid var(--border-color);
+  padding: 0.5rem;
+  text-align: left;
+}
+
+.results-table tr .cell table th {
+  background-color: var(--header-background-color);
+  font-weight: bold;
+}
+
+.results-table tr .cell table tr:nth-child(even) {
+  background-color: var(--row-background-color);
+}
+
+.results-table tr .cell table tr:hover {
+  background-color: var(--hover-background-color);
+}
+/* End Table-within-a-cell */
+
+.results-table th .output-header {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  align-items: flex-start;
+}
+
+.results-table th .output-header .pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.results-table th .prompt-container {
+  font-weight: bold;
+  margin-bottom: 0.5rem;
+}
+
+.results-table th .prompt-container > * {
+  display: inline;
+}
+
+.results-table th .provider,
+.results-table .status .provider {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  background-color: var(--neutral-background-color);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  margin-right: 0.25rem;
+}
+
+.results-table th .summary {
+  font-weight: normal;
+}
+
+.results-table th .prompt-detail {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 0.5rem;
+  row-gap: 0.25rem;
+
+  font-size: 0.75rem;
+  color: #888;
+  margin-top: auto; /* Floats element to the bottom of the container */
+}
+
+.results-table th .summary .highlight {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  background-color: var(--fail-background-color);
+  border: 1px solid var(--border-color);
+  transition: background-color 0.2s ease;
+}
+
+.results-table th .summary .highlight.success-0 {
+  background-color: var(--fail-background-color);
+}
+
+.results-table th .summary .highlight.success-20 {
+  background-color: color-mix(
+    in srgb,
+    var(--fail-background-color) 80%,
+    var(--success-background-color) 20%
+  );
+}
+
+.results-table th .summary .highlight.success-40 {
+  background-color: color-mix(
+    in srgb,
+    var(--fail-background-color) 60%,
+    var(--success-background-color) 40%
+  );
+}
+
+.results-table th .summary .highlight.success-60 {
+  background-color: color-mix(
+    in srgb,
+    var(--fail-background-color) 40%,
+    var(--success-background-color) 60%
+  );
+}
+
+.results-table th .summary .highlight.success-80 {
+  background-color: color-mix(
+    in srgb,
+    var(--fail-background-color) 20%,
+    var(--success-background-color) 80%
+  );
+}
+
+.results-table th .summary .highlight.success-100 {
+  background-color: var(--success-background-color);
+  border: 1px solid var(--pass-color);
+}
+
+.results-table .status {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-weight: bold;
+  margin-bottom: 0.5rem;
+}
+
+.results-table .status .status-row {
+  display: flex;
+  flex-direction: row;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.results-table .status .pill,
+.results-table .status .provider.pill {
+  display: inline-flex;
+  align-self: flex-start; /* prevents it from stretching to fill width */
+  align-items: center;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.9em;
+  height: 24px;
+  line-height: 1;
+}
+
+.results-table .status .provider.pill {
+  background-color: var(--neutral-background-color);
+  border: 1px solid var(--border-color);
+  color: inherit;
+  font-weight: bold;
+}
+
+.results-table .pass .pill:not(.provider) {
+  background-color: var(--success-background-color);
+  color: var(--pass-color);
+  border: 1px solid var(--pass-color);
+}
+
+.results-table .fail .pill:not(.provider) {
+  background-color: var(--fail-background-color);
+  border: 1px solid var(--fail-color);
+}
+
+.results-table .fail {
+  color: var(--fail-color);
+}
+
+.fail-reason {
+  color: var(--fail-color);
+  font-weight: bold;
+}
+
+.compact .fail-reason {
+  display: inline;
+}
+
+.results-table .fail .pill {
+  background-color: var(--fail-background-color);
+}
+
+.results-table td .score {
+  font-weight: normal;
+}
+
+.results-table .comment {
+  margin-top: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  background-color: var(--neutral-background-color);
+  font-style: italic;
+  cursor: pointer;
+}
+
+.results-table td.first-prompt-col {
+  border-left: 2px solid #888;
+}
+
+.results-table td.first-prompt-row {
+  border-top: 2px solid #888;
+}
+
+.search-highlight {
+  color: var(--search-text-color);
+  background-color: var(--search-highlight-color);
+}
+
+.results-table tr .cell .lightbox {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.results-table tr .cell .lightbox img {
+  max-width: 90%;
+  max-height: 90%;
+  cursor: zoom-out;
+  background: white;
+  border-radius: 4px;
+}
+
+[data-theme='dark'] .results-table tr .cell .lightbox img {
+  background: #333;
+}
+
+.resizer {
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: 100%;
+  width: 5px;
+  cursor: col-resize;
+  user-select: none;
+  touch-action: none;
+
+  background: var(--text-color);
+  opacity: 0.5;
+}
+
+.resizer.isResizing {
+  background: var(--text-color);
+  opacity: 1;
+}
+
+@media (hover: hover) {
+  .resizer {
+    opacity: 0;
+  }
+
+  *:hover > .resizer {
+    opacity: 1;
+  }
+}
+
+.results-table thead.sticky {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  transition: transform 0.2s ease-out;
+}
+
+[data-theme='dark'] .results-table thead.sticky {
+  background: #1a1a1a;
+}
+
+.header-dismiss {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  cursor: pointer;
+  z-index: 101;
+  padding: 4px;
+  border-radius: 4px;
+  background: #eee;
+  display: none;
+}
+
+[data-theme='dark'] .header-dismiss {
+  background: #333;
+}
+
+.header-dismiss:hover {
+  background: #ddd;
+}
+
+[data-theme='dark'] .header-dismiss:hover {
+  background: #444;
+}
+
+thead.collapsed .header-dismiss {
+  display: block;
+}
+
+.results-table thead.collapsed .prompt-detail,
+.results-table thead.collapsed .custom-metric-container {
+  display: none;
+}
+
+.results-table thead.collapsed .MuiFormControlLabel-root {
+  margin-top: -8px;
+}
+
+/* Ensure the header cells have a solid background */
+.results-table th {
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* Add these additional styles */
+.results-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.results-table thead.collapsed th {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+/* Ensure content below header doesn't jump when header collapses */
+.results-table thead th {
+  transition: padding 0.2s ease-out;
+}
+
+/* Add a subtle transition for the collapse animation */
+.results-table thead .output-header {
+  transition: max-height 0.2s ease-out;
+}
+
+/* Update these styles */
+.results-table thead.collapsed {
+  border-bottom: 2px solid var(--border-color);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Ensure the header cells have a solid background */
+.results-table th {
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+[data-theme='dark'] .results-table th {
+  background: #1a1a1a;
+}
+
+.lightbox {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  cursor: pointer;
+}
+
+.lightbox img {
+  max-width: 90%;
+  max-height: 90%;
+  object-fit: contain;
+  background: white;
+  border-radius: 4px;
+}
+
+[data-theme='dark'] .lightbox img {
+  background: #333;
+}
+
+.error-pill {
+  cursor: pointer;
+}
+
+.results-table .provider.pill {
+  background-color: var(--neutral-background-color);
+  border: 1px solid var(--border-color);
+  color: inherit;
+  font-weight: bold;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.9em;
+  height: 24px;
+  line-height: 1;
+}
+
+.audio-output {
+  margin: 1rem 0;
+}
+
+.audio-output audio {
+  margin-bottom: 0.5rem;
+}
+
+.audio-output .transcript {
+  font-size: 0.9rem;
+  color: var(--ifm-color-emphasis-700);
+  line-height: 1.4;
+  white-space: pre-wrap;
+}

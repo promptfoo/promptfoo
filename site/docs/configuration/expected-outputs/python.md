@@ -50,12 +50,29 @@ assert:
 A `context` object is available in the Python function. Here is its type definition:
 
 ```py
-from typing import Any, Dict, TypedDict, Union
+from typing import Any, Dict, Optional, TypedDict, Union
 
-class AssertContext(TypedDict):
-    prompt: str
-    vars: Dict[str, str]
+class AssertionValueFunctionContext(TypedDict):
+    # Raw prompt sent to LLM
+    prompt: Optional[str]
+
+    # Test case variables
+    vars: Dict[str, Union[str, object]]
+
+    # The complete test case
     test: Dict[str, Any]  # Contains keys like "vars", "assert", "options"
+
+    # Log probabilities from the LLM response, if available
+    logProbs: Optional[list[float]]
+
+    # Configuration passed to the assertion
+    config: Optional[Dict[str, Any]]
+
+    # The provider that generated the response
+    provider: Optional[Any]  # ApiProvider type
+
+    # The complete provider response
+    providerResponse: Optional[Any]  # ProviderResponse type
 ```
 
 For example, if the test case has a var `example`, access it in Python like this:
@@ -67,7 +84,7 @@ tests:
       example: 'Example text'
     assert:
       - type: python
-        value: 'context['vars']['example'] in output'
+        value: 'context["vars"]["example"] in output'
 ```
 
 ## External .py
@@ -78,9 +95,21 @@ To reference an external file, use the `file://` prefix:
 assert:
   - type: python
     value: file://relative/path/to/script.py
+    config:
+      outputLengthLimit: 10
 ```
 
-This file will be called with an `output` string and an `AssertContext` object (see above).
+You can specify a particular function to use by appending it after a colon:
+
+```yaml
+assert:
+  - type: python
+    value: file://relative/path/to/script.py:custom_assert
+```
+
+If no function is specified, it defaults to `get_assert`.
+
+This file will be called with an `output` string and an `AssertionValueFunctionContext` object (see above).
 It expects that either a `bool` (pass/fail), `float` (score), or `GradingResult` will be returned.
 
 Here's an example `assert.py`:
@@ -88,6 +117,7 @@ Here's an example `assert.py`:
 ```py
 from typing import Dict, TypedDict, Union
 
+# Default function name
 def get_assert(output: str, context) -> Union[bool, float, Dict[str, Any]]:
     print('Prompt:', context['prompt'])
     print('Vars', context['vars']['topic'])
@@ -98,6 +128,19 @@ def get_assert(output: str, context) -> Union[bool, float, Dict[str, Any]]:
       'score': 0.6,
       'reason': 'Looks good to me',
     }
+
+# Custom function name
+def custom_assert(output: str, context) -> Union[bool, float, Dict[str, Any]]:
+    return len(output) > 10
+```
+
+This is an example of an assertion that uses data from a configuration defined in the assertion's YML file:
+
+```py
+from typing import Dict, Union
+
+def get_assert(output: str, context) -> Union[bool, float, Dict[str, Any]]:
+    return len(output) <= context.get('config', {}).get('outputLengthLimit', 0)
 ```
 
 You can also return nested metrics and assertions via a `GradingResult` object:

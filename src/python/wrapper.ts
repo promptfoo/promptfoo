@@ -1,4 +1,4 @@
-import { promises as fs } from 'fs';
+import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import logger from '../logger';
@@ -21,7 +21,7 @@ export async function runPythonCode(
     `temp-python-code-${Date.now()}-${Math.random().toString(16).slice(2)}.py`,
   );
   try {
-    await fs.writeFile(tempFilePath, code);
+    fs.writeFileSync(tempFilePath, code);
     // Necessary to await so temp file doesn't get deleted.
     const result = await runPython(tempFilePath, method, args);
     return result;
@@ -29,8 +29,10 @@ export async function runPythonCode(
     logger.error(`Error executing Python code: ${error}`);
     throw error;
   } finally {
-    await fs
-      .unlink(tempFilePath)
-      .catch((error) => logger.error(`Error removing temporary file: ${error}`));
+    try {
+      fs.unlinkSync(tempFilePath);
+    } catch (error) {
+      logger.error(`Error removing temporary file: ${error}`);
+    }
   }
 }

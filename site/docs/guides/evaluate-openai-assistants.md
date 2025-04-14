@@ -76,7 +76,7 @@ If you want to override the configuration of an assistant for a specific test, y
 providers:
   - id: openai:assistant:asst_fEhNN3MClMamLfKLkIaoIpgB
     config:
-      model: gpt-4-1106-preview
+      model: gpt-4o
       instructions: 'Enter a replacement for system-level instructions here'
       tools:
         - type: code_interpreter
@@ -101,7 +101,7 @@ providers:
   # Modified
   - id: openai:assistant:asst_fEhNN3MClMamLfKLkIaoIpgB
     config:
-      model: gpt-4-1106-preview
+      model: gpt-4o
       instructions: 'Always talk like a pirate'
 ```
 

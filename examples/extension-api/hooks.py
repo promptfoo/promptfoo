@@ -6,13 +6,16 @@ individual evaluations, as well as running setup and teardown commands.
 """
 
 import logging
+import os
 from datetime import datetime
 
 # Set up logging only if it hasn't been set up already
 if not logging.getLogger().handlers:
+    current_dir = os.path.dirname(os.path.abspath(__file__))
     log_filename = f"promptfoo_run_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    log_path = os.path.join(current_dir, log_filename)
     logging.basicConfig(
-        filename=log_filename,
+        filename=log_path,
         level=logging.INFO,
         format="%(asctime)s - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",

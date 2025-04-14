@@ -1,10 +1,11 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: 'Similarity assertions with Voyage AI'
 
 prompts:
   - 'Output the color of {{item}}'
 
 providers:
-  - 'anthropic:messages:claude-3-haiku-20240307'
+  - 'anthropic:claude-3-5-haiku-20241022'
 
 defaultTest:
   options:

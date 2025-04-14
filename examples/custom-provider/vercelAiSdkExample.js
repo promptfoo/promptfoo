@@ -43,7 +43,7 @@ class CustomProvider {
     }
 
     // If not cached, make the function call
-    const model = anthropic('claude-3-haiku-20240307');
+    const model = anthropic('claude-3-5-haiku-20241022');
     const { object, usage } = await generateObject({
       model,
       messages: JSON.parse(prompt),

@@ -1,8 +1,9 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'Select a random {{person_type}} and introduce yourself as them'
 
 providers:
-  - openai:chat:gpt-4-0125-preview
+  - openai:chat:gpt-4o
 
 defaultTest:
   options:

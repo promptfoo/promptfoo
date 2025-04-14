@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450">
+  <!-- Background -->
+  <rect width="800" height="500" fill="#ffffff"/>
+  
+  <!-- Central AI System -->
+  <circle cx="400" cy="250" r="100" fill="#e3f2fd" stroke="#1976d2" stroke-width="3"/>
+  <text x="400" y="260" text-anchor="middle" font-family="Arial" font-size="24" fill="#1976d2">AI System</text>
+  
+  <!-- Threat Categories -->
+  <!-- Adversarial Attacks -->
+  <circle cx="200" cy="150" r="70" fill="#ffebee" stroke="#c62828" stroke-width="2"/>
+  <text x="200" y="145" text-anchor="middle" font-family="Arial" font-size="16" fill="#c62828">Adversarial</text>
+  <text x="200" y="165" text-anchor="middle" font-family="Arial" font-size="16" fill="#c62828">Attacks</text>
+  
+  <!-- Alignment Risks -->
+  <circle cx="600" cy="150" r="70" fill="#e8f5e9" stroke="#2e7d32" stroke-width="2"/>
+  <text x="600" y="145" text-anchor="middle" font-family="Arial" font-size="16" fill="#2e7d32">Alignment</text>
+  <text x="600" y="165" text-anchor="middle" font-family="Arial" font-size="16" fill="#2e7d32">Risks</text>
+  
+  <!-- Data Risks -->
+  <circle cx="200" cy="350" r="70" fill="#fff3e0" stroke="#ef6c00" stroke-width="2"/>
+  <text x="200" y="345" text-anchor="middle" font-family="Arial" font-size="16" fill="#ef6c00">Data</text>
+  <text x="200" y="365" text-anchor="middle" font-family="Arial" font-size="16" fill="#ef6c00">Risks</text>
+  
+  <!-- Knowledge Risks -->
+  <circle cx="600" cy="350" r="70" fill="#e0f7fa" stroke="#006064" stroke-width="2"/>
+  <text x="600" y="345" text-anchor="middle" font-family="Arial" font-size="16" fill="#006064">Knowledge</text>
+  <text x="600" y="365" text-anchor="middle" font-family="Arial" font-size="16" fill="#006064">Risks</text>
+  
+  <!-- Connecting Lines -->
+  <line x1="270" y1="150" x2="320" y2="190" stroke="#1976d2" stroke-width="2"/>
+  <line x1="530" y1="150" x2="480" y2="190" stroke="#1976d2" stroke-width="2"/>
+  <line x1="270" y1="350" x2="320" y2="310" stroke="#1976d2" stroke-width="2"/>
+  <line x1="530" y1="350" x2="480" y2="310" stroke="#1976d2" stroke-width="2"/>
+  
+</svg>

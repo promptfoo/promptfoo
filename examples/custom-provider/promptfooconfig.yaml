@@ -1,11 +1,12 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
-  - prompts.txt
+  - file://prompts.txt
 
 providers:
-  - id: customProvider.js
+  - id: file://customProvider.js
     label: 'My custom provider'
 
-tests: vars.csv
+tests: file://vars.csv
 # To compare two of the same provider, you can do the following:
 #
 # providers:

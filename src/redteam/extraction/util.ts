@@ -1,12 +1,14 @@
 import dedent from 'dedent';
-import invariant from 'tiny-invariant';
 import { z } from 'zod';
 import { fetchWithCache } from '../../cache';
+import { VERSION } from '../../constants';
 import { getEnvBool } from '../../envars';
+import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { ApiProvider } from '../../types';
-import { REMOTE_GENERATION_URL } from '../constants';
+import invariant from '../../util/invariant';
+import { getRemoteGenerationUrl } from '../remoteGeneration';
 
 export const RedTeamGenerationResponse = z.object({
   task: z.string(),
@@ -41,10 +43,12 @@ export async function fetchRemoteGeneration(
     const body = {
       task,
       prompts,
+      version: VERSION,
+      email: getUserEmail(),
     };
 
     const response = await fetchWithCache(
-      REMOTE_GENERATION_URL,
+      getRemoteGenerationUrl(),
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -67,7 +71,9 @@ export async function callExtraction<T>(
   prompt: string,
   processOutput: (output: string) => T,
 ): Promise<T> {
-  const { output, error } = await provider.callApi(prompt);
+  const { output, error } = await provider.callApi(
+    JSON.stringify([{ role: 'user', content: prompt }]),
+  );
 
   if (error) {
     logger.error(`Error in extraction: ${error}`);

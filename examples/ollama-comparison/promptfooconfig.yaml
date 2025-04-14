@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - id: file://prompts/openai_prompt.json
     label: openai_prompt
@@ -15,7 +16,7 @@ providers:
       - llama_prompt
     config:
       num_predict: 1024
-  - id: openai:gpt-3.5-turbo
+  - id: openai:gpt-4o-mini
     prompts:
       - openai_prompt
 

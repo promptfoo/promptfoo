@@ -1,12 +1,22 @@
 import nunjucks from 'nunjucks';
+import cliState from '../cliState';
 import { getEnvBool } from '../envars';
 import type { NunjucksFilterMap } from '../types';
 
+/**
+ * Get a Nunjucks engine instance with optional filters and configuration.
+ * @param filters - Optional map of custom Nunjucks filters.
+ * @param throwOnUndefined - Whether to throw an error on undefined variables.
+ * @param isGrader - Whether this engine is being used in a grader context.
+ * Nunjucks is always enabled in grader mode.
+ * @returns A configured Nunjucks environment.
+ */
 export function getNunjucksEngine(
   filters?: NunjucksFilterMap,
   throwOnUndefined: boolean = false,
+  isGrader: boolean = false,
 ): nunjucks.Environment {
-  if (getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+  if (!isGrader && getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
     return {
       renderString: (template: string) => template,
     } as unknown as nunjucks.Environment;
@@ -17,8 +27,19 @@ export function getNunjucksEngine(
     throwOnUndefined,
   });
 
-  // Add environment variables as global under 'env'
-  env.addGlobal('env', process.env);
+  // Configure environment variables as template globals unless disabled. Defaults to disabled in self-hosted mode
+  if (
+    !getEnvBool('PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS', getEnvBool('PROMPTFOO_SELF_HOSTED', false))
+  ) {
+    env.addGlobal('env', {
+      ...process.env,
+      ...cliState.config?.env,
+    });
+  }
+
+  env.addFilter('load', function (str) {
+    return JSON.parse(str);
+  });
 
   if (filters) {
     for (const [name, filter] of Object.entries(filters)) {
