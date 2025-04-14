@@ -174,15 +174,7 @@ const pluginFactories: PluginFactory[] = [
     invariant(config.policy, 'Policy plugin requires `config.policy` to be set'),
   ),
   createPluginFactory(PoliticsPlugin, 'politics'),
-  createPluginFactory<{ systemPrompt: string }>(
-    PromptExtractionPlugin,
-    'prompt-extraction',
-    (config: { systemPrompt: string }) =>
-      invariant(
-        config.systemPrompt,
-        'Prompt extraction plugin requires `config.systemPrompt` to be set',
-      ),
-  ),
+  createPluginFactory<{ systemPrompt: string }>(PromptExtractionPlugin, 'prompt-extraction'),
   createPluginFactory(RbacPlugin, 'rbac'),
   createPluginFactory(ShellInjectionPlugin, 'shell-injection'),
   createPluginFactory(SqlInjectionPlugin, 'sql-injection'),
