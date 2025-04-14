@@ -800,12 +800,27 @@ function ResultsTable({
   const { isCollapsed } = useScrollHandler();
   const { stickyHeader, setStickyHeader } = useResultsViewStore();
 
+  // Helper function to clear row-id from URL
+  const clearRowIdFromUrl = React.useCallback(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.has('row-id')) {
+      url.searchParams.delete('row-id');
+      window.history.replaceState({}, '', url);
+    }
+  }, []);
+
+  // Handle row link navigation
   useEffect(() => {
     const params = parseQueryParams(window.location.search);
     const rowId = params['row-id'];
 
     if (rowId) {
-      const rowIndex = Number(rowId.split('-').pop()); // Extract the row index from the rowId
+      // Convert from 1-based (user-friendly) to 0-based (internal) with validation
+      const parsedRowId = Number(rowId);
+      // Ensure rowIndex is valid, non-negative, and exists in the dataset
+      const rowIndex = Math.max(0, Math.min(parsedRowId - 1, filteredBody.length - 1));
+
+      let hasScrolled = false;
 
       // Calculate the page number where the row is located
       const rowPageIndex = Math.floor(rowIndex / pagination.pageSize);
@@ -821,36 +836,65 @@ function ResultsTable({
 
       // Wait for the correct page to load and scroll to the correct row
       const scrollToRow = () => {
-        const globalRowIndex = rowIndex % pagination.pageSize; // Calculate the local row index on the page
-        const rowElement = document.querySelector(`#row-${globalRowIndex}`);
+        if (hasScrolled) {
+          return;
+        }
+
+        const localRowIndex = rowIndex % pagination.pageSize; // Calculate the local row index on the page
+        const rowElement = document.querySelector(`#row-${localRowIndex}`);
 
         if (rowElement) {
-          rowElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          rowElement.classList.add('highlight');
-          setTimeout(() => {
-            rowElement.classList.remove('highlight');
-          }, 2000);
+          hasScrolled = true;
+
+          // Use requestAnimationFrame to ensure DOM is fully rendered
+          requestAnimationFrame(() => {
+            rowElement.scrollIntoView({
+              behavior: 'smooth',
+              block: 'nearest',
+            });
+          });
         }
       };
 
+      // Get a more specific container to observe for better performance
+      const tableContainer =
+        document.querySelector('.results-table')?.parentElement || document.body;
+
       // Observe DOM changes and trigger scrolling once the page is ready
       const observer = new MutationObserver(() => {
-        const rowElement = document.querySelector(`#row-${rowIndex % pagination.pageSize}`);
+        if (hasScrolled) {
+          observer.disconnect();
+          return;
+        }
+
+        const localRowIndex = rowIndex % pagination.pageSize;
+        const rowElement = document.querySelector(`#row-${localRowIndex}`);
         if (rowElement) {
           scrollToRow();
           observer.disconnect(); // Disconnect the observer once scrolling is done
         }
       });
 
-      observer.observe(document.body, {
+      observer.observe(tableContainer, {
         childList: true,
         subtree: true,
       });
 
+      // Add a fallback timeout to disconnect the observer if the row is never found
+      const timeoutId = setTimeout(() => {
+        if (!hasScrolled) {
+          console.warn('Timeout reached while waiting for row to be rendered');
+          observer.disconnect();
+        }
+      }, 5000);
+
       // Cleanup the observer when the component unmounts
-      return () => observer.disconnect();
+      return () => {
+        observer.disconnect();
+        clearTimeout(timeoutId);
+      };
     }
-  }, [pagination.pageIndex, pagination.pageSize, reactTable]);
+  }, [pagination.pageIndex, pagination.pageSize, reactTable, filteredBody.length]);
 
   return (
     <div>
@@ -993,6 +1037,7 @@ function ResultsTable({
           <Button
             onClick={() => {
               setPagination((prev) => ({ ...prev, pageIndex: Math.max(prev.pageIndex - 1, 0) }));
+              clearRowIdFromUrl();
               window.scrollTo(0, 0);
             }}
             disabled={reactTable.getState().pagination.pageIndex === 0}
@@ -1012,6 +1057,7 @@ function ResultsTable({
                   ...prev,
                   pageIndex: Math.min(Math.max(page, 0), reactTable.getPageCount() - 1),
                 }));
+                clearRowIdFromUrl();
               }}
               InputProps={{
                 style: { width: '60px', textAlign: 'center' },
@@ -1026,6 +1072,7 @@ function ResultsTable({
                 ...prev,
                 pageIndex: Math.min(prev.pageIndex + 1, reactTable.getPageCount() - 1),
               }));
+              clearRowIdFromUrl();
               window.scrollTo(0, 0);
             }}
             disabled={reactTable.getState().pagination.pageIndex + 1 >= reactTable.getPageCount()}

@@ -274,11 +274,21 @@ function EvalOutputCell({
     }
   }, [onRating, output.score, output.gradingResult?.comment]);
 
-  const [linked] = React.useState(false);
+  const [linked, setLinked] = React.useState(false);
   const handleRowShareLink = React.useCallback(() => {
     const url = new URL(window.location.href);
-    url.searchParams.set('row-id', String(rowIndex));
-    navigator.clipboard.writeText(url.toString());
+    url.searchParams.set('row-id', String(rowIndex + 1));
+
+    navigator.clipboard
+      .writeText(url.toString())
+      .then(() => {
+        // Show checkmark for 3 seconds then reset
+        setLinked(true);
+        setTimeout(() => setLinked(false), 3000);
+      })
+      .catch((error) => {
+        console.error('Failed to copy link to clipboard:', error);
+      });
   }, [rowIndex]);
 
   const [copied, setCopied] = React.useState(false);
