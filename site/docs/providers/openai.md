@@ -14,14 +14,15 @@ export OPENAI_API_KEY=your_api_key_here
 
 The OpenAI provider supports the following model formats:
 
-- `openai:chat` - defaults to `gpt-4o-mini`
-- `openai:completion` - defaults to `text-davinci-003`
-- `openai:<model name>` - uses a specific model name (mapped automatically to chat or completion endpoint)
 - `openai:chat:<model name>` - uses any model name against the `/v1/chat/completions` endpoint
+- `openai:responses:<model name>` - uses responses API models over HTTP connections
+- `openai:assistant:<assistant id>` - use an assistant
+- `openai:<model name>` - uses a specific model name (mapped automatically to chat or completion endpoint)
+- `openai:chat` - defaults to `gpt-4o-mini`
 - `openai:chat:ft:gpt-4o-mini:company-name:ID` - example of a fine-tuned chat completion model
+- `openai:completion` - defaults to `text-davinci-003`
 - `openai:completion:<model name>` - uses any model name against the `/v1/completions` endpoint
 - `openai:embeddings:<model name>` - uses any model name against the `/v1/embeddings` endpoint
-- `openai:assistant:<assistant id>` - use an assistant
 - `openai:realtime:<model name>` - uses realtime API models over WebSocket connections
 
 The `openai:<endpoint>:<model name>` construction is useful if OpenAI releases a new model,
@@ -125,6 +126,45 @@ interface OpenAiConfig {
 ```
 
 ## Models
+
+### GPT-4.1
+
+GPT-4.1 is OpenAI's flagship model for complex tasks with a 1,047,576 token context window and 32,768 max output tokens. Available in three variants with different price points:
+
+| Model        | Description                                  | Input Price         | Output Price        |
+| ------------ | -------------------------------------------- | ------------------- | ------------------- |
+| GPT-4.1      | Flagship model for complex tasks             | $2.00 per 1M tokens | $8.00 per 1M tokens |
+| GPT-4.1 Mini | More affordable, strong general capabilities | $0.40 per 1M tokens | $1.60 per 1M tokens |
+| GPT-4.1 Nano | Most economical, good for high-volume tasks  | $0.10 per 1M tokens | $0.40 per 1M tokens |
+
+All variants support text and image input with text output and have a May 31, 2024 knowledge cutoff.
+
+#### Usage Examples
+
+Standard model:
+
+```yaml
+providers:
+  - id: openai:chat:gpt-4.1 # or openai:responses:gpt-4.1
+    config:
+      temperature: 0.7
+```
+
+More affordable variants:
+
+```yaml
+providers:
+  - id: openai:chat:gpt-4.1-mini # or -nano variant
+```
+
+Specific snapshot versions are also available:
+
+```yaml
+providers:
+  - id: openai:chat:gpt-4.1-2025-04-14 # Standard
+  - id: openai:chat:gpt-4.1-mini-2025-04-14 # Mini
+  - id: openai:chat:gpt-4.1-nano-2025-04-14 # Nano
+```
 
 ### Reasoning Models (o1, o3-mini)
 

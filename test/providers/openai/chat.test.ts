@@ -822,11 +822,13 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const o1Provider = new OpenAiChatCompletionProvider('o1-mini');
       const o3Provider = new OpenAiChatCompletionProvider('o3-mini');
       const o1PreviewProvider = new OpenAiChatCompletionProvider('o1-preview');
+      const gpt41Provider = new OpenAiChatCompletionProvider('gpt-4.1');
 
       expect(regularProvider['supportsTemperature']()).toBe(true);
       expect(o1Provider['supportsTemperature']()).toBe(false);
       expect(o3Provider['supportsTemperature']()).toBe(false);
       expect(o1PreviewProvider['supportsTemperature']()).toBe(false);
+      expect(gpt41Provider['supportsTemperature']()).toBe(true);
     });
 
     it('should respect temperature settings based on model type', async () => {
