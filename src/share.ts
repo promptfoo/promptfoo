@@ -10,7 +10,7 @@ import { cloudConfig } from './globalConfig/cloud';
 import logger from './logger';
 import type Eval from './models/eval';
 import type { SharedResults } from './types';
-import { cloudCanAcceptChunkedResults } from './util/cloud';
+import { cloudCanAcceptChunkedResults, makeRequest as makeCloudRequest } from './util/cloud';
 
 export interface ShareDomainResult {
   domain: string;
@@ -372,6 +372,37 @@ async function handleLegacyResults(evalRecord: Eval, url: string): Promise<strin
   return responseJson.id ?? null;
 }
 
+/**
+ * Constructs the shareable URL for an eval.
+ * @param eval_ The eval to get the shareable URL for.
+ * @param showAuth Whether to show the authentication information in the URL.
+ * @returns The shareable URL for the eval.
+ */
+export async function getShareableUrl(
+  eval_: Eval,
+  showAuth: boolean = false,
+): Promise<string | null> {
+  const { domain } = determineShareDomain(eval_);
+
+  // For custom self-hosted setups, ensure we're using the same domain as the API
+  const customDomain = getEnvString('PROMPTFOO_REMOTE_APP_BASE_URL');
+  const finalDomain = customDomain || domain;
+
+  const fullUrl = cloudConfig.isEnabled()
+    ? `${finalDomain}/eval/${eval_.id}`
+    : SHARE_VIEW_BASE_URL === DEFAULT_SHARE_VIEW_BASE_URL && !customDomain
+      ? `${finalDomain}/eval/${eval_.id}`
+      : `${finalDomain}/eval/?evalId=${eval_.id}`;
+
+  return showAuth ? fullUrl : stripAuthFromUrl(fullUrl);
+}
+
+/**
+ * Shares an eval and returns the shareable URL.
+ * @param evalRecord The eval to share.
+ * @param showAuth Whether to show the authentication information in the URL.
+ * @returns The shareable URL for the eval.
+ */
 export async function createShareableUrl(
   evalRecord: Eval,
   showAuth: boolean = false,
@@ -404,17 +435,20 @@ export async function createShareableUrl(
   }
   logger.debug(`New eval ID on remote instance: ${evalId}`);
 
-  const { domain } = determineShareDomain(evalRecord);
+  return getShareableUrl(evalRecord, showAuth);
+}
 
-  // For custom self-hosted setups, ensure we're using the same domain as the API
-  const customDomain = getEnvString('PROMPTFOO_REMOTE_APP_BASE_URL');
-  const finalDomain = customDomain || domain;
-
-  const fullUrl = cloudConfig.isEnabled()
-    ? `${finalDomain}/eval/${evalId}`
-    : SHARE_VIEW_BASE_URL === DEFAULT_SHARE_VIEW_BASE_URL && !customDomain
-      ? `${finalDomain}/eval/${evalId}`
-      : `${finalDomain}/eval/?evalId=${evalId}`;
-
-  return showAuth ? fullUrl : stripAuthFromUrl(fullUrl);
+/**
+ * Checks whether an eval has been shared.
+ * @param eval_ The eval to check.
+ * @returns True if the eval has been shared, false otherwise.
+ */
+export async function hasEvalBeenShared(eval_: Eval): Promise<boolean> {
+  try {
+    const { status } = await makeCloudRequest(`/${eval_.id}`, 'GET');
+    return status !== 404;
+  } catch (e) {
+    logger.error(`Error checking if eval has been shared: ${e}`);
+    return false;
+  }
 }

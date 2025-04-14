@@ -34,7 +34,7 @@ import { EchoProvider } from './echo';
 import { FalImageGenerationProvider } from './fal';
 import { GolangProvider } from './golangCompletion';
 import { AIStudioChatProvider } from './google/ai.studio';
-import { GoogleMMLiveProvider } from './google/live';
+import { GoogleLiveProvider } from './google/live';
 import { VertexChatProvider, VertexEmbeddingProvider } from './google/vertex';
 import { GroqProvider } from './groq';
 import { HttpProvider } from './http';
@@ -266,6 +266,10 @@ export const providerMap: ProviderFactory[] = [
       }
       if (modelType === 'embeddings' || modelType === 'embedding') {
         return new AwsBedrockEmbeddingProvider(modelName, providerOptions);
+      }
+      if (modelType === 'kb' || modelType === 'knowledge-base') {
+        const { AwsBedrockKnowledgeBaseProvider } = await import('./bedrockKnowledgeBase');
+        return new AwsBedrockKnowledgeBaseProvider(modelName, providerOptions);
       }
       return new AwsBedrockCompletionProvider(
         `${modelType}${modelName ? `:${modelName}` : ''}`,
@@ -902,8 +906,8 @@ export const providerMap: ProviderFactory[] = [
         const modelName = splits.slice(2).join(':');
 
         if (serviceType === 'live') {
-          // This is a Multimodal Live API request
-          return new GoogleMMLiveProvider(modelName, providerOptions);
+          // This is a Live API request
+          return new GoogleLiveProvider(modelName, providerOptions);
         }
       }
 

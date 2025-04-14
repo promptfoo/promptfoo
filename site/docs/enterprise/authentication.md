@@ -38,4 +38,4 @@ You may wish to authenticate into the CLI when using Promptfoo. Follow these ste
 All of your evals are stored locally until you share them. If you were previously an open-source user, you can share your local evals to your Promptfoo Enterprise organization by running `promptfoo share`.
 :::
 
-Authenticating with your organization's account enables [team-based sharing](/docs/usage/sharing#team-cloud-sharing-private), ensuring your evaluation results are only visible to members of your organization rather than being publicly accessible.
+Authenticating with your organization's account enables [team-based sharing](/docs/usage/sharing#enterprise-sharing), ensuring your evaluation results are only visible to members of your organization rather than being publicly accessible.

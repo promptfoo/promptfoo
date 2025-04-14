@@ -1,4 +1,5 @@
 import React from 'react';
+import CloseIcon from '@mui/icons-material/Close';
 import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -169,9 +170,12 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
   return (
     <Drawer anchor="right" open={open} onClose={onClose}>
       <Box sx={{ width: 750, p: 2 }} className="risk-category-drawer">
-        <Typography variant="h6" gutterBottom>
-          {displayName}
-        </Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Typography variant="h6">{displayName}</Typography>
+          <IconButton onClick={onClose} size="small" aria-label="close drawer">
+            <CloseIcon />
+          </IconButton>
+        </Box>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
           <Box sx={{ textAlign: 'center', flex: 1 }}>
             <Typography variant="h4" color="primary">

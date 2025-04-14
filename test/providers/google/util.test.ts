@@ -20,8 +20,18 @@ jest.mock('glob', () => ({
 }));
 
 jest.mock('fs', () => ({
-  existsSync: jest.fn(),
-  readFileSync: jest.fn(),
+  existsSync: jest.fn().mockImplementation((path) => {
+    if (path === 'file://system_instruction.json') {
+      return true;
+    }
+    return false;
+  }),
+  readFileSync: jest.fn().mockImplementation((path) => {
+    if (path === 'file://system_instruction.json') {
+      return 'system instruction';
+    }
+    throw new Error(`Mock file not found: ${path}`);
+  }),
   writeFileSync: jest.fn(),
   statSync: jest.fn(),
 }));
@@ -70,12 +80,14 @@ describe('util', () => {
     ];
 
     it('should validate Vertex/AIS format function call', () => {
-      const output = {
-        functionCall: {
-          name: 'testFunction',
-          args: '{"param1": "test"}',
+      const output = [
+        {
+          functionCall: {
+            name: 'testFunction',
+            args: '{"param1": "test"}',
+          },
         },
-      };
+      ];
       expect(() => validateFunctionCall(output, mockFunctions)).not.toThrow();
     });
 
@@ -94,22 +106,26 @@ describe('util', () => {
     });
 
     it('should validate empty function args', () => {
-      const output = {
-        functionCall: {
-          name: 'emptyFunction',
-          args: '{}',
+      const output = [
+        {
+          functionCall: {
+            name: 'emptyFunction',
+            args: '{}',
+          },
         },
-      };
+      ];
       expect(() => validateFunctionCall(output, mockFunctions)).not.toThrow();
     });
 
     it('should validate function with no parameters', () => {
-      const output = {
-        functionCall: {
-          name: 'emptyFunction',
-          args: '{}',
+      const output = [
+        {
+          functionCall: {
+            name: 'emptyFunction',
+            args: '{}',
+          },
         },
-      };
+      ];
       expect(() => validateFunctionCall(output, mockFunctions)).not.toThrow();
     });
 
@@ -123,24 +139,28 @@ describe('util', () => {
     });
 
     it('should throw error for non-existent function', () => {
-      const output = {
-        functionCall: {
-          name: 'nonExistentFunction',
-          args: '{}',
+      const output = [
+        {
+          functionCall: {
+            name: 'nonExistentFunction',
+            args: '{}',
+          },
         },
-      };
+      ];
       expect(() => validateFunctionCall(output, mockFunctions)).toThrow(
         'Called "nonExistentFunction", but there is no function with that name',
       );
     });
 
     it('should throw error for invalid args', () => {
-      const output = {
-        functionCall: {
-          name: 'testFunction',
-          args: '{}',
+      const output = [
+        {
+          functionCall: {
+            name: 'testFunction',
+            args: '{}',
+          },
         },
-      };
+      ];
       expect(() => validateFunctionCall(output, mockFunctions)).toThrow(/does not match schema/);
     });
   });
@@ -537,6 +557,110 @@ describe('util', () => {
         ],
         coerced: true,
         systemInstruction: undefined,
+      });
+    });
+
+    it('should handle native Gemini format with system_instruction field', () => {
+      const input = {
+        system_instruction: { parts: [{ text: 'You are a helpful assistant' }] },
+        contents: [
+          {
+            parts: [{ text: 'Hello' }],
+          },
+        ],
+      };
+
+      const result = maybeCoerceToGeminiFormat(input);
+
+      expect(result).toEqual({
+        contents: [
+          {
+            parts: [{ text: 'Hello' }],
+          },
+        ],
+        coerced: true,
+        systemInstruction: { parts: [{ text: 'You are a helpful assistant' }] },
+      });
+    });
+
+    it('should handle native Gemini format with system_instruction but no contents field', () => {
+      const input = {
+        system_instruction: { parts: [{ text: 'You are a helpful assistant' }] },
+      };
+
+      const result = maybeCoerceToGeminiFormat(input);
+
+      expect(result).toEqual({
+        contents: [],
+        coerced: true,
+        systemInstruction: { parts: [{ text: 'You are a helpful assistant' }] },
+      });
+    });
+
+    it('should handle native Gemini format with system_instruction and empty contents array', () => {
+      const input = {
+        system_instruction: { parts: [{ text: 'You are a helpful assistant' }] },
+        contents: [],
+      };
+
+      const result = maybeCoerceToGeminiFormat(input);
+
+      expect(result).toEqual({
+        contents: [],
+        coerced: true,
+        systemInstruction: { parts: [{ text: 'You are a helpful assistant' }] },
+      });
+    });
+
+    it('should handle valid GeminiFormat array with system_instruction field', () => {
+      const input = {
+        system_instruction: { parts: [{ text: 'You are a helpful assistant' }] },
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: 'Hello, Gemini!' }],
+          },
+        ],
+      };
+
+      const result = maybeCoerceToGeminiFormat(input);
+
+      expect(result).toEqual({
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: 'Hello, Gemini!' }],
+          },
+        ],
+        coerced: true,
+        systemInstruction: { parts: [{ text: 'You are a helpful assistant' }] },
+      });
+    });
+
+    it('should handle system_instruction with different formats', () => {
+      const input = {
+        system_instruction: {
+          parts: [{ text: 'You are a helpful assistant' }, { text: 'Be concise and accurate' }],
+        },
+        contents: [
+          {
+            parts: [{ text: 'Hello' }],
+          },
+        ],
+      };
+
+      const result = maybeCoerceToGeminiFormat(input);
+
+      expect(result).toEqual({
+        contents: [
+          {
+            parts: [{ text: 'Hello' }],
+          },
+        ],
+        coerced: true,
+        systemInstruction: {
+          parts: [{ text: 'You are a helpful assistant' }, { text: 'Be concise and accurate' }],
+        },
       });
     });
   });

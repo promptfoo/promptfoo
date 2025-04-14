@@ -1,12 +1,14 @@
+import confirm from '@inquirer/confirm';
 import chalk from 'chalk';
 import type { Command } from 'commander';
 import dedent from 'dedent';
 import { DEFAULT_SHARE_VIEW_BASE_URL } from '../constants';
 import logger from '../logger';
 import Eval from '../models/eval';
-import { createShareableUrl, isSharingEnabled } from '../share';
+import { createShareableUrl, hasEvalBeenShared, isSharingEnabled, getShareableUrl } from '../share';
 import telemetry from '../telemetry';
 import { setupEnv } from '../util';
+import { loadDefaultConfig } from '../util/config/default';
 
 export function notCloudEnabledShareInstructions(): void {
   const cloudUrl = DEFAULT_SHARE_VIEW_BASE_URL;
@@ -53,6 +55,12 @@ export function shareCommand(program: Command) {
       'Show username/password authentication information in the URL if exists',
       false,
     )
+    // NOTE: Added in 0.109.1 after migrating sharing to promptfoo.app in 0.108.0
+    .option(
+      '-y, --yes',
+      'Flag does nothing (maintained for backwards compatibility only - shares are now private by default)',
+      false,
+    )
     .action(
       async (
         evalId: string | undefined,
@@ -79,6 +87,19 @@ export function shareCommand(program: Command) {
             process.exitCode = 1;
             return;
           }
+          logger.info(`Sharing latest eval (${eval_.id})`);
+        }
+
+        try {
+          const { defaultConfig: currentConfig } = await loadDefaultConfig();
+          if (currentConfig && currentConfig.sharing) {
+            eval_.config.sharing = currentConfig.sharing;
+            logger.debug(
+              `Applied sharing config from promptfooconfig.yaml: ${JSON.stringify(currentConfig.sharing)}`,
+            );
+          }
+        } catch (err) {
+          logger.debug(`Could not load config: ${err}`);
         }
 
         if (eval_.prompts.length === 0) {
@@ -92,6 +113,17 @@ export function shareCommand(program: Command) {
           );
           process.exitCode = 1;
           return;
+        }
+
+        if (await hasEvalBeenShared(eval_)) {
+          const url = await getShareableUrl(eval_, cmdObj.showAuth);
+          const shouldContinue = await confirm({
+            message: `This eval is already shared at ${url}. Sharing it again will overwrite the existing data. Continue?`,
+          });
+          if (!shouldContinue) {
+            process.exitCode = 0;
+            return;
+          }
         }
 
         await createAndDisplayShareableUrl(eval_, cmdObj.showAuth);
