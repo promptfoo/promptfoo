@@ -39,6 +39,7 @@ export interface OpenAiRealtimeOptions extends OpenAiCompletionOptions {
   tool_choice?: 'none' | 'auto' | 'required' | { type: 'function'; function?: { name: string } };
   functionCallHandler?: (name: string, args: string) => Promise<string>; // Handler for function calls
   apiVersion?: string; // Optional API version
+  maintainContext?: boolean;
 }
 
 interface WebSocketMessage {
@@ -63,6 +64,11 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
   config: OpenAiRealtimeOptions;
 
+  // Add persistent connection handling
+  persistentConnection: any = null;
+  previousItemId: string | null = null;
+  assistantMessageIds: string[] = []; // Track assistant message IDs
+
   constructor(
     modelName: string,
     options: { config?: OpenAiRealtimeOptions; id?: string; env?: EnvOverrides } = {},
@@ -72,6 +78,11 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     }
     super(modelName, options);
     this.config = options.config || {};
+
+    // Enable maintainContext by default
+    if (this.config.maintainContext === undefined) {
+      this.config.maintainContext = true;
+    }
   }
 
   getRealtimeSessionBody() {
@@ -595,7 +606,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
     try {
       // Extract the message content for WebSocket communications
-      // This approach is similar to parseChatPrompt but specialized for Realtime API
       let promptText = prompt;
 
       try {
@@ -635,9 +645,15 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         logger.debug('Using prompt as is - not a JSON structure');
       }
 
-      // Connect directly to the WebSocket API using API key
-      logger.debug(`Connecting directly to OpenAI Realtime API WebSocket with API key`);
-      const result = await this.directWebSocketRequest(promptText);
+      // Use a persistent connection if we should maintain conversation context
+      let result;
+      if (this.config.maintainContext === true) {
+        result = await this.persistentWebSocketRequest(promptText);
+      } else {
+        // Connect directly to the WebSocket API using API key
+        logger.debug(`Connecting directly to OpenAI Realtime API WebSocket with API key`);
+        result = await this.directWebSocketRequest(promptText);
+      }
 
       // Format the output - if function calls occurred, include that info
       let finalOutput = result.output;
@@ -1146,5 +1162,235 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         }
       });
     });
+  }
+
+  // New method for persistent connection
+  async persistentWebSocketRequest(prompt: string): Promise<RealtimeResponse> {
+    return new Promise((resolve, reject) => {
+      logger.debug(`Using persistent WebSocket connection to OpenAI Realtime API`);
+
+      // Create a new connection if needed or use existing
+      const connection = this.persistentConnection;
+
+      if (connection) {
+        // Connection already exists, just set up message handlers
+        this.setupMessageHandlers(prompt, resolve, reject);
+      } else {
+        // Create new connection
+        const wsUrl = `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(this.modelName)}`;
+        logger.debug(`Connecting to WebSocket URL: ${wsUrl}`);
+
+        // Add WebSocket options with required headers
+        const wsOptions = {
+          headers: {
+            Authorization: `Bearer ${this.getApiKey()}`,
+            'OpenAI-Beta': 'realtime=v1',
+            'User-Agent': 'promptfoo Realtime API Client',
+            Origin: 'https://api.openai.com',
+          },
+          handshakeTimeout: 10000,
+          perMessageDeflate: false,
+        };
+
+        this.persistentConnection = new WebSocket(wsUrl, wsOptions);
+
+        // Handle connection establishment
+        this.persistentConnection.once('open', () => {
+          logger.debug('Persistent WebSocket connection established successfully');
+          this.setupMessageHandlers(prompt, resolve, reject);
+        });
+
+        this.persistentConnection.once('error', (err: Error) => {
+          logger.error(`WebSocket connection error: ${err}`);
+          reject(err);
+        });
+      }
+    });
+  }
+
+  // Helper method to set up message handlers for persistent WebSocket
+  private setupMessageHandlers(
+    prompt: string,
+    resolve: (value: RealtimeResponse) => void,
+    reject: (reason: Error) => void,
+  ): void {
+    // Accumulators for response text and errors
+    let responseText = '';
+    let responseError = '';
+    // Using _responseDone to indicate the variable is used internally
+    let _responseDone = false;
+    let _usage: {
+      total_tokens?: number;
+      prompt_tokens?: number;
+      completion_tokens?: number;
+    } | null = null;
+
+    // Track message IDs and function call state
+    let _messageId = '';
+    let _responseId = '';
+    const functionCallOccurred = false;
+    const functionCallResults: string[] = [];
+
+    const sendEvent = (event: any) => {
+      if (!event.event_id) {
+        event.event_id = this.generateEventId();
+      }
+      logger.debug(`Sending event: ${JSON.stringify(event)}`);
+
+      // Check for connection existence without negated condition
+      const connection = this.persistentConnection;
+      if (connection) {
+        connection.send(JSON.stringify(event));
+      }
+
+      return event.event_id;
+    };
+
+    // Set up response handlers for this request
+    const messageHandler = async (data: Buffer) => {
+      try {
+        const message = JSON.parse(data.toString()) as WebSocketMessage;
+        logger.debug(`Received WebSocket message: ${message.type}`);
+
+        // Handle different event types
+        switch (message.type) {
+          case 'conversation.item.created':
+            if (message.item.role === 'user') {
+              // User message was created, now create a response
+              _messageId = message.item.id;
+              this.previousItemId = _messageId;
+
+              // Prepare response creation event with appropriate settings
+              const responseEvent: any = {
+                type: 'response.create',
+                response: {
+                  modalities: this.config.modalities || ['text'],
+                  instructions: this.config.instructions || 'You are a helpful assistant.',
+                  voice: this.config.voice || 'alloy',
+                  temperature: this.config.temperature ?? 0.8,
+                },
+              };
+
+              // Add tools if configured
+              if (this.config.tools && this.config.tools.length > 0) {
+                responseEvent.response.tools = this.config.tools;
+                if (Object.prototype.hasOwnProperty.call(this.config, 'tool_choice')) {
+                  responseEvent.response.tool_choice = this.config.tool_choice;
+                } else {
+                  responseEvent.response.tool_choice = 'auto';
+                }
+              }
+
+              sendEvent(responseEvent);
+            } else if (message.item.role === 'assistant') {
+              // Store assistant message ID
+              logger.debug(`Storing assistant message ID: ${message.item.id}`);
+              this.assistantMessageIds.push(message.item.id);
+              // Update previousItemId to the assistant's message for better conversation chaining
+              this.previousItemId = message.item.id;
+            }
+            break;
+
+          case 'response.created':
+            _responseId = message.response.id;
+            break;
+
+          case 'response.text.delta':
+            // Accumulate text deltas
+            responseText += message.delta;
+            break;
+
+          case 'response.text.done':
+            // Final text content
+            if (message.text && message.text.length > 0) {
+              responseText = message.text;
+            }
+            break;
+
+          case 'response.done':
+            _responseDone = true;
+            // Capture token usage if available
+            if (message.usage) {
+              _usage = message.usage;
+            }
+
+            // Remove the event handlers
+            const connectionForDone = this.persistentConnection;
+            if (connectionForDone) {
+              connectionForDone.removeListener('message', messageHandler);
+            }
+
+            // Resolve the promise
+            resolve({
+              output: responseText,
+              tokenUsage: {
+                total: _usage?.total_tokens || 0,
+                prompt: _usage?.prompt_tokens || 0,
+                completion: _usage?.completion_tokens || 0,
+                cached: 0,
+              },
+              cached: false,
+              metadata: {},
+              functionCallOccurred,
+              functionCallResults,
+            });
+            break;
+
+          case 'error':
+            responseError = message.message || 'Unknown WebSocket error';
+            logger.error(`WebSocket error: ${responseError}`);
+
+            // Remove the event handlers
+            const connectionForError = this.persistentConnection;
+            if (connectionForError) {
+              connectionForError.removeListener('message', messageHandler);
+            }
+
+            reject(new Error(responseError));
+            break;
+        }
+      } catch (error) {
+        logger.error(`Error processing WebSocket message: ${error}`);
+      }
+    };
+
+    // Set up error handler
+    const errorHandler = (error: Error) => {
+      logger.error(`WebSocket error: ${error}`);
+      this.persistentConnection = null; // Clear connection on error
+      reject(error);
+    };
+
+    // Add message handler for this request
+    if (this.persistentConnection) {
+      this.persistentConnection.on('message', messageHandler);
+      this.persistentConnection.once('error', errorHandler);
+    }
+
+    // Create a conversation item with the user's prompt
+    sendEvent({
+      type: 'conversation.item.create',
+      previous_item_id: this.previousItemId,
+      item: {
+        type: 'message',
+        role: 'user',
+        content: [
+          {
+            type: 'input_text',
+            text: prompt,
+          },
+        ],
+      },
+    });
+
+    // Set a timeout for the response
+    const _timeout = setTimeout(() => {
+      logger.error('WebSocket response timed out');
+      const connection = this.persistentConnection;
+      if (connection) {
+        connection.removeListener('message', messageHandler);
+      }
+      reject(new Error('WebSocket response timed out'));
+    }, this.config.websocketTimeout || 30000);
   }
 }
