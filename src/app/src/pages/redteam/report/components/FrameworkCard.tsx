@@ -27,7 +27,7 @@ import {
   getPluginDisplayName,
   getSeverityColor,
   FRAMEWORK_DESCRIPTIONS,
-} from './FrameworkComplianceUtils.ts';
+} from './FrameworkComplianceUtils';
 
 interface FrameworkCardProps {
   framework: string;
