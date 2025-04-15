@@ -203,14 +203,14 @@ export const FRAMEWORK_NAMES: Record<string, string> = {
 export const OWASP_LLM_TOP_10_NAMES = [
   'Prompt Injection',
   'Sensitive Information Disclosure',
-  'Supply Chain Vulnerabilities',
-  'Model Denial of Service',
+  'Supply Chain',
+  'Improper Output Handling',
   'Insecure Output Handling',
   'Excessive Agency',
   'System Prompt Leakage',
-  'Insecure Plugin Design',
-  'Overreliance',
-  'Training Data Poisoning',
+  'Vector and Embedding Weaknesses',
+  'Misinformation',
+  'Unbounded Consumption',
 ];
 
 export const OWASP_API_TOP_10_NAMES = [
