@@ -11,6 +11,7 @@ import { VALID_SCHEMA_TYPES } from './types';
 import type { Content, FunctionCall, Part, Tool } from './types';
 
 const ajv = new Ajv();
+ajv.addKeyword('property_ordering');
 const clone = Clone();
 
 type Probability = 'NEGLIGIBLE' | 'LOW' | 'MEDIUM' | 'HIGH';
@@ -516,7 +517,14 @@ export function validateFunctionCall(
     }
     if (Object.keys(functionArgs).length !== 0 && functionSchema?.parameters) {
       const parameterSchema = normalizeSchemaTypes(functionSchema.parameters);
-      const validate = ajv.compile(parameterSchema as AnySchema);
+      let validate;
+      try {
+        validate = ajv.compile(parameterSchema as AnySchema);
+      } catch (err) {
+        throw new Error(
+          `Tool schema doesn't compile with ajv: ${err}. If this is a valid tool schema you may need to reformulate your assertion without is-valid-function-call.`,
+        );
+      }
       if (!validate(functionArgs)) {
         throw new Error(
           `Call to "${functionName}":\n${JSON.stringify(functionCall)}\ndoes not match schema:\n${JSON.stringify(validate.errors)}`,
@@ -529,3 +537,13 @@ export function validateFunctionCall(
     }
   }
 }
+
+export {
+  ajv,
+  clone,
+  PartSchema,
+  ContentSchema,
+  GeminiFormatSchema,
+  cachedAuth,
+  normalizeSchemaTypes,
+};
