@@ -11,6 +11,9 @@ import { VALID_SCHEMA_TYPES } from './types';
 import type { Content, FunctionCall, Part, Tool } from './types';
 
 const ajv = new Ajv();
+// property_ordering is an optional field sometimes present in gemini tool configs, but ajv doesn't know about it.
+// At the moment we will just ignore it, so the is-valid-function-call won't check property field ordering.
+ajv.addKeyword('property_ordering');
 const clone = Clone();
 
 type Probability = 'NEGLIGIBLE' | 'LOW' | 'MEDIUM' | 'HIGH';
@@ -516,7 +519,14 @@ export function validateFunctionCall(
     }
     if (Object.keys(functionArgs).length !== 0 && functionSchema?.parameters) {
       const parameterSchema = normalizeSchemaTypes(functionSchema.parameters);
-      const validate = ajv.compile(parameterSchema as AnySchema);
+      let validate;
+      try {
+        validate = ajv.compile(parameterSchema as AnySchema);
+      } catch (err) {
+        throw new Error(
+          `Tool schema doesn't compile with ajv: ${err}. If this is a valid tool schema you may need to reformulate your assertion without is-valid-function-call.`,
+        );
+      }
       if (!validate(functionArgs)) {
         throw new Error(
           `Call to "${functionName}":\n${JSON.stringify(functionCall)}\ndoes not match schema:\n${JSON.stringify(validate.errors)}`,
