@@ -18,6 +18,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   static OPENAI_RESPONSES_MODEL_NAMES = [
     'gpt-4o',
     'gpt-4o-2024-08-06',
+    'gpt-4.1',
+    'gpt-4.1-2025-04-14',
+    'gpt-4.1-mini',
+    'gpt-4.1-mini-2025-04-14',
+    'gpt-4.1-nano',
+    'gpt-4.1-nano-2025-04-14',
     'o1',
     'o1-preview',
     'o1-mini',

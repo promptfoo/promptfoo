@@ -107,6 +107,8 @@ function calculateMedianResultSize(results: any[], sampleSize: number = 25): num
 
 function createChunks(results: any[], targetChunkSize: number): any[][] {
   const medianSize = calculateMedianResultSize(results);
+  // PROMPTFOO_SHARE_CHUNK_SIZE lets you directly specify how many results to include in each chunk.
+  // The value represents the number of results per chunk, not a byte size.
   const estimatedResultsPerChunk =
     getEnvInt('PROMPTFOO_SHARE_CHUNK_SIZE') ??
     Math.max(1, Math.floor(targetChunkSize / medianSize));
