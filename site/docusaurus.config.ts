@@ -111,20 +111,24 @@ const config: Config = {
       items: [
         {
           type: 'dropdown',
-          label: 'Product',
+          label: 'Products',
           position: 'left',
           items: [
             {
-              to: '/security/',
-              label: 'Gen AI Security',
+              to: '/red-teaming/',
+              label: 'Red Teaming',
             },
             {
-              to: '/llm-vulnerability-scanner/',
-              label: 'Vulnerability Scanner',
+              to: '/guardrails/',
+              label: 'Guardrails',
+            },
+            {
+              to: '/model-security/',
+              label: 'Model Security',
             },
             {
               to: '/docs/getting-started/',
-              label: 'LLM Evaluations',
+              label: 'Evaluations',
             },
           ],
         },

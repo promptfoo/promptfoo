@@ -17,8 +17,8 @@ function HomepageHeader({ getStartedUrl }: { getStartedUrl: string }) {
   return (
     <header className={clsx('hero hero--primary', styles.heroBanner)}>
       <div className="container">
-        <h1>Test & secure your LLM apps</h1>
-        <p>Open-source LLM testing used by 75,000+ developers</p>
+        <h1>Comprehensive security for AI applications</h1>
+        <p>Trusted by 75,000+ developers for red teaming, guardrails, and model security</p>
         <div className={styles.buttons}>
           <Link className="button button--primary button--lg" to={getStartedUrl}>
             Get Started
@@ -38,14 +38,108 @@ function HomepageHeader({ getStartedUrl }: { getStartedUrl: string }) {
 function HomepageWalkthrough() {
   const isDarkTheme = useColorMode().colorMode === 'dark';
   const [selectedStep, setSelectedStep] = React.useState(() => {
-    if (typeof window !== 'undefined' && window.location.hash === '#evals') {
-      return 1;
+    if (typeof window !== 'undefined') {
+      if (window.location.hash === '#evals') {
+        return 4;
+      } else if (window.location.hash === '#redteam') {
+        return 1;
+      } else if (window.location.hash === '#guardrails') {
+        return 2;
+      } else if (window.location.hash === '#modelsecurity') {
+        return 3;
+      }
     }
-    return 2;
+    return 1; // Default to Red Teaming
   });
+  
   const steps = [
     {
       id: 1,
+      caption: 'Red Teaming',
+      image: '/img/riskreport-1.png',
+      image2x: '/img/riskreport-1@2x.png',
+      description: (
+        <>
+          <p className={styles.walkthroughHeading}>Adaptive red teaming that targets applications, not just models</p>
+          <p>Generate customized attacks that adapt to your specific use case:</p>
+          <pre className={styles.codeBox}>
+            <code>npx promptfoo@latest redteam init</code>
+          </pre>
+          <p>Unlike generic jailbreaks, our solution uncovers actual risks in your systems:</p>
+          <ul>
+            <li>Data leaks and privacy breaches</li>
+            <li>Insecure tool use vulnerabilities</li>
+            <li>Direct and indirect prompt injections</li>
+            <li>Jailbreaks tailored to your guardrails</li>
+            <li>Unauthorized contract creation</li>
+            <li>Harmful content generation</li>
+          </ul>
+          <p>
+            <strong>
+              <Link to="/red-teaming">&raquo; Learn more about Red Teaming</Link>
+            </strong>
+          </p>
+        </>
+      ),
+      icon: <SecurityIcon />,
+      destinationUrl: '/red-teaming',
+    },
+    {
+      id: 2,
+      caption: 'Guardrails',
+      image: '/img/guardrails.png',
+      image2x: '/img/guardrails.png',
+      description: (
+        <>
+          <p className={styles.walkthroughHeading}>Self-improving guardrails that learn from attacks</p>
+          <p>Unlike static guardrails, our system continuously improves through red team feedback:</p>
+          <ul>
+            <li>Automatically adapts to new attack patterns</li>
+            <li>Learns from real-world usage and attack attempts</li>
+            <li>Validates both our guardrails and third-party systems</li>
+            <li>Enforces company policies with increasing precision</li>
+            <li>Protects sensitive information with evolving defenses</li>
+          </ul>
+          <p>Deploy in minutes on cloud or on-premises with seamless integration into any AI workflow.</p>
+          <p>
+            <strong>
+              <Link to="/guardrails">&raquo; Learn more about Guardrails</Link>
+            </strong>
+          </p>
+        </>
+      ),
+      icon: <SecurityIcon />,
+      destinationUrl: '/guardrails',
+    },
+    {
+      id: 3,
+      caption: 'Model Security',
+      image: '/img/foundationmodel-reports.png',
+      image2x: '/img/foundationmodel-reports.png',
+      description: (
+        <>
+          <p className={styles.walkthroughHeading}>Comprehensive compliance for your AI stack</p>
+          <p>One-click scanning of your entire AI ecosystem against industry frameworks:</p>
+          <ul>
+            <li>OWASP Top 10 for LLMs compliance</li>
+            <li>NIST AI Risk Management Framework</li>
+            <li>EU AI Act requirements</li>
+            <li>Customizable scans for industry regulations</li>
+            <li>AWS plugin support for top 10 vulnerabilities</li>
+          </ul>
+          <p>Get detailed reports with clear remediation steps and continuous monitoring.</p>
+          <p>
+            <strong>
+              <Link to="/model-security">&raquo; Learn more about Model Security</Link>
+            </strong>
+          </p>
+        </>
+      ),
+      icon: <DescriptionIcon />,
+      destinationUrl: '/model-security',
+    },
+    {
+      id: 4,
       caption: 'Evaluations',
       image: '/img/claude-vs-gpt-example.png',
       image2x: '/img/claude-vs-gpt-example@2x.png',
@@ -53,86 +147,25 @@ function HomepageWalkthrough() {
       image2xDark: '/img/claude-vs-gpt-example-dark@2x.png',
       description: (
         <>
-          <p className={styles.walkthroughHeading}>Build reliable prompts, RAGs, and agents</p>
-          <p>Start testing the performance of your models, prompts, and tools in minutes:</p>
+          <p className={styles.walkthroughHeading}>Build reliable AI systems in minutes</p>
+          <p>The fastest way to test and compare LLMs, prompts, RAGs, and agents:</p>
           <pre className={styles.codeBox}>
             <code>npx promptfoo@latest init</code>
           </pre>
           <p>
-            Promptfoo runs locally and integrates directly with your app - no SDKs, cloud
-            dependencies, or logins.
+            Run comprehensive evaluations locally with no SDKs, cloud dependencies, or logins—just
+            a simple declarative configuration.
           </p>
+          <p>Used by major AI companies to build better models, prompts, and agent systems.</p>
           <p>
             <strong>
-              <Link to="/docs/intro">&raquo; Get Started</Link>
+              <Link to="/docs/intro">&raquo; Get Started with Evaluations</Link>
             </strong>
           </p>
         </>
       ),
       icon: <CompareIcon />,
       destinationUrl: '/docs/intro',
-    },
-    {
-      id: 2,
-      caption: 'Security & Red Teaming',
-      image: '/img/riskreport-1.png',
-      image2x: '/img/riskreport-1@2x.png',
-      description: (
-        <>
-          <p className={styles.walkthroughHeading}>Automated red teaming for gen AI</p>
-          <p>Run custom scans that detect security, legal, and brand risk:</p>
-          <pre className={styles.codeBox}>
-            <code>npx promptfoo@latest redteam init</code>
-          </pre>
-          <p>Our probes adapt dynamically to your app and uncover common failures like:</p>
-          <ul>
-            <li>PII leaks</li>
-            <li>Insecure tool use</li>
-            <li>Cross-session data leaks</li>
-            <li>Direct and indirect prompt injections</li>
-            <li>Jailbreaks</li>
-            <li>Harmful content</li>
-            <li>Specialized medical and legal advice</li>
-            <li>
-              and <Link to="/docs/red-team/llm-vulnerability-types/">much more</Link>.
-            </li>
-          </ul>
-          <p>
-            <strong>
-              <Link to="/docs/red-team/quickstart/">&raquo; Find exploits in your LLM app</Link>
-            </strong>
-          </p>
-        </>
-      ),
-      icon: <SecurityIcon />,
-      destinationUrl: '/docs/red-team/quickstart/',
-    },
-    {
-      id: 3,
-      caption: 'Continuous Monitoring',
-      image: '/img/continuous-monitoring.png',
-      image2x: '/img/continuous-monitoring@2x.png',
-      description: (
-        <>
-          <p className={styles.walkthroughHeading}>Spot issues before they're deployed</p>
-          <p>
-            Promptfoo provides a high-level view of your system's security posture across different
-            models, prompts, and applications.
-          </p>
-          <p>
-            Our simple file-based config and local runtime make it easy to set up in{' '}
-            <Link to="/docs/integrations/github-action/">GitHub Actions</Link> or other CI/CD
-            services.
-          </p>
-          <p>
-            <strong>
-              <Link to="/docs/red-team/quickstart/">&raquo; See setup docs</Link>
-            </strong>
-          </p>
-        </>
-      ),
-      icon: <DescriptionIcon />,
-      destinationUrl: '/docs/red-team/quickstart/',
     },
   ];
 
@@ -167,7 +200,7 @@ function HomepageWalkthrough() {
                   ? `${selectedStepData.imageDark} 1x, ${selectedStepData.image2xDark} 2x`
                   : `${selectedStepData?.image} 1x, ${selectedStepData?.image2x} 2x`
               }
-              alt={`Walkthrough step ${selectedStep}`}
+              alt={`${selectedStepData?.caption}`}
               className={styles.walkthroughImage}
             />
           </Link>
@@ -184,7 +217,7 @@ function AsSeenOnSection() {
   return (
     <section className={styles.asSeenOnSection}>
       <div className="container">
-        <h2>Featured In</h2>
+        <h2 className={styles.sectionTitle}>Featured In</h2>
         <div className={styles.asSeenOnGrid}>
           <a
             href="https://vimeo.com/1023317525/be082a1029"
@@ -258,29 +291,30 @@ export default function Home(): JSX.Element {
         <meta name="twitter:card" content="summary_large_image" />
       </Head>
       <HomepageHeader getStartedUrl={getStartedUrl} />
-      <HomepageWalkthrough />
+      <div className="container">
+        <HomepageWalkthrough />
+      </div>
       <main>
         <section className={styles.logoSection}>
           <div className="container">
-            <h2>Trusted by developers at</h2>
+            <h2>Trusted by security teams at</h2>
             <LogoContainer noBackground noBorder />
           </div>
         </section>
         <HomepageFeatures />
-        <HomepageInfo />
         <AsSeenOnSection />
 
         <div className={styles.ctaSection}>
-          <h2>Make your LLM app reliable & secure</h2>
+          <h2>Secure your AI applications today</h2>
           <div className={styles.buttons}>
             <Link className="button button--primary button--lg" to={getStartedUrl}>
-              Getting Started
+              Try Open Source
             </Link>
             <Link
               className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
               to="/contact/"
             >
-              Contact Us
+              Enterprise Solutions
             </Link>
           </div>
         </div>

@@ -308,6 +308,17 @@
   margin-bottom: 2rem;
 }
 
+.productSection {
+  padding: 4rem 0;
+  background-color: var(--ifm-background-surface-color);
+}
+
+.sectionTitle {
+  text-align: center;
+  font-size: 2.5rem;
+  margin-bottom: 2rem;
+}
+
 .asSeenOnSection {
   padding: 4rem 0 6rem;
   background-color: var(--ifm-background-surface-color);

@@ -7,7 +7,7 @@ export default function HomepageFeatures() {
     {
       title: 'Comprehensive security coverage',
       description:
-        'Custom probes for your application that identify failures you actually care about, not just generic jailbreaks and prompt injections.',
+        'Full-stack security for AI applications: red teaming, guardrails, model security, and continuous evaluation of your entire AI ecosystem.',
       image: '/img/security-coverage.png',
       image2x: '/img/security-coverage.png',
       alt: 'promptfoo security coverage examples',
@@ -15,33 +15,39 @@ export default function HomepageFeatures() {
       cta: 'Learn More',
     },
     {
-      title: 'Built for developers',
+      title: 'Battle-tested open source',
       description:
-        'Move quickly with a command-line interface, live reloads, and caching. No SDKs, cloud dependencies, or logins.',
-      image:
-        'https://user-images.githubusercontent.com/310310/244891726-480e1114-d049-40b9-bd5f-f81c15060284.gif',
-      image2x:
-        'https://user-images.githubusercontent.com/310310/244891726-480e1114-d049-40b9-bd5f-f81c15060284.gif',
-      alt: 'promptfoo CLI',
-      link: '/docs/getting-started',
-      cta: 'Get Started',
-    },
-    {
-      title: 'Battle-tested open-source',
-      description:
-        'Used by teams serving millions of users and supported by an active open-source community.',
+        'Trusted by 75,000+ developers and major enterprises. The most widely adopted AI security solution with a thriving open source community of security experts.',
       image: '/img/github-repo.png',
       image2x: '/img/github-repo.png',
-      alt: 'promptfoo github repo',
+      alt: 'promptfoo github repository',
       link: 'https://github.com/promptfoo/promptfoo',
       cta: 'View on GitHub',
+    },
+    {
+      title: 'Compliance framework integration',
+      description:
+        'Mapped to OWASP, NIST, MITRE, EU AI Act, and more. Customizable to your organization\'s specific policies and industry regulations, with detailed compliance reporting.',
+      image: '/img/report-with-compliance@2x.png',
+      alt: 'promptfoo compliance reporting',
+      link: '/model-security/',
+      cta: 'Learn More',
+    },
+    {
+      title: 'Deploy your way',
+      description:
+        'Get started in minutes with our CLI tool (free), or choose our managed cloud or on-premises enterprise solutions for advanced features and support.',
+      image: '/img/redteamrun-cli.png',
+      alt: 'promptfoo deployment options',
+      link: '/contact/',
+      cta: 'Get Started',
     },
   ];
 
   return (
     <section className={styles.features}>
       <div className="container">
-        {/*<h2 className={styles.featuresTitle}>Why Promptfoo?</h2>*/}
+        <h2 className={styles.featuresTitle}>Why Promptfoo?</h2>
         <div className={styles.featuresList}>
           {features.map((feature, idx) => (
             <div key={idx} className={styles.featureItem}>
