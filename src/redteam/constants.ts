@@ -200,6 +200,32 @@ export const FRAMEWORK_NAMES: Record<string, string> = {
   'owasp:llm': 'OWASP LLM Top 10',
 };
 
+export const OWASP_LLM_TOP_10_NAMES = [
+  'Prompt Injection',
+  'Sensitive Information Disclosure',
+  'Supply Chain',
+  'Improper Output Handling',
+  'Insecure Output Handling',
+  'Excessive Agency',
+  'System Prompt Leakage',
+  'Vector and Embedding Weaknesses',
+  'Misinformation',
+  'Unbounded Consumption',
+];
+
+export const OWASP_API_TOP_10_NAMES = [
+  'Broken Object Level Authorization',
+  'Broken Authentication',
+  'Broken Object Property Level Authorization',
+  'Unrestricted Resource Consumption',
+  'Broken Function Level Authorization',
+  'Unrestricted Access to Sensitive Business Flows',
+  'Server Side Request Forgery',
+  'Security Misconfiguration',
+  'Improper Inventory Management',
+  'Unsafe Consumption of APIs',
+];
+
 export const OWASP_LLM_TOP_10_MAPPING: Record<
   string,
   { plugins: Plugin[]; strategies: Strategy[] }
