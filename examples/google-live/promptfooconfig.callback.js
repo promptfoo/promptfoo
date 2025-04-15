@@ -47,7 +47,7 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
         {
           type: 'contains',
           value: '11',
-          transform: 'JSON.parse(output).text',
+          transform: 'output.text',
         },
       ],
     },
@@ -59,7 +59,7 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
         },
         {
           type: 'javascript',
-          value: "JSON.parse(output).text.includes('30')",
+          value: "output.text.includes('30')",
         },
       ],
     },
