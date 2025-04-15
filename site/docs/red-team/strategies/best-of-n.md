@@ -18,6 +18,7 @@ Use it like so in your `promptfooconfig.yaml`:
 strategies:
   - id: best-of-n
     config:
+      useBasicRefusal: false
       maxConcurrency: 3 # Maximum concurrent API calls (default)
       nSteps: 10000 # Maximum number of attempts (optional)
       maxCandidatesPerStep: 1 # Maximum candidates per batch (optional)
@@ -43,6 +44,15 @@ The strategy's effectiveness comes from exploiting the stochastic nature of LLM 
 
 ## Configuration Parameters
 
+### useBasicRefusal
+
+**Type:** `boolean`  
+**Default:** `false`
+
+When enabled, uses a simple refusal check instead of LLM-as-a-judge assertions. This is much faster and cheaper than using an LLM judge, making it ideal for testing when the typical response of an LLM to a prompt is a refusal.
+
+We recommend using this setting whenever possible if the default response to your original prompts is a "Sorry, I can't do that"-style refusal.
+
 ### maxConcurrency
 
 **Type:** `number`  
@@ -67,7 +77,7 @@ Number of prompt variations to generate in each batch. Lower values provide more
 Usually best to set this to `1` and increase `nSteps` until you get a successful jailbreak.
 
 :::tip
-For initial testing, we recommend starting with relatively low values for `nSteps` and `maxCandidatesPerStep`. This allows you to quickly validate the strategy's effectiveness for your use case before scaling up to more comprehensive testing.
+For initial testing, we recommend starting with `useBasicRefusal: true` and relatively low values for `nSteps` and `maxCandidatesPerStep`. This allows you to quickly validate the strategy's effectiveness for your use case before scaling up to more comprehensive testing.
 :::
 
 ## Performance
