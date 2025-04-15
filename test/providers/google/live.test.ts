@@ -114,7 +114,7 @@ describe('GoogleLiveProvider', () => {
 
     const response = await provider.callApi('test prompt');
     expect(response).toEqual({
-      output: JSON.stringify({ text: 'test response', toolCall: { functionCalls: [] } }),
+      output: { text: 'test response', toolCall: { functionCalls: [] } },
     });
   });
 
@@ -149,7 +149,7 @@ describe('GoogleLiveProvider', () => {
 
     const response = await provider.callApi('test prompt');
     expect(response).toEqual({
-      output: JSON.stringify({
+      output: {
         text: 'I was not able to retrieve weather information.',
         toolCall: {
           functionCalls: [
@@ -160,7 +160,7 @@ describe('GoogleLiveProvider', () => {
             },
           ],
         },
-      }),
+      },
     });
   });
 
@@ -189,7 +189,7 @@ describe('GoogleLiveProvider', () => {
 
     const response = await provider.callApi('test prompt');
     expect(response).toEqual({
-      output: JSON.stringify({
+      output: {
         text: "\n```tool_outputs\n{'status': 'called'}\n```\n",
         toolCall: {
           functionCalls: [
@@ -197,7 +197,7 @@ describe('GoogleLiveProvider', () => {
             { name: 'call_me', args: {}, id: 'function-call-15919291184864374131' },
           ],
         },
-      }),
+      },
     });
   });
 
@@ -247,10 +247,10 @@ describe('GoogleLiveProvider', () => {
 
     const response = await provider.callApi('test prompt');
     expect(response).toEqual({
-      output: JSON.stringify({
+      output: {
         text: 'The sea is salty primarily due to the erosion of rocks on land. Rainwater, which is slightly acidic due to dissolved carbon dioxide, erodes rocks and carries dissolved minerals and salts into rivers.',
         toolCall: { functionCalls: [] },
-      }),
+      },
     });
   });
 
@@ -274,10 +274,10 @@ describe('GoogleLiveProvider', () => {
 
     const response = await provider.callApi('\n');
     expect(response).toEqual({
-      output: JSON.stringify({
+      output: {
         text: '\nThe result of multiplying 1341 by 23 is 30843.\n',
         toolCall: { functionCalls: [] },
-      }),
+      },
     });
   });
 
@@ -302,10 +302,10 @@ describe('GoogleLiveProvider', () => {
       '[{"role":"user","content":"hey"},{"role":"user","content":"tell me about hawaii"}]',
     );
     expect(response).toEqual({
-      output: JSON.stringify({
+      output: {
         text: "Hey there! How can I help you today?\nOkay, let's talk about Hawaii! It's a truly fascinating place with a unique culture, history, and geography.",
         toolCall: { functionCalls: [] },
-      }),
+      },
     });
   });
 
@@ -421,14 +421,14 @@ describe('GoogleLiveProvider', () => {
 
     const response = await provider.callApi('What is the sum of 5 and 6?');
     expect(response).toEqual({
-      output: JSON.stringify({
+      output: {
         text: 'The sum of 5 and 6 is 11.\n',
         toolCall: {
           functionCalls: [
             { name: 'addNumbers', args: { a: 5, b: 6 }, id: 'function-call-13767088400406609799' },
           ],
         },
-      }),
+      },
     });
     expect(mockAddNumbers).toHaveBeenCalledTimes(1);
     expect(mockAddNumbers).toHaveBeenCalledWith('{"a":5,"b":6}');
@@ -492,14 +492,14 @@ describe('GoogleLiveProvider', () => {
 
     const response = await provider.callApi('Call the error function');
     expect(response).toEqual({
-      output: JSON.stringify({
+      output: {
         text: 'The function `errorFunction` has been called and it returned an error as expected.',
         toolCall: {
           functionCalls: [
             { name: 'errorFunction', args: {}, id: 'function-call-7580472343952164416' },
           ],
         },
-      }),
+      },
     });
   });
 
@@ -594,7 +594,7 @@ describe('GoogleLiveProvider', () => {
 
     const response = await provider.callApi('Add to the counter until it reaches 5');
     expect(response).toEqual({
-      output: JSON.stringify({
+      output: {
         text: 'The counter has been incremented until it reached 5.\n',
         toolCall: {
           functionCalls: [
@@ -606,7 +606,7 @@ describe('GoogleLiveProvider', () => {
           ],
         },
         statefulApiState: { counter: 5 },
-      }),
+      },
     });
     expect(mockedAxios.get).toHaveBeenCalledTimes(6);
   });

@@ -222,11 +222,11 @@ export class GoogleLiveProvider implements ApiProvider {
                 }
               }
               resolve({
-                output: JSON.stringify({
+                output: {
                   text: response_text_total,
                   toolCall: { functionCalls: function_calls_total },
                   statefulApiState,
-                }),
+                },
               });
               ws.close();
             }
