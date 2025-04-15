@@ -184,7 +184,7 @@ Customize the installation using a `values.yaml` file or `--set` flags.
 image:
   tag: v0.54.0 # Pin to a specific version
 
-persistentVolumesClaims:
+persistentVolumeClaims:
   - name: promptfoo
     size: 10Gi # Increase storage size
     # Optional: Specify a StorageClass if the default is not suitable
