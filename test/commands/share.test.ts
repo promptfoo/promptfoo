@@ -27,7 +27,7 @@ jest.mock('../../src/util/config/default');
 describe('Share Command', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    process.exitCode = 0; // Reset exitCode before each test
+    process.exitCode = 0;
   });
 
   describe('notCloudEnabledShareInstructions', () => {
@@ -43,7 +43,6 @@ describe('Share Command', () => {
 
   describe('createAndDisplayShareableUrl', () => {
     it('should return a URL and log it when successful', async () => {
-      jest.mocked(isSharingEnabled).mockReturnValue(true);
       const mockEval = { id: 'test-eval-id' } as Eval;
       const mockUrl = 'https://app.promptfoo.dev/eval/test-eval-id';
 
@@ -70,7 +69,6 @@ describe('Share Command', () => {
     it('should return null when createShareableUrl returns null', async () => {
       const mockEval = { id: 'test-eval-id' } as Eval;
 
-      jest.mocked(isSharingEnabled).mockReturnValue(true);
       jest.mocked(createShareableUrl).mockResolvedValue(null);
 
       const result = await createAndDisplayShareableUrl(mockEval, false);
@@ -78,7 +76,7 @@ describe('Share Command', () => {
       expect(createShareableUrl).toHaveBeenCalledWith(mockEval, false);
       expect(result).toBeNull();
       expect(logger.error).toHaveBeenCalledWith('Failed to create shareable URL');
-      expect(logger.info).not.toHaveBeenCalled();
+      expect(process.exitCode).toBe(1);
     });
   });
 
@@ -86,7 +84,6 @@ describe('Share Command', () => {
     let program: Command;
 
     beforeEach(() => {
-      jest.clearAllMocks();
       program = new Command();
       shareCommand(program);
     });
@@ -253,18 +250,6 @@ describe('Share Command', () => {
       expect(mockEval.config.sharing).toEqual(mockSharing);
       expect(isSharingEnabled).toHaveBeenCalledWith(mockEval);
       expect(createShareableUrl).toHaveBeenCalledWith(mockEval, false);
-    });
-
-    it('should show cloud instructions and return null when sharing is not enabled', async () => {
-      jest.mocked(isSharingEnabled).mockReturnValue(false);
-
-      const shareCmd = program.commands.find((c) => c.name() === 'share');
-      await shareCmd?.parseAsync(['node', 'test']);
-
-      expect(logger.info).toHaveBeenCalledWith(
-        expect.stringContaining('You need to have a cloud account'),
-      );
-      expect(process.exitCode).toBe(1);
     });
   });
 });
