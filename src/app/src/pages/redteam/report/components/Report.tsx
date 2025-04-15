@@ -368,7 +368,6 @@ const App: React.FC = () => {
           </Box>
         </Card>
         <Overview categoryStats={categoryStats} plugins={evalData.config.redteam.plugins || []} />
-        <FrameworkCompliance categoryStats={categoryStats} strategyStats={strategyStats} />
         <StrategyStats
           strategyStats={strategyStats}
           failuresByPlugin={failuresByPlugin}
@@ -386,6 +385,7 @@ const App: React.FC = () => {
           categoryStats={categoryStats}
           plugins={evalData.config.redteam.plugins || []}
         />
+        <FrameworkCompliance categoryStats={categoryStats} strategyStats={strategyStats} />
       </Stack>
       <Modal
         open={isPromptModalOpen}
