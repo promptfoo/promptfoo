@@ -1,4 +1,4 @@
-import { categoryAliases, displayNameOverrides } from '@promptfoo/redteam/constants';
+import { categoryAliases, displayNameOverrides, Severity } from '@promptfoo/redteam/constants';
 
 // Types for utility functions
 export type CategoryStats = Record<
@@ -86,15 +86,15 @@ export const FRAMEWORK_DESCRIPTIONS: Record<string, string> = {
   'owasp:llm': 'OWASP LLM Top 10 security vulnerabilities for large language models',
 };
 
-export const getSeverityColor = (severity: string): string => {
+export const getSeverityColor = (severity: Severity): string => {
   switch (severity) {
-    case 'Critical':
+    case Severity.Critical:
       return '#d32f2f';
-    case 'High':
+    case Severity.High:
       return '#f57c00';
-    case 'Medium':
+    case Severity.Medium:
       return '#fbc02d';
-    case 'Low':
+    case Severity.Low:
       return '#7cb342';
     default:
       return '#757575';
