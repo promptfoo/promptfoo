@@ -67,19 +67,6 @@ describe('Share Command', () => {
       expect(createShareableUrl).toHaveBeenCalledWith(mockEval, true);
     });
 
-    it('should show cloud instructions and return null when sharing is not enabled', async () => {
-      const mockEval = { id: 'test-eval-id' } as Eval;
-      jest.mocked(isSharingEnabled).mockReturnValue(false);
-
-      const result = await createAndDisplayShareableUrl(mockEval, false);
-
-      expect(result).toBeNull();
-      expect(logger.info).toHaveBeenCalledWith(
-        expect.stringContaining('You need to have a cloud account'),
-      );
-      expect(process.exitCode).toBe(1);
-    });
-
     it('should return null when createShareableUrl returns null', async () => {
       const mockEval = { id: 'test-eval-id' } as Eval;
 
@@ -266,6 +253,18 @@ describe('Share Command', () => {
       expect(mockEval.config.sharing).toEqual(mockSharing);
       expect(isSharingEnabled).toHaveBeenCalledWith(mockEval);
       expect(createShareableUrl).toHaveBeenCalledWith(mockEval, false);
+    });
+
+    it('should show cloud instructions and return null when sharing is not enabled', async () => {
+      jest.mocked(isSharingEnabled).mockReturnValue(false);
+
+      const shareCmd = program.commands.find((c) => c.name() === 'share');
+      await shareCmd?.parseAsync(['node', 'test']);
+
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('You need to have a cloud account'),
+      );
+      expect(process.exitCode).toBe(1);
     });
   });
 });

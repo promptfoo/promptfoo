@@ -28,12 +28,6 @@ export async function createAndDisplayShareableUrl(
   evalRecord: Eval,
   showAuth: boolean,
 ): Promise<string | null> {
-  if (!isSharingEnabled(evalRecord)) {
-    notCloudEnabledShareInstructions();
-    process.exitCode = 1;
-    return null;
-  }
-
   const url = await createShareableUrl(evalRecord, showAuth);
 
   if (url) {
@@ -111,6 +105,13 @@ export function shareCommand(program: Command) {
               If your eval is still running, wait for it to complete and try again.
             `,
           );
+          process.exitCode = 1;
+          return;
+        }
+
+        // Validate that the user has authenticated with Cloud.
+        if (!isSharingEnabled(eval_)) {
+          notCloudEnabledShareInstructions();
           process.exitCode = 1;
           return;
         }

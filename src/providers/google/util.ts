@@ -11,6 +11,8 @@ import { VALID_SCHEMA_TYPES } from './types';
 import type { Content, FunctionCall, Part, Tool } from './types';
 
 const ajv = new Ajv();
+// property_ordering is an optional field sometimes present in gemini tool configs, but ajv doesn't know about it.
+// At the moment we will just ignore it, so the is-valid-function-call won't check property field ordering.
 ajv.addKeyword('property_ordering');
 const clone = Clone();
 
@@ -537,13 +539,3 @@ export function validateFunctionCall(
     }
   }
 }
-
-export {
-  ajv,
-  clone,
-  PartSchema,
-  ContentSchema,
-  GeminiFormatSchema,
-  cachedAuth,
-  normalizeSchemaTypes,
-};
