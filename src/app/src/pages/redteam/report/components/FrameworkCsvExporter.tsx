@@ -115,8 +115,8 @@ const CSVExporter: React.FC<CSVExporterProps> = ({ categoryStats, pluginPassRate
         // Add data for other frameworks (without categories)
         // First get all plugins defined for this framework
         const frameworkPlugins = new Set<string>();
-        if (ALIASED_PLUGIN_MAPPINGS[framework]) {
-          Object.values(ALIASED_PLUGIN_MAPPINGS[framework]).forEach(({ plugins }) => {
+        if (ALIASED_PLUGIN_MAPPINGS[frameworkId]) {
+          Object.values(ALIASED_PLUGIN_MAPPINGS[frameworkId]).forEach(({ plugins }) => {
             const expanded = expandPluginCollections(plugins, categoryStats);
             expanded.forEach((plugin) => frameworkPlugins.add(plugin));
           });
