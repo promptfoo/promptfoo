@@ -75,6 +75,35 @@ describe('util', () => {
           {
             name: 'emptyFunction',
           },
+          {
+            name: 'invalidSchemaFunction',
+            parameters: {
+              type: 'OBJECT',
+              properties: {
+                param1: { type: 'STRING' },
+                param2: { type: 'STRING', enum: ['test'] },
+              },
+            },
+          },
+          {
+            name: 'propertyOrderingFunction',
+            parameters: {
+              type: 'OBJECT',
+              properties: {
+                param1: { type: 'STRING' },
+              },
+              propertyOrdering: ['param1', 'param2'],
+            },
+          },
+          {
+            name: 'uncompilableFunction',
+            parameters: {
+              type: 'OBJECT',
+              properties: {
+                param1: { type: 'TYPE_UNSPECIFIED' },
+              },
+            },
+          },
         ],
       },
     ];
@@ -162,6 +191,34 @@ describe('util', () => {
         },
       ];
       expect(() => validateFunctionCall(output, mockFunctions)).toThrow(/does not match schema/);
+    });
+
+    it('should throw error when schema compilation fails', () => {
+      const output = [
+        {
+          functionCall: {
+            name: 'uncompilableFunction',
+            args: '{"param1": "test"}',
+          },
+        },
+      ];
+      expect(() => validateFunctionCall(output, mockFunctions)).toThrow(
+        /Tool schema doesn't compile with ajv:.*If this is a valid tool schema you may need to reformulate your assertion without is-valid-function-call/,
+      );
+    });
+
+    it('should throw error when propertyOrdering references invalid property', () => {
+      const output = [
+        {
+          functionCall: {
+            name: 'propertyOrderingFunction',
+            args: '{"param1": "test"}',
+          },
+        },
+      ];
+      expect(() => validateFunctionCall(output, mockFunctions)).toThrow(
+        /Tool schema doesn't compile with ajv:.*If this is a valid tool schema you may need to reformulate your assertion without is-valid-function-call/,
+      );
     });
   });
 
