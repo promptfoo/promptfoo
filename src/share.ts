@@ -448,7 +448,7 @@ export async function createShareableUrl(
 export async function hasEvalBeenShared(eval_: Eval): Promise<boolean> {
   try {
     // GET /api/results/:id
-    const res = await makeCloudRequest(`/${eval_.id}`, 'GET');
+    const res = await makeCloudRequest(`results/${eval_.id}`, 'GET');
     switch (res.status) {
       // 200: Eval already exists i.e. it has been shared before.
       case 200:
