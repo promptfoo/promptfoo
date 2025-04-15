@@ -447,10 +447,22 @@ export async function createShareableUrl(
  */
 export async function hasEvalBeenShared(eval_: Eval): Promise<boolean> {
   try {
-    const { status } = await makeCloudRequest(`/${eval_.id}`, 'GET');
-    return status !== 404;
+    // GET /api/results/:id
+    const res = await makeCloudRequest(`/${eval_.id}`, 'GET');
+    switch (res.status) {
+      // 200: Eval already exists i.e. it has been shared before.
+      case 200:
+        return true;
+      // 404: Eval not found i.e. it has not been shared before.
+      case 404:
+        return false;
+      default:
+        throw new Error(
+          `[hasEvalBeenShared]: unexpected API error: ${res.status}\n${res.statusText}`,
+        );
+    }
   } catch (e) {
-    logger.error(`Error checking if eval has been shared: ${e}`);
+    logger.error(`[hasEvalBeenShared]: error checking if eval has been shared: ${e}`);
     return false;
   }
 }
