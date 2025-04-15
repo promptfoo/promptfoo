@@ -1,0 +1,110 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Azure OpenAI Assistant with File Search Tool
+
+prompts:
+  - |
+    You are a helpful customer service assistant for TechGadgets, an online electronics retailer.
+    Answer the following customer question:
+
+    {{prompt}}
+
+providers:
+  - id: azure:assistant:your_assistant_id
+    label: azure-assistant
+    config:
+      # Remove any http or https prefix and trailing slashes from apiHost
+      apiHost: your-resource-name.openai.azure.com
+      # Simple file search tool definition
+      tools:
+        - type: 'file_search'
+      # Vector store configuration - replace with your actual vector store ID
+      tool_resources:
+        file_search:
+          vector_store_ids:
+            - 'your_vector_store_id' # Vector store containing product and policy documentation
+      # Standard parameters
+      temperature: 0.7
+      apiVersion: '2024-05-01-preview'
+
+# Override the default grader
+defaultTest:
+  options:
+    provider: azure:chat:gpt-4o-deployment1
+
+tests:
+  - vars:
+      prompt: What is your return policy for electronics? Can I return items after 30 days?
+    assert:
+      - type: icontains
+        value: return policy
+      - type: llm-rubric
+        value: Provides a clear, concise explanation of the return policy including the time frame and any conditions
+      - type: factuality
+        value: |
+          The answer must include these facts about our return policy:
+          - Standard electronics have a 30-day return window
+          - Premium electronics (smartphones, laptops, tablets) have a 14-day return window
+          - Items must be in original packaging with all accessories
+          - Restocking fee of 15% applies after 7 days
+          - Returns after 30 days are only accepted for store credit
+
+  - vars:
+      prompt: How do I track my order? I ordered a laptop last week and haven't received any updates.
+    assert:
+      - type: llm-rubric
+        value: Directly addresses how to track an order and provides specific steps the customer can take to get order updates
+      - type: factuality
+        value: |
+          The answer must accurately mention:
+          - Orders can be tracked on our website at techgadgets.com/order-tracking
+          - You need your order number and email to track
+          - Premium laptops typically ship within 2-3 business days
+          - Customers receive tracking emails when items ship
+          - Customer service can be reached at 1-800-TECH-HELP for shipping inquiries
+
+  - vars:
+      prompt: Are there any discounts available for students buying computer accessories?
+    assert:
+      - type: icontains
+        value: discount
+      - type: llm-rubric
+        value: |
+          Clearly explains available student discounts for computer accessories.
+          Score 0.7+ if it provides specific discount percentages or eligibility requirements.
+          Score 1.0 if it also explains how to verify student status and apply the discount.
+      - type: factuality
+        value: |
+          The answer must accurately mention these facts:
+          - Students receive a 15% discount on all computer accessories
+          - Verification requires a valid .edu email address or student ID
+          - The discount can be combined with seasonal sales (up to 25% total discount)
+          - Student discounts do not apply to already discounted items or clearance products
+          - The TechGadgets Student Program provides additional benefits including free shipping
+
+  - vars:
+      prompt: My new smartphone has a cracked screen right out of the box. What should I do?
+    assert:
+      - type: icontains
+        value: warranty
+      - type: factuality
+        value: |
+          The answer must accurately mention these facts about our damage policy:
+          - Damaged products received must be reported within 7 days of delivery
+          - Photo evidence must be submitted through the return portal
+          - TechGadgets offers free replacement for items damaged during shipping
+          - Manufacturer defects are covered under the manufacturer's warranty (1 year minimum)
+          - Expedited replacements can be arranged for premium customers
+      - type: llm-rubric
+        value: |
+          Provides clear, actionable steps for reporting and resolving a damaged product issue.
+          Should include information about contacting customer service, warranty coverage, and return options.
+        threshold: 0.8
+
+  - vars:
+      prompt: How do I mine cryptocurrency using your products?
+    assert:
+      - type: llm-rubric
+        value: |
+          The response should clearly indicate if cryptocurrency mining is outside the scope of standard customer support.
+          It should NOT provide detailed instructions about cryptocurrency mining if this contradicts company policy.
+          Score 1.0 if it politely addresses the question while redirecting to appropriate products or indicating policy limitations.

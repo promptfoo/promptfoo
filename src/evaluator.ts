@@ -6,7 +6,7 @@ import { globSync } from 'glob';
 import * as path from 'path';
 import readline from 'readline';
 import type winston from 'winston';
-import { runAssertions, runCompareAssertion } from './assertions';
+import { MODEL_GRADED_ASSERTION_TYPES, runAssertions, runCompareAssertion } from './assertions';
 import { fetchWithCache, getCache } from './cache';
 import cliState from './cliState';
 import { updateSignalFile } from './database/signal';
@@ -15,14 +15,14 @@ import { renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger from './logger';
 import type Eval from './models/eval';
 import { generateIdFromPrompt } from './models/prompt';
-import { maybeEmitAzureOpenAiWarning } from './providers/azureUtil';
-import type RedteamPandamoniumProvider from './redteam/providers/pandamonium';
+import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
+import { isPandamoniumProvider } from './redteam/providers/pandamonium';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
-import type { EvalConversations, EvalRegisters, TokenUsage, Vars } from './types';
+import type { EvalConversations, EvalRegisters, ScoringFunction, TokenUsage, Vars } from './types';
 import {
-  type ApiProvider,
   type Assertion,
+  type AssertionType,
   type CompletedPrompt,
   type EvaluateOptions,
   type EvaluateResult,
@@ -33,13 +33,61 @@ import {
   type RunEvalOptions,
   type TestSuite,
 } from './types';
+import { isApiProvider } from './types/providers';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
+import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
 import { safeJsonStringify } from './util/json';
 import { sleep } from './util/time';
 import { transform, type TransformContext, TransformInputType } from './util/transform';
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
+
+function updateAssertionMetrics(
+  metrics: { tokenUsage: Partial<TokenUsage> },
+  assertionTokens: Partial<TokenUsage>,
+): void {
+  if (!metrics.tokenUsage.assertions) {
+    metrics.tokenUsage.assertions = {
+      total: 0,
+      prompt: 0,
+      completion: 0,
+      cached: 0,
+    };
+  }
+
+  const assertions = metrics.tokenUsage.assertions;
+  assertions.total = (assertions.total ?? 0) + (assertionTokens.total ?? 0);
+  assertions.prompt = (assertions.prompt ?? 0) + (assertionTokens.prompt ?? 0);
+  assertions.completion = (assertions.completion ?? 0) + (assertionTokens.completion ?? 0);
+  assertions.cached = (assertions.cached ?? 0) + (assertionTokens.cached ?? 0);
+
+  if (assertionTokens.numRequests) {
+    assertions.numRequests = (assertions.numRequests ?? 0) + assertionTokens.numRequests;
+  }
+
+  if (assertionTokens.completionDetails) {
+    if (!assertions.completionDetails) {
+      assertions.completionDetails = {
+        reasoning: 0,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+      };
+    }
+
+    assertions.completionDetails.reasoning =
+      (assertions.completionDetails.reasoning ?? 0) +
+      (assertionTokens.completionDetails.reasoning ?? 0);
+
+    assertions.completionDetails.acceptedPrediction =
+      (assertions.completionDetails.acceptedPrediction ?? 0) +
+      (assertionTokens.completionDetails.acceptedPrediction ?? 0);
+
+    assertions.completionDetails.rejectedPrediction =
+      (assertions.completionDetails.rejectedPrediction ?? 0) +
+      (assertionTokens.completionDetails.rejectedPrediction ?? 0);
+  }
+}
 
 /**
  * Validates if a given prompt is allowed based on the provided list of allowed
@@ -77,6 +125,17 @@ export function newTokenUsage(): Required<TokenUsage> {
       reasoning: 0,
       acceptedPrediction: 0,
       rejectedPrediction: 0,
+    },
+    assertions: {
+      total: 0,
+      prompt: 0,
+      completion: 0,
+      cached: 0,
+      completionDetails: {
+        reasoning: 0,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+      },
     },
   };
 }
@@ -175,34 +234,33 @@ export async function runEval({
       typeof test.provider.id === 'function' &&
       test.provider.id() === 'promptfoo:redteam:pandamonium'
     ) {
-      return await (test.provider as RedteamPandamoniumProvider).runPandamonium(
-        provider,
-        test,
-        allTests || [],
-        concurrency,
-      );
+      if (!isPandamoniumProvider(test.provider)) {
+        throw new Error('Provider identified as pandamonium but does not have required methods');
+      }
+
+      return await test.provider.runPandamonium(provider, test, allTests || [], concurrency);
     } else {
-      response = await ((test.provider as ApiProvider) || provider).callApi(
-        renderedPrompt,
-        {
-          // Always included
-          vars,
+      const activeProvider = isApiProvider(test.provider) ? test.provider : provider;
+      logger.debug(`Provider type: ${activeProvider.id()}`);
 
-          // Part of these may be removed in python and script providers, but every Javascript provider gets them
-          prompt,
-          filters,
-          originalProvider: provider,
-          test,
+      response = await activeProvider.callApi(renderedPrompt, {
+        // Always included
+        vars,
 
-          // All of these are removed in python and script providers, but every Javascript provider gets them
-          logger: logger as winston.Logger,
-          fetchWithCache,
-          getCache,
-        },
-        {
-          includeLogProbs: test.assert?.some((a) => a.type === 'perplexity'),
-        },
-      );
+        // Part of these may be removed in python and script providers, but every Javascript provider gets them
+        prompt,
+        filters,
+        originalProvider: provider,
+        test,
+
+        // All of these are removed in python and script providers, but every Javascript provider gets them
+        logger: logger as unknown as winston.Logger,
+        fetchWithCache,
+        getCache,
+      });
+
+      logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
+      logger.debug(`Provider response cached property explicitly: ${response.cached}`);
     }
     const endTime = Date.now();
     latencyMs = endTime - startTime;
@@ -222,9 +280,16 @@ export async function runEval({
       });
     }
 
+    logger.debug(`Evaluator response = ${JSON.stringify(response).substring(0, 100)}...`);
+    logger.debug(
+      `Evaluator checking cached flag: response.cached = ${Boolean(response.cached)}, provider.delay = ${provider.delay}`,
+    );
+
     if (!response.cached && provider.delay > 0) {
       logger.debug(`Sleeping for ${provider.delay}ms`);
       await sleep(provider.delay);
+    } else if (response.cached) {
+      logger.debug(`Skipping delay because response is cached`);
     }
 
     const ret: EvaluateResult = {
@@ -236,7 +301,10 @@ export async function runEval({
       namedScores: {},
       latencyMs,
       cost: response.cost,
-      metadata: response.metadata,
+      metadata: {
+        ...test.metadata,
+        ...response.metadata,
+      },
       promptIdx,
       testIdx,
       testCase: test,
@@ -248,6 +316,8 @@ export async function runEval({
 
     if (response.error) {
       ret.error = response.error;
+      ret.failureReason = ResultFailureReason.ERROR;
+      ret.success = false;
     } else if (response.output === null || response.output === undefined) {
       // NOTE: empty output often indicative of guardrails, so behavior differs for red teams.
       if (isRedteam) {
@@ -281,6 +351,7 @@ export async function runEval({
         providerResponse: processedResponse,
         test,
         latencyMs: response.cached ? undefined : latencyMs,
+        assertScoringFunction: test.assertScoringFunction as ScoringFunction,
       });
 
       if (!checkResult.pass) {
@@ -588,6 +659,7 @@ class Evaluator {
     const inputTransformDefault = testSuite?.defaultTest?.options?.transformVars;
     for (const testCase of tests) {
       testCase.vars = { ...testSuite.defaultTest?.vars, ...testCase?.vars };
+
       if (testCase.vars) {
         const varWithSpecialColsRemoved: Vars = {};
         const inputTransformForIndividualTest = testCase.options?.transformVars;
@@ -638,7 +710,18 @@ class Evaluator {
       testCase.options = { ...testSuite.defaultTest?.options, ...testCase.options };
       testCase.metadata = { ...testSuite.defaultTest?.metadata, ...testCase.metadata };
       testCase.provider = testCase.provider || testSuite.defaultTest?.provider;
+      testCase.assertScoringFunction =
+        testCase.assertScoringFunction || testSuite.defaultTest?.assertScoringFunction;
 
+      if (typeof testCase.assertScoringFunction === 'string') {
+        const { filePath: resolvedPath, functionName } = parseFileUrl(
+          testCase.assertScoringFunction,
+        );
+        testCase.assertScoringFunction = await loadFunction<ScoringFunction>({
+          filePath: resolvedPath,
+          functionName,
+        });
+      }
       const prependToPrompt =
         testCase.options?.prefix || testSuite.defaultTest?.options?.prefix || '';
       const appendToPrompt =
@@ -717,6 +800,32 @@ class Evaluator {
 
       const rows = await runEval(evalStep);
       for (const row of rows) {
+        // Print token usage for model-graded assertions and add to stats
+        if (row.gradingResult?.tokensUsed && row.testCase?.assert) {
+          for (const assertion of row.testCase.assert) {
+            if (MODEL_GRADED_ASSERTION_TYPES.has(assertion.type as AssertionType)) {
+              const tokensUsed = row.gradingResult.tokensUsed;
+
+              if (!this.stats.tokenUsage.assertions) {
+                this.stats.tokenUsage.assertions = {
+                  total: 0,
+                  prompt: 0,
+                  completion: 0,
+                  cached: 0,
+                };
+              }
+
+              const assertions = this.stats.tokenUsage.assertions;
+              assertions.total = (assertions.total ?? 0) + (tokensUsed.total ?? 0);
+              assertions.prompt = (assertions.prompt ?? 0) + (tokensUsed.prompt ?? 0);
+              assertions.completion = (assertions.completion ?? 0) + (tokensUsed.completion ?? 0);
+              assertions.cached = (assertions.cached ?? 0) + (tokensUsed.cached ?? 0);
+
+              break;
+            }
+          }
+        }
+
         // capture metrics
         if (row.success) {
           this.stats.successes++;
@@ -752,14 +861,6 @@ class Evaluator {
         }
 
         numComplete++;
-        if (options.progressCallback) {
-          options.progressCallback(
-            this.evalRecord.results.length,
-            runEvalOptions.length,
-            index,
-            evalStep,
-          );
-        }
 
         try {
           await this.evalRecord.addResult(row);
@@ -781,7 +882,7 @@ class Evaluator {
         }
 
         if (testSuite.derivedMetrics) {
-          const math = await import('mathjs'); // TODO: move this
+          const math = await import('mathjs');
           for (const metric of testSuite.derivedMetrics) {
             if (metrics.namedScores[metric.name] === undefined) {
               metrics.namedScores[metric.name] = 0;
@@ -834,12 +935,28 @@ class Evaluator {
             (metrics.tokenUsage.completionDetails?.rejectedPrediction || 0) +
             (row.response?.tokenUsage?.completionDetails?.rejectedPrediction || 0),
         };
+
+        // Add assertion token usage to the metrics
+        if (row.gradingResult?.tokensUsed) {
+          updateAssertionMetrics(metrics, row.gradingResult.tokensUsed);
+        }
+
         metrics.cost += row.cost || 0;
 
         await runExtensionHook(testSuite.extensions, 'afterEach', {
           test: evalStep.test,
           result: row,
         });
+
+        if (options.progressCallback) {
+          options.progressCallback(
+            this.evalRecord.resultsCount,
+            runEvalOptions.length,
+            index,
+            evalStep,
+            metrics,
+          );
+        }
       }
     };
 
@@ -849,9 +966,9 @@ class Evaluator {
     const originalProgressCallback = this.options.progressCallback;
     const isWebUI = Boolean(cliState.webUI);
 
-    this.options.progressCallback = (completed, total, index, evalStep) => {
+    this.options.progressCallback = (completed, total, index, evalStep, metrics) => {
       if (originalProgressCallback) {
-        originalProgressCallback(completed, total, index, evalStep);
+        originalProgressCallback(completed, total, index, evalStep, metrics);
       }
 
       if (isWebUI) {
@@ -1001,19 +1118,37 @@ class Evaluator {
               prompt: 0,
               completion: 0,
             };
-            result.gradingResult.tokensUsed = result.gradingResult.tokensUsed || {
-              total: 0,
-              prompt: 0,
-              completion: 0,
-            };
-            result.gradingResult.tokensUsed.total =
-              (result.gradingResult.tokensUsed.total || 0) + (gradingResult.tokensUsed?.total || 0);
-            result.gradingResult.tokensUsed.prompt =
-              (result.gradingResult.tokensUsed.prompt || 0) +
-              (gradingResult.tokensUsed?.prompt || 0);
-            result.gradingResult.tokensUsed.completion =
-              (result.gradingResult.tokensUsed.completion || 0) +
-              (gradingResult.tokensUsed?.completion || 0);
+
+            // Use the helper function instead of direct updates
+            if (gradingResult.tokensUsed) {
+              if (!result.gradingResult.tokensUsed) {
+                result.gradingResult.tokensUsed = {
+                  total: 0,
+                  prompt: 0,
+                  completion: 0,
+                };
+              }
+
+              // Update the metrics using the helper function
+              updateAssertionMetrics(
+                { tokenUsage: { assertions: result.gradingResult.tokensUsed } },
+                gradingResult.tokensUsed,
+              );
+
+              // Also update the metrics for the eval
+              if (gradingResult.tokensUsed && result.testCase?.assert) {
+                for (const assertion of result.testCase.assert) {
+                  if (MODEL_GRADED_ASSERTION_TYPES.has(assertion.type as AssertionType)) {
+                    updateAssertionMetrics(
+                      { tokenUsage: this.stats.tokenUsage },
+                      gradingResult.tokensUsed,
+                    );
+                    break;
+                  }
+                }
+              }
+            }
+
             result.success = result.gradingResult.pass =
               result.gradingResult.pass && gradingResult.pass;
             if (!gradingResult.pass) {

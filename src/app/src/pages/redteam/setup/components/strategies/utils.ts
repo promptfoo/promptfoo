@@ -7,25 +7,28 @@ export function getStrategyId(strategy: RedteamStrategy): string {
 }
 
 export const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
-  default: 1,
-  basic: 1,
-  jailbreak: 10,
-  'jailbreak:composite': 5,
-  'prompt-injection': 1,
+  audio: 1,
   base64: 1,
+  basic: 1,
+  'best-of-n': 1,
   citation: 1,
   crescendo: 10,
+  default: 1,
   gcg: 1,
   goat: 5,
-  'jailbreak:tree': 150,
+  hex: 1,
+  image: 1,
+  jailbreak: 10,
+  'jailbreak:composite': 5,
   'jailbreak:likert': 1,
+  'jailbreak:tree': 150,
   leetspeak: 1,
   'math-prompt': 1,
   multilingual: 3, // This won't matter, we multiply all probes by number of languages
-  rot13: 1,
-  'best-of-n': 1,
   pandamonium: 5,
-  hex: 1,
+  'prompt-injection': 1,
+  retry: 1,
+  rot13: 1,
 };
 
 export function getEstimatedProbes(config: Config) {

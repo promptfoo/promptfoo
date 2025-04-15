@@ -5,18 +5,20 @@ import { useToast } from '@app/hooks/useToast';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
 import { callApi, fetchUserEmail, updateEvalAuthor } from '@app/utils/api';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
+import ClearIcon from '@mui/icons-material/Clear';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import SearchIcon from '@mui/icons-material/Search';
 import SettingsIcon from '@mui/icons-material/Settings';
 import ShareIcon from '@mui/icons-material/Share';
-import SearchIcon from '@mui/icons-material/Source';
 import EyeIcon from '@mui/icons-material/Visibility';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
+import IconButton from '@mui/material/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import Menu from '@mui/material/Menu';
@@ -42,9 +44,9 @@ import EvalSelectorKeyboardShortcut from './EvalSelectorKeyboardShortcut';
 import { FilterModeSelector } from './FilterModeSelector';
 import ResultsCharts from './ResultsCharts';
 import ResultsTable from './ResultsTable';
-import SettingsModal from './ResultsViewSettingsModal';
 import ShareModal from './ShareModal';
-import { useStore as useResultsViewStore } from './store';
+import SettingsModal from './TableSettings/TableSettingsModal';
+import { useStore as useResultsViewStore, useResultsViewSettingsStore } from './store';
 import type { EvaluateTable, FilterMode, ResultLightweightWithLabel } from './types';
 import './ResultsView.css';
 
@@ -62,6 +64,94 @@ interface ResultsViewProps {
   defaultEvalId?: string;
 }
 
+const SearchInputField = React.memo(
+  ({
+    value,
+    onChange,
+    onKeyDown,
+    placeholder = 'Search...',
+  }: {
+    value: string;
+    onChange: (value: string) => void;
+    onKeyDown?: React.KeyboardEventHandler;
+    placeholder?: string;
+  }) => {
+    // Use local state to handle immediate updates
+    const [localValue, setLocalValue] = React.useState(value);
+
+    // Sync with parent when external value changes
+    React.useEffect(() => {
+      setLocalValue(value);
+    }, [value]);
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const newValue = e.target.value;
+      // Update local state immediately for responsive typing
+      setLocalValue(newValue);
+      // Notify parent of change
+      onChange(newValue);
+    };
+
+    const handleClear = () => {
+      setLocalValue('');
+      onChange('');
+    };
+
+    return (
+      <TextField
+        sx={{
+          width: '100%',
+          maxWidth: '400px',
+          '& .MuiInputBase-root': {
+            borderRadius: '20px',
+          },
+          '& .MuiInputAdornment-root': {
+            transition:
+              'opacity 225ms cubic-bezier(0.4, 0, 0.2, 1), width 225ms cubic-bezier(0.4, 0, 0.2, 1), transform 225ms cubic-bezier(0.4, 0, 0.2, 1)',
+          },
+          '& .clear-button': {
+            opacity: localValue ? 1 : 0,
+            width: localValue ? 'auto' : 0,
+            transform: localValue ? 'scale(1)' : 'scale(0.8)',
+            transition:
+              'opacity 225ms cubic-bezier(0.4, 0, 0.2, 1), width 225ms cubic-bezier(0.4, 0, 0.2, 1), transform 225ms cubic-bezier(0.4, 0, 0.2, 1)',
+          },
+        }}
+        size="small"
+        label="Search"
+        placeholder={placeholder}
+        value={localValue}
+        onChange={handleChange}
+        onKeyDown={onKeyDown}
+        InputProps={{
+          startAdornment: (
+            <InputAdornment position="start">
+              <SearchIcon color="action" fontSize="small" />
+            </InputAdornment>
+          ),
+          endAdornment: (
+            <InputAdornment position="end" className="clear-button">
+              <Tooltip title="Clear search (Esc)">
+                <IconButton
+                  aria-label="clear search"
+                  onClick={handleClear}
+                  edge="end"
+                  size="small"
+                  sx={{
+                    visibility: localValue ? 'visible' : 'hidden',
+                  }}
+                >
+                  <ClearIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </InputAdornment>
+          ),
+        }}
+      />
+    );
+  },
+);
+
 export default function ResultsView({
   recentEvals,
   onRecentEvalSelected,
@@ -69,28 +159,24 @@ export default function ResultsView({
 }: ResultsViewProps) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { author, table, setTable, config, setConfig, evalId, setAuthor } = useResultsViewStore();
+
   const {
-    author,
-    table,
-    setTable,
-    config,
-    setConfig,
-    maxTextLength,
-    wordBreak,
-    showInferenceDetails,
-    evalId,
     setInComparisonMode,
     columnStates,
     setColumnState,
-    setAuthor,
-  } = useResultsViewStore();
+    maxTextLength,
+    wordBreak,
+    showInferenceDetails,
+  } = useResultsViewSettingsStore();
+
   const { setStateFromConfig } = useMainStore();
   const { showToast } = useToast();
   const [searchText, setSearchText] = React.useState(searchParams.get('search') || '');
-  const [debouncedSearchText] = useDebounce(searchText, 1000);
-  const handleSearchTextChange = (text: string) => {
+  const [debouncedSearchText] = useDebounce(searchText, 200);
+  const handleSearchTextChange = React.useCallback((text: string) => {
     setSearchText(text);
-  };
+  }, []);
 
   const [failureFilter, setFailureFilter] = React.useState<{ [key: string]: boolean }>({});
   const handleFailureFilterToggle = React.useCallback(
@@ -373,6 +459,17 @@ export default function ResultsView({
     }
   };
 
+  const handleSearchKeyDown = React.useCallback<React.KeyboardEventHandler>(
+    (event) => {
+      if (event.key === 'Escape') {
+        handleSearchTextChange('');
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    },
+    [handleSearchTextChange],
+  );
+
   return (
     <div style={{ marginLeft: '1rem', marginRight: '1rem' }}>
       <ResponsiveStack
@@ -388,18 +485,20 @@ export default function ResultsView({
             size="small"
             fullWidth
             value={config?.description || evalId || ''}
-            InputProps={{
-              readOnly: true,
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon />
-                </InputAdornment>
-              ),
-              endAdornment: (
-                <InputAdornment position="end">
-                  <ArrowDropDownIcon />
-                </InputAdornment>
-              ),
+            slotProps={{
+              input: {
+                readOnly: true,
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon />
+                  </InputAdornment>
+                ),
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <ArrowDropDownIcon />
+                  </InputAdornment>
+                ),
+              },
             }}
             onClick={() => setEvalSelectorDialogOpen(true)}
             placeholder="Search or select an eval..."
@@ -408,9 +507,12 @@ export default function ResultsView({
           <EvalSelectorDialog
             open={evalSelectorDialogOpen}
             onClose={() => setEvalSelectorDialogOpen(false)}
-            recentEvals={recentEvals}
-            onRecentEvalSelected={onRecentEvalSelected}
+            onEvalSelected={(evalId) => {
+              setEvalSelectorDialogOpen(false);
+              onRecentEvalSelected(evalId);
+            }}
             title="Select an Eval"
+            focusedEvalId={evalId ?? undefined}
           />
         </Box>
         {evalId && <EvalIdChip evalId={evalId} onCopy={handleEvalIdCopyClick} />}
@@ -434,13 +536,11 @@ export default function ResultsView({
           <FilterModeSelector filterMode={filterMode} onChange={handleFilterModeChange} />
         </Box>
         <Box>
-          <TextField
-            sx={{ minWidth: 180 }}
-            size="small"
-            label="Search"
-            placeholder="Text or regex"
+          <SearchInputField
             value={searchText}
-            onChange={(e) => handleSearchTextChange(e.target.value)}
+            onChange={handleSearchTextChange}
+            onKeyDown={handleSearchKeyDown}
+            placeholder="Text or regex"
           />
         </Box>
         <Box flexGrow={1} />
@@ -556,7 +656,8 @@ export default function ResultsView({
         showStats={showInferenceDetails}
         filterMode={filterMode}
         failureFilter={failureFilter}
-        searchText={debouncedSearchText}
+        searchText={searchText}
+        debouncedSearchText={debouncedSearchText}
         onFailureFilterToggle={handleFailureFilterToggle}
         onSearchTextChange={handleSearchTextChange}
         setFilterMode={setFilterMode}
@@ -569,10 +670,7 @@ export default function ResultsView({
         onShare={handleShare}
       />
       <SettingsModal open={viewSettingsModalOpen} onClose={() => setViewSettingsModalOpen(false)} />
-      <EvalSelectorKeyboardShortcut
-        recentEvals={recentEvals}
-        onRecentEvalSelected={onRecentEvalSelected}
-      />
+      <EvalSelectorKeyboardShortcut onEvalSelected={onRecentEvalSelected} />
     </div>
   );
 }

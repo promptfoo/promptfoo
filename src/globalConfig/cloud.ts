@@ -1,8 +1,9 @@
+import chalk from 'chalk';
 import { fetchWithProxy } from '../fetch';
 import logger from '../logger';
 import { readGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
 
-const API_HOST = process.env.API_HOST || 'https://api.promptfoo.app';
+export const API_HOST = process.env.API_HOST || 'https://api.promptfoo.app';
 
 interface CloudUser {
   id: string;
@@ -102,16 +103,16 @@ export class CloudConfig {
       throw new Error('Failed to validate API token: ' + response.statusText);
     }
 
-    logger.info('You are logged in successfully.');
     const { user, organization, app } = await response.json();
     this.setApiKey(token);
     this.setApiHost(apiHost);
     this.setAppUrl(app.url);
 
-    logger.info('Logged in as:');
-    logger.info(`User: ${user.email}`);
-    logger.info(`Organization: ${organization.name}`);
-    logger.info(`Access the app at ${app.url}`);
+    logger.info(chalk.green.bold('Successfully logged in'));
+    logger.info(chalk.dim('Logged in as:'));
+    logger.info(`User: ${chalk.cyan(user.email)}`);
+    logger.info(`Organization: ${chalk.cyan(organization.name)}`);
+    logger.info(`Access the app at ${chalk.cyan(app.url)}`);
 
     return {
       user,
@@ -121,5 +122,5 @@ export class CloudConfig {
   }
 }
 
-// Export a singleton instance
+// singleton instance
 export const cloudConfig = new CloudConfig();

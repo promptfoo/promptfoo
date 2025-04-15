@@ -54,7 +54,7 @@ export class AlibabaChatCompletionProvider extends OpenAiChatCompletionProvider 
       ...options,
       config: {
         ...options.config,
-        apiBaseUrl: API_BASE_URL,
+        apiBaseUrl: options.config?.API_BASE_URL || API_BASE_URL,
         apiKeyEnvar: 'DASHSCOPE_API_KEY',
       },
     });
@@ -73,7 +73,7 @@ export class AlibabaEmbeddingProvider extends OpenAiEmbeddingProvider {
       ...options,
       config: {
         ...options.config,
-        apiBaseUrl: API_BASE_URL,
+        apiBaseUrl: options.config?.API_BASE_URL || API_BASE_URL,
         apiKeyEnvar: 'DASHSCOPE_API_KEY',
       },
     });

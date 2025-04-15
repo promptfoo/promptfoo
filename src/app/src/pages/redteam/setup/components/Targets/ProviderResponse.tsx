@@ -26,8 +26,10 @@ export default function ProviderResponse({ providerResponse }: { providerRespons
           <TableBody>
             {Object.entries(providerResponse?.metadata?.headers || {}).map(([key, value]) => (
               <TableRow key={key}>
-                <TableCell>{key}</TableCell>
-                <TableCell>{value as string}</TableCell>
+                <TableCell sx={{ maxWidth: '200px', wordBreak: 'break-word' }}>{key}</TableCell>
+                <TableCell sx={{ maxWidth: '300px', wordBreak: 'break-word' }}>
+                  {value as string}
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>

@@ -11,5 +11,9 @@ export function addBase64Encoding(testCases: TestCase[], injectVar: string): Tes
       ...testCase.vars,
       [injectVar]: Buffer.from(String(testCase.vars![injectVar])).toString('base64'),
     },
+    metadata: {
+      ...testCase.metadata,
+      strategyId: 'base64',
+    },
   }));
 }

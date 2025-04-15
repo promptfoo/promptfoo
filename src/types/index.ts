@@ -7,17 +7,14 @@ import type {
   RedteamFileConfig,
   StrategyConfig,
 } from '../redteam/types';
-import { isJavascriptFile } from '../util/file';
+import type { EnvOverrides } from '../types/env';
+import { ProviderEnvOverridesSchema } from '../types/env';
+import { TokenUsageSchema } from '../types/shared';
+import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/file';
 import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
-import {
-  ApiProviderSchema,
-  ProviderEnvOverridesSchema,
-  ProviderOptionsSchema,
-  ProvidersSchema,
-} from '../validators/providers';
+import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
 import { RedteamConfigSchema } from '../validators/redteam';
-import { NunjucksFilterMapSchema, TokenUsageSchema } from '../validators/shared';
-import type { EnvOverrides } from './env';
+import { NunjucksFilterMapSchema } from '../validators/shared';
 import type { Prompt, PromptFunction } from './prompts';
 import type { ApiProvider, ProviderOptions, ProviderResponse } from './providers';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
@@ -27,7 +24,7 @@ export * from './providers';
 export * from '../redteam/types';
 export * from './shared';
 
-export type { EnvOverrides } from './env';
+export type { EnvOverrides };
 
 export const CommandLineOptionsSchema = z.object({
   // Shared with TestSuite
@@ -56,6 +53,7 @@ export const CommandLineOptionsSchema = z.object({
   share: z.boolean().optional(),
   progressBar: z.boolean().optional(),
   watch: z.boolean().optional(),
+  filterErrorsOnly: z.string().optional(),
   filterFailing: z.string().optional(),
   filterFirstN: z.coerce.number().int().positive().optional(),
   filterMetadata: z.string().optional(),
@@ -165,7 +163,16 @@ const EvaluateOptionsSchema = z.object({
   interactiveProviders: z.boolean().optional(),
   maxConcurrency: z.number().optional(),
   progressCallback: z
-    .function(z.tuple([z.number(), z.number(), z.number(), z.custom<RunEvalOptions>()]), z.void())
+    .function(
+      z.tuple([
+        z.number(),
+        z.number(),
+        z.number(),
+        z.custom<RunEvalOptions>(),
+        z.custom<PromptMetrics>(),
+      ]),
+      z.void(),
+    )
     .optional(),
   repeat: z.number().optional(),
   showProgressBar: z.boolean().optional(),
@@ -217,6 +224,11 @@ export interface PromptWithMetadata {
   count: number;
 }
 
+// The server returns ISO formatted strings for dates, so we need to adjust the type here
+export type ServerPromptWithMetadata = Omit<PromptWithMetadata, 'recentEvalDate'> & {
+  recentEvalDate: string;
+};
+
 export enum ResultFailureReason {
   // The test passed, or we don't know exactly why the test case failed.
   NONE = 0,
@@ -265,6 +277,13 @@ export interface EvaluateTableOutput {
   testCase: AtomicTestCase;
   text: string;
   tokenUsage?: Partial<TokenUsage>;
+  audio?: {
+    id?: string;
+    expiresAt?: number;
+    data?: string; // base64 encoded audio data
+    transcript?: string;
+    format?: string;
+  };
 }
 
 export interface EvaluateTableRow {
@@ -369,12 +388,12 @@ export const BaseAssertionTypesSchema = z.enum([
   'answer-relevance',
   'bleu',
   'classifier',
+  'contains',
   'contains-all',
   'contains-any',
   'contains-json',
   'contains-sql',
   'contains-xml',
-  'contains',
   'context-faithfulness',
   'context-recall',
   'context-relevance',
@@ -382,13 +401,15 @@ export const BaseAssertionTypesSchema = z.enum([
   'equals',
   'factuality',
   'g-eval',
+  'gleu',
   'guardrails',
+  'icontains',
   'icontains-all',
   'icontains-any',
-  'icontains',
   'is-json',
   'is-refusal',
   'is-sql',
+  'is-valid-function-call',
   'is-valid-openai-function-call',
   'is-valid-openai-tools-call',
   'is-xml',
@@ -399,8 +420,8 @@ export const BaseAssertionTypesSchema = z.enum([
   'model-graded-closedqa',
   'model-graded-factuality',
   'moderation',
-  'perplexity-score',
   'perplexity',
+  'perplexity-score',
   'python',
   'regex',
   'rouge-n',
@@ -551,6 +572,23 @@ export const VarsSchema = z.record(
 
 export type Vars = z.infer<typeof VarsSchema>;
 
+export type ScoringFunction = (
+  namedScores: Record<string, number>,
+  context?: {
+    threshold?: number;
+    parentAssertionSet?: {
+      index: number;
+      assertionSet: AssertionSet;
+    };
+    componentResults?: GradingResult[];
+    tokensUsed?: {
+      total: number;
+      prompt: number;
+      completion: number;
+    };
+  },
+) => Promise<GradingResult> | GradingResult;
+
 // Each test case is graded pass/fail with a score.  A test case represents a unique input to the LLM after substituting `vars` in the prompt.
 // HEADS UP: When you add a property here, you probably need to load it from `defaultTest` in evaluator.ts.
 export const TestCaseSchema = z.object({
@@ -568,6 +606,16 @@ export const TestCaseSchema = z.object({
 
   // Optional list of automatic checks to run on the LLM output
   assert: z.array(z.union([AssertionSetSchema, AssertionSchema])).optional(),
+
+  // Optional scoring function to run on the LLM output
+  assertScoringFunction: z
+    .union([
+      z
+        .string()
+        .regex(new RegExp(`^file://.*\\.(${JAVASCRIPT_EXTENSIONS.join('|')}|py)(?::[\\w.]+)?$`)),
+      z.custom<ScoringFunction>(),
+    ])
+    .optional(),
 
   // Additional configuration settings for the prompt
   options: z
@@ -729,6 +777,7 @@ export const TestSuiteSchema = z.object({
           },
         ),
     )
+    .nullable()
     .optional(),
 
   // Redteam configuration - used only when generating redteam tests
@@ -792,13 +841,25 @@ export const TestSuiteConfigSchema = z.object({
   nunjucksFilters: z.record(z.string(), z.string()).optional(),
 
   // Envvar overrides
-  env: ProviderEnvOverridesSchema.optional(),
+  env: z
+    .union([
+      ProviderEnvOverridesSchema,
+      z.record(
+        z.string(),
+        z.union([
+          z.string(),
+          z.number().transform((n) => String(n)),
+          z.boolean().transform((b) => String(b)),
+        ]),
+      ),
+    ])
+    .optional(),
 
   // Metrics to calculate after the eval has been completed
   derivedMetrics: z.array(DerivedMetricSchema).optional(),
 
   // Extension that is called at various plugin points
-  extensions: z.array(z.string()).optional(),
+  extensions: z.array(z.string()).nullable().optional(),
 
   // Any other information about this configuration.
   metadata: MetadataSchema.optional(),
@@ -811,6 +872,7 @@ export const TestSuiteConfigSchema = z.object({
 });
 
 export type TestSuiteConfig = z.infer<typeof TestSuiteConfigSchema>;
+
 export const UnifiedConfigSchema = TestSuiteConfigSchema.extend({
   evaluateOptions: EvaluateOptionsSchema.optional(),
   commandLineOptions: CommandLineOptionsSchema.partial().optional(),
@@ -832,6 +894,16 @@ export const UnifiedConfigSchema = TestSuiteConfigSchema.extend({
       data.providers = data.targets;
       delete data.targets;
     }
+
+    // Handle null extensions, undefined extensions, or empty arrays by deleting the field
+    if (
+      data.extensions === null ||
+      data.extensions === undefined ||
+      (Array.isArray(data.extensions) && data.extensions.length === 0)
+    ) {
+      delete data.extensions;
+    }
+
     return data;
   });
 
@@ -882,6 +954,8 @@ export interface ResultLightweight {
 }
 
 export type ResultLightweightWithLabel = ResultLightweight & { label: string };
+
+export type EvalSummary = ResultLightweightWithLabel & { passRate: number };
 
 // File exported as --output option
 export interface OutputFile {

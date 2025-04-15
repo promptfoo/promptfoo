@@ -6,7 +6,6 @@ import telemetry from '../../telemetry';
 import { setupEnv } from '../../util';
 import { getConfigFromCloud } from '../../util/cloud';
 import { doRedteamRun } from '../shared';
-import { getUnifiedConfig } from '../sharedFrontend';
 import type { RedteamRunOptions } from '../types';
 import { poisonCommand } from './poison';
 
@@ -35,6 +34,7 @@ export function redteamRunCommand(program: Command) {
     .option('--remote', 'Force remote inference wherever possible', false)
     .option('--force', 'Force generation even if no changes are detected', false)
     .option('--verbose', 'Show debug output', false)
+    .option('--no-progress-bar', 'Do not show progress bar')
     .option(
       '--filter-providers, --filter-targets <providers>',
       'Only run tests with these providers (regex match)',
@@ -52,7 +52,9 @@ export function redteamRunCommand(program: Command) {
 
       if (opts.config && UUID_REGEX.test(opts.config)) {
         const configObj = await getConfigFromCloud(opts.config);
-        opts.liveRedteamConfig = getUnifiedConfig(configObj.config);
+
+        opts.liveRedteamConfig = configObj;
+
         opts.config = undefined;
 
         opts.loadedFromCloud = true;

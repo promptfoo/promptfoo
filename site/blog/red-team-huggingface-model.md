@@ -43,7 +43,7 @@ export HF_API_TOKEN=your_huggingface_api_token
 Use the `promptfoo` command-line tool to initialize a new red teaming project:
 
 ```bash
-npx promptfoo@latest redteam init my-huggingface-redteam
+npx promptfoo@latest redteam init my-huggingface-redteam --no-gui
 cd my-huggingface-redteam
 ```
 

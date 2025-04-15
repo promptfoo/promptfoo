@@ -67,6 +67,7 @@ export interface Plugin {
   name: string;
   pluginId: string;
   vulnerabilityType: VulnerabilityType;
+  isRemote?: boolean;
 }
 
 // Type utility at the top
@@ -95,6 +96,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'security',
+    isRemote: true,
   },
   {
     category: 'Trust and Safety',
@@ -109,6 +111,20 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'security',
+  },
+  {
+    category: 'Trust and Safety',
+    description: 'Tests handling of unsafe image content through multi-modal model evaluation',
+    label: 'harmful',
+    link: '/docs/red-team/plugins/unsafebench/',
+    name: 'UnsafeBench',
+    pluginId: 'unsafebench',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'harmful',
   },
   {
     category: 'Trust and Safety',
@@ -165,6 +181,7 @@ export const PLUGINS = [
       chat: false,
     },
     vulnerabilityType: 'security',
+    isRemote: true,
   },
   {
     category: 'Security and Access Control',
@@ -179,6 +196,7 @@ export const PLUGINS = [
       chat: false,
     },
     vulnerabilityType: 'security',
+    isRemote: true,
   },
   {
     category: 'Brand',
@@ -193,6 +211,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'misinformation and misuse',
+    isRemote: true,
   },
   {
     category: 'Compliance and Legal',
@@ -278,6 +297,22 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'security',
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests for vulnerability to computational resource exhaustion through excessive reasoning patterns. Applicable to reasoning models.',
+    label: 'security',
+    link: '/docs/red-team/plugins/reasoning-dos/',
+    name: 'Reasoning DoS',
+    pluginId: 'reasoning-dos',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
   },
   {
     category: 'Brand',
@@ -435,20 +470,6 @@ export const PLUGINS = [
   },
   {
     category: 'Compliance and Legal',
-    description: 'Content related to methamphetamine',
-    label: 'harmful',
-    link: '/docs/red-team/plugins/harmful/',
-    name: 'Methamphetamine',
-    pluginId: 'harmful:illegal-drugs:meth',
-    applicationTypes: {
-      rag: true,
-      agent: true,
-      chat: true,
-    },
-    vulnerabilityType: 'criminal',
-  },
-  {
-    category: 'Compliance and Legal',
     description: 'Content related to weapons without context',
     label: 'harmful',
     link: '/docs/red-team/plugins/harmful/',
@@ -490,20 +511,6 @@ export const PLUGINS = [
     vulnerabilityType: 'criminal',
   },
   {
-    category: 'Compliance and Legal',
-    description: 'Content related to generating malicious code',
-    label: 'harmful',
-    link: '/docs/red-team/plugins/harmful/',
-    name: 'Malicious Code',
-    pluginId: 'harmful:cybercrime:malicious-code',
-    applicationTypes: {
-      rag: true,
-      agent: true,
-      chat: true,
-    },
-    vulnerabilityType: 'criminal',
-  },
-  {
     category: 'Brand',
     description: 'Spreading false or misleading information',
     label: 'harmful',
@@ -516,6 +523,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'misinformation and misuse',
+    isRemote: true,
   },
   {
     category: 'Compliance and Legal',
@@ -628,6 +636,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'misinformation and misuse',
+    isRemote: true,
   },
   {
     category: 'Compliance and Legal',
@@ -658,20 +667,6 @@ export const PLUGINS = [
     vulnerabilityType: 'criminal',
   },
   {
-    category: 'Compliance and Legal',
-    description: 'Content related to creating Improvised Explosive Devices',
-    label: 'harmful',
-    link: '/docs/red-team/plugins/harmful/',
-    name: 'IEDs',
-    pluginId: 'harmful:weapons:ied',
-    applicationTypes: {
-      rag: true,
-      agent: true,
-      chat: true,
-    },
-    vulnerabilityType: 'criminal',
-  },
-  {
     category: 'Security and Access Control',
     description: 'Unauthorized or off-topic resource use',
     label: 'technical',
@@ -684,6 +679,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'security',
+    isRemote: true,
   },
   {
     category: 'Brand',
@@ -713,6 +709,7 @@ export const PLUGINS = [
       chat: false,
     },
     vulnerabilityType: 'security',
+    isRemote: true,
   },
   {
     category: 'Custom',
@@ -755,6 +752,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'security',
+    isRemote: true,
   },
   {
     category: 'Security and Access Control',
@@ -896,6 +894,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'misinformation and misuse',
+    isRemote: true,
   },
   {
     category: 'Security and Access Control',
@@ -938,6 +937,7 @@ export const PLUGINS = [
       chat: false,
     },
     vulnerabilityType: 'security',
+    isRemote: true,
   },
   {
     category: 'Security and Access Control',
@@ -952,6 +952,38 @@ export const PLUGINS = [
       agent: true,
       chat: false,
     },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Simulates Context Compliance Attacks to test whether an AI system can be tricked into generating restricted content using manipulated chat history.',
+    label: 'security',
+    link: '/docs/red-team/plugins/context-compliance-attack/',
+    name: 'CCA',
+    pluginId: 'cca',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    applicationTypes: {
+      agent: true,
+      chat: true,
+      rag: true,
+    },
+    category: 'Security and Access Control',
+    description:
+      'Tests if an AI system reveals the list of tools, functions, or API calls it has access to',
+    label: 'technical',
+    link: '/docs/red-team/plugins/tool-discovery/',
+    name: 'Tool Discovery',
+    pluginId: 'tool-discovery',
     vulnerabilityType: 'security',
   },
 ] as const as readonly Plugin[];

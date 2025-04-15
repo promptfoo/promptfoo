@@ -22,6 +22,8 @@ import { addPandamonium } from './pandamonium';
 import { addInjections } from './promptInjections';
 import { addRetryTestCases } from './retry';
 import { addRot13 } from './rot13';
+import { addAudioToBase64 } from './simpleAudio';
+import { addImageToBase64 } from './simpleImage';
 import { addCompositeTestCases } from './singleTurnComposite';
 
 export interface Strategy {
@@ -138,6 +140,24 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding experimental tree jailbreaks to ${testCases.length} test cases`);
       const newTestCases = addIterativeJailbreaks(testCases, injectVar, 'iterative:tree', config);
       logger.debug(`Added ${newTestCases.length} experimental tree jailbreak test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'image',
+    action: async (testCases, injectVar) => {
+      logger.debug(`Adding image encoding to ${testCases.length} test cases`);
+      const newTestCases = await addImageToBase64(testCases, injectVar);
+      logger.debug(`Added ${newTestCases.length} image encoded test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'audio',
+    action: async (testCases, injectVar) => {
+      logger.debug(`Adding audio encoding to ${testCases.length} test cases`);
+      const newTestCases = await addAudioToBase64(testCases, injectVar);
+      logger.debug(`Added ${newTestCases.length} audio encoded test cases`);
       return newTestCases;
     },
   },

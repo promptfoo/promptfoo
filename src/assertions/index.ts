@@ -26,6 +26,7 @@ import type {
   AssertionValueFunctionContext,
   BaseAssertionTypes,
   ProviderResponse,
+  ScoringFunction,
 } from '../types';
 import {
   type ApiProvider,
@@ -38,8 +39,8 @@ import { isJavascriptFile } from '../util/file';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { transform } from '../util/transform';
-import { AssertionsResult } from './AssertionsResult';
 import { handleAnswerRelevance } from './answerRelevance';
+import { AssertionsResult } from './assertionsResult';
 import { handleBleuScore } from './bleu';
 import { handleClassifier } from './classifier';
 import {
@@ -56,7 +57,9 @@ import { handleContextRelevance } from './contextRelevance';
 import { handleCost } from './cost';
 import { handleEquals } from './equals';
 import { handleFactuality } from './factuality';
+import { handleIsValidFunctionCall } from './functionToolCall';
 import { handleGEval } from './geval';
+import { handleGleuScore } from './gleu';
 import { handleGuardrails } from './guardrails';
 import { handleJavascript } from './javascript';
 import { handleContainsJson, handleIsJson } from './json';
@@ -65,7 +68,7 @@ import { handleLevenshtein } from './levenshtein';
 import { handleLlmRubric } from './llmRubric';
 import { handleModelGradedClosedQa } from './modelGradedClosedQa';
 import { handleModeration } from './moderation';
-import { handleIsValidOpenAiFunctionCall, handleIsValidOpenAiToolsCall } from './openai';
+import { handleIsValidOpenAiToolsCall } from './openai';
 import { handlePerplexity, handlePerplexityScore } from './perplexity';
 import { handlePython } from './python';
 import { handleRedteam } from './redteam';
@@ -246,6 +249,7 @@ export async function runAssertion({
     cost: handleCost,
     equals: handleEquals,
     factuality: handleFactuality,
+    gleu: handleGleuScore,
     guardrails: handleGuardrails,
     'g-eval': handleGEval,
     icontains: handleIContains,
@@ -254,7 +258,8 @@ export async function runAssertion({
     'is-json': handleIsJson,
     'is-refusal': handleIsRefusal,
     'is-sql': handleIsSql,
-    'is-valid-openai-function-call': handleIsValidOpenAiFunctionCall,
+    'is-valid-function-call': handleIsValidFunctionCall,
+    'is-valid-openai-function-call': handleIsValidFunctionCall,
     'is-valid-openai-tools-call': handleIsValidOpenAiToolsCall,
     'is-xml': handleIsXml,
     javascript: handleJavascript,
@@ -296,17 +301,19 @@ export async function runAssertion({
 }
 
 export async function runAssertions({
+  assertScoringFunction,
+  latencyMs,
   prompt,
   provider,
   providerResponse,
   test,
-  latencyMs,
 }: {
+  assertScoringFunction?: ScoringFunction;
+  latencyMs?: number;
   prompt?: string;
   provider?: ApiProvider;
   providerResponse: ProviderResponse;
   test: AtomicTestCase;
-  latencyMs?: number;
 }): Promise<GradingResult> {
   if (!test.assert || test.assert.length < 1) {
     return AssertionsResult.noAssertsResult();
@@ -374,8 +381,8 @@ export async function runAssertions({
     },
   );
 
-  subAssertResults.forEach((subAssertResult) => {
-    const result = subAssertResult.testResult();
+  await async.forEach(subAssertResults, async (subAssertResult) => {
+    const result = await subAssertResult.testResult();
     const {
       index,
       assertionSet: { metric, weight },
@@ -389,7 +396,7 @@ export async function runAssertions({
     });
   });
 
-  return mainAssertResult.testResult();
+  return mainAssertResult.testResult(assertScoringFunction);
 }
 
 export async function runCompareAssertion(

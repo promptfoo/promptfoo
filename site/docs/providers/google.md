@@ -8,13 +8,17 @@ You can use it by specifying one of the [available models](https://ai.google.dev
 
 ### Chat and Multimodal Models
 
+- `google:gemini-2.5-pro-exp-03-25` - Latest thinking model, designed to tackle increasingly complex problems with enhanced reasoning capabilities.
 - `google:gemini-2.0-pro-exp-02-05` - Latest multimodal model with next-gen features, 1M token context window
+- `google:gemini-2.0-flash-exp` - Multimodal model with next generation features
+- `google:gemini-2.0-flash-thinking-exp` - Optimized for complex reasoning and problem-solving
 - `google:gemini-2.0-flash` - Latest multimodal model with next-gen features, 1M token context window
 - `google:gemini-2.0-flash-lite` - Cost-efficient version of 2.0 Flash with 1M token context
+- `google:gemini-1.5-pro` - Best performing model for complex reasoning tasks
 - `google:gemini-1.5-flash` - Fast and versatile multimodal model
 - `google:gemini-1.5-flash-8b` - Small model optimized for high-volume, lower complexity tasks
-- `google:gemini-1.5-pro` - Best performing model for complex reasoning tasks
-- `google:gemini-1.0-pro` - Legacy model for text and code (Deprecated, use 1.5 Pro instead)
+- `google:gemini-pro` - General purpose text and chat
+- `google:gemini-pro-vision` - Multimodal understanding (text + vision)
 
 ### Embedding Models
 
@@ -212,3 +216,113 @@ providers:
 ```
 
 For more details, see the [Gemini API documentation](https://ai.google.dev/docs).
+
+## Google Live API
+
+Promptfoo now supports Google's WebSocket-based Live API, which enables low-latency bidirectional voice and video interactions with Gemini models. This API provides real-time interactive capabilities beyond what's available in the standard REST API.
+
+### Using the Live Provider
+
+Access the Live API by specifying the model with the 'live' service type:
+
+```yaml
+providers:
+  - id: 'google:live:gemini-2.0-flash-exp'
+    config:
+      generationConfig:
+        response_modalities: ['text']
+      timeoutMs: 10000
+```
+
+### Key Features
+
+- **Real-time bidirectional communication**: Uses WebSockets for faster responses
+- **Multimodal capabilities**: Can process text, audio, and video inputs
+- **Built-in tools**: Supports function calling, code execution, and Google Search integration
+- **Low-latency interactions**: Optimized for conversational applications
+- **Session memory**: The model retains context throughout the session
+
+### Function Calling Example
+
+The Live API supports function calling, allowing you to define tools that the model can use:
+
+```yaml
+providers:
+  - id: 'google:live:gemini-2.0-flash-exp'
+    config:
+      tools: file://tools.json
+      generationConfig:
+        response_modalities: ['text']
+      timeoutMs: 10000
+```
+
+Where `tools.json` contains function declarations and built-in tools:
+
+```json
+[
+  {
+    "functionDeclarations": [
+      {
+        "name": "get_weather",
+        "description": "Get current weather information for a city",
+        "parameters": {
+          "type": "OBJECT",
+          "properties": {
+            "city": {
+              "type": "STRING",
+              "description": "The name of the city to get weather for"
+            }
+          },
+          "required": ["city"]
+        }
+      }
+    ]
+  },
+  {
+    "codeExecution": {}
+  },
+  {
+    "googleSearch": {}
+  }
+]
+```
+
+### Built-in Tools
+
+The Live API includes several built-in tools:
+
+1. **Code Execution**: Execute Python code directly in the model's runtime
+
+   ```json
+   {
+     "codeExecution": {}
+   }
+   ```
+
+2. **Google Search**: Perform real-time web searches
+   ```json
+   {
+     "googleSearch": {}
+   }
+   ```
+
+### Getting Started
+
+Try the examples:
+
+```sh
+# Basic text-only example
+promptfoo init --example google-live
+
+# Function calling and tools example
+promptfoo init --example google-live-tools
+```
+
+### Limitations
+
+- Sessions are limited to 15 minutes for audio or 2 minutes of audio and video
+- Token counting is not supported
+- Rate limits of 3 concurrent sessions per API key apply
+- Maximum of 4M tokens per minute
+
+For more details, see the [Live API documentation](https://ai.google.dev/gemini-api/docs/live).

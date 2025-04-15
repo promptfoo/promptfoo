@@ -12,6 +12,16 @@ providers:
   - id: file://provider.py:async_provider
     label: async provider
 
+  # Demonstrates how to load configuration from various file formats
+  - id: 'file://provider.py:call_api'
+    config:
+      # YAML
+      settings: 'file://configs/fileConfig.yaml'
+      # JavaScript file
+      formatting: 'file://configs/fileConfig.js:getFormatConfig'
+      nested: # Python file
+        parameters: 'file://configs/fileConfig.py:get_params'
+
 tests:
   - vars:
       topic: bananas
