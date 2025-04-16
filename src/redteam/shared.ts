@@ -20,8 +20,16 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     setLogCallback(options.logCallback);
   }
 
-  let configPath: string | undefined = options.config || 'promptfooconfig.yaml';
-  let redteamPath = options.output || 'redteam.yaml';
+  let configPath: string = options.config ?? 'promptfooconfig.yaml';
+
+  // If output filepath is not provided, locate the out file in the same directory as the config file:
+  let redteamPath;
+  if (options.output) {
+    redteamPath = options.output;
+  } else {
+    const configDir = path.dirname(configPath);
+    redteamPath = path.join(configDir, 'redteam.yaml');
+  }
 
   if (options.liveRedteamConfig) {
     // Write liveRedteamConfig to a temporary file
