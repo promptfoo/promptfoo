@@ -206,3 +206,5 @@ export function poisonCommand(program: Command) {
       }
     });
 }
+
+export { getAllFiles, generatePoisonedDocument, poisonDocument, doPoisonDocuments };
