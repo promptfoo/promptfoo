@@ -5,7 +5,18 @@ import { alpha } from '@mui/material/styles';
 import { DEFAULT_STRATEGIES, AGENTIC_STRATEGIES } from '@promptfoo/redteam/constants';
 import type { StrategyCardData } from './types';
 
-const CONFIGURABLE_STRATEGIES = ['multilingual'] as const;
+const CONFIGURABLE_STRATEGIES = [
+  'multilingual',
+  'best-of-n',
+  'goat',
+  'crescendo',
+  'pandamonium',
+  'jailbreak',
+  'jailbreak:tree',
+  'tool-discovery:multi-turn',
+  'gcg',
+  'citation',
+] as const;
 
 interface StrategyItemProps {
   strategy: StrategyCardData;
@@ -56,27 +67,28 @@ export function StrategyItem({ strategy, isSelected, onToggle, onConfigClick }: 
       </Box>
 
       {/* Content container */}
-      <Box sx={{ flex: 1, p: 2, minWidth: 0 }}>
-        {/* Settings button */}
+      <Box sx={{ flex: 1, p: 2, minWidth: 0, position: 'relative' }}>
+        {/* Settings button - positioned absolutely in the top-right corner */}
         {isSelected && CONFIGURABLE_STRATEGIES.includes(strategy.id as any) && (
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
-            <IconButton
-              size="small"
-              onClick={(e) => {
-                e.stopPropagation();
-                onConfigClick(strategy.id);
-              }}
-              sx={{
-                opacity: 0.6,
-                '&:hover': {
-                  opacity: 1,
-                  backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08),
-                },
-              }}
-            >
-              <SettingsOutlinedIcon fontSize="small" />
-            </IconButton>
-          </Box>
+          <IconButton
+            size="small"
+            onClick={(e) => {
+              e.stopPropagation();
+              onConfigClick(strategy.id);
+            }}
+            sx={{
+              position: 'absolute',
+              top: 8,
+              right: 8,
+              opacity: 0.6,
+              '&:hover': {
+                opacity: 1,
+                backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08),
+              },
+            }}
+          >
+            <SettingsOutlinedIcon fontSize="small" />
+          </IconButton>
         )}
 
         {/* Title and badges section */}
