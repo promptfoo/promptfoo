@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { ShiftKeyProvider } from '@app/contexts/ShiftKeyContext';
 import useApiConfig from '@app/stores/apiConfig';
@@ -13,7 +13,7 @@ import { useResultsViewSettingsStore, useStore } from './store';
 import './Eval.css';
 
 interface EvalOptions {
-  fetchId?: string;
+  fetchId?: string | null;
   preloadedData?: SharedResults;
   recentEvals?: ResultLightweightWithLabel[];
   defaultEvalId?: string;
@@ -83,17 +83,13 @@ export default function Eval({
     defaultEvalIdProp || recentEvals[0]?.evalId,
   );
 
-  const [searchParams] = useSearchParams();
-  const searchEvalId = searchParams.get('evalId');
-
   React.useEffect(() => {
-    const evalId = searchEvalId || fetchId;
-    if (evalId) {
-      console.log('Eval init: Fetching eval by id', { searchEvalId, fetchId });
+    if (fetchId) {
+      console.log('Eval init: Fetching eval by id', { fetchId });
       const run = async () => {
-        await fetchEvalById(evalId);
+        await fetchEvalById(fetchId);
         setLoaded(true);
-        setDefaultEvalId(evalId);
+        setDefaultEvalId(fetchId);
         // Load other recent eval runs
         fetchRecentFileEvals();
       };
@@ -179,7 +175,6 @@ export default function Eval({
     fetchEvalById,
     preloadedData,
     setDefaultEvalId,
-    searchEvalId,
     setInComparisonMode,
   ]);
 
