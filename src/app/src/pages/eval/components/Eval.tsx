@@ -76,7 +76,10 @@ export default function Eval({
   );
 
   const handleRecentEvalSelection = async (id: string) => {
-    navigate(`/eval/?evalId=${encodeURIComponent(id)}`);
+    navigate({
+      pathname: `/eval/${encodeURIComponent(id)}`,
+      search: window.location.search,
+    });
   };
 
   const [defaultEvalId, setDefaultEvalId] = React.useState<string>(
