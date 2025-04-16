@@ -934,34 +934,34 @@ providers:
 
 Reasoning models "think before they answer," generating internal reasoning that isn't visible in the output but counts toward token usage and billing.
 
-### New o3 and o4-mini Models
+### o3 and o4-mini Models
 
-The latest OpenAI reasoning models include:
+OpenAI offers advanced reasoning models in the o-series:
 
-#### o3
+#### o3 and o4-mini
 
-OpenAI's most powerful reasoning model, designed for complex tasks requiring advanced mathematical, scientific, and coding capabilities.
+These reasoning models provide different performance and efficiency profiles:
 
-- 200,000 token context window
-- 100,000 max output tokens
-- May 31, 2024 knowledge cutoff
-- Pricing: $10.00 per 1M input tokens, $40.00 per 1M output tokens
+- **o3**: Powerful reasoning model, optimized for complex mathematical, scientific, and coding tasks
+- **o4-mini**: Efficient reasoning model with strong performance in coding and visual tasks at lower cost
 
-#### o4-mini
+Both models feature:
 
-A faster, more affordable reasoning model with efficient performance in coding and visual tasks.
+- Large context window (200,000 tokens)
+- High maximum output tokens (100,000 tokens)
 
-- 200,000 token context window
-- 100,000 max output tokens
-- May 31, 2024 knowledge cutoff
-- Pricing: $1.10 per 1M input tokens, $4.40 per 1M output tokens
+For current specifications and pricing information, refer to [OpenAI's pricing page](https://openai.com/pricing).
 
 Example configuration:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
+  - id: openai:responses:o3
+    config:
+      reasoning_effort: 'high'
+      max_output_tokens: 2000
+
   - id: openai:responses:o4-mini
-    label: o4-mini-standard
     config:
       reasoning_effort: 'medium'
       max_output_tokens: 1000
