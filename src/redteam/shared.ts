@@ -23,17 +23,23 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
   }
 
   // Check API health before proceeding
-  const healthUrl = getRemoteHealthUrl();
-  if (healthUrl) {
-    logger.debug(`Checking Promptfoo API health at ${healthUrl}...`);
-    const healthResult = await checkRemoteHealth(healthUrl);
-    if (healthResult.status !== 'OK') {
-      throw new Error(
-        `Unable to proceed with redteam: ${healthResult.message}\n` +
-          'Please check your API configuration or try again later.',
-      );
+  try {
+    const healthUrl = getRemoteHealthUrl();
+    if (healthUrl) {
+      logger.debug(`Checking Promptfoo API health at ${healthUrl}...`);
+      const healthResult = await checkRemoteHealth(healthUrl);
+      if (healthResult.status !== 'OK') {
+        throw new Error(
+          `Unable to proceed with redteam: ${healthResult.message}\n` +
+            'Please check your API configuration or try again later.',
+        );
+      }
+      logger.debug('API health check passed');
     }
-    logger.debug('API health check passed');
+  } catch (error) {
+    logger.warn(
+      `API health check failed with error: ${error}.\nPlease check your API configuration or try again later.`,
+    );
   }
 
   let configPath: string | undefined = options.config || 'promptfooconfig.yaml';
