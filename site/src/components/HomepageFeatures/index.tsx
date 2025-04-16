@@ -5,9 +5,16 @@ import styles from './styles.module.css';
 export default function HomepageFeatures() {
   const features = [
     {
-      title: 'Comprehensive coverage',
-      description:
-        'Full-stack security for AI applications: red teaming, guardrails, model security, and continuous evaluation of your entire AI ecosystem.',
+      title: 'Tailored to your systems',
+      description: (
+        <>
+          <p>
+            Our specialized language models find vulnerabilities in 50+ risk areas, including in
+            complex RAGs and agents.
+          </p>
+          <p>No canned attacks - every attack is tailored to your system.</p>
+        </>
+      ),
       image: '/img/security-coverage.png',
       image2x: '/img/security-coverage.png',
       alt: 'promptfoo security coverage examples',
@@ -15,29 +22,45 @@ export default function HomepageFeatures() {
       cta: 'Learn More',
     },
     {
-      title: 'The most widely adopted AI security solution',
-      description:
-        'Battle-tested at large enterprises, with a thriving open source community of security experts.',
+      title: 'The most widely adopted security stack',
+      description: (
+        <>
+          <p>
+            Battle-tested at large enterprises, with a thriving open source community of security
+            experts.
+          </p>
+          <p>Promptfoo has been used by 75,000+ users, ranging from startups to Fortune 50s.</p>
+        </>
+      ),
       image: '/img/github-repo.png',
       image2x: '/img/github-repo.png',
-      alt: 'promptfoo github repository',
-      link: 'https://github.com/promptfoo/promptfoo',
-      cta: 'View on GitHub',
+      alt: 'promptfoo quickstart',
+      link: '/docs/red-team/quickstart/',
+      cta: 'Get Started',
     },
     {
-      title: 'Compliance framework integration',
-      description:
-        "Mapped to OWASP, NIST, MITRE, EU AI Act, and more. Customizable to your organization's specific policies and industry regulations, with detailed compliance reporting.",
-      image: '/img/report-with-compliance@2x.png',
+      title: 'Set your standards',
+      description: (
+        <>
+          <p>Map to OWASP, NIST, MITRE, EU AI Act, and more.</p>
+          <p>
+            Customizable to your specific policies and industry regulations, with detailed
+            reporting.
+          </p>
+        </>
+      ),
+      image: '/img/compliance-frameworks.png',
+      image2x: '/img/compliance-frameworks.png',
       alt: 'promptfoo compliance reporting',
-      link: '/model-security/',
+      link: '/red-teaming/',
       cta: 'Learn More',
     },
     {
       title: 'Deploy your way',
       description:
-        'Get started in minutes with our CLI tool (free), or choose our managed cloud or on-premises enterprise solutions for advanced features and support.',
-      image: '/img/redteamrun-cli.png',
+        'Get started in minutes with our CLI tool, or choose our managed cloud or on-premises enterprise solutions for advanced features and support.',
+      image: '/img/deploy-options.svg',
+      image2x: '/img/deploy-options.svg',
       alt: 'promptfoo deployment options',
       link: '/contact/',
       cta: 'Get Started',

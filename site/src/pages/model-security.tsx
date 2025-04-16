@@ -3,10 +3,10 @@ import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import ScannerIcon from '@mui/icons-material/DocumentScanner';
-import SecurityIcon from '@mui/icons-material/Security';
-import ShieldIcon from '@mui/icons-material/Shield';
 import IntegrationInstructionsIcon from '@mui/icons-material/IntegrationInstructions';
 import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
+import SecurityIcon from '@mui/icons-material/Security';
+import ShieldIcon from '@mui/icons-material/Shield';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
 import LogoContainer from '../components/LogoContainer';
@@ -18,17 +18,18 @@ function HeroSection() {
     <section className={styles.heroSection}>
       <div className="container">
         <img
-          src="/img/foundationmodel-reports.png"
+          src="/img/model-ranking-framed.png"
           alt="Model Security Reports"
           className={styles.heroImage}
         />
         <div className={styles.logoSection}>
-          Trusted by security teams at...
+          Promptfoo is trusted by teams at...
           <LogoContainer noBackground noBorder />
         </div>
-        <h2>Comprehensive security assessment for your AI model ecosystem</h2>
+        <h2>Secure your AI model ecosystem</h2>
         <p>
-          A unified approach that protects your entire AI pipeline - from model files to deployed systems - while ensuring compliance with any framework.
+          A unified approach that protects your entire AI pipeline - from model files to deployed
+          systems - while ensuring compliance with any framework.
         </p>
       </div>
     </section>
@@ -40,7 +41,9 @@ function ModelSecurityHeader() {
     <header className={clsx('hero hero--primary', styles.heroBanner)}>
       <div className="container">
         <h1 className={styles.heroTitle}>Complete AI Model Security</h1>
-        <p className={styles.heroSubtitle}>End-to-end protection from model files to deployed instances</p>
+        <p className={styles.heroSubtitle}>
+          End-to-end protection from model files to deployed instances
+        </p>
         <div className={styles.buttons}>
           <Link
             className={clsx('button button--primary button--lg', styles.buttonPrimary)}
@@ -66,11 +69,13 @@ function ComprehensiveApproachSection() {
     <section className={styles.actionOrientedSection}>
       <div className="container">
         <h2>End-to-End AI Security</h2>
-        <p>Our comprehensive model security platform protects your entire AI pipeline through a seamless, integrated approach:</p>
-        
+        <p>Our comprehensive model security platform protects your entire AI pipeline</p>
+
         <div className={styles.securityFlowContainer}>
           <div className={styles.securityFlowStep}>
-            <div className={styles.approachIcon}><ScannerIcon fontSize="large" /></div>
+            <div className={styles.approachIcon}>
+              <ScannerIcon fontSize="large" />
+            </div>
             <h3>1. Model File Security</h3>
             <p>Analyze model files for security risks before deployment</p>
             <ul>
@@ -78,12 +83,22 @@ function ComprehensiveApproachSection() {
               <li>Identify risky model configurations</li>
               <li>Flag suspicious operations</li>
             </ul>
+            <div className={styles.capabilityDetails}>
+              <p>
+                <strong>Supported:</strong> PyTorch, TensorFlow, Keras, Pickle, JSON/YAML
+              </p>
+              <Link to="/docs/model-audit/" className="button button--secondary button--sm">
+                Learn More
+              </Link>
+            </div>
           </div>
-          
+
           <div className={styles.securityFlowArrow}>→</div>
-          
+
           <div className={styles.securityFlowStep}>
-            <div className={styles.approachIcon}><SecurityIcon fontSize="large" /></div>
+            <div className={styles.approachIcon}>
+              <SecurityIcon fontSize="large" />
+            </div>
             <h3>2. Behavioral Testing</h3>
             <p>Verify model behavior against advanced security threats</p>
             <ul>
@@ -91,12 +106,25 @@ function ComprehensiveApproachSection() {
               <li>Simulate real-world attacks</li>
               <li>Evaluate resilience under stress</li>
             </ul>
+            <div className={styles.capabilityDetails}>
+              <p>
+                <strong>Works with:</strong> Any foundation or fine-tuned model
+              </p>
+              <Link
+                to="/docs/red-team/foundation-models/"
+                className="button button--secondary button--sm"
+              >
+                Learn More
+              </Link>
+            </div>
           </div>
-          
+
           <div className={styles.securityFlowArrow}>→</div>
-          
+
           <div className={styles.securityFlowStep}>
-            <div className={styles.approachIcon}><AssessmentIcon fontSize="large" /></div>
+            <div className={styles.approachIcon}>
+              <AssessmentIcon fontSize="large" />
+            </div>
             <h3>3. Compliance Mapping</h3>
             <p>Generate comprehensive compliance reports</p>
             <ul>
@@ -104,32 +132,17 @@ function ComprehensiveApproachSection() {
               <li>Create custom compliance policies</li>
               <li>Document security posture</li>
             </ul>
-          </div>
-        </div>
-        
-        <div className={styles.capabilityHighlights}>
-          <div className={styles.capabilityBox}>
-            <h4>Model File Scanner</h4>
-            <p><strong>Supported formats:</strong> PyTorch, TensorFlow, Keras, Pickle, JSON/YAML</p>
-            <Link to="/docs/model-audit/" className="button button--secondary button--sm">
-              Learn More
-            </Link>
-          </div>
-          
-          <div className={styles.capabilityBox}>
-            <h4>Red Team Testing</h4>
-            <p><strong>Works with:</strong> Any foundation or fine-tuned model</p>
-            <Link to="/docs/red-team/foundation-models/" className="button button--secondary button--sm">
-              Learn More
-            </Link>
-          </div>
-          
-          <div className={styles.capabilityBox}>
-            <h4>Compliance Frameworks</h4>
-            <p><strong>Built-in:</strong> OWASP, NIST, EU AI Act, MITRE, custom</p>
-            <Link to="/docs/model-security/compliance/" className="button button--secondary button--sm">
-              Learn More
-            </Link>
+            <div className={styles.capabilityDetails}>
+              <p>
+                <strong>Built-in:</strong> OWASP, NIST, EU AI Act, MITRE, custom
+              </p>
+              <Link
+                to="/docs/red-team/owasp-llm-top-10/"
+                className="button button--secondary button--sm"
+              >
+                Learn More
+              </Link>
+            </div>
           </div>
         </div>
       </div>
@@ -156,28 +169,16 @@ function ComplianceFrameworksSection() {
             <p>Prepare for compliance with the European Union's AI regulations.</p>
           </div>
           <div className={styles.featureItem}>
-            <h3>AWS Plugin Support</h3>
-            <p>Dedicated plugins for AWS AI service compliance and security.</p>
-          </div>
-          <div className={styles.featureItem}>
             <h3>MITRE ATLAS</h3>
             <p>Check against the MITRE ATLAS framework for AI threat landscapes.</p>
           </div>
           <div className={styles.featureItem}>
-            <h3>Custom Frameworks</h3>
-            <p>Create custom compliance frameworks for your industry or organization.</p>
-          </div>
-          <div className={styles.featureItem}>
             <h3>Regulatory Alignment</h3>
-            <p>Stay ahead of emerging regulations with constantly updated compliance checks.</p>
+            <p>Introduce regulatory requirements specific to your industry.</p>
           </div>
           <div className={styles.featureItem}>
-            <h3>Industry Specific Policies</h3>
-            <p>Tailor scans to financial, healthcare, legal, or other industry requirements.</p>
-          </div>
-          <div className={styles.featureItem}>
-            <h3>Cross-Framework Mapping</h3>
-            <p>View how issues map across multiple frameworks to simplify compliance.</p>
+            <h3>Custom Policies</h3>
+            <p>Create custom compliance policies for your industry or organization.</p>
           </div>
         </div>
       </div>
@@ -190,7 +191,9 @@ function SecurityAssessmentSection() {
     <section className={styles.actionOrientedSection}>
       <div className="container">
         <h2>Complete AI Model Security Assessment</h2>
-        <p>A unified workflow to identify, test, and document all aspects of your AI model security</p>
+        <p>
+          A unified workflow to identify, test, and document all aspects of your AI model security
+        </p>
         <div className={styles.securityAssessmentSteps}>
           <div className={styles.assessmentStep}>
             <h3>File-level security screening</h3>
@@ -203,7 +206,7 @@ function SecurityAssessmentSection() {
             </div>
             <p>Detect malicious code and suspicious operations before deployment</p>
           </div>
-          
+
           <div className={styles.assessmentStep}>
             <h3>Behavioral security testing</h3>
             <div className={styles.screenshotPlaceholder}>
@@ -232,7 +235,8 @@ function BenefitsSection() {
             <div className={styles.benefitContent}>
               <h3>Complete AI lifecycle protection</h3>
               <p>
-                The only platform that secures models from development through deployment with a seamless, integrated security workflow.
+                The only platform that secures models from development through deployment with a
+                seamless, integrated security workflow.
               </p>
             </div>
           </div>
@@ -241,7 +245,8 @@ function BenefitsSection() {
             <div className={styles.benefitContent}>
               <h3>Universal compliance mapping</h3>
               <p>
-                Automatically map security findings to any framework (OWASP, NIST, EU AI Act, MITRE) or create custom policies for your organization.
+                Automatically map security findings to any framework (OWASP, NIST, EU AI Act, MITRE)
+                or create custom policies for your organization.
               </p>
             </div>
           </div>
@@ -250,7 +255,8 @@ function BenefitsSection() {
             <div className={styles.benefitContent}>
               <h3>Enterprise-ready integration</h3>
               <p>
-                Seamlessly fits into your existing AI pipeline with CI/CD support, API integration, and team collaboration features.
+                Seamlessly fits into your existing AI pipeline with CI/CD support, API integration,
+                and team collaboration features.
               </p>
             </div>
           </div>
@@ -259,7 +265,8 @@ function BenefitsSection() {
             <div className={styles.benefitContent}>
               <h3>AI model risk intelligence</h3>
               <p>
-                Compare security across models, track improvement over time, and make data-driven decisions about your AI ecosystem.
+                Compare security across models, track improvement over time, and make data-driven
+                decisions about your AI ecosystem.
               </p>
             </div>
           </div>
@@ -275,7 +282,8 @@ function ComparisonSection() {
       <div className="container">
         <h2>Compare and Benchmark Foundation Models</h2>
         <p>
-          Run side-by-side security assessments of different models to identify the most secure option for your requirements.
+          Run side-by-side security assessments of different models to identify the most secure
+          option for your requirements.
         </p>
         <div className={styles.screenshotPlaceholder}>
           <img
@@ -302,7 +310,7 @@ function CallToActionSection() {
             className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
             to="/contact/"
           >
-            Enterprise Solutions
+            Get a Demo
           </Link>
         </div>
       </div>
@@ -317,10 +325,7 @@ export default function ModelSecurity(): JSX.Element {
       description="Complete AI model security platform that protects your entire AI pipeline - from model files to deployed systems - with a unified security assessment workflow."
     >
       <Head>
-        <meta
-          property="og:image"
-          content="https://www.promptfoo.dev/img/meta/model-security.png"
-        />
+        <meta property="og:image" content="https://www.promptfoo.dev/img/meta/model-security.png" />
         <meta name="twitter:card" content="summary_large_image" />
       </Head>
       <div className={styles.pageContainer}>

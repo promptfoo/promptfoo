@@ -6,7 +6,6 @@ import CompareIcon from '@mui/icons-material/Compare';
 import DescriptionIcon from '@mui/icons-material/Description';
 import SecurityIcon from '@mui/icons-material/Security';
 import HomepageFeatures from '@site/src/components/HomepageFeatures';
-import HomepageInfo from '@site/src/components/HomepageInfo';
 import LogoContainer from '@site/src/components/LogoContainer';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
@@ -68,18 +67,18 @@ function HomepageWalkthrough() {
           <p className={styles.walkthroughHeading}>
             Adaptive red teaming that targets applications, not just models
           </p>
-          <p>Generate customized attacks that adapt to your specific use case:</p>
+          <p>Generate customized attacks for your use case:</p>
           <pre className={styles.codeBox}>
             <code>npx promptfoo@latest redteam init</code>
           </pre>
-          <p>Unlike generic red teamers, our solution uncovers actual risks in your systems:</p>
+          <p>Our language models probe for specific risks in your system.</p>
           <ul>
-            <li>Data leaks and privacy breaches</li>
-            <li>Insecure tool use vulnerabilities</li>
             <li>Direct and indirect prompt injections</li>
             <li>Jailbreaks tailored to your guardrails</li>
+            <li>Data and PII leaks</li>
+            <li>Insecure tool use vulnerabilities</li>
             <li>Unauthorized contract creation</li>
-            <li>Harmful content generation</li>
+            <li>Toxic content generation</li>
             <li>
               And <Link to="/docs/red-team/llm-vulnerability-types/">much more</Link>
             </li>
@@ -164,19 +163,18 @@ function HomepageWalkthrough() {
       image2xDark: '/img/claude-vs-gpt-example-dark@2x.png',
       description: (
         <>
-          <p className={styles.walkthroughHeading}>Build reliable AI systems in minutes</p>
-          <p>The fastest way to test and compare LLMs, prompts, RAGs, and agents:</p>
+          <p className={styles.walkthroughHeading}>Build reliable prompts, RAGs, and agents</p>
+          <p>Start testing the performance of your models, prompts, and tools in minutes:</p>
           <pre className={styles.codeBox}>
             <code>npx promptfoo@latest init</code>
           </pre>
           <p>
-            Run comprehensive evaluations locally with no SDKs, cloud dependencies, or logins—just a
-            simple declarative configuration.
+            Promptfoo runs locally and integrates directly with your app - no SDKs, cloud
+            dependencies, or logins.
           </p>
-          <p>Used by major AI companies to build better models, prompts, and agent systems.</p>
           <p>
             <strong>
-              <Link to="/docs/intro">&raquo; Get Started with Evaluations</Link>
+              <Link to="/docs/intro/">&raquo; Get Started with Evaluations</Link>
             </strong>
           </p>
         </>
@@ -314,7 +312,7 @@ export default function Home(): JSX.Element {
       <main>
         <section className={styles.logoSection}>
           <div className="container">
-            <h2>Trusted by security teams at</h2>
+            <h2>Trusted by teams at</h2>
             <LogoContainer noBackground noBorder />
           </div>
         </section>
@@ -325,13 +323,13 @@ export default function Home(): JSX.Element {
           <h2>Secure your AI applications today</h2>
           <div className={styles.buttons}>
             <Link className="button button--primary button--lg" to={getStartedUrl}>
-              Try Open Source
+              Get Started
             </Link>
             <Link
               className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
               to="/contact/"
             >
-              Enterprise Solutions
+              Request a Demo
             </Link>
           </div>
         </div>
