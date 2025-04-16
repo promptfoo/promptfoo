@@ -1,4 +1,6 @@
+import chalk from 'chalk';
 import type { Command } from 'commander';
+import dedent from 'dedent';
 import { z } from 'zod';
 import cliState from '../../cliState';
 import logger, { setLogLevel } from '../../logger';
@@ -14,7 +16,14 @@ const UUID_REGEX = /^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}
 export function redteamRunCommand(program: Command) {
   program
     .command('run')
-    .description('Run red teaming process (init, generate, and evaluate)')
+    .description(
+      dedent`
+        ${chalk.red('Red team')} a target application, a two-step process:
+
+        1. Generates dynamic attack probes (i.e. test cases) tailored to your target application using specialized uncensored models.
+        2. Evaluates the generated probes against your target application.
+      `,
+    )
     .option(
       '-c, --config [path]',
       'Path to configuration file or cloud config UUID. Defaults to promptfooconfig.yaml',
