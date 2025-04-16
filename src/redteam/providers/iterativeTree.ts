@@ -134,7 +134,7 @@ export async function evaluateResponse(
           }>(judgeResp.output)
         : judgeResp.output;
 
-    if (!parsed?.currentResponse?.rating) {
+    if (parsed?.currentResponse?.rating === undefined) {
       logger.debug('[IterativeTree] Invalid judge response, using default score');
       return { score: 1, explanation: 'Failed to parse judge response' };
     }
