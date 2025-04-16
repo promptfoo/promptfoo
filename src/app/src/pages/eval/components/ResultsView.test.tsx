@@ -82,4 +82,18 @@ describe('ResultsView', () => {
     expect(screen.getByText('Table Settings')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Search or select an eval...')).toBeInTheDocument();
   });
+
+  it('setting search param updates input', () => {
+    render(
+      <MemoryRouter initialEntries={['/?search=hello_world']}>
+        <ToastProvider>
+          <ResultsView
+            recentEvals={mockRecentEvals}
+            onRecentEvalSelected={mockOnRecentEvalSelected}
+          />
+        </ToastProvider>
+      </MemoryRouter>,
+    );
+    expect(screen.getByDisplayValue('hello_world')).toBeInTheDocument();
+  });
 });
