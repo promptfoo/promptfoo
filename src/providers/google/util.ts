@@ -1,8 +1,8 @@
-import Ajv from 'ajv';
 import type { AnySchema } from 'ajv';
 import type { GoogleAuth } from 'google-auth-library';
 import Clone from 'rfdc';
 import { z } from 'zod';
+import { getAjv } from '../../../src/assertions/json';
 import logger from '../../logger';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
 import { getNunjucksEngine } from '../../util/templates';
@@ -10,7 +10,7 @@ import { parseChatPrompt } from '../shared';
 import { VALID_SCHEMA_TYPES } from './types';
 import type { Content, FunctionCall, Part, Tool } from './types';
 
-const ajv = new Ajv();
+const ajv = getAjv();
 // property_ordering is an optional field sometimes present in gemini tool configs, but ajv doesn't know about it.
 // At the moment we will just ignore it, so the is-valid-function-call won't check property field ordering.
 ajv.addKeyword('property_ordering');
