@@ -8,8 +8,10 @@ import logger, { setLogCallback, setLogLevel } from '../logger';
 import type Eval from '../models/eval';
 import { createShareableUrl } from '../share';
 import { isRunningUnderNpx } from '../util';
+import { checkRemoteHealth } from '../util/apiHealth';
 import { loadDefaultConfig } from '../util/config/default';
 import { doGenerateRedteam } from './commands/generate';
+import { getRemoteHealthUrl } from './remoteGeneration';
 import type { RedteamRunOptions } from './types';
 
 export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | undefined> {
@@ -18,6 +20,20 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
   }
   if (options.logCallback) {
     setLogCallback(options.logCallback);
+  }
+
+  // Check API health before proceeding
+  const healthUrl = getRemoteHealthUrl();
+  if (healthUrl) {
+    logger.debug(`Checking Promptfoo API health at ${healthUrl}...`);
+    const healthResult = await checkRemoteHealth(healthUrl);
+    if (healthResult.status !== 'OK') {
+      throw new Error(
+        `Unable to proceed with test generation: ${healthResult.message}\n` +
+          'Please check your API configuration or try again later.',
+      );
+    }
+    logger.debug('API health check passed');
   }
 
   let configPath: string | undefined = options.config || 'promptfooconfig.yaml';
