@@ -143,7 +143,7 @@
     "check-dependency-version-consistency": "^5.0.0",
     "cloudflare": "3.4.0",
     "concurrently": "^9.1.2",
-    "drizzle-kit": "^0.30.6",
+    "drizzle-kit": "^0.31.0",
     "eslint": "^9.24.0",
     "eslint-plugin-jest": "^28.11.0",
     "eslint-plugin-react-hooks": "^5.2.0",
