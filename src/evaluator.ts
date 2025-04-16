@@ -198,7 +198,7 @@ export async function runEval({
   Object.assign(vars, registers);
 
   // Initialize these outside try block so they're in scope for the catch
-  let setup = {
+  const setup = {
     provider: {
       id: provider.id(),
       label: provider.label,
