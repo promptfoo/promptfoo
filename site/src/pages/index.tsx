@@ -17,8 +17,13 @@ function HomepageHeader({ getStartedUrl }: { getStartedUrl: string }) {
   return (
     <header className={clsx('hero hero--primary', styles.heroBanner)}>
       <div className="container">
-        <h1>Comprehensive security for AI applications</h1>
-        <p>Trusted by 75,000+ developers for red teaming, guardrails, and model security</p>
+        <h1>
+          <span className={styles.heroMainText}>Secure your AI</span>
+          <br />
+          from <span className={styles.heroHighlight}>prompt</span> to{' '}
+          <span className={styles.heroHighlight}>production</span>
+        </h1>
+        <p>Gen AI red teaming, guardrails, and model security trusted by 75,000+ users</p>
         <div className={styles.buttons}>
           <Link className="button button--primary button--lg" to={getStartedUrl}>
             Get Started
@@ -51,7 +56,7 @@ function HomepageWalkthrough() {
     }
     return 1; // Default to Red Teaming
   });
-  
+
   const steps = [
     {
       id: 1,
@@ -60,12 +65,14 @@ function HomepageWalkthrough() {
       image2x: '/img/riskreport-1@2x.png',
       description: (
         <>
-          <p className={styles.walkthroughHeading}>Adaptive red teaming that targets applications, not just models</p>
+          <p className={styles.walkthroughHeading}>
+            Adaptive red teaming that targets applications, not just models
+          </p>
           <p>Generate customized attacks that adapt to your specific use case:</p>
           <pre className={styles.codeBox}>
             <code>npx promptfoo@latest redteam init</code>
           </pre>
-          <p>Unlike generic jailbreaks, our solution uncovers actual risks in your systems:</p>
+          <p>Unlike generic red teamers, our solution uncovers actual risks in your systems:</p>
           <ul>
             <li>Data leaks and privacy breaches</li>
             <li>Insecure tool use vulnerabilities</li>
@@ -73,6 +80,9 @@ function HomepageWalkthrough() {
             <li>Jailbreaks tailored to your guardrails</li>
             <li>Unauthorized contract creation</li>
             <li>Harmful content generation</li>
+            <li>
+              And <Link to="/docs/red-team/llm-vulnerability-types/">much more</Link>
+            </li>
           </ul>
           <p>
             <strong>
@@ -91,8 +101,12 @@ function HomepageWalkthrough() {
       image2x: '/img/guardrails.png',
       description: (
         <>
-          <p className={styles.walkthroughHeading}>Self-improving guardrails that learn from attacks</p>
-          <p>Unlike static guardrails, our system continuously improves through red team feedback:</p>
+          <p className={styles.walkthroughHeading}>
+            Self-improving guardrails that learn from attacks
+          </p>
+          <p>
+            Unlike static guardrails, our system continuously improves through red team feedback:
+          </p>
           <ul>
             <li>Automatically adapts to new attack patterns</li>
             <li>Learns from real-world usage and attack attempts</li>
@@ -100,7 +114,10 @@ function HomepageWalkthrough() {
             <li>Enforces company policies with increasing precision</li>
             <li>Protects sensitive information with evolving defenses</li>
           </ul>
-          <p>Deploy in minutes on cloud or on-premises with seamless integration into any AI workflow.</p>
+          <p>
+            Deploy in minutes on cloud or on-premises with seamless integration into any AI
+            workflow.
+          </p>
           <p>
             <strong>
               <Link to="/guardrails">&raquo; Learn more about Guardrails</Link>
@@ -153,8 +170,8 @@ function HomepageWalkthrough() {
             <code>npx promptfoo@latest init</code>
           </pre>
           <p>
-            Run comprehensive evaluations locally with no SDKs, cloud dependencies, or logins—just
-            a simple declarative configuration.
+            Run comprehensive evaluations locally with no SDKs, cloud dependencies, or logins—just a
+            simple declarative configuration.
           </p>
           <p>Used by major AI companies to build better models, prompts, and agent systems.</p>
           <p>

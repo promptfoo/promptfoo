@@ -30,12 +30,57 @@
 .heroBanner h1 {
   font-size: 3.5rem;
   margin-bottom: 2rem;
+  font-weight: bold;
+  letter-spacing: -0.02em;
+  color: var(--ifm-font-color-base);
 }
 
 .heroBanner p {
   font-size: 1.25rem;
   font-weight: normal;
   margin-bottom: 2rem;
+}
+
+.heroMainText {
+  background: linear-gradient(90deg, #2563eb, #3b82f6, #60a5fa);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
+  display: inline-block;
+}
+
+.heroHighlight {
+  position: relative;
+  color: var(--ifm-color-primary);
+  font-weight: 800;
+}
+
+.heroHighlight::after {
+  content: '';
+  position: absolute;
+  bottom: 0.1em;
+  left: 0;
+  width: 100%;
+  height: 0.2em;
+  background-color: rgba(59, 130, 246, 0.3);
+  z-index: -1;
+  border-radius: 4px;
+}
+
+[data-theme='dark'] .heroMainText {
+  background: linear-gradient(90deg, #60a5fa, #93c5fd, #bfdbfe);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+[data-theme='dark'] .heroHighlight {
+  color: #93c5fd;
+}
+
+[data-theme='dark'] .heroHighlight::after {
+  background-color: rgba(96, 165, 250, 0.3);
 }
 
 @media screen and (max-width: 996px) {

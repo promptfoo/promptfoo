@@ -5,7 +5,7 @@ import styles from './styles.module.css';
 export default function HomepageFeatures() {
   const features = [
     {
-      title: 'Comprehensive security coverage',
+      title: 'Comprehensive coverage',
       description:
         'Full-stack security for AI applications: red teaming, guardrails, model security, and continuous evaluation of your entire AI ecosystem.',
       image: '/img/security-coverage.png',
@@ -15,9 +15,9 @@ export default function HomepageFeatures() {
       cta: 'Learn More',
     },
     {
-      title: 'Battle-tested open source',
+      title: 'The most widely adopted AI security solution',
       description:
-        'Trusted by 75,000+ developers and major enterprises. The most widely adopted AI security solution with a thriving open source community of security experts.',
+        'Battle-tested at large enterprises, with a thriving open source community of security experts.',
       image: '/img/github-repo.png',
       image2x: '/img/github-repo.png',
       alt: 'promptfoo github repository',
@@ -27,7 +27,7 @@ export default function HomepageFeatures() {
     {
       title: 'Compliance framework integration',
       description:
-        'Mapped to OWASP, NIST, MITRE, EU AI Act, and more. Customizable to your organization\'s specific policies and industry regulations, with detailed compliance reporting.',
+        "Mapped to OWASP, NIST, MITRE, EU AI Act, and more. Customizable to your organization's specific policies and industry regulations, with detailed compliance reporting.",
       image: '/img/report-with-compliance@2x.png',
       alt: 'promptfoo compliance reporting',
       link: '/model-security/',
