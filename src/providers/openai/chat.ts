@@ -33,7 +33,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   }
 
   protected isReasoningModel(): boolean {
-    return this.modelName.startsWith('o1') || this.modelName.startsWith('o3');
+    return (
+      this.modelName.startsWith('o1') ||
+      this.modelName.startsWith('o3') ||
+      this.modelName.startsWith('o4')
+    );
   }
 
   protected supportsTemperature(): boolean {
