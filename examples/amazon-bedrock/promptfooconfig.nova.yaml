@@ -5,7 +5,7 @@ prompts:
   - 'Write a tweet about {{topic}}'
 
 providers:
-  - id: bedrock:amazon.nova-micro-v1:0
+  - id: bedrock:amazon.nova-sonic-v1:0
     config:
       region: 'us-east-1'
       inferenceConfig:
