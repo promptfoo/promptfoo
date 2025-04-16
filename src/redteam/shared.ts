@@ -29,7 +29,7 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     const healthResult = await checkRemoteHealth(healthUrl);
     if (healthResult.status !== 'OK') {
       throw new Error(
-        `Unable to proceed with test generation: ${healthResult.message}\n` +
+        `Unable to proceed with redteam: ${healthResult.message}\n` +
           'Please check your API configuration or try again later.',
       );
     }
