@@ -25,6 +25,7 @@ import { AzureEmbeddingProvider } from './azure/embedding';
 import { AzureModerationProvider } from './azure/moderation';
 import { BAMProvider } from './bam';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './bedrock';
+import { NovaSonicProvider } from './bedrock/nova-sonic';
 import { BrowserProvider } from './browser';
 import { ClouderaAiChatCompletionProvider } from './cloudera';
 import * as CloudflareAiProviders from './cloudflare-ai';
@@ -259,6 +260,11 @@ export const providerMap: ProviderFactory[] = [
       const splits = providerPath.split(':');
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
+
+      // Handle nova-sonic model
+      if (modelType === 'nova-sonic' || modelType.includes('amazon.nova-sonic')) {
+        return new NovaSonicProvider('amazon.nova-sonic-v1:0', providerOptions);
+      }
 
       if (modelType === 'completion') {
         // Backwards compatibility: `completion` used to be required

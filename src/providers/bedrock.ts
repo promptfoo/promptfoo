@@ -235,6 +235,72 @@ export interface BedrockAmazonNovaGenerationOptions extends BedrockOptions {
     };
   };
 }
+
+export type ContentType = 'AUDIO' | 'TEXT' | 'TOOL';
+
+export type AudioMediaType = 'audio/wav' | 'audio/lpcm' | 'audio/mulaw' | 'audio/mpeg';
+export type TextMediaType = 'text/plain' | 'application/json';
+
+export interface AudioConfiguration {
+  readonly mediaType: AudioMediaType;
+  readonly sampleRateHertz: number;
+  readonly sampleSizeBits: number;
+  readonly channelCount: number;
+  readonly encoding: string;
+  readonly audioType: 'SPEECH';
+}
+
+export interface TextConfiguration {
+  readonly contentType: ContentType;
+  readonly mediaType: TextMediaType;
+}
+
+export interface BedrockAmazonNovaSonicGenerationOptions extends BedrockOptions {
+  interfaceConfig?: {
+    max_new_tokens?: number;
+    temperature?: number;
+    top_p?: number;
+    top_k?: number;
+    stopSequences?: string[];
+  };
+  audioInputConfiguration?: Omit<AudioConfiguration, 'voiceId'>;
+  audioOutputConfiguration?: Omit<AudioConfiguration, 'mediaType'> & {
+    mediaType: 'audio/lpcm';
+    voiceId?: 'matthew' | 'tiffany' | 'amy';
+  };
+  textInputConfiguration?: TextConfiguration;
+  textOutputConfiguration?: Omit<TextConfiguration, 'mediaType'> & {
+    mediaType: 'text/plain';
+  };
+  toolConfig?: {
+    tools?: {
+      toolSpec: {
+        name: string;
+        description?: string;
+        inputSchema: {
+          json: {
+            type: 'object';
+            properties: {
+              [propertyName: string]: {
+                description: string;
+                type: string;
+              };
+            };
+            required: string[];
+          };
+        };
+      };
+    }[];
+    toolChoice?: {
+      any?: any;
+      auto?: any;
+      tool?: {
+        name: string;
+      };
+    };
+  };
+}
+
 export interface BedrockDeepseekGenerationOptions extends BedrockOptions {
   max_tokens?: number;
   temperature?: number;
