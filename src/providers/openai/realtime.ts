@@ -68,6 +68,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   persistentConnection: any = null;
   previousItemId: string | null = null;
   assistantMessageIds: string[] = []; // Track assistant message IDs
+  private activeTimeouts: Set<NodeJS.Timeout> = new Set();
 
   constructor(
     modelName: string,
@@ -1390,7 +1391,24 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       if (connection) {
         connection.removeListener('message', messageHandler);
       }
+      this.activeTimeouts.delete(_timeout);
       reject(new Error('WebSocket response timed out'));
     }, this.config.websocketTimeout || 30000);
+
+    this.activeTimeouts.add(_timeout);
+  }
+
+  // Add cleanup method to close WebSocket connections
+  cleanup(): void {
+    if (this.persistentConnection) {
+      logger.info('Cleaning up persistent WebSocket connection');
+      // Clear all timeouts
+      this.activeTimeouts.forEach((t) => clearTimeout(t));
+      this.activeTimeouts.clear();
+      this.persistentConnection.close();
+      this.persistentConnection = null;
+      this.previousItemId = null;
+      this.assistantMessageIds = [];
+    }
   }
 }
