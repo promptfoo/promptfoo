@@ -196,29 +196,32 @@ export async function runEval({
 
   // Overwrite vars with any saved register values
   Object.assign(vars, registers);
-  // Render the prompt
-  const renderedPrompt = await renderPrompt(prompt, vars, filters, provider);
-  let renderedJson = undefined;
-  try {
-    renderedJson = JSON.parse(renderedPrompt);
-  } catch {}
 
-  const setup = {
+  // Initialize these outside try block so they're in scope for the catch
+  let setup = {
     provider: {
       id: provider.id(),
       label: provider.label,
       config: provider.config,
     },
     prompt: {
-      raw: renderedPrompt,
+      raw: '',
       label: promptLabel,
       config: prompt.config,
     },
     vars,
   };
-  // Call the API
   let latencyMs = 0;
+
   try {
+    // Render the prompt
+    const renderedPrompt = await renderPrompt(prompt, vars, filters, provider);
+    let renderedJson = undefined;
+    try {
+      renderedJson = JSON.parse(renderedPrompt);
+    } catch {}
+    setup.prompt.raw = renderedPrompt;
+
     const startTime = Date.now();
     let response: ProviderResponse = {
       output: '',
