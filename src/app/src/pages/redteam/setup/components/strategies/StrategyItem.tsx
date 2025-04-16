@@ -5,7 +5,18 @@ import { alpha } from '@mui/material/styles';
 import { DEFAULT_STRATEGIES, AGENTIC_STRATEGIES } from '@promptfoo/redteam/constants';
 import type { StrategyCardData } from './types';
 
-const CONFIGURABLE_STRATEGIES = ['multilingual'] as const;
+const CONFIGURABLE_STRATEGIES = [
+  'multilingual',
+  'best-of-n',
+  'goat',
+  'crescendo',
+  'pandamonium',
+  'jailbreak',
+  'jailbreak:tree',
+  'tool-discovery:multi-turn',
+  'gcg',
+  'citation',
+] as const;
 
 interface StrategyItemProps {
   strategy: StrategyCardData;
