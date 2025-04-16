@@ -15,6 +15,7 @@ interface PoisonOptions {
   output?: string;
   outputDir?: string;
   envPath?: string;
+  verbose?: boolean;
 }
 
 interface PoisonResponse {
@@ -23,6 +24,18 @@ interface PoisonResponse {
   task: string;
   originalPath?: string;
 }
+
+type FilePath = string;
+type DirectoryPath = string;
+type DocumentContent = string;
+
+type DocumentLike = FilePath | DirectoryPath | DocumentContent;
+
+type Document = {
+  docLike: FilePath | DocumentContent;
+  isFile: boolean;
+  dir: string | null;
+};
 
 function getAllFiles(dirPath: string, arrayOfFiles: string[] = []): string[] {
   const files = fs.readdirSync(dirPath);
@@ -39,7 +52,10 @@ function getAllFiles(dirPath: string, arrayOfFiles: string[] = []): string[] {
   return arrayOfFiles;
 }
 
-async function generatePoisonedDocument(document: string, goal?: string): Promise<PoisonResponse> {
+async function generatePoisonedDocument(
+  document: string,
+  goal?: PoisonOptions['goal'],
+): Promise<PoisonResponse> {
   const response = await fetch(getRemoteGenerationUrl(), {
     method: 'POST',
     headers: {
@@ -62,8 +78,59 @@ async function generatePoisonedDocument(document: string, goal?: string): Promis
   return await response.json();
 }
 
+/**
+ * Poisons an individual document.
+ * @param docLike A path to a document or document content to poison.
+ */
+async function poisonDocument(
+  doc: Document,
+  outputDir: string,
+  goal?: PoisonOptions['goal'],
+): Promise<Partial<PoisonResponse>> {
+  logger.debug(`Poisoning ${JSON.stringify(doc)}`);
+
+  try {
+    const documentContent = doc.isFile ? fs.readFileSync(doc.docLike, 'utf-8') : doc.docLike;
+    const result = await generatePoisonedDocument(documentContent, goal);
+
+    if (doc.isFile) {
+      result.originalPath = doc.docLike;
+    }
+
+    let outputFilePath: string;
+    if (doc.isFile) {
+      // If the document was loaded from a directory, strip the directory prefix.
+      // Otherwise, use the relative path to the current directory.
+      const docPath = doc.dir
+        ? doc.docLike.replace(doc.dir, '')
+        : path.relative(process.cwd(), doc.docLike);
+
+      outputFilePath = path.join(outputDir, docPath);
+
+      // Create necessary subdirectories
+      fs.mkdirSync(path.dirname(outputFilePath), { recursive: true });
+    } else {
+      // Generate a filename for / from the document content
+      const hash = Buffer.from(documentContent).toString('base64').slice(0, 8);
+      outputFilePath = path.join(outputDir, `poisoned-${hash}.txt`);
+    }
+
+    fs.writeFileSync(outputFilePath, result.poisonedDocument);
+    logger.debug(`Wrote poisoned document to ${outputFilePath}`);
+
+    logger.info(chalk.green(`✓ Successfully poisoned ${doc.isFile ? doc.docLike : 'document'}`));
+
+    return {
+      originalPath: result.originalPath,
+      poisonedDocument: result.poisonedDocument,
+      intendedResult: result.intendedResult,
+    };
+  } catch (error) {
+    throw new Error(`Failed to poison ${doc.docLike}: ${error}`);
+  }
+}
+
 async function doPoisonDocuments(options: PoisonOptions) {
-  const results: Partial<PoisonResponse>[] = [];
   const outputPath = options.output || 'poisoned-config.yaml';
   const outputDir = options.outputDir || 'poisoned-documents';
 
@@ -73,68 +140,30 @@ async function doPoisonDocuments(options: PoisonOptions) {
   logger.info(chalk.blue('Generating poisoned documents...'));
 
   // Collect all document paths, including from directories
-  const documentPaths: string[] = [];
+  let docs: Document[] = [];
+
   for (const doc of options.documents) {
+    // Is the document a ∈{file|directory} path or document content?
     if (fs.existsSync(doc)) {
       const stat = fs.statSync(doc);
       if (stat.isDirectory()) {
-        documentPaths.push(...getAllFiles(doc));
+        docs = [
+          ...docs,
+          ...getAllFiles(doc).map((file) => ({ docLike: file, isFile: true, dir: doc })),
+        ];
       } else {
-        documentPaths.push(doc);
+        docs = [...docs, { docLike: doc, isFile: true, dir: null }];
       }
     } else {
       // Treat as direct content
-      documentPaths.push(doc);
+      docs.push({ docLike: doc, isFile: false, dir: null });
     }
   }
 
-  for (const docPath of documentPaths) {
-    try {
-      let documentContent: string;
-      let isFile = false;
-
-      if (fs.existsSync(docPath)) {
-        documentContent = fs.readFileSync(docPath, 'utf-8');
-        isFile = true;
-      } else {
-        documentContent = docPath;
-      }
-
-      const result = await generatePoisonedDocument(documentContent, options.goal);
-
-      if (isFile) {
-        result.originalPath = docPath;
-      }
-
-      results.push({
-        originalPath: result.originalPath,
-        poisonedDocument: result.poisonedDocument,
-        intendedResult: result.intendedResult,
-      });
-
-      // Always write individual poisoned documents since we have a default outputDir
-      let outputFilePath: string;
-      if (isFile) {
-        // Maintain directory structure relative to current directory
-        const relativePath = path.relative(process.cwd(), docPath);
-        outputFilePath = path.join(outputDir, relativePath);
-
-        // Create necessary subdirectories
-        fs.mkdirSync(path.dirname(outputFilePath), { recursive: true });
-      } else {
-        // Generate a filename for direct content
-        const hash = Buffer.from(documentContent).toString('base64').slice(0, 8);
-        outputFilePath = path.join(outputDir, `poisoned-${hash}.txt`);
-      }
-
-      fs.writeFileSync(outputFilePath, result.poisonedDocument);
-      logger.debug(`Wrote poisoned document to ${outputFilePath}`);
-
-      logger.info(chalk.green(`✓ Successfully poisoned ${isFile ? docPath : 'document'}`));
-    } catch (error) {
-      logger.error(`Failed to poison ${docPath}: ${error}`);
-    }
-  }
+  // Poison all documents
+  const results: Partial<PoisonResponse>[] = await Promise.all(
+    docs.map((doc) => poisonDocument(doc, outputDir, options.goal)),
+  );
 
   // Write summary YAML file
   fs.writeFileSync(outputPath, yaml.dump({ documents: results }));
