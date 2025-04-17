@@ -25,7 +25,6 @@ import { AzureEmbeddingProvider } from './azure/embedding';
 import { AzureModerationProvider } from './azure/moderation';
 import { BAMProvider } from './bam';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './bedrock';
-import { NovaSonicProvider } from './bedrock/nova-sonic';
 import { BrowserProvider } from './browser';
 import { ClouderaAiChatCompletionProvider } from './cloudera';
 import * as CloudflareAiProviders from './cloudflare-ai';
@@ -263,6 +262,7 @@ export const providerMap: ProviderFactory[] = [
 
       // Handle nova-sonic model
       if (modelType === 'nova-sonic' || modelType.includes('amazon.nova-sonic')) {
+        const { NovaSonicProvider } = await import('./bedrock/nova-sonic');
         return new NovaSonicProvider('amazon.nova-sonic-v1:0', providerOptions);
       }
 

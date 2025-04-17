@@ -30,14 +30,7 @@ jest.mock('glob', () => ({
   globSync: jest.fn(),
 }));
 
-jest.mock('fs', () => ({
-  readFileSync: jest.fn(),
-  writeFileSync: jest.fn(),
-  statSync: jest.fn(),
-  readdirSync: jest.fn(),
-  existsSync: jest.fn(),
-  mkdirSync: jest.fn(),
-}));
+jest.mock('fs');
 
 jest.mock('../../../src/esm', () => ({
   importModule: jest.fn(),
