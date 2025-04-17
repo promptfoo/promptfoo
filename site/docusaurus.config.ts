@@ -212,16 +212,20 @@ const config: Config = {
           title: 'Product',
           items: [
             {
-              label: 'Docs',
-              to: '/docs/intro/',
+              label: 'Red Teaming',
+              to: '/red-teaming/',
             },
             {
-              label: 'Command Line',
+              label: 'Guardrails',
+              to: '/guardrails/',
+            },
+            {
+              label: 'Model Security',
+              to: '/model-security/',
+            },
+            {
+              label: 'Evaluations',
               to: '/docs/getting-started/',
-            },
-            {
-              label: 'Node Package',
-              to: '/docs/usage/node-package/',
             },
             {
               label: 'Enterprise',
