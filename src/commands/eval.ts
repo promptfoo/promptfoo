@@ -16,13 +16,13 @@ import logger, { getLogLevel, setLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
 import { loadApiProvider } from '../providers';
-import { OpenAiRealtimeProvider } from '../providers/openai/realtime';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { generateTable } from '../table';
 import telemetry from '../telemetry';
 import type {
   CommandLineOptions,
   EvaluateOptions,
+  ApiProvider,
   Scenario,
   TestSuite,
   TokenUsage,
@@ -534,10 +534,8 @@ export async function doEval(
 
     // Clean up any WebSocket connections
     if (testSuite.providers.length > 0) {
-      for (const provider of testSuite.providers) {
-        if (provider instanceof OpenAiRealtimeProvider) {
-          provider.cleanup();
-        }
+      for (const provider of testSuite.providers as ApiProvider[]) {
+        provider?.cleanup?.();
       }
     }
 
