@@ -34,8 +34,8 @@ npx promptfoo@latest init --example redteam-multi-modal
 # Navigate to the example directory
 cd redteam-multi-modal
 
-# Install dependencies for image and audio strategies
-npm install sharp node-gtts
+# Install required dependencies
+npm install sharp
 
 # Run the static image red team
 npx promptfoo@latest redteam run -c promptfooconfig.static-image.yaml

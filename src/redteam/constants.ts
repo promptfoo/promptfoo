@@ -200,6 +200,32 @@ export const FRAMEWORK_NAMES: Record<string, string> = {
   'owasp:llm': 'OWASP LLM Top 10',
 };
 
+export const OWASP_LLM_TOP_10_NAMES = [
+  'Prompt Injection',
+  'Sensitive Information Disclosure',
+  'Supply Chain',
+  'Improper Output Handling',
+  'Insecure Output Handling',
+  'Excessive Agency',
+  'System Prompt Leakage',
+  'Vector and Embedding Weaknesses',
+  'Misinformation',
+  'Unbounded Consumption',
+];
+
+export const OWASP_API_TOP_10_NAMES = [
+  'Broken Object Level Authorization',
+  'Broken Authentication',
+  'Broken Object Property Level Authorization',
+  'Unrestricted Resource Consumption',
+  'Broken Function Level Authorization',
+  'Unrestricted Access to Sensitive Business Flows',
+  'Server Side Request Forgery',
+  'Security Misconfiguration',
+  'Improper Inventory Management',
+  'Unsafe Consumption of APIs',
+];
+
 export const OWASP_LLM_TOP_10_MAPPING: Record<
   string,
   { plugins: Plugin[]; strategies: Strategy[] }
@@ -796,7 +822,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   ssrf: 'Tests for server-side request forgery vulnerabilities',
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
   'tool-discovery': 'Tests for enumeration of available tools and function calls',
-  'tool-discovery:multi-turn': 'Multi-turn Tool Discovery',
+  'tool-discovery:multi-turn':
+    'Uses conversational approach to discover available tools, functions, and capabilities through multi-step interactions',
   unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
 };
 
@@ -998,6 +1025,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'sql-injection',
     'ssrf',
     'tool-discovery',
+    'tool-discovery:multi-turn',
 
     // Data protection
     'cross-session-leak',
@@ -1302,8 +1330,8 @@ export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
   'Minimal Test': 'Minimal set of plugins to validate your setup',
   MITRE: 'MITRE ATLAS framework',
   NIST: 'NIST AI Risk Management Framework',
-  'OWASP API': 'OWASP API Top 10',
-  'OWASP LLM': 'OWASP LLM Top 10',
+  'OWASP API Top 10': 'OWASP API security vulnerabilities framework',
+  'OWASP LLM Top 10': 'OWASP LLM security vulnerabilities framework',
   'OWASP Gen AI Red Team': 'OWASP Gen AI Red Teaming Best Practices',
   RAG: 'Recommended plugins plus additional tests for RAG specific scenarios like access control',
   Recommended: 'A broad set of plugins recommended by Promptfoo',

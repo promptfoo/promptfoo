@@ -41,8 +41,7 @@ import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
 import type { TruncatedTextProps } from './TruncatedText';
 import TruncatedText from './TruncatedText';
-import { useStore as useMainStore } from './store';
-import { useStore as useResultsViewStore } from './store';
+import { useStore as useMainStore, useResultsViewSettingsStore } from './store';
 import './ResultsTable.css';
 
 function formatRowOutput(output: EvaluateTableOutput | string) {
@@ -90,11 +89,13 @@ function TableHeader({
               🔎
             </span>
           </Tooltip>
-          <EvalOutputPromptDialog
-            open={promptOpen}
-            onClose={handlePromptClose}
-            prompt={expandedText}
-          />
+          {promptOpen && (
+            <EvalOutputPromptDialog
+              open={promptOpen}
+              onClose={handlePromptClose}
+              prompt={expandedText}
+            />
+          )}
           {resourceId && (
             <Tooltip title="View other evals and datasets for this prompt">
               <span className="action">
@@ -135,7 +136,7 @@ interface ExtendedEvaluateTableRow extends EvaluateTableRow {
 
 function useScrollHandler() {
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const { stickyHeader } = useResultsViewStore();
+  const { stickyHeader } = useResultsViewSettingsStore();
   const lastScrollY = useRef(0);
 
   useEffect(() => {
@@ -202,7 +203,8 @@ function ResultsTable({
   onSearchTextChange,
   setFilterMode,
 }: ResultsTableProps) {
-  const { evalId, table, setTable, config, inComparisonMode, version } = useMainStore();
+  const { evalId, table, setTable, config, version } = useMainStore();
+  const { inComparisonMode } = useResultsViewSettingsStore();
   const { showToast } = useToast();
 
   invariant(table, 'Table should be defined');
@@ -450,7 +452,7 @@ function ResultsTable({
 
   const columnHelper = React.useMemo(() => createColumnHelper<EvaluateTableRow>(), []);
 
-  const { renderMarkdown } = useResultsViewStore();
+  const { renderMarkdown } = useResultsViewSettingsStore();
   const variableColumns = React.useMemo(() => {
     if (head.vars.length > 0) {
       return [
@@ -795,7 +797,7 @@ function ResultsTable({
   });
 
   const { isCollapsed } = useScrollHandler();
-  const { stickyHeader, setStickyHeader } = useResultsViewStore();
+  const { stickyHeader, setStickyHeader } = useResultsViewSettingsStore();
 
   return (
     <div>

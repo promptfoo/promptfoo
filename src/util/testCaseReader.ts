@@ -171,7 +171,13 @@ export async function readStandaloneTestsFile(
     telemetry.recordAndSendOnce('feature_used', {
       feature: 'json tests file',
     });
-    rows = yaml.load(fs.readFileSync(resolvedVarsPath, 'utf-8')) as unknown as any;
+    const fileContent = fs.readFileSync(resolvedVarsPath, 'utf-8');
+    const jsonData = yaml.load(fileContent) as any;
+    const testCases: TestCase[] = Array.isArray(jsonData) ? jsonData : [jsonData];
+    return testCases.map((item, idx) => ({
+      ...item,
+      description: item.description || `Row #${idx + 1}`,
+    }));
   }
   // Handle .jsonl files
   else if (fileExtension === 'jsonl') {
@@ -188,7 +194,6 @@ export async function readStandaloneTestsFile(
         const row = JSON.parse(line);
         return {
           ...row,
-          options: row.options ?? {},
           description: `Row #${idx + 1}`,
         };
       });

@@ -9,9 +9,8 @@ import {
   determineShareDomain,
   isSharingEnabled,
   hasEvalBeenShared,
-  updateSharedEval,
 } from '../src/share';
-import { cloudCanAcceptChunkedResults } from '../src/util/cloud';
+import { cloudCanAcceptChunkedResults, makeRequest } from '../src/util/cloud';
 
 const mockFetch = jest.fn();
 
@@ -28,6 +27,7 @@ jest.mock('../src/globalConfig/accounts', () => ({
 
 jest.mock('../src/util/cloud', () => ({
   cloudCanAcceptChunkedResults: jest.fn(),
+  makeRequest: jest.fn(),
 }));
 
 jest.mock('../src/envars', () => ({
@@ -498,14 +498,7 @@ describe('hasEvalBeenShared', () => {
       id: randomUUID(),
     };
 
-    mockFetch
-      // Mock `getApiConfig` internals
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ version: '0.103.7' }),
-      })
-      // Mock `fetchWithProxy` internals
-      .mockResolvedValueOnce({ status: 200 });
+    jest.mocked(makeRequest).mockResolvedValue({ status: 200 } as Response);
 
     const result = await hasEvalBeenShared(mockEval as Eval);
     expect(result).toBe(true);
@@ -517,42 +510,9 @@ describe('hasEvalBeenShared', () => {
       id: randomUUID(),
     };
 
-    mockFetch
-      // Mock `getApiConfig` internals
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ version: '0.103.7' }),
-      })
-      // Mock `fetchWithProxy` internals
-      .mockResolvedValueOnce({ status: 404 });
+    jest.mocked(makeRequest).mockResolvedValue({ status: 404 } as Response);
 
     const result = await hasEvalBeenShared(mockEval as Eval);
     expect(result).toBe(false);
-  });
-});
-
-describe('updateSharedEval', () => {
-  it('fails if 204 status is not returned by the server', async () => {
-    const mockEval: Partial<Eval> = {
-      config: {},
-      id: randomUUID(),
-      results: [
-        { id: '1', gradingResult: {} },
-        { id: '2', gradingResult: {} },
-      ] as EvalResult[],
-    };
-
-    mockFetch
-      // Mock `getApiConfig` internals
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ version: '0.103.7' }),
-      })
-      // Mock `fetchWithProxy` internals
-      .mockResolvedValueOnce({ status: 500, statusText: 'Foobar' });
-
-    await expect(updateSharedEval(mockEval as Eval)).rejects.toThrow(
-      'Failed to sync eval: 500 Foobar',
-    );
   });
 });

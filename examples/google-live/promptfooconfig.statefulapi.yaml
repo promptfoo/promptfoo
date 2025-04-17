@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Example for mocking a stateful python api'
+
+prompts: '{{query}}'
+
+providers:
+  - id: 'google:live:gemini-2.0-flash-exp'
+    config:
+      tools: file://tools.json
+      functionToolStatefulApi:
+        file: examples/google-live/counter_api.py
+        url: http://127.0.0.1:8765
+        # Optionally specify a custom Python executable path
+        # pythonExecutable: '/usr/local/bin/python3'
+      generationConfig:
+        response_modalities: ['text']
+      timeoutMs: 10000
+
+tests:
+  - vars:
+      query: Add to the counter until it reaches 5
+    assert:
+      - type: is-valid-function-call
+      - type: equals
+        value: { 'counter': 5 }
+        transform: output.statefulApiState

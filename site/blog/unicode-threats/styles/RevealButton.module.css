@@ -1,0 +1,126 @@
+.container {
+  margin: 2rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  color: #1a202c;
+  font-weight: 500;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  transition: all 0.15s ease-in-out;
+  cursor: pointer;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  width: fit-content;
+  margin: 0 auto;
+}
+
+html[data-theme='dark'] .button {
+  background-color: #1e293b;
+  border-color: #334155;
+  color: #f8fafc;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.2);
+}
+
+.button:hover {
+  background-color: #f8fafc;
+  border-color: #e2e8f0;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.05);
+}
+
+html[data-theme='dark'] .button:hover {
+  background-color: #334155;
+  border-color: #475569;
+  box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.2);
+}
+
+.button:active {
+  transform: translateY(0);
+}
+
+.button.active {
+  background-color: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+html[data-theme='dark'] .button.active {
+  background-color: #334155;
+  border-color: #475569;
+}
+
+.buttonText {
+  font-weight: 500;
+}
+
+.icon {
+  font-size: 1.1em;
+  line-height: 1;
+}
+
+.infoBox {
+  padding: 1rem;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: #1a202c;
+  max-width: 600px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+html[data-theme='dark'] .infoBox {
+  background-color: #1e293b;
+  border-color: #334155;
+  color: #f8fafc;
+}
+
+.unicodeInfo {
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.25rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.8125rem;
+  color: #1a202c;
+  white-space: pre-wrap;
+}
+
+html[data-theme='dark'] .unicodeInfo {
+  background-color: #0f172a;
+  border-color: #334155;
+  color: #f8fafc;
+}
+
+/* Show hidden Unicode text when revealed */
+.revealed [data-unicode-content]::after {
+  content: '→ ' attr(data-unicode-content);
+  color: rgba(239, 68, 68, 0.7);
+  margin-left: 0.5rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.875rem;
+  font-style: italic;
+  background-color: rgba(254, 226, 226, 0.3);
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  border: 1px solid rgba(239, 68, 68, 0.1);
+}
+
+html[data-theme='dark'] .revealed [data-unicode-content]::after {
+  color: rgba(252, 165, 165, 0.9);
+  background-color: rgba(127, 29, 29, 0.3);
+  border-color: rgba(252, 165, 165, 0.2);
+}

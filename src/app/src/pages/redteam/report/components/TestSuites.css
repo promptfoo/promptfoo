@@ -1,14 +1,14 @@
 /* FIXME(ian): !important because these are global classes, unfortunately */
 
-.pass-high {
+.asr-low {
   color: green !important;
 }
 
-.pass-medium {
+.asr-medium {
   color: rgb(203, 133, 3) !important;
 }
 
-.pass-low {
+.asr-high {
   color: red !important;
 }
 

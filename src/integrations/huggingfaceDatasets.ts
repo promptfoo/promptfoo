@@ -112,7 +112,11 @@ export async function fetchHuggingFaceDataset(
         vars: {
           ...row,
         },
+        options: {
+          disableVarExpansion: true,
+        },
       };
+
       tests.push(test);
     }
 

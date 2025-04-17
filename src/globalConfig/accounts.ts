@@ -26,6 +26,9 @@ export function getAuthor(): string | null {
 export async function promptForEmailUnverified() {
   let email = isCI() ? 'ci-placeholder@promptfoo.dev' : getUserEmail();
   if (!email) {
+    await telemetry.record('feature_used', {
+      feature: 'promptForEmailUnverified',
+    });
     const emailSchema = z.string().email('Please enter a valid email address');
     email = await input({
       message: 'Redteam evals require email verification. Please enter your work email:',
@@ -35,6 +38,9 @@ export async function promptForEmailUnverified() {
       },
     });
     setUserEmail(email);
+    await telemetry.record('feature_used', {
+      feature: 'userCompletedPromptForEmailUnverified',
+    });
   }
   await telemetry.saveConsent(email, {
     source: 'promptForEmailUnverified',

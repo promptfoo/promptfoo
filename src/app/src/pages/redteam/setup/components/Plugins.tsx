@@ -219,7 +219,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       plugins: new Set(Object.values(NIST_AI_RMF_MAPPING).flatMap((v) => v.plugins)),
     },
     {
-      name: 'OWASP LLM',
+      name: 'OWASP LLM Top 10',
       plugins: new Set(Object.values(OWASP_LLM_TOP_10_MAPPING).flatMap((v) => v.plugins)),
     },
     {
@@ -227,7 +227,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       plugins: new Set(Object.values(OWASP_LLM_RED_TEAM_MAPPING).flatMap((v) => v.plugins)),
     },
     {
-      name: 'OWASP API',
+      name: 'OWASP API Top 10',
       plugins: new Set(Object.values(OWASP_API_TOP_10_MAPPING).flatMap((v) => v.plugins)),
     },
     {

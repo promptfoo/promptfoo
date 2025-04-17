@@ -31,7 +31,7 @@ export interface Content {
   role?: string;
 }
 
-interface Schema {
+export interface Schema {
   type: 'TYPE_UNSPECIFIED' | 'STRING' | 'NUMBER' | 'INTEGER' | 'BOOLEAN' | 'ARRAY' | 'OBJECT';
   format?: string;
   description?: string;
@@ -44,6 +44,18 @@ interface Schema {
   propertyOrdering?: string[];
   items?: Schema;
 }
+
+type SchemaType = Schema['type']; // Create a type alias for convenience
+
+export const VALID_SCHEMA_TYPES: ReadonlyArray<SchemaType> = [
+  'TYPE_UNSPECIFIED',
+  'STRING',
+  'NUMBER',
+  'INTEGER',
+  'BOOLEAN',
+  'ARRAY',
+  'OBJECT',
+];
 
 interface FunctionDeclaration {
   name: string;

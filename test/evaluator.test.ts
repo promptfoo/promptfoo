@@ -2247,6 +2247,15 @@ describe('runEval', () => {
       callApi: jest.fn().mockRejectedValue(new Error('API Error')),
     };
 
+    // Define defaultOptions locally for this test
+    const defaultOptions = {
+      delay: 0,
+      testIdx: 0,
+      promptIdx: 0,
+      repeatIndex: 0,
+      isRedteam: false,
+    };
+
     const results = await runEval({
       ...defaultOptions,
       provider: errorProvider,

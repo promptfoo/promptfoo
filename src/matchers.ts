@@ -445,58 +445,67 @@ export async function matchesLlmRubric(
     return fail(resp.error || 'No output', resp.tokenUsage);
   }
 
-  invariant(typeof resp.output === 'string', 'llm-rubric produced malformed response');
-  try {
-    const jsonObjects = extractJsonObjects(resp.output);
-    if (jsonObjects.length === 0) {
-      return fail('Could not extract JSON from llm-rubric response', resp.tokenUsage);
+  let jsonObjects: any[] = [];
+  if (typeof resp.output === 'string') {
+    try {
+      jsonObjects = extractJsonObjects(resp.output);
+      if (jsonObjects.length === 0) {
+        return fail('Could not extract JSON from llm-rubric response', resp.tokenUsage);
+      }
+    } catch (err) {
+      return fail(
+        `llm-rubric produced malformed response: ${err}\n\n${resp.output}`,
+        resp.tokenUsage,
+      );
     }
-
-    // expects properties pass, score, and reason
-    const parsed = jsonObjects[0] as Partial<GradingResult>;
-
-    let pass = parsed.pass ?? true;
-    if (typeof pass !== 'boolean') {
-      pass = /^(true|yes|pass|y)$/i.test(String(pass));
-    }
-
-    let score = parsed.score;
-    if (typeof score !== 'number') {
-      score = Number.isFinite(Number(score)) ? Number(score) : Number(pass);
-    }
-
-    const threshold =
-      typeof assertion?.threshold === 'string' ? Number(assertion.threshold) : assertion?.threshold;
-    if (typeof threshold === 'number' && Number.isFinite(threshold)) {
-      pass = pass && score >= threshold;
-    }
-
-    const reason =
-      parsed.reason || (pass ? 'Grading passed' : `Score ${score} below threshold ${threshold}`);
-
-    return {
-      assertion,
-      pass,
-      score,
-      reason,
-      tokensUsed: {
-        total: resp.tokenUsage?.total || 0,
-        prompt: resp.tokenUsage?.prompt || 0,
-        completion: resp.tokenUsage?.completion || 0,
-        cached: resp.tokenUsage?.cached || 0,
-        completionDetails: parsed.tokensUsed?.completionDetails || {
-          reasoning: 0,
-          acceptedPrediction: 0,
-          rejectedPrediction: 0,
-        },
-      },
-    };
-  } catch (err) {
+  } else if (typeof resp.output === 'object') {
+    jsonObjects = [resp.output];
+  } else {
     return fail(
-      `llm-rubric produced malformed response: ${err}\n\n${resp.output}`,
+      'llm-rubric produced malformed response - output must be string or object',
       resp.tokenUsage,
     );
   }
+
+  // expects properties pass, score, and reason
+  const parsed = jsonObjects[0] as Partial<GradingResult>;
+
+  let pass = parsed.pass ?? true;
+  if (typeof pass !== 'boolean') {
+    pass = /^(true|yes|pass|y)$/i.test(String(pass));
+  }
+
+  let score = parsed.score;
+  if (typeof score !== 'number') {
+    score = Number.isFinite(Number(score)) ? Number(score) : Number(pass);
+  }
+
+  const threshold =
+    typeof assertion?.threshold === 'string' ? Number(assertion.threshold) : assertion?.threshold;
+  if (typeof threshold === 'number' && Number.isFinite(threshold)) {
+    pass = pass && score >= threshold;
+  }
+
+  const reason =
+    parsed.reason || (pass ? 'Grading passed' : `Score ${score} below threshold ${threshold}`);
+
+  return {
+    assertion,
+    pass,
+    score,
+    reason,
+    tokensUsed: {
+      total: resp.tokenUsage?.total || 0,
+      prompt: resp.tokenUsage?.prompt || 0,
+      completion: resp.tokenUsage?.completion || 0,
+      cached: resp.tokenUsage?.cached || 0,
+      completionDetails: parsed.tokensUsed?.completionDetails || {
+        reasoning: 0,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+      },
+    },
+  };
 }
 
 export async function matchesFactuality(

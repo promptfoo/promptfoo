@@ -41,13 +41,15 @@ vi.mock('./store', () => ({
     config: {},
     setConfig: vi.fn(),
     evalId: '1',
-    inComparisonMode: false,
-    setInComparisonMode: vi.fn(),
     author: '',
     recentEvals: mockRecentEvals,
-    columnStates: {
-      '1': mockColumnState,
-    },
+  })),
+  useResultsViewSettingsStore: vi.fn().mockImplementation(() => ({
+    stickyHeader: true,
+    setStickyHeader: vi.fn(),
+    inComparisonMode: false,
+    setInComparisonMode: vi.fn(),
+    columnStates: { '1': mockColumnState },
     setColumnState: vi.fn(),
   })),
 }));

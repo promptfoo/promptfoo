@@ -177,3 +177,26 @@
     width: 100%;
   }
 }
+
+.demoCTA {
+  text-align: center;
+  padding: 4rem 1rem;
+  background: var(--ifm-color-emphasis-100);
+  margin-top: 2rem;
+}
+
+.demoCTA h2 {
+  font-size: 2rem;
+  margin-bottom: 1rem;
+}
+
+.demoCTA p {
+  font-size: 1.2rem;
+  margin-bottom: 2rem;
+  color: var(--ifm-color-emphasis-700);
+}
+
+.demoButton {
+  font-size: 1.2rem;
+  padding: 1rem 2rem;
+}

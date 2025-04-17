@@ -27,8 +27,8 @@ import type {
   GuardrailResponse,
   NunjucksFilterMap,
   Prompt,
-  TokenUsage,
   ProviderResponse,
+  TokenUsage,
 } from '../../types';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
@@ -37,7 +37,7 @@ import { sleep } from '../../util/time';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import type { BaseRedteamMetadata } from '../types';
 import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } from './prompts';
-import { getTargetResponse, redteamProviderManager, checkPenalizedPhrases } from './shared';
+import { checkPenalizedPhrases, getTargetResponse, redteamProviderManager } from './shared';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -125,26 +125,35 @@ export async function evaluateResponse(
   if (judgeResp.error) {
     throw new Error(`Error from redteam (judge) provider: ${judgeResp.error}`);
   }
+  try {
+    const parsed =
+      typeof judgeResp.output === 'string'
+        ? extractFirstJsonObject<{
+            currentResponse: { rating: number; explanation: string };
+            previousBestResponse: { rating: number; explanation: string };
+          }>(judgeResp.output)
+        : judgeResp.output;
 
-  const parsed =
-    typeof judgeResp.output === 'string'
-      ? extractFirstJsonObject<{
-          currentResponse: { rating: number; explanation: string };
-          previousBestResponse: { rating: number; explanation: string };
-        }>(judgeResp.output)
-      : judgeResp.output;
+    if (parsed?.currentResponse?.rating === undefined) {
+      logger.debug('[IterativeTree] Invalid judge response, using default score');
+      return { score: 1, explanation: 'Failed to parse judge response' };
+    }
 
-  let currentScore = parsed.currentResponse.rating;
+    let currentScore = parsed.currentResponse.rating;
 
-  // Apply penalty if the phrase is present
-  if (containsPenalizedPhrase) {
-    currentScore = Math.max(1, currentScore - 3);
+    // Apply penalty if the phrase is present
+    if (containsPenalizedPhrase) {
+      currentScore = Math.max(1, currentScore - 3);
+    }
+
+    return {
+      score: currentScore,
+      explanation: parsed?.currentResponse?.explanation,
+    };
+  } catch (e) {
+    logger.debug(`[IterativeTree] Error parsing judge response, using default score: ${e}`);
+    return { score: 1, explanation: 'Failed to parse judge response' };
   }
-
-  return {
-    score: currentScore,
-    explanation: parsed.currentResponse.explanation,
-  };
 }
 
 /**

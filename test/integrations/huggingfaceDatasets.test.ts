@@ -92,6 +92,13 @@ describe('huggingfaceDatasets', () => {
       act: 'Math Tutor',
       prompt: 'Solve 2+2',
     });
+
+    // Check that disableVarExpansion is set for all test cases
+    tests.forEach((test) => {
+      expect(test.options).toEqual({
+        disableVarExpansion: true,
+      });
+    });
   });
 
   it('should include auth token when HF_TOKEN is set', async () => {
@@ -185,6 +192,13 @@ describe('huggingfaceDatasets', () => {
 
     expect(tests).toHaveLength(3);
     expect(tests.map((t) => t.vars?.text)).toEqual(['First', 'Second', 'Third']);
+
+    // Check that disableVarExpansion is set for all test cases
+    tests.forEach((test) => {
+      expect(test.options).toEqual({
+        disableVarExpansion: true,
+      });
+    });
   });
 
   it('should handle API errors', async () => {
@@ -219,6 +233,13 @@ describe('huggingfaceDatasets', () => {
 
     expect(tests).toHaveLength(2);
     expect(tests.map((t) => t.vars?.text)).toEqual(['First', 'Second']);
+
+    // Check that disableVarExpansion is set for all test cases
+    tests.forEach((test) => {
+      expect(test.options).toEqual({
+        disableVarExpansion: true,
+      });
+    });
   });
 
   it('should handle limit larger than page size', async () => {
@@ -264,5 +285,12 @@ describe('huggingfaceDatasets', () => {
 
     expect(tests).toHaveLength(120);
     expect(tests[119].vars?.text).toBe('Item 120');
+
+    // Check that disableVarExpansion is set for all test cases
+    tests.forEach((test) => {
+      expect(test.options).toEqual({
+        disableVarExpansion: true,
+      });
+    });
   });
 });

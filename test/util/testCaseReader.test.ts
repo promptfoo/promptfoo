@@ -117,16 +117,32 @@ describe('readStandaloneTestsFile', () => {
   it('should read JSON file and return test cases', async () => {
     jest.mocked(fs.readFileSync).mockReturnValue(
       JSON.stringify([
-        { var1: 'value1', var2: 'value2' },
-        { var1: 'value3', var2: 'value4' },
+        {
+          vars: { var1: 'value1', var2: 'value2' },
+          assert: [{ type: 'equals', value: 'expected1' }],
+          description: 'Test #1',
+        },
+        {
+          vars: { var1: 'value3', var2: 'value4' },
+          assert: [{ type: 'contains', value: 'expected2' }],
+          description: 'Test #2',
+        },
       ]),
     );
     const result = await readStandaloneTestsFile('test.json');
 
     expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('test.json'), 'utf-8');
     expect(result).toEqual([
-      { assert: [], description: 'Row #1', options: {}, vars: { var1: 'value1', var2: 'value2' } },
-      { assert: [], description: 'Row #2', options: {}, vars: { var1: 'value3', var2: 'value4' } },
+      {
+        vars: { var1: 'value1', var2: 'value2' },
+        assert: [{ type: 'equals', value: 'expected1' }],
+        description: 'Test #1',
+      },
+      {
+        vars: { var1: 'value3', var2: 'value4' },
+        assert: [{ type: 'contains', value: 'expected2' }],
+        description: 'Test #2',
+      },
     ]);
   });
 
@@ -142,13 +158,11 @@ describe('readStandaloneTestsFile', () => {
       {
         assert: [{ type: 'equals', value: 'Hello World' }],
         description: 'Row #1',
-        options: {},
         vars: { var1: 'value1', var2: 'value2' },
       },
       {
         assert: [{ type: 'equals', value: 'Hello World' }],
         description: 'Row #2',
-        options: {},
         vars: { var1: 'value3', var2: 'value4' },
       },
     ]);
@@ -329,6 +343,26 @@ describe('readStandaloneTestsFile', () => {
     await expect(readStandaloneTestsFile('test.py:invalid:extra')).rejects.toThrow(
       'Too many colons. Invalid test file script path: test.py:invalid:extra',
     );
+  });
+
+  it('should read JSON file with a single test case object', async () => {
+    jest.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        vars: { var1: 'value1', var2: 'value2' },
+        assert: [{ type: 'equals', value: 'expected1' }],
+        description: 'Single Test',
+      }),
+    );
+    const result = await readStandaloneTestsFile('test.json');
+
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('test.json'), 'utf-8');
+    expect(result).toEqual([
+      {
+        vars: { var1: 'value1', var2: 'value2' },
+        assert: [{ type: 'equals', value: 'expected1' }],
+        description: 'Single Test',
+      },
+    ]);
   });
 });
 

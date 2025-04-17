@@ -19,6 +19,7 @@ import TextareaAutosize from '@mui/material/TextareaAutosize';
 import Typography from '@mui/material/Typography';
 import { ellipsize } from '../../../../../util/text';
 import ChatMessages, { type Message } from './ChatMessages';
+import Citations from './Citations';
 import type { GradingResult } from './types';
 
 // Common style object for copy buttons
@@ -226,6 +227,9 @@ export default function EvalOutputPromptDialog({
     parsedMessages = JSON.parse(metadata?.messages || '[]');
   } catch {}
 
+  // Get citations from metadata if they exist
+  const citationsData = metadata?.citations;
+
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="lg">
       <DialogTitle>Details{provider && `: ${provider}`}</DialogTitle>
@@ -326,9 +330,10 @@ export default function EvalOutputPromptDialog({
             </div>
           </Box>
         )}
+        {citationsData && <Citations citations={citationsData} />}
         <AssertionResults gradingResults={gradingResults} />
         {parsedMessages && parsedMessages.length > 0 && <ChatMessages messages={parsedMessages} />}
-        {metadata && Object.keys(metadata).length > 0 && (
+        {metadata && Object.keys(metadata).filter((key) => key !== 'citations').length > 0 && (
           <Box my={2}>
             <Typography variant="subtitle1" style={{ marginBottom: '1rem', marginTop: '1rem' }}>
               Metadata
@@ -347,6 +352,11 @@ export default function EvalOutputPromptDialog({
                 </TableHead>
                 <TableBody>
                   {Object.entries(metadata).map(([key, value]) => {
+                    // Skip citations in metadata display as they're shown in their own component
+                    if (key === 'citations') {
+                      return null;
+                    }
+
                     const stringValue = typeof value === 'string' ? value : JSON.stringify(value);
                     const truncatedValue = ellipsize(stringValue, 300);
                     const isUrl = typeof value === 'string' && isValidUrl(value);

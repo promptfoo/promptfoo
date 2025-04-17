@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Knowledge Base RAG using AWS Bedrock
+
+prompts:
+  - |
+    Answer the following question in a concise manner:
+
+    {{prompt}}
+
+providers:
+  # Knowledge Base provider
+  - id: bedrock:kb:us.anthropic.claude-3-7-sonnet-20250219-v1:0
+    config:
+      region: 'us-east-2'
+      knowledgeBaseId: '0VMCLLCVGB'
+      temperature: 0.0
+      max_tokens: 1000
+
+  # Regular provider for comparison
+  - id: bedrock:us.anthropic.claude-3-7-sonnet-20250219-v1:0
+    config:
+      region: 'us-east-2'
+      temperature: 0.0
+      max_tokens: 1000
+
+tests:
+  - vars:
+      prompt: 'What is promptfoo and what problem does it solve?'
+  - vars:
+      prompt: 'How do I evaluate prompts with promptfoo?'
+  - vars:
+      prompt: 'What providers and models does promptfoo support?'
+  - vars:
+      prompt: 'How can I use assertions in promptfoo to test responses?'
+  - vars:
+      prompt: 'What are some advanced features of promptfoo for enterprise users?'

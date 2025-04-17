@@ -149,7 +149,7 @@ describe('AIStudioChatProvider', () => {
       });
 
       const response = await provider.callGemini('test prompt');
-      expect(response.error).toContain('API did not return any candidate responses');
+      expect(response.error).toContain('Error: Expected one candidate in API response.');
     });
 
     it('should handle malformed API responses', async () => {
@@ -186,15 +186,7 @@ describe('AIStudioChatProvider', () => {
       const response = await provider.callGemini('test prompt');
 
       expect(response).toEqual({
-        output: undefined,
-        tokenUsage: {
-          completion: undefined,
-          numRequests: 1,
-          prompt: undefined,
-          total: undefined,
-        },
-        raw: mockResponse,
-        cached: false,
+        error: 'Error: No output found in response: {"content":{"parts":null}}',
       });
     });
   });
@@ -708,12 +700,14 @@ describe('AIStudioChatProvider', () => {
 
       expect(response).toEqual({
         cached: false,
-        output: JSON.stringify({
-          functionCall: {
-            name: 'get_weather',
-            args: { location: 'San Francisco' },
+        output: [
+          {
+            functionCall: {
+              name: 'get_weather',
+              args: { location: 'San Francisco' },
+            },
           },
-        }),
+        ],
         raw: mockResponse.data,
         tokenUsage: {
           numRequests: 1,

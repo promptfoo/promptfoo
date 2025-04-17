@@ -685,6 +685,51 @@ tests:
         value: '{{expected}}'
 ```
 
+### GLEU
+
+The BLEU score has some undesirable properties when used for single sentences, as it was designed to be a corpus measure. To address these concerns, the 'GLEU (Google-BLEU) score' was introduced as a variant that better correlates with human judgments on sentence-level evaluation.
+
+For the GLEU score, we record all sub-sequences of 1, 2, 3 or 4 tokens in output and target sequence (n-grams). We then compute:
+
+- A recall: the ratio of matching n-grams to total n-grams in the target (ground truth) sequence
+- A precision: the ratio of matching n-grams to total n-grams in the generated output sequence
+
+The GLEU score is the minimum of recall and precision. The score's range is always between 0 (no matches) and 1 (all match) and it is symmetrical when switching output and target.
+
+```yaml
+assert:
+  # Ensure GLEU score compared to "hello world" is >= 0.5 (default threshold)
+  - type: gleu
+    value: hello world
+
+  # With custom threshold
+  - type: gleu
+    threshold: 0.7
+    value: hello world
+```
+
+`value` can reference other variables using template syntax. For example:
+
+```yaml
+tests:
+  - vars:
+      expected: hello world
+    assert:
+      - type: gleu
+        value: '{{expected}}'
+```
+
+You can also provide multiple reference strings for evaluation:
+
+```yaml
+assert:
+  - type: gleu
+    value:
+      - 'Hello world'
+      - 'Hi there world'
+    threshold: 0.6
+```
+
 ### F-Score
 
 F-score (also F1 score) is a measure of accuracy that considers both precision and recall. It is the harmonic mean of precision and recall, providing a single score that balances both metrics. The score ranges from 0 (worst) to 1 (best).

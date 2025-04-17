@@ -1,4 +1,5 @@
 import React from 'react';
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Table from '@mui/material/Table';
@@ -53,6 +54,13 @@ const getSubCategoryStats = (
             ).toFixed(1) + '%'
           : 'N/A',
         severity: getRiskCategorySeverityMap(plugins)[subCategory as Plugin] || 'Unknown',
+        attackSuccessRate: categoryStats[subCategory]
+          ? (
+              ((categoryStats[subCategory].total - categoryStats[subCategory].pass) /
+                categoryStats[subCategory].total) *
+              100
+            ).toFixed(1) + '%'
+          : 'N/A',
       });
     }
   }
@@ -83,32 +91,128 @@ const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins 
     setPage(0);
   };
 
-  const [order, setOrder] = React.useState<'asc' | 'desc'>('asc');
-  const [orderBy, setOrderBy] = React.useState<'passRate' | 'severity' | 'default'>('default');
-  const handleSort = (property: 'passRate' | 'severity') => {
+  const [order, setOrder] = React.useState<'asc' | 'desc'>('desc');
+  const [orderBy, setOrderBy] = React.useState<'attackSuccessRate' | 'severity' | 'default'>(
+    'attackSuccessRate',
+  );
+  const handleSort = (property: 'attackSuccessRate' | 'severity') => {
     const isAsc = orderBy === property && order === 'asc';
     setOrder(isAsc ? 'desc' : 'asc');
     setOrderBy(property);
   };
 
+  const exportToCSV = () => {
+    // Format data for CSV
+    const headers = ['Type', 'Description', 'Attack Success Rate', 'Severity'];
+
+    // Get the sorted data as displayed in the table
+    const sortedData = [...subCategoryStats].sort((a, b) => {
+      if (orderBy === 'attackSuccessRate') {
+        if (a.passRate === 'N/A') {
+          return 1;
+        }
+        if (b.passRate === 'N/A') {
+          return -1;
+        }
+        return order === 'asc'
+          ? Number.parseFloat(a.attackSuccessRate) - Number.parseFloat(b.attackSuccessRate)
+          : Number.parseFloat(b.attackSuccessRate) - Number.parseFloat(a.attackSuccessRate);
+      } else if (orderBy === 'severity') {
+        if (a.passRate === 'N/A') {
+          return 1;
+        }
+        if (b.passRate === 'N/A') {
+          return -1;
+        }
+        const severityOrder = {
+          [Severity.Critical]: 4,
+          [Severity.High]: 3,
+          [Severity.Medium]: 2,
+          [Severity.Low]: 1,
+        };
+        return order === 'asc'
+          ? severityOrder[a.severity] - severityOrder[b.severity]
+          : severityOrder[b.severity] - severityOrder[a.severity];
+      } else {
+        // Default sort: severity desc tiebroken by pass rate asc, N/A passRate goes to the bottom
+        const severityOrder = {
+          [Severity.Critical]: 4,
+          [Severity.High]: 3,
+          [Severity.Medium]: 2,
+          [Severity.Low]: 1,
+        };
+        if (a.severity === b.severity) {
+          return Number.parseFloat(b.passRate) - Number.parseFloat(a.passRate);
+        } else {
+          return severityOrder[b.severity] - severityOrder[a.severity];
+        }
+      }
+    });
+
+    const csvData = sortedData.map((subCategory) => [
+      displayNameOverrides[subCategory.pluginName as keyof typeof displayNameOverrides] ||
+        subCategory.type,
+      subCategory.description,
+      subCategory.attackSuccessRate,
+      subCategory.severity,
+    ]);
+
+    // Combine headers and data with proper escaping for CSV
+    const escapeCSV = (cell: string) => {
+      // If cell contains commas, quotes, or newlines, wrap in quotes and escape any quotes
+      if (/[",\n]/.test(cell)) {
+        return `"${cell.replace(/"/g, '""')}"`;
+      }
+      return cell;
+    };
+
+    const csvContent = [
+      headers.map(escapeCSV).join(','),
+      ...csvData.map((row) => row.map((cell) => escapeCSV(String(cell))).join(',')),
+    ].join('\n');
+
+    // Create and trigger download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    link.setAttribute('download', `vulnerability-report-${evalId || 'export'}-${timestamp}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <Box>
-      <Typography variant="h5" gutterBottom id="table">
-        Vulnerabilities and Mitigations
-      </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Typography variant="h5" id="table">
+          Vulnerabilities and Mitigations
+        </Typography>
+        <Button
+          variant="contained"
+          color="primary"
+          startIcon={<FileDownloadIcon />}
+          onClick={exportToCSV}
+        >
+          Export vulnerabilities to CSV
+        </Button>
+      </Box>
+
       <TableContainer>
         <Table>
           <TableHead>
             <TableRow>
               <TableCell>Type</TableCell>
               <TableCell>Description</TableCell>
-              <TableCell>
+              <TableCell style={{ minWidth: '200px' }}>
                 <TableSortLabel
-                  active={orderBy === 'passRate'}
-                  direction={orderBy === 'passRate' ? order : 'asc'}
-                  onClick={() => handleSort('passRate')}
+                  active={orderBy === 'attackSuccessRate'}
+                  direction={orderBy === 'attackSuccessRate' ? order : 'asc'}
+                  onClick={() => handleSort('attackSuccessRate')}
                 >
-                  Pass rate
+                  Attack Success Rate
                 </TableSortLabel>
               </TableCell>
               <TableCell>
@@ -126,21 +230,23 @@ const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins 
           <TableBody>
             {subCategoryStats
               .sort((a, b) => {
-                if (orderBy === 'passRate') {
-                  if (a.passRate === 'N/A') {
+                if (orderBy === 'attackSuccessRate') {
+                  if (a.attackSuccessRate === 'N/A') {
                     return 1;
                   }
-                  if (b.passRate === 'N/A') {
+                  if (b.attackSuccessRate === 'N/A') {
                     return -1;
                   }
                   return order === 'asc'
-                    ? Number.parseFloat(a.passRate) - Number.parseFloat(b.passRate)
-                    : Number.parseFloat(b.passRate) - Number.parseFloat(a.passRate);
+                    ? Number.parseFloat(a.attackSuccessRate) -
+                        Number.parseFloat(b.attackSuccessRate)
+                    : Number.parseFloat(b.attackSuccessRate) -
+                        Number.parseFloat(a.attackSuccessRate);
                 } else if (orderBy === 'severity') {
-                  if (a.passRate === 'N/A') {
+                  if (a.attackSuccessRate === 'N/A') {
                     return 1;
                   }
-                  if (b.passRate === 'N/A') {
+                  if (b.attackSuccessRate === 'N/A') {
                     return -1;
                   }
                   const severityOrder = {
@@ -161,7 +267,10 @@ const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins 
                     [Severity.Low]: 1,
                   };
                   if (a.severity === b.severity) {
-                    return Number.parseFloat(a.passRate) - Number.parseFloat(b.passRate);
+                    return (
+                      Number.parseFloat(b.attackSuccessRate) -
+                      Number.parseFloat(a.attackSuccessRate)
+                    );
                   } else {
                     return severityOrder[b.severity] - severityOrder[a.severity];
                   }
@@ -170,14 +279,14 @@ const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins 
               .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
               .map((subCategory, index) => {
                 let passRateClass = '';
-                if (subCategory.passRate !== 'N/A') {
-                  const passRate = Number.parseFloat(subCategory.passRate);
+                if (subCategory.attackSuccessRate !== 'N/A') {
+                  const passRate = Number.parseFloat(subCategory.attackSuccessRate);
                   if (passRate >= 75) {
-                    passRateClass = 'pass-high';
+                    passRateClass = 'asr-high';
                   } else if (passRate >= 50) {
-                    passRateClass = 'pass-medium';
+                    passRateClass = 'asr-medium';
                   } else {
-                    passRateClass = 'pass-low';
+                    passRateClass = 'asr-low';
                   }
                 }
                 return (
@@ -191,7 +300,7 @@ const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins 
                     </TableCell>
                     <TableCell>{subCategory.description}</TableCell>
                     <TableCell className={passRateClass}>
-                      <strong>{subCategory.passRate}</strong>
+                      <strong>{subCategory.attackSuccessRate}</strong>
                       {subCategory.passRateWithFilter === subCategory.passRate ? null : (
                         <>
                           <br />({subCategory.passRateWithFilter} with mitigation)

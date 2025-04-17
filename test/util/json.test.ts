@@ -1,11 +1,11 @@
 import dedent from 'dedent';
 import {
-  extractJsonObjects,
-  isValidJson,
-  safeJsonStringify,
-  orderKeys,
   convertSlashCommentsToHash,
   extractFirstJsonObject,
+  extractJsonObjects,
+  isValidJson,
+  orderKeys,
+  safeJsonStringify,
 } from '../../src/util/json';
 
 describe('json utilities', () => {
@@ -169,7 +169,11 @@ describe('json utilities', () => {
     it('should handle incomplete JSON', () => {
       const input = `{
   "incomplete": "object"`;
-      expect(extractJsonObjects(input)).toEqual([]);
+      expect(extractJsonObjects(input)).toEqual([
+        {
+          incomplete: 'object',
+        },
+      ]);
     });
 
     it('should handle string containing incomplete JSON', () => {
@@ -189,6 +193,9 @@ describe('json utilities', () => {
             nested: 'value2',
           },
           key3: 'value3',
+        },
+        {
+          incomplete: 'object',
         },
       ]);
     });

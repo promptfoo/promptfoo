@@ -1210,7 +1210,7 @@ describe('loadApiProvider', () => {
   it('loadApiProvider with xai', async () => {
     const provider = await loadApiProvider('xai:grok-2');
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
-    expect(provider.id()).toBe('grok-2');
+    expect(provider.id()).toBe('xai:grok-2');
     expect(provider.config.apiBaseUrl).toBe('https://api.x.ai/v1');
     expect(provider.config.apiKeyEnvar).toBe('XAI_API_KEY');
   });

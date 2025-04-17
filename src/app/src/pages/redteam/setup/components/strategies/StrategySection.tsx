@@ -1,5 +1,5 @@
 import React from 'react';
-import { Typography, Box } from '@mui/material';
+import { Typography, Box, Button } from '@mui/material';
 import { StrategyItem } from './StrategyItem';
 import type { StrategyCardData } from './types';
 
@@ -9,6 +9,7 @@ interface StrategySectionProps {
   selectedIds: string[];
   onToggle: (id: string) => void;
   onConfigClick: (id: string) => void;
+  onSelectNone?: (strategyIds: string[]) => void;
 }
 
 export function StrategySection({
@@ -17,12 +18,46 @@ export function StrategySection({
   selectedIds,
   onToggle,
   onConfigClick,
+  onSelectNone,
 }: StrategySectionProps) {
+  const selectedStrategiesInSection = strategies
+    .map((strategy) => strategy.id)
+    .filter((id) => selectedIds.includes(id));
+
+  const handleSelectNone = () => {
+    if (onSelectNone) {
+      onSelectNone(selectedStrategiesInSection);
+    } else {
+      // Fallback to the old approach if onSelectNone not provided
+      selectedStrategiesInSection.forEach((id) => onToggle(id));
+    }
+  };
+
   return (
     <Box sx={{ mb: 4 }}>
-      <Typography variant="h6" gutterBottom sx={{ mb: 2 }}>
-        {title}
-      </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Typography variant="h6">{title}</Typography>
+        {strategies.length > 0 && (
+          <Button
+            variant="text"
+            size="small"
+            color="primary"
+            onClick={handleSelectNone}
+            disabled={selectedStrategiesInSection.length === 0}
+            sx={{
+              fontSize: '0.875rem',
+              fontWeight: 'normal',
+              padding: 0,
+              margin: 0,
+              '&:hover': {
+                backgroundColor: 'transparent',
+              },
+            }}
+          >
+            Reset
+          </Button>
+        )}
+      </Box>
       <Box
         sx={{
           display: 'grid',

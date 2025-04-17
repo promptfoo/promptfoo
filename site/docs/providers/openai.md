@@ -14,14 +14,15 @@ export OPENAI_API_KEY=your_api_key_here
 
 The OpenAI provider supports the following model formats:
 
-- `openai:chat` - defaults to `gpt-4o-mini`
-- `openai:completion` - defaults to `text-davinci-003`
-- `openai:<model name>` - uses a specific model name (mapped automatically to chat or completion endpoint)
 - `openai:chat:<model name>` - uses any model name against the `/v1/chat/completions` endpoint
+- `openai:responses:<model name>` - uses responses API models over HTTP connections
+- `openai:assistant:<assistant id>` - use an assistant
+- `openai:<model name>` - uses a specific model name (mapped automatically to chat or completion endpoint)
+- `openai:chat` - defaults to `gpt-4o-mini`
 - `openai:chat:ft:gpt-4o-mini:company-name:ID` - example of a fine-tuned chat completion model
+- `openai:completion` - defaults to `text-davinci-003`
 - `openai:completion:<model name>` - uses any model name against the `/v1/completions` endpoint
 - `openai:embeddings:<model name>` - uses any model name against the `/v1/embeddings` endpoint
-- `openai:assistant:<assistant id>` - use an assistant
 - `openai:realtime:<model name>` - uses realtime API models over WebSocket connections
 
 The `openai:<endpoint>:<model name>` construction is useful if OpenAI releases a new model,
@@ -125,6 +126,45 @@ interface OpenAiConfig {
 ```
 
 ## Models
+
+### GPT-4.1
+
+GPT-4.1 is OpenAI's flagship model for complex tasks with a 1,047,576 token context window and 32,768 max output tokens. Available in three variants with different price points:
+
+| Model        | Description                                  | Input Price         | Output Price        |
+| ------------ | -------------------------------------------- | ------------------- | ------------------- |
+| GPT-4.1      | Flagship model for complex tasks             | $2.00 per 1M tokens | $8.00 per 1M tokens |
+| GPT-4.1 Mini | More affordable, strong general capabilities | $0.40 per 1M tokens | $1.60 per 1M tokens |
+| GPT-4.1 Nano | Most economical, good for high-volume tasks  | $0.10 per 1M tokens | $0.40 per 1M tokens |
+
+All variants support text and image input with text output and have a May 31, 2024 knowledge cutoff.
+
+#### Usage Examples
+
+Standard model:
+
+```yaml
+providers:
+  - id: openai:chat:gpt-4.1 # or openai:responses:gpt-4.1
+    config:
+      temperature: 0.7
+```
+
+More affordable variants:
+
+```yaml
+providers:
+  - id: openai:chat:gpt-4.1-mini # or -nano variant
+```
+
+Specific snapshot versions are also available:
+
+```yaml
+providers:
+  - id: openai:chat:gpt-4.1-2025-04-14 # Standard
+  - id: openai:chat:gpt-4.1-mini-2025-04-14 # Mini
+  - id: openai:chat:gpt-4.1-nano-2025-04-14 # Nano
+```
 
 ### Reasoning Models (o1, o3-mini)
 
@@ -848,7 +888,9 @@ The Responses API supports a wide range of models, including:
 - `o1` - Powerful reasoning model
 - `o1-mini` - Smaller, more affordable reasoning model
 - `o1-pro` - Enhanced reasoning model with more compute
-- `o3-mini` - Latest reasoning model with improved performance
+- `o3` - OpenAI's most powerful reasoning model
+- `o3-mini` - Smaller, more affordable reasoning model
+- `o4-mini` - Latest fast, cost-effective reasoning model
 
 ### Using the Responses API
 
@@ -877,6 +919,53 @@ The Responses API configuration supports these parameters in addition to standar
 | `store`                | Whether to store the response for later retrieval | true       | Boolean                             |
 | `truncation`           | Strategy to handle context window overflow        | 'disabled' | 'auto', 'disabled'                  |
 | `reasoning`            | Configuration for reasoning models                | None       | Object with `effort` field          |
+
+### Reasoning Models
+
+When using reasoning models like `o1`, `o1-pro`, `o3`, `o3-mini`, or `o4-mini`, you can control the reasoning effort:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:o3
+    config:
+      reasoning_effort: 'medium' # Can be "low", "medium", or "high"
+      max_output_tokens: 1000
+```
+
+Reasoning models "think before they answer," generating internal reasoning that isn't visible in the output but counts toward token usage and billing.
+
+### o3 and o4-mini Models
+
+OpenAI offers advanced reasoning models in the o-series:
+
+#### o3 and o4-mini
+
+These reasoning models provide different performance and efficiency profiles:
+
+- **o3**: Powerful reasoning model, optimized for complex mathematical, scientific, and coding tasks
+- **o4-mini**: Efficient reasoning model with strong performance in coding and visual tasks at lower cost
+
+Both models feature:
+
+- Large context window (200,000 tokens)
+- High maximum output tokens (100,000 tokens)
+
+For current specifications and pricing information, refer to [OpenAI's pricing page](https://openai.com/pricing).
+
+Example configuration:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:o3
+    config:
+      reasoning_effort: 'high'
+      max_output_tokens: 2000
+
+  - id: openai:responses:o4-mini
+    config:
+      reasoning_effort: 'medium'
+      max_output_tokens: 1000
+```
 
 ### Sending Images in Prompts
 
@@ -925,20 +1014,6 @@ providers:
               required: ['location']
       tool_choice: 'auto'
 ```
-
-### Reasoning Models
-
-When using reasoning models like `o1`, `o1-pro`, or `o3-mini`, you can control the reasoning effort:
-
-```yaml title="promptfooconfig.yaml"
-providers:
-  - id: openai:responses:o1
-    config:
-      reasoning_effort: 'medium' # Can be "low", "medium", or "high"
-      max_output_tokens: 1000
-```
-
-Reasoning models "think before they answer," generating internal reasoning that isn't visible in the output but counts toward token usage and billing.
 
 ### Complete Example
 

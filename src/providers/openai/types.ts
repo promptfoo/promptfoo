@@ -52,7 +52,7 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   modalities?: string[];
   audio?: {
     bitrate?: string;
-    format?: string;
+    format?: string | 'wav' | 'mp3' | 'flac' | 'opus' | 'pcm16' | 'aac';
     speed?: number;
     voice?: string;
   };

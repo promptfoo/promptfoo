@@ -251,10 +251,10 @@ Try the examples:
 
 ```sh
 # Basic text-only example
-promptfoo init --example google-multimodal-live
+promptfoo init --example google-live
 
 # Function calling and tools example
-promptfoo init --example google-multimodal-live-tools
+promptfoo init --example google-live-tools
 ```
 
 ### Limitations

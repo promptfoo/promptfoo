@@ -11,7 +11,7 @@ import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import FailReasonCarousel from './FailReasonCarousel';
 import CommentDialog from './TableCommentDialog';
 import TruncatedText from './TruncatedText';
-import { useStore as useResultsViewStore } from './store';
+import { useResultsViewSettingsStore } from './store';
 
 type CSSPropertiesWithCustomVars = React.CSSProperties & {
   [key: `--${string}`]: string | number;
@@ -50,7 +50,8 @@ function EvalOutputCell({
   searchText: string;
 }) {
   const { renderMarkdown, prettifyJson, showPrompts, showPassFail, maxImageWidth, maxImageHeight } =
-    useResultsViewStore();
+    useResultsViewSettingsStore();
+
   const [openPrompt, setOpen] = React.useState(false);
   const [activeRating, setActiveRating] = React.useState<boolean | null>(
     output.gradingResult?.componentResults?.find((result) => result.assertion?.type === 'human')
@@ -416,15 +417,17 @@ function EvalOutputCell({
               <span>🔎</span>
             </Tooltip>
           </span>
-          <EvalOutputPromptDialog
-            open={openPrompt}
-            onClose={handlePromptClose}
-            prompt={output.prompt}
-            provider={output.provider}
-            gradingResults={output.gradingResult?.componentResults}
-            output={text}
-            metadata={output.metadata}
-          />
+          {openPrompt && (
+            <EvalOutputPromptDialog
+              open={openPrompt}
+              onClose={handlePromptClose}
+              prompt={output.prompt}
+              provider={output.provider}
+              gradingResults={output.gradingResult?.componentResults}
+              output={text}
+              metadata={output.metadata}
+            />
+          )}
         </>
       )}
       <span
@@ -607,14 +610,16 @@ function EvalOutputCell({
           <img src={lightboxImage} alt="Lightbox" />
         </div>
       )}
-      <CommentDialog
-        open={commentDialogOpen}
-        contextText={getCombinedContextText()}
-        commentText={commentText}
-        onClose={handleCommentClose}
-        onSave={handleCommentSave}
-        onChange={setCommentText}
-      />
+      {commentDialogOpen && (
+        <CommentDialog
+          open={commentDialogOpen}
+          contextText={getCombinedContextText()}
+          commentText={commentText}
+          onClose={handleCommentClose}
+          onSave={handleCommentSave}
+          onChange={setCommentText}
+        />
+      )}
     </div>
   );
 }

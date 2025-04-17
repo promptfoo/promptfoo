@@ -13,14 +13,19 @@ const EvalSelectorDialog: React.FC<{
   title?: string;
   description?: string;
   focusedEvalId?: string;
-}> = ({ open, onClose, onEvalSelected, title, description, focusedEvalId }) => {
+  filterByDatasetId?: boolean;
+}> = ({ open, onClose, onEvalSelected, title, description, focusedEvalId, filterByDatasetId }) => {
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       {title ? <DialogTitle>{title}</DialogTitle> : null}
       <DialogContent>
         {description ? <Box sx={{ mb: 4 }}>{description}</Box> : null}
         <Box sx={{ width: '100%', mt: 2 }}>
-          <EvalsDataGrid onEvalSelected={onEvalSelected} focusedEvalId={focusedEvalId} />
+          <EvalsDataGrid
+            onEvalSelected={onEvalSelected}
+            focusedEvalId={focusedEvalId}
+            filterByDatasetId={filterByDatasetId}
+          />
         </Box>
       </DialogContent>
       <DialogActions>
