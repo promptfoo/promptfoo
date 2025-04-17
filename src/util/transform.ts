@@ -158,7 +158,7 @@ export async function transform(
 
   const ret = await Promise.resolve(postprocessFn(transformInput, context));
 
-  if (validateReturn && ret == null) {
+  if (validateReturn && (ret === null || ret === undefined)) {
     throw new Error(`Transform function did not return a value\n\n${codeOrFilepath}`);
   }
 
