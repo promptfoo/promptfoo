@@ -19,6 +19,11 @@ const EvalSelector: React.FC<EvalSelectorProps> = ({ onEvalSelected }) => {
     setOpen(false);
   };
 
+  const handleEvalSelected = (evalId: string) => {
+    onEvalSelected(evalId);
+    handleClose();
+  };
+
   React.useEffect(() => {
     const handleGlobalKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key === 'k') {
@@ -39,7 +44,7 @@ const EvalSelector: React.FC<EvalSelectorProps> = ({ onEvalSelected }) => {
       title="Open an Eval"
       open={open}
       onClose={handleClose}
-      onEvalSelected={onEvalSelected}
+      onEvalSelected={handleEvalSelected}
       onOpenFocusSearch
     />
   );
