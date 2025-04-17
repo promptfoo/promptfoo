@@ -6,7 +6,6 @@ import CompareIcon from '@mui/icons-material/Compare';
 import DescriptionIcon from '@mui/icons-material/Description';
 import SecurityIcon from '@mui/icons-material/Security';
 import HomepageFeatures from '@site/src/components/HomepageFeatures';
-import HomepageInfo from '@site/src/components/HomepageInfo';
 import LogoContainer from '@site/src/components/LogoContainer';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
@@ -17,8 +16,13 @@ function HomepageHeader({ getStartedUrl }: { getStartedUrl: string }) {
   return (
     <header className={clsx('hero hero--primary', styles.heroBanner)}>
       <div className="container">
-        <h1>Test & secure your LLM apps</h1>
-        <p>Open-source LLM testing used by 75,000+ developers</p>
+        <h1>
+          <span className={styles.heroMainText}>Secure your AI</span>
+          <br />
+          from <span className={styles.heroHighlight}>prompt</span> to{' '}
+          <span className={styles.heroHighlight}>production</span>
+        </h1>
+        <p>Open-source LLM security trusted by 75,000+ users</p>
         <div className={styles.buttons}>
           <Link className="button button--primary button--lg" to={getStartedUrl}>
             Get Started
@@ -38,15 +42,135 @@ function HomepageHeader({ getStartedUrl }: { getStartedUrl: string }) {
 function HomepageWalkthrough() {
   const isDarkTheme = useColorMode().colorMode === 'dark';
   const [selectedStep, setSelectedStep] = React.useState(() => {
-    if (typeof window !== 'undefined' && window.location.hash === '#evals') {
-      return 1;
+    if (typeof window !== 'undefined') {
+      if (window.location.hash === '#evals') {
+        return 4;
+      } else if (window.location.hash === '#redteam') {
+        return 1;
+      } else if (window.location.hash === '#guardrails') {
+        return 2;
+      } else if (window.location.hash === '#modelsecurity') {
+        return 3;
+      }
     }
-    return 2;
+    return 1; // Default to Red Teaming
   });
+  const [isMobile, setIsMobile] = React.useState(false);
+
+  React.useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
   const steps = [
     {
       id: 1,
+      caption: 'Red Teaming',
+      mobileCaption: 'Red Team',
+      image: '/img/riskreport-1.png',
+      image2x: '/img/riskreport-1@2x.png',
+      description: (
+        <>
+          <p className={styles.walkthroughHeading}>
+            Adaptive red teaming that targets applications, not just models
+          </p>
+          <p>Generate customized attacks for your use case:</p>
+          <pre className={styles.codeBox}>
+            <code>npx promptfoo@latest redteam init</code>
+          </pre>
+          <p>Our language models probe for specific risks in your system.</p>
+          <ul>
+            <li>Direct and indirect prompt injections</li>
+            <li>Jailbreaks tailored to your guardrails</li>
+            <li>Data and PII leaks</li>
+            <li>Insecure tool use vulnerabilities</li>
+            <li>Unauthorized contract creation</li>
+            <li>Toxic content generation</li>
+            <li>
+              And <Link to="/docs/red-team/llm-vulnerability-types/">much more</Link>
+            </li>
+          </ul>
+          <p>
+            <strong>
+              <Link to="/red-teaming">&raquo; Learn more about Red Teaming</Link>
+            </strong>
+          </p>
+        </>
+      ),
+      icon: <SecurityIcon />,
+      destinationUrl: '/red-teaming',
+    },
+    {
+      id: 2,
+      caption: 'Guardrails',
+      mobileCaption: 'Guardrails',
+      image: '/img/guardrails-framed.png',
+      image2x: '/img/guardrails-framed.png',
+      description: (
+        <>
+          <p className={styles.walkthroughHeading}>
+            Self-improving guardrails that learn from attacks
+          </p>
+          <p>
+            Unlike static guardrails, our system continuously improves through red team feedback:
+          </p>
+          <ul>
+            <li>Automatically adapts to new attack patterns</li>
+            <li>Learns from real-world usage and attack attempts</li>
+            <li>Validates both our guardrails and third-party systems</li>
+            <li>Enforces company policies with increasing precision</li>
+            <li>Protects sensitive information with evolving defenses</li>
+          </ul>
+          <p>
+            Deploy in minutes on cloud or on-premises with seamless integration into any AI
+            workflow.
+          </p>
+          <p>
+            <strong>
+              <Link to="/guardrails">&raquo; Learn more about Guardrails</Link>
+            </strong>
+          </p>
+        </>
+      ),
+      icon: <SecurityIcon />,
+      destinationUrl: '/guardrails',
+    },
+    {
+      id: 3,
+      caption: 'Model Security',
+      mobileCaption: 'Security',
+      image: '/img/model-ranking-framed.png',
+      image2x: '/img/model-ranking-framed.png',
+      description: (
+        <>
+          <p className={styles.walkthroughHeading}>Comprehensive compliance for your AI stack</p>
+          <p>One-click scanning of your entire AI ecosystem against industry frameworks:</p>
+          <ul>
+            <li>OWASP Top 10 for LLMs compliance</li>
+            <li>NIST AI Risk Management Framework</li>
+            <li>EU AI Act requirements</li>
+            <li>Customizable scans for industry regulations</li>
+            <li>AWS plugin support for top 10 vulnerabilities</li>
+          </ul>
+          <p>Get detailed reports with clear remediation steps and continuous monitoring.</p>
+          <p>
+            <strong>
+              <Link to="/model-security">&raquo; Learn more about Model Security</Link>
+            </strong>
+          </p>
+        </>
+      ),
+      icon: <DescriptionIcon />,
+      destinationUrl: '/model-security',
+    },
+    {
+      id: 4,
       caption: 'Evaluations',
+      mobileCaption: 'Evals',
       image: '/img/claude-vs-gpt-example.png',
       image2x: '/img/claude-vs-gpt-example@2x.png',
       imageDark: '/img/claude-vs-gpt-example-dark.png',
@@ -64,75 +188,13 @@ function HomepageWalkthrough() {
           </p>
           <p>
             <strong>
-              <Link to="/docs/intro">&raquo; Get Started</Link>
+              <Link to="/docs/intro/">&raquo; Get Started with Evaluations</Link>
             </strong>
           </p>
         </>
       ),
       icon: <CompareIcon />,
       destinationUrl: '/docs/intro',
-    },
-    {
-      id: 2,
-      caption: 'Security & Red Teaming',
-      image: '/img/riskreport-1.png',
-      image2x: '/img/riskreport-1@2x.png',
-      description: (
-        <>
-          <p className={styles.walkthroughHeading}>Automated red teaming for gen AI</p>
-          <p>Run custom scans that detect security, legal, and brand risk:</p>
-          <pre className={styles.codeBox}>
-            <code>npx promptfoo@latest redteam init</code>
-          </pre>
-          <p>Our probes adapt dynamically to your app and uncover common failures like:</p>
-          <ul>
-            <li>PII leaks</li>
-            <li>Insecure tool use</li>
-            <li>Cross-session data leaks</li>
-            <li>Direct and indirect prompt injections</li>
-            <li>Jailbreaks</li>
-            <li>Harmful content</li>
-            <li>Specialized medical and legal advice</li>
-            <li>
-              and <Link to="/docs/red-team/llm-vulnerability-types/">much more</Link>.
-            </li>
-          </ul>
-          <p>
-            <strong>
-              <Link to="/docs/red-team/quickstart/">&raquo; Find exploits in your LLM app</Link>
-            </strong>
-          </p>
-        </>
-      ),
-      icon: <SecurityIcon />,
-      destinationUrl: '/docs/red-team/quickstart/',
-    },
-    {
-      id: 3,
-      caption: 'Continuous Monitoring',
-      image: '/img/continuous-monitoring.png',
-      image2x: '/img/continuous-monitoring@2x.png',
-      description: (
-        <>
-          <p className={styles.walkthroughHeading}>Spot issues before they're deployed</p>
-          <p>
-            Promptfoo provides a high-level view of your system's security posture across different
-            models, prompts, and applications.
-          </p>
-          <p>
-            Our simple file-based config and local runtime make it easy to set up in{' '}
-            <Link to="/docs/integrations/github-action/">GitHub Actions</Link> or other CI/CD
-            services.
-          </p>
-          <p>
-            <strong>
-              <Link to="/docs/red-team/quickstart/">&raquo; See setup docs</Link>
-            </strong>
-          </p>
-        </>
-      ),
-      icon: <DescriptionIcon />,
-      destinationUrl: '/docs/red-team/quickstart/',
     },
   ];
 
@@ -149,7 +211,7 @@ function HomepageWalkthrough() {
             )}
             onClick={() => setSelectedStep(step.id)}
           >
-            {step.caption}
+            {isMobile ? step.mobileCaption : step.caption}
           </button>
         ))}
       </div>
@@ -167,7 +229,7 @@ function HomepageWalkthrough() {
                   ? `${selectedStepData.imageDark} 1x, ${selectedStepData.image2xDark} 2x`
                   : `${selectedStepData?.image} 1x, ${selectedStepData?.image2x} 2x`
               }
-              alt={`Walkthrough step ${selectedStep}`}
+              alt={`${selectedStepData?.caption}`}
               className={styles.walkthroughImage}
             />
           </Link>
@@ -184,7 +246,7 @@ function AsSeenOnSection() {
   return (
     <section className={styles.asSeenOnSection}>
       <div className="container">
-        <h2>Featured In</h2>
+        <h2 className={styles.sectionTitle}>Featured In</h2>
         <div className={styles.asSeenOnGrid}>
           <a
             href="https://vimeo.com/1023317525/be082a1029"
@@ -258,29 +320,30 @@ export default function Home(): JSX.Element {
         <meta name="twitter:card" content="summary_large_image" />
       </Head>
       <HomepageHeader getStartedUrl={getStartedUrl} />
-      <HomepageWalkthrough />
+      <div className="container">
+        <HomepageWalkthrough />
+      </div>
       <main>
         <section className={styles.logoSection}>
           <div className="container">
-            <h2>Trusted by developers at</h2>
+            <h2>Trusted by teams at</h2>
             <LogoContainer noBackground noBorder />
           </div>
         </section>
         <HomepageFeatures />
-        <HomepageInfo />
         <AsSeenOnSection />
 
         <div className={styles.ctaSection}>
-          <h2>Make your LLM app reliable & secure</h2>
+          <h2>Secure your AI applications today</h2>
           <div className={styles.buttons}>
             <Link className="button button--primary button--lg" to={getStartedUrl}>
-              Getting Started
+              Get Started
             </Link>
             <Link
               className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
               to="/contact/"
             >
-              Contact Us
+              Request a Demo
             </Link>
           </div>
         </div>
