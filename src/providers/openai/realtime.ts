@@ -1248,7 +1248,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   ): void {
     // Reset audio state at the start of each request
     this.resetAudioState();
-    logger.info(`Starting new request with prompt: ${prompt}`);
 
     // Set main request timeout
     const requestTimeout = setTimeout(() => {
@@ -1278,7 +1277,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       if (!event.event_id) {
         event.event_id = this.generateEventId();
       }
-      logger.info(`Sending event: ${JSON.stringify(event)}`);
 
       const connection = this.persistentConnection;
       if (connection) {
@@ -1292,10 +1290,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     let cleanupMessageHandler: (() => void) | null = null;
 
     const resolveResponse = () => {
-      logger.info('Resolving response');
-      logger.info(`Current text response: ${responseText}`);
-      logger.info(`Has audio: ${this.currentAudioBuffer.length > 0}`);
-
       // Clean up message handler if it exists
       if (cleanupMessageHandler) {
         cleanupMessageHandler();
@@ -1321,10 +1315,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
       const hadAudio = this.currentAudioBuffer.length > 0;
       const finalAudioFormat = this.currentAudioFormat;
-
-      logger.info(
-        `Final response stats: textLength=${responseText.length}, hasAudio=${hadAudio}, audioFormat=${finalAudioFormat}`,
-      );
 
       this.resetAudioState();
 
@@ -1363,7 +1353,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     const checkAndResolve = () => {
       // Only resolve if both text and audio are done (or no audio was processed)
       if (textDone && audioDone) {
-        logger.info('Both text and audio are complete, resolving response');
         resolveResponse();
       } else {
         logger.info(`Waiting for completion - Text done: ${textDone}, Audio done: ${audioDone}`);
@@ -1373,14 +1362,12 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     const messageHandler = async (data: Buffer) => {
       try {
         const message = JSON.parse(data.toString()) as WebSocketMessage;
-        logger.info(`Received message type: ${message.type}`);
 
         switch (message.type) {
           case 'conversation.item.created':
             if (message.item.role === 'user') {
               _messageId = message.item.id;
               this.previousItemId = _messageId;
-              logger.info(`Created user message with ID: ${_messageId}`);
 
               // Send response creation event immediately after user message
               sendEvent({
@@ -1393,7 +1380,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                 },
               });
             } else if (message.item.role === 'assistant') {
-              logger.info(`Created assistant message with ID: ${message.item.id}`);
               this.assistantMessageIds.push(message.item.id);
               this.previousItemId = message.item.id;
             }
@@ -1401,13 +1387,11 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
           case 'response.created':
             _responseId = message.response.id;
-            logger.info(`Response created with ID: ${_responseId}`);
             break;
 
           case 'response.text.delta':
           case 'response.audio_transcript.delta':
             responseText += message.delta;
-            logger.info(`Received text delta. Current length: ${responseText.length}`);
             clearTimeout(requestTimeout);
             break;
 
@@ -1416,7 +1400,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
             textDone = true;
             if (message.text && message.text.length > 0) {
               responseText = message.text;
-              logger.info(`Text response completed: ${responseText}`);
             }
             checkAndResolve();
             break;
@@ -1425,12 +1408,10 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
             if (!this.isProcessingAudio) {
               this.isProcessingAudio = true;
               audioDone = false;
-              logger.info('Started processing audio');
               clearTimeout(requestTimeout);
             }
 
             if (message.item_id !== this.lastAudioItemId) {
-              logger.info('New audio stream detected, resetting buffer');
               this.lastAudioItemId = message.item_id;
               this.currentAudioBuffer = [];
             }
@@ -1439,7 +1420,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               try {
                 const audioBuffer = Buffer.from(message.audio, 'base64');
                 this.currentAudioBuffer.push(audioBuffer);
-                logger.info(`Added audio chunk, total chunks: ${this.currentAudioBuffer.length}`);
               } catch (error) {
                 logger.error(`Error processing audio data: ${error}`);
               }
@@ -1452,7 +1432,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
             }
             this.isProcessingAudio = false;
             audioDone = true;
-            logger.info('Audio processing completed');
             checkAndResolve();
             break;
 
@@ -1460,7 +1439,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
             if (message.usage) {
               _usage = message.usage;
             }
-            logger.info('Response done event received');
             // Mark both as done if we get response.done without any audio processing
             if (!this.isProcessingAudio) {
               audioDone = true;
@@ -1505,7 +1483,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     }
 
     // Create a conversation item with the user's prompt
-    logger.info('Creating initial conversation item');
     sendEvent({
       type: 'conversation.item.create',
       previous_item_id: this.previousItemId,
