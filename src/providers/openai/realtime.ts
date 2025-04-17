@@ -70,6 +70,13 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   assistantMessageIds: string[] = []; // Track assistant message IDs
   private activeTimeouts: Set<NodeJS.Timeout> = new Set();
 
+  // Add audio state management
+  private lastAudioItemId: string | null = null;
+  private currentAudioBuffer: Buffer[] = [];
+  private currentAudioFormat: string = 'wav';
+  private isProcessingAudio: boolean = false;
+  private audioTimeout: NodeJS.Timeout | null = null;
+
   constructor(
     modelName: string,
     options: { config?: OpenAiRealtimeOptions; id?: string; env?: EnvOverrides } = {},
@@ -84,6 +91,30 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     if (this.config.maintainContext === undefined) {
       this.config.maintainContext = true;
     }
+  }
+
+  // Add method to reset audio state
+  private resetAudioState(): void {
+    this.lastAudioItemId = null;
+    this.currentAudioBuffer = [];
+    this.currentAudioFormat = 'wav';
+    this.isProcessingAudio = false;
+    if (this.audioTimeout) {
+      clearTimeout(this.audioTimeout);
+      this.audioTimeout = null;
+    }
+  }
+
+  // Add method to handle audio processing timeout
+  private setupAudioTimeout(reject: (reason: Error) => void): void {
+    if (this.audioTimeout) {
+      clearTimeout(this.audioTimeout);
+    }
+    this.audioTimeout = setTimeout(() => {
+      logger.error('Audio processing timed out');
+      this.resetAudioState();
+      reject(new Error('Audio processing timed out'));
+    }, this.config.websocketTimeout || 60000); // 60 second timeout for audio
   }
 
   getRealtimeSessionBody() {
@@ -1215,11 +1246,22 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     resolve: (value: RealtimeResponse) => void,
     reject: (reason: Error) => void,
   ): void {
+    // Reset audio state at the start of each request
+    this.resetAudioState();
+    logger.info(`Starting new request with prompt: ${prompt}`);
+
+    // Set main request timeout
+    const requestTimeout = setTimeout(() => {
+      logger.error('WebSocket response timed out');
+      this.resetAudioState();
+      reject(new Error('WebSocket response timed out'));
+    }, this.config.websocketTimeout || 30000); // 30 second default timeout
+
     // Accumulators for response text and errors
     let responseText = '';
     let responseError = '';
-    // Using _responseDone to indicate the variable is used internally
-    let _responseDone = false;
+    let textDone = false;
+    let audioDone = true; // Default to true, set to false when audio processing starts
     let _usage: {
       total_tokens?: number;
       prompt_tokens?: number;
@@ -1236,9 +1278,8 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       if (!event.event_id) {
         event.event_id = this.generateEventId();
       }
-      logger.debug(`Sending event: ${JSON.stringify(event)}`);
+      logger.info(`Sending event: ${JSON.stringify(event)}`);
 
-      // Check for connection existence without negated condition
       const connection = this.persistentConnection;
       if (connection) {
         connection.send(JSON.stringify(event));
@@ -1247,128 +1288,224 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       return event.event_id;
     };
 
-    // Set up response handlers for this request
+    // Store cleanup function for message handler
+    let cleanupMessageHandler: (() => void) | null = null;
+
+    const resolveResponse = () => {
+      logger.info('Resolving response');
+      logger.info(`Current text response: ${responseText}`);
+      logger.info(`Has audio: ${this.currentAudioBuffer.length > 0}`);
+
+      // Clean up message handler if it exists
+      if (cleanupMessageHandler) {
+        cleanupMessageHandler();
+      }
+
+      clearTimeout(requestTimeout);
+
+      // Handle empty response cases
+      if (responseText.length === 0) {
+        logger.warn('Empty response text detected');
+        if (this.currentAudioBuffer.length > 0) {
+          responseText = '[Audio response received]';
+        } else {
+          responseText = '[No response received from API]';
+        }
+      }
+
+      // Prepare final response with audio if available
+      const finalAudioData =
+        this.currentAudioBuffer.length > 0
+          ? Buffer.concat(this.currentAudioBuffer).toString('base64')
+          : null;
+
+      const hadAudio = this.currentAudioBuffer.length > 0;
+      const finalAudioFormat = this.currentAudioFormat;
+
+      logger.info(
+        `Final response stats: textLength=${responseText.length}, hasAudio=${hadAudio}, audioFormat=${finalAudioFormat}`,
+      );
+
+      this.resetAudioState();
+
+      resolve({
+        output: responseText,
+        tokenUsage: {
+          total: _usage?.total_tokens || 0,
+          prompt: _usage?.prompt_tokens || 0,
+          completion: _usage?.completion_tokens || 0,
+          cached: 0,
+        },
+        cached: false,
+        metadata: {
+          responseId: _responseId,
+          messageId: _messageId,
+          usage: _usage,
+          ...(hadAudio && {
+            audio: {
+              data: finalAudioData,
+              format: finalAudioFormat,
+            },
+          }),
+        },
+        ...(hadAudio && {
+          audio: {
+            data: finalAudioData,
+            format: finalAudioFormat,
+            transcript: responseText,
+          },
+        }),
+        functionCallOccurred,
+        functionCallResults,
+      });
+    };
+
+    const checkAndResolve = () => {
+      // Only resolve if both text and audio are done (or no audio was processed)
+      if (textDone && audioDone) {
+        logger.info('Both text and audio are complete, resolving response');
+        resolveResponse();
+      } else {
+        logger.info(`Waiting for completion - Text done: ${textDone}, Audio done: ${audioDone}`);
+      }
+    };
+
     const messageHandler = async (data: Buffer) => {
       try {
         const message = JSON.parse(data.toString()) as WebSocketMessage;
-        logger.debug(`Received WebSocket message: ${message.type}`);
+        logger.info(`Received message type: ${message.type}`);
 
-        // Handle different event types
         switch (message.type) {
           case 'conversation.item.created':
             if (message.item.role === 'user') {
-              // User message was created, now create a response
               _messageId = message.item.id;
               this.previousItemId = _messageId;
+              logger.info(`Created user message with ID: ${_messageId}`);
 
-              // Prepare response creation event with appropriate settings
-              const responseEvent: any = {
+              // Send response creation event immediately after user message
+              sendEvent({
                 type: 'response.create',
                 response: {
-                  modalities: this.config.modalities || ['text'],
+                  modalities: this.config.modalities || ['text', 'audio'],
                   instructions: this.config.instructions || 'You are a helpful assistant.',
                   voice: this.config.voice || 'alloy',
                   temperature: this.config.temperature ?? 0.8,
                 },
-              };
-
-              // Add tools if configured
-              if (this.config.tools && this.config.tools.length > 0) {
-                responseEvent.response.tools = this.config.tools;
-                if (Object.prototype.hasOwnProperty.call(this.config, 'tool_choice')) {
-                  responseEvent.response.tool_choice = this.config.tool_choice;
-                } else {
-                  responseEvent.response.tool_choice = 'auto';
-                }
-              }
-
-              sendEvent(responseEvent);
+              });
             } else if (message.item.role === 'assistant') {
-              // Store assistant message ID
-              logger.debug(`Storing assistant message ID: ${message.item.id}`);
+              logger.info(`Created assistant message with ID: ${message.item.id}`);
               this.assistantMessageIds.push(message.item.id);
-              // Update previousItemId to the assistant's message for better conversation chaining
               this.previousItemId = message.item.id;
             }
             break;
 
           case 'response.created':
             _responseId = message.response.id;
+            logger.info(`Response created with ID: ${_responseId}`);
             break;
 
           case 'response.text.delta':
-            // Accumulate text deltas
+          case 'response.audio_transcript.delta':
             responseText += message.delta;
+            logger.info(`Received text delta. Current length: ${responseText.length}`);
+            clearTimeout(requestTimeout);
             break;
 
           case 'response.text.done':
-            // Final text content
+          case 'response.audio_transcript.done':
+            textDone = true;
             if (message.text && message.text.length > 0) {
               responseText = message.text;
+              logger.info(`Text response completed: ${responseText}`);
+            }
+            checkAndResolve();
+            break;
+
+          case 'response.audio.delta':
+            if (!this.isProcessingAudio) {
+              this.isProcessingAudio = true;
+              audioDone = false;
+              logger.info('Started processing audio');
+              clearTimeout(requestTimeout);
+            }
+
+            if (message.item_id !== this.lastAudioItemId) {
+              logger.info('New audio stream detected, resetting buffer');
+              this.lastAudioItemId = message.item_id;
+              this.currentAudioBuffer = [];
+            }
+
+            if (message.audio && message.audio.length > 0) {
+              try {
+                const audioBuffer = Buffer.from(message.audio, 'base64');
+                this.currentAudioBuffer.push(audioBuffer);
+                logger.info(`Added audio chunk, total chunks: ${this.currentAudioBuffer.length}`);
+              } catch (error) {
+                logger.error(`Error processing audio data: ${error}`);
+              }
             }
             break;
 
+          case 'response.audio.done':
+            if (message.format) {
+              this.currentAudioFormat = message.format;
+            }
+            this.isProcessingAudio = false;
+            audioDone = true;
+            logger.info('Audio processing completed');
+            checkAndResolve();
+            break;
+
           case 'response.done':
-            _responseDone = true;
-            // Capture token usage if available
             if (message.usage) {
               _usage = message.usage;
             }
-
-            // Remove the event handlers
-            const connectionForDone = this.persistentConnection;
-            if (connectionForDone) {
-              connectionForDone.removeListener('message', messageHandler);
+            logger.info('Response done event received');
+            // Mark both as done if we get response.done without any audio processing
+            if (!this.isProcessingAudio) {
+              audioDone = true;
+              textDone = true;
             }
-
-            // Resolve the promise
-            resolve({
-              output: responseText,
-              tokenUsage: {
-                total: _usage?.total_tokens || 0,
-                prompt: _usage?.prompt_tokens || 0,
-                completion: _usage?.completion_tokens || 0,
-                cached: 0,
-              },
-              cached: false,
-              metadata: {},
-              functionCallOccurred,
-              functionCallResults,
-            });
+            checkAndResolve();
             break;
 
           case 'error':
             responseError = message.message || 'Unknown WebSocket error';
             logger.error(`WebSocket error: ${responseError}`);
-
-            // Remove the event handlers
-            const connectionForError = this.persistentConnection;
-            if (connectionForError) {
-              connectionForError.removeListener('message', messageHandler);
-            }
-
+            clearTimeout(requestTimeout);
+            this.resetAudioState();
             reject(new Error(responseError));
             break;
         }
       } catch (error) {
         logger.error(`Error processing WebSocket message: ${error}`);
+        clearTimeout(requestTimeout);
+        this.resetAudioState();
+        reject(new Error(`Error processing WebSocket message: ${error}`));
       }
-    };
-
-    // Set up error handler
-    const errorHandler = (error: Error) => {
-      logger.error(`WebSocket error: ${error}`);
-      this.persistentConnection = null; // Clear connection on error
-      reject(error);
     };
 
     // Add message handler for this request
     if (this.persistentConnection) {
       this.persistentConnection.on('message', messageHandler);
-      this.persistentConnection.once('error', errorHandler);
+      this.persistentConnection.once('error', (error: Error) => {
+        logger.error(`WebSocket error: ${error}`);
+        clearTimeout(requestTimeout);
+        this.resetAudioState();
+        this.persistentConnection = null;
+        reject(error);
+      });
+
+      // Set up cleanup function
+      cleanupMessageHandler = () => {
+        if (this.persistentConnection) {
+          this.persistentConnection.removeListener('message', messageHandler);
+        }
+      };
     }
 
     // Create a conversation item with the user's prompt
+    logger.info('Creating initial conversation item');
     sendEvent({
       type: 'conversation.item.create',
       previous_item_id: this.previousItemId,
@@ -1383,19 +1520,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         ],
       },
     });
-
-    // Set a timeout for the response
-    const _timeout = setTimeout(() => {
-      logger.error('WebSocket response timed out');
-      const connection = this.persistentConnection;
-      if (connection) {
-        connection.removeListener('message', messageHandler);
-      }
-      this.activeTimeouts.delete(_timeout);
-      reject(new Error('WebSocket response timed out'));
-    }, this.config.websocketTimeout || 30000);
-
-    this.activeTimeouts.add(_timeout);
   }
 
   // Add cleanup method to close WebSocket connections
@@ -1405,6 +1529,11 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       // Clear all timeouts
       this.activeTimeouts.forEach((t) => clearTimeout(t));
       this.activeTimeouts.clear();
+
+      // Reset audio state
+      this.resetAudioState();
+
+      // Close connection and reset state
       this.persistentConnection.close();
       this.persistentConnection = null;
       this.previousItemId = null;
