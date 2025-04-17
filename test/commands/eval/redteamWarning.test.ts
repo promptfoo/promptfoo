@@ -80,10 +80,10 @@ describe('redteam warning in eval command', () => {
     // Call doEval
     await doEval(mockCmd, mockDefaultConfig, mockDefaultConfigPath, mockEvaluateOptions);
 
-    // Verify that logger.warn was called with a message containing "redteam generate"
-    expect(logger.warn).toHaveBeenCalled();
-    const warningCall = logger.warn.mock.calls[0][0];
-    expect(warningCall).toContain('redteam section but no test cases');
-    expect(warningCall).toContain('promptfoo redteam generate');
+    // Verify that logger.warn was called with a message containing the expected text
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('redteam section but no test cases'),
+    );
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('promptfoo redteam generate'));
   });
 });
