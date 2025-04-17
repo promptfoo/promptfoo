@@ -1,5 +1,6 @@
 import { faker } from '@faker-js/faker';
 import * as fs from 'fs';
+import path from 'path';
 import { doGenerateRedteam } from '../../src/redteam/commands/generate';
 import { doRedteamRun } from '../../src/redteam/shared';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
@@ -63,7 +64,7 @@ describe('doRedteamRun', () => {
     expect(doGenerateRedteam).toHaveBeenCalledWith(
       expect.objectContaining({
         config: customConfig,
-        output: `${dirPath}/redteam.yaml`,
+        output: path.normalize(`${dirPath}/redteam.yaml`),
       }),
     );
   });
