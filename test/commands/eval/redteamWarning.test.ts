@@ -53,8 +53,8 @@ jest.mock('../../../src/models/eval', () => {
 
 describe('redteam warning in eval command', () => {
   beforeEach(() => {
-    // Mock logger.warn
-    jest.spyOn(logger, 'warn').mockImplementation(() => {});
+    // Mock logger.warn - return the logger object to maintain chaining
+    jest.spyOn(logger, 'warn').mockImplementation(() => logger);
   });
 
   afterEach(() => {
