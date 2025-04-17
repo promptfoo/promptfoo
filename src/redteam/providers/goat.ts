@@ -3,6 +3,7 @@ import dedent from 'dedent';
 import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail } from '../../globalConfig/accounts';
+import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import type { Assertion, AssertionSet, AtomicTestCase } from '../../types';
@@ -122,10 +123,12 @@ export default class GoatProvider implements ApiProvider {
           email: getUserEmail(),
         });
         logger.debug(`[GOAT] Sending request to ${getRemoteGenerationUrl()}: ${body}`);
+        const apiKey = cloudConfig.getApiKey();
         response = await fetch(getRemoteGenerationUrl(), {
           body,
           headers: {
             'Content-Type': 'application/json',
+            ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
           },
           method: 'POST',
         });

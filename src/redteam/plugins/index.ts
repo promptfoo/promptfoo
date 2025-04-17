@@ -1,9 +1,7 @@
-import { fetchWithCache } from '../../cache';
 import { VERSION } from '../../constants';
 import { getEnvBool } from '../../envars';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types';
 import invariant from '../../util/invariant';
 import type { HarmPlugin } from '../constants';
@@ -13,8 +11,8 @@ import {
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../constants';
 import {
-  getRemoteGenerationUrl,
   neverGenerateRemote,
+  remoteGenerationFetchWithCache,
   shouldGenerateRemote,
 } from '../remoteGeneration';
 import { getShortPluginId } from '../util';
@@ -81,17 +79,13 @@ async function fetchRemoteTestCases(
     email: getUserEmail(),
   });
   try {
-    const { data } = await fetchWithCache(
-      getRemoteGenerationUrl(),
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body,
+    const { data } = await remoteGenerationFetchWithCache({
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
-      REQUEST_TIMEOUT_MS,
-    );
+      body,
+    });
     const ret = (data as { result: TestCase[] }).result;
     logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
     return ret;

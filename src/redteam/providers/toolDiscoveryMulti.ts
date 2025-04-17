@@ -1,4 +1,5 @@
 import { randomBytes } from 'crypto';
+import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import type { ApiProvider, CallApiContextParams, CallApiOptionsParams } from '../../types';
 import { getRemoteGenerationUrl } from '../remoteGeneration';
@@ -112,10 +113,12 @@ export class ServerToolDiscoveryMultiProvider implements ApiProvider {
         );
 
         // Get server's next message
+        const apiKey = cloudConfig.getApiKey();
         const response = await fetch(getRemoteGenerationUrl(), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
           },
           body: JSON.stringify({
             task: 'tool-discovery:multi-turn',

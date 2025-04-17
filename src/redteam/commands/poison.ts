@@ -7,7 +7,7 @@ import { getUserEmail } from '../../globalConfig/accounts';
 import logger, { setLogLevel } from '../../logger';
 import telemetry from '../../telemetry';
 import { setupEnv } from '../../util';
-import { getRemoteGenerationUrl } from '../remoteGeneration';
+import { remoteGenerationFetch } from '../remoteGeneration';
 
 interface PoisonOptions {
   documents: string[];
@@ -56,7 +56,7 @@ export async function generatePoisonedDocument(
   document: string,
   goal?: PoisonOptions['goal'],
 ): Promise<PoisonResponse> {
-  const response = await fetch(getRemoteGenerationUrl(), {
+  const response = await remoteGenerationFetch({
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

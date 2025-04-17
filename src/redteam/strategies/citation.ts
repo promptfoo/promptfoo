@@ -1,13 +1,12 @@
 import async from 'async';
 import { SingleBar, Presets } from 'cli-progress';
 import dedent from 'dedent';
-import { fetchWithCache } from '../../cache';
+import { VERSION } from '../../constants';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { TestCase } from '../../types';
 import invariant from '../../util/invariant';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import { neverGenerateRemote, remoteGenerationFetchWithCache } from '../remoteGeneration';
 
 async function generateCitations(
   testCases: TestCase[],
@@ -37,25 +36,20 @@ async function generateCitations(
       );
 
       const payload = {
-        task: 'citation',
-        testCases: [testCase],
-        injectVar,
-        topic: testCase.vars[injectVar],
+        task: 'get-citations',
+        prompts: [testCase.vars[injectVar]],
         config,
+        version: VERSION,
         email: getUserEmail(),
       };
 
-      const { data } = await fetchWithCache(
-        getRemoteGenerationUrl(),
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(payload),
+      const { data } = await remoteGenerationFetchWithCache({
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
-        REQUEST_TIMEOUT_MS,
-      );
+        body: JSON.stringify(payload),
+      });
 
       logger.debug(
         `Got remote citation generation result for case ${Number(index) + 1}: ${JSON.stringify(data)}`,

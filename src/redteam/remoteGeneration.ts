@@ -1,6 +1,9 @@
+import { fetchWithCache, type FetchWithCacheResult } from '../cache';
 import cliState from '../cliState';
 import { getEnvBool, getEnvString } from '../envars';
-import { CloudConfig } from '../globalConfig/cloud';
+import { fetchWithRetries } from '../fetch';
+import { cloudConfig, CloudConfig } from '../globalConfig/cloud';
+import { REQUEST_TIMEOUT_MS } from '../providers/shared';
 
 export function getRemoteGenerationUrl(): string {
   // Check env var first
@@ -15,6 +18,49 @@ export function getRemoteGenerationUrl(): string {
   }
   // otherwise use the default
   return 'https://api.promptfoo.app/api/v1/task';
+}
+
+export function remoteGenerationFetch(options: RequestInit): Promise<Response> {
+  const apiKey = cloudConfig.getApiKey();
+  return fetch(getRemoteGenerationUrl(), {
+    ...options,
+    headers: {
+      ...options.headers,
+      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+    },
+  });
+}
+
+export function remoteGenerationFetchWithCache(
+  options: RequestInit,
+): Promise<FetchWithCacheResult<any>> {
+  const apiKey = cloudConfig.getApiKey();
+  return fetchWithCache(
+    getRemoteGenerationUrl(),
+    {
+      ...options,
+      headers: {
+        ...options.headers,
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+      },
+    },
+    REQUEST_TIMEOUT_MS,
+  );
+}
+
+export function remoteGenerationFetchWithRetries(options: RequestInit): Promise<Response> {
+  const apiKey = cloudConfig.getApiKey();
+  return fetchWithRetries(
+    getRemoteGenerationUrl(),
+    {
+      ...options,
+      headers: {
+        ...options.headers,
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+      },
+    },
+    REQUEST_TIMEOUT_MS,
+  );
 }
 
 export function neverGenerateRemote(): boolean {
@@ -67,4 +113,29 @@ export function getRemoteGenerationUrlForUnaligned(): string {
   }
   // otherwise use the default
   return 'https://api.promptfoo.app/api/v1/task/harmful';
+}
+
+export function unalignedRemoteGenerationFetchWithRetries(
+  requestOptions: RequestInit,
+  {
+    timeout,
+    maxRetries,
+  }: {
+    timeout: number;
+    maxRetries: number;
+  },
+): Promise<Response> {
+  const apiKey = cloudConfig.getApiKey();
+  return fetchWithRetries(
+    getRemoteGenerationUrlForUnaligned(),
+    {
+      ...requestOptions,
+      headers: {
+        ...requestOptions.headers,
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+      },
+    },
+    timeout,
+    maxRetries,
+  );
 }

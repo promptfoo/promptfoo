@@ -1,11 +1,12 @@
-import { fetchWithCache } from '../cache';
 import { VERSION } from '../constants';
-import { fetchWithRetries } from '../fetch';
 import { getUserEmail } from '../globalConfig/accounts';
+import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import {
-  getRemoteGenerationUrl,
   getRemoteGenerationUrlForUnaligned,
+  remoteGenerationFetchWithCache,
+  remoteGenerationFetchWithRetries,
+  unalignedRemoteGenerationFetchWithRetries,
 } from '../redteam/remoteGeneration';
 import type {
   ApiProvider,
@@ -15,7 +16,6 @@ import type {
   TokenUsage,
 } from '../types';
 import type { EnvOverrides } from '../types/env';
-import { REQUEST_TIMEOUT_MS } from './shared';
 
 interface PromptfooHarmfulCompletionOptions {
   harmCategory: string;
@@ -60,8 +60,8 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
         `[HarmfulCompletionProvider] Calling generate harmful API (${getRemoteGenerationUrlForUnaligned()}) with body: ${JSON.stringify(body)}`,
       );
       // We're using the promptfoo API to avoid having users provide their own unaligned model.
-      const response = await fetchWithRetries(
-        getRemoteGenerationUrlForUnaligned(),
+
+      const response = await unalignedRemoteGenerationFetchWithRetries(
         {
           method: 'POST',
           headers: {
@@ -69,8 +69,10 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
           },
           body: JSON.stringify(body),
         },
-        580000,
-        2,
+        {
+          timeout: 580000,
+          maxRetries: 2,
+        },
       );
 
       if (!response.ok) {
@@ -129,17 +131,13 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
     };
 
     try {
-      const { data, status, statusText } = await fetchWithCache(
-        getRemoteGenerationUrl(),
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(body),
+      const { data, status, statusText } = await remoteGenerationFetchWithCache({
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
-        REQUEST_TIMEOUT_MS,
-      );
+        body: JSON.stringify(body),
+      });
 
       const { result, tokenUsage } = data;
 
@@ -201,17 +199,15 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
 
     logger.debug(`Calling promptfoo agent API with body: ${JSON.stringify(body)}`);
     try {
-      const response = await fetchWithRetries(
-        getRemoteGenerationUrl(),
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(body),
+      const apiKey = cloudConfig.getApiKey();
+      const response = await remoteGenerationFetchWithRetries({
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
         },
-        REQUEST_TIMEOUT_MS,
-      );
+        body: JSON.stringify(body),
+      });
 
       if (!response.ok) {
         throw new Error(`API call failed with status ${response.status}: ${await response.text()}`);

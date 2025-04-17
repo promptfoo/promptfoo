@@ -1,14 +1,12 @@
 import async from 'async';
 import { SingleBar, Presets } from 'cli-progress';
 import dedent from 'dedent';
-import { fetchWithCache } from '../../cache';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { TestCase } from '../../types';
 import invariant from '../../util/invariant';
 import { redteamProviderManager } from '../providers/shared';
-import { getRemoteGenerationUrl, shouldGenerateRemote } from '../remoteGeneration';
+import { remoteGenerationFetchWithCache, shouldGenerateRemote } from '../remoteGeneration';
 
 const DEFAULT_MATH_CONCEPTS = ['set theory', 'group theory', 'abstract algebra'];
 
@@ -56,17 +54,13 @@ export async function generateMathPrompt(
         email: getUserEmail(),
       };
 
-      const { data } = await fetchWithCache(
-        getRemoteGenerationUrl(),
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(payload),
+      const { data } = await remoteGenerationFetchWithCache({
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
-        REQUEST_TIMEOUT_MS,
-      );
+        body: JSON.stringify(payload),
+      });
 
       logger.debug(
         `Got remote MathPrompt generation result for batch ${Number(index) + 1}: ${JSON.stringify(data)}`,

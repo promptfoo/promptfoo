@@ -3,7 +3,7 @@ import type { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import cliState from '../../cliState';
 import logger from '../../logger';
-import { getRemoteGenerationUrl } from '../../redteam/remoteGeneration';
+import { remoteGenerationFetch } from '../../redteam/remoteGeneration';
 import { doRedteamRun } from '../../redteam/shared';
 import { evalJobs } from './eval';
 
@@ -123,7 +123,7 @@ redteamRouter.post('/cancel', async (req: Request, res: Response): Promise<void>
 // NOTE: This comes last, so the other routes take precedence
 redteamRouter.post('/:task', async (req: Request, res: Response): Promise<void> => {
   const { task } = req.params;
-  const cloudFunctionUrl = getRemoteGenerationUrl();
+
   logger.debug(
     `Received ${task} task request: ${JSON.stringify({
       method: req.method,
@@ -133,8 +133,7 @@ redteamRouter.post('/:task', async (req: Request, res: Response): Promise<void> 
   );
 
   try {
-    logger.debug(`Sending request to cloud function: ${cloudFunctionUrl}`);
-    const response = await fetch(cloudFunctionUrl, {
+    const response = await remoteGenerationFetch({
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

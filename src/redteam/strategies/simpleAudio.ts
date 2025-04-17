@@ -1,12 +1,10 @@
 import { SingleBar, Presets } from 'cli-progress';
-import { fetchWithCache } from '../../cache';
 import { VERSION } from '../../constants';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { TestCase } from '../../types';
 import invariant from '../../util/invariant';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import { neverGenerateRemote, remoteGenerationFetchWithCache } from '../remoteGeneration';
 
 /**
  * Converts text to audio using the remote API
@@ -31,15 +29,11 @@ export async function textToAudio(text: string, language: string = 'en'): Promis
       email: getUserEmail(),
     };
 
-    const { data } = await fetchWithCache(
-      getRemoteGenerationUrl(),
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      },
-      REQUEST_TIMEOUT_MS,
-    );
+    const { data } = await remoteGenerationFetchWithCache({
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
 
     if (data.error) {
       throw new Error(`Error in remote audio generation: ${data.error}`);

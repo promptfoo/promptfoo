@@ -4,6 +4,7 @@ import dedent from 'dedent';
 import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail } from '../../globalConfig/accounts';
+import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import type {
   ApiProvider,
@@ -63,10 +64,12 @@ export default class BestOfNProvider implements ApiProvider {
 
     try {
       // Get candidate prompts from the server
+      const apiKey = cloudConfig.getApiKey();
       const response = await fetch(getRemoteGenerationUrl(), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
         },
         body: JSON.stringify({
           task: 'jailbreak:best-of-n',

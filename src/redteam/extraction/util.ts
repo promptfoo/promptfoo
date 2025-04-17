@@ -4,11 +4,12 @@ import { fetchWithCache } from '../../cache';
 import { VERSION } from '../../constants';
 import { getEnvBool } from '../../envars';
 import { getUserEmail } from '../../globalConfig/accounts';
+import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { ApiProvider } from '../../types';
 import invariant from '../../util/invariant';
-import { getRemoteGenerationUrl } from '../remoteGeneration';
+import { getRemoteGenerationUrl, remoteGenerationFetchWithCache } from '../remoteGeneration';
 
 export const RedTeamGenerationResponse = z.object({
   task: z.string(),
@@ -47,16 +48,15 @@ export async function fetchRemoteGeneration(
       email: getUserEmail(),
     };
 
-    const response = await fetchWithCache(
-      getRemoteGenerationUrl(),
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+    const apiKey = cloudConfig.getApiKey();
+    const response = await remoteGenerationFetchWithCache({
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
       },
-      REQUEST_TIMEOUT_MS,
-      'json',
-    );
+      body: JSON.stringify(body),
+    });
 
     const parsedResponse = RedTeamGenerationResponse.parse(response.data);
     return parsedResponse.result;

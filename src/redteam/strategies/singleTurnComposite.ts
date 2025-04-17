@@ -1,12 +1,10 @@
 import async from 'async';
 import { SingleBar, Presets } from 'cli-progress';
-import { fetchWithCache } from '../../cache';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { TestCase } from '../../types';
 import invariant from '../../util/invariant';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import { neverGenerateRemote, remoteGenerationFetchWithCache } from '../remoteGeneration';
 
 async function generateCompositePrompts(
   testCases: TestCase[],
@@ -45,17 +43,13 @@ async function generateCompositePrompts(
         ...(config.modelFamily && { modelFamily: config.modelFamily }),
       };
 
-      const { data } = await fetchWithCache(
-        getRemoteGenerationUrl(),
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(payload),
+      const { data } = await remoteGenerationFetchWithCache({
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
-        REQUEST_TIMEOUT_MS,
-      );
+        body: JSON.stringify(payload),
+      });
 
       logger.debug(
         `Got composite jailbreak generation result for case ${Number(index) + 1}: ${JSON.stringify(

@@ -230,11 +230,15 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
   private async startRun(
     testCases: TestCasePayload[],
   ): Promise<z.infer<typeof StartResponseSchema>> {
+    const apiKey = cloudConfig.getApiKey();
     const response = await fetchWithRetries(
       `${this.baseUrl}/start`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+        },
         body: JSON.stringify({
           testCases,
           email: getUserEmail(),
@@ -250,11 +254,15 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
    * Fetches iteration data by calling the /next endpoint.
    */
   private async fetchNextIteration(runId: string): Promise<z.infer<typeof NextResponseSchema>> {
+    const apiKey = cloudConfig.getApiKey();
     const response = await fetchWithRetries(
       `${this.baseUrl}/next`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+        },
         body: JSON.stringify({
           id: runId,
           email: getUserEmail(),
@@ -350,11 +358,15 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
     runId: string,
     successfulResult: { result: EvaluateResult; program: string; pluginId: string },
   ): Promise<void> {
+    const apiKey = cloudConfig.getApiKey();
     await fetchWithRetries(
       `${this.baseUrl}/success`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+        },
         body: JSON.stringify({
           id: runId,
           pluginId: successfulResult.pluginId,

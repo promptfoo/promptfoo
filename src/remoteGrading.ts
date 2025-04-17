@@ -1,8 +1,6 @@
-import { fetchWithCache } from './cache';
 import { getUserEmail } from './globalConfig/accounts';
 import logger from './logger';
-import { REQUEST_TIMEOUT_MS } from './providers/shared';
-import { getRemoteGenerationUrl } from './redteam/remoteGeneration';
+import { remoteGenerationFetchWithCache } from './redteam/remoteGeneration';
 import type { GradingResult } from './types';
 
 type RemoteGradingPayload = {
@@ -17,17 +15,14 @@ export async function doRemoteGrading(
     payload.email = getUserEmail();
     const body = JSON.stringify(payload);
     logger.debug(`Performing remote grading: ${body}`);
-    const { data } = await fetchWithCache(
-      getRemoteGenerationUrl(),
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body,
+
+    const { data } = await remoteGenerationFetchWithCache({
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
-      REQUEST_TIMEOUT_MS,
-    );
+      body,
+    });
 
     const { result } = data as { result: GradingResult };
     logger.debug(`Got remote grading result: ${JSON.stringify(result)}`);
