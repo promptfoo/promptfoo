@@ -5,14 +5,14 @@ import styles from './styles.module.css';
 export default function HomepageFeatures() {
   const features = [
     {
-      title: 'Tailored to your systems',
+      title: 'Find vulnerabilities you actually care about',
       description: (
         <>
           <p>
-            Our specialized language models find vulnerabilities in 50+ risk areas, including in
-            complex RAGs and agents.
+            Our specialized language models generate attacks specific to your industry, company, and
+            application.
           </p>
-          <p>No canned attacks - every attack is tailored to your system.</p>
+          <p>No generic canned attacks - every attack is created on-the-fly.</p>
         </>
       ),
       image: '/img/security-coverage.png',
@@ -22,14 +22,11 @@ export default function HomepageFeatures() {
       cta: 'Learn More',
     },
     {
-      title: 'The most widely adopted security stack',
+      title: 'Battle-tested at enterprise scale',
       description: (
         <>
-          <p>
-            Battle-tested at large enterprises, with a thriving open source community of security
-            experts.
-          </p>
-          <p>Promptfoo has been used by 75,000+ users, ranging from startups to Fortune 50s.</p>
+          <p>Adopted by 27 Fortune 500 companies shipping apps to hundreds of millions of users.</p>
+          <p>Embraced by an open-source community of over 75,000 developers worldwide.</p>
         </>
       ),
       image: '/img/github-repo.png',
@@ -38,6 +35,7 @@ export default function HomepageFeatures() {
       link: '/docs/red-team/quickstart/',
       cta: 'Get Started',
     },
+    /*
     {
       title: 'Set your standards',
       description: (
@@ -55,6 +53,18 @@ export default function HomepageFeatures() {
       link: '/red-teaming/',
       cta: 'Learn More',
     },
+    */
+    {
+      title: 'Security-first, developer-friendly',
+      image:
+        'https://user-images.githubusercontent.com/310310/244891726-480e1114-d049-40b9-bd5f-f81c15060284.gif',
+      image2x:
+        'https://user-images.githubusercontent.com/310310/244891726-480e1114-d049-40b9-bd5f-f81c15060284.gif',
+      description:
+        'Move quickly with a command-line interface, live reloads, and caching. No SDKs, cloud dependencies, or logins.',
+      link: '/docs/red-team/quickstart/',
+      cta: 'Get Started',
+    },
     {
       title: 'Deploy your way',
       description:
@@ -64,6 +74,7 @@ export default function HomepageFeatures() {
       alt: 'promptfoo deployment options',
       link: '/contact/',
       cta: 'Get Started',
+      className: 'noBorder',
     },
   ];
 
@@ -73,7 +84,10 @@ export default function HomepageFeatures() {
         <h2 className={styles.featuresTitle}>Why Promptfoo?</h2>
         <div className={styles.featuresList}>
           {features.map((feature, idx) => (
-            <div key={idx} className={styles.featureItem}>
+            <div
+              key={idx}
+              className={`${styles.featureItem} ${feature.className ? styles[feature.className] : ''}`}
+            >
               <div className={styles.featureContent}>
                 <h3>{feature.title}</h3>
                 <p>{feature.description}</p>
@@ -88,7 +102,7 @@ export default function HomepageFeatures() {
                     src={feature.image}
                     srcSet={`${feature.image} 1x, ${feature.image2x} 2x`}
                     alt={feature.alt}
-                    className={styles.featureImage}
+                    className={`${styles.featureImage} ${feature.className ? styles[feature.className + 'Image'] : ''}`}
                   />
                 </Link>
               </div>

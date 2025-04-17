@@ -180,9 +180,6 @@ function CallToActionSection() {
       <div className="container">
         <h2>Upgrade to guardrails that learn and adapt</h2>
         <div className={styles.buttons}>
-          <Link className="button button--primary button--lg" to="/docs/guardrails/quickstart">
-            Get Started
-          </Link>
           <Link
             className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
             to="/contact/"

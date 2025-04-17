@@ -22,7 +22,7 @@ function HomepageHeader({ getStartedUrl }: { getStartedUrl: string }) {
           from <span className={styles.heroHighlight}>prompt</span> to{' '}
           <span className={styles.heroHighlight}>production</span>
         </h1>
-        <p>Gen AI red teaming, guardrails, and model security trusted by 75,000+ users</p>
+        <p>Open-source LLM security trusted by 75,000+ users</p>
         <div className={styles.buttons}>
           <Link className="button button--primary button--lg" to={getStartedUrl}>
             Get Started
@@ -55,11 +55,22 @@ function HomepageWalkthrough() {
     }
     return 1; // Default to Red Teaming
   });
+  const [isMobile, setIsMobile] = React.useState(false);
+
+  React.useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   const steps = [
     {
       id: 1,
       caption: 'Red Teaming',
+      mobileCaption: 'Red Team',
       image: '/img/riskreport-1.png',
       image2x: '/img/riskreport-1@2x.png',
       description: (
@@ -96,8 +107,9 @@ function HomepageWalkthrough() {
     {
       id: 2,
       caption: 'Guardrails',
-      image: '/img/guardrails.png',
-      image2x: '/img/guardrails.png',
+      mobileCaption: 'Guardrails',
+      image: '/img/guardrails-framed.png',
+      image2x: '/img/guardrails-framed.png',
       description: (
         <>
           <p className={styles.walkthroughHeading}>
@@ -130,8 +142,9 @@ function HomepageWalkthrough() {
     {
       id: 3,
       caption: 'Model Security',
-      image: '/img/foundationmodel-reports.png',
-      image2x: '/img/foundationmodel-reports.png',
+      mobileCaption: 'Security',
+      image: '/img/model-ranking-framed.png',
+      image2x: '/img/model-ranking-framed.png',
       description: (
         <>
           <p className={styles.walkthroughHeading}>Comprehensive compliance for your AI stack</p>
@@ -157,6 +170,7 @@ function HomepageWalkthrough() {
     {
       id: 4,
       caption: 'Evaluations',
+      mobileCaption: 'Evals',
       image: '/img/claude-vs-gpt-example.png',
       image2x: '/img/claude-vs-gpt-example@2x.png',
       imageDark: '/img/claude-vs-gpt-example-dark.png',
@@ -197,7 +211,7 @@ function HomepageWalkthrough() {
             )}
             onClick={() => setSelectedStep(step.id)}
           >
-            {step.caption}
+            {isMobile ? step.mobileCaption : step.caption}
           </button>
         ))}
       </div>

@@ -208,7 +208,7 @@ function ActionOrientedSection() {
     {
       number: 1,
       title: 'Tell us about your application',
-      image: '/img/docs/setup/application-details.png',
+      image: '/img/application-details-framed.png',
     },
     {
       number: 2,
@@ -218,7 +218,7 @@ function ActionOrientedSection() {
     {
       number: 3,
       title: 'Receive detailed vulnerability reports',
-      image: '/img/riskreport-1@2x.png',
+      image: '/img/risk-assessment-framed.png',
     },
     {
       number: 4,
@@ -297,7 +297,7 @@ function ContinuousMonitoringSection() {
         <div className={styles.screenshotPlaceholder}>
           <img
             loading="lazy"
-            src="/img/continuous-monitoring@2x.png"
+            src="/img/continuous-monitoring-framed.png"
             alt="Continuous monitoring dashboard"
           />
         </div>

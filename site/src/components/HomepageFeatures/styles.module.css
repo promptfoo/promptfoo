@@ -53,6 +53,20 @@
   transform: scale(1.02);
 }
 
+/* No border or shadow styles */
+.noBorder {
+  /* Custom styles for the container if needed */
+}
+
+.noBorderImage {
+  box-shadow: none;
+  border-radius: 0;
+}
+
+.noBorderImage:hover {
+  transform: none;
+}
+
 @media screen and (max-width: 768px) {
   .featureItem,
   .featureItem:nth-child(even) {
