@@ -148,6 +148,12 @@ export interface RunEvalOptions {
   // Used by pandamonium, this should never be passed to callApi, it could be a massive object that will break the stack
   allTests?: RunEvalOptions[];
   concurrency?: number;
+  
+  /**
+   * AbortSignal that can be used to cancel the evaluation
+   * This is passed to the provider's callApi function
+   */
+  abortSignal?: AbortSignal;
 }
 
 const EvaluateOptionsSchema = z.object({

@@ -172,6 +172,7 @@ export async function runEval({
   isRedteam,
   allTests,
   concurrency,
+  abortSignal,
 }: RunEvalOptions): Promise<EvaluateResult[]> {
   // Use the original prompt to set the label, not renderedPrompt
   const promptLabel = prompt.label;
@@ -260,7 +261,7 @@ export async function runEval({
         logger: logger as unknown as winston.Logger,
         fetchWithCache,
         getCache,
-      });
+      }, abortSignal ? { abortSignal } : undefined);
 
       logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
       logger.debug(`Provider response cached property explicitly: ${response.cached}`);
@@ -765,6 +766,7 @@ class Evaluator {
                 isRedteam: this.testSuite.redteam != null,
                 allTests: runEvalOptions,
                 concurrency,
+                abortSignal,
               });
               promptIdx++;
             }
@@ -973,12 +975,37 @@ class Evaluator {
         return processEvalStep(evalStep, index);
       }
       
+      // Create an AbortController to cancel the request if it times out
+      const abortController = new AbortController();
+      const { signal } = abortController;
+      
+      // Add the abort signal to the evalStep
+      const evalStepWithSignal = {
+        ...evalStep,
+        abortSignal: signal
+      };
+      
       try {
         return await Promise.race([
-          processEvalStep(evalStep, index),
+          processEvalStep(evalStepWithSignal, index),
           new Promise<void>((_, reject) => {
-            setTimeout(() => {
+            const timeoutId = setTimeout(() => {
+              // Abort any ongoing requests
+              abortController.abort();
+              
+              // If the provider has a cleanup method, call it
+              if (typeof evalStep.provider.cleanup === 'function') {
+                try {
+                  evalStep.provider.cleanup();
+                } catch (cleanupErr) {
+                  logger.warn(`Error during provider cleanup: ${cleanupErr}`);
+                }
+              }
+              
               reject(new Error(`Evaluation timed out after ${timeoutMs}ms`));
+              
+              // Clear the timeout to prevent memory leaks
+              clearTimeout(timeoutId);
             }, timeoutMs);
           })
         ]);
