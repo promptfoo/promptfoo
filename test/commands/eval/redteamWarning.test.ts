@@ -36,13 +36,26 @@ jest.mock('../../../src/migrate', () => ({
   runDbMigrations: jest.fn().mockResolvedValue({}),
 }));
 
+// Mock the table generation
+jest.mock('../../../src/table', () => ({
+  generateTable: jest.fn().mockReturnValue({
+    toString: jest.fn().mockReturnValue('Mock Table Output'),
+  }),
+}));
+
 jest.mock('../../../src/models/eval', () => {
   return {
     __esModule: true,
     default: jest.fn().mockImplementation(() => ({
       addResult: jest.fn().mockResolvedValue({}),
       addPrompts: jest.fn().mockResolvedValue({}),
-      getTable: jest.fn().mockResolvedValue({ body: [] }),
+      getTable: jest.fn().mockResolvedValue({
+        head: {
+          prompts: [],
+          vars: [],
+        },
+        body: [],
+      }),
       resultsCount: 0,
       prompts: [],
       persisted: false,
@@ -51,10 +64,26 @@ jest.mock('../../../src/models/eval', () => {
   };
 });
 
+// Mock the logger module with both default and named exports
+jest.mock('../../../src/logger', () => {
+  const mockLogger = {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+  };
+
+  return {
+    __esModule: true,
+    default: mockLogger,
+    getLogLevel: jest.fn().mockReturnValue('info'),
+    setLogLevel: jest.fn(),
+  };
+});
+
 describe('redteam warning in eval command', () => {
   beforeEach(() => {
-    // Mock logger.warn - return the logger object to maintain chaining
-    jest.spyOn(logger, 'warn').mockImplementation(() => logger);
+    jest.clearAllMocks();
   });
 
   afterEach(() => {
@@ -62,10 +91,13 @@ describe('redteam warning in eval command', () => {
   });
 
   it('should warn when config has redteam section but no test cases', async () => {
-    // Mock command object
+    // Mock command object with all required properties
     const mockCmd = {
       config: ['test-config.yaml'],
       write: false, // Prevent database operations
+      progressBar: false,
+      verbose: false,
+      table: false, // Set to false to avoid table generation
     };
 
     // Mock defaultConfig
