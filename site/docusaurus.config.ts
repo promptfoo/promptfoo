@@ -111,20 +111,24 @@ const config: Config = {
       items: [
         {
           type: 'dropdown',
-          label: 'Product',
+          label: 'Products',
           position: 'left',
           items: [
             {
-              to: '/security/',
-              label: 'Gen AI Security',
+              to: '/red-teaming/',
+              label: 'Red Teaming',
             },
             {
-              to: '/llm-vulnerability-scanner/',
-              label: 'Vulnerability Scanner',
+              to: '/guardrails/',
+              label: 'Guardrails',
+            },
+            {
+              to: '/model-security/',
+              label: 'Model Security',
             },
             {
               to: '/docs/getting-started/',
-              label: 'LLM Evaluations',
+              label: 'Evaluations',
             },
           ],
         },
@@ -208,16 +212,20 @@ const config: Config = {
           title: 'Product',
           items: [
             {
-              label: 'Docs',
-              to: '/docs/intro/',
+              label: 'Red Teaming',
+              to: '/red-teaming/',
             },
             {
-              label: 'Command Line',
+              label: 'Guardrails',
+              to: '/guardrails/',
+            },
+            {
+              label: 'Model Security',
+              to: '/model-security/',
+            },
+            {
+              label: 'Evaluations',
               to: '/docs/getting-started/',
-            },
-            {
-              label: 'Node Package',
-              to: '/docs/usage/node-package/',
             },
             {
               label: 'Enterprise',
