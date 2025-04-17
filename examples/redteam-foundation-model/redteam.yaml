@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Foundation Model Red Team Template
+description: OpenAI GPT-4o 2024-11-20 Foundation Model Redteam
 targets:
-  - openai:chat:gpt-4o-mini
+  - openai:chat:gpt-4o-2024-11-20
 prompts:
   - '{{prompt}}'
 redteam:
