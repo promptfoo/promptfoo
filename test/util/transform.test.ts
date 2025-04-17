@@ -232,6 +232,23 @@ describe('util', () => {
       );
     });
 
+    it('does not throw error when validateReturn is false and function returns null', async () => {
+      const output = 'test';
+      const context = { vars: {}, prompt: {} };
+      const transformFunction = 'null'; // Will be wrapped with "return" automatically
+      const result = await transform(transformFunction, output, context, false);
+      expect(result).toBeNull();
+    });
+
+    it('throws error when validateReturn is true and function returns null', async () => {
+      const output = 'test';
+      const context = { vars: {}, prompt: {} };
+      const transformFunction = 'null'; // Will be wrapped with "return" automatically
+      await expect(transform(transformFunction, output, context, true)).rejects.toThrow(
+        'Transform function did not return a value',
+      );
+    });
+
     it('handles file transform function errors gracefully', async () => {
       const output = 'test';
       const context = { vars: {}, prompt: {} };

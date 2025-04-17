@@ -34,6 +34,13 @@ describe('OpenAiResponsesProvider', () => {
     );
   });
 
+  it('should support the latest o-series reasoning models', () => {
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3-2025-04-16');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o4-mini');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o4-mini-2025-04-16');
+  });
+
   it('should support gpt-4.1 and its variants', () => {
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4.1');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4.1-2025-04-14');
@@ -1531,5 +1538,99 @@ describe('OpenAiResponsesProvider', () => {
       expect(result.isRefusal).toBe(true);
       expect(result.output).toBe('I cannot provide that information.');
     });
+  });
+
+  it('should configure o3 model correctly with reasoning parameters', async () => {
+    const mockApiResponse = {
+      id: 'resp_abc123',
+      status: 'completed',
+      model: 'o3',
+      output: [
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [
+            {
+              type: 'output_text',
+              text: 'Response from o3 model',
+            },
+          ],
+        },
+      ],
+      usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
+    };
+
+    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new OpenAiResponsesProvider('o3', {
+      config: {
+        apiKey: 'test-key',
+        reasoning_effort: 'high',
+        max_output_tokens: 2000,
+      },
+    });
+
+    await provider.callApi('Test prompt');
+
+    const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+    const reqOptions = mockCall[1] as { body: string };
+    const body = JSON.parse(reqOptions.body);
+
+    expect(body.model).toBe('o3');
+    expect(body.reasoning).toEqual({ effort: 'high' });
+    expect(body.max_output_tokens).toBe(2000);
+    expect(body.temperature).toBeUndefined(); // o3 model should not have temperature
+  });
+
+  it('should configure o4-mini model correctly with reasoning parameters', async () => {
+    const mockApiResponse = {
+      id: 'resp_abc123',
+      status: 'completed',
+      model: 'o4-mini',
+      output: [
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [
+            {
+              type: 'output_text',
+              text: 'Response from o4-mini model',
+            },
+          ],
+        },
+      ],
+      usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
+    };
+
+    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new OpenAiResponsesProvider('o4-mini', {
+      config: {
+        apiKey: 'test-key',
+        reasoning_effort: 'medium',
+        max_output_tokens: 1000,
+      },
+    });
+
+    await provider.callApi('Test prompt');
+
+    const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+    const reqOptions = mockCall[1] as { body: string };
+    const body = JSON.parse(reqOptions.body);
+
+    expect(body.model).toBe('o4-mini');
+    expect(body.reasoning).toEqual({ effort: 'medium' });
+    expect(body.max_output_tokens).toBe(1000);
+    expect(body.temperature).toBeUndefined(); // o4-mini model should not have temperature
   });
 });
