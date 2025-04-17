@@ -6,7 +6,7 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import EvalsDataGrid from '../../evals/components/EvalsDataGrid';
 
-const EvalSelectorDialog: React.FC<{
+type Props = {
   open: boolean;
   onClose: () => void;
   onEvalSelected: (evalId: string) => void;
@@ -14,7 +14,19 @@ const EvalSelectorDialog: React.FC<{
   description?: string;
   focusedEvalId?: string;
   filterByDatasetId?: boolean;
-}> = ({ open, onClose, onEvalSelected, title, description, focusedEvalId, filterByDatasetId }) => {
+  onOpenFocusSearch?: boolean;
+};
+
+const EvalSelectorDialog: React.FC<Props> = ({
+  open,
+  onClose,
+  onEvalSelected,
+  title,
+  description,
+  focusedEvalId,
+  filterByDatasetId,
+  onOpenFocusSearch = false,
+}) => {
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       {title ? <DialogTitle>{title}</DialogTitle> : null}
@@ -25,6 +37,7 @@ const EvalSelectorDialog: React.FC<{
             onEvalSelected={onEvalSelected}
             focusedEvalId={focusedEvalId}
             filterByDatasetId={filterByDatasetId}
+            focusQuickFilterOnMount={onOpenFocusSearch}
           />
         </Box>
       </DialogContent>
