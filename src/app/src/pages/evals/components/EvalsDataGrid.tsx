@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useState } from 'react';
+import { useMemo, useEffect, useState, useRef, forwardRef } from 'react';
 import { callApi } from '@app/utils/api';
 import { Box, Typography, Paper, CircularProgress, useTheme, Link } from '@mui/material';
 import {
@@ -13,6 +13,7 @@ import {
   type GridRenderCellParams,
   GridToolbarExportContainer,
   GridCsvExportMenuItem,
+  type GridToolbarQuickFilterProps,
 } from '@mui/x-data-grid';
 import invariant from '@promptfoo/util/invariant';
 
@@ -31,6 +32,7 @@ type Eval = {
 declare module '@mui/x-data-grid' {
   interface ToolbarPropsOverrides {
     showUtilityButtons: boolean;
+    focusQuickFilterOnMount: boolean;
   }
 }
 
@@ -40,8 +42,41 @@ const GridToolbarExport = () => (
   </GridToolbarExportContainer>
 );
 
-function CustomToolbar({ showUtilityButtons }: { showUtilityButtons: boolean }) {
+const QuickFilter = forwardRef<HTMLInputElement, GridToolbarQuickFilterProps>((props, ref) => {
   const theme = useTheme();
+  return (
+    <GridToolbarQuickFilter
+      {...props}
+      inputRef={ref}
+      sx={{
+        '& .MuiInputBase-root': {
+          borderRadius: 2,
+          backgroundColor: theme.palette.background.paper,
+        },
+      }}
+    />
+  );
+});
+
+QuickFilter.displayName = 'QuickFilter';
+
+function CustomToolbar({
+  showUtilityButtons,
+  focusQuickFilterOnMount,
+}: {
+  showUtilityButtons: boolean;
+  focusQuickFilterOnMount: boolean;
+}) {
+  const theme = useTheme();
+  const quickFilterRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (focusQuickFilterOnMount && quickFilterRef.current) {
+      console.log('focusing quick filter');
+      quickFilterRef.current.focus();
+    }
+  }, [focusQuickFilterOnMount]);
+
   return (
     <GridToolbarContainer sx={{ p: 1, borderBottom: `1px solid ${theme.palette.divider}` }}>
       {showUtilityButtons && (
@@ -53,14 +88,7 @@ function CustomToolbar({ showUtilityButtons }: { showUtilityButtons: boolean }) 
         </Box>
       )}
       <Box sx={{ flexGrow: 1 }} />
-      <GridToolbarQuickFilter
-        sx={{
-          '& .MuiInputBase-root': {
-            borderRadius: 2,
-            backgroundColor: theme.palette.background.paper,
-          },
-        }}
-      />
+      <QuickFilter ref={quickFilterRef} />
     </GridToolbarContainer>
   );
 }
@@ -78,11 +106,13 @@ export default function EvalsDataGrid({
   focusedEvalId,
   showUtilityButtons = false,
   filterByDatasetId = false,
+  focusQuickFilterOnMount = false,
 }: {
   onEvalSelected: (evalId: string) => void;
   focusedEvalId?: string;
   showUtilityButtons?: boolean;
   filterByDatasetId?: boolean;
+  focusQuickFilterOnMount?: boolean;
 }) {
   if (filterByDatasetId) {
     invariant(focusedEvalId, 'focusedEvalId is required when filterByDatasetId is true');
@@ -281,7 +311,12 @@ export default function EvalsDataGrid({
             </Box>
           ),
         }}
-        slotProps={{ toolbar: { showUtilityButtons } }}
+        slotProps={{
+          toolbar: {
+            showUtilityButtons,
+            focusQuickFilterOnMount,
+          },
+        }}
         onCellClick={handleCellClick}
         sx={{
           border: 'none',

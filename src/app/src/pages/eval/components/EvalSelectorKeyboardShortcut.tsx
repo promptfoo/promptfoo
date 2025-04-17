@@ -40,6 +40,7 @@ const EvalSelector: React.FC<EvalSelectorProps> = ({ onEvalSelected }) => {
       open={open}
       onClose={handleClose}
       onEvalSelected={onEvalSelected}
+      onOpenFocusSearch
     />
   );
 };
