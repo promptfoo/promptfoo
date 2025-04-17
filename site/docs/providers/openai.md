@@ -888,7 +888,9 @@ The Responses API supports a wide range of models, including:
 - `o1` - Powerful reasoning model
 - `o1-mini` - Smaller, more affordable reasoning model
 - `o1-pro` - Enhanced reasoning model with more compute
-- `o3-mini` - Latest reasoning model with improved performance
+- `o3` - OpenAI's most powerful reasoning model
+- `o3-mini` - Smaller, more affordable reasoning model
+- `o4-mini` - Latest fast, cost-effective reasoning model
 
 ### Using the Responses API
 
@@ -917,6 +919,53 @@ The Responses API configuration supports these parameters in addition to standar
 | `store`                | Whether to store the response for later retrieval | true       | Boolean                             |
 | `truncation`           | Strategy to handle context window overflow        | 'disabled' | 'auto', 'disabled'                  |
 | `reasoning`            | Configuration for reasoning models                | None       | Object with `effort` field          |
+
+### Reasoning Models
+
+When using reasoning models like `o1`, `o1-pro`, `o3`, `o3-mini`, or `o4-mini`, you can control the reasoning effort:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:o3
+    config:
+      reasoning_effort: 'medium' # Can be "low", "medium", or "high"
+      max_output_tokens: 1000
+```
+
+Reasoning models "think before they answer," generating internal reasoning that isn't visible in the output but counts toward token usage and billing.
+
+### o3 and o4-mini Models
+
+OpenAI offers advanced reasoning models in the o-series:
+
+#### o3 and o4-mini
+
+These reasoning models provide different performance and efficiency profiles:
+
+- **o3**: Powerful reasoning model, optimized for complex mathematical, scientific, and coding tasks
+- **o4-mini**: Efficient reasoning model with strong performance in coding and visual tasks at lower cost
+
+Both models feature:
+
+- Large context window (200,000 tokens)
+- High maximum output tokens (100,000 tokens)
+
+For current specifications and pricing information, refer to [OpenAI's pricing page](https://openai.com/pricing).
+
+Example configuration:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:o3
+    config:
+      reasoning_effort: 'high'
+      max_output_tokens: 2000
+
+  - id: openai:responses:o4-mini
+    config:
+      reasoning_effort: 'medium'
+      max_output_tokens: 1000
+```
 
 ### Sending Images in Prompts
 
@@ -965,20 +1014,6 @@ providers:
               required: ['location']
       tool_choice: 'auto'
 ```
-
-### Reasoning Models
-
-When using reasoning models like `o1`, `o1-pro`, or `o3-mini`, you can control the reasoning effort:
-
-```yaml title="promptfooconfig.yaml"
-providers:
-  - id: openai:responses:o1
-    config:
-      reasoning_effort: 'medium' # Can be "low", "medium", or "high"
-      max_output_tokens: 1000
-```
-
-Reasoning models "think before they answer," generating internal reasoning that isn't visible in the output but counts toward token usage and billing.
 
 ### Complete Example
 

@@ -29,7 +29,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'o1-mini',
     'o1-pro',
     'o3',
-    'o3-preview',
+    'o3-2025-04-16',
+    'o4-mini',
+    'o4-mini-2025-04-16',
     'o3-mini',
     'gpt-4.5-preview',
     'gpt-4.5-preview-2025-02-27',
@@ -46,7 +48,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   }
 
   protected isReasoningModel(): boolean {
-    return this.modelName.startsWith('o1') || this.modelName.startsWith('o3');
+    return (
+      this.modelName.startsWith('o1') ||
+      this.modelName.startsWith('o3') ||
+      this.modelName.startsWith('o4')
+    );
   }
 
   protected supportsTemperature(): boolean {
@@ -78,9 +84,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     }
 
     const isReasoningModel = this.isReasoningModel();
-    const maxOutputTokens = isReasoningModel
-      ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
-      : (config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024));
+    const maxOutputTokens =
+      config.max_output_tokens ??
+      (isReasoningModel
+        ? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS')
+        : getEnvInt('OPENAI_MAX_TOKENS', 1024));
 
     const temperature = this.supportsTemperature()
       ? (config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0))
