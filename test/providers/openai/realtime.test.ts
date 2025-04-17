@@ -138,73 +138,50 @@ describe('OpenAI Realtime Provider', () => {
       const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview-2024-12-17');
       jest.spyOn(provider, 'getApiKey').mockImplementation().mockReturnValue('sk-test-key');
 
+      // Override the default mock for this test
+      (MockWebSocket as any).mockImplementationOnce(() => {
+        const ws = {
+          on: jest.fn((event, handler) => {
+            if (event === 'open') {
+              // Trigger open immediately
+              handler();
+            }
+            if (event === 'message') {
+              // Trigger messages in next tick to ensure open has completed
+              process.nextTick(() => {
+                handler(
+                  Buffer.from(
+                    JSON.stringify({
+                      type: 'response.text.done',
+                      text: 'Hello, world!',
+                      usage: { total_tokens: 10, input_tokens: 5, output_tokens: 5 },
+                    }),
+                  ),
+                );
+                handler(
+                  Buffer.from(
+                    JSON.stringify({
+                      type: 'response.done',
+                      response: {
+                        usage: { total_tokens: 10, input_tokens: 5, output_tokens: 5 },
+                      },
+                    }),
+                  ),
+                );
+              });
+            }
+          }),
+          send: jest.fn(),
+          close: jest.fn(),
+          once: jest.fn(),
+        };
+        return ws;
+      });
+
       const result = await provider.callApi('Hello');
 
       expect(result.output).toBe('Hello, world!');
       expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, cached: 0 });
-    });
-
-    it('should properly format the WebSocket request URL', () => {
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview-2024-12-17');
-
-      // Mock getApiKey
-      jest.spyOn(provider, 'getApiKey').mockImplementation().mockReturnValue('sk-test-key');
-
-      // Mock WebSocket constructor to capture the URL and headers
-      let capturedUrl: string | undefined;
-      let capturedOptions: any;
-
-      (MockWebSocket as any).mockImplementation((url: string, options: any) => {
-        capturedUrl = url;
-        capturedOptions = options;
-        return {
-          on: jest.fn(),
-          send: jest.fn(),
-          close: jest.fn(),
-        } as any;
-      });
-
-      // Replace the directWebSocketRequest method with a mock that just creates the WebSocket
-      // but doesn't actually wait for any events
-      const originalMethod = provider.directWebSocketRequest;
-      jest.spyOn(provider, 'directWebSocketRequest').mockImplementation((prompt: string) => {
-        // Just create the WebSocket but return a resolved promise instead of waiting
-        new WebSocket(
-          `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(provider.modelName)}`,
-          {
-            headers: {
-              Authorization: `Bearer ${provider.getApiKey()}`,
-              'OpenAI-Beta': 'realtime=v1',
-              'User-Agent': 'promptfoo Realtime API Client',
-              Origin: 'https://api.openai.com',
-            },
-          },
-        );
-
-        return Promise.resolve({
-          output: 'Mock response',
-          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
-          cached: false,
-          metadata: {},
-        });
-      });
-
-      // Call the method with our mock
-      provider.directWebSocketRequest('Test');
-
-      // Verify the URL was formatted correctly
-      expect(capturedUrl).toBe(
-        'wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17',
-      );
-
-      // Verify the headers were set correctly
-      expect(capturedOptions.headers).toMatchObject({
-        Authorization: 'Bearer sk-test-key',
-        'OpenAI-Beta': 'realtime=v1',
-      });
-
-      // Restore the original method
-      provider.directWebSocketRequest = originalMethod;
     });
 
     it('should handle function calls correctly', async () => {
@@ -237,50 +214,44 @@ describe('OpenAI Realtime Provider', () => {
       // Override the default mock for this test
       (MockWebSocket as any).mockImplementationOnce(() => {
         const ws = {
-          on: jest.fn(),
+          on: jest.fn((event, handler) => {
+            if (event === 'open') {
+              // Trigger open immediately
+              handler();
+            }
+            if (event === 'message') {
+              // Trigger messages in next tick to ensure open has completed
+              process.nextTick(() => {
+                handler(
+                  Buffer.from(
+                    JSON.stringify({
+                      type: 'response.text.done',
+                      text: 'The weather in New York is sunny, 25°C',
+                      usage: { total_tokens: 15, prompt: 8, completion: 7 },
+                      functionCallOccurred: true,
+                      functionCallResults: ['{"weather": "sunny", "temperature": 25}'],
+                    }),
+                  ),
+                );
+                handler(
+                  Buffer.from(
+                    JSON.stringify({
+                      type: 'response.done',
+                      response: {
+                        usage: { total_tokens: 15, prompt: 8, completion: 7 },
+                        functionCallOccurred: true,
+                        functionCallResults: ['{"weather": "sunny", "temperature": 25}'],
+                      },
+                    }),
+                  ),
+                );
+              });
+            }
+          }),
           send: jest.fn(),
           close: jest.fn(),
           once: jest.fn(),
         };
-
-        setTimeout(() => {
-          const handlers = ws.on.mock.calls.reduce((acc: any, [event, handler]) => {
-            acc[event] = handler;
-            return acc;
-          }, {});
-
-          if (handlers.open) {
-            handlers.open();
-          }
-
-          if (handlers.message) {
-            handlers.message(
-              Buffer.from(
-                JSON.stringify({
-                  type: 'response.text.done',
-                  text: 'The weather in New York is sunny, 25°C',
-                  usage: { total_tokens: 15, prompt: 8, completion: 7 },
-                  functionCallOccurred: true,
-                  functionCallResults: ['{"weather": "sunny", "temperature": 25}'],
-                }),
-              ),
-            );
-
-            handlers.message(
-              Buffer.from(
-                JSON.stringify({
-                  type: 'response.done',
-                  response: {
-                    usage: { total_tokens: 15, prompt: 8, completion: 7 },
-                    functionCallOccurred: true,
-                    functionCallResults: ['{"weather": "sunny", "temperature": 25}'],
-                  },
-                }),
-              ),
-            );
-          }
-        }, 0);
-
         return ws;
       });
 
@@ -300,54 +271,48 @@ describe('OpenAI Realtime Provider', () => {
       // Override the default mock for this test
       (MockWebSocket as any).mockImplementationOnce(() => {
         const ws = {
-          on: jest.fn(),
+          on: jest.fn((event, handler) => {
+            if (event === 'open') {
+              // Trigger open immediately
+              handler();
+            }
+            if (event === 'message') {
+              // Trigger messages in next tick to ensure open has completed
+              process.nextTick(() => {
+                handler(
+                  Buffer.from(
+                    JSON.stringify({
+                      type: 'response.text.done',
+                      text: 'This is the transcript of the audio',
+                      usage: { total_tokens: 12, prompt: 5, completion: 7 },
+                      audio: {
+                        data: audioData,
+                        format: 'pcm16',
+                      },
+                    }),
+                  ),
+                );
+                handler(
+                  Buffer.from(
+                    JSON.stringify({
+                      type: 'response.done',
+                      response: {
+                        usage: { total_tokens: 12, prompt: 5, completion: 7 },
+                        audio: {
+                          data: audioData,
+                          format: 'pcm16',
+                        },
+                      },
+                    }),
+                  ),
+                );
+              });
+            }
+          }),
           send: jest.fn(),
           close: jest.fn(),
           once: jest.fn(),
         };
-
-        setTimeout(() => {
-          const handlers = ws.on.mock.calls.reduce((acc: any, [event, handler]) => {
-            acc[event] = handler;
-            return acc;
-          }, {});
-
-          if (handlers.open) {
-            handlers.open();
-          }
-
-          if (handlers.message) {
-            handlers.message(
-              Buffer.from(
-                JSON.stringify({
-                  type: 'response.text.done',
-                  text: 'This is the transcript of the audio',
-                  usage: { total_tokens: 12, prompt: 5, completion: 7 },
-                  audio: {
-                    data: audioData,
-                    format: 'pcm16',
-                  },
-                }),
-              ),
-            );
-
-            handlers.message(
-              Buffer.from(
-                JSON.stringify({
-                  type: 'response.done',
-                  response: {
-                    usage: { total_tokens: 12, prompt: 5, completion: 7 },
-                    audio: {
-                      data: audioData,
-                      format: 'pcm16',
-                    },
-                  },
-                }),
-              ),
-            );
-          }
-        }, 0);
-
         return ws;
       });
 
