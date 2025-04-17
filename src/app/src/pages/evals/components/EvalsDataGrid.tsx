@@ -72,7 +72,6 @@ function CustomToolbar({
 
   useEffect(() => {
     if (focusQuickFilterOnMount && quickFilterRef.current) {
-      console.log('focusing quick filter');
       quickFilterRef.current.focus();
     }
   }, [focusQuickFilterOnMount]);
