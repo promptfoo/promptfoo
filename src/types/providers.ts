@@ -73,6 +73,7 @@ export interface ApiProvider {
   label?: ProviderLabel;
   transform?: string;
   toJSON?: () => any;
+  cleanup?: () => void;
 }
 
 export interface ApiEmbeddingProvider extends ApiProvider {
