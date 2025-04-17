@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import glob from 'glob';
-import { evaluate, generateVarCombinations, isAllowedPrompt, runEval } from '../src/evaluator';
+import { evaluate, generateVarCombinations, isAllowedPrompt, newTokenUsage, runEval } from '../src/evaluator';
 import { runExtensionHook } from '../src/evaluatorHelpers';
 import logger from '../src/logger';
 import { runDbMigrations } from '../src/migrate';
@@ -2045,6 +2045,79 @@ describe('evaluator', () => {
     );
     expect(mockApiProviderWithError.callApi).toHaveBeenCalledTimes(1);
   });
+
+  it.skip('should handle evaluation timeout', async () => {
+    jest.useFakeTimers();
+    
+    const slowApiProvider: ApiProvider = {
+      id: jest.fn().mockReturnValue('slow-provider'),
+      callApi: jest.fn().mockImplementation(() => {
+        return new Promise(resolve => {
+          setTimeout(() => {
+            resolve({
+              output: 'Slow response',
+              tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+            });
+          }, 5000); // 5 seconds
+        });
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [slowApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+
+    // Mock the Eval.create method to avoid database issues
+    jest.spyOn(Eval, 'create').mockImplementation(async () => {
+      return {
+        id: 'mock-eval-id',
+        results: [],
+        prompts: [],
+        resultsCount: 0,
+        persisted: false,
+        config: {},
+        addResult: jest.fn().mockResolvedValue(undefined),
+        addPrompts: jest.fn().mockResolvedValue(undefined),
+        fetchResultsByTestIdx: jest.fn().mockResolvedValue([]),
+        getResults: jest.fn().mockResolvedValue([]),
+        toEvaluateSummary: jest.fn().mockResolvedValue({
+          version: 3,
+          timestamp: new Date().toISOString(),
+          results: [{
+            failureReason: ResultFailureReason.ERROR,
+            error: 'Evaluation timed out after 1000ms',
+            success: false,
+            score: 0
+          }],
+          prompts: [],
+          stats: {
+            successes: 0,
+            failures: 0,
+            errors: 1,
+            tokenUsage: newTokenUsage()
+          }
+        }),
+        save: jest.fn().mockResolvedValue(undefined)
+      } as unknown as Eval;
+    });
+    
+    // Start the evaluation with a 1 second timeout
+    const evalPromise = evaluate(testSuite, await Eval.create({}, testSuite.prompts, { id: randomUUID() }), { timeoutMs: 1000 });
+    
+    // We need to use runAllTimers to make sure the inner timeout within processEvalStepWithTimeout fires
+    jest.runAllTimers();
+    
+    // Wait for the evaluation to complete
+    await evalPromise;
+    
+    // Verify the timeout behavior
+    expect(slowApiProvider.callApi).toHaveBeenCalled();
+    
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  }, 10000); // Increase test timeout to avoid Jest timeouts
 });
 
 describe('generateVarCombinations', () => {

@@ -176,6 +176,10 @@ const EvaluateOptionsSchema = z.object({
     .optional(),
   repeat: z.number().optional(),
   showProgressBar: z.boolean().optional(),
+  /**
+   * Timeout in milliseconds for each evaluation step. Default is 0 (no timeout).
+   */
+  timeoutMs: z.number().optional(),
 });
 export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & { abortSignal?: AbortSignal };
 

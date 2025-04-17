@@ -35,6 +35,7 @@ export type EnvVars = {
   PROMPTFOO_DISABLE_UPDATE?: boolean;
   PROMPTFOO_DISABLE_VAR_EXPANSION?: boolean;
   PROMPTFOO_ENABLE_DATABASE_LOGS?: boolean;
+  PROMPTFOO_EVAL_TIMEOUT_MS?: number;
   PROMPTFOO_EXPERIMENTAL?: boolean;
   PROMPTFOO_FAILED_TEST_EXIT_CODE?: number;
   PROMPTFOO_LOG_DIR?: string;
@@ -244,6 +245,15 @@ export function getEnvFloat(key: EnvVarKey, defaultValue?: number): number | und
     }
   }
   return defaultValue;
+}
+
+/**
+ * Get the evaluation timeout in milliseconds.
+ * @param defaultValue Optional default value if the environment variable is not set. Defaults to 0 (no timeout).
+ * @returns The timeout value in milliseconds, or the default value if not set.
+ */
+export function getEvalTimeoutMs(defaultValue: number = 0): number {
+  return getEnvInt('PROMPTFOO_EVAL_TIMEOUT_MS', defaultValue);
 }
 
 export function isCI() {

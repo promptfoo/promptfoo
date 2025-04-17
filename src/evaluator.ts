@@ -10,7 +10,7 @@ import { MODEL_GRADED_ASSERTION_TYPES, runAssertions, runCompareAssertion } from
 import { fetchWithCache, getCache } from './cache';
 import cliState from './cliState';
 import { updateSignalFile } from './database/signal';
-import { getEnvBool, getEnvInt, isCI } from './envars';
+import { getEnvBool, getEnvInt, isCI, getEvalTimeoutMs } from './envars';
 import { renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger from './logger';
 import type Eval from './models/eval';
@@ -963,6 +963,96 @@ class Evaluator {
       }
     };
 
+    // Add a wrapper function that implements timeout
+    const processEvalStepWithTimeout = async (evalStep: RunEvalOptions, index: number | string) => {
+      // Get timeout value from options or environment, defaults to 0 (no timeout)
+      const timeoutMs = options.timeoutMs || getEvalTimeoutMs();
+      
+      if (timeoutMs <= 0) {
+        // No timeout, process normally
+        return processEvalStep(evalStep, index);
+      }
+      
+      try {
+        return await Promise.race([
+          processEvalStep(evalStep, index),
+          new Promise<void>((_, reject) => {
+            setTimeout(() => {
+              reject(new Error(`Evaluation timed out after ${timeoutMs}ms`));
+            }, timeoutMs);
+          })
+        ]);
+      } catch (error) {
+        // Create and add an error result for timeout
+        const timeoutResult = {
+          provider: {
+            id: evalStep.provider.id(),
+            label: evalStep.provider.label,
+            config: evalStep.provider.config,
+          },
+          prompt: {
+            raw: evalStep.prompt.raw,
+            label: evalStep.prompt.label,
+            config: evalStep.prompt.config,
+          },
+          vars: evalStep.test.vars || {},
+          error: `Evaluation timed out after ${timeoutMs}ms: ${String(error)}`,
+          success: false,
+          failureReason: ResultFailureReason.ERROR, // Using ERROR for timeouts
+          score: 0,
+          namedScores: {},
+          latencyMs: timeoutMs,
+          promptIdx: evalStep.promptIdx,
+          testIdx: evalStep.testIdx,
+          testCase: evalStep.test,
+          promptId: evalStep.prompt.id || '',
+        };
+        
+        // Add the timeout result to the evaluation record
+        await this.evalRecord.addResult(timeoutResult);
+        
+        // Update stats
+        this.stats.errors++;
+        
+        // Update prompt metrics
+        const { promptIdx } = timeoutResult;
+        const metrics = prompts[promptIdx].metrics;
+        if (metrics) {
+          metrics.testErrorCount += 1;
+          metrics.totalLatencyMs += timeoutMs;
+        }
+        
+        // Progress callback
+        if (options.progressCallback) {
+          options.progressCallback(
+            this.evalRecord.resultsCount,
+            runEvalOptions.length,
+            typeof index === 'number' ? index : 0,
+            evalStep,
+            metrics || { 
+              score: 0,
+              testPassCount: 0,
+              testFailCount: 0,
+              testErrorCount: 1,
+              assertPassCount: 0,
+              assertFailCount: 0,
+              totalLatencyMs: timeoutMs,
+              tokenUsage: {
+                total: 0,
+                prompt: 0,
+                completion: 0,
+                cached: 0,
+                numRequests: 0,
+              },
+              namedScores: {},
+              namedScoresCount: {},
+              cost: 0,
+            },
+          );
+        }
+      }
+    };
+
     // Set up main progress bars
     let multibar: MultiBar | undefined;
     let multiProgressBars: SingleBar[] = [];
@@ -1062,7 +1152,7 @@ class Evaluator {
             `[${numComplete}/${serialRunEvalOptions.length}] Running ${provider} with vars: ${vars}`,
           );
         }
-        await processEvalStep(evalStep, serialRunEvalOptions.indexOf(evalStep));
+        await processEvalStepWithTimeout(evalStep, serialRunEvalOptions.indexOf(evalStep));
       }
     }
 
@@ -1072,7 +1162,7 @@ class Evaluator {
     );
     await async.forEachOfLimit(concurrentRunEvalOptions, concurrency, async (evalStep, index) => {
       checkAbort();
-      await processEvalStep(evalStep, index);
+      await processEvalStepWithTimeout(evalStep, index);
     });
 
     // Do we have to run comparisons between row outputs?
