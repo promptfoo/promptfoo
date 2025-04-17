@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600">
+  <!-- Large Circle Around All Icons -->
+  <circle cx="400" cy="300" r="300" fill="none" stroke="#3182CE" stroke-width="5" stroke-dasharray="15,10" />
+  
   <!-- On-Prem Section (Top of Triangle) -->
   <g transform="translate(400, 100)">
     <!-- Server Rack Icon -->
@@ -48,6 +51,4 @@
     <!-- Label -->
     <text x="0" y="90" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#2d3748" text-anchor="middle">Cloud</text>
   </g>
-  
-  <!-- No triangle connection lines -->
 </svg>

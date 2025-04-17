@@ -9,8 +9,8 @@ export default function HomepageFeatures() {
       description: (
         <>
           <p>
-            Our specialized language models generate attacks specific to your industry, company, and
-            application.
+            Our <strong>specialized language models</strong> generate attacks specific to your
+            industry, company, and application.
           </p>
           <p>No generic canned attacks - every attack is created on-the-fly.</p>
         </>
@@ -25,15 +25,22 @@ export default function HomepageFeatures() {
       title: 'Battle-tested at enterprise scale',
       description: (
         <>
-          <p>Adopted by 27 Fortune 500 companies shipping apps to hundreds of millions of users.</p>
-          <p>Embraced by an open-source community of over 75,000 developers worldwide.</p>
+          <p>
+            Adopted by <strong>27 Fortune 500 companies</strong> shipping apps to hundreds of
+            millions of users.
+          </p>
+          <p>
+            Embraced by an open-source community of <strong>over 75,000 developers</strong>{' '}
+            worldwide.
+          </p>
         </>
       ),
-      image: '/img/github-repo.png',
-      image2x: '/img/github-repo.png',
+      image: '/img/f500-usage.svg',
+      image2x: '/img/f500-usage.svg',
       alt: 'promptfoo quickstart',
       link: '/docs/red-team/quickstart/',
       cta: 'Get Started',
+      className: 'f500',
     },
     /*
     {
