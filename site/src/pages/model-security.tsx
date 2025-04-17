@@ -40,19 +40,13 @@ function ModelSecurityHeader() {
   return (
     <header className={clsx('hero hero--primary', styles.heroBanner)}>
       <div className="container">
-        <h1 className={styles.heroTitle}>Complete AI Model Security</h1>
+        <h1 className={styles.heroTitle}>Complete AI model security</h1>
         <p className={styles.heroSubtitle}>
           End-to-end protection from model files to deployed instances
         </p>
         <div className={styles.buttons}>
           <Link
             className={clsx('button button--primary button--lg', styles.buttonPrimary)}
-            to="/docs/model-security/quickstart"
-          >
-            Get Started
-          </Link>
-          <Link
-            className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
             to="/contact/"
           >
             Request Demo

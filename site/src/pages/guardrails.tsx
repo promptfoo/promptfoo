@@ -36,19 +36,13 @@ function GuardrailsHeader() {
   return (
     <header className={clsx('hero hero--primary', styles.heroBanner)}>
       <div className="container">
-        <h1 className={styles.heroTitle}>AI Guardrails That Learn & Adapt</h1>
+        <h1 className={styles.heroTitle}>AI Guardrails that learn & adapt</h1>
         <p className={styles.heroSubtitle}>
           Self-improving protection powered by continuous red teaming feedback
         </p>
         <div className={styles.buttons}>
           <Link
-            className={clsx('button button--primary button--lg', styles.buttonPrimary)}
-            to="/docs/guardrails/quickstart"
-          >
-            Get Started
-          </Link>
-          <Link
-            className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
+            className={clsx('button button--secondary button--lg', styles.buttonPrimary)}
             to="/contact/"
           >
             Request a demo
@@ -165,8 +159,7 @@ function ContinuousMonitoringSection() {
         <h2>Third-Party Guardrail Validation</h2>
         <p>
           Already using another guardrail system? Our platform can validate and improve any
-          guardrail solution, adding an essential layer of independent verification to your AI
-          security stack.
+          guardrail solution.
         </p>
         <div className={styles.screenshotPlaceholder}>
           <img

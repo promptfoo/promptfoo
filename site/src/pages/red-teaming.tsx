@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
+import AutorenewIcon from '@mui/icons-material/Autorenew';
 import BugReportIcon from '@mui/icons-material/BugReport';
 import CodeIcon from '@mui/icons-material/Code';
 import ReportIcon from '@mui/icons-material/Report';
@@ -12,7 +13,7 @@ import clsx from 'clsx';
 import 'swiper/css/navigation';
 import 'swiper/css/pagination';
 // Import required Swiper modules
-import { Navigation, Pagination, Autoplay } from 'swiper/modules';
+import { Navigation, Pagination } from 'swiper/modules';
 import LogoContainer from '../components/LogoContainer';
 import NewsletterForm from '../components/NewsletterForm';
 import styles from './llm-vulnerability-scanner.module.css';
@@ -33,8 +34,8 @@ function HeroSection() {
           Promptfoo is trusted by teams at...
           <LogoContainer noBackground noBorder />
         </div>
-        <h2>Simulate application-specific attack scenarios</h2>
-        <p>Our models simulate attacks that specifically target your application use case.</p>
+        <h2>Move beyond fuzzing and canned attacks</h2>
+        <p>Our agentic red teamers specifically target your application use case.</p>
       </div>
     </section>
   );
@@ -146,9 +147,8 @@ function DifferentiatorsSection() {
             <div className={styles.benefitContent}>
               <h3>Battle-tested with wide industry adoption</h3>
               <p>
-                Used by foundation model labs, major Fortune 50 enterprises, and 75,000 open source
-                users - we're the closest thing to an industry standard tool for AI security
-                testing.
+                Used by foundation model labs, Fortune 50 enterprises, and 75,000 open source users
+                - we're the closest thing to an industry standard tool for AI security testing.
               </p>
             </div>
           </div>
@@ -157,7 +157,7 @@ function DifferentiatorsSection() {
             <div className={styles.benefitContent}>
               <h3>Custom attack generation</h3>
               <p>
-                Unlike static jailbreaks, our models are trained with the latest ML techniques to
+                Unlike static jailbreaks, our agents are trained with the latest ML techniques to
                 generate dynamic attacks tailored to your application.
               </p>
             </div>
@@ -168,6 +168,16 @@ function DifferentiatorsSection() {
               <h3>Detailed vulnerability reports with remediations</h3>
               <p>
                 Get comprehensive analysis of vulnerabilities with actionable remediation steps.
+              </p>
+            </div>
+          </div>
+          <div className={styles.benefitItem}>
+            <AutorenewIcon className={styles.benefitIcon} />
+            <div className={styles.benefitContent}>
+              <h3>Continuous monitoring</h3>
+              <p>
+                Integrate with CI/CD pipelines or run on a schedule to maintain a complete timeline
+                of your risk posture as your application evolves.
               </p>
             </div>
           </div>
@@ -228,14 +238,13 @@ function ActionOrientedSection() {
         {domLoaded && (
           <div className={styles.processCarousel}>
             <Swiper
-              modules={[Navigation, Pagination, Autoplay]}
+              modules={[Navigation, Pagination]}
               spaceBetween={20}
               slidesPerView={1.3}
               centeredSlides={true}
               loop={false}
               navigation
               pagination={{ clickable: true }}
-              autoplay={{ delay: 5000, disableOnInteraction: false }}
               className={styles.swiper}
               breakpoints={{
                 480: {
@@ -274,6 +283,24 @@ function ActionOrientedSection() {
             </Swiper>
           </div>
         )}
+      </div>
+    </section>
+  );
+}
+
+function ContinuousMonitoringSection() {
+  return (
+    <section className={styles.actionOrientedSection}>
+      <div className="container">
+        <h2>Continuous Monitoring</h2>
+        <p>Detect and respond to new vulnerabilities as they emerge with real-time monitoring.</p>
+        <div className={styles.screenshotPlaceholder}>
+          <img
+            loading="lazy"
+            src="/img/continuous-monitoring@2x.png"
+            alt="Continuous monitoring dashboard"
+          />
+        </div>
       </div>
     </section>
   );
@@ -336,6 +363,7 @@ export default function RedTeaming(): JSX.Element {
         <main className={styles.mainContent}>
           <FeaturesSection />
           <ActionOrientedSection />
+          <ContinuousMonitoringSection />
           <ComplianceSection />
           <DifferentiatorsSection />
           <CallToActionSection />
