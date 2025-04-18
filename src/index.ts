@@ -123,7 +123,6 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     }
   }
 
-  await telemetry.send();
   return ret;
 }
 
