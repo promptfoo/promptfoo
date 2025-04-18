@@ -195,6 +195,9 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
           maxOutputTokens: this.config.maxOutputTokens,
         }),
         ...this.config.generationConfig,
+        ...(this.config.generationConfig?.thinkingConfig && {
+          thinkingConfig: this.config.generationConfig.thinkingConfig,
+        }),
       },
       safetySettings: this.config.safetySettings,
       ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),

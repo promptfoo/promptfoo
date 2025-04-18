@@ -265,6 +265,9 @@ export class VertexChatProvider extends VertexGenericProvider {
         topP: this.config.topP,
         topK: this.config.topK,
         ...this.config.generationConfig,
+        ...(this.config.generationConfig?.thinkingConfig && {
+          thinkingConfig: this.config.generationConfig.thinkingConfig,
+        }),
       },
       ...(this.config.safetySettings ? { safetySettings: this.config.safetySettings } : {}),
       ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),

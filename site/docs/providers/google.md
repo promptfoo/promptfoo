@@ -6,7 +6,8 @@ You can use it by specifying one of the [available models](https://ai.google.dev
 
 ## Available Models
 
-- `google:gemini-2.5-pro-exp-03-25` - Latest thinking model, designed to tackle increasingly complex problems with enhanced reasoning capabilities.
+- `google:gemini-2.5-flash-preview-04-17` - Latest Flash model with thinking capabilities for enhanced reasoning
+- `google:gemini-2.5-pro-exp-03-25` - Latest thinking model, designed to tackle increasingly complex problems with enhanced reasoning capabilities
 - `google:gemini-2.0-flash-exp` - Multimodal model with next generation features
 - `google:gemini-2.0-flash-thinking-exp` - Optimized for complex reasoning and problem-solving
 - `google:gemini-1.5-flash-8b` - Fast and cost-efficient multimodal model
@@ -37,6 +38,23 @@ providers:
       topK: 40 # Top-k sampling
       stopSequences: ['END'] # Stop generation at these sequences
 ```
+
+### Thinking Configuration
+
+For models that support thinking capabilities (like Gemini 2.5 Flash), you can configure the thinking budget:
+
+```yaml
+providers:
+  - id: google:gemini-2.5-flash-preview-04-17
+    config:
+      generationConfig:
+        temperature: 0.7
+        maxOutputTokens: 2048
+        thinkingConfig:
+          thinkingBudget: 1024 # Controls tokens allocated for thinking process
+```
+
+The thinking configuration allows the model to show its reasoning process before providing the final answer, which can be helpful for complex tasks that require step-by-step thinking.
 
 You can also specify a response schema for structured output:
 

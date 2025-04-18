@@ -109,6 +109,11 @@ export interface CompletionOptions {
 
     // Live API
     response_modalities?: string[];
+
+    // Thinking configuration
+    thinkingConfig?: {
+      thinkingBudget?: number;
+    };
   };
 
   responseSchema?: string;
