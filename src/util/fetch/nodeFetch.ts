@@ -1,7 +1,6 @@
 import { CLOUD_API_HOST, cloudConfig } from '../../globalConfig/cloud';
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const originalFetch = global.fetch || require('node-fetch');
+const originalFetch = global.fetch;
 
 // Override global fetch
 global.fetch = async (...args) => {
