@@ -297,3 +297,5 @@ export async function fetchWithRetries(
   }
   throw new Error(`Request failed after ${maxRetries} retries: ${lastErrorMessage}`);
 }
+
+export { originalFetch };
