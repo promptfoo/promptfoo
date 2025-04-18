@@ -4,7 +4,9 @@ import { fetchWithProxy } from '../fetch';
 import logger from '../logger';
 import { readGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
 
-export const API_HOST = getEnvString('API_HOST', 'https://api.promptfoo.app');
+export const CLOUD_API_HOST = 'https://api.promptfoo.app';
+
+export const API_HOST = getEnvString('API_HOST', CLOUD_API_HOST);
 
 interface CloudUser {
   id: string;

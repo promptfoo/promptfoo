@@ -7,10 +7,39 @@ import { Agent, ProxyAgent, setGlobalDispatcher } from 'undici';
 import cliState from './cliState';
 import { VERSION } from './constants';
 import { getEnvBool, getEnvInt, getEnvString } from './envars';
+import { cloudConfig, CLOUD_API_HOST } from './globalConfig/cloud';
 import logger from './logger';
 import { REQUEST_TIMEOUT_MS } from './providers/shared';
 import invariant from './util/invariant';
 import { sleep } from './util/time';
+
+// Save the original fetch implementation
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const originalFetch = global.fetch || require('node-fetch');
+
+// Override global fetch
+global.fetch = async (...args) => {
+  const [url, options] = args;
+
+  const opts = {
+    ...options,
+  };
+
+  if (
+    (typeof url === 'string' && url.startsWith(CLOUD_API_HOST)) ||
+    (url instanceof URL && url.host === CLOUD_API_HOST.replace(/^https?:\/\//, ''))
+  ) {
+    const token = cloudConfig.getApiKey();
+    opts.headers = {
+      ...(options?.headers || {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+  }
+
+  // Call the original fetch
+  const response = await originalFetch(url, opts);
+  return response;
+};
 
 /**
  * Options for configuring TLS in proxy connections
