@@ -232,7 +232,7 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
 > = {
   'owasp:llm:01': {
     // Prompt Injection
-    plugins: ['ascii-smuggling', 'indirect-prompt-injection', 'prompt-extraction', 'harmful'],
+    plugins: ['ascii-smuggling', 'indirect-prompt-injection', 'harmful'],
     strategies: ['jailbreak', 'prompt-injection', 'jailbreak:composite'],
   },
   'owasp:llm:02': {
@@ -283,15 +283,7 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
   },
   'owasp:llm:07': {
     // System Prompt Leakage
-    plugins: [
-      'prompt-extraction',
-      'rbac',
-      'harmful:privacy',
-      'pii:api-db',
-      'pii:direct',
-      'pii:session',
-      'pii:social',
-    ],
+    plugins: ['prompt-extraction'],
     strategies: ['jailbreak', 'prompt-injection', 'jailbreak:composite'],
   },
   'owasp:llm:08': {
