@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import { VERSION } from './constants';
 import { getEnvBool } from './envars';
-import { fetchWithTimeout } from './fetch';
 import logger from './logger';
+import { fetchWithTimeout } from './util/fetch';
 
 export const TelemetryEventSchema = z.object({
   event: z.enum([

@@ -1,6 +1,6 @@
 import chalk from 'chalk';
-import { fetchWithProxy } from '../fetch';
 import logger from '../logger';
+import { fetchWithProxy } from '../util/fetch';
 import { readGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
 
 export const CLOUD_API_HOST = 'https://api.promptfoo.app';

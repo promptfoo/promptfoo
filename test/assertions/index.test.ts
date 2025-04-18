@@ -3,7 +3,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { runAssertion, runAssertions } from '../../src/assertions';
 import { validateXml, containsXml } from '../../src/assertions/xml';
-import { fetchWithRetries } from '../../src/fetch';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import {
   DefaultGradingJsonProvider,
@@ -17,6 +16,7 @@ import type {
   ProviderResponse,
   GradingResult,
 } from '../../src/types';
+import { fetchWithRetries } from '../../src/util/fetch';
 import { TestGrader } from '../util/utils';
 
 jest.mock('../../src/redteam/remoteGeneration', () => ({
@@ -36,8 +36,8 @@ jest.mock('node:module', () => {
   };
 });
 
-jest.mock('../../src/fetch', () => {
-  const actual = jest.requireActual('../../src/fetch');
+jest.mock('../../src/util/fetch/index.ts', () => {
+  const actual = jest.requireActual('../../src/util/fetch/index.ts');
   return {
     ...actual,
     fetchWithRetries: jest.fn(actual.fetchWithRetries),

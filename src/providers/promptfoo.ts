@@ -1,6 +1,5 @@
 import { fetchWithCache } from '../cache';
 import { VERSION } from '../constants';
-import { fetchWithRetries } from '../fetch';
 import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
 import {
@@ -15,6 +14,7 @@ import type {
   TokenUsage,
 } from '../types';
 import type { EnvOverrides } from '../types/env';
+import { fetchWithRetries } from '../util/fetch';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
 interface PromptfooHarmfulCompletionOptions {

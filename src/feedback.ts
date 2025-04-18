@@ -1,6 +1,6 @@
 import readline from 'readline';
-import { fetchWithProxy } from './fetch';
 import logger from './logger';
+import { fetchWithProxy } from './util/fetch';
 
 export async function sendFeedback(feedback: string) {
   const resp = await fetchWithProxy('https://api.promptfoo.dev/api/feedback', {

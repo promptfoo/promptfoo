@@ -1,6 +1,5 @@
 import async from 'async';
 import { z } from 'zod';
-import { fetchWithRetries } from '../../fetch';
 import { getUserEmail } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
@@ -11,6 +10,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../../types/providers';
+import { fetchWithRetries } from '../../util/fetch';
 import invariant from '../../util/invariant';
 import { neverGenerateRemote } from '../remoteGeneration';
 

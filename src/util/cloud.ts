@@ -1,9 +1,9 @@
-import { fetchWithProxy } from '../fetch';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import type { UnifiedConfig } from '../types';
 import type { ProviderOptions } from '../types/providers';
 import { ProviderOptionsSchema } from '../validators/providers';
+import { fetchWithProxy } from './fetch';
 import invariant from './invariant';
 
 const CHUNKED_RESULTS_BUILD_DATE = new Date('2025-01-10');
