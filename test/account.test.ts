@@ -15,12 +15,17 @@ describe('accounts module', () => {
 
   describe('getUserEmail', () => {
     it('should return the email from global config', () => {
-      jest.mocked(readGlobalConfig).mockReturnValue({ account: { email: 'test@example.com' } });
+      jest.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        account: { email: 'test@example.com' },
+      });
       expect(getUserEmail()).toBe('test@example.com');
     });
 
     it('should return null if no email is set in global config', () => {
-      jest.mocked(readGlobalConfig).mockReturnValue({});
+      jest.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+      });
       expect(getUserEmail()).toBeNull();
     });
   });
@@ -40,12 +45,17 @@ describe('accounts module', () => {
     });
 
     it('should return the email if environment variable is not set', () => {
-      jest.mocked(readGlobalConfig).mockReturnValue({ account: { email: 'test@example.com' } });
+      jest.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        account: { email: 'test@example.com' },
+      });
       expect(getAuthor()).toBe('test@example.com');
     });
 
     it('should return null if neither environment variable nor email is set', () => {
-      jest.mocked(readGlobalConfig).mockReturnValue({});
+      jest.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+      });
       expect(getAuthor()).toBeNull();
     });
   });

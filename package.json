@@ -201,6 +201,7 @@
     "nunjucks": "^3.2.4",
     "openai": "^4.93.0",
     "opener": "^1.5.2",
+    "posthog-node": "^4.12.0",
     "proxy-agent": "^6.5.0",
     "python-shell": "^5.0.0",
     "replicate": "^0.34.1",

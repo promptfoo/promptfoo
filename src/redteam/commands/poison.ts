@@ -189,7 +189,6 @@ export function poisonCommand(program: Command) {
       telemetry.record('command_used', {
         name: 'redteam poison',
       });
-      await telemetry.send();
 
       if (opts.verbose) {
         setLogLevel('debug');

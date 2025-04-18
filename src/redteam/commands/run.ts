@@ -53,7 +53,6 @@ export function redteamRunCommand(program: Command) {
       telemetry.record('command_used', {
         name: 'redteam run',
       });
-      await telemetry.send();
 
       if (opts.verbose) {
         setLogLevel('debug');
