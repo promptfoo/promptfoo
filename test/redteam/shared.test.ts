@@ -1,10 +1,10 @@
-import { faker } from '@faker-js/faker';
 import * as fs from 'fs';
 import path from 'path';
 import { doGenerateRedteam } from '../../src/redteam/commands/generate';
 import { doRedteamRun } from '../../src/redteam/shared';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { loadDefaultConfig } from '../../src/util/config/default';
+import FakeDataFactory from '../factories/data/fakeDataFactory';
 
 jest.mock('../../src/redteam/commands/generate');
 jest.mock('../../src/commands/eval');
@@ -58,7 +58,8 @@ describe('doRedteamRun', () => {
   });
 
   it('should locate the out file in the same directory as the config file if output is not specified', async () => {
-    const dirPath = faker.system.directoryPath();
+    // Generate a random directory path
+    const dirPath = FakeDataFactory.system.directoryPath();
     const customConfig = `${dirPath}/config.yaml`;
     await doRedteamRun({ config: customConfig });
     expect(doGenerateRedteam).toHaveBeenCalledWith(

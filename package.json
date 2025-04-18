@@ -113,7 +113,6 @@
     "@aws-sdk/credential-provider-sso": "^3.787.0",
     "@azure/identity": "^4.8.0",
     "@eslint/js": "^9.24.0",
-    "@faker-js/faker": "^9.7.0",
     "@libsql/client": "^0.14.0",
     "@swc/cli": "^0.6.0",
     "@swc/core": "^1.11.21",
