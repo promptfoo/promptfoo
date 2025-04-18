@@ -4,14 +4,14 @@ import type { ConnectionOptions } from 'tls';
 
 import { getProxyForUrl } from 'proxy-from-env';
 import { Agent, ProxyAgent, setGlobalDispatcher } from 'undici';
-import cliState from './cliState';
-import { VERSION } from './constants';
-import { getEnvBool, getEnvInt, getEnvString } from './envars';
-import { cloudConfig, CLOUD_API_HOST } from './globalConfig/cloud';
-import logger from './logger';
-import { REQUEST_TIMEOUT_MS } from './providers/shared';
-import invariant from './util/invariant';
-import { sleep } from './util/time';
+import cliState from '../../cliState';
+import { VERSION } from '../../constants';
+import { getEnvBool, getEnvInt, getEnvString } from '../../envars';
+import { cloudConfig, CLOUD_API_HOST } from '../../globalConfig/cloud';
+import logger from '../../logger';
+import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
+import invariant from '../../util/invariant';
+import { sleep } from '../../util/time';
 
 // Save the original fetch implementation
 // eslint-disable-next-line @typescript-eslint/no-require-imports

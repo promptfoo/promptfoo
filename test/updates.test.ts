@@ -16,7 +16,7 @@ jest.mock('util', () => ({
   }),
 }));
 
-jest.mock('../src/fetch', () => ({
+jest.mock('../src/util/fetch/index.ts', () => ({
   fetchWithTimeout: jest.fn(),
 }));
 

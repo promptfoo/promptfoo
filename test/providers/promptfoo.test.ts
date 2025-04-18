@@ -1,16 +1,16 @@
 import { fetchWithCache } from '../../src/cache';
 import { getEnvString } from '../../src/envars';
-import { fetchWithRetries } from '../../src/fetch';
 import { getUserEmail } from '../../src/globalConfig/accounts';
 import {
   PromptfooChatCompletionProvider,
   PromptfooHarmfulCompletionProvider,
   PromptfooSimulatedUserProvider,
 } from '../../src/providers/promptfoo';
+import { fetchWithRetries } from '../../src/util/fetch';
 
 jest.mock('../../src/cache');
 jest.mock('../../src/envars');
-jest.mock('../../src/fetch');
+jest.mock('../../src/util/fetch/index.ts');
 jest.mock('../../src/globalConfig/accounts');
 jest.mock('../../src/globalConfig/cloud', () => ({
   CloudConfig: class {

@@ -1,7 +1,6 @@
 import input from '@inquirer/input';
 import chalk from 'chalk';
 import { getEnvString, isCI } from '../../src/envars';
-import { fetchWithTimeout } from '../../src/fetch';
 import {
   checkEmailStatus,
   checkEmailStatusOrExit,
@@ -19,6 +18,7 @@ import {
 } from '../../src/globalConfig/globalConfig';
 import logger from '../../src/logger';
 import telemetry from '../../src/telemetry';
+import { fetchWithTimeout } from '../../src/util/fetch';
 
 // Mock fetchWithTimeout before any imports that might use telemetry
 jest.mock('../../src/fetch', () => ({
@@ -40,6 +40,8 @@ jest.mock('../../src/telemetry', () => {
     Telemetry: jest.fn().mockImplementation(() => mockTelemetry),
   };
 });
+jest.mock('../../src/util/fetch/index.ts');
+jest.mock('../../src/telemetry');
 jest.mock('../../src/util');
 
 describe('accounts', () => {

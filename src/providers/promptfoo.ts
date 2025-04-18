@@ -1,12 +1,11 @@
-import { fetchWithCache } from '../cache';
 import { VERSION } from '../constants';
-import { fetchWithRetries } from '../fetch';
 import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
 import {
   getRemoteGenerationUrl,
   getRemoteGenerationUrlForUnaligned,
 } from '../redteam/remoteGeneration';
+import { fetchWithRetries } from '../util/fetch';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
 import type {
@@ -150,7 +149,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
     };
 
     try {
-      const { data, status, statusText } = await fetchWithCache(
+      const { data, status, statusText } = await fetchWithRetries(
         getRemoteGenerationUrl(),
         {
           method: 'POST',

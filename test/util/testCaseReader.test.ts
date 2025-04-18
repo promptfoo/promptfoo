@@ -32,6 +32,7 @@ jest.mock('glob', () => ({
 jest.mock('../../src/providers', () => ({
   loadApiProvider: jest.fn(),
 }));
+jest.mock('../../src/util/fetch/index.ts');
 
 jest.mock('fs', () => ({
   readFileSync: jest.fn(),
