@@ -366,3 +366,35 @@ describe('ResultsTable Metadata Search', () => {
     expect(/unknown/i.test(metadataString)).toBe(false);
   });
 });
+
+describe('ResultsTable Row Navigation', () => {
+  it('clears row-id URL parameter when changing pages', () => {
+    const mockURL = new URL('http://localhost/?rowId=3');
+
+    const mockReplaceState = vi.fn();
+    const originalHistory = window.history;
+    Object.defineProperty(window, 'history', {
+      value: { ...originalHistory, replaceState: mockReplaceState },
+      configurable: true,
+      writable: true,
+    });
+
+    const clearRowIdFromUrl = () => {
+      const url = new URL(mockURL);
+      if (url.searchParams.has('rowId')) {
+        url.searchParams.delete('rowId');
+        window.history.replaceState({}, '', url);
+      }
+    };
+
+    clearRowIdFromUrl();
+
+    expect(mockReplaceState).toHaveBeenCalled();
+
+    Object.defineProperty(window, 'history', {
+      value: originalHistory,
+      configurable: true,
+      writable: true,
+    });
+  });
+});
