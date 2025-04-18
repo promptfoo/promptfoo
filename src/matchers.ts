@@ -372,6 +372,13 @@ async function loadRubricPrompt(
   return rubricPrompt;
 }
 
+function tryParse(content: string) {
+  try {
+    return JSON.parse(content);
+  } catch {}
+  return content;
+}
+
 export async function renderLlmRubricPrompt(
   rubricPrompt: string,
   context: Record<string, string | object>,
@@ -419,7 +426,7 @@ export async function matchesLlmRubric(
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, DEFAULT_GRADING_PROMPT);
   const prompt = await renderLlmRubricPrompt(rubricPrompt, {
-    output: llmOutput,
+    output: tryParse(llmOutput),
     rubric,
     ...(vars || {}),
   });
@@ -518,7 +525,7 @@ export async function matchesFactuality(
   const prompt = await renderLlmRubricPrompt(rubricPrompt, {
     input,
     ideal: expected,
-    completion: output,
+    completion: tryParse(output),
     ...(vars || {}),
   });
 
@@ -670,7 +677,7 @@ export async function matchesClosedQa(
   const prompt = await renderLlmRubricPrompt(rubricPrompt, {
     input,
     criteria: expected,
-    completion: output,
+    completion: tryParse(output),
     ...(vars || {}),
   });
 
@@ -843,7 +850,7 @@ export async function matchesAnswerRelevance(
   for (let i = 0; i < 3; i++) {
     // TODO(ian): Parallelize
     const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, ANSWER_RELEVANCY_GENERATE);
-    const promptText = await renderLlmRubricPrompt(rubricPrompt, { answer: output });
+    const promptText = await renderLlmRubricPrompt(rubricPrompt, { answer: tryParse(output) });
     const resp = await textProvider.callApi(promptText);
     if (resp.error || !resp.output) {
       tokensUsed.total += resp.tokenUsage?.total || 0;
@@ -1078,7 +1085,7 @@ export async function matchesContextFaithfulness(
 
   let promptText = await renderLlmRubricPrompt(longformPrompt, {
     question: query,
-    answer: output,
+    answer: tryParse(output),
     ...(vars || {}),
   });
 
@@ -1157,7 +1164,7 @@ export async function matchesSelectBest(
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, SELECT_BEST_PROMPT);
   const promptText = await renderLlmRubricPrompt(rubricPrompt, {
     criteria,
-    outputs,
+    outputs: outputs.map((o) => tryParse(o)),
     ...(vars || {}),
   });
 
