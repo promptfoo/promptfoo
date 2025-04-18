@@ -3,9 +3,16 @@
 prompts:
   - |
     Given this math puzzle: {{puzzle}}
-    Provide a short, clear answer with minimal explanation.
+    Please solve this step by step, showing your reasoning process.
 
 providers:
+  - id: google:gemini-2.5-flash-preview-04-17
+    config:
+      generationConfig:
+        temperature: 0.7
+        maxOutputTokens: 2048
+        thinkingConfig:
+          thinkingBudget: 1024
   - google:gemini-2.0-flash-exp
   - google:gemini-2.0-flash-thinking-exp
 
