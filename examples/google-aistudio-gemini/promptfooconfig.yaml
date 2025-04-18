@@ -13,13 +13,15 @@ providers:
         maxOutputTokens: 2048
         thinkingConfig:
           thinkingBudget: 1024
+
   - google:gemini-2.0-flash-exp
+
   - google:gemini-2.0-flash-thinking-exp
 
   - id: google:gemini-2.5-pro-exp-03-25
     config:
       temperature: 0.7
-      maxOutputTokens: 512
+      maxOutputTokens: 2048
 
   - id: google:gemini-1.5-pro
     config:
