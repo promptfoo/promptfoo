@@ -54,23 +54,6 @@ function cosineSimilarity(vecA: number[], vecB: number[]) {
   return dotProduct / (vecAMagnitude * vecBMagnitude);
 }
 
-function fromVars(vars?: Record<string, string | object>) {
-  if (!vars) {
-    return {};
-  }
-
-  const ret: Record<string, string> = {};
-  for (const [key, value] of Object.entries(vars)) {
-    if (typeof value === 'object') {
-      ret[key] = JSON.stringify(value);
-    } else {
-      ret[key] = JSON.stringify(value).slice(1, -1);
-    }
-  }
-
-  return ret;
-}
-
 async function loadFromProviderOptions(provider: ProviderOptions) {
   invariant(
     typeof provider === 'object',
@@ -390,18 +373,23 @@ async function loadRubricPrompt(
 }
 
 export async function renderLlmRubricPrompt(
-  rubric: string,
-  llmOutput: string,
-  grading?: GradingConfig,
-  vars?: Record<string, string | object>,
+  rubricPrompt: string,
+  context: Record<string, string | object>,
 ) {
-  const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, DEFAULT_GRADING_PROMPT);
+  try {
+    // Render every string scalar within the JSON
+    // Does not render object keys (only values)
+    const parsed = JSON.parse(rubricPrompt, (k, v) =>
+      typeof v === 'string' ? nunjucks.renderString(v, context) : v,
+    );
+    return JSON.stringify(parsed);
+  } catch {
+    // not valid JSON...
+    // output a warning?
+  }
 
-  return nunjucks.renderString(rubricPrompt, {
-    output: JSON.stringify(llmOutput).slice(1, -1),
-    rubric: JSON.stringify(rubric).slice(1, -1),
-    ...fromVars(vars),
-  });
+  // Legacy rendering for non-JSON prompts
+  return nunjucks.renderString(rubricPrompt, context);
 }
 
 export async function matchesLlmRubric(
@@ -429,7 +417,12 @@ export async function matchesLlmRubric(
     };
   }
 
-  const prompt = await renderLlmRubricPrompt(rubric, llmOutput, grading, vars);
+  const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, DEFAULT_GRADING_PROMPT);
+  const prompt = await renderLlmRubricPrompt(rubricPrompt, {
+    output: llmOutput,
+    rubric,
+    ...(vars || {}),
+  });
 
   const defaultProviders = await getDefaultProviders();
   const defaultProvider =
@@ -522,12 +515,11 @@ export async function matchesFactuality(
   }
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, PROMPTFOO_FACTUALITY_PROMPT);
-
-  const prompt = nunjucks.renderString(rubricPrompt, {
-    input: JSON.stringify(input).slice(1, -1),
-    ideal: JSON.stringify(expected).slice(1, -1),
-    completion: JSON.stringify(output).slice(1, -1),
-    ...fromVars(vars),
+  const prompt = await renderLlmRubricPrompt(rubricPrompt, {
+    input,
+    ideal: expected,
+    completion: output,
+    ...(vars || {}),
   });
 
   // Get the appropriate provider
@@ -675,11 +667,11 @@ export async function matchesClosedQa(
   }
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, OPENAI_CLOSED_QA_PROMPT);
-  const prompt = nunjucks.renderString(rubricPrompt, {
-    input: JSON.stringify(input).slice(1, -1),
-    criteria: JSON.stringify(expected).slice(1, -1),
-    completion: JSON.stringify(output).slice(1, -1),
-    ...fromVars(vars),
+  const prompt = await renderLlmRubricPrompt(rubricPrompt, {
+    input,
+    criteria: expected,
+    completion: output,
+    ...(vars || {}),
   });
 
   const finalProvider = await getAndCheckProvider(
@@ -851,9 +843,7 @@ export async function matchesAnswerRelevance(
   for (let i = 0; i < 3; i++) {
     // TODO(ian): Parallelize
     const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, ANSWER_RELEVANCY_GENERATE);
-    const promptText = nunjucks.renderString(rubricPrompt, {
-      answer: JSON.stringify(output).slice(1, -1),
-    });
+    const promptText = await renderLlmRubricPrompt(rubricPrompt, { answer: output });
     const resp = await textProvider.callApi(promptText);
     if (resp.error || !resp.output) {
       tokensUsed.total += resp.tokenUsage?.total || 0;
@@ -968,10 +958,10 @@ export async function matchesContextRecall(
   );
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, CONTEXT_RECALL);
-  const promptText = nunjucks.renderString(rubricPrompt, {
-    context: JSON.stringify(context).slice(1, -1),
-    groundTruth: JSON.stringify(groundTruth).slice(1, -1),
-    ...fromVars(vars),
+  const promptText = await renderLlmRubricPrompt(rubricPrompt, {
+    context,
+    groundTruth,
+    ...(vars || {}),
   });
 
   const resp = await textProvider.callApi(promptText);
@@ -1021,9 +1011,9 @@ export async function matchesContextRelevance(
   );
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, CONTEXT_RELEVANCE);
-  const promptText = nunjucks.renderString(rubricPrompt, {
-    context: JSON.stringify(context).slice(1, -1),
-    query: JSON.stringify(question).slice(1, -1),
+  const promptText = await renderLlmRubricPrompt(rubricPrompt, {
+    context,
+    query: question,
   });
 
   const resp = await textProvider.callApi(promptText);
@@ -1086,10 +1076,10 @@ export async function matchesContextFaithfulness(
       ? grading?.rubricPrompt?.[1]
       : grading?.rubricPrompt?.[1].content) || CONTEXT_FAITHFULNESS_NLI_STATEMENTS;
 
-  let promptText = nunjucks.renderString(longformPrompt, {
-    question: JSON.stringify(query).slice(1, -1),
-    answer: JSON.stringify(output).slice(1, -1),
-    ...fromVars(vars),
+  let promptText = await renderLlmRubricPrompt(longformPrompt, {
+    question: query,
+    answer: output,
+    ...(vars || {}),
   });
 
   let resp = await textProvider.callApi(promptText);
@@ -1100,10 +1090,10 @@ export async function matchesContextFaithfulness(
   invariant(typeof resp.output === 'string', 'context-faithfulness produced malformed response');
 
   const statements = resp.output.split('\n');
-  promptText = nunjucks.renderString(nliPrompt, {
-    context: JSON.stringify(context).slice(1, -1),
-    statements: JSON.stringify(statements.join('\n')).slice(1, -1),
-    ...fromVars(vars),
+  promptText = await renderLlmRubricPrompt(nliPrompt, {
+    context,
+    statements,
+    ...(vars || {}),
   });
 
   resp = await textProvider.callApi(promptText);
@@ -1165,10 +1155,10 @@ export async function matchesSelectBest(
   );
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, SELECT_BEST_PROMPT);
-  const promptText = nunjucks.renderString(rubricPrompt, {
-    criteria: JSON.stringify(criteria).slice(1, -1),
-    outputs: outputs.map((output) => JSON.stringify(output).slice(1, -1)),
-    ...fromVars(vars),
+  const promptText = await renderLlmRubricPrompt(rubricPrompt, {
+    criteria,
+    outputs,
+    ...(vars || {}),
   });
 
   const resp = await textProvider.callApi(promptText);
