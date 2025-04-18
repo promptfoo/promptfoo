@@ -7,6 +7,7 @@ You can use it by specifying one of the [available models](https://ai.google.dev
 ## Available Models
 
 - `google:gemini-2.5-pro-exp-03-25` - Latest thinking model, designed to tackle increasingly complex problems with enhanced reasoning capabilities.
+- `google:gemini-2.5-flash-preview-04-17` - Balances reasoning capabilities with speed, supports thinking process control.
 - `google:gemini-2.0-flash-exp` - Multimodal model with next generation features
 - `google:gemini-2.0-flash-thinking-exp` - Optimized for complex reasoning and problem-solving
 - `google:gemini-1.5-flash-8b` - Fast and cost-efficient multimodal model
@@ -75,6 +76,20 @@ For more details on capabilities and configuration options, see the [Gemini API 
 
 ## Model Examples
 
+### Gemini 2.5 Flash
+
+Best for balancing reasoning capabilities with speed:
+
+```yaml
+providers:
+  - id: google:gemini-2.5-flash-preview-04-17
+    config:
+      temperature: 0.7
+      maxOutputTokens: 2048
+      thinkingConfig:
+        thinking_budget: 1024 # Controls how much reasoning the model can do (0-24576)
+```
+
 ### Gemini 2.0 Flash
 
 Best for fast, efficient responses and general tasks:
@@ -90,6 +105,24 @@ providers:
 ```
 
 ## Advanced Features
+
+### Thinking Configuration
+
+Gemini 2.5 models are "thinking" models capable of reasoning through their thoughts before responding. You can control this behavior with the `thinkingConfig`:
+
+```yaml
+providers:
+  - id: google:gemini-2.5-flash-preview-04-17
+    config:
+      thinkingConfig:
+        thinking_budget: 1024 # Set the token budget for thinking (0-24576)
+```
+
+The `thinking_budget` parameter allows you to:
+
+- Set to `0` to disable thinking entirely (for maximum speed)
+- Set a specific token budget (1-24576) to control the depth of reasoning
+- Higher budgets allow for more complex reasoning at the cost of latency
 
 ### Function Calling
 

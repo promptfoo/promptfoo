@@ -1,5 +1,7 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 
+description: 'Testing Gemini models with thinking capabilities'
+
 prompts:
   - |
     Given this math puzzle: {{puzzle}}
@@ -9,11 +11,23 @@ providers:
   - google:gemini-2.0-flash-exp
   - google:gemini-2.0-flash-thinking-exp
 
+  # Gemini 2.5 Pro with default thinking
   - id: google:gemini-2.5-pro-exp-03-25
     config:
       temperature: 0.7
       maxOutputTokens: 512
 
+  # Using Gemini 1.5 Pro with default settings
+  # Note: For Gemini 2.5 Flash, use the configuration below when the API is stable
+  # id: google:gemini-2.5-flash-preview-04-17
+  # config:
+  #   temperature: 0.7
+  #   maxOutputTokens: 1024
+  #   apiVersion: v1
+  #   thinkingConfig:
+  #     thinkingBudget: 1024 # Control amount of reasoning (0-24576 tokens)
+  #   topP: 0.9
+  #   topK: 40
   - id: google:gemini-1.5-pro
     config:
       temperature: 0.7
@@ -72,3 +86,14 @@ tests:
       - type: llm-rubric
         value: |
           The answer should be 52.5 mph.
+
+  - vars:
+      puzzle: 'A rectangular garden has a perimeter of 120 feet and an area of 864 square feet. What are the dimensions of the garden?'
+    assert:
+      - type: contains
+        value: 36
+      - type: contains
+        value: 24
+      - type: llm-rubric
+        value: |
+          The garden dimensions should be 36 feet by 24 feet.

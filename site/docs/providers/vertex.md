@@ -6,6 +6,7 @@ The `vertex` provider enables integration with Google's [Vertex AI](https://clou
 
 ### Latest Gemini Models
 
+- `vertex:gemini-2.5-flash-preview-04-17` - Best for balancing reasoning and speed. Supports text, code, images, audio, video, video with audio, and PDF inputs.
 - `vertex:gemini-2.0-flash-001` - Next-gen workhorse model for all daily tasks. Supports text, code, images, audio, video, video with audio, and PDF inputs.
 - `vertex:gemini-2.0-pro-exp-02-05` - Strongest model quality, especially for code & world knowledge (2M context). Supports text, images, video, audio, and PDF inputs.
 - `vertex:gemini-2.0-flash-lite-preview-02-05` - Cost-effective offering for high throughput. Supports text, images, video, audio, and PDF inputs.
@@ -197,6 +198,24 @@ providers:
       max_tokens: 1024
 ```
 
+### Thinking Configuration (Gemini 2.5)
+
+Control the reasoning depth for Gemini 2.5 models:
+
+```yaml
+providers:
+  - id: vertex:gemini-2.5-flash-preview-04-17
+    config:
+      thinkingConfig:
+        thinking_budget: 1024 # Set the token budget for thinking (0-24576)
+```
+
+The `thinking_budget` parameter allows you to:
+
+- Set to `0` to disable thinking entirely (for maximum speed)
+- Set a specific token budget (1-24576) to control the depth of reasoning
+- Higher budgets allow for more complex reasoning at the cost of latency
+
 ### Safety Settings
 
 Control AI safety filters:
@@ -214,6 +233,27 @@ Control AI safety filters:
 See [Google's SafetySetting API documentation](https://ai.google.dev/api/generate-content#safetysetting) for details.
 
 ## Model-Specific Features
+
+### Gemini 2.5 Flash Model Features
+
+- Support for "thinking" capability with configurable token budgets
+- Long context window (1M+ tokens)
+- Multimodal input support (text, code, images, audio, video, PDF)
+- Text-only output
+- Available in `us-central1` region (preview)
+
+#### Example Configuration
+
+```yaml
+providers:
+  - id: vertex:gemini-2.5-flash-preview-04-17
+    config:
+      region: us-central1
+      temperature: 0.7
+      maxOutputTokens: 2048
+      thinkingConfig:
+        thinking_budget: 1024 # Controls reasoning depth (0-24576 tokens)
+```
 
 ### Llama Model Features
 
@@ -281,6 +321,7 @@ defaultTest:
 | `generationConfig.stopSequences`   | Generation stop triggers           | `[]`                                 |
 | `toolConfig`                       | Tool/function calling config       | None                                 |
 | `systemInstruction`                | System prompt (supports `{{var}}`) | None                                 |
+| `thinkingConfig.thinking_budget`   | Token budget for model reasoning   | None                                 |
 
 :::note
 Not all models support all parameters. See [Google's documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/overview) for model-specific details.

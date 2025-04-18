@@ -2,16 +2,19 @@
 
 # Learn more about building a configuration: https://promptfoo.dev/docs/configuration/guide
 
-description: 'Function calling demonstration'
+description: 'Demonstrating function calling and thinking capabilities'
 
 prompts:
   - What is the weather in {{location}}?
 
 providers:
   # See https://www.promptfoo.dev/docs/providers/vertex/
-  - id: 'vertex:gemini-2.0-flash-001'
+  - id: 'vertex:gemini-2.5-flash-preview-04-17'
     config:
       tools: file://tools.json
+      apiVersion: v1beta # Specify the correct API version
+      thinkingConfig:
+        thinkingBudget: 1024 # Enable thinking for better tool use
 
 defaultTest:
   assert:
@@ -31,7 +34,7 @@ defaultTest:
     # This overrides the default grading providers with Vertex AI models.
     providers:
       embedding: 'vertex:embedding:text-embedding-005'
-      text: 'vertex:gemini-2.0-flash-001'
+      text: 'vertex:gemini-2.5-flash-preview-04-17'
 
 tests:
   - vars:

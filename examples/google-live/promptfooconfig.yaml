@@ -8,7 +8,7 @@ prompts:
   - Why is {{concept}}?
 
 providers:
-  - id: 'google:live:gemini-2.0-flash-exp'
+  - id: 'google:live:gemini-2.5-flash-preview-04-17'
     config:
       generationConfig:
         response_modalities: ['text']

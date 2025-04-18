@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Foundation Model Red Team Template
+description: LLama3 8B Foundation Model Redteam
 targets:
-  - openai:chat:gpt-4o-mini
+  - bedrock:meta.llama3-8b-instruct-v1:0
 prompts:
   - '{{prompt}}'
 redteam:

@@ -42,6 +42,10 @@ interface Candidate {
     | 'SPII'
     | 'MALFORMED_FUNCTION_CALL';
   safetyRatings: SafetyRating[];
+  thinking?: {
+    output?: string;
+    [key: string]: any;
+  };
 }
 
 interface GeminiUsageMetadata {
@@ -59,11 +63,26 @@ export interface GeminiErrorResponse {
 }
 
 export interface GeminiResponseData {
-  candidates: Candidate[];
+  candidates?: Candidate[];
   usageMetadata?: GeminiUsageMetadata;
   promptFeedback?: {
     safetyRatings: Array<{ category: string; probability: string }>;
     blockReason: any;
+  };
+  content?: Content;
+  thinking?: {
+    output?: string;
+    [key: string]: any;
+  };
+  text?: string;
+  thinkingSummary?: string;
+  tokenCount?: number;
+  response?: {
+    candidates?: Array<{
+      content: {
+        parts: Part[];
+      };
+    }>;
   };
 }
 
@@ -287,11 +306,188 @@ export async function hasGoogleDefaultCredentials() {
 }
 
 export function getCandidate(data: GeminiResponseData) {
-  if (!(data && data.candidates && data.candidates.length === 1)) {
-    throw new Error('Expected one candidate in API response.');
+  if (!data) {
+    logger.debug(`Empty API response.`);
+    throw new Error('Empty API response.');
   }
-  const candidate = data.candidates[0];
-  return candidate;
+
+  logger.debug(`API response data type: ${typeof data}`);
+  if (typeof data === 'string') {
+    try {
+      // Sometimes the API returns a JSON string
+      data = JSON.parse(data) as GeminiResponseData;
+      logger.debug(`Parsed string response into object`);
+    } catch {
+      // Maybe it's just a plain text response
+      logger.debug(`Response is plain text: ${data}`);
+      return {
+        content: {
+          parts: [{ text: String(data) }],
+        },
+        safetyRatings: [],
+      } as Candidate;
+    }
+  }
+
+  // If data is an array (as in Vertex API responses), use the first item
+  if (Array.isArray(data)) {
+    logger.debug(`Response is an array with ${data.length} items`);
+    if (data.length === 0) {
+      throw new Error('Empty API response array.');
+    }
+    data = data[0];
+  }
+
+  // Debug log the complete structure
+  logger.debug(`Processed API response data: ${JSON.stringify(data)}`);
+
+  // Handle new Gemini 2.5 Flash Preview response format which might not have candidates
+  if (!data.candidates || data.candidates.length === 0) {
+    logger.debug(`No candidates found in response. Checking alternative formats.`);
+
+    // For Gemini 2.5 direct responses
+    if ((data as any).text !== undefined) {
+      logger.debug(`Found direct text property in response.`);
+      return {
+        content: {
+          parts: [{ text: (data as any).text }],
+        },
+        safetyRatings: [],
+      } as Candidate;
+    }
+
+    // If the data has content directly, create a synthetic candidate
+    if (data.content) {
+      logger.debug(`Found content property in response.`);
+      return {
+        content: data.content,
+        safetyRatings: [],
+      } as Candidate;
+    }
+
+    // Try to extract candidate information from thinking output
+    if ((data as any).thinking) {
+      logger.debug(
+        `Found thinking property in response: ${JSON.stringify((data as any).thinking)}`,
+      );
+
+      // Check if thinking is an object with the output property
+      if (typeof (data as any).thinking === 'object' && (data as any).thinking !== null) {
+        if ((data as any).thinking.output) {
+          logger.debug(`Found thinking.output property in response.`);
+          return {
+            content: {
+              parts: [{ text: (data as any).thinking.output }],
+            },
+            safetyRatings: [],
+          } as Candidate;
+        }
+
+        // If thinking exists but without output, try other properties in the thinking object
+        for (const key in (data as any).thinking) {
+          if (
+            Object.prototype.hasOwnProperty.call((data as any).thinking, key) &&
+            typeof (data as any).thinking[key] === 'string' &&
+            (data as any).thinking[key].length > 0 &&
+            key !== 'error'
+          ) {
+            logger.debug(`Found string property "${key}" in thinking object, using as fallback.`);
+            return {
+              content: {
+                parts: [{ text: (data as any).thinking[key] }],
+              },
+              safetyRatings: [],
+            } as Candidate;
+          }
+        }
+      } else if (typeof (data as any).thinking === 'string' && (data as any).thinking.length > 0) {
+        // Handle case where thinking is a direct string
+        logger.debug(`thinking is a direct string`);
+        return {
+          content: {
+            parts: [{ text: (data as any).thinking }],
+          },
+          safetyRatings: [],
+        } as Candidate;
+      }
+    }
+
+    // Try thinkingSummary if available
+    if ((data as any).thinkingSummary) {
+      logger.debug(`Found thinkingSummary property in response.`);
+      return {
+        content: {
+          parts: [{ text: (data as any).thinkingSummary }],
+        },
+        safetyRatings: [],
+      } as Candidate;
+    }
+
+    // Check if there's a response in a nested object
+    const dataObj = data as Record<string, any>;
+    for (const key in dataObj) {
+      if (
+        Object.prototype.hasOwnProperty.call(dataObj, key) &&
+        typeof dataObj[key] === 'object' &&
+        dataObj[key] !== null
+      ) {
+        const nested = dataObj[key];
+
+        // Check for text or content in the nested object
+        if (nested.text && typeof nested.text === 'string') {
+          logger.debug(`Found nested text in "${key}" property`);
+          return {
+            content: {
+              parts: [{ text: nested.text }],
+            },
+            safetyRatings: [],
+          } as Candidate;
+        }
+
+        if (nested.content) {
+          logger.debug(`Found nested content in "${key}" property`);
+          return {
+            content: nested.content,
+            safetyRatings: [],
+          } as Candidate;
+        }
+      }
+    }
+
+    // Check if there's any response field that contains text we can use
+    for (const key in dataObj) {
+      if (
+        Object.prototype.hasOwnProperty.call(dataObj, key) &&
+        typeof dataObj[key] === 'string' &&
+        dataObj[key].length > 0 &&
+        key !== 'error' // Skip error messages
+      ) {
+        logger.debug(`Found string property "${key}" in response, using as fallback.`);
+        return {
+          content: {
+            parts: [{ text: dataObj[key] as string }],
+          },
+          safetyRatings: [],
+        } as Candidate;
+      }
+    }
+
+    // Log more detailed info about the response structure
+    logger.debug(
+      `Unable to extract content from response. Full response structure: ${JSON.stringify(data)}`,
+    );
+    logger.debug(`Response keys: ${Object.keys(dataObj).join(', ')}`);
+
+    // Fall back to error if we can't extract content
+    throw new Error('Could not find response content in API response.');
+  }
+
+  if (data.candidates.length !== 1) {
+    logger.debug(`Found ${data.candidates.length} candidates in response.`);
+  }
+
+  logger.debug(`Successfully extracted candidate from response.`);
+  return data.candidates[0];
 }
 
 export function formatCandidateContents(candidate: Candidate) {

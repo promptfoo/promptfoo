@@ -15,6 +15,7 @@ import type { EnvOverrides } from '../../types/env';
 import { isValidJson } from '../../util/json';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import type { ClaudeRequest, ClaudeResponse, CompletionOptions } from './types';
+import type { Part } from './types';
 import type {
   GeminiApiResponse,
   GeminiErrorResponse,
@@ -27,7 +28,6 @@ import {
   getCandidate,
   getGoogleClient,
   loadFile,
-  mergeParts,
   formatCandidateContents,
 } from './util';
 
@@ -255,6 +255,18 @@ export class VertexChatProvider extends VertexGenericProvider {
       context?.vars,
       this.config.systemInstruction,
     );
+
+    // Override API version if needed for specific models
+    let apiVersion = this.getApiVersion();
+    if (
+      this.modelName.includes('gemini-2.5-flash') &&
+      apiVersion === 'v1' &&
+      !this.config.apiVersion
+    ) {
+      logger.debug(`Using v1beta API for Gemini 2.5 Flash model instead of v1`);
+      apiVersion = 'v1beta';
+    }
+
     // https://ai.google.dev/api/rest/v1/models/streamGenerateContent
     const body = {
       contents: contents as GeminiFormat,
@@ -273,6 +285,24 @@ export class VertexChatProvider extends VertexGenericProvider {
       ...(this.config.tools ? { tools: loadFile(this.config.tools, context?.vars) } : {}),
       ...(systemInstruction ? { systemInstruction } : {}),
     };
+
+    // Add thinking configuration for Gemini 2.5 models
+    if (this.config.thinkingConfig && this.modelName.includes('2.5')) {
+      // For clarity and to accommodate both API versions, use thinking_config
+      (body as any).thinking_config = {
+        ...(this.config.thinkingConfig.thinking_budget !== undefined && {
+          thinking_budget: this.config.thinkingConfig.thinking_budget,
+        }),
+        ...(this.config.thinkingConfig.thinkingBudget !== undefined && {
+          thinking_budget: this.config.thinkingConfig.thinkingBudget,
+        }),
+      };
+
+      logger.debug(
+        `Added thinking configuration: ${JSON.stringify((body as any).thinking_config)}`,
+      );
+    }
+
     logger.debug(`Preparing to call Google Vertex API (Gemini) with body: ${JSON.stringify(body)}`);
 
     const cache = await getCache();
@@ -296,9 +326,13 @@ export class VertexChatProvider extends VertexGenericProvider {
       let data;
       try {
         const { client, projectId } = await getGoogleClient();
-        const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
+        const url = `https://${this.getApiHost()}/${apiVersion}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
           this.modelName
         }:streamGenerateContent`;
+
+        logger.debug(`Making API request to ${url}`);
+        logger.debug(`For model: ${this.modelName}`);
+
         const res = await client.request({
           url,
           method: 'POST',
@@ -306,7 +340,9 @@ export class VertexChatProvider extends VertexGenericProvider {
           timeout: REQUEST_TIMEOUT_MS,
         });
         data = res.data as GeminiApiResponse;
-        logger.debug(`Gemini API response: ${JSON.stringify(data)}`);
+        logger.debug(`Gemini API response type: ${typeof data}`);
+        logger.debug(`Gemini API response structure: ${Array.isArray(data) ? 'Array' : 'Object'}`);
+        logger.debug(`Gemini API response: ${JSON.stringify(data, null, 2)}`);
       } catch (err) {
         const geminiError = err as GaxiosError;
         if (
@@ -338,10 +374,13 @@ export class VertexChatProvider extends VertexGenericProvider {
             error: `Error ${error.code}: ${error.message}`,
           };
         }
+
         const dataWithResponse = data as GeminiResponseData[];
-        let output;
+        let output = null;
+
         for (const datum of dataWithResponse) {
           const candidate = getCandidate(datum);
+
           if (candidate.finishReason && candidate.finishReason === 'SAFETY') {
             const finishReason = 'Content was blocked due to safety settings.';
             if (cliState.config?.redteam) {
@@ -362,12 +401,80 @@ export class VertexChatProvider extends VertexGenericProvider {
             }
             return { error: blockReason };
           } else if (candidate.content?.parts) {
-            output = mergeParts(output, formatCandidateContents(candidate));
+            // Gemini 2.5 models with thinking may return different response structures
+            // Try to handle both standard format and thinking format
+            let formattedContent;
+            try {
+              formattedContent = formatCandidateContents(candidate);
+              // If this is a Gemini 2.5 model with thinking, look for thinking content
+              if (this.config.thinkingConfig && this.modelName.includes('2.5')) {
+                logger.debug(
+                  `Checking for thinking content in candidate: ${JSON.stringify(candidate)}`,
+                );
+                if (candidate.thinking) {
+                  logger.debug(`Found thinking content: ${JSON.stringify(candidate.thinking)}`);
+                }
+              }
+            } catch (formatError) {
+              logger.debug(`Error formatting candidate content: ${formatError}`);
+              return {
+                error: `Error parsing response content: ${String(formatError)}. Response: ${JSON.stringify(candidate)}`,
+              };
+            }
+
+            output = mergeParts(output, formattedContent);
           } else {
-            return {
-              error: `No output found in response: ${JSON.stringify(data)}`,
-            };
+            // Try to find response content in unexpected structure for Gemini 2.5
+            if (this.modelName.includes('2.5')) {
+              logger.debug(`Attempting to extract content from non-standard response structure`);
+
+              // Try different possible structures
+              if (datum.candidates && datum.candidates[0]?.content?.parts) {
+                const parts = datum.candidates[0].content.parts;
+                output = mergeParts(
+                  output,
+                  formatCandidateContents({
+                    content: { parts },
+                    safetyRatings: [],
+                  }),
+                );
+                logger.debug(`Found content in datum.candidates[0].content.parts`);
+              } else if (
+                datum.response &&
+                datum.response.candidates &&
+                datum.response.candidates[0]?.content
+              ) {
+                const parts = datum.response.candidates[0].content.parts;
+                output = mergeParts(
+                  output,
+                  formatCandidateContents({
+                    content: { parts },
+                    safetyRatings: [],
+                  }),
+                );
+                logger.debug(`Found content in datum.response.candidates[0].content`);
+              } else {
+                // Last resort - try to find any text content
+                logger.debug(
+                  `Searching for text content in non-standard response: ${JSON.stringify(datum)}`,
+                );
+                // Stringify the response and look for potential output
+                return {
+                  error: `Could not find response content in API response. Full response: ${JSON.stringify(datum)}`,
+                };
+              }
+            } else {
+              return {
+                error: `No output found in response: ${JSON.stringify(data)}`,
+              };
+            }
           }
+        }
+
+        if (output === null) {
+          return {
+            error: `Could not extract any content from the API response: ${JSON.stringify(data)}`,
+          };
         }
 
         const lastData = dataWithResponse[dataWithResponse.length - 1];
@@ -754,3 +861,21 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
 
 export const DefaultGradingProvider = new VertexChatProvider('gemini-1.5-pro');
 export const DefaultEmbeddingProvider = new VertexEmbeddingProvider('text-embedding-004');
+
+export function mergeParts(parts1: Part[] | string | undefined | null, parts2: Part[] | string) {
+  if (parts1 === undefined || parts1 === null) {
+    return parts2;
+  }
+
+  if (typeof parts1 === 'string' && typeof parts2 === 'string') {
+    return parts1 + parts2;
+  }
+
+  const array1: Part[] = typeof parts1 === 'string' ? [{ text: parts1 }] : parts1;
+
+  const array2: Part[] = typeof parts2 === 'string' ? [{ text: parts2 }] : parts2;
+
+  array1.push(...array2);
+
+  return array1;
+}

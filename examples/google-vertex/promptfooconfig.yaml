@@ -1,20 +1,39 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 # This configuration runs each prompt through a series of example inputs and checks if they meet requirements.
 
+description: 'Comparing Gemini models with reasoning capabilities'
+
 prompts:
   - "You are a helpful assistant. Reply with a concise answer to this inquiry: '{{question}}'"
 
 providers:
-  - id: 'vertex:gemini-1.5-flash'
+  # Gemini 2.5 Flash with thinking configuration
+  - id: 'vertex:gemini-2.5-flash-preview-04-17'
     config:
+      thinkingConfig:
+        thinkingBudget: 1024 # 1024 tokens for reasoning
+      apiVersion: v1beta # Specify the correct API version
       systemInstruction:
-      parts:
-        - text: Always talk like a cow. Mooo!
+        parts:
+          - text: Always talk like a cow. Mooo!
+
+  # Gemini 2.0 Flash Thinking Experiment
   - id: 'vertex:gemini-2.0-flash-thinking-exp-1219'
     config:
       systemInstruction:
         parts:
           - text: Always talk like a sheep. Baaaah!
+
+  # Gemini 2.5 Flash with thinking disabled
+  - id: 'vertex:gemini-2.5-flash-preview-04-17'
+    label: 'Gemini 2.5 Flash (No Thinking)'
+    config:
+      thinkingConfig:
+        thinkingBudget: 0 # Disable thinking (0 tokens)
+      apiVersion: v1beta # Specify the correct API version
+      systemInstruction:
+        parts:
+          - text: Always talk like a duck. Quack!
 
 defaultTest:
   options:

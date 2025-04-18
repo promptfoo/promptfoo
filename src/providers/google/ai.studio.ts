@@ -75,9 +75,237 @@ class AIStudioGenericProvider implements ApiProvider {
     return undefined;
   }
 
+  // Add a getCachedOutput method (no-op implementation)
+  getCachedOutput(prompt: any, modelConfig: any): string | undefined {
+    return undefined;
+  }
+
   // @ts-ignore: Prompt is not used in this implementation
   async callApi(prompt: string): Promise<ProviderResponse> {
     throw new Error('Not implemented');
+  }
+
+  async callGemini(
+    prompt: string | Array<{ role: string; parts: Array<{ text: string }> }>,
+    modelConfig: any,
+    {
+      stream = false,
+      signal,
+      temperature,
+      maxOutputTokens,
+      topP,
+      topK,
+      stopSequences,
+      useGeminiPro,
+    }: {
+      stream?: boolean;
+      signal?: AbortSignal;
+      temperature?: number;
+      maxOutputTokens?: number;
+      topP?: number;
+      topK?: number;
+      stopSequences?: string[];
+      useGeminiPro?: boolean;
+    } = {},
+  ): Promise<ProviderResponse> {
+    if (!this.getApiKey()) {
+      throw new Error(
+        'Google API key is not set. Set the GOOGLE_API_KEY environment variable or add `apiKey` to the provider config.',
+      );
+    }
+
+    const modelName = modelConfig.model || this.modelName;
+    logger.debug(`Calling Gemini API with model: ${modelName}`);
+
+    const options: Record<string, any> = {};
+    if (temperature !== undefined) {
+      options.temperature = temperature;
+    }
+    if (maxOutputTokens !== undefined) {
+      options.maxOutputTokens = maxOutputTokens;
+    }
+    if (topP !== undefined) {
+      options.topP = topP;
+    }
+    if (topK !== undefined) {
+      options.topK = topK;
+    }
+    if (stopSequences?.length) {
+      options.stopSequences = stopSequences;
+    }
+
+    // Default API version for Gemini API
+    let apiVersion = 'v1';
+
+    // Check if the model is Gemini 2.5 and set the appropriate API version
+    const isGemini25 = modelName.includes('gemini-2.5');
+
+    // Use v1beta API for Gemini 2.5 models
+    if (isGemini25) {
+      apiVersion = 'v1beta';
+      logger.debug(`Using ${apiVersion} API version for Gemini 2.5`);
+    }
+
+    // Support for Gemini 2.5 Flash with thinking capability
+    const thinkingConfig = modelConfig.provider?.thinking_config || {};
+    const isFlashModel = modelName.includes('flash');
+
+    const enableThinking = isGemini25 && isFlashModel && Object.keys(thinkingConfig).length > 0;
+
+    if (enableThinking) {
+      logger.debug(`Enabling thinking capability with config: ${JSON.stringify(thinkingConfig)}`);
+    }
+
+    const apiUrl = `https://${this.getApiHost()}/${apiVersion}/models/${modelName}:${
+      stream ? 'streamGenerateContent' : 'generateContent'
+    }`;
+
+    let body: Record<string, any>;
+
+    if (Array.isArray(prompt)) {
+      // Chat-style format with roles
+      body = {
+        contents: prompt,
+        generationConfig: options,
+      };
+    } else {
+      // Simple text prompt
+      body = {
+        contents: [
+          {
+            parts: [{ text: prompt }],
+          },
+        ],
+        generationConfig: options,
+      };
+    }
+
+    // Add thinking configuration if needed
+    if (enableThinking) {
+      body.thinking_config = {
+        ...(thinkingConfig.thinking_budget !== undefined && {
+          thinking_budget: thinkingConfig.thinking_budget,
+        }),
+        ...(thinkingConfig.thinkingBudget !== undefined && {
+          thinking_budget: thinkingConfig.thinkingBudget,
+        }),
+      };
+    }
+
+    logger.debug(`API URL: ${apiUrl}`);
+    logger.debug(`Request body: ${JSON.stringify(body)}`);
+
+    // Handle cached output if available
+    const cachedOutput =
+      typeof this.getCachedOutput === 'function'
+        ? this.getCachedOutput(prompt, modelConfig)
+        : undefined;
+
+    if (cachedOutput) {
+      return {
+        error: undefined,
+        output: cachedOutput,
+        tokenUsage: undefined,
+        cached: true,
+        raw: {},
+      };
+    }
+
+    let data,
+      cached = false;
+    try {
+      ({ data, cached } = (await fetchWithCache(
+        `${apiUrl}?key=${this.getApiKey()}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(body),
+          signal,
+        },
+        REQUEST_TIMEOUT_MS,
+        'json',
+        false,
+      )) as {
+        data: GeminiResponseData;
+        cached: boolean;
+      });
+    } catch (err) {
+      return {
+        error: `API call error: ${String(err)}`,
+        output: undefined,
+        tokenUsage: undefined,
+      };
+    }
+
+    logger.debug(`\tGoogle API response: ${JSON.stringify(data)}`);
+
+    let output, candidate;
+    try {
+      logger.debug(`Getting candidate from response`);
+      candidate = getCandidate(data);
+      logger.debug(`Formatting candidate contents`);
+      output = formatCandidateContents(candidate);
+      logger.debug(
+        `Formatted output: ${typeof output === 'string' ? output.substring(0, 100) : JSON.stringify(output).substring(0, 100)}`,
+      );
+    } catch (err) {
+      logger.error(`Error extracting content from response: ${err}`);
+      return {
+        error: `${String(err)}`,
+        output: undefined,
+        tokenUsage: undefined,
+      };
+    }
+
+    try {
+      let guardrails: GuardrailResponse | undefined;
+
+      if (data.promptFeedback?.safetyRatings || candidate.safetyRatings) {
+        const flaggedInput = data.promptFeedback?.safetyRatings?.some(
+          (r) => r.probability !== 'NEGLIGIBLE',
+        );
+        const flaggedOutput = candidate.safetyRatings?.some((r) => r.probability !== 'NEGLIGIBLE');
+        const flagged = flaggedInput || flaggedOutput;
+
+        guardrails = {
+          flaggedInput,
+          flaggedOutput,
+          flagged,
+        };
+      }
+
+      // Include thinking output if available
+      const thinkingOutput = data.thinking?.output || data.thinkingSummary;
+      const apiResponse: ProviderResponse = {
+        output,
+        tokenUsage: cached
+          ? {
+              cached: data.usageMetadata?.totalTokenCount || data.tokenCount,
+              total: data.usageMetadata?.totalTokenCount || data.tokenCount,
+              numRequests: 0,
+            }
+          : {
+              prompt: data.usageMetadata?.promptTokenCount,
+              completion: data.usageMetadata?.candidatesTokenCount,
+              total: data.usageMetadata?.totalTokenCount || data.tokenCount,
+              numRequests: 1,
+            },
+        raw: data,
+        cached,
+        ...(guardrails && { guardrails }),
+        ...(thinkingOutput && { thinking: thinkingOutput }),
+      };
+
+      return apiResponse;
+    } catch (err) {
+      return {
+        error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
+        output: undefined,
+        tokenUsage: undefined,
+      };
+    }
   }
 }
 
@@ -184,8 +412,17 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
       this.config.systemInstruction,
     );
 
-    // Determine API version based on model
-    const apiVersion = this.modelName === 'gemini-2.0-flash-thinking-exp' ? 'v1alpha' : 'v1beta';
+    // Determine API version based on model and config
+    let apiVersion = this.config.apiVersion || 'v1beta';
+
+    // Default to v1beta for most models, but use v1 for 2.5 Flash models unless overridden
+    if (!this.config.apiVersion) {
+      if (this.modelName === 'gemini-2.0-flash-thinking-exp') {
+        apiVersion = 'v1alpha';
+      } else if (this.modelName.includes('gemini-2.5-flash')) {
+        apiVersion = 'v1';
+      }
+    }
 
     const body: Record<string, any> = {
       contents,
@@ -206,6 +443,18 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
       ...(this.config.tools ? { tools: loadFile(this.config.tools, context?.vars) } : {}),
       ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
     };
+
+    // Add thinking configuration for Gemini 2.5 models
+    if (this.config.thinkingConfig && this.modelName.includes('2.5')) {
+      body.thinking_config = {
+        ...(this.config.thinkingConfig.thinking_budget !== undefined && {
+          thinking_budget: this.config.thinkingConfig.thinking_budget,
+        }),
+        ...(this.config.thinkingConfig.thinkingBudget !== undefined && {
+          thinking_budget: this.config.thinkingConfig.thinkingBudget,
+        }),
+      };
+    }
 
     if (this.config.responseSchema) {
       if (body.generationConfig.response_schema) {
@@ -254,9 +503,15 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
     logger.debug(`\tGoogle API response: ${JSON.stringify(data)}`);
     let output, candidate;
     try {
+      logger.debug(`Getting candidate from response`);
       candidate = getCandidate(data);
+      logger.debug(`Formatting candidate contents`);
       output = formatCandidateContents(candidate);
+      logger.debug(
+        `Formatted output: ${typeof output === 'string' ? output.substring(0, 100) : JSON.stringify(output).substring(0, 100)}`,
+      );
     } catch (err) {
+      logger.error(`Error extracting content from response: ${err}`);
       return {
         error: `${String(err)}`,
       };

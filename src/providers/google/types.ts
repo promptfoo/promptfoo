@@ -123,6 +123,12 @@ export interface CompletionOptions {
     response_modalities?: string[];
   };
 
+  // Thinking configuration for Gemini 2.5 models
+  thinkingConfig?: {
+    thinking_budget?: number;
+    thinkingBudget?: number; // Support both camelCase and snake_case versions
+  };
+
   responseSchema?: string;
 
   toolConfig?: {
