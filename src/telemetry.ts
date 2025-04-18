@@ -26,7 +26,7 @@ export type EventProperties = TelemetryEvent['properties'];
 
 const CONSENT_ENDPOINT = 'https://api.promptfoo.dev/consent';
 const EVENTS_ENDPOINT = 'https://a.promptfoo.app';
-const KA_ENDPOINT = process.env.KA_ENDPOINT;
+const KA_ENDPOINT = 'https://ka.promptfoo.app/';
 
 const posthogClient = process.env.POSTHOG_KEY
   ? new PostHog(process.env.POSTHOG_KEY, {
