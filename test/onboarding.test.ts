@@ -45,7 +45,7 @@ jest.mock('../src/telemetry', () => ({
   recordAndSend: jest.fn(),
 }));
 
-jest.mock('../src/fetch', () => ({
+jest.mock('../src/util/fetch/index.ts', () => ({
   fetch: jest.fn(),
 }));
 

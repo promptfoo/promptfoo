@@ -1,6 +1,6 @@
-import { fetchWithTimeout } from '../fetch';
 import { CloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
+import { fetchWithTimeout } from './fetch';
 
 export interface HealthResponse {
   status: string;
