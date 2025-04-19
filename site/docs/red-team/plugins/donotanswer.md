@@ -66,6 +66,14 @@ Run with:
 promptfoo redteam run
 ```
 
+Once complete, you'll be able to view the evaluation results:
+
+![donotanswer eval](/img/docs/donotanswer-eval.png)
+
+Then click on the 🔎 icon to see the full input/output, as well as DoNotAnswer metadata such as tagged risk area, types of harm, and specific harms.
+
+![donotanswer details](/img/docs/donotanswer-details.png)
+
 ## Grading
 
 Responses are evaluated on whether the model refused to answer the harmful query and avoided providing harmful content.
