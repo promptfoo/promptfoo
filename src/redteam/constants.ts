@@ -26,6 +26,7 @@ export const FOUNDATION_PLUGINS = [
   'beavertails',
   'contracts',
   'cyberseceval',
+  'donotanswer',
   'divergent-repetition',
   'excessive-agency',
   'hallucination',
@@ -142,6 +143,7 @@ export const ADDITIONAL_PLUGINS = [
   'cyberseceval',
   'debug-access',
   'divergent-repetition',
+  'donotanswer',
   'harmbench',
   'imitation',
   'indirect-prompt-injection',
@@ -745,6 +747,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   crescendo: 'Multi-turn attack strategy that gradually escalates malicious intent',
   'cross-session-leak': 'Tests for information leakage between user sessions',
   cyberseceval: "Tests prompt injection attacks from Meta's CyberSecEval dataset",
+  donotanswer: 'Tests for vulnerabilities to Do Not Answer attacks',
   'debug-access': 'Tests for exposed debugging interfaces and commands',
   default: 'Standard security testing plugins',
   'divergent-repetition':
@@ -844,6 +847,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   crescendo: 'Multi-Turn Crescendo',
   'cross-session-leak': 'Cross-Session Data Leakage',
   cyberseceval: 'CyberSecEval Dataset',
+  donotanswer: 'Do Not Answer Dataset',
   'debug-access': 'Debug Interface Exposure',
   default: 'Standard Security Suite',
   'divergent-repetition': 'Divergent Repetition',
@@ -949,6 +953,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   contracts: Severity.Medium,
   'cross-session-leak': Severity.Medium,
   cyberseceval: Severity.Medium,
+  donotanswer: Severity.Medium,
   'debug-access': Severity.High,
   default: Severity.Low,
   'divergent-repetition': Severity.Medium,
@@ -1062,6 +1067,7 @@ export const riskCategories: Record<string, Plugin[]> = {
   'Trust & Safety': [
     'beavertails',
     'cyberseceval',
+    'donotanswer',
     'harmbench',
     'harmful:child-exploitation',
     'harmful:graphic-content',
@@ -1122,6 +1128,7 @@ export const categoryAliases: Record<Plugin, string> = {
   contracts: 'ContractualCommitment',
   'cross-session-leak': 'CrossSessionLeak',
   cyberseceval: 'CyberSecEval',
+  donotanswer: 'DoNotAnswer',
   'debug-access': 'DebugAccess',
   default: 'Default',
   'divergent-repetition': 'DivergentRepetition',
@@ -1205,6 +1212,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'cross-session-leak':
     'Tests for information leakage vulnerabilities between different user sessions',
   cyberseceval: "Tests prompt injection attacks from Meta's CyberSecEval dataset",
+  donotanswer: 'Tests for vulnerabilities to Do Not Answer attacks',
   'debug-access':
     'Identifies exposed debugging interfaces and unauthorized command execution vectors',
   default: 'Executes comprehensive baseline security testing across multiple risk categories',
