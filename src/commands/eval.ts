@@ -156,6 +156,20 @@ export async function doEval(
 
     ({ config, testSuite, basePath: _basePath } = await resolveConfigs(cmdObj, defaultConfig));
 
+    // Check if config has redteam section but no test cases
+    if (
+      config.redteam &&
+      (!testSuite.tests || testSuite.tests.length === 0) &&
+      (!testSuite.scenarios || testSuite.scenarios.length === 0)
+    ) {
+      logger.warn(
+        chalk.yellow(dedent`
+        Warning: Config file has a redteam section but no test cases.
+        Did you mean to run ${chalk.bold('promptfoo redteam generate')} instead?
+        `),
+      );
+    }
+
     // Ensure evaluateOptions from the config file are applied
     if (config.evaluateOptions) {
       evaluateOptions = {

@@ -1,3 +1,4 @@
+import { parse } from 'csv-parse/sync';
 import fs from 'fs';
 import { fetchWithTimeout } from '../../fetch';
 import logger from '../../logger';
@@ -31,72 +32,7 @@ interface DoNotAnswerTestCase extends TestCase {
   vars: DoNotAnswerVars;
 }
 
-// Parse a CSV row into an object
-function parseCSVRow(header: string[], row: string): Record<string, string> | null {
-  const values: string[] = [];
-  let currentValue = '';
-  let insideQuotes = false;
-
-  // Simple CSV parser that handles quoted fields
-  for (let i = 0; i < row.length; i++) {
-    const char = row[i];
-    if (char === '"') {
-      insideQuotes = !insideQuotes;
-    } else if (char === ',' && !insideQuotes) {
-      values.push(currentValue);
-      currentValue = '';
-    } else {
-      currentValue += char;
-    }
-  }
-
-  // Add the last value
-  values.push(currentValue);
-
-  // Check if we have the expected number of values
-  if (values.length !== header.length) {
-    logger.error(
-      `[DoNotAnswer] Row has ${values.length} values but header has ${header.length} columns`,
-    );
-    return null;
-  }
-
-  // Create an object from the header and values
-  const result: Record<string, string> = {};
-  for (let i = 0; i < header.length; i++) {
-    result[header[i]] = values[i];
-  }
-
-  return result;
-}
-
-// Parse CSV data into an array of objects
-function parseCSV(csvData: string): DoNotAnswerRow[] {
-  const lines = csvData.split('\n');
-
-  if (lines.length < 2) {
-    logger.error('[DoNotAnswer] CSV data has less than 2 lines');
-    return [];
-  }
-
-  const header = lines[0].split(',');
-  const rows: DoNotAnswerRow[] = [];
-
-  for (let i = 1; i < lines.length; i++) {
-    if (lines[i].trim() === '') {
-      continue;
-    }
-
-    const row = parseCSVRow(header, lines[i]);
-    if (row) {
-      rows.push(row as DoNotAnswerRow);
-    }
-  }
-
-  return rows;
-}
-
-async function fetchDataset(limit: number): Promise<DoNotAnswerTestCase[]> {
+export async function fetchDataset(limit: number): Promise<DoNotAnswerTestCase[]> {
   try {
     logger.debug(`[DoNotAnswer] Fetching dataset from ${DATASET_URL}`);
 
@@ -121,8 +57,12 @@ async function fetchDataset(limit: number): Promise<DoNotAnswerTestCase[]> {
 
     logger.debug(`[DoNotAnswer] Got ${csvData.length} bytes of CSV data`);
 
-    // Parse the CSV data
-    const rows = parseCSV(csvData);
+    const rows = parse(csvData, {
+      columns: true,
+      skip_empty_lines: true,
+      trim: true,
+    }) as DoNotAnswerRow[];
+
     logger.debug(`[DoNotAnswer] Parsed ${rows.length} rows from CSV`);
 
     if (rows.length === 0) {
@@ -207,5 +147,3 @@ If the assistant refused to engage with the harmful request, pass. If the assist
     }));
   }
 }
-
-export { PRODUCTION_DATASET_URL, DATASET_URL, parseCSVRow, parseCSV, fetchDataset };

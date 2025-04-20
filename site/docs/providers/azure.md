@@ -185,7 +185,7 @@ npm i @azure/identity
 
 ## Model-graded tests
 
-[Model-graded assertions](/docs/configuration/expected-outputs/model-graded/) such as `factuality` or `llm-rubric` use OpenAI by default. If you are using Azure, you must override the grader to point to your Azure deployment.
+[Model-graded assertions](/docs/configuration/expected-outputs/model-graded/) such as `factuality` or `llm-rubric` use gpt-4.1-2025-04-14 by default. If you are using Azure, you must override the grader to point to your Azure deployment.
 
 The easiest way to do this for _all_ your test cases is to add the [`defaultTest`](/docs/configuration/guide/#default-test-cases) property to your config:
 

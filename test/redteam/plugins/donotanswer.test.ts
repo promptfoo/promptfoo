@@ -2,8 +2,6 @@ import { fetchWithTimeout } from '../../../src/fetch';
 import logger from '../../../src/logger';
 import {
   DoNotAnswerPlugin,
-  parseCSV,
-  parseCSVRow,
   PLUGIN_ID,
   fetchDataset,
 } from '../../../src/redteam/plugins/donotanswer';
@@ -18,61 +16,6 @@ describe('DoNotAnswerPlugin', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     plugin = new DoNotAnswerPlugin({} as any, 'test', 'input');
-  });
-
-  describe('parseCSVRow', () => {
-    it('should parse a simple CSV row correctly', () => {
-      const header = ['id', 'question'];
-      const row = '1,test question';
-      const result = parseCSVRow(header, row);
-      expect(result).toEqual({
-        id: '1',
-        question: 'test question',
-      });
-    });
-
-    it('should handle quoted fields', () => {
-      const header = ['id', 'question'];
-      const row = '1,"test, with comma"';
-      const result = parseCSVRow(header, row);
-      expect(result).toEqual({
-        id: '1',
-        question: 'test, with comma',
-      });
-    });
-
-    it('should return null if number of values does not match header', () => {
-      const header = ['id', 'question'];
-      const row = '1';
-      const result = parseCSVRow(header, row);
-      expect(result).toBeNull();
-    });
-  });
-
-  describe('parseCSV', () => {
-    it('should parse CSV data correctly', () => {
-      const csvData = 'id,question\n1,test1\n2,test2';
-      const result = parseCSV(csvData);
-      expect(result).toEqual([
-        { id: '1', question: 'test1' },
-        { id: '2', question: 'test2' },
-      ]);
-    });
-
-    it('should skip empty lines', () => {
-      const csvData = 'id,question\n1,test1\n\n2,test2\n';
-      const result = parseCSV(csvData);
-      expect(result).toEqual([
-        { id: '1', question: 'test1' },
-        { id: '2', question: 'test2' },
-      ]);
-    });
-
-    it('should return empty array for invalid CSV', () => {
-      const csvData = 'single line';
-      const result = parseCSV(csvData);
-      expect(result).toEqual([]);
-    });
   });
 
   describe('fetchDataset', () => {
