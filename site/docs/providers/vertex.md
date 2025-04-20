@@ -6,6 +6,8 @@ The `vertex` provider enables integration with Google's [Vertex AI](https://clou
 
 ### Latest Gemini Models
 
+- `vertex:gemini-2.5-flash-preview-04-17` - Latest Flash model with thinking capabilities for enhanced reasoning
+- `vertex:gemini-2.5-pro-exp-03-25` - Latest thinking model for complex reasoning (2M context)
 - `vertex:gemini-2.0-flash-001` - Next-gen workhorse model for all daily tasks. Supports text, code, images, audio, video, video with audio, and PDF inputs.
 - `vertex:gemini-2.0-pro-exp-02-05` - Strongest model quality, especially for code & world knowledge (2M context). Supports text, images, video, audio, and PDF inputs.
 - `vertex:gemini-2.0-flash-lite-preview-02-05` - Cost-effective offering for high throughput. Supports text, images, video, audio, and PDF inputs.
@@ -434,3 +436,31 @@ providers:
         - category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT'
           threshold: 'BLOCK_LOW_AND_ABOVE'
 ```
+
+### Thinking Configuration
+
+For models that support thinking capabilities (like Gemini 2.5 Flash), you can configure the thinking budget:
+
+```yaml
+providers:
+  - id: vertex:gemini-2.5-flash-preview-04-17
+    config:
+      generationConfig:
+        temperature: 0.7
+        maxOutputTokens: 2048
+        thinkingConfig:
+          thinkingBudget: 1024 # Controls tokens allocated for thinking process
+```
+
+The thinking configuration allows the model to show its reasoning process before providing the final answer. This is particularly useful for:
+
+- Complex problem solving
+- Mathematical reasoning
+- Step-by-step analysis
+- Decision making tasks
+
+When using thinking configuration:
+
+- The `thinkingBudget` must be at least 1024 tokens
+- The budget is counted towards your total token usage
+- The model will show its reasoning process in the response
