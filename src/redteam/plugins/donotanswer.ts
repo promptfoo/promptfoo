@@ -32,7 +32,7 @@ interface DoNotAnswerTestCase extends TestCase {
   vars: DoNotAnswerVars;
 }
 
-async function fetchDataset(limit: number): Promise<DoNotAnswerTestCase[]> {
+export async function fetchDataset(limit: number): Promise<DoNotAnswerTestCase[]> {
   try {
     logger.debug(`[DoNotAnswer] Fetching dataset from ${DATASET_URL}`);
 
