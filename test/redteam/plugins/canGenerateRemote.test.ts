@@ -8,7 +8,6 @@ import { CyberSecEvalPlugin } from '../../../src/redteam/plugins/cyberseceval';
 import { PlinyPlugin } from '../../../src/redteam/plugins/pliny';
 import { DoNotAnswerPlugin } from '../../../src/redteam/plugins/donotanswer';
 import { IntentPlugin } from '../../../src/redteam/plugins/intent';
-import { CustomPlugin } from '../../../src/redteam/plugins/custom';
 import type { ApiProvider } from '../../../src/types';
 
 // Mock dependencies
@@ -84,7 +83,7 @@ describe('canGenerateRemote property and behavior', () => {
       expect(fetchWithCache).not.toHaveBeenCalled();
 
       // Verify provider.callApi was called (local generation)
-      expect(mockProvider.callApi).toHaveBeenCalled();
+      expect(mockProvider.callApi).toHaveBeenCalledWith(expect.any(String));
     });
 
     it('should use remote generation for LLM-based plugins when shouldGenerateRemote is true', async () => {
@@ -113,7 +112,16 @@ describe('canGenerateRemote property and behavior', () => {
       });
 
       // Verify fetchWithCache was called (remote generation)
-      expect(fetchWithCache).toHaveBeenCalled();
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            'Content-Type': 'application/json',
+          }),
+        }),
+        expect.any(Number)
+      );
     });
 
     it('should use local generation for all plugins when shouldGenerateRemote is false', async () => {
@@ -137,7 +145,7 @@ describe('canGenerateRemote property and behavior', () => {
       expect(fetchWithCache).not.toHaveBeenCalled();
       
       // Verify provider.callApi was called (local generation)
-      expect(mockProvider.callApi).toHaveBeenCalled();
+      expect(mockProvider.callApi).toHaveBeenCalledWith(expect.any(String));
     });
   });
 }); 

@@ -412,7 +412,7 @@ describe('Plugins', () => {
       for (const pluginKey of noRemoteGenerationPlugins) {
         const plugin = Plugins.find((p) => p.key === pluginKey);
         if (!plugin) {
-          fail(`Plugin ${pluginKey} not found`);
+          throw new Error(`Plugin ${pluginKey} not found`);
           continue;
         }
 
