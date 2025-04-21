@@ -11,9 +11,7 @@ import { PlinyPlugin } from '../../../src/redteam/plugins/pliny';
 import { UnsafeBenchPlugin } from '../../../src/redteam/plugins/unsafebench';
 import { shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import type { ApiProvider } from '../../../src/types';
-import { maybeLoadFromExternalFile } from '../../../src/util';
 
-// Mock dependencies
 jest.mock('../../../src/cache');
 jest.mock('../../../src/cliState', () => ({
   __esModule: true,
@@ -23,6 +21,13 @@ jest.mock('../../../src/redteam/remoteGeneration', () => ({
   getRemoteGenerationUrl: jest.fn().mockReturnValue('http://test-url'),
   neverGenerateRemote: jest.fn().mockReturnValue(false),
   shouldGenerateRemote: jest.fn().mockReturnValue(false),
+}));
+jest.mock('../../../src/util', () => ({
+  ...jest.requireActual('../../../src/util'),
+  maybeLoadFromExternalFile: jest.fn().mockReturnValue({
+    generator: 'Generate test prompts',
+    grader: 'Grade the response',
+  }),
 }));
 
 // Mock contracts plugin to ensure it has canGenerateRemote = true
@@ -55,36 +60,30 @@ describe('canGenerateRemote property and behavior', () => {
 
   describe('Plugin canGenerateRemote property', () => {
     it('should mark dataset-based plugins as not requiring remote generation', () => {
-      // Mock for CustomPlugin
-      jest.mocked(maybeLoadFromExternalFile).mockReturnValue({
-        generator: 'Generate test prompts',
-        grader: 'Grade the response',
-      });
-
       // Initialize the plugins that use datasets and don't need remote generation
-      const unsafeBenchPlugin = new UnsafeBenchPlugin(mockProvider, 'test', 'test');
       const beavertailsPlugin = new BeavertailsPlugin(mockProvider, 'test', 'test');
-      const harmbenchPlugin = new HarmbenchPlugin(mockProvider, 'test', 'test');
-      const cybersecEvalPlugin = new CyberSecEvalPlugin(mockProvider, 'test', 'test');
-      const plinyPlugin = new PlinyPlugin(mockProvider, 'test', 'test');
-      const doNotAnswerPlugin = new DoNotAnswerPlugin(mockProvider, 'test', 'test');
-      const intentPlugin = new IntentPlugin(mockProvider, 'test', 'test', { intent: 'test' });
       const customPlugin = new CustomPlugin(
         mockProvider,
         'test',
         'test',
         'path/to/custom-plugin.json',
       );
+      const cybersecEvalPlugin = new CyberSecEvalPlugin(mockProvider, 'test', 'test');
+      const doNotAnswerPlugin = new DoNotAnswerPlugin(mockProvider, 'test', 'test');
+      const harmbenchPlugin = new HarmbenchPlugin(mockProvider, 'test', 'test');
+      const intentPlugin = new IntentPlugin(mockProvider, 'test', 'test', { intent: 'test' });
+      const plinyPlugin = new PlinyPlugin(mockProvider, 'test', 'test');
+      const unsafeBenchPlugin = new UnsafeBenchPlugin(mockProvider, 'test', 'test');
 
       // Verify each plugin has canGenerateRemote set to false
-      expect(unsafeBenchPlugin.canGenerateRemote).toBe(false);
       expect(beavertailsPlugin.canGenerateRemote).toBe(false);
-      expect(harmbenchPlugin.canGenerateRemote).toBe(false);
-      expect(cybersecEvalPlugin.canGenerateRemote).toBe(false);
-      expect(plinyPlugin.canGenerateRemote).toBe(false);
-      expect(doNotAnswerPlugin.canGenerateRemote).toBe(false);
-      expect(intentPlugin.canGenerateRemote).toBe(false);
       expect(customPlugin.canGenerateRemote).toBe(false);
+      expect(cybersecEvalPlugin.canGenerateRemote).toBe(false);
+      expect(doNotAnswerPlugin.canGenerateRemote).toBe(false);
+      expect(harmbenchPlugin.canGenerateRemote).toBe(false);
+      expect(intentPlugin.canGenerateRemote).toBe(false);
+      expect(plinyPlugin.canGenerateRemote).toBe(false);
+      expect(unsafeBenchPlugin.canGenerateRemote).toBe(false);
     });
   });
 
@@ -92,12 +91,6 @@ describe('canGenerateRemote property and behavior', () => {
     it('should not use remote generation for dataset-based plugins even when shouldGenerateRemote is true', async () => {
       // Set up the conditions for remote generation
       jest.mocked(shouldGenerateRemote).mockReturnValue(true);
-
-      // Mock for CustomPlugin to avoid errors in integration tests
-      jest.mocked(maybeLoadFromExternalFile).mockReturnValue({
-        generator: 'Generate test prompts',
-        grader: 'Grade the response',
-      });
 
       // Get a plugin that doesn't need remote generation
       const unsafeBenchPlugin = Plugins.find((p) => p.key === 'unsafebench');
@@ -126,8 +119,8 @@ describe('canGenerateRemote property and behavior', () => {
 
       // Mock successful response
       const mockResponse = {
-        data: { result: [{ test: 'case' }] },
         cached: false,
+        data: { result: [{ test: 'case' }] },
         status: 200,
         statusText: 'OK',
       };
@@ -151,12 +144,12 @@ describe('canGenerateRemote property and behavior', () => {
 
       // Call the plugin action - this should use local generation
       await contractsPlugin?.action({
-        provider: mockProvider,
-        purpose: 'test',
-        injectVar: 'testVar',
-        n: 1,
         config: {},
         delayMs: 0,
+        injectVar: 'testVar',
+        n: 1,
+        provider: mockProvider,
+        purpose: 'test',
       });
 
       // Verify fetchWithCache wasn't called (no remote generation)

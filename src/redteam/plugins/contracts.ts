@@ -23,7 +23,6 @@ const DEFAULT_EXAMPLES = dedent`
 
 export class ContractPlugin extends RedteamPluginBase {
   readonly id = PLUGIN_ID;
-  readonly canGenerateRemote = true;
 
   protected async getTemplate(): Promise<string> {
     return dedent`

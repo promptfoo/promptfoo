@@ -7,7 +7,6 @@ import {
   VALID_CATEGORIES,
 } from '../../../src/redteam/plugins/unsafebench';
 
-// Mock dependencies
 jest.mock('../../../src/integrations/huggingfaceDatasets');
 jest.mock('../../../src/logger', () => ({
   debug: jest.fn(),
