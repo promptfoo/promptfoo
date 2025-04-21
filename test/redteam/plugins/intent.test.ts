@@ -109,6 +109,13 @@ describe('IntentPlugin', () => {
       });
     }).toThrow(expect.any(Error));
   });
+
+  it('should set canGenerateRemote to false', () => {
+    const plugin = new IntentPlugin(mockProvider, 'test-purpose', 'prompt', {
+      intent: 'test intent',
+    });
+    expect(plugin.canGenerateRemote).toBe(false);
+  });
 });
 
 describe('IntentGrader', () => {

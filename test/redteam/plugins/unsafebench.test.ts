@@ -51,6 +51,7 @@ jest.mock('../../../src/redteam/plugins/unsafebench', () => {
       return {
         id: originalModule.PLUGIN_ID,
         pluginConfig: config,
+        canGenerateRemote: false,
         getTemplate: jest.fn().mockResolvedValue(injectVar),
         getAssertions: jest.fn().mockImplementation((category) => [
           {
@@ -248,6 +249,11 @@ describe('UnsafeBenchPlugin', () => {
     expect(VALID_CATEGORIES).toContain('Shocking');
     expect(VALID_CATEGORIES).toContain('Illegal activity');
     // etc.
+  });
+
+  it('should set canGenerateRemote to false', () => {
+    const plugin = new UnsafeBenchPlugin({ type: 'test' }, 'testing purposes', 'image');
+    expect(plugin.canGenerateRemote).toBe(false);
   });
 });
 

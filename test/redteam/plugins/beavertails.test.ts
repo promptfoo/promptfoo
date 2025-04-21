@@ -2,11 +2,24 @@ import { fetchHuggingFaceDataset } from '../../../src/integrations/huggingfaceDa
 import {
   fetchAllDatasets,
   BeavertailsGrader,
+  BeavertailsPlugin,
   PLUGIN_ID,
 } from '../../../src/redteam/plugins/beavertails';
-import type { TestCase } from '../../../src/types';
+import type { TestCase, ApiProvider } from '../../../src/types';
 
 jest.mock('../../../src/integrations/huggingfaceDatasets');
+
+describe('BeavertailsPlugin', () => {
+  it('should set canGenerateRemote to false', () => {
+    const mockProvider = {
+      callApi: jest.fn(),
+      id: jest.fn().mockReturnValue('test-provider'),
+    } as ApiProvider;
+
+    const plugin = new BeavertailsPlugin(mockProvider, 'test-purpose', 'testVar');
+    expect(plugin.canGenerateRemote).toBe(false);
+  });
+});
 
 describe('BeavertailsGrader', () => {
   it('should have the correct plugin ID', () => {
