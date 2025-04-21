@@ -209,10 +209,3 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
   }
   return providers;
 }
-
-export {
-  COMPLETION_PROVIDERS,
-  EMBEDDING_PROVIDERS,
-  defaultCompletionProvider,
-  defaultEmbeddingProvider,
-};
