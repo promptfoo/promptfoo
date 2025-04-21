@@ -123,7 +123,7 @@ describe('Server Utilities', () => {
     });
 
     it('should handle opener errors gracefully', async () => {
-      (jest.mocked(opener)).mockImplementationOnce(() => {
+      jest.mocked(opener).mockImplementationOnce(() => {
         throw new Error('Failed to open browser');
       });
 

@@ -1,7 +1,8 @@
+import readline from 'readline';
+// Import *after* mocking
+import { sendFeedback, gatherFeedback } from '../src/feedback';
 import { fetchWithProxy } from '../src/fetch';
 import logger from '../src/logger';
-import { getUserEmail } from '../src/globalConfig/accounts';
-import readline from 'readline';
 
 // Store the original implementation to reference in mocks
 const actualFeedback = jest.requireActual('../src/feedback');
@@ -36,20 +37,17 @@ jest.mock('../src/feedback', () => {
   };
 });
 
-// Import *after* mocking
-import { sendFeedback, gatherFeedback } from '../src/feedback';
-
 describe('Feedback Module', () => {
   // Mock console to prevent logging during tests
   const originalConsoleLog = console.log;
-  
+
   beforeEach(() => {
     // Reset all mocks before each test
     jest.clearAllMocks();
     // Silence console output during tests
-    console.log = jest.fn();
+    jest.spyOn(console, 'log').mockImplementation();
   });
-  
+
   afterEach(() => {
     // Restore console.log after each test
     console.log = originalConsoleLog;
@@ -58,13 +56,13 @@ describe('Feedback Module', () => {
   describe('sendFeedback', () => {
     // Add the actual implementation for these tests
     beforeEach(() => {
-      (sendFeedback as jest.Mock).mockImplementation(actualFeedback.sendFeedback);
+      jest.mocked(sendFeedback).mockImplementation(actualFeedback.sendFeedback);
     });
 
     it('should send feedback successfully', async () => {
       // Mock a successful API response
       const mockResponse = { ok: true };
-      (fetchWithProxy as jest.Mock).mockResolvedValueOnce(mockResponse);
+      jest.mocked(fetchWithProxy).mockResolvedValueOnce(mockResponse);
 
       await sendFeedback('Test feedback');
 
@@ -75,7 +73,7 @@ describe('Feedback Module', () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ message: 'Test feedback' }),
-        })
+        }),
       );
 
       // Verify success message was logged
@@ -85,7 +83,7 @@ describe('Feedback Module', () => {
     it('should handle API failure', async () => {
       // Mock a failed API response
       const mockResponse = { ok: false, status: 500 };
-      (fetchWithProxy as jest.Mock).mockResolvedValueOnce(mockResponse);
+      jest.mocked(fetchWithProxy).mockResolvedValueOnce(mockResponse);
 
       await sendFeedback('Test feedback');
 
@@ -94,7 +92,7 @@ describe('Feedback Module', () => {
 
     it('should handle network errors', async () => {
       // Mock a network error
-      (fetchWithProxy as jest.Mock).mockRejectedValueOnce(new Error('Network error'));
+      jest.mocked(fetchWithProxy).mockRejectedValueOnce(new Error('Network error'));
 
       await sendFeedback('Test feedback');
 
@@ -112,15 +110,15 @@ describe('Feedback Module', () => {
   describe('gatherFeedback', () => {
     it('should send feedback directly if a message is provided', async () => {
       // Create a simplified implementation for this test
-      (gatherFeedback as jest.Mock).mockImplementation(async (message) => {
+      jest.mocked(gatherFeedback).mockImplementation(async (message) => {
         if (message) {
           await sendFeedback(message);
         }
       });
 
       // Reset sendFeedback to be a jest function we can track
-      (sendFeedback as jest.Mock).mockReset();
-      
+      jest.mocked(sendFeedback).mockReset();
+
       // Run the test
       await gatherFeedback('Direct feedback');
 
@@ -135,11 +133,11 @@ describe('Feedback Module', () => {
         close: jest.fn(),
         on: jest.fn(),
       };
-      (readline.createInterface as jest.Mock).mockReturnValue(mockInterface);
-      
+      jest.mocked(readline.createInterface).mockReturnValue(mockInterface);
+
       // Use real implementation for gatherFeedback
-      (gatherFeedback as jest.Mock).mockImplementation(actualFeedback.gatherFeedback);
-      
+      jest.mocked(gatherFeedback).mockImplementation(actualFeedback.gatherFeedback);
+
       await gatherFeedback();
 
       // Verify sendFeedback was not called due to empty input
@@ -148,16 +146,18 @@ describe('Feedback Module', () => {
 
     it('should handle errors during feedback gathering', async () => {
       // Mock readline to throw an error
-      (readline.createInterface as jest.Mock).mockImplementation(() => {
+      jest.mocked(readline.createInterface).mockImplementation(() => {
         throw new Error('Test error');
       });
-      
+
       // Use real implementation for gatherFeedback
-      (gatherFeedback as jest.Mock).mockImplementation(actualFeedback.gatherFeedback);
+      jest.mocked(gatherFeedback).mockImplementation(actualFeedback.gatherFeedback);
 
       await gatherFeedback();
 
-      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Error gathering feedback'));
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Error gathering feedback'),
+      );
     });
   });
-}); 
+});
