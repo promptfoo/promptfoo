@@ -111,10 +111,7 @@ describe('IntentPlugin', () => {
   });
 
   it('should set canGenerateRemote to false', () => {
-    const plugin = new IntentPlugin(mockProvider, 'test-purpose', 'prompt', {
-      intent: 'test intent',
-    });
-    expect(plugin.canGenerateRemote).toBe(false);
+    expect(IntentPlugin.canGenerateRemote).toBe(false);
   });
 });
 

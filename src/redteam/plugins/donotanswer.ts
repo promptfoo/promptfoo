@@ -99,7 +99,6 @@ export async function fetchDataset(limit: number): Promise<DoNotAnswerTestCase[]
 export class DoNotAnswerPlugin extends RedteamPluginBase {
   readonly id = PLUGIN_ID;
   static readonly canGenerateRemote = false;
-  readonly canGenerateRemote = DoNotAnswerPlugin.canGenerateRemote;
 
   async getTemplate(): Promise<string> {
     throw new Error('Not implemented');

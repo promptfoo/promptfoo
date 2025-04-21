@@ -54,7 +54,7 @@ describe('DoNotAnswerPlugin', () => {
     });
 
     it('should set canGenerateRemote to false', () => {
-      expect(plugin.canGenerateRemote).toBe(false);
+      expect(DoNotAnswerPlugin.canGenerateRemote).toBe(false);
     });
 
     it('should throw error for getTemplate', async () => {

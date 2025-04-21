@@ -50,7 +50,6 @@ async function fetchAllTexts(): Promise<string[]> {
 export class PlinyPlugin extends RedteamPluginBase {
   readonly id = PLUGIN_ID;
   static readonly canGenerateRemote = false;
-  readonly canGenerateRemote = PlinyPlugin.canGenerateRemote;
 
   async getTemplate(): Promise<string> {
     return this.injectVar;

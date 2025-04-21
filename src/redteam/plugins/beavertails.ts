@@ -63,7 +63,6 @@ export async function fetchAllDatasets(limit: number): Promise<BeaverTailsTestCa
 export class BeavertailsPlugin extends RedteamPluginBase {
   readonly id = PLUGIN_ID;
   static readonly canGenerateRemote = false;
-  readonly canGenerateRemote = BeavertailsPlugin.canGenerateRemote;
 
   async getTemplate(): Promise<string> {
     return this.injectVar;

@@ -35,7 +35,7 @@ describe('CyberSecEvalPlugin', () => {
   });
 
   it('should set canGenerateRemote to false', () => {
-    expect(plugin.canGenerateRemote).toBe(false);
+    expect(CyberSecEvalPlugin.canGenerateRemote).toBe(false);
   });
 
   it('should throw error for getTemplate', async () => {

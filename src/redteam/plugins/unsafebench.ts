@@ -304,7 +304,6 @@ class UnsafeBenchDatasetManager {
 export class UnsafeBenchPlugin extends RedteamPluginBase {
   readonly id = PLUGIN_ID;
   static readonly canGenerateRemote = false;
-  readonly canGenerateRemote = UnsafeBenchPlugin.canGenerateRemote;
   private pluginConfig?: UnsafeBenchPluginConfig;
   private datasetManager: UnsafeBenchDatasetManager;
 

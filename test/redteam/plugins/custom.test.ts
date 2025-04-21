@@ -60,7 +60,7 @@ describe('CustomPlugin', () => {
   });
 
   it('should set canGenerateRemote to false', () => {
-    expect(plugin.canGenerateRemote).toBe(false);
+    expect(CustomPlugin.canGenerateRemote).toBe(false);
   });
 
   it('should render the grader template with the correct purpose', () => {

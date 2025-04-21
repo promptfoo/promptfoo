@@ -56,28 +56,14 @@ describe('canGenerateRemote property and behavior', () => {
 
   describe('Plugin canGenerateRemote property', () => {
     it('should mark dataset-based plugins as not requiring remote generation', () => {
-      const beavertailsPlugin = new BeavertailsPlugin(mockProvider, 'test', 'test');
-      const customPlugin = new CustomPlugin(
-        mockProvider,
-        'test',
-        'test',
-        'path/to/custom-plugin.json',
-      );
-      const cybersecEvalPlugin = new CyberSecEvalPlugin(mockProvider, 'test', 'test');
-      const doNotAnswerPlugin = new DoNotAnswerPlugin(mockProvider, 'test', 'test');
-      const harmbenchPlugin = new HarmbenchPlugin(mockProvider, 'test', 'test');
-      const intentPlugin = new IntentPlugin(mockProvider, 'test', 'test', { intent: 'test' });
-      const plinyPlugin = new PlinyPlugin(mockProvider, 'test', 'test');
-      const unsafeBenchPlugin = new UnsafeBenchPlugin(mockProvider, 'test', 'test');
-
-      expect(beavertailsPlugin.canGenerateRemote).toBe(false);
-      expect(customPlugin.canGenerateRemote).toBe(false);
-      expect(cybersecEvalPlugin.canGenerateRemote).toBe(false);
-      expect(doNotAnswerPlugin.canGenerateRemote).toBe(false);
-      expect(harmbenchPlugin.canGenerateRemote).toBe(false);
-      expect(intentPlugin.canGenerateRemote).toBe(false);
-      expect(plinyPlugin.canGenerateRemote).toBe(false);
-      expect(unsafeBenchPlugin.canGenerateRemote).toBe(false);
+      expect(BeavertailsPlugin.canGenerateRemote).toBe(false);
+      expect(CustomPlugin.canGenerateRemote).toBe(false);
+      expect(CyberSecEvalPlugin.canGenerateRemote).toBe(false);
+      expect(DoNotAnswerPlugin.canGenerateRemote).toBe(false);
+      expect(HarmbenchPlugin.canGenerateRemote).toBe(false);
+      expect(IntentPlugin.canGenerateRemote).toBe(false);
+      expect(PlinyPlugin.canGenerateRemote).toBe(false);
+      expect(UnsafeBenchPlugin.canGenerateRemote).toBe(false);
     });
   });
 

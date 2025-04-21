@@ -60,7 +60,7 @@ With some content.
   });
 
   it('should set canGenerateRemote to false', () => {
-    expect(plugin.canGenerateRemote).toBe(false);
+    expect(PlinyPlugin.canGenerateRemote).toBe(false);
   });
 
   it('should return the inject variable as the template', async () => {
