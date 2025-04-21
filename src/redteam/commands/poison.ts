@@ -37,7 +37,7 @@ type Document = {
   dir: string | null;
 };
 
-function getAllFiles(dirPath: string, arrayOfFiles: string[] = []): string[] {
+export function getAllFiles(dirPath: string, arrayOfFiles: string[] = []): string[] {
   const files = fs.readdirSync(dirPath);
 
   files.forEach((file) => {
@@ -52,7 +52,7 @@ function getAllFiles(dirPath: string, arrayOfFiles: string[] = []): string[] {
   return arrayOfFiles;
 }
 
-async function generatePoisonedDocument(
+export async function generatePoisonedDocument(
   document: string,
   goal?: PoisonOptions['goal'],
 ): Promise<PoisonResponse> {
@@ -82,7 +82,7 @@ async function generatePoisonedDocument(
  * Poisons an individual document.
  * @param docLike A path to a document or document content to poison.
  */
-async function poisonDocument(
+export async function poisonDocument(
   doc: Document,
   outputDir: string,
   goal?: PoisonOptions['goal'],
@@ -130,7 +130,7 @@ async function poisonDocument(
   }
 }
 
-async function doPoisonDocuments(options: PoisonOptions) {
+export async function doPoisonDocuments(options: PoisonOptions) {
   const outputPath = options.output || 'poisoned-config.yaml';
   const outputDir = options.outputDir || 'poisoned-documents';
 
@@ -206,5 +206,3 @@ export function poisonCommand(program: Command) {
       }
     });
 }
-
-export { getAllFiles, generatePoisonedDocument, poisonDocument, doPoisonDocuments };

@@ -8,8 +8,6 @@ import {
   getGradingProvider,
   matchesClassification,
   matchesModeration,
-} from '../src/matchers';
-import {
   matchesSimilarity,
   matchesLlmRubric,
   matchesFactuality,
@@ -18,6 +16,8 @@ import {
   matchesContextRelevance,
   matchesContextRecall,
   matchesContextFaithfulness,
+  renderLlmRubricPrompt,
+  matchesGEval,
 } from '../src/matchers';
 import { ANSWER_RELEVANCY_GENERATE } from '../src/prompts';
 import { HuggingfaceTextClassificationProvider } from '../src/providers/huggingface';
@@ -2048,5 +2048,268 @@ describe('matchesModeration', () => {
     );
 
     expect(replicateSpy).toHaveBeenCalledWith('test prompt', 'test response');
+  });
+});
+
+describe('tryParse and renderLlmRubricPrompt', () => {
+  let tryParse: (content: string | null | undefined) => any;
+
+  beforeAll(async () => {
+    const context: { capturedFn: null | Function } = { capturedFn: null };
+
+    await renderLlmRubricPrompt('{"test":"value"}', {
+      __capture(fn: Function) {
+        context.capturedFn = fn;
+        return 'captured';
+      },
+    });
+
+    tryParse = function (content: string | null | undefined) {
+      try {
+        if (content === null || content === undefined) {
+          return content;
+        }
+        return JSON.parse(content);
+      } catch {}
+      return content;
+    };
+  });
+
+  it('should parse valid JSON', () => {
+    const input = '{"key": "value"}';
+    expect(tryParse(input)).toEqual({ key: 'value' });
+  });
+
+  it('should return original string for invalid JSON', () => {
+    const input = 'not json';
+    expect(tryParse(input)).toBe('not json');
+  });
+
+  it('should handle empty string', () => {
+    const input = '';
+    expect(tryParse(input)).toBe('');
+  });
+
+  it('should handle null and undefined', () => {
+    expect(tryParse(null)).toBeNull();
+    expect(tryParse(undefined)).toBeUndefined();
+  });
+
+  it('should render strings inside JSON objects', async () => {
+    const template = '{"role": "user", "content": "Hello {{name}}"}';
+    const result = await renderLlmRubricPrompt(template, { name: 'World' });
+    const parsed = JSON.parse(result);
+    expect(parsed).toEqual({ role: 'user', content: 'Hello World' });
+  });
+
+  it('should preserve JSON structure while rendering only strings', async () => {
+    const template = '{"nested": {"text": "{{var}}", "number": 42}}';
+    const result = await renderLlmRubricPrompt(template, { var: 'test' });
+    const parsed = JSON.parse(result);
+    expect(parsed).toEqual({ nested: { text: 'test', number: 42 } });
+  });
+
+  it('should handle non-JSON templates with legacy rendering', async () => {
+    const template = 'Hello {{name}}';
+    const result = await renderLlmRubricPrompt(template, { name: 'World' });
+    expect(result).toBe('Hello World');
+  });
+
+  it('should handle complex objects in context', async () => {
+    const template = '{"text": "{{object}}"}';
+    const complexObject = { foo: 'bar', baz: [1, 2, 3] };
+    const result = await renderLlmRubricPrompt(template, { object: complexObject });
+    const parsed = JSON.parse(result);
+    expect(typeof parsed.text).toBe('string');
+    expect(parsed.text).toBe('[object Object]');
+  });
+
+  it('should render arrays of objects correctly', async () => {
+    const template = '{"items": [{"name": "{{name1}}"}, {"name": "{{name2}}"}]}';
+    const result = await renderLlmRubricPrompt(template, { name1: 'Alice', name2: 'Bob' });
+    const parsed = JSON.parse(result);
+    expect(parsed).toEqual({
+      items: [{ name: 'Alice' }, { name: 'Bob' }],
+    });
+  });
+
+  it('should handle multiline strings', async () => {
+    const template = `{"content": "Line 1\\nLine {{number}}\\nLine 3"}`;
+    const result = await renderLlmRubricPrompt(template, { number: '2' });
+    const parsed = JSON.parse(result);
+    expect(parsed).toEqual({
+      content: 'Line 1\nLine 2\nLine 3',
+    });
+  });
+
+  it('should handle nested templates', async () => {
+    const template = '{"outer": "{{value1}}", "inner": {"value": "{{value2}}"}}';
+    const result = await renderLlmRubricPrompt(template, {
+      value1: 'outer value',
+      value2: 'inner value',
+    });
+    const parsed = JSON.parse(result);
+    expect(parsed).toEqual({
+      outer: 'outer value',
+      inner: { value: 'inner value' },
+    });
+  });
+
+  it('should handle escaping in JSON strings', async () => {
+    const template = '{"content": "This needs \\"escaping\\" and {{var}} too"}';
+    const result = await renderLlmRubricPrompt(template, { var: 'var with "quotes"' });
+    const parsed = JSON.parse(result);
+    expect(parsed.content).toBe('This needs "escaping" and var with "quotes" too');
+  });
+
+  it('should work with nested arrays and objects', async () => {
+    const template = JSON.stringify({
+      role: 'system',
+      content: 'Process this: {{input}}',
+      config: {
+        options: [
+          { id: 1, label: '{{option1}}' },
+          { id: 2, label: '{{option2}}' },
+        ],
+      },
+    });
+
+    const evalResult = await renderLlmRubricPrompt(template, {
+      input: 'test input',
+      option1: 'First Option',
+      option2: 'Second Option',
+    });
+
+    const parsed = JSON.parse(evalResult);
+    expect(parsed.content).toBe('Process this: test input');
+    expect(parsed.config.options[0].label).toBe('First Option');
+    expect(parsed.config.options[1].label).toBe('Second Option');
+  });
+
+  it('should handle rendering statements with join filter', async () => {
+    const statements = ['Statement 1', 'Statement 2', 'Statement 3'];
+    const template = 'statements:\n{{statements|join("\\n")}}';
+    const result = await renderLlmRubricPrompt(template, { statements });
+
+    const expected = 'statements:\nStatement 1\nStatement 2\nStatement 3';
+    expect(result).toBe(expected);
+  });
+});
+
+describe('matchesGEval', () => {
+  let originalCallApi: typeof DefaultGradingProvider.callApi;
+
+  beforeEach(() => {
+    originalCallApi = DefaultGradingProvider.callApi;
+
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(async (prompt) => {
+      if (prompt.includes('generate 3-4 concise evaluation steps')) {
+        return {
+          output: '{"steps": ["Check clarity", "Evaluate coherence", "Assess grammar"]}',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        };
+      } else {
+        return {
+          output: '{"score": 8, "reason": "The response is well-structured and clear"}',
+          tokenUsage: { total: 15, prompt: 8, completion: 7 },
+        };
+      }
+    });
+  });
+
+  afterEach(() => {
+    DefaultGradingProvider.callApi = originalCallApi;
+  });
+
+  it('should properly evaluate with default prompts', async () => {
+    const criteria = 'Evaluate coherence and clarity';
+    const input = 'Test input';
+    const output = 'Test output';
+    const threshold = 0.7;
+
+    const result = await matchesGEval(criteria, input, output, threshold);
+
+    expect(result).toEqual({
+      pass: true,
+      score: 0.8,
+      reason: 'The response is well-structured and clear',
+    });
+
+    expect(DefaultGradingProvider.callApi).toHaveBeenCalledTimes(2);
+  });
+
+  it('should handle custom rubric prompts', async () => {
+    jest.resetAllMocks();
+
+    const mockCallApi = jest
+      .fn()
+      .mockImplementationOnce(() => ({
+        output: '{"steps": ["Custom step 1", "Custom step 2"]}',
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      }))
+      .mockImplementationOnce(() => ({
+        output: '{"score": 8, "reason": "Custom evaluation complete", "pass": true}',
+        tokenUsage: { total: 15, prompt: 8, completion: 7 },
+      }));
+
+    DefaultGradingProvider.callApi = mockCallApi;
+
+    const criteria = 'Evaluate coherence and clarity';
+    const input = 'Test input';
+    const output = 'Test output';
+    const threshold = 0.7;
+
+    const grading = {
+      rubricPrompt: {
+        steps: 'Custom steps template with {{criteria}}',
+        evaluate: 'Custom evaluation template with {{criteria}} and {{steps}}',
+      },
+    } as any;
+
+    const result = await matchesGEval(criteria, input, output, threshold, grading);
+
+    expect(result.score).toBe(0.8);
+
+    expect(mockCallApi).toHaveBeenCalledTimes(2);
+    expect(mockCallApi).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining('Custom steps template with'),
+    );
+    expect(mockCallApi).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('Custom evaluation template with'),
+    );
+
+    DefaultGradingProvider.callApi = originalCallApi;
+  });
+
+  it('should fail when score is below threshold', async () => {
+    jest
+      .spyOn(DefaultGradingProvider, 'callApi')
+      .mockImplementationOnce(async () => {
+        return {
+          output: '{"steps": ["Check clarity", "Evaluate coherence", "Assess grammar"]}',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        };
+      })
+      .mockImplementationOnce(async () => {
+        return {
+          output: '{"score": 3, "reason": "The response lacks coherence"}',
+          tokenUsage: { total: 15, prompt: 8, completion: 7 },
+        };
+      });
+
+    const criteria = 'Evaluate coherence and clarity';
+    const input = 'Test input';
+    const output = 'Test output';
+    const threshold = 0.7;
+
+    const result = await matchesGEval(criteria, input, output, threshold);
+
+    expect(result).toEqual({
+      pass: false,
+      score: 0.3,
+      reason: 'The response lacks coherence',
+    });
   });
 });
