@@ -3,12 +3,70 @@ import {
   convertSlashCommentsToHash,
   extractFirstJsonObject,
   extractJsonObjects,
+  getAjv,
   isValidJson,
   orderKeys,
+  resetAjv,
   safeJsonStringify,
 } from '../../src/util/json';
 
 describe('json utilities', () => {
+  describe('getAjv', () => {
+    beforeAll(() => {
+      process.env.NODE_ENV = 'test';
+    });
+
+    beforeEach(() => {
+      delete process.env.PROMPTFOO_DISABLE_AJV_STRICT_MODE;
+      resetAjv();
+    });
+
+    afterEach(() => {
+      delete process.env.PROMPTFOO_DISABLE_AJV_STRICT_MODE;
+    });
+
+    it('should create an Ajv instance with default options', () => {
+      const ajv = getAjv();
+      expect(ajv).toBeDefined();
+      expect(ajv.opts.strictSchema).toBe(true);
+    });
+
+    it('should disable strict mode when PROMPTFOO_DISABLE_AJV_STRICT_MODE is set', () => {
+      process.env.PROMPTFOO_DISABLE_AJV_STRICT_MODE = 'true';
+      const ajv = getAjv();
+      expect(ajv.opts.strictSchema).toBe(false);
+    });
+
+    it('should add formats to the Ajv instance', () => {
+      const ajv = getAjv();
+      expect(ajv.formats).toBeDefined();
+      expect(Object.keys(ajv.formats)).not.toHaveLength(0);
+    });
+
+    it('should reuse the same instance on subsequent calls', () => {
+      const firstInstance = getAjv();
+      const secondInstance = getAjv();
+      expect(firstInstance).toBe(secondInstance);
+    });
+
+    it('should reset the instance when resetAjv is called', () => {
+      const firstInstance = getAjv();
+      resetAjv();
+      const secondInstance = getAjv();
+      expect(firstInstance).not.toBe(secondInstance);
+    });
+
+    it('should only allow resetAjv to be called in test environment', () => {
+      const originalNodeEnv = process.env.NODE_ENV;
+      try {
+        process.env.NODE_ENV = 'production';
+        expect(() => resetAjv()).toThrow('resetAjv can only be called in test environment');
+      } finally {
+        process.env.NODE_ENV = originalNodeEnv;
+      }
+    });
+  });
+
   describe('isValidJson', () => {
     it('returns true for valid JSON', () => {
       expect(isValidJson('{"key": "value"}')).toBe(true);
