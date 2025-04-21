@@ -82,7 +82,7 @@ export interface ApiProvider {
    * Providers should implement this to clean up any resources they might have
    * allocated, such as file handles, network connections, etc.
    */
-  cleanup?: () => void;
+  cleanup?: () => void | Promise<void>;
 }
 
 export interface ApiEmbeddingProvider extends ApiProvider {

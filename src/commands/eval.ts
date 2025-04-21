@@ -27,7 +27,7 @@ import type {
   TokenUsage,
   UnifiedConfig,
 } from '../types';
-import { OutputFileExtension, TestSuiteSchema } from '../types';
+import { isApiProvider, OutputFileExtension, TestSuiteSchema } from '../types';
 import { CommandLineOptionsSchema } from '../types';
 import { isRunningUnderNpx, maybeLoadFromExternalFile } from '../util';
 import { printBorder, setupEnv, writeMultipleOutputs } from '../util';
@@ -543,6 +543,14 @@ export async function doEval(
     }
     if (testSuite.redteam) {
       showRedteamProviderLabelMissingWarning(testSuite);
+    }
+    for (const provider of testSuite.providers) {
+      if (isApiProvider(provider)) {
+        const cleanup = provider?.cleanup?.();
+        if (cleanup instanceof Promise) {
+          await cleanup;
+        }
+      }
     }
     return ret;
   };
