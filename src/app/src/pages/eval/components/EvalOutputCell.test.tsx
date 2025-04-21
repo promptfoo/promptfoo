@@ -317,6 +317,82 @@ describe('EvalOutputCell', () => {
     expect(sourceElement).toHaveAttribute('src', 'data:audio/wav;base64,base64audiodata');
     expect(sourceElement).toHaveAttribute('type', 'audio/wav');
   });
+
+  it('allows copying row link to clipboard', async () => {
+    const originalClipboard = navigator.clipboard;
+    const mockClipboard = {
+      writeText: vi.fn().mockResolvedValue(undefined),
+    };
+    Object.defineProperty(navigator, 'clipboard', {
+      value: mockClipboard,
+      configurable: true,
+      writable: true,
+    });
+
+    const originalURL = global.URL;
+    const mockUrl = {
+      toString: vi.fn().mockReturnValue('https://example.com/?rowId=1'),
+      searchParams: {
+        set: vi.fn(),
+      },
+    };
+    global.URL = vi.fn(() => mockUrl) as any;
+
+    renderWithProviders(<EvalOutputCell {...defaultProps} />);
+
+    const shareButton = screen.getByLabelText('Share output');
+    expect(shareButton).toBeInTheDocument();
+
+    await userEvent.click(shareButton);
+
+    expect(mockUrl.searchParams.set).toHaveBeenCalledWith('rowId', '1');
+
+    expect(mockClipboard.writeText).toHaveBeenCalled();
+
+    Object.defineProperty(navigator, 'clipboard', {
+      value: originalClipboard,
+      configurable: true,
+      writable: true,
+    });
+    global.URL = originalURL;
+  });
+
+  it('shows checkmark after copying link', async () => {
+    const originalClipboard = navigator.clipboard;
+    const mockClipboard = {
+      writeText: vi.fn().mockResolvedValue(undefined),
+    };
+    Object.defineProperty(navigator, 'clipboard', {
+      value: mockClipboard,
+      configurable: true,
+      writable: true,
+    });
+
+    const mockUrl = {
+      toString: vi.fn().mockReturnValue('https://example.com/?rowId=1'),
+      searchParams: {
+        set: vi.fn(),
+      },
+    };
+    const originalURL = global.URL;
+    global.URL = vi.fn(() => mockUrl) as any;
+
+    renderWithProviders(<EvalOutputCell {...defaultProps} />);
+
+    const shareButtonWrapper = screen.getByText('🔗').closest('.action');
+    expect(shareButtonWrapper).toBeInTheDocument();
+
+    await userEvent.click(shareButtonWrapper!);
+
+    expect(mockClipboard.writeText).toHaveBeenCalled();
+
+    Object.defineProperty(navigator, 'clipboard', {
+      value: originalClipboard,
+      configurable: true,
+      writable: true,
+    });
+    global.URL = originalURL;
+  });
 });
 
 describe('EvalOutputCell provider override', () => {
