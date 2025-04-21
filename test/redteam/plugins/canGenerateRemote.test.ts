@@ -112,7 +112,7 @@ describe('canGenerateRemote property and behavior', () => {
 
       // Get a plugin that needs remote generation
       const contractsPlugin = Plugins.find((p) => p.key === 'contracts');
-      
+
       // Manually override the plugin action to force remote generation for this test
       const originalAction = contractsPlugin!.action;
       contractsPlugin!.action = async (params) => {
@@ -132,10 +132,10 @@ describe('canGenerateRemote property and behavior', () => {
               email: null,
             }),
           },
-          0
+          0,
         );
-        
-        return [{ test: 'case', metadata: { pluginId: 'contracts' }}];
+
+        return [{ test: 'case', metadata: { pluginId: 'contracts' } }];
       };
 
       // Call the plugin action - this should use remote generation
@@ -159,7 +159,7 @@ describe('canGenerateRemote property and behavior', () => {
         }),
         expect.any(Number),
       );
-      
+
       // Restore original action
       contractsPlugin!.action = originalAction;
     });

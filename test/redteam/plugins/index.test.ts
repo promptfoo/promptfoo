@@ -167,7 +167,7 @@ describe('Plugins', () => {
       jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
       const plugin = Plugins.find((p) => p.key === 'contracts');
-      
+
       // Manually patch the plugin action to bypass the canGenerateRemote check
       const originalAction = plugin!.action;
       plugin!.action = async (params) => {
@@ -187,7 +187,7 @@ describe('Plugins', () => {
               email: null,
             }),
           },
-          0
+          0,
         ).then(({ data }: any) => {
           return data.result.map((testCase: any) => ({
             ...testCase,
@@ -223,7 +223,7 @@ describe('Plugins', () => {
         expect.any(Number),
       );
       expect(result).toEqual([{ test: 'case', metadata: { pluginId: 'contracts' } }]);
-      
+
       // Restore original action for other tests
       plugin!.action = originalAction;
     });

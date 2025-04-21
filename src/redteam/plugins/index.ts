@@ -111,7 +111,7 @@ function createPluginFactory<T extends PluginConfig>(
     key,
     validate: validate as ((config: PluginConfig) => void) | undefined,
     action: async ({ provider, purpose, injectVar, n, delayMs, config }: PluginActionParams) => {
-      if (shouldGenerateRemote()) {
+      if (shouldGenerateRemote() && PluginClass.prototype.canGenerateRemote) {
         const testCases = await fetchRemoteTestCases(key, purpose, injectVar, n, config);
         return testCases.map((testCase) => ({
           ...testCase,
