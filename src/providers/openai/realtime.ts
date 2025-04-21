@@ -65,7 +65,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   config: OpenAiRealtimeOptions;
 
   // Add persistent connection handling
-  persistentConnection: any = null;
+  persistentConnection: WebSocket | null = null;
   previousItemId: string | null = null;
   assistantMessageIds: string[] = []; // Track assistant message IDs
   private activeTimeouts: Set<NodeJS.Timeout> = new Set();
