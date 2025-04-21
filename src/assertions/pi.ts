@@ -14,5 +14,5 @@ export const handlePiScorer = ({
     '"llm-rubric" assertion type must have a string value',
   );
 
-  return matchesPiScore(context.prompt || '', outputString, assertion);
+  return matchesPiScore(context.prompt || '', outputString, assertion, context.vars);
 };

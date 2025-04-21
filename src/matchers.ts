@@ -511,19 +511,22 @@ export async function matchesLlmRubric(
 }
 
 
+
 export async function matchesPiScore(
-  llm_input: string,
+  llmInput: string,
   llmOutput: string,
   assertion?: Assertion | null,
+  vars?: Record<string, string | object>
 ): Promise<GradingResult> {
+  const varsToUse = vars || {};
   return {
     ...(await doRemoteScoringWithPi({
-      llm_input: llm_input,
+      llm_input: llmInput,
       llm_output: llmOutput,
       scoring_spec: [{
-        question: assertion?.value as string || ''
+        question: nunjucks.renderString(assertion?.value as string || '', {...varsToUse})
       }]
-    })),
+    }, assertion?.threshold )),
     assertion,
   };
 }

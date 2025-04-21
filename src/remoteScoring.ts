@@ -29,9 +29,9 @@ type WithPiGradingResult = {
   total_score: number;
 }
 
-function convertPiResultToGradingResult(result: WithPiGradingResult) : GradingResult {
+function convertPiResultToGradingResult(result: WithPiGradingResult, threshold: number) : GradingResult {
   return {
-    pass: result.total_score > .5,
+    pass: result.total_score > threshold,
     score: result.total_score,
     namedScores: result.question_scores,
     reason: 'Pi Scorer'
@@ -39,7 +39,7 @@ function convertPiResultToGradingResult(result: WithPiGradingResult) : GradingRe
 }
 const WITHPI_API_URL = `https://api.withpi.ai/v1/scoring_system/score`
 export async function doRemoteScoringWithPi(
-  payload: RemotePiScoringPayload,
+  payload: RemotePiScoringPayload, passThreshold: number=.5
 ): Promise<Omit<GradingResult, 'assertion'>> {
   try {
     const apiKey = getWithPiApiKey();
@@ -58,7 +58,7 @@ export async function doRemoteScoringWithPi(
         },
         REQUEST_TIMEOUT_MS,
       );
-      return convertPiResultToGradingResult(data);
+      return convertPiResultToGradingResult(data, passThreshold);
     } else {
       throw new Error(`Env var WITHPI_AI_KEY must be set. Visit https://docs.withpi.ai for more information.`)
     }
