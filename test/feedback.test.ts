@@ -100,7 +100,7 @@ describe('Feedback Module', () => {
   describe('sendFeedback', () => {
     // Add the actual implementation for these tests
     beforeEach(() => {
-      (jest.mocked(sendFeedback)).mockImplementation(actualFeedback.sendFeedback);
+      jest.mocked(sendFeedback).mockImplementation(actualFeedback.sendFeedback);
     });
 
     it('should send feedback successfully', async () => {
@@ -154,14 +154,14 @@ describe('Feedback Module', () => {
   describe('gatherFeedback', () => {
     it('should send feedback directly if a message is provided', async () => {
       // Create a simplified implementation for this test
-      (jest.mocked(gatherFeedback)).mockImplementation(async (message) => {
+      jest.mocked(gatherFeedback).mockImplementation(async (message) => {
         if (message) {
           await sendFeedback(message);
         }
       });
 
       // Reset sendFeedback to be a jest function we can track
-      (jest.mocked(sendFeedback)).mockReset();
+      jest.mocked(sendFeedback).mockReset();
 
       // Run the test
       await gatherFeedback('Direct feedback');
@@ -181,7 +181,7 @@ describe('Feedback Module', () => {
       jest.mocked(readline.createInterface).mockReturnValue(mockInterface);
 
       // Use real implementation for gatherFeedback
-      (jest.mocked(gatherFeedback)).mockImplementation(actualFeedback.gatherFeedback);
+      jest.mocked(gatherFeedback).mockImplementation(actualFeedback.gatherFeedback);
 
       await gatherFeedback();
 
@@ -196,7 +196,7 @@ describe('Feedback Module', () => {
       });
 
       // Use real implementation for gatherFeedback
-      (jest.mocked(gatherFeedback)).mockImplementation(actualFeedback.gatherFeedback);
+      jest.mocked(gatherFeedback).mockImplementation(actualFeedback.gatherFeedback);
 
       await gatherFeedback();
 
