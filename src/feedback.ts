@@ -106,3 +106,5 @@ export async function gatherFeedback(message?: string) {
     logger.error('Error gathering feedback');
   }
 }
+
+export { prompt };
