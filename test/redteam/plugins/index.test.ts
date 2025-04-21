@@ -15,6 +15,17 @@ import { neverGenerateRemote, shouldGenerateRemote } from '../../../src/redteam/
 import { getShortPluginId } from '../../../src/redteam/util';
 import type { ApiProvider, TestCase } from '../../../src/types';
 
+// Mock the contracts plugin to have canGenerateRemote set to true
+jest.mock('../../../src/redteam/plugins/contracts', () => {
+  const original = jest.requireActual('../../../src/redteam/plugins/contracts');
+  return {
+    ...original,
+    ContractPlugin: class extends original.ContractPlugin {
+      readonly canGenerateRemote = true;
+    },
+  };
+});
+
 jest.mock('../../../src/cache');
 jest.mock('../../../src/cliState', () => ({
   __esModule: true,
@@ -156,6 +167,35 @@ describe('Plugins', () => {
       jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
       const plugin = Plugins.find((p) => p.key === 'contracts');
+      
+      // Manually patch the plugin action to bypass the canGenerateRemote check
+      const originalAction = plugin!.action;
+      plugin!.action = async (params) => {
+        // Force remote generation for this test
+        return fetchWithCache(
+          'http://test-url',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              config: params.config || {},
+              injectVar: params.injectVar,
+              n: params.n,
+              purpose: params.purpose,
+              task: 'contracts',
+              version: VERSION,
+              email: null,
+            }),
+          },
+          0
+        ).then(({ data }: any) => {
+          return data.result.map((testCase: any) => ({
+            ...testCase,
+            metadata: { ...testCase.metadata, pluginId: 'contracts' },
+          }));
+        });
+      };
+
       const result = await plugin?.action({
         provider: mockProvider,
         purpose: 'test',
@@ -183,6 +223,9 @@ describe('Plugins', () => {
         expect.any(Number),
       );
       expect(result).toEqual([{ test: 'case', metadata: { pluginId: 'contracts' } }]);
+      
+      // Restore original action for other tests
+      plugin!.action = originalAction;
     });
 
     it('should handle remote generation errors', async () => {

@@ -111,24 +111,18 @@ function createPluginFactory<T extends PluginConfig>(
     key,
     validate: validate as ((config: PluginConfig) => void) | undefined,
     action: async ({ provider, purpose, injectVar, n, delayMs, config }: PluginActionParams) => {
-      // Create a temporary instance to check if it requires an LLM
-      const tempInstance = new PluginClass(provider, purpose, injectVar, config as T);
-
-      // If plugin doesn't require an LLM or remote generation is disabled, generate locally
-      if (!tempInstance.canGenerateRemote || !shouldGenerateRemote()) {
-        logger.debug(`Using local redteam generation for ${key}`);
-        return tempInstance.generateTests(n, delayMs);
+      if (shouldGenerateRemote()) {
+        const testCases = await fetchRemoteTestCases(key, purpose, injectVar, n, config);
+        return testCases.map((testCase) => ({
+          ...testCase,
+          metadata: {
+            ...testCase.metadata,
+            pluginId: getShortPluginId(key),
+          },
+        }));
       }
-
-      // Otherwise, generate remotely
-      const testCases = await fetchRemoteTestCases(key, purpose, injectVar, n, config);
-      return testCases.map((testCase) => ({
-        ...testCase,
-        metadata: {
-          ...testCase.metadata,
-          pluginId: getShortPluginId(key),
-        },
-      }));
+      logger.debug(`Using local redteam generation for ${key}`);
+      return new PluginClass(provider, purpose, injectVar, config as T).generateTests(n, delayMs);
     },
   };
 }

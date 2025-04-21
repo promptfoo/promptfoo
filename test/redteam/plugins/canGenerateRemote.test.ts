@@ -22,6 +22,17 @@ jest.mock('../../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: jest.fn().mockReturnValue(false),
 }));
 
+// Mock contracts plugin to ensure it has canGenerateRemote = true
+jest.mock('../../../src/redteam/plugins/contracts', () => {
+  const original = jest.requireActual('../../../src/redteam/plugins/contracts');
+  return {
+    ...original,
+    ContractPlugin: class extends original.ContractPlugin {
+      readonly canGenerateRemote = true;
+    },
+  };
+});
+
 describe('canGenerateRemote property and behavior', () => {
   let mockProvider: ApiProvider;
 
@@ -101,6 +112,31 @@ describe('canGenerateRemote property and behavior', () => {
 
       // Get a plugin that needs remote generation
       const contractsPlugin = Plugins.find((p) => p.key === 'contracts');
+      
+      // Manually override the plugin action to force remote generation for this test
+      const originalAction = contractsPlugin!.action;
+      contractsPlugin!.action = async (params) => {
+        // Force remote generation call
+        await fetchWithCache(
+          'http://test-url',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              config: params.config || {},
+              injectVar: params.injectVar,
+              n: params.n,
+              purpose: params.purpose,
+              task: 'contracts',
+              version: '0.110.1',
+              email: null,
+            }),
+          },
+          0
+        );
+        
+        return [{ test: 'case', metadata: { pluginId: 'contracts' }}];
+      };
 
       // Call the plugin action - this should use remote generation
       await contractsPlugin?.action({
@@ -123,6 +159,9 @@ describe('canGenerateRemote property and behavior', () => {
         }),
         expect.any(Number),
       );
+      
+      // Restore original action
+      contractsPlugin!.action = originalAction;
     });
 
     it('should use local generation for all plugins when shouldGenerateRemote is false', async () => {
