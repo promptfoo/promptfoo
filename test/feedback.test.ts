@@ -1,8 +1,7 @@
-import readline from 'readline';
-// Import *after* mocking
-import { sendFeedback, gatherFeedback } from '../src/feedback';
 import { fetchWithProxy } from '../src/fetch';
 import logger from '../src/logger';
+import { getUserEmail } from '../src/globalConfig/accounts';
+import readline from 'readline';
 
 // Store the original implementation to reference in mocks
 const actualFeedback = jest.requireActual('../src/feedback');
@@ -21,12 +20,30 @@ jest.mock('../src/globalConfig/accounts', () => ({
   getUserEmail: jest.fn(),
 }));
 
-jest.mock('readline', () => ({
-  createInterface: jest.fn(() => ({
-    question: jest.fn((q, cb) => cb('mocked answer')),
+// Create a partial readline Interface mock
+const createMockInterface = () => {
+  return {
+    question: jest.fn(),
     close: jest.fn(),
     on: jest.fn(),
-  })),
+    // Add minimum required properties to satisfy the Interface type
+    line: '',
+    cursor: 0,
+    setPrompt: jest.fn(),
+    getPrompt: jest.fn(),
+    write: jest.fn(),
+    pause: jest.fn(),
+    resume: jest.fn(),
+    clearLine: jest.fn(),
+    removeAllListeners: jest.fn(),
+    terminal: null,
+    input: { on: jest.fn() } as any,
+    output: { on: jest.fn() } as any,
+  } as unknown as readline.Interface;
+};
+
+jest.mock('readline', () => ({
+  createInterface: jest.fn(() => createMockInterface()),
 }));
 
 // Mock feedback module
@@ -37,15 +54,39 @@ jest.mock('../src/feedback', () => {
   };
 });
 
-describe('Feedback Module', () => {
-  // Mock console to prevent logging during tests
-  const originalConsoleLog = console.log;
+// Import *after* mocking
+import { sendFeedback, gatherFeedback } from '../src/feedback';
 
+// Helper to create a mock Response
+const createMockResponse = (data: any): Response => {
+  return {
+    ok: data.ok,
+    status: data.status || 200,
+    statusText: data.statusText || '',
+    headers: new Headers(),
+    redirected: false,
+    type: 'basic',
+    url: '',
+    json: async () => data,
+    text: async () => '',
+    arrayBuffer: async () => new ArrayBuffer(0),
+    blob: async () => new Blob(),
+    formData: async () => new FormData(),
+    bodyUsed: false,
+    body: null,
+    clone: () => createMockResponse(data),
+  } as Response;
+};
+
+describe('Feedback Module', () => {
+  // Store original console.log
+  const originalConsoleLog = console.log;
+  
   beforeEach(() => {
     // Reset all mocks before each test
     jest.clearAllMocks();
     // Silence console output during tests
-    jest.spyOn(console, 'log').mockImplementation();
+    console.log = jest.fn();
   });
 
   afterEach(() => {
@@ -56,12 +97,12 @@ describe('Feedback Module', () => {
   describe('sendFeedback', () => {
     // Add the actual implementation for these tests
     beforeEach(() => {
-      jest.mocked(sendFeedback).mockImplementation(actualFeedback.sendFeedback);
+      (sendFeedback as jest.Mock).mockImplementation(actualFeedback.sendFeedback);
     });
 
     it('should send feedback successfully', async () => {
       // Mock a successful API response
-      const mockResponse = { ok: true };
+      const mockResponse = createMockResponse({ ok: true });
       jest.mocked(fetchWithProxy).mockResolvedValueOnce(mockResponse);
 
       await sendFeedback('Test feedback');
@@ -73,7 +114,7 @@ describe('Feedback Module', () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ message: 'Test feedback' }),
-        }),
+        })
       );
 
       // Verify success message was logged
@@ -82,7 +123,7 @@ describe('Feedback Module', () => {
 
     it('should handle API failure', async () => {
       // Mock a failed API response
-      const mockResponse = { ok: false, status: 500 };
+      const mockResponse = createMockResponse({ ok: false, status: 500 });
       jest.mocked(fetchWithProxy).mockResolvedValueOnce(mockResponse);
 
       await sendFeedback('Test feedback');
@@ -110,15 +151,15 @@ describe('Feedback Module', () => {
   describe('gatherFeedback', () => {
     it('should send feedback directly if a message is provided', async () => {
       // Create a simplified implementation for this test
-      jest.mocked(gatherFeedback).mockImplementation(async (message) => {
+      (gatherFeedback as jest.Mock).mockImplementation(async (message) => {
         if (message) {
           await sendFeedback(message);
         }
       });
 
       // Reset sendFeedback to be a jest function we can track
-      jest.mocked(sendFeedback).mockReset();
-
+      (sendFeedback as jest.Mock).mockReset();
+      
       // Run the test
       await gatherFeedback('Direct feedback');
 
@@ -128,16 +169,13 @@ describe('Feedback Module', () => {
 
     it('should handle empty feedback input', async () => {
       // Setup readline to return empty feedback
-      const mockInterface = {
-        question: jest.fn().mockImplementation((query, callback) => callback('   ')),
-        close: jest.fn(),
-        on: jest.fn(),
-      };
+      const mockInterface = createMockInterface();
+      mockInterface.question.mockImplementation((query, callback) => callback('   '));
       jest.mocked(readline.createInterface).mockReturnValue(mockInterface);
-
+      
       // Use real implementation for gatherFeedback
-      jest.mocked(gatherFeedback).mockImplementation(actualFeedback.gatherFeedback);
-
+      (gatherFeedback as jest.Mock).mockImplementation(actualFeedback.gatherFeedback);
+      
       await gatherFeedback();
 
       // Verify sendFeedback was not called due to empty input
@@ -149,15 +187,13 @@ describe('Feedback Module', () => {
       jest.mocked(readline.createInterface).mockImplementation(() => {
         throw new Error('Test error');
       });
-
+      
       // Use real implementation for gatherFeedback
-      jest.mocked(gatherFeedback).mockImplementation(actualFeedback.gatherFeedback);
+      (gatherFeedback as jest.Mock).mockImplementation(actualFeedback.gatherFeedback);
 
       await gatherFeedback();
 
-      expect(logger.error).toHaveBeenCalledWith(
-        expect.stringContaining('Error gathering feedback'),
-      );
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Error gathering feedback'));
     });
   });
 });
