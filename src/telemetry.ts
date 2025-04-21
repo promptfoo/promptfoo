@@ -37,7 +37,6 @@ const posthogClient = process.env.POSTHOG_KEY
 const TELEMETRY_TIMEOUT_MS = 1000;
 
 export class Telemetry {
-  private events: TelemetryEvent[] = [];
   private telemetryDisabledRecorded = false;
   private id: string;
   private email: string | undefined;
@@ -72,16 +71,12 @@ export class Telemetry {
   }
 
   get disabled() {
-    return getEnvBool('PROMPTFOO_DISABLE_TELEMETRY') || getEnvString('NODE_ENV') === 'test';
+    return getEnvBool('PROMPTFOO_DISABLE_TELEMETRY');
   }
 
   private recordTelemetryDisabled() {
     if (!this.telemetryDisabledRecorded) {
-      this.events.push({
-        event: 'feature_used',
-        packageVersion: VERSION,
-        properties: { feature: 'telemetry disabled' },
-      });
+      this.sendEvent('feature_used', { feature: 'telemetry disabled' });
       this.telemetryDisabledRecorded = true;
     }
   }
@@ -90,39 +85,46 @@ export class Telemetry {
     if (this.disabled) {
       this.recordTelemetryDisabled();
     } else {
-      if (posthogClient) {
-        const globalConfig = readGlobalConfig();
-        posthogClient.capture({
-          distinctId: globalConfig.id,
-          event: eventName,
-          properties: { ...properties, packageVersion: VERSION },
-        });
-      }
-      const kaBody = {
-        profile_id: this.id,
-        email: this.email,
-        events: [
-          {
-            message_id: randomUUID(),
-            type: 'track',
-            event: eventName,
-            properties,
-            sent_at: new Date().toISOString(),
-          },
-        ],
-      };
+      this.sendEvent(eventName, properties);
+    }
+  }
 
-      fetch(KA_ENDPOINT, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': `promptfoo/${VERSION}`,
-        },
-        body: JSON.stringify(kaBody),
-      }).catch(() => {
-        // pass
+  private sendEvent(eventName: TelemetryEventTypes, properties: EventProperties): void {
+    if (getEnvString('NODE_ENV') === 'test') {
+      return;
+    }
+    if (posthogClient) {
+      const globalConfig = readGlobalConfig();
+      posthogClient.capture({
+        distinctId: globalConfig.id,
+        event: eventName,
+        properties: { ...properties, packageVersion: VERSION },
       });
     }
+    const kaBody = {
+      profile_id: this.id,
+      email: this.email,
+      events: [
+        {
+          message_id: randomUUID(),
+          type: 'track',
+          event: eventName,
+          properties,
+          sent_at: new Date().toISOString(),
+        },
+      ],
+    };
+
+    fetch(KA_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': `promptfoo/${VERSION}`,
+      },
+      body: JSON.stringify(kaBody),
+    }).catch(() => {
+      // pass
+    });
   }
 
   /**
