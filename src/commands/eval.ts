@@ -22,7 +22,6 @@ import telemetry from '../telemetry';
 import type {
   CommandLineOptions,
   EvaluateOptions,
-  ApiProvider,
   Scenario,
   TestSuite,
   TokenUsage,
@@ -30,6 +29,7 @@ import type {
 } from '../types';
 import { OutputFileExtension, TestSuiteSchema } from '../types';
 import { CommandLineOptionsSchema } from '../types';
+import { isApiProvider } from '../types/providers';
 import { isRunningUnderNpx, maybeLoadFromExternalFile } from '../util';
 import { printBorder, setupEnv, writeMultipleOutputs } from '../util';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
@@ -533,8 +533,10 @@ export async function doEval(
     }
 
     if (testSuite.providers.length > 0) {
-      for (const provider of testSuite.providers as ApiProvider[]) {
-        provider?.cleanup?.();
+      for (const provider of testSuite.providers) {
+        if (isApiProvider(provider) && provider.cleanup) {
+          provider.cleanup();
+        }
       }
     }
 
