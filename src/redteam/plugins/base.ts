@@ -63,6 +63,13 @@ export abstract class RedteamPluginBase {
   abstract readonly id: string;
 
   /**
+   * Whether this plugin can be generated remotely if OpenAI is not available.
+   * Defaults to true. Set to false for plugins that use static data sources
+   * like datasets, CSVs, or JSON files that don't need remote generation.
+   */
+  readonly canGenerateRemote: boolean = true;
+
+  /**
    * Creates an instance of RedteamPluginBase.
    * @param provider - The API provider used for generating prompts.
    * @param purpose - The purpose of the plugin.

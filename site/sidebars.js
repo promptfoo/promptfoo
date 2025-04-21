@@ -222,6 +222,7 @@ const sidebars = {
             'red-team/plugins/beavertails',
             'red-team/plugins/contracts',
             'red-team/plugins/cyberseceval',
+            'red-team/plugins/donotanswer',
             'red-team/plugins/harmbench',
             'red-team/plugins/harmful',
             'red-team/plugins/pliny',
