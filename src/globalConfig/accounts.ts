@@ -4,9 +4,9 @@ import { z } from 'zod';
 import type { GlobalConfig } from '../configTypes';
 import { TERMINAL_MAX_WIDTH } from '../constants';
 import { getEnvString, isCI } from '../envars';
-import { fetchWithTimeout } from '../fetch';
 import logger from '../logger';
 import telemetry from '../telemetry';
+import { fetchWithTimeout } from '../util/fetch';
 import { readGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
 
 export function getUserEmail(): string | null {

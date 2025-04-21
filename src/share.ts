@@ -4,13 +4,13 @@ import cliProgress from 'cli-progress';
 import { URL } from 'url';
 import { DEFAULT_SHARE_VIEW_BASE_URL, SHARE_API_BASE_URL, SHARE_VIEW_BASE_URL } from './constants';
 import { getEnvBool, getEnvInt, isCI, getEnvString } from './envars';
-import { fetchWithProxy } from './fetch';
 import { getAuthor, getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
 import logger from './logger';
 import type Eval from './models/eval';
 import type { SharedResults } from './types';
 import { cloudCanAcceptChunkedResults, makeRequest as makeCloudRequest } from './util/cloud';
+import { fetchWithProxy } from './util/fetch';
 
 export interface ShareDomainResult {
   domain: string;

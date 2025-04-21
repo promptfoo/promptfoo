@@ -2,12 +2,12 @@ import fs from 'fs';
 import path from 'path';
 import type { ConnectionOptions } from 'tls';
 import { ProxyAgent, setGlobalDispatcher } from 'undici';
-import cliState from './cliState';
-import { VERSION } from './constants';
-import { getEnvBool, getEnvInt, getEnvString } from './envars';
-import logger from './logger';
-import invariant from './util/invariant';
-import { sleep } from './util/time';
+import cliState from '../../cliState';
+import { VERSION } from '../../constants';
+import { getEnvBool, getEnvInt, getEnvString } from '../../envars';
+import logger from '../../logger';
+import invariant from '../invariant';
+import { sleep } from '../time';
 
 /**
  * Options for configuring TLS in proxy connections

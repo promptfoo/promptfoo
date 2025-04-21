@@ -21,6 +21,7 @@ import type {
   Scenario,
 } from './types';
 import { readFilters, writeMultipleOutputs, writeOutput } from './util';
+import './util/fetch/nodeFetch';
 import invariant from './util/invariant';
 import { readTests } from './util/testCaseReader';
 

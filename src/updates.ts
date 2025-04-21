@@ -2,8 +2,8 @@ import chalk from 'chalk';
 import semverGt from 'semver/functions/gt';
 import { TERMINAL_MAX_WIDTH, VERSION } from './constants';
 import { getEnvBool } from './envars';
-import { fetchWithTimeout } from './fetch';
 import logger from './logger';
+import { fetchWithTimeout } from './util/fetch';
 
 export async function getLatestVersion() {
   const response = await fetchWithTimeout(`https://api.promptfoo.dev/api/latestVersion`, {}, 1000);
