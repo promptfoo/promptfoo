@@ -228,6 +228,7 @@ const sidebars = {
             'red-team/plugins/pliny',
             'red-team/plugins/politics',
             'red-team/plugins/religion',
+            'red-team/plugins/xstest',
           ],
         },
         {
