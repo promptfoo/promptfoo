@@ -10,8 +10,8 @@ authors:
   - family-names: Zang
     given-names: Guangshuo
 title: promptfoo
-version: 0.110.1
-date-released: '2025-04-17'
+version: 0.111.0
+date-released: '2025-04-21'
 url: https://promptfoo.dev
 repository-code: https://github.com/promptfoo/promptfoo
 license: MIT
