@@ -19,7 +19,7 @@ providers:
 
 | Api Providers                                       | Description                                       | Syntax & Example                                   |
 | --------------------------------------------------- | ------------------------------------------------- | -------------------------------------------------- |
-| [OpenAI](./openai.md)                               | GPT models including GPT-4.1 and reasoning models | `openai:o3-mini`                                   |
+| [OpenAI](./openai.md)                               | GPT models including GPT-4.1 and reasoning models | `openai:gpt-4.1-mini` or `openai:o3-mini`          |
 | [Anthropic](./anthropic.md)                         | Claude models                                     | `anthropic:messages:claude-3-7-sonnet-latest`      |
 | [HTTP](./http.md)                                   | Generic HTTP-based providers                      | `https://api.example.com/v1/chat/completions`      |
 | [Javascript](./custom-api.md)                       | Custom - JavaScript file                          | `file://path/to/custom_provider.js`                |
