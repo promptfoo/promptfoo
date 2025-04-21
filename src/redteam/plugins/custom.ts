@@ -39,6 +39,7 @@ export function loadCustomPluginDefinition(filePath: string): CustomPluginDefini
 
 export class CustomPlugin extends RedteamPluginBase {
   private definition: CustomPluginDefinition;
+  readonly canGenerateRemote = true;
 
   get id(): string {
     return this.definition.id || `promptfoo:redteam:custom`;
