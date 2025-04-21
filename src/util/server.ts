@@ -51,9 +51,8 @@ export async function openBrowser(
       });
 
       // Unref stdin to prevent it from keeping the process alive during tests
-      // Safely check if input exists and has unref method (handles test environment)
-      if (rl.input && typeof rl.input.unref === 'function') {
-        rl.input.unref();
+      if (process.stdin.unref) {
+        process.stdin.unref();
       }
 
       rl.question('Open URL in browser? (y/N): ', async (answer) => {
