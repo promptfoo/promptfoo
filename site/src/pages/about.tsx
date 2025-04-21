@@ -93,7 +93,7 @@ const AboutPageContent = () => {
                 name: 'Matthew Bou',
                 title: 'Enterprise GTM Lead',
                 image: '/img/team/matt.jpeg',
-                bio: "Matt's a three-time founding sales team member with a track record of building GTM from the ground up. He's helped multiple startups land and grow Fortune 500 accounts, leading to three exits along the way. At Promptfoo, he helps lead enterprise sales and go-to-market, helping teams move faster and reduce risk with continuous LLM red teaming.",
+                bio: "Matt's a three-time founding sales team member with a track record of building GTM from scratch. He's helped startups land and grow Fortune 500 accounts, leading to three exits. At Promptfoo, he leads enterprise sales, helping teams accelerate and secure LLMs.",
               },
               {
                 name: 'Vanessa Sauter',
