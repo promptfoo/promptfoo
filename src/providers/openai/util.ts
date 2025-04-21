@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
-import { getAjv } from '../../../src/assertions/json';
 import type { TokenUsage } from '../../types';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
+import { getAjv } from '../../util/json';
 import { safeJsonStringify } from '../../util/json';
 import type { ProviderConfig } from '../shared';
 import { calculateCost } from '../shared';
