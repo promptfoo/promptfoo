@@ -113,6 +113,12 @@ const AboutPageContent = () => {
                 image: '/img/team/will.jpg',
                 bio: 'Will has a passion for building secure and reliable systems. He brings experience leading teams that develop AI for the financial services industry.',
               },
+              {
+                name: 'Asmi Gulati',
+                title: 'AI Red Team',
+                image: '/img/team/asmi.jpeg',
+                bio: 'Asmi specializes in prompt hacking and develops educational content for Promptfoo. In her free time she maintains https://aisimplyexplained.com/',
+              },
             ].map((leader) => (
               <Grid size={{ xs: 12, sm: 6, md: 4 }} key={leader.name}>
                 <Box textAlign="center">
