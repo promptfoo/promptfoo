@@ -164,9 +164,25 @@ describe('Plugins', () => {
       jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
       const plugin = Plugins.find((p) => p.key === 'contracts');
-      
-      expect(plugin).toBeDefined();
-      expect(mockResponse.data.result).toEqual([{ test: 'case' }]);
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: {},
+        delayMs: 0,
+      });
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: expect.stringContaining('"task":"contracts"'),
+        }),
+        expect.any(Number)
+      );
+      expect(result).toEqual([{ test: 'case', metadata: { pluginId: 'contracts' } }]);
     });
 
     it('should handle remote generation errors', async () => {
