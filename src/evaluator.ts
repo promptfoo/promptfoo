@@ -1,6 +1,7 @@
 import async from 'async';
 import chalk from 'chalk';
 import type { MultiBar, SingleBar } from 'cli-progress';
+import cliProgress from 'cli-progress';
 import { randomUUID } from 'crypto';
 import { globSync } from 'glob';
 import * as path from 'path';
@@ -461,6 +462,19 @@ export function generateVarCombinations(
   }
 
   return combinations;
+}
+
+// Helper function to calculate group size and count based on concurrency
+function calculateProgressGroups(concurrency: number): { groupSize: number; numGroups: number } {
+  if (concurrency <= 10) {
+    return { groupSize: 1, numGroups: concurrency };
+  } else if (concurrency <= 30) {
+    return { groupSize: 5, numGroups: Math.ceil(concurrency / 5) };
+  } else if (concurrency <= 100) {
+    return { groupSize: 10, numGroups: Math.ceil(concurrency / 10) };
+  } else {
+    return { groupSize: 20, numGroups: Math.ceil(concurrency / 20) };
+  }
 }
 
 class Evaluator {
@@ -980,8 +994,15 @@ class Evaluator {
           .replace(/\n/g, ' ');
         logger.info(`[${numComplete}/${total}] Running ${provider} with vars: ${vars}`);
       } else if (multibar && evalStep) {
-        const threadIndex = index % concurrency;
-        const progressbar = multiProgressBars[threadIndex];
+        const { groupSize, numGroups } = calculateProgressGroups(concurrency);
+        const groupIndex = Math.floor(index / groupSize) % numGroups;
+        const progressbar = multiProgressBars[groupIndex];
+
+        // Calculate active threads in this group
+        const groupStartIndex = groupIndex * groupSize;
+        const groupEndIndex = Math.min((groupIndex + 1) * groupSize, concurrency);
+        const activeThreads = Math.min(groupEndIndex - groupStartIndex, groupSize);
+
         progressbar.increment({
           provider: evalStep.provider.label || evalStep.provider.id(),
           prompt: evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ' '),
@@ -990,6 +1011,7 @@ class Evaluator {
             .join(' ')
             .slice(0, 10)
             .replace(/\n/g, ' '),
+          activeThreads,
         });
       } else {
         logger.debug(`Eval #${index + 1} complete (${numComplete} of ${runEvalOptions.length})`);
@@ -1002,25 +1024,35 @@ class Evaluator {
         return;
       }
 
-      const cliProgress = await import('cli-progress');
+      const { groupSize, numGroups } = calculateProgressGroups(concurrency);
+
       multibar = new cliProgress.MultiBar(
         {
           format:
-            '[{bar}] {percentage}% | ETA: {eta}s | {value}/{total} | {provider} "{prompt}" {vars}',
+            'Group {groupId} [{bar}] {percentage}% | {value}/{total} | {activeThreads}/{maxThreads} threads | {provider} "{prompt}" {vars}',
           hideCursor: true,
         },
         cliProgress.Presets.shades_classic,
       );
-      const stepsPerThread = Math.floor(evalOptions.length / concurrency);
-      const remainingSteps = evalOptions.length % concurrency;
+
+      if (!multibar) {
+        return;
+      }
+
+      const stepsPerGroup = Math.floor(evalOptions.length / numGroups);
+      const remainingSteps = evalOptions.length % numGroups;
       multiProgressBars = [];
-      for (let i = 0; i < concurrency; i++) {
-        const totalSteps = i < remainingSteps ? stepsPerThread + 1 : stepsPerThread;
+
+      for (let i = 0; i < numGroups; i++) {
+        const totalSteps = i < remainingSteps ? stepsPerGroup + 1 : stepsPerGroup;
         if (totalSteps > 0) {
           const progressbar = multibar.create(totalSteps, 0, {
+            groupId: `${i + 1}/${numGroups}`,
             provider: '',
             prompt: '',
             vars: '',
+            activeThreads: 0,
+            maxThreads: groupSize,
           });
           multiProgressBars.push(progressbar);
         }
