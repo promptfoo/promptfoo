@@ -1,4 +1,4 @@
-import WebSocket from 'ws';
+import * as WebSocket from 'ws';
 import { disableCache, enableCache } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { OpenAiRealtimeProvider } from '../../../src/providers/openai/realtime';
@@ -144,18 +144,20 @@ describe('OpenAI Realtime Provider', () => {
 
       const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', { config });
 
-      // Create mock WebSocket connection
+      // Create mock WebSocket connection with proper type
       provider.persistentConnection = {
         on: jest.fn((event: string, handler: Function) => {
           mockHandlers[event].push(handler);
+          return provider.persistentConnection;
         }),
         once: jest.fn((event: string, handler: Function) => {
           mockHandlers[event].push(handler);
+          return provider.persistentConnection;
         }),
         send: jest.fn(),
         close: jest.fn(),
         removeListener: jest.fn(),
-      };
+      } as unknown as WebSocket;
 
       // Create a promise for the API call
       const responsePromise = provider.callApi('Hello');
@@ -243,18 +245,20 @@ describe('OpenAI Realtime Provider', () => {
 
       const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', { config });
 
-      // Create mock WebSocket connection
+      // Create mock WebSocket connection with proper type
       provider.persistentConnection = {
         on: jest.fn((event: string, handler: Function) => {
           mockHandlers[event].push(handler);
+          return provider.persistentConnection;
         }),
         once: jest.fn((event: string, handler: Function) => {
           mockHandlers[event].push(handler);
+          return provider.persistentConnection;
         }),
         send: jest.fn(),
         close: jest.fn(),
         removeListener: jest.fn(),
-      };
+      } as unknown as WebSocket;
 
       // Helper function to simulate message sequence
       const simulateMessageSequence = async (
@@ -359,7 +363,7 @@ describe('OpenAI Realtime Provider', () => {
       const secondResponsePromise = provider.callApi('Second message');
 
       // Verify context maintenance
-      expect(provider.persistentConnection.send).toHaveBeenCalledWith(
+      expect(provider.persistentConnection?.send).toHaveBeenCalledWith(
         expect.stringContaining('"previous_item_id":"assistant_1"'),
       );
 
@@ -385,18 +389,20 @@ describe('OpenAI Realtime Provider', () => {
 
       const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', { config });
 
-      // Create mock WebSocket connection
+      // Create mock WebSocket connection with proper type
       provider.persistentConnection = {
         on: jest.fn((event: string, handler: Function) => {
           mockHandlers[event].push(handler);
+          return provider.persistentConnection;
         }),
         once: jest.fn((event: string, handler: Function) => {
           mockHandlers[event].push(handler);
+          return provider.persistentConnection;
         }),
         send: jest.fn(),
         close: jest.fn(),
         removeListener: jest.fn(),
-      };
+      } as unknown as WebSocket;
 
       const responsePromise = provider.callApi('Hello');
 
@@ -420,18 +426,20 @@ describe('OpenAI Realtime Provider', () => {
 
       const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', { config });
 
-      // Create mock WebSocket connection
+      // Create mock WebSocket connection with proper type
       provider.persistentConnection = {
         on: jest.fn((event: string, handler: Function) => {
           mockHandlers[event].push(handler);
+          return provider.persistentConnection;
         }),
         once: jest.fn((event: string, handler: Function) => {
           mockHandlers[event].push(handler);
+          return provider.persistentConnection;
         }),
         send: jest.fn(),
         close: jest.fn(),
         removeListener: jest.fn(),
-      };
+      } as unknown as WebSocket;
 
       const responsePromise = provider.callApi('Hello');
 
@@ -549,23 +557,31 @@ describe('OpenAI Realtime Provider', () => {
       let messageHandler: Function | null = null;
       let openHandler: Function | null = null;
 
-      // Create mock WebSocket connection with proper event handling
+      // Create mock WebSocket connection with proper type
       const mockWs = {
         on: jest.fn((event: string, handler: Function) => {
           if (event === 'message') {
             messageHandler = handler;
           }
           mockHandlers[event].push(handler);
+          return mockWs;
         }),
         once: jest.fn((event: string, handler: Function) => {
           if (event === 'open') {
             openHandler = handler;
           }
           mockHandlers[event].push(handler);
+          return mockWs;
         }),
         send: jest.fn(),
         close: jest.fn(),
         removeListener: jest.fn(),
+      } as unknown as WebSocket & {
+        send: jest.Mock;
+        close: jest.Mock;
+        on: jest.Mock;
+        once: jest.Mock;
+        removeListener: jest.Mock;
       };
 
       // Mock WebSocket constructor to return our mockWs
@@ -721,11 +737,19 @@ describe('OpenAI Realtime Provider', () => {
   describe('Cleanup', () => {
     it('should properly clean up resources', () => {
       const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview');
-      provider.persistentConnection = mockWs;
+
+      // Create a properly typed mock
+      const cleanupMockWs = {
+        close: jest.fn(),
+      } as unknown as WebSocket & {
+        close: jest.Mock;
+      };
+
+      provider.persistentConnection = cleanupMockWs;
 
       provider.cleanup();
 
-      expect(mockWs.close).toHaveBeenCalledWith();
+      expect(cleanupMockWs.close).toHaveBeenCalledWith();
       expect(provider.persistentConnection).toBeNull();
     });
   });
