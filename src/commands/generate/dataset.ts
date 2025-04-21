@@ -3,10 +3,11 @@ import type { Command } from 'commander';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import { disableCache } from '../../cache';
+import { serializeObjectArrayAsCSV } from '../../csv';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { synthesizeFromTestSuite } from '../../testCase/synthesis';
-import type { TestSuite, UnifiedConfig } from '../../types';
+import { type TestSuite, type UnifiedConfig } from '../../types';
 import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
 import { resolveConfigs } from '../../util/config/load';
 
@@ -24,7 +25,7 @@ interface DatasetGenerateOptions {
   defaultConfigPath: string | undefined;
 }
 
-async function doGenerateDataset(options: DatasetGenerateOptions): Promise<void> {
+export async function doGenerateDataset(options: DatasetGenerateOptions): Promise<void> {
   setupEnv(options.envFile);
   if (!options.cache) {
     logger.info('Cache is disabled.');
@@ -39,6 +40,7 @@ async function doGenerateDataset(options: DatasetGenerateOptions): Promise<void>
         config: [configPath],
       },
       options.defaultConfig,
+      'DatasetGeneration',
     );
     testSuite = resolved.testSuite;
   } else {
@@ -62,7 +64,14 @@ async function doGenerateDataset(options: DatasetGenerateOptions): Promise<void>
   const configAddition = { tests: results.map((result) => ({ vars: result })) };
   const yamlString = yaml.dump(configAddition);
   if (options.output) {
-    fs.writeFileSync(options.output, yamlString);
+    // Should the output be written as a YAML or CSV?
+    if (options.output.endsWith('.csv')) {
+      fs.writeFileSync(options.output, serializeObjectArrayAsCSV(results));
+    } else if (options.output.endsWith('.yaml')) {
+      fs.writeFileSync(options.output, yamlString);
+    } else {
+      throw new Error(`Unsupported output file type: ${options.output}`);
+    }
     printBorder();
     logger.info(`Wrote ${results.length} new test cases to ${options.output}`);
     printBorder();
@@ -113,7 +122,7 @@ export function generateDatasetCommand(
       'Additional instructions to follow while generating test cases',
     )
     .option('-c, --config [path]', 'Path to configuration file. Defaults to promptfooconfig.yaml')
-    .option('-o, --output [path]', 'Path to output file')
+    .option('-o, --output [path]', 'Path to output file. Supports CSV and YAML output.')
     .option('-w, --write', 'Write results to promptfoo configuration file')
     .option(
       '--provider <provider>',

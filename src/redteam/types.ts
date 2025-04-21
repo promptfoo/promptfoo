@@ -88,6 +88,7 @@ export interface RedteamCliGenerateOptions extends CommonOptions {
   verbose?: boolean;
   abortSignal?: AbortSignal;
   burpEscapeJson?: boolean;
+  progressBar?: boolean;
 }
 
 export interface RedteamFileConfig extends CommonOptions {
@@ -105,6 +106,7 @@ export interface SynthesizeOptions extends CommonOptions {
   prompts: [string, ...string[]];
   strategies: RedteamStrategyObject[];
   targetLabels: string[];
+  showProgressBar?: boolean;
 }
 
 export type RedteamAssertionTypes = `promptfoo:redteam:${string}`;
@@ -122,10 +124,18 @@ export interface RedteamRunOptions {
   filterProviders?: string;
   filterTargets?: string;
   verbose?: boolean;
+  progressBar?: boolean;
 
   // Used by webui
   liveRedteamConfig?: any;
   logCallback?: (message: string) => void;
+  progressCallback?: (
+    completed: number,
+    total: number,
+    index: number | string,
+    evalStep: any, // RunEvalOptions, but introduces circular dependency
+    metrics: any, // PromptMetrics, but introduces circular dependency
+  ) => void;
   abortSignal?: AbortSignal;
 
   loadedFromCloud?: boolean;
@@ -138,6 +148,7 @@ export interface SavedRedteamConfig {
   plugins: (RedteamPlugin | { id: string; config?: any })[];
   strategies: RedteamStrategy[];
   purpose?: string;
+  extensions?: string[];
   numTests?: number;
   applicationDefinition: {
     purpose?: string;

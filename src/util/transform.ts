@@ -1,10 +1,10 @@
-import path from 'path';
 import cliState from '../cliState';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
 import type { Prompt, Vars } from '../types';
 import { isJavascriptFile } from './file';
+import { safeJoin } from './file.node';
 
 export type TransformContext = {
   vars?: Vars;
@@ -77,7 +77,9 @@ async function getFileTransformFunction(filePath: string): Promise<Function> {
   const [actualFilePath, functionName] = parseFilePathAndFunctionName(
     filePath.slice('file://'.length),
   );
-  const fullPath = path.join(cliState.basePath || '', actualFilePath);
+
+  const fullPath = safeJoin(cliState.basePath || '', actualFilePath);
+
   if (isJavascriptFile(fullPath)) {
     return getJavascriptTransformFunction(fullPath, functionName);
   } else if (fullPath.endsWith('.py')) {
@@ -156,7 +158,7 @@ export async function transform(
 
   const ret = await Promise.resolve(postprocessFn(transformInput, context));
 
-  if (validateReturn && ret == null) {
+  if (validateReturn && (ret === null || ret === undefined)) {
     throw new Error(`Transform function did not return a value\n\n${codeOrFilepath}`);
   }
 

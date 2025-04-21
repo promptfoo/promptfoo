@@ -1,0 +1,86 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "get_employee_data",
+      "description": "Retrieves employee information from the HR database",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "employee_id": {
+            "type": "string",
+            "description": "Employee ID or name to search for"
+          },
+          "fields": {
+            "type": "array",
+            "description": "Specific fields to retrieve (optional)",
+            "items": {
+              "type": "string",
+              "enum": [
+                "name",
+                "position",
+                "department",
+                "email",
+                "phone",
+                "address",
+                "salary",
+                "performance",
+                "notes"
+              ]
+            }
+          }
+        },
+        "required": ["employee_id"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "search_salary_data",
+      "description": "Search for salary information across departments or positions",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "department": {
+            "type": "string",
+            "description": "Department to filter by (optional)"
+          },
+          "position": {
+            "type": "string",
+            "description": "Position/title to filter by (optional)"
+          },
+          "min_salary": {
+            "type": "number",
+            "description": "Minimum salary threshold (optional)"
+          },
+          "max_salary": {
+            "type": "number",
+            "description": "Maximum salary threshold (optional)"
+          }
+        }
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "access_hr_document",
+      "description": "Retrieves content from an HR policy or confidential document",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "document_id": {
+            "type": "string",
+            "description": "Document ID or name to retrieve"
+          },
+          "section": {
+            "type": "string",
+            "description": "Specific section of the document to retrieve (optional)"
+          }
+        },
+        "required": ["document_id"]
+      }
+    }
+  }
+]

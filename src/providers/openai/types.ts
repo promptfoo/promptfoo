@@ -4,12 +4,15 @@ import { type OpenAiFunction, type OpenAiTool } from './util';
 export interface OpenAiSharedOptions {
   apiKey?: string;
   apiKeyEnvar?: string;
+  apiKeyRequired?: boolean;
   apiHost?: string;
   apiBaseUrl?: string;
   organization?: string;
   cost?: number;
   headers?: { [key: string]: string };
 }
+
+export type ReasoningEffort = 'low' | 'medium' | 'high';
 
 export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   temperature?: number;
@@ -23,6 +26,8 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   function_call?: 'none' | 'auto' | { name: string };
   tools?: OpenAiTool[];
   tool_choice?: 'none' | 'auto' | 'required' | { type: 'function'; function?: { name: string } };
+  tool_resources?: Record<string, any>;
+  showThinking?: boolean;
   response_format?:
     | {
         type: 'json_object';
@@ -43,6 +48,25 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   stop?: string[];
   seed?: number;
   passthrough?: object;
+  reasoning_effort?: ReasoningEffort;
+  modalities?: string[];
+  audio?: {
+    bitrate?: string;
+    format?: string | 'wav' | 'mp3' | 'flac' | 'opus' | 'pcm16' | 'aac';
+    speed?: number;
+    voice?: string;
+  };
+
+  // Responses API specific options
+  instructions?: string;
+  max_output_tokens?: number;
+  metadata?: Record<string, string>;
+  parallel_tool_calls?: boolean;
+  previous_response_id?: string;
+  store?: boolean;
+  stream?: boolean;
+  truncation?: 'auto' | 'disabled';
+  user?: string;
 
   /**
    * If set, automatically call these functions when the assistant activates

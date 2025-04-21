@@ -11,7 +11,7 @@ The example includes two prompt configurations for solving a math problem.
 
 1. Set up your API credentials:
    - For OpenAI: Set `OPENAI_API_KEY` environment variable.
-   - For Azure OpenAI: Set required Azure credentials. See [Azure OpenAI provider docs](https://promptfoo.com/docs/providers/azure) for more details.
+   - For Azure OpenAI: Set required Azure credentials. See [Azure OpenAI provider docs](https://promptfoo.dev/docs/providers/azure) for more details.
 
 ## Getting Started
 

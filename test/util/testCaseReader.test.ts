@@ -3,16 +3,17 @@ import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import { testCaseFromCsvRow } from '../../src/csv';
-import { getEnvString } from '../../src/envars';
+import { getEnvBool, getEnvString } from '../../src/envars';
 import { fetchCsvFromGoogleSheet } from '../../src/googleSheets';
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers';
 import type { AssertionType, TestCase, TestCaseWithVarsFile } from '../../src/types';
 import {
+  loadTestsFromGlob,
   readStandaloneTestsFile,
   readTest,
   readTests,
-  readVarsFiles,
+  readTestFiles,
 } from '../../src/util/testCaseReader';
 
 jest.mock('proxy-agent', () => ({
@@ -49,7 +50,15 @@ jest.mock('../../src/googleSheets', () => ({
 jest.mock('../../src/envars', () => ({
   ...jest.requireActual('../../src/envars'),
   getEnvBool: jest.fn(),
-  getEnvString: jest.fn().mockImplementation((key, defaultValue) => defaultValue),
+  getEnvString: jest.fn(),
+}));
+
+jest.mock('../../src/python/pythonUtils', () => ({
+  runPython: jest.fn(),
+}));
+
+jest.mock('../../src/integrations/huggingfaceDatasets', () => ({
+  fetchHuggingFaceDataset: jest.fn(),
 }));
 
 describe('readStandaloneTestsFile', () => {
@@ -108,16 +117,54 @@ describe('readStandaloneTestsFile', () => {
   it('should read JSON file and return test cases', async () => {
     jest.mocked(fs.readFileSync).mockReturnValue(
       JSON.stringify([
-        { var1: 'value1', var2: 'value2' },
-        { var1: 'value3', var2: 'value4' },
+        {
+          vars: { var1: 'value1', var2: 'value2' },
+          assert: [{ type: 'equals', value: 'expected1' }],
+          description: 'Test #1',
+        },
+        {
+          vars: { var1: 'value3', var2: 'value4' },
+          assert: [{ type: 'contains', value: 'expected2' }],
+          description: 'Test #2',
+        },
       ]),
     );
     const result = await readStandaloneTestsFile('test.json');
 
     expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('test.json'), 'utf-8');
     expect(result).toEqual([
-      { assert: [], description: 'Row #1', options: {}, vars: { var1: 'value1', var2: 'value2' } },
-      { assert: [], description: 'Row #2', options: {}, vars: { var1: 'value3', var2: 'value4' } },
+      {
+        vars: { var1: 'value1', var2: 'value2' },
+        assert: [{ type: 'equals', value: 'expected1' }],
+        description: 'Test #1',
+      },
+      {
+        vars: { var1: 'value3', var2: 'value4' },
+        assert: [{ type: 'contains', value: 'expected2' }],
+        description: 'Test #2',
+      },
+    ]);
+  });
+
+  it('should read JSONL file and return test cases', async () => {
+    jest.mocked(fs.readFileSync).mockReturnValue(
+      `{"vars":{"var1":"value1","var2":"value2"},"assert":[{"type":"equals","value":"Hello World"}]}
+        {"vars":{"var1":"value3","var2":"value4"},"assert":[{"type":"equals","value":"Hello World"}]}`,
+    );
+    const result = await readStandaloneTestsFile('test.jsonl');
+
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('test.jsonl'), 'utf-8');
+    expect(result).toEqual([
+      {
+        assert: [{ type: 'equals', value: 'Hello World' }],
+        description: 'Row #1',
+        vars: { var1: 'value1', var2: 'value2' },
+      },
+      {
+        assert: [{ type: 'equals', value: 'Hello World' }],
+        description: 'Row #2',
+        vars: { var1: 'value3', var2: 'value4' },
+      },
     ]);
   });
 
@@ -244,6 +291,76 @@ describe('readStandaloneTestsFile', () => {
         description: 'Row #2',
         options: {},
         vars: { var1: 'value3', var2: 'value4' },
+      },
+    ]);
+  });
+
+  it('should handle Python files with default function name', async () => {
+    const pythonResult = [
+      { vars: { var1: 'value1' }, assert: [{ type: 'equals', value: 'expected1' }] },
+      { vars: { var2: 'value2' }, assert: [{ type: 'equals', value: 'expected2' }] },
+    ];
+    const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
+    mockRunPython.mockResolvedValueOnce(pythonResult);
+
+    const result = await readStandaloneTestsFile('test.py');
+
+    expect(mockRunPython).toHaveBeenCalledWith(
+      expect.stringContaining('test.py'),
+      'generate_tests',
+      [],
+    );
+    expect(result).toEqual(pythonResult);
+  });
+
+  it('should handle Python files with custom function name', async () => {
+    const pythonResult = [
+      { vars: { var1: 'value1' }, assert: [{ type: 'equals', value: 'expected1' }] },
+    ];
+    const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
+    mockRunPython.mockResolvedValueOnce(pythonResult);
+
+    const result = await readStandaloneTestsFile('test.py:custom_function');
+
+    expect(mockRunPython).toHaveBeenCalledWith(
+      expect.stringContaining('test.py'),
+      'custom_function',
+      [],
+    );
+    expect(result).toEqual(pythonResult);
+  });
+
+  it('should throw error when Python file returns non-array', async () => {
+    const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
+    mockRunPython.mockResolvedValueOnce({ not: 'an array' });
+
+    await expect(readStandaloneTestsFile('test.py')).rejects.toThrow(
+      'Python test function must return a list of test cases, got object',
+    );
+  });
+
+  it('should handle Python files with invalid function name in readStandaloneTestsFile', async () => {
+    await expect(readStandaloneTestsFile('test.py:invalid:extra')).rejects.toThrow(
+      'Too many colons. Invalid test file script path: test.py:invalid:extra',
+    );
+  });
+
+  it('should read JSON file with a single test case object', async () => {
+    jest.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        vars: { var1: 'value1', var2: 'value2' },
+        assert: [{ type: 'equals', value: 'expected1' }],
+        description: 'Single Test',
+      }),
+    );
+    const result = await readStandaloneTestsFile('test.json');
+
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('test.json'), 'utf-8');
+    expect(result).toEqual([
+      {
+        vars: { var1: 'value1', var2: 'value2' },
+        assert: [{ type: 'equals', value: 'expected1' }],
+        description: 'Single Test',
       },
     ]);
   });
@@ -560,14 +677,12 @@ describe('readTests', () => {
   });
 
   it('should log a warning for unsupported test format', async () => {
-    const warnSpy = jest.spyOn(logger, 'warn');
     const unsupportedTests = { invalid: 'format' };
 
     await readTests(unsupportedTests as any);
-    expect(warnSpy).toHaveBeenCalledWith(
+    expect(logger.warn).toHaveBeenCalledWith(
       expect.stringContaining("Warning: Unsupported 'tests' format in promptfooconfig.yaml."),
     );
-    warnSpy.mockRestore();
   });
 
   it('should not log a warning if tests is undefined', async () => {
@@ -612,6 +727,234 @@ describe('readTests', () => {
       assert: [{ type: 'equals', value: 'expected3' }],
     });
   });
+
+  it('should handle HuggingFace dataset URLs', async () => {
+    const mockDataset: TestCase[] = [
+      {
+        description: 'Test 1',
+        vars: { var1: 'value1' },
+        assert: [{ type: 'equals', value: 'expected1' }],
+        options: {},
+      },
+      {
+        description: 'Test 2',
+        vars: { var2: 'value2' },
+        assert: [{ type: 'equals', value: 'expected2' }],
+        options: {},
+      },
+    ];
+    const mockFetchHuggingFaceDataset = jest.requireMock(
+      '../../src/integrations/huggingfaceDatasets',
+    ).fetchHuggingFaceDataset;
+    mockFetchHuggingFaceDataset.mockImplementation(async () => mockDataset);
+    jest.mocked(globSync).mockReturnValueOnce([]);
+
+    const result = await readTests('huggingface://datasets/example/dataset');
+
+    expect(mockFetchHuggingFaceDataset).toHaveBeenCalledWith(
+      'huggingface://datasets/example/dataset',
+    );
+    expect(result).toEqual(mockDataset);
+  });
+
+  it('should handle JSONL files', async () => {
+    const expectedTests: TestCase[] = [
+      {
+        description: 'Test 1',
+        vars: { var1: 'value1' },
+        assert: [{ type: 'equals', value: 'expected1' }],
+        options: {},
+      },
+      {
+        description: 'Test 2',
+        vars: { var2: 'value2' },
+        assert: [{ type: 'equals', value: 'expected2' }],
+        options: {},
+      },
+    ];
+    const jsonlContent = expectedTests.map((test) => JSON.stringify(test)).join('\n');
+    jest.mocked(fs.readFileSync).mockReturnValueOnce(jsonlContent);
+    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat());
+
+    const result = await readTests(['test.jsonl']);
+
+    expect(result).toEqual(expectedTests);
+  });
+
+  it('should handle file read errors gracefully', async () => {
+    jest.mocked(fs.readFileSync).mockImplementation(() => {
+      throw new Error('File read error');
+    });
+    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat());
+
+    await expect(readTests(['test.yaml'])).rejects.toThrow('File read error');
+  });
+
+  it('should handle Python files in readTests', async () => {
+    const pythonTests: TestCase[] = [
+      {
+        description: 'Python Test 1',
+        vars: { var1: 'value1' },
+        assert: [{ type: 'equals', value: 'expected1' }],
+        options: {},
+      },
+      {
+        description: 'Python Test 2',
+        vars: { var2: 'value2' },
+        assert: [{ type: 'equals', value: 'expected2' }],
+        options: {},
+      },
+    ];
+    const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
+    mockRunPython.mockResolvedValue(pythonTests);
+    jest.mocked(globSync).mockReturnValue(['test.py']);
+
+    const result = await readTests(['test.py']);
+
+    expect(mockRunPython).toHaveBeenCalledWith(
+      expect.stringContaining('test.py'),
+      'generate_tests',
+      [],
+    );
+    expect(result).toHaveLength(2);
+    expect(result).toEqual(pythonTests);
+  });
+
+  it('should handle Python files with custom function in readTests', async () => {
+    const pythonTests: TestCase[] = [
+      {
+        description: 'Python Test 1',
+        vars: { var1: 'value1' },
+        assert: [{ type: 'equals', value: 'expected1' }],
+        options: {},
+      },
+    ];
+    const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
+    mockRunPython.mockReset();
+    mockRunPython.mockResolvedValueOnce(pythonTests);
+    jest.mocked(globSync).mockReturnValueOnce(['test.py']);
+
+    const result = await readTests(['test.py:custom_function']);
+
+    expect(mockRunPython).toHaveBeenCalledWith(
+      expect.stringContaining('test.py'),
+      'custom_function',
+      [],
+    );
+    expect(result).toEqual(pythonTests);
+  });
+
+  it('should handle Python files with invalid function name in readTests', async () => {
+    await expect(readTests(['test.py:invalid:extra'])).rejects.toThrow(
+      'Too many colons. Invalid test file script path: test.py:invalid:extra',
+    );
+  });
+
+  it('should handle Python files that return non-array in readTests', async () => {
+    const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
+    mockRunPython.mockReset();
+    mockRunPython.mockResolvedValueOnce({ not: 'an array' });
+    jest.mocked(globSync).mockReturnValueOnce(['test.py']);
+
+    await expect(readTests(['test.py'])).rejects.toThrow(
+      'Python test function must return a list of test cases, got object',
+    );
+  });
+
+  it('should handle file:// URLs with YAML files correctly in readTests', async () => {
+    const yamlTests = [
+      {
+        description: 'Test 1',
+        vars: { key1: 'value1' },
+        assert: [{ type: 'equals', value: 'expected1' }],
+      },
+      {
+        description: 'Test 2',
+        vars: { key2: 'value2' },
+        assert: [{ type: 'equals', value: 'expected2' }],
+      },
+    ];
+
+    jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(yamlTests));
+    jest.mocked(globSync).mockReturnValue(['products.yaml']);
+
+    const result = await readTests(['file://products.yaml']);
+
+    expect(result).toEqual(yamlTests);
+    expect(globSync).toHaveBeenCalledWith(
+      expect.stringContaining('products.yaml'),
+      expect.any(Object),
+    );
+  });
+
+  it('should warn when assert is found in vars', async () => {
+    const testWithAssertInVars = [
+      {
+        description: 'Test case',
+        vars: {
+          assert: [{ type: 'equals', value: 'test' }],
+        },
+      },
+    ];
+    jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(testWithAssertInVars));
+    jest.mocked(globSync).mockReturnValue(['test.yaml']);
+    jest
+      .mocked(getEnvBool)
+      .mockImplementation((key) => !key.includes('PROMPTFOO_NO_TESTCASE_ASSERT_WARNING'));
+
+    const result = await readTests(['test.yaml']);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual(testWithAssertInVars[0]);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('PROMPTFOO_NO_TESTCASE_ASSERT_WARNING'),
+    );
+  });
+
+  it('should not warn about assert in vars when environment variable is set', async () => {
+    const testWithAssertInVars = [
+      {
+        description: 'Test case',
+        vars: {
+          assert: { type: 'equals', value: 'test' },
+        },
+      },
+    ];
+    jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(testWithAssertInVars));
+    jest.mocked(globSync).mockReturnValue(['test.yaml']);
+    jest
+      .mocked(getEnvBool)
+      .mockImplementation((key) => (key === 'PROMPTFOO_NO_TESTCASE_ASSERT_WARNING' ? true : false));
+
+    await readTests('test.yaml');
+
+    expect(logger.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('PROMPTFOO_NO_TESTCASE_ASSERT_WARNING'),
+    );
+  });
+
+  it('should handle file:// URLs with function names in readTests', async () => {
+    const pythonTests: TestCase[] = [
+      {
+        description: 'Python Test with file:// URL',
+        vars: { var1: 'value1' },
+        assert: [{ type: 'equals', value: 'expected1' }],
+        options: {},
+      },
+    ];
+    const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
+    mockRunPython.mockReset();
+    mockRunPython.mockResolvedValueOnce(pythonTests);
+    jest.mocked(globSync).mockReturnValueOnce(['test.py']);
+
+    const result = await readTests(['file://test.py:custom_function']);
+
+    expect(mockRunPython).toHaveBeenCalledWith(
+      expect.stringContaining('test.py'),
+      'custom_function',
+      [],
+    );
+    expect(result).toEqual(pythonTests);
+  });
 });
 
 describe('testCaseFromCsvRow', () => {
@@ -653,7 +996,7 @@ describe('readVarsFiles', () => {
     jest.mocked(fs.readFileSync).mockReturnValue(yamlContent);
     jest.mocked(globSync).mockReturnValue(['vars.yaml']);
 
-    const result = await readVarsFiles('vars.yaml');
+    const result = await readTestFiles('vars.yaml');
 
     expect(result).toEqual({ var1: 'value1', var2: 'value2' });
   });
@@ -667,8 +1010,132 @@ describe('readVarsFiles', () => {
       .mockReturnValueOnce(yamlContent2);
     jest.mocked(globSync).mockReturnValue(['vars1.yaml', 'vars2.yaml']);
 
-    const result = await readVarsFiles(['vars1.yaml', 'vars2.yaml']);
+    const result = await readTestFiles(['vars1.yaml', 'vars2.yaml']);
 
     expect(result).toEqual({ var1: 'value1', var2: 'value2' });
+  });
+});
+
+describe('loadTestsFromGlob', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+  });
+
+  it('should handle Hugging Face dataset URLs', async () => {
+    const mockDataset: TestCase[] = [
+      {
+        description: 'Test 1',
+        vars: { var1: 'value1' },
+        assert: [{ type: 'equals', value: 'expected1' }],
+        options: {},
+      },
+      {
+        description: 'Test 2',
+        vars: { var2: 'value2' },
+        assert: [{ type: 'equals', value: 'expected2' }],
+        options: {},
+      },
+    ];
+    const mockFetchHuggingFaceDataset = jest.requireMock(
+      '../../src/integrations/huggingfaceDatasets',
+    ).fetchHuggingFaceDataset;
+    mockFetchHuggingFaceDataset.mockImplementation(async () => mockDataset);
+
+    const result = await loadTestsFromGlob('huggingface://datasets/example/dataset');
+
+    expect(mockFetchHuggingFaceDataset).toHaveBeenCalledWith(
+      'huggingface://datasets/example/dataset',
+    );
+    expect(result).toEqual(mockDataset);
+  });
+});
+
+describe('CSV parsing with JSON fields', () => {
+  beforeEach(() => {
+    jest.mocked(getEnvBool).mockImplementation((key, defaultValue = false) => defaultValue);
+    jest.mocked(getEnvString).mockImplementation((key, defaultValue) => defaultValue);
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+    jest.resetModules();
+  });
+
+  it('should parse CSV file containing properly escaped JSON fields in strict mode', async () => {
+    const csvContent = `label,query,expected_json_format,context
+my_test_label,What is the date?,"{\""answer\"":""""}",file://../get_context.py`;
+
+    jest.spyOn(fs, 'readFileSync').mockReturnValue(csvContent);
+
+    const testCases = await readStandaloneTestsFile('dummy.csv');
+
+    expect(testCases).toHaveLength(1);
+    expect(testCases[0].vars).toEqual({
+      label: 'my_test_label',
+      query: 'What is the date?',
+      expected_json_format: '{"answer":""}',
+      context: 'file://../get_context.py',
+    });
+
+    jest.mocked(fs.readFileSync).mockRestore();
+  });
+
+  it('should fall back to relaxed parsing for unescaped JSON fields', async () => {
+    const csvContent = `label,query,expected_json_format,context
+my_test_label,What is the date?,{"answer":""},file://../get_context.py`;
+
+    jest.spyOn(fs, 'readFileSync').mockReturnValue(csvContent);
+
+    const testCases = await readStandaloneTestsFile('dummy.csv');
+
+    expect(testCases).toHaveLength(1);
+    expect(testCases[0].vars).toEqual({
+      label: 'my_test_label',
+      query: 'What is the date?',
+      expected_json_format: '{"answer":""}',
+      context: 'file://../get_context.py',
+    });
+
+    jest.mocked(fs.readFileSync).mockRestore();
+  });
+
+  it('should enforce strict mode when PROMPTFOO_CSV_STRICT=true', async () => {
+    jest
+      .mocked(getEnvBool)
+      .mockImplementation((key, defaultValue = false) =>
+        key === 'PROMPTFOO_CSV_STRICT' ? true : defaultValue,
+      );
+
+    const csvContent = `label,query,expected_json_format,context
+my_test_label,What is the date?,{"answer":""},file://../get_context.py`;
+
+    jest.spyOn(fs, 'readFileSync').mockReturnValue(csvContent);
+
+    await expect(readStandaloneTestsFile('dummy.csv')).rejects.toThrow(
+      'Invalid Opening Quote: a quote is found on field',
+    );
+
+    jest.mocked(fs.readFileSync).mockRestore();
+  });
+
+  it('should propagate non-quote-related CSV errors', async () => {
+    const mockParse = jest.fn().mockImplementation(() => {
+      const error = new Error('Some other CSV error');
+      (error as any).code = 'CSV_OTHER_ERROR';
+      throw error;
+    });
+
+    jest.mock('csv-parse/sync', () => ({
+      parse: mockParse,
+    }));
+
+    const csvContent = `label,query,expected_json_format,context
+my_test_label,What is the date?,"{\""answer\"":""""}",file://../get_context.py`;
+
+    jest.spyOn(fs, 'readFileSync').mockReturnValue(csvContent);
+    const { readStandaloneTestsFile } = await import('../../src/util/testCaseReader');
+    await expect(readStandaloneTestsFile('dummy.csv')).rejects.toThrow('Some other CSV error');
+
+    jest.mocked(fs.readFileSync).mockRestore();
   });
 });

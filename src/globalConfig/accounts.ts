@@ -1,6 +1,8 @@
 import input from '@inquirer/input';
+import chalk from 'chalk';
 import { z } from 'zod';
 import type { GlobalConfig } from '../configTypes';
+import { TERMINAL_MAX_WIDTH } from '../constants';
 import { getEnvString, isCI } from '../envars';
 import { fetchWithTimeout } from '../fetch';
 import logger from '../logger';
@@ -24,6 +26,9 @@ export function getAuthor(): string | null {
 export async function promptForEmailUnverified() {
   let email = isCI() ? 'ci-placeholder@promptfoo.dev' : getUserEmail();
   if (!email) {
+    await telemetry.record('feature_used', {
+      feature: 'promptForEmailUnverified',
+    });
     const emailSchema = z.string().email('Please enter a valid email address');
     email = await input({
       message: 'Redteam evals require email verification. Please enter your work email:',
@@ -33,6 +38,9 @@ export async function promptForEmailUnverified() {
       },
     });
     setUserEmail(email);
+    await telemetry.record('feature_used', {
+      feature: 'userCompletedPromptForEmailUnverified',
+    });
   }
   await telemetry.saveConsent(email, {
     source: 'promptForEmailUnverified',
@@ -52,7 +60,8 @@ export async function checkEmailStatusOrExit() {
       500,
     );
     const data = (await resp.json()) as {
-      status: 'ok' | 'exceeded_limit';
+      status: 'ok' | 'exceeded_limit' | 'show_usage_warning';
+      message?: string;
       error?: string;
     };
     if (data?.status === 'exceeded_limit') {
@@ -60,6 +69,12 @@ export async function checkEmailStatusOrExit() {
         'You have exceeded the maximum cloud inference limit. Please contact inquiries@promptfoo.dev to upgrade your account.',
       );
       process.exit(1);
+    }
+    if (data?.status === 'show_usage_warning' && data?.message) {
+      const border = '='.repeat(TERMINAL_MAX_WIDTH);
+      logger.info(chalk.yellow(border));
+      logger.warn(chalk.yellow(data.message));
+      logger.info(chalk.yellow(border));
     }
   } catch (e) {
     logger.debug(`Failed to check user status: ${e}`);

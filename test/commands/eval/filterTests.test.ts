@@ -1,168 +1,240 @@
 import { filterTests } from '../../../src/commands/eval/filterTests';
-import type { TestSuite } from '../../../src/types';
+import Eval from '../../../src/models/eval';
+import type { TestSuite, TestCase } from '../../../src/types';
+import { ResultFailureReason } from '../../../src/types';
+
+jest.mock('../../../src/models/eval', () => ({
+  findById: jest.fn(),
+}));
 
 describe('filterTests', () => {
-  const testNoDescription = {};
-  const testHuey = {
-    description: 'Huey',
+  const mockTestSuite: TestSuite = {
+    prompts: [],
+    providers: [],
+    tests: [
+      {
+        description: 'test1',
+        vars: { var1: 'test1' },
+        assert: [],
+        metadata: { type: 'unit' },
+      },
+      {
+        description: 'test2',
+        vars: { var1: 'test2' },
+        assert: [],
+        metadata: { type: 'integration' },
+      },
+      {
+        description: 'test3',
+        vars: { var1: 'test3' },
+        assert: [],
+        metadata: { type: 'unit' },
+      },
+    ],
   };
-  const testDewey = {
-    description: 'Dewey',
-  };
-  const testLouie = {
-    description: 'Louie',
-  };
-  const tests = [testHuey, testNoDescription, testDewey, testLouie];
-  const testSuite = {
-    tests,
-  } as TestSuite;
 
-  it('should run all tests when no args', async () => {
-    const result = await filterTests(testSuite, {});
-
-    expect(result).toStrictEqual(tests);
+  beforeEach(() => {
+    jest.resetAllMocks();
+    const mockEval = {
+      id: 'eval-123',
+      createdAt: new Date().getTime(),
+      config: {},
+      results: [],
+      resultsCount: 0,
+      prompts: [],
+      persisted: true,
+      toEvaluateSummary: jest.fn().mockResolvedValue({
+        version: 2,
+        timestamp: new Date().toISOString(),
+        results: [
+          {
+            vars: { var1: 'test1' },
+            success: false,
+            failureReason: ResultFailureReason.ASSERT,
+            testCase: mockTestSuite.tests![0],
+          },
+          {
+            vars: { var1: 'test3' },
+            success: false,
+            failureReason: ResultFailureReason.ERROR,
+            testCase: mockTestSuite.tests![2],
+          },
+        ],
+        table: { head: { prompts: [], vars: [] }, body: [] },
+        stats: {
+          successes: 0,
+          failures: 0,
+          errors: 0,
+          tokenUsage: {
+            total: 0,
+            prompt: 0,
+            completion: 0,
+            cached: 0,
+            numRequests: 0,
+            completionDetails: {
+              reasoning: 0,
+              acceptedPrediction: 0,
+              rejectedPrediction: 0,
+            },
+          },
+        },
+      }),
+    };
+    jest.mocked(Eval.findById).mockResolvedValue(mockEval as any);
   });
 
-  it('handles no tests', async () => {
-    const result = await filterTests({} as TestSuite, {});
+  it('should return all tests if no options provided', async () => {
+    const result = await filterTests(mockTestSuite, {});
+    expect(result).toEqual(mockTestSuite.tests);
+  });
 
+  it('should return empty array if testSuite has no tests', async () => {
+    const result = await filterTests({ prompts: [], providers: [] }, {});
     expect(result).toEqual([]);
   });
 
-  describe('firstN', () => {
-    it('should only run Huey and Dewey', async () => {
-      const result = await filterTests(testSuite, { firstN: '2' });
-
-      expect(result).toStrictEqual(tests.slice(0, 2));
+  describe('metadata filter', () => {
+    it('should filter tests by metadata key-value pair', async () => {
+      const result = await filterTests(mockTestSuite, { metadata: 'type=unit' });
+      expect(result).toHaveLength(2);
+      expect(result.map((t: TestCase) => t.vars?.var1)).toEqual(['test1', 'test3']);
     });
 
-    it('throws an exception when firstN is not a number', async () => {
-      await expect(() => filterTests(testSuite, { firstN: 'NOPE' })).rejects.toEqual(
-        new Error('firstN must be a number, got: NOPE'),
+    it('should throw error if metadata filter format is invalid', async () => {
+      await expect(filterTests(mockTestSuite, { metadata: 'invalid' })).rejects.toThrow(
+        '--filter-metadata must be specified in key=value format',
+      );
+    });
+
+    it('should exclude tests without metadata', async () => {
+      const testSuite = {
+        ...mockTestSuite,
+        tests: [...mockTestSuite.tests!, { description: 'no-metadata', vars: {}, assert: [] }],
+      };
+      const result = await filterTests(testSuite, { metadata: 'type=unit' });
+      expect(result).toHaveLength(2);
+      expect(result.map((t: TestCase) => t.vars?.var1)).toEqual(['test1', 'test3']);
+    });
+  });
+
+  describe('failing filter', () => {
+    it('should filter failing tests when failing option is provided', async () => {
+      const result = await filterTests(mockTestSuite, { failing: 'eval-123' });
+      expect(result).toHaveLength(2);
+      expect(result.map((t: TestCase) => t.vars?.var1)).toEqual(['test1', 'test3']);
+    });
+  });
+
+  describe('errors only filter', () => {
+    it('should filter error tests when errorsOnly option is provided', async () => {
+      const result = await filterTests(mockTestSuite, { errorsOnly: 'eval-123' });
+      expect(result).toHaveLength(1);
+      expect(result[0]?.vars?.var1).toBe('test3');
+    });
+  });
+
+  describe('pattern filter', () => {
+    it('should filter tests by description pattern', async () => {
+      const result = await filterTests(mockTestSuite, { pattern: 'test[12]' });
+      expect(result).toHaveLength(2);
+      expect(result.map((t: TestCase) => t.vars?.var1)).toEqual(['test1', 'test2']);
+    });
+
+    it('should handle tests without description', async () => {
+      const testSuite = {
+        ...mockTestSuite,
+        tests: [...mockTestSuite.tests!, { vars: {}, assert: [] }],
+      };
+      const result = await filterTests(testSuite, { pattern: 'test' });
+      expect(result).toHaveLength(3);
+    });
+  });
+
+  describe('firstN filter', () => {
+    it('should take first N tests', async () => {
+      const result = await filterTests(mockTestSuite, { firstN: 2 });
+      expect(result).toHaveLength(2);
+      expect(result.map((t: TestCase) => t.vars?.var1)).toEqual(['test1', 'test2']);
+    });
+
+    it('should handle string input for firstN', async () => {
+      const result = await filterTests(mockTestSuite, { firstN: '2' });
+      expect(result).toHaveLength(2);
+      expect(result.map((t: TestCase) => t.vars?.var1)).toEqual(['test1', 'test2']);
+    });
+
+    it('should throw error if firstN is not a number', async () => {
+      await expect(filterTests(mockTestSuite, { firstN: 'invalid' })).rejects.toThrow(
+        'firstN must be a number, got: invalid',
+      );
+    });
+
+    it('should handle undefined firstN', async () => {
+      const result = await filterTests(mockTestSuite, { firstN: undefined });
+      expect(result).toEqual(mockTestSuite.tests);
+    });
+
+    it('should throw error if firstN is null', async () => {
+      await expect(filterTests(mockTestSuite, { firstN: null as any })).rejects.toThrow(
+        'firstN must be a number, got: null',
+      );
+    });
+
+    it('should throw error if firstN is NaN', async () => {
+      await expect(filterTests(mockTestSuite, { firstN: Number.NaN })).rejects.toThrow(
+        'firstN must be a number, got: NaN',
       );
     });
   });
 
-  describe('pattern', () => {
-    it('should only return tests whose description ends in "ey"', async () => {
-      const result = await filterTests(testSuite, { pattern: 'ey$' });
-
-      expect(result).toStrictEqual([testHuey, testDewey]);
-    });
-
-    it('can combine firstN and pattern', async () => {
-      const result = await filterTests(testSuite, { firstN: '1', pattern: 'ey$' });
-
-      expect(result).toStrictEqual([testHuey]);
-    });
-
-    it('does not mutate when when has args', async () => {
-      const result = await filterTests(testSuite, { firstN: '1', pattern: 'ey$' });
-
-      expect(result).not.toBe(tests);
-    });
-  });
-
-  describe('sample', () => {
-    it('should return the requested number of random tests', async () => {
-      const result = await filterTests(testSuite, { sample: 2 });
-
+  describe('sample filter', () => {
+    it('should take N random tests', async () => {
+      const result = await filterTests(mockTestSuite, { sample: 2 });
       expect(result).toHaveLength(2);
-      // Each result should be one of the original tests
-      result?.forEach((test) => {
-        expect(tests).toContain(test);
-      });
+      // Can't test exact values since it's random
+      expect(result.every((t: TestCase) => mockTestSuite.tests!.includes(t))).toBe(true);
     });
 
-    it('accepts sample as string', async () => {
-      const result = await filterTests(testSuite, { sample: '2' });
-
+    it('should handle string input for sample', async () => {
+      const result = await filterTests(mockTestSuite, { sample: '2' });
       expect(result).toHaveLength(2);
+      expect(result.every((t: TestCase) => mockTestSuite.tests!.includes(t))).toBe(true);
     });
 
-    it('throws an exception when sample is not a number', async () => {
-      await expect(() => filterTests(testSuite, { sample: 'NOPE' })).rejects.toEqual(
-        new Error('sample must be a number, got: NOPE'),
+    it('should throw error if sample is not a number', async () => {
+      await expect(filterTests(mockTestSuite, { sample: 'invalid' })).rejects.toThrow(
+        'sample must be a number, got: invalid',
       );
     });
 
-    it('returns all tests when sample size exceeds test count', async () => {
-      const result = await filterTests(testSuite, { sample: 10 });
-
-      expect(result).toHaveLength(tests.length);
-      result?.forEach((test) => {
-        expect(tests).toContain(test);
-      });
+    it('should handle undefined sample', async () => {
+      const result = await filterTests(mockTestSuite, { sample: undefined });
+      expect(result).toEqual(mockTestSuite.tests);
     });
 
-    it('can combine with pattern filter', async () => {
-      const result = await filterTests(testSuite, { sample: 1, pattern: 'ey$' });
+    it('should throw error if sample is null', async () => {
+      await expect(filterTests(mockTestSuite, { sample: null as any })).rejects.toThrow(
+        'sample must be a number, got: null',
+      );
+    });
 
-      expect(result).toBeDefined();
-      expect(result).toHaveLength(1);
-      expect(result?.[0].description).toMatch(/ey$/);
+    it('should throw error if sample is NaN', async () => {
+      await expect(filterTests(mockTestSuite, { sample: Number.NaN })).rejects.toThrow(
+        'sample must be a number, got: NaN',
+      );
     });
   });
 
-  describe('metadata', () => {
-    const testWithMetadata1 = {
-      description: 'Test with metadata 1',
-      metadata: {
-        strategyId: 'goat',
-        pluginId: 'test-plugin',
-      },
-    };
-    const testWithMetadata2 = {
-      description: 'Test with metadata 2',
-      metadata: {
-        strategyId: 'sheep',
-        pluginId: 'test-plugin',
-      },
-    };
-    const testWithoutMetadata = {
-      description: 'Test without metadata',
-    };
-
-    const testSuiteWithMetadata = {
-      tests: [testWithMetadata1, testWithMetadata2, testWithoutMetadata],
-    } as TestSuite;
-
-    it('should filter tests by metadata key=value', async () => {
-      const result = await filterTests(testSuiteWithMetadata, { metadata: 'strategyId=goat' });
-
-      expect(result).toHaveLength(1);
-      expect(result).toStrictEqual([testWithMetadata1]);
-    });
-
-    it('should return empty array when no tests match metadata', async () => {
-      const result = await filterTests(testSuiteWithMetadata, { metadata: 'strategyId=invalid' });
-
-      expect(result).toHaveLength(0);
-      expect(result).toStrictEqual([]);
-    });
-
-    it('should return empty array when filtering for non-existent metadata key', async () => {
-      const result = await filterTests(testSuiteWithMetadata, { metadata: 'nonexistent=value' });
-
-      expect(result).toHaveLength(0);
-      expect(result).toStrictEqual([]);
-    });
-
-    it('can combine metadata filter with other filters', async () => {
-      const result = await filterTests(testSuiteWithMetadata, {
-        metadata: 'pluginId=test-plugin',
-        firstN: 1,
+  describe('multiple filters', () => {
+    it('should apply filters in correct order', async () => {
+      const result = await filterTests(mockTestSuite, {
+        metadata: 'type=unit',
+        failing: 'eval-123',
+        pattern: 'test1',
       });
 
-      expect(result).toBeDefined();
       expect(result).toHaveLength(1);
-      expect(result?.[0]).toBe(testWithMetadata1);
-    });
-
-    it('throws error for invalid metadata format', async () => {
-      await expect(() =>
-        filterTests(testSuiteWithMetadata, { metadata: 'invalid-format' }),
-      ).rejects.toThrow('--filter-metadata must be specified in key=value format');
+      expect(result[0]?.vars?.var1).toBe('test1');
     });
   });
 });

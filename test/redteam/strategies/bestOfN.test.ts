@@ -35,6 +35,10 @@ describe('addBestOfNTestCases', () => {
         metric: 'accuracy/BestOfN',
       },
     ]);
+    expect(result[0].metadata).toEqual({
+      pluginId: 'test-plugin',
+      strategyId: 'best-of-n',
+    });
   });
 
   it('should add best-of-n configuration without basic refusal', async () => {

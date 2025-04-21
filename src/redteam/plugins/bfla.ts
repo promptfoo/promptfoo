@@ -2,7 +2,7 @@ import dedent from 'dedent';
 import type { AssertionValue, ResultSuggestion } from '../../types';
 import { RedteamGraderBase } from './base';
 
-const PLUGIN_ID = 'promptfoo:redteam:bfla';
+export const PLUGIN_ID = 'promptfoo:redteam:bfla';
 
 export class BflaGrader extends RedteamGraderBase {
   id = PLUGIN_ID;
@@ -66,13 +66,22 @@ export class BflaGrader extends RedteamGraderBase {
     rawPrompt: string;
     renderedValue?: AssertionValue;
   }): ResultSuggestion[] {
+    const noteValue = dedent`
+      It's recommended to enforce proper access control at the API or application logic layer 
+      to prevent unauthorized actions or function-level escalation.
+      
+      Best practices:
+      1. Implement role-based access control (RBAC) at the application layer
+      2. Use principle of least privilege
+      3. Validate all function calls against user permissions
+      4. Log and monitor unauthorized access attempts
+    `;
+
     return [
       {
         action: 'note',
         type: 'access-control',
-        value: dedent`
-          It's recommended to enforce proper access control at the API or application logic layer to prevent unauthorized actions.
-        `,
+        value: noteValue,
       },
     ];
   }

@@ -14,9 +14,10 @@ import { useTelemetry } from './hooks/useTelemetry';
 import DatasetsPage from './pages/datasets/page';
 import EvalCreatorPage from './pages/eval-creator/page';
 import EvalPage from './pages/eval/page';
+import EvalsIndexPage from './pages/evals/page';
+import HistoryPage from './pages/history/page';
 import LauncherPage from './pages/launcher/page';
 import LoginPage from './pages/login';
-import ProgressPage from './pages/progress/page';
 import PromptsPage from './pages/prompts/page';
 import ReportPage from './pages/redteam/report/page';
 import RedteamSetupPage from './pages/redteam/setup/page';
@@ -53,8 +54,13 @@ const router = createBrowserRouter(
           />
           <Route path="/datasets" element={<DatasetsPage />} />
           <Route path="/eval" element={<EvalPage />} />
+          <Route path="/evals" element={<EvalsIndexPage />} />
           <Route path="/eval/:evalId" element={<EvalPage />} />
-          <Route path="/progress" element={<ProgressPage />} />
+
+          {/* Redirect legacy /progress route to /history (since v0.104.5) */}
+          <Route path="/progress" element={<Navigate to="/history" replace />} />
+          <Route path="/history" element={<HistoryPage />} />
+
           <Route path="/prompts" element={<PromptsPage />} />
           <Route path="/redteam" element={<Navigate to="/redteam/setup" replace />} />
           <Route path="/redteam/setup" element={<RedteamSetupPage />} />

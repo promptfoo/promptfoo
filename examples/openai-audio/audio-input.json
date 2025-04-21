@@ -1,0 +1,18 @@
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "text",
+        "text": "{{question}}"
+      },
+      {
+        "type": "input_audio",
+        "input_audio": {
+          "data": "{{audio_file}}",
+          "format": "mp3"
+        }
+      }
+    ]
+  }
+]

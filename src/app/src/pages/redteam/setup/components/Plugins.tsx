@@ -34,6 +34,7 @@ import {
   categoryAliases,
   type Plugin,
   riskCategories,
+  OWASP_LLM_RED_TEAM_MAPPING,
 } from '@promptfoo/redteam/constants';
 import { useDebounce } from 'use-debounce';
 import { useRedTeamConfig, useRecentlyUsedPlugins } from '../hooks/useRedTeamConfig';
@@ -218,11 +219,15 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       plugins: new Set(Object.values(NIST_AI_RMF_MAPPING).flatMap((v) => v.plugins)),
     },
     {
-      name: 'OWASP LLM',
+      name: 'OWASP LLM Top 10',
       plugins: new Set(Object.values(OWASP_LLM_TOP_10_MAPPING).flatMap((v) => v.plugins)),
     },
     {
-      name: 'OWASP API',
+      name: 'OWASP Gen AI Red Team',
+      plugins: new Set(Object.values(OWASP_LLM_RED_TEAM_MAPPING).flatMap((v) => v.plugins)),
+    },
+    {
+      name: 'OWASP API Top 10',
       plugins: new Set(Object.values(OWASP_API_TOP_10_MAPPING).flatMap((v) => v.plugins)),
     },
     {
@@ -302,6 +307,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   const renderPluginCategory = (category: string, plugins: readonly Plugin[]) => {
     const pluginsToShow = plugins
       .filter((plugin) => plugin !== 'intent') // Skip intent because we have a dedicated section for it
+      .filter((plugin) => plugin !== 'policy') // Skip policy because we have a dedicated section for it
       .filter((plugin) => filteredPlugins.includes(plugin));
     if (pluginsToShow.length === 0) {
       return null;
@@ -393,7 +399,6 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                   sx={{
                     p: 2,
                     height: '100%',
-                    borderRadius: 2,
                     border: (theme) => {
                       if (selectedPlugins.has(plugin)) {
                         if (
@@ -404,7 +409,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                         }
                         return `1px solid ${theme.palette.primary.main}`;
                       }
-                      return '1px solid transparent';
+                      return undefined;
                     },
                     backgroundColor: (theme) =>
                       selectedPlugins.has(plugin)
@@ -663,11 +668,32 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
           </Accordion>
         </Box>
 
-        {selectedPlugins.has('policy') && (
-          <Box sx={{ mb: 4 }}>
+        <Accordion
+          expanded={expandedCategories.has('Custom Policies')}
+          onChange={(event, expanded) => {
+            setExpandedCategories((prev) => {
+              const newSet = new Set(prev);
+              if (expanded) {
+                newSet.add('Custom Policies');
+              } else {
+                newSet.delete('Custom Policies');
+              }
+              return newSet;
+            });
+          }}
+        >
+          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+            <Typography variant="h6" sx={{ fontWeight: 'medium' }}>
+              Custom Policies (
+              {config.plugins.filter((p) => typeof p === 'object' && 'id' in p && p.id === 'policy')
+                .length || 0}
+              )
+            </Typography>
+          </AccordionSummary>
+          <AccordionDetails>
             <CustomPoliciesSection />
-          </Box>
-        )}
+          </AccordionDetails>
+        </Accordion>
 
         <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
           <Button

@@ -11,6 +11,7 @@ providers:
     config:
       temperature: 0.7
       apiKeyEnvar: 01234567890123456789012345678901 # or set `DASHSCOPE_API_KEY` to your Alibaba Cloud API key
+      API_BASE_URL: https://dashscope-intl.aliyuncs.com/compatible-mode/v1 # Optional: Override default API base URL
 ```
 
 ## Models

@@ -1,4 +1,3 @@
-import dedent from 'dedent';
 import path from 'path';
 import { loadFromJavaScriptFile } from './assertions/utils';
 import cliState from './cliState';
@@ -15,7 +14,9 @@ import {
   CONTEXT_RELEVANCE_BAD,
   DEFAULT_GRADING_PROMPT,
   OPENAI_CLOSED_QA_PROMPT,
-  OPENAI_FACTUALITY_PROMPT,
+  PROMPTFOO_FACTUALITY_PROMPT,
+  GEVAL_PROMPT_STEPS,
+  GEVAL_PROMPT_EVALUATE,
 } from './prompts';
 import { loadApiProvider } from './providers';
 import { getDefaultProviders } from './providers/defaults';
@@ -39,7 +40,7 @@ import type {
 import { maybeLoadFromExternalFile } from './util';
 import { isJavascriptFile } from './util/file';
 import invariant from './util/invariant';
-import { extractJsonObjects } from './util/json';
+import { extractJsonObjects, extractFirstJsonObject } from './util/json';
 import { getNunjucksEngine } from './util/templates';
 
 const nunjucks = getNunjucksEngine(undefined, false, true);
@@ -52,23 +53,6 @@ function cosineSimilarity(vecA: number[], vecB: number[]) {
   const vecAMagnitude = Math.sqrt(vecA.reduce((acc, val) => acc + val * val, 0));
   const vecBMagnitude = Math.sqrt(vecB.reduce((acc, val) => acc + val * val, 0));
   return dotProduct / (vecAMagnitude * vecBMagnitude);
-}
-
-function fromVars(vars?: Record<string, string | object>) {
-  if (!vars) {
-    return {};
-  }
-
-  const ret: Record<string, string> = {};
-  for (const [key, value] of Object.entries(vars)) {
-    if (typeof value === 'object') {
-      ret[key] = JSON.stringify(value);
-    } else {
-      ret[key] = JSON.stringify(value).slice(1, -1);
-    }
-  }
-
-  return ret;
 }
 
 async function loadFromProviderOptions(provider: ProviderOptions) {
@@ -358,7 +342,10 @@ async function loadRubricPrompt(
   rubricPrompt: string | object | undefined,
   defaultPrompt: string,
 ): Promise<string> {
-  if (!rubricPrompt) {
+  if (
+    !rubricPrompt ||
+    (typeof rubricPrompt === 'object' && Object.keys(rubricPrompt ?? {}).length === 0)
+  ) {
     return defaultPrompt;
   }
 
@@ -378,7 +365,6 @@ async function loadRubricPrompt(
     rubricPrompt = maybeLoadFromExternalFile(rubricPrompt);
   }
 
-  // Stringify if it's an object
   if (typeof rubricPrompt === 'object') {
     rubricPrompt = JSON.stringify(rubricPrompt);
   }
@@ -387,19 +373,31 @@ async function loadRubricPrompt(
   return rubricPrompt;
 }
 
-export async function renderLlmRubricPrompt(
-  rubric: string,
-  llmOutput: string,
-  grading?: GradingConfig,
-  vars?: Record<string, string | object>,
-) {
-  const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, DEFAULT_GRADING_PROMPT);
+function tryParse(content: string) {
+  try {
+    return JSON.parse(content);
+  } catch {}
+  return content;
+}
 
-  return nunjucks.renderString(rubricPrompt, {
-    output: JSON.stringify(llmOutput).slice(1, -1),
-    rubric: JSON.stringify(rubric).slice(1, -1),
-    ...fromVars(vars),
-  });
+export async function renderLlmRubricPrompt(
+  rubricPrompt: string,
+  context: Record<string, string | object>,
+) {
+  try {
+    // Render every string scalar within the JSON
+    // Does not render object keys (only values)
+    const parsed = JSON.parse(rubricPrompt, (k, v) =>
+      typeof v === 'string' ? nunjucks.renderString(v, context) : v,
+    );
+    return JSON.stringify(parsed);
+  } catch {
+    // not valid JSON...
+    // output a warning?
+  }
+
+  // Legacy rendering for non-JSON prompts
+  return nunjucks.renderString(rubricPrompt, context);
 }
 
 export async function matchesLlmRubric(
@@ -416,15 +414,23 @@ export async function matchesLlmRubric(
   }
 
   if (!grading.rubricPrompt && cliState.config?.redteam && shouldGenerateRemote()) {
-    return doRemoteGrading({
-      task: 'llm-rubric',
-      rubric,
-      output: llmOutput,
-      vars: vars || {},
-    });
+    return {
+      ...(await doRemoteGrading({
+        task: 'llm-rubric',
+        rubric,
+        output: llmOutput,
+        vars: vars || {},
+      })),
+      assertion,
+    };
   }
 
-  const prompt = await renderLlmRubricPrompt(rubric, llmOutput, grading, vars);
+  const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, DEFAULT_GRADING_PROMPT);
+  const prompt = await renderLlmRubricPrompt(rubricPrompt, {
+    output: tryParse(llmOutput),
+    rubric,
+    ...(vars || {}),
+  });
 
   const defaultProviders = await getDefaultProviders();
   const defaultProvider =
@@ -440,51 +446,67 @@ export async function matchesLlmRubric(
     return fail(resp.error || 'No output', resp.tokenUsage);
   }
 
-  invariant(typeof resp.output === 'string', 'llm-rubric produced malformed response');
-  try {
-    const jsonObjects = extractJsonObjects(resp.output);
-    if (jsonObjects.length === 0) {
-      return fail('Could not extract JSON from llm-rubric response', resp.tokenUsage);
+  let jsonObjects: any[] = [];
+  if (typeof resp.output === 'string') {
+    try {
+      jsonObjects = extractJsonObjects(resp.output);
+      if (jsonObjects.length === 0) {
+        return fail('Could not extract JSON from llm-rubric response', resp.tokenUsage);
+      }
+    } catch (err) {
+      return fail(
+        `llm-rubric produced malformed response: ${err}\n\n${resp.output}`,
+        resp.tokenUsage,
+      );
     }
-    const parsed = jsonObjects[0] as Partial<GradingResult>;
-    const threshold = assertion?.threshold;
-    let pass = parsed.pass ?? true;
-    let score = parsed.score;
-
-    // Handle invalid or missing scores
-    if (typeof score !== 'number' || Number.isNaN(score)) {
-      score = pass ? 1.0 : 0.0;
-    }
-
-    // Apply threshold check if threshold is defined
-    if (threshold !== undefined) {
-      pass = pass && score >= threshold;
-    }
-
-    return {
-      assertion,
-      pass,
-      score,
-      reason:
-        parsed.reason || (pass ? 'Grading passed' : `Score ${score} below threshold ${threshold}`),
-      tokensUsed: {
-        total: resp.tokenUsage?.total || 0,
-        prompt: resp.tokenUsage?.prompt || 0,
-        completion: resp.tokenUsage?.completion || 0,
-        cached: resp.tokenUsage?.cached || 0,
-        completionDetails: parsed.tokensUsed?.completionDetails || {
-          reasoning: 0,
-          acceptedPrediction: 0,
-          rejectedPrediction: 0,
-        },
-      },
-    };
-  } catch (err) {
+  } else if (typeof resp.output === 'object') {
+    jsonObjects = [resp.output];
+  } else {
     return fail(
-      `llm-rubric produced malformed response: ${err}\n\n${resp.output}`,
+      'llm-rubric produced malformed response - output must be string or object',
       resp.tokenUsage,
     );
   }
+
+  // expects properties pass, score, and reason
+  const parsed = jsonObjects[0] as Partial<GradingResult>;
+
+  let pass = parsed.pass ?? true;
+  if (typeof pass !== 'boolean') {
+    pass = /^(true|yes|pass|y)$/i.test(String(pass));
+  }
+
+  let score = parsed.score;
+  if (typeof score !== 'number') {
+    score = Number.isFinite(Number(score)) ? Number(score) : Number(pass);
+  }
+
+  const threshold =
+    typeof assertion?.threshold === 'string' ? Number(assertion.threshold) : assertion?.threshold;
+  if (typeof threshold === 'number' && Number.isFinite(threshold)) {
+    pass = pass && score >= threshold;
+  }
+
+  const reason =
+    parsed.reason || (pass ? 'Grading passed' : `Score ${score} below threshold ${threshold}`);
+
+  return {
+    assertion,
+    pass,
+    score,
+    reason,
+    tokensUsed: {
+      total: resp.tokenUsage?.total || 0,
+      prompt: resp.tokenUsage?.prompt || 0,
+      completion: resp.tokenUsage?.completion || 0,
+      cached: resp.tokenUsage?.cached || 0,
+      completionDetails: parsed.tokensUsed?.completionDetails || {
+        reasoning: 0,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+      },
+    },
+  };
 }
 
 export async function matchesFactuality(
@@ -500,39 +522,56 @@ export async function matchesFactuality(
     );
   }
 
-  const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, OPENAI_FACTUALITY_PROMPT);
-  const prompt = nunjucks.renderString(rubricPrompt, {
-    input: JSON.stringify(input).slice(1, -1),
-    ideal: JSON.stringify(expected).slice(1, -1),
-    completion: JSON.stringify(output).slice(1, -1),
-    ...fromVars(vars),
+  const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, PROMPTFOO_FACTUALITY_PROMPT);
+  const prompt = await renderLlmRubricPrompt(rubricPrompt, {
+    input,
+    ideal: expected,
+    completion: tryParse(output),
+    ...(vars || {}),
   });
 
+  // Get the appropriate provider
   const finalProvider = await getAndCheckProvider(
     'text',
     grading.provider,
     (await getDefaultProviders()).gradingProvider,
     'factuality check',
   );
+
   const resp = await finalProvider.callApi(prompt);
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', resp.tokenUsage);
   }
 
   invariant(typeof resp.output === 'string', 'factuality produced malformed response');
-  try {
-    const output = resp.output;
-    // The preferred output starts like "(A)...", but we also support leading whitespace, lowercase letters, and omitting the first parenthesis.
-    const answerMatch = output.match(/\s*\(?([a-eA-E])\)/);
-    if (!answerMatch) {
-      return fail(
-        `Factuality checker output did not match expected format: ${output}`,
-        resp.tokenUsage,
-      );
-    }
-    const option = answerMatch[1].toUpperCase();
 
-    let reason = '';
+  // Copied from standard factuality grading prompt
+  const categoryDescriptions: Record<string, string> = {
+    A: 'The submitted answer is a subset of the expert answer and is fully consistent with it.',
+    B: 'The submitted answer is a superset of the expert answer and is fully consistent with it.',
+    C: 'The submitted answer contains all the same details as the expert answer.',
+    D: 'There is a disagreement between the submitted answer and the expert answer.',
+    E: "The answers differ, but these differences don't matter from the perspective of factuality.",
+  };
+
+  // Try to parse as JSON first
+  let jsonData: { category?: string; reason?: string } | null = null;
+  let jsonError: Error | null = null;
+
+  try {
+    jsonData = extractFirstJsonObject<{ category?: string; reason?: string }>(resp.output);
+  } catch (err) {
+    jsonError = err as Error;
+    logger.debug(`JSON parsing failed: ${jsonError.message}`);
+  }
+
+  // If JSON parsing succeeded and provided a valid category
+  if (jsonData && jsonData.category && typeof jsonData.category === 'string') {
+    const option = jsonData.category.trim().toUpperCase();
+
+    if (!/^[A-E]$/.test(option)) {
+      return fail(`Invalid category value: ${option}`, resp.tokenUsage);
+    }
 
     const scoreLookup: Record<string, number> = {
       A: grading.factuality?.subset ?? 1,
@@ -542,49 +581,84 @@ export async function matchesFactuality(
       E: grading.factuality?.differButFactual ?? 1,
     };
 
-    // Passing is defined as scores with value >0, and failing as scores with value 0.
+    // Determine if this option passes or fails
     const passing = Object.keys(scoreLookup).filter((key) => scoreLookup[key] > 0);
     const failing = Object.keys(scoreLookup).filter((key) => scoreLookup[key] === 0);
+    const pass = passing.includes(option) && !failing.includes(option);
 
-    let pass = passing.includes(option) && !failing.includes(option);
-    const optionReasons: Record<string, string> = {
-      A: `The submitted answer is a subset of the expert answer and is fully consistent with it.`,
-      B: `The submitted answer is a superset of the expert answer and is fully consistent with it.`,
-      C: `The submitted answer contains all the same details as the expert answer.`,
-      D: `There is a disagreement between the submitted answer and the expert answer.`,
-      E: `The answers differ, but these differences don't matter from the perspective of factuality.`,
-    };
-    if (optionReasons[option]) {
-      reason = optionReasons[option];
-    } else {
-      pass = false;
-      reason = `Invalid option: ${option}. Full response from factuality checker: ${resp.output}`;
-    }
+    // Use the model's reason if available, otherwise fall back to the category description
+    const modelReason = jsonData.reason?.trim();
+    const reason = modelReason || `Category ${option}: ${categoryDescriptions[option]}`;
 
-    let score = pass ? 1 : 0;
-    if (typeof scoreLookup[option] !== 'undefined') {
-      score = scoreLookup[option];
-    }
+    const score = scoreLookup[option] ?? (pass ? 1 : 0);
 
     return {
       pass,
       score,
       reason,
-      tokensUsed: {
-        total: resp.tokenUsage?.total || 0,
-        prompt: resp.tokenUsage?.prompt || 0,
-        completion: resp.tokenUsage?.completion || 0,
-        cached: resp.tokenUsage?.cached || 0,
-        completionDetails: resp.tokenUsage?.completionDetails || {
+      tokensUsed: resp.tokenUsage || {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
+        completionDetails: {
           reasoning: 0,
           acceptedPrediction: 0,
           rejectedPrediction: 0,
         },
       },
     };
-  } catch (err) {
-    return fail(`Error parsing output: ${(err as Error).message}`, resp.tokenUsage);
   }
+
+  // Fallback to old pattern matching format
+  logger.info('Falling back to legacy pattern matching for factuality check');
+  const responseText = resp.output;
+  // The preferred output starts like "(A)...", but we also support leading whitespace, lowercase letters, and omitting the first parenthesis.
+  const answerMatch = responseText.match(/\s*\(?([a-eA-E])\)/);
+  if (!answerMatch) {
+    return fail(
+      `Factuality checker output did not match expected format: ${responseText}`,
+      resp.tokenUsage,
+    );
+  }
+
+  const option = answerMatch[1].toUpperCase();
+
+  let modelReason = responseText;
+  const reasonMatch = responseText.match(/\)\s*(.*)/s);
+  if (reasonMatch && reasonMatch[1]) {
+    modelReason = reasonMatch[1].trim();
+  }
+
+  const scoreLookup: Record<string, number> = {
+    A: grading.factuality?.subset ?? 1,
+    B: grading.factuality?.superset ?? 1,
+    C: grading.factuality?.agree ?? 1,
+    D: grading.factuality?.disagree ?? 0,
+    E: grading.factuality?.differButFactual ?? 1,
+  };
+
+  const passing = Object.keys(scoreLookup).filter((key) => scoreLookup[key] > 0);
+  const failing = Object.keys(scoreLookup).filter((key) => scoreLookup[key] === 0);
+  const pass = passing.includes(option) && !failing.includes(option);
+  const score = scoreLookup[option] ?? (pass ? 1 : 0);
+
+  return {
+    pass,
+    score,
+    reason: modelReason,
+    tokensUsed: {
+      total: resp.tokenUsage?.total || 0,
+      prompt: resp.tokenUsage?.prompt || 0,
+      completion: resp.tokenUsage?.completion || 0,
+      cached: resp.tokenUsage?.cached || 0,
+      completionDetails: resp.tokenUsage?.completionDetails || {
+        reasoning: 0,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+      },
+    },
+  };
 }
 
 export async function matchesClosedQa(
@@ -601,11 +675,11 @@ export async function matchesClosedQa(
   }
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, OPENAI_CLOSED_QA_PROMPT);
-  const prompt = nunjucks.renderString(rubricPrompt, {
-    input: JSON.stringify(input).slice(1, -1),
-    criteria: JSON.stringify(expected).slice(1, -1),
-    completion: JSON.stringify(output).slice(1, -1),
-    ...fromVars(vars),
+  const prompt = await renderLlmRubricPrompt(rubricPrompt, {
+    input,
+    criteria: expected,
+    completion: tryParse(output),
+    ...(vars || {}),
   });
 
   const finalProvider = await getAndCheckProvider(
@@ -670,20 +744,13 @@ export async function matchesGEval(
     'reply geval check',
   );
 
-  const promptSteps = dedent`
-    Given an evaluation criteria which outlines how you should judge some text, generate 3-4 concise evaluation steps for any text based on the criteria below.
-
-    Evaluation Criteria:
-    ${criteria}
-
-    **
-    IMPORTANT: Please make sure to only return in minified JSON format, with the "steps" key as a list of strings. No additional words, explanation or formatting is needed.
-    Example JSON:
-    {"steps": <list_of_strings>}
-    **
-
-    JSON:
-    `;
+  // Step 1: Get evaluation steps using renderLlmRubricPrompt
+  const stepsRubricPrompt =
+    typeof grading?.rubricPrompt === 'object' && !Array.isArray(grading?.rubricPrompt)
+      ? grading?.rubricPrompt?.['steps']
+      : undefined;
+  const stepsPrompt = await loadRubricPrompt(stepsRubricPrompt, GEVAL_PROMPT_STEPS);
+  const promptSteps = await renderLlmRubricPrompt(stepsPrompt, { criteria });
 
   const respSteps = await textProvider.callApi(promptSteps);
   let steps;
@@ -699,32 +766,19 @@ export async function matchesGEval(
     return fail(`LLM-proposed evaluation steps are not in JSON format: ${respSteps.output}`);
   }
 
-  const promptText = dedent`
-    You will be given one Reply for a Source Text below. Your task is to rate the Reply on one metric.
-    Please make sure you read and understand these instructions carefully. Please keep this document open while reviewing, and refer to it as needed.
-
-    Evaluation Criteria:
-    ${criteria}
-
-    Evaluation Steps:
-    - ${steps.join('\n- ')}
-    - Given the evaluation steps, return a JSON with two keys: 1) a "score" key ranging from 0 - ${maxScore}, with ${maxScore} being that it follows the Evaluation Criteria outlined in the Evaluation Steps and 0 being that it does not; 2) a "reason" key, a reason for the given score, but DO NOT QUOTE THE SCORE in your reason. Please mention specific information from Source Text and Reply in your reason, but be very concise with it!
-
-    Source Text:
-    ${input}
-
-    Reply:
-    ${output}
-
-    **
-    IMPORTANT: Please make sure to only return in minified JSON format, with the "score" and "reason" key. No additional words, explanation or formatting is needed.
-
-    Example JSON:
-    {"score":0,"reason":"The text does not follow the evaluation steps provided."}
-    **
-
-    JSON:
-    `;
+  // Step 2: Use steps to evaluate using renderLlmRubricPrompt
+  const evalRubricPrompt =
+    typeof grading?.rubricPrompt === 'object' && !Array.isArray(grading?.rubricPrompt)
+      ? grading?.rubricPrompt?.['evaluate']
+      : undefined;
+  const evalPrompt = await loadRubricPrompt(evalRubricPrompt, GEVAL_PROMPT_EVALUATE);
+  const promptText = await renderLlmRubricPrompt(evalPrompt, {
+    criteria,
+    steps: steps.join('\n- '),
+    maxScore: maxScore.toString(),
+    input: tryParse(input),
+    output: tryParse(output),
+  });
 
   const resp = await textProvider.callApi(promptText);
   let result;
@@ -777,9 +831,7 @@ export async function matchesAnswerRelevance(
   for (let i = 0; i < 3; i++) {
     // TODO(ian): Parallelize
     const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, ANSWER_RELEVANCY_GENERATE);
-    const promptText = nunjucks.renderString(rubricPrompt, {
-      answer: JSON.stringify(output).slice(1, -1),
-    });
+    const promptText = await renderLlmRubricPrompt(rubricPrompt, { answer: tryParse(output) });
     const resp = await textProvider.callApi(promptText);
     if (resp.error || !resp.output) {
       tokensUsed.total += resp.tokenUsage?.total || 0;
@@ -894,10 +946,10 @@ export async function matchesContextRecall(
   );
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, CONTEXT_RECALL);
-  const promptText = nunjucks.renderString(rubricPrompt, {
-    context: JSON.stringify(context).slice(1, -1),
-    groundTruth: JSON.stringify(groundTruth).slice(1, -1),
-    ...fromVars(vars),
+  const promptText = await renderLlmRubricPrompt(rubricPrompt, {
+    context,
+    groundTruth,
+    ...(vars || {}),
   });
 
   const resp = await textProvider.callApi(promptText);
@@ -947,9 +999,9 @@ export async function matchesContextRelevance(
   );
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, CONTEXT_RELEVANCE);
-  const promptText = nunjucks.renderString(rubricPrompt, {
-    context: JSON.stringify(context).slice(1, -1),
-    query: JSON.stringify(question).slice(1, -1),
+  const promptText = await renderLlmRubricPrompt(rubricPrompt, {
+    context,
+    query: question,
   });
 
   const resp = await textProvider.callApi(promptText);
@@ -1012,10 +1064,10 @@ export async function matchesContextFaithfulness(
       ? grading?.rubricPrompt?.[1]
       : grading?.rubricPrompt?.[1].content) || CONTEXT_FAITHFULNESS_NLI_STATEMENTS;
 
-  let promptText = nunjucks.renderString(longformPrompt, {
-    question: JSON.stringify(query).slice(1, -1),
-    answer: JSON.stringify(output).slice(1, -1),
-    ...fromVars(vars),
+  let promptText = await renderLlmRubricPrompt(longformPrompt, {
+    question: query,
+    answer: tryParse(output),
+    ...(vars || {}),
   });
 
   let resp = await textProvider.callApi(promptText);
@@ -1026,10 +1078,10 @@ export async function matchesContextFaithfulness(
   invariant(typeof resp.output === 'string', 'context-faithfulness produced malformed response');
 
   const statements = resp.output.split('\n');
-  promptText = nunjucks.renderString(nliPrompt, {
-    context: JSON.stringify(context).slice(1, -1),
-    statements: JSON.stringify(statements.join('\n')).slice(1, -1),
-    ...fromVars(vars),
+  promptText = await renderLlmRubricPrompt(nliPrompt, {
+    context,
+    statements,
+    ...(vars || {}),
   });
 
   resp = await textProvider.callApi(promptText);
@@ -1091,10 +1143,10 @@ export async function matchesSelectBest(
   );
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, SELECT_BEST_PROMPT);
-  const promptText = nunjucks.renderString(rubricPrompt, {
-    criteria: JSON.stringify(criteria).slice(1, -1),
-    outputs: outputs.map((output) => JSON.stringify(output).slice(1, -1)),
-    ...fromVars(vars),
+  const promptText = await renderLlmRubricPrompt(rubricPrompt, {
+    criteria,
+    outputs: outputs.map((o) => tryParse(o)),
+    ...(vars || {}),
   });
 
   const resp = await textProvider.callApi(promptText);

@@ -74,6 +74,7 @@ Here's an example of how to use the raw HTTP request feature:
 providers:
   - id: https
     config:
+      useHttps: true
       request: |
         POST /v1/completions HTTP/1.1
         Host: api.example.com
@@ -91,8 +92,9 @@ providers:
 In this example:
 
 1. The `request` property contains a raw HTTP request, including the method, path, headers, and body.
-2. You can use template variables like `{{api_key}}` and `{{prompt}}` within the raw request. These will be replaced with actual values when the request is sent.
-3. The `transformResponse` property is used to extract the desired information from the JSON response.
+2. The `useHttps` property is set to `true`, so the request will be sent over HTTPS.
+3. You can use template variables like `{{api_key}}` and `{{prompt}}` within the raw request. These will be replaced with actual values when the request is sent.
+4. The `transformResponse` property is used to extract the desired information from the JSON response.
 
 You can also load the raw request from an external file using the `file://` prefix:
 
@@ -550,7 +552,7 @@ The HTTP provider supports digital signature authentication. This feature allows
 - Customize header names and signature formats
 - Configure different signature algorithms
 
-The current implementation uses asymmetric key cryptography (RSA by default), but the configuration is algorithm-agnostic. In either case, the private key is **never sent to PromptFoo** and will always be stored locally on your system either in your `promptfooconfig.yaml` file or on a local path that the configuration file references.
+The current implementation uses asymmetric key cryptography (RSA by default), but the configuration is algorithm-agnostic. In either case, the private key is **never sent to Promptfoo** and will always be stored locally on your system either in your `promptfooconfig.yaml` file or on a local path that the configuration file references.
 
 ### Basic Usage
 
@@ -588,9 +590,13 @@ providers:
         # Optional fields with defaults shown
         signatureValidityMs: 300000 # 5 minutes
         signatureAlgorithm: 'SHA256'
-        signatureDataTemplate: '{{clientId}}{{timestamp}}\n' # \n is interpreted as a newline
+        signatureDataTemplate: '{{clientId}}{{timestamp}}\n' # \n is interpreted as a newline character
         signatureRefreshBufferMs: 30000 # Optional: custom refresh buffer
 ```
+
+:::note
+You can use environment variables throughout your HTTP provider configuration using the `{{env.VARIABLE_NAME}}` syntax.
+:::
 
 When signature authentication is enabled, the following variables are available for use in headers or other templated fields:
 

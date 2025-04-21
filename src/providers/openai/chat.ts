@@ -4,10 +4,13 @@ import { getEnvFloat, getEnvInt } from '../../envars';
 import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
-import { renderVarsInObject } from '../../util';
-import { maybeLoadFromExternalFile } from '../../util';
+import {
+  maybeLoadFromExternalFile,
+  maybeLoadToolsFromExternalFile,
+  renderVarsInObject,
+} from '../../util';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from '../shared';
-import type { OpenAiCompletionOptions } from './types';
+import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
 import { calculateOpenAICost } from './util';
 import { formatOpenAiError, getTokenUsage, OPENAI_CHAT_MODELS } from './util';
 
@@ -30,7 +33,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   }
 
   protected isReasoningModel(): boolean {
-    return this.modelName.startsWith('o1') || this.modelName.startsWith('o3');
+    return (
+      this.modelName.startsWith('o1') ||
+      this.modelName.startsWith('o3') ||
+      this.modelName.startsWith('o4')
+    );
   }
 
   protected supportsTemperature(): boolean {
@@ -64,7 +71,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       ? (config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0))
       : undefined;
     const reasoningEffort = isReasoningModel
-      ? renderVarsInObject(config.reasoning_effort, context?.vars)
+      ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
       : undefined;
 
     const body = {
@@ -101,7 +108,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         : {}),
       ...(config.function_call ? { function_call: config.function_call } : {}),
       ...(config.tools
-        ? { tools: maybeLoadFromExternalFile(renderVarsInObject(config.tools, context?.vars)) }
+        ? { tools: maybeLoadToolsFromExternalFile(config.tools, context?.vars) }
         : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.tool_resources ? { tool_resources: config.tool_resources } : {}),
@@ -115,6 +122,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(config.stop ? { stop: config.stop } : {}),
       ...(config.passthrough || {}),
+      ...(this.modelName.includes('audio')
+        ? {
+            modalities: config.modalities || ['text', 'audio'],
+            audio: config.audio || { voice: 'alloy', format: 'wav' },
+          }
+        : {}),
     };
 
     return { body, config };
@@ -125,7 +138,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    if (!this.getApiKey()) {
+    if (this.requiresApiKey() && !this.getApiKey()) {
       throw new Error(
         'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
       );
@@ -191,7 +204,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         } else {
           output = message;
         }
-      } else if (message.content === null) {
+      } else if (
+        message.content === null ||
+        message.content === undefined ||
+        (message.content === '' && message.tool_calls)
+      ) {
         output = message.function_call || message.tool_calls;
       } else {
         output = message.content;
@@ -237,9 +254,44 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
               config,
               data.usage?.prompt_tokens,
               data.usage?.completion_tokens,
+              data.usage?.audio_prompt_tokens,
+              data.usage?.audio_completion_tokens,
             ),
           };
         }
+      }
+
+      // Handle DeepSeek reasoning model's reasoning_content by prepending it to the output
+      if (
+        message.reasoning_content &&
+        typeof message.reasoning_content === 'string' &&
+        typeof output === 'string' &&
+        (this.config.showThinking ?? true)
+      ) {
+        output = `Thinking: ${message.reasoning_content}\n\n${output}`;
+      }
+      if (message.audio) {
+        return {
+          output: message.audio.transcript || '',
+          audio: {
+            id: message.audio.id,
+            expiresAt: message.audio.expires_at,
+            data: message.audio.data,
+            transcript: message.audio.transcript,
+            format: message.audio.format || 'wav',
+          },
+          tokenUsage: getTokenUsage(data, cached),
+          cached,
+          logProbs,
+          cost: calculateOpenAICost(
+            this.modelName,
+            config,
+            data.usage?.prompt_tokens,
+            data.usage?.completion_tokens,
+            data.usage?.audio_prompt_tokens,
+            data.usage?.audio_completion_tokens,
+          ),
+        };
       }
 
       return {
@@ -252,6 +304,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           config,
           data.usage?.prompt_tokens,
           data.usage?.completion_tokens,
+          data.usage?.audio_prompt_tokens,
+          data.usage?.audio_completion_tokens,
         ),
       };
     } catch (err) {

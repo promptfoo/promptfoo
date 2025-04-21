@@ -3,15 +3,15 @@ import { useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useShiftKey } from '@app/hooks/useShiftKey';
 import Tooltip from '@mui/material/Tooltip';
-import { ResultFailureReason, type EvaluateTableOutput } from '@promptfoo/types';
-import { diffSentences, diffJson, diffWords } from 'diff';
+import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
+import { diffJson, diffSentences, diffWords } from 'diff';
 import remarkGfm from 'remark-gfm';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import FailReasonCarousel from './FailReasonCarousel';
 import CommentDialog from './TableCommentDialog';
 import TruncatedText from './TruncatedText';
-import { useStore as useResultsViewStore } from './store';
+import { useResultsViewSettingsStore } from './store';
 
 type CSSPropertiesWithCustomVars = React.CSSProperties & {
   [key: `--${string}`]: string | number;
@@ -50,8 +50,22 @@ function EvalOutputCell({
   searchText: string;
 }) {
   const { renderMarkdown, prettifyJson, showPrompts, showPassFail, maxImageWidth, maxImageHeight } =
-    useResultsViewStore();
+    useResultsViewSettingsStore();
+
   const [openPrompt, setOpen] = React.useState(false);
+  const [activeRating, setActiveRating] = React.useState<boolean | null>(
+    output.gradingResult?.componentResults?.find((result) => result.assertion?.type === 'human')
+      ?.pass ?? null,
+  );
+
+  // Update activeRating when output changes
+  React.useEffect(() => {
+    const humanRating = output.gradingResult?.componentResults?.find(
+      (result) => result.assertion?.type === 'human',
+    )?.pass;
+    setActiveRating(humanRating ?? null);
+  }, [output]);
+
   const handlePromptOpen = () => {
     setOpen(true);
   };
@@ -197,6 +211,23 @@ function EvalOutputCell({
         onClick={() => toggleLightbox(text)}
       />
     );
+  } else if (output.audio) {
+    node = (
+      <div className="audio-output">
+        <audio controls style={{ width: '100%' }} data-testid="audio-player">
+          <source
+            src={`data:audio/${output.audio.format || 'wav'};base64,${output.audio.data}`}
+            type={`audio/${output.audio.format || 'wav'}`}
+          />
+          Your browser does not support the audio element.
+        </audio>
+        {output.audio.transcript && (
+          <div className="transcript">
+            <strong>Transcript:</strong> {output.audio.transcript}
+          </div>
+        )}
+      </div>
+    );
   } else if (renderMarkdown && !showDiffs) {
     node = (
       <ReactMarkdown
@@ -226,6 +257,7 @@ function EvalOutputCell({
 
   const handleRating = React.useCallback(
     (isPass: boolean) => {
+      setActiveRating(isPass);
       onRating(isPass, undefined, output.gradingResult?.comment);
     },
     [onRating, output.gradingResult?.comment],
@@ -242,6 +274,22 @@ function EvalOutputCell({
       }
     }
   }, [onRating, output.score, output.gradingResult?.comment]);
+
+  const [linked, setLinked] = React.useState(false);
+  const handleRowShareLink = React.useCallback(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('rowId', String(rowIndex + 1));
+
+    navigator.clipboard
+      .writeText(url.toString())
+      .then(() => {
+        setLinked(true);
+        setTimeout(() => setLinked(false), 3000);
+      })
+      .catch((error) => {
+        console.error('Failed to copy link to clipboard:', error);
+      });
+  }, [rowIndex]);
 
   const [copied, setCopied] = React.useState(false);
   const handleCopy = React.useCallback(() => {
@@ -376,6 +424,15 @@ function EvalOutputCell({
               <span>🌟</span>
             </Tooltip>
           </span>
+          <span
+            className="action"
+            onClick={handleRowShareLink}
+            onMouseDown={(e) => e.preventDefault()}
+          >
+            <Tooltip title="Share output">
+              <span>{linked ? '✅' : '🔗'}</span>
+            </Tooltip>
+          </span>
         </>
       )}
       {output.prompt && (
@@ -385,23 +442,31 @@ function EvalOutputCell({
               <span>🔎</span>
             </Tooltip>
           </span>
-          <EvalOutputPromptDialog
-            open={openPrompt}
-            onClose={handlePromptClose}
-            prompt={output.prompt}
-            provider={output.provider}
-            gradingResults={output.gradingResult?.componentResults}
-            output={text}
-            metadata={output.metadata}
-          />
+          {openPrompt && (
+            <EvalOutputPromptDialog
+              open={openPrompt}
+              onClose={handlePromptClose}
+              prompt={output.prompt}
+              provider={output.provider}
+              gradingResults={output.gradingResult?.componentResults}
+              output={text}
+              metadata={output.metadata}
+            />
+          )}
         </>
       )}
-      <span className="action" onClick={() => handleRating(true)}>
+      <span
+        className={`action ${activeRating === true ? 'active' : ''}`}
+        onClick={() => handleRating(true)}
+      >
         <Tooltip title="Mark test passed (score 1.0)">
           <span>👍</span>
         </Tooltip>
       </span>
-      <span className="action" onClick={() => handleRating(false)}>
+      <span
+        className={`action ${activeRating === false ? 'active' : ''}`}
+        onClick={() => handleRating(false)}
+      >
         <Tooltip title="Mark test failed (score 0.0)">
           <span>👎</span>
         </Tooltip>
@@ -570,14 +635,16 @@ function EvalOutputCell({
           <img src={lightboxImage} alt="Lightbox" />
         </div>
       )}
-      <CommentDialog
-        open={commentDialogOpen}
-        contextText={getCombinedContextText()}
-        commentText={commentText}
-        onClose={handleCommentClose}
-        onSave={handleCommentSave}
-        onChange={setCommentText}
-      />
+      {commentDialogOpen && (
+        <CommentDialog
+          open={commentDialogOpen}
+          contextText={getCombinedContextText()}
+          commentText={commentText}
+          onClose={handleCommentClose}
+          onSave={handleCommentSave}
+          onChange={setCommentText}
+        />
+      )}
     </div>
   );
 }

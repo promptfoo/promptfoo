@@ -1,37 +1,23 @@
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import type { ApiProvider } from '../types';
+import type { ApiProvider, DefaultProviders } from '../types';
 import type { EnvOverrides } from '../types/env';
+import { getAnthropicProviders } from './anthropic/defaults';
+import { AzureChatCompletionProvider } from './azure/chat';
+import { AzureEmbeddingProvider } from './azure/embedding';
+import { AzureModerationProvider } from './azure/moderation';
+import { hasGoogleDefaultCredentials } from './google/util';
 import {
-  DefaultGradingProvider as AnthropicGradingProvider,
-  DefaultGradingJsonProvider as AnthropicGradingJsonProvider,
-  DefaultSuggestionsProvider as AnthropicSuggestionsProvider,
-  DefaultLlmRubricProvider as AnthropicLlmRubricProvider,
-} from './anthropic';
-import { AzureChatCompletionProvider, AzureEmbeddingProvider } from './azure';
+  DefaultEmbeddingProvider as GeminiEmbeddingProvider,
+  DefaultGradingProvider as GeminiGradingProvider,
+} from './google/vertex';
 import {
   DefaultEmbeddingProvider as OpenAiEmbeddingProvider,
   DefaultGradingJsonProvider as OpenAiGradingJsonProvider,
   DefaultGradingProvider as OpenAiGradingProvider,
-  DefaultSuggestionsProvider as OpenAiSuggestionsProvider,
   DefaultModerationProvider as OpenAiModerationProvider,
+  DefaultSuggestionsProvider as OpenAiSuggestionsProvider,
 } from './openai/defaults';
-import {
-  DefaultGradingProvider as GeminiGradingProvider,
-  DefaultEmbeddingProvider as GeminiEmbeddingProvider,
-} from './vertex';
-import { hasGoogleDefaultCredentials } from './vertexUtil';
-
-interface DefaultProviders {
-  datasetGenerationProvider: ApiProvider;
-  embeddingProvider: ApiProvider;
-  gradingJsonProvider: ApiProvider;
-  gradingProvider: ApiProvider;
-  llmRubricProvider?: ApiProvider;
-  moderationProvider: ApiProvider;
-  suggestionsProvider: ApiProvider;
-  synthesizeProvider: ApiProvider;
-}
 
 const COMPLETION_PROVIDERS: (keyof DefaultProviders)[] = [
   'datasetGenerationProvider',
@@ -67,22 +53,15 @@ export async function setDefaultEmbeddingProviders(provider: ApiProvider) {
   defaultEmbeddingProvider = provider;
 }
 
-// New helper functions for provider configuration and creation
-/**
- * Checks whether Azure configuration is available.
- *
- * Azure is used if no OpenAI API key is provided and Azure credentials (API key or client credentials)
- * along with required deployment names are available.
- *
- * @param env - Optional overrides for environment variables.
- * @returns True if Azure configuration is detected.
- */
-function isAzureConfigured(env?: EnvOverrides): boolean {
-  const hasOpenAikey = getEnvString('OPENAI_API_KEY') || env?.OPENAI_API_KEY;
-  if (hasOpenAikey) {
-    return false;
-  }
-  const azureApiKey =
+export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultProviders> {
+  // Check for provider credentials
+  const hasAnthropicCredentials = Boolean(
+    getEnvString('ANTHROPIC_API_KEY') || env?.ANTHROPIC_API_KEY,
+  );
+  const hasOpenAiCredentials = Boolean(getEnvString('OPENAI_API_KEY') || env?.OPENAI_API_KEY);
+  const preferAnthropic = !hasOpenAiCredentials && hasAnthropicCredentials;
+
+  const hasAzureApiKey =
     getEnvString('AZURE_OPENAI_API_KEY') ||
     env?.AZURE_OPENAI_API_KEY ||
     getEnvString('AZURE_API_KEY') ||
@@ -94,173 +73,85 @@ function isAzureConfigured(env?: EnvOverrides): boolean {
   const deploymentName = getEnvString('AZURE_DEPLOYMENT_NAME') || env?.AZURE_DEPLOYMENT_NAME;
   const openaiDeploymentName =
     getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME') || env?.AZURE_OPENAI_DEPLOYMENT_NAME;
-  return (
-    (Boolean(azureApiKey) || Boolean(azureClientCreds)) &&
+  
+  const preferAzure = !hasOpenAiCredentials && 
+    (Boolean(hasAzureApiKey) || Boolean(azureClientCreds)) &&
     Boolean(deploymentName) &&
-    Boolean(openaiDeploymentName)
-  );
-}
+    Boolean(openaiDeploymentName);
 
-/**
- * Checks whether Anthropic configuration is available.
- *
- * Anthropic is used if no OpenAI API key is provided and an Anthropic API key exists.
- *
- * @param env - Optional overrides for environment variables.
- * @returns True if Anthropic configuration is detected.
- */
-function isAnthropicConfigured(env?: EnvOverrides): boolean {
-  return (
+  let providers: Pick<DefaultProviders, keyof DefaultProviders>;
+
+  if (preferAzure) {
+    logger.debug('Using Azure OpenAI default providers');
+    const deploymentName =
+      getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME') || env?.AZURE_OPENAI_DEPLOYMENT_NAME;
+    if (!deploymentName) {
+      throw new Error('AZURE_OPENAI_DEPLOYMENT_NAME must be set when using Azure OpenAI');
+    }
+
+    const embeddingDeploymentName =
+      getEnvString('AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME') ||
+      env?.AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME ||
+      deploymentName;
+
+    const azureProvider = new AzureChatCompletionProvider(deploymentName, { env });
+    const azureEmbeddingProvider = new AzureEmbeddingProvider(embeddingDeploymentName, {
+      env,
+    });
+
+    providers = {
+      datasetGenerationProvider: azureProvider,
+      embeddingProvider: azureEmbeddingProvider,
+      gradingJsonProvider: azureProvider,
+      gradingProvider: azureProvider,
+      moderationProvider: OpenAiModerationProvider,
+      suggestionsProvider: azureProvider,
+      synthesizeProvider: azureProvider,
+    };
+  } else if (preferAnthropic) {
+    logger.debug('Using Anthropic default providers');
+    const anthropicProviders = getAnthropicProviders(env);
+    providers = {
+      datasetGenerationProvider: anthropicProviders.datasetGenerationProvider,
+      embeddingProvider: OpenAiEmbeddingProvider, // TODO(ian): Voyager instead?
+      gradingJsonProvider: anthropicProviders.gradingJsonProvider,
+      gradingProvider: anthropicProviders.gradingProvider,
+      llmRubricProvider: anthropicProviders.llmRubricProvider,
+      moderationProvider: OpenAiModerationProvider,
+      suggestionsProvider: anthropicProviders.suggestionsProvider,
+      synthesizeProvider: anthropicProviders.synthesizeProvider,
+    };
+  } else if (
     !getEnvString('OPENAI_API_KEY') &&
     !env?.OPENAI_API_KEY &&
-    Boolean(getEnvString('ANTHROPIC_API_KEY') || env?.ANTHROPIC_API_KEY)
-  );
-}
-
-/**
- * Asynchronously checks whether Google (Vertex) configuration is available.
- *
- * Google is used if no OpenAI API key is provided and Google default credentials are detected.
- *
- * @param env - Optional overrides for environment variables.
- * @returns A promise that resolves to true if Google configuration is detected.
- */
-async function isGoogleConfigured(env?: EnvOverrides): Promise<boolean> {
-  if (!getEnvString('OPENAI_API_KEY') && !env?.OPENAI_API_KEY) {
-    return await hasGoogleDefaultCredentials();
-  }
-  return false;
-}
-
-/**
- * Checks whether OpenAI configuration is available.
- *
- * OpenAI is used if an OpenAI API key is present (either from environment or overrides).
- *
- * @param env - Optional overrides for environment variables.
- * @returns True if OpenAI configuration is detected.
- */
-function isOpenAIConfigured(env?: EnvOverrides): boolean {
-  return Boolean(getEnvString('OPENAI_API_KEY') || env?.OPENAI_API_KEY);
-}
-
-/**
- * Constructs and returns the Azure providers.
- *
- * @param env - Optional overrides for environment variables.
- * @returns A DefaultProviders object configured for Azure OpenAI.
- *
- * @throws Error if required Azure deployment settings are missing.
- */
-function getAzureProviders(env?: EnvOverrides): DefaultProviders {
-  const deploymentName =
-    getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME') || env?.AZURE_OPENAI_DEPLOYMENT_NAME;
-  if (!deploymentName) {
-    throw new Error('AZURE_OPENAI_DEPLOYMENT_NAME must be set when using Azure OpenAI');
-  }
-  const embeddingDeploymentName =
-    getEnvString('AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME') ||
-    env?.AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME ||
-    deploymentName;
-  const azureProvider = new AzureChatCompletionProvider(deploymentName, { env });
-  const azureEmbeddingProvider = new AzureEmbeddingProvider(embeddingDeploymentName, { env });
-  return {
-    datasetGenerationProvider: azureProvider,
-    embeddingProvider: azureEmbeddingProvider,
-    gradingJsonProvider: azureProvider,
-    gradingProvider: azureProvider,
-    moderationProvider: OpenAiModerationProvider,
-    suggestionsProvider: azureProvider,
-    synthesizeProvider: azureProvider,
-  };
-}
-
-/**
- * Constructs and returns the Anthropic providers.
- *
- * @param env - Optional overrides for environment variables.
- * @returns A DefaultProviders object configured for Anthropic.
- */
-function getAnthropicProviders(env?: EnvOverrides): DefaultProviders {
-  return {
-    datasetGenerationProvider: AnthropicGradingProvider,
-    embeddingProvider: OpenAiEmbeddingProvider, // TODO: Consider alternate provider
-    gradingJsonProvider: AnthropicGradingJsonProvider,
-    gradingProvider: AnthropicGradingProvider,
-    llmRubricProvider: AnthropicLlmRubricProvider,
-    moderationProvider: OpenAiModerationProvider,
-    suggestionsProvider: AnthropicSuggestionsProvider,
-    synthesizeProvider: AnthropicGradingJsonProvider,
-  };
-}
-
-/**
- * Constructs and returns the Google (Vertex) providers.
- *
- * @param env - Optional overrides for environment variables.
- * @returns A DefaultProviders object configured for Google.
- */
-function getGoogleProviders(env?: EnvOverrides): DefaultProviders {
-  return {
-    datasetGenerationProvider: GeminiGradingProvider,
-    embeddingProvider: GeminiEmbeddingProvider,
-    gradingJsonProvider: GeminiGradingProvider,
-    gradingProvider: GeminiGradingProvider,
-    moderationProvider: OpenAiModerationProvider,
-    suggestionsProvider: GeminiGradingProvider,
-    synthesizeProvider: GeminiGradingProvider,
-  };
-}
-
-/**
- * Constructs and returns the OpenAI providers.
- *
- * @param env - Optional overrides for environment variables.
- * @returns A DefaultProviders object configured for OpenAI.
- */
-function getOpenAIProviders(env?: EnvOverrides): DefaultProviders {
-  return {
-    datasetGenerationProvider: OpenAiGradingProvider,
-    embeddingProvider: OpenAiEmbeddingProvider,
-    gradingJsonProvider: OpenAiGradingJsonProvider,
-    gradingProvider: OpenAiGradingProvider,
-    moderationProvider: OpenAiModerationProvider,
-    suggestionsProvider: OpenAiSuggestionsProvider,
-    synthesizeProvider: OpenAiGradingJsonProvider,
-  };
-}
-
-/**
- * Returns the default API providers based on the current environment configuration.
- *
- * Provider preference order:
- *  1. OpenAI: Chosen if an OpenAI API key is provided.
- *  2. Azure: Chosen if Azure credentials and deployment names are provided and no OpenAI API key is present.
- *  3. Anthropic: Chosen if an Anthropic API key is present and no OpenAI API key is provided.
- *  4. Google (Vertex): Chosen if Google default credentials are detected and no OpenAI API key is provided.
- *
- * Global completion and embedding provider overrides (if set) are applied after the initial configuration.
- *
- * @param env - Optional overrides for environment variables.
- * @returns A promise that resolves to the configured DefaultProviders object.
- */
-export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultProviders> {
-  let providers: DefaultProviders;
-  if (isOpenAIConfigured(env)) {
-    logger.debug('Using OpenAI default providers');
-    providers = getOpenAIProviders(env);
-  } else if (isAzureConfigured(env)) {
-    logger.debug('Using Azure OpenAI default providers');
-    providers = getAzureProviders(env);
-  } else if (isAnthropicConfigured(env)) {
-    logger.debug('Using Anthropic default providers');
-    providers = getAnthropicProviders(env);
-  } else if (await isGoogleConfigured(env)) {
+    (await hasGoogleDefaultCredentials())
+  ) {
     logger.debug('Using Google default providers');
-    providers = getGoogleProviders(env);
+    providers = {
+      datasetGenerationProvider: GeminiGradingProvider,
+      embeddingProvider: GeminiEmbeddingProvider,
+      gradingJsonProvider: GeminiGradingProvider,
+      gradingProvider: GeminiGradingProvider,
+      moderationProvider: OpenAiModerationProvider,
+      suggestionsProvider: GeminiGradingProvider,
+      synthesizeProvider: GeminiGradingProvider,
+    };
   } else {
-    logger.debug('Defaulting to OpenAI default providers');
-    providers = getOpenAIProviders(env);
+    logger.debug('Using OpenAI default providers');
+    providers = {
+      datasetGenerationProvider: OpenAiGradingProvider,
+      embeddingProvider: OpenAiEmbeddingProvider,
+      gradingJsonProvider: OpenAiGradingJsonProvider,
+      gradingProvider: OpenAiGradingProvider,
+      moderationProvider: OpenAiModerationProvider,
+      suggestionsProvider: OpenAiSuggestionsProvider,
+      synthesizeProvider: OpenAiGradingJsonProvider,
+    };
+  }
+
+  // If Azure Content Safety endpoint is available, use it for moderation
+  if (getEnvString('AZURE_CONTENT_SAFETY_ENDPOINT') || env?.AZURE_CONTENT_SAFETY_ENDPOINT) {
+    providers.moderationProvider = new AzureModerationProvider('text-content-safety', { env });
   }
 
   if (defaultCompletionProvider) {

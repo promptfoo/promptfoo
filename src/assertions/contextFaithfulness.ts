@@ -27,7 +27,7 @@ export async function handleContextFaithfulness({
       test.vars.query,
       output,
       test.vars.context,
-      assertion.threshold || 0,
+      assertion.threshold ?? 0,
       test.options,
     )),
   };

@@ -72,6 +72,7 @@ describe('util', () => {
       jest.doMock(path.resolve('transform.js'), () => (output: string) => output.toUpperCase(), {
         virtual: true,
       });
+
       const transformFunctionPath = 'file://transform.js';
       const transformedOutput = await transform(transformFunctionPath, output, context);
       expect(transformedOutput).toBe('HELLO');
@@ -231,6 +232,23 @@ describe('util', () => {
       );
     });
 
+    it('does not throw error when validateReturn is false and function returns null', async () => {
+      const output = 'test';
+      const context = { vars: {}, prompt: {} };
+      const transformFunction = 'null'; // Will be wrapped with "return" automatically
+      const result = await transform(transformFunction, output, context, false);
+      expect(result).toBeNull();
+    });
+
+    it('throws error when validateReturn is true and function returns null', async () => {
+      const output = 'test';
+      const context = { vars: {}, prompt: {} };
+      const transformFunction = 'null'; // Will be wrapped with "return" automatically
+      await expect(transform(transformFunction, output, context, true)).rejects.toThrow(
+        'Transform function did not return a value',
+      );
+    });
+
     it('handles file transform function errors gracefully', async () => {
       const output = 'test';
       const context = { vars: {}, prompt: {} };
@@ -262,6 +280,78 @@ describe('util', () => {
       expect(logger.error).toHaveBeenCalledWith(
         expect.stringContaining('Error creating inline transform function:'),
       );
+    });
+
+    describe('file path handling', () => {
+      it('handles absolute paths in transform files', async () => {
+        const output = 'hello';
+        const context = { vars: { key: 'value' }, prompt: { id: '123' } };
+        const mockPath = path.resolve('transform.js');
+
+        jest.doMock(mockPath, () => (output: string) => output.toUpperCase(), {
+          virtual: true,
+        });
+
+        const transformFunctionPath = 'file://transform.js';
+        const transformedOutput = await transform(transformFunctionPath, output, context);
+        expect(transformedOutput).toBe('HELLO');
+      });
+
+      it('handles file URLs in transform files', async () => {
+        const output = 'hello';
+        const context = { vars: { key: 'value' }, prompt: { id: '123' } };
+        const mockPath = path.resolve('transform.js');
+
+        jest.doMock(mockPath, () => (output: string) => output.toUpperCase(), {
+          virtual: true,
+        });
+
+        const transformFunctionPath = 'file://transform.js';
+        const transformedOutput = await transform(transformFunctionPath, output, context);
+        expect(transformedOutput).toBe('HELLO');
+      });
+
+      it('handles Python files with absolute paths', async () => {
+        const output = 'hello';
+        const context = { vars: { key: 'value' }, prompt: { id: '123' } };
+        const pythonFilePath = 'file://transform.py';
+
+        const transformedOutput = await transform(pythonFilePath, output, context);
+        expect(transformedOutput).toBe('HELLO FROM PYTHON');
+        expect(runPython).toHaveBeenCalledWith(
+          expect.stringContaining('transform.py'),
+          'get_transform',
+          [output, expect.any(Object)],
+        );
+      });
+
+      it('handles complex nested paths', async () => {
+        const output = 'hello';
+        const context = { vars: { key: 'value' }, prompt: { id: '123' } };
+        const mockPath = path.resolve('deeply/nested/path/with spaces/transform.js');
+
+        jest.doMock(mockPath, () => (output: string) => output.toUpperCase(), {
+          virtual: true,
+        });
+
+        const transformFunctionPath = 'file://deeply/nested/path/with spaces/transform.js';
+        const transformedOutput = await transform(transformFunctionPath, output, context);
+        expect(transformedOutput).toBe('HELLO');
+      });
+
+      it('handles paths with special characters', async () => {
+        const output = 'hello';
+        const context = { vars: { key: 'value' }, prompt: { id: '123' } };
+        const mockPath = path.resolve('path/with-hyphens/and_underscores/transform.js');
+
+        jest.doMock(mockPath, () => (output: string) => output.toUpperCase(), {
+          virtual: true,
+        });
+
+        const transformFunctionPath = 'file://path/with-hyphens/and_underscores/transform.js';
+        const transformedOutput = await transform(transformFunctionPath, output, context);
+        expect(transformedOutput).toBe('HELLO');
+      });
     });
   });
 });

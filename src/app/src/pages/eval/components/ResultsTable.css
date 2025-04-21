@@ -165,9 +165,15 @@ table.results-table,
   font-size: 1.25rem;
 }
 
+/* Show all actions on hover */
 .results-table .first-prompt-col:hover .cell-actions,
 .results-table .second-prompt-column:hover .cell-actions {
   visibility: visible;
+}
+
+/* Always show active thumbs */
+.results-table tr .cell-actions .action.active {
+  visibility: visible !important;
 }
 
 .results-table tr .cell-detail {
@@ -188,6 +194,10 @@ table.results-table,
 
 .results-table tr .cell-actions .action {
   cursor: pointer;
+}
+
+.results-table tr .cell-actions .action.active span {
+  filter: saturate(1.5);
 }
 
 /* Table-within-a-cell, used for markdown tables */
@@ -592,4 +602,19 @@ thead.collapsed .header-dismiss {
   font-size: 0.9em;
   height: 24px;
   line-height: 1;
+}
+
+.audio-output {
+  margin: 1rem 0;
+}
+
+.audio-output audio {
+  margin-bottom: 0.5rem;
+}
+
+.audio-output .transcript {
+  font-size: 0.9rem;
+  color: var(--ifm-color-emphasis-700);
+  line-height: 1.4;
+  white-space: pre-wrap;
 }

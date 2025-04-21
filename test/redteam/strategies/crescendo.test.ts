@@ -33,6 +33,9 @@ describe('addCrescendo', () => {
           someConfig: 'value',
         },
       },
+      metadata: {
+        strategyId: 'crescendo',
+      },
       assert: [
         {
           type: 'contains',
@@ -60,6 +63,9 @@ describe('addCrescendo', () => {
       config: {
         injectVar: 'inject',
       },
+    });
+    expect(result[0].metadata).toEqual({
+      strategyId: 'crescendo',
     });
   });
 
@@ -90,6 +96,9 @@ describe('addCrescendo', () => {
         config: {
           injectVar: 'inject',
         },
+      },
+      metadata: {
+        strategyId: 'crescendo',
       },
     });
   });

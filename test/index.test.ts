@@ -36,10 +36,11 @@ describe('index.ts exports', () => {
     'cache',
     'evaluate',
     'generateTable',
+    'guardrails',
     'isApiProvider',
     'isGradingResult',
     'isProviderOptions',
-    'providers',
+    'loadApiProvider',
     'redteam',
   ];
 
@@ -48,8 +49,10 @@ describe('index.ts exports', () => {
     'AssertionTypeSchema',
     'AtomicTestCaseSchema',
     'BaseAssertionTypesSchema',
+    'BaseTokenUsageSchema',
     'CommandLineOptionsSchema',
     'CompletedPromptSchema',
+    'CompletionTokenDetailsSchema',
     'DerivedMetricSchema',
     'NotPrefixedAssertionTypesSchema',
     'OutputConfigSchema',
@@ -63,6 +66,7 @@ describe('index.ts exports', () => {
     'TestCaseWithVarsFileSchema',
     'TestSuiteConfigSchema',
     'TestSuiteSchema',
+    'TokenUsageSchema',
     'UnifiedConfigSchema',
     'VarsSchema',
   ];
@@ -83,9 +87,7 @@ describe('index.ts exports', () => {
     const actualExports = Object.keys(index)
       .filter((key) => key !== 'default')
       .sort();
-    const expectedExports = [...expectedNamedExports, ...expectedSchemaExports].sort();
-    expect(actualExports).toHaveLength(expectedExports.length);
-    expect(actualExports).toEqual(expectedExports);
+    expect(actualExports).toEqual([...expectedNamedExports, ...expectedSchemaExports].sort());
   });
 
   it('redteam should have expected properties', () => {
@@ -109,7 +111,8 @@ describe('index.ts exports', () => {
       assertions: index.assertions,
       cache: index.cache,
       evaluate: index.evaluate,
-      providers: index.providers,
+      guardrails: index.guardrails,
+      loadApiProvider: index.loadApiProvider,
       redteam: index.redteam,
     });
   });

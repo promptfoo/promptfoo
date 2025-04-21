@@ -109,6 +109,19 @@ When using promptfoo as a Node library, provide the equivalent configuration:
 }
 ```
 
+## Limitations
+
+The simulated user provider assumes that the target endpoint accepts messages in OpenAI chat format:
+
+```ts
+type Messages = {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}[];
+```
+
+The original prompt (agent_policy.txt in the example above) is sent as a system message.
+
 ## Debugging
 
 Set the environment variable `LOG_LEVEL=debug` to see detailed logs of the conversation flow, including each message sent between the agent and simulated user.

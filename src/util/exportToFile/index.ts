@@ -75,6 +75,15 @@ export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableO
     provider: result.provider?.label || result.provider?.id || 'unknown provider',
     pass: result.success,
     cost: result.cost || 0,
+    audio: result.response?.audio
+      ? {
+          id: result.response.audio.id,
+          expiresAt: result.response.audio.expiresAt,
+          data: result.response.audio.data,
+          transcript: result.response.audio.transcript,
+          format: result.response.audio.format,
+        }
+      : undefined,
   };
 }
 
