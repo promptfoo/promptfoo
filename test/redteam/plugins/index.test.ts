@@ -387,4 +387,62 @@ describe('Plugins', () => {
       });
     });
   });
+
+  describe('canGenerateRemote property', () => {
+    // Define plugins that should not need remote generation
+    const noRemoteGenerationPlugins = [
+      'unsafebench',
+      'beavertails',
+      'harmbench',
+      'cyberseceval',
+      'pliny',
+      'donotanswer',
+      'intent',
+    ];
+
+    // Test a sample of plugins known to use local data sources
+    it('dataset-based plugins should set canGenerateRemote to false', async () => {
+      // Mock each plugin to have the appropriate methods for testing
+      const mockApiProvider = {
+        callApi: jest.fn().mockResolvedValue({ output: 'test', error: null }),
+        id: jest.fn().mockReturnValue('mock-provider'),
+      };
+
+      // Test each plugin that shouldn't need remote generation
+      for (const pluginKey of noRemoteGenerationPlugins) {
+        const plugin = Plugins.find((p) => p.key === pluginKey);
+        if (!plugin) {
+          fail(`Plugin ${pluginKey} not found`);
+          continue;
+        }
+
+        // Create a basic action params object
+        const params = {
+          provider: mockApiProvider,
+          purpose: 'test',
+          injectVar: 'test',
+          n: 1,
+          config: {},
+          delayMs: 0,
+        };
+
+        // Special handling for intent which needs a config.intent value
+        if (pluginKey === 'intent') {
+          params.config = { intent: 'test intent' };
+        }
+
+        // Set up remote generation to be true
+        jest.mocked(shouldGenerateRemote).mockReturnValue(true);
+
+        // Call the plugin action
+        await plugin.action(params);
+
+        // Even with shouldGenerateRemote=true, these plugins should not call fetchWithCache
+        expect(fetchWithCache).not.toHaveBeenCalled();
+
+        // Reset mocks for next iteration
+        jest.clearAllMocks();
+      }
+    });
+  });
 });
