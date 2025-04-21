@@ -90,6 +90,12 @@ const AboutPageContent = () => {
                 bio: `Steve brings decades of expertise in engineering, product, and cybersecurity. He has led technical and product teams, and conducted pentests at companies like Microsoft, Shopify, Intercom, and PwC. Most recently he was scaling AI products at Discord.`,
               },
               {
+                name: 'Matthew Bou',
+                title: 'Enterprise GTM Lead',
+                image: '/img/team/matt.jpeg',
+                bio: "Matt's a three-time founding sales team member with a track record of building GTM from scratch. He's helped startups land and grow Fortune 500 accounts, leading to three exits. At Promptfoo, he leads enterprise sales, helping teams accelerate and secure LLMs.",
+              },
+              {
                 name: 'Vanessa Sauter',
                 title: 'Principal Solutions Architect',
                 image: '/img/team/vanessa.jpeg',
