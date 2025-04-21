@@ -75,14 +75,6 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME') &&
     getEnvString('AZURE_OPENAI_API_HOST');
 
-  console.log('preferAzureChatCompletion', preferAzureChatCompletion);
-  console.log('getEnvString("AZURE_OPENAI_API_KEY")', getEnvString('AZURE_OPENAI_API_KEY'));
-  console.log(
-    'getEnvString("AZURE_OPENAI_DEPLOYMENT_NAME")',
-    getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME'),
-  );
-  console.log('getEnvString("AZURE_OPENAI_API_HOST")', getEnvString('AZURE_OPENAI_API_HOST'));
-
   let providers: Pick<DefaultProviders, keyof DefaultProviders>;
 
   if (preferAzure) {
@@ -148,26 +140,20 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       throw new Error('AZURE_OPENAI_DEPLOYMENT_NAME must be set when using Azure OpenAI');
     }
 
-    const azureProvider = new AzureChatCompletionProvider(
-      getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME')!,
-      {
-        config: {
-          apiHost: getEnvString('AZURE_OPENAI_API_HOST'),
-          apiKey: getEnvString('AZURE_OPENAI_API_KEY'),
-        },
+    const azureProvider = new AzureChatCompletionProvider(deploymentName, {
+      config: {
+        apiHost: getEnvString('AZURE_OPENAI_API_HOST'),
+        apiKey: getEnvString('AZURE_OPENAI_API_KEY'),
       },
-    );
+    });
 
-    const azureJsonProvider = new AzureChatCompletionProvider(
-      getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME')!,
-      {
-        config: {
-          response_format: { type: 'json_object' },
-          apiHost: getEnvString('AZURE_OPENAI_API_HOST'),
-          apiKey: getEnvString('AZURE_OPENAI_API_KEY'),
-        },
+    const azureJsonProvider = new AzureChatCompletionProvider(deploymentName, {
+      config: {
+        response_format: { type: 'json_object' },
+        apiHost: getEnvString('AZURE_OPENAI_API_HOST'),
+        apiKey: getEnvString('AZURE_OPENAI_API_KEY'),
       },
-    );
+    });
     providers = {
       datasetGenerationProvider: azureProvider,
       embeddingProvider: OpenAiEmbeddingProvider,
