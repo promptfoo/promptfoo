@@ -532,7 +532,6 @@ export async function doEval(
       showRedteamProviderLabelMissingWarning(testSuite);
     }
 
-    // Clean up any WebSocket connections
     if (testSuite.providers.length > 0) {
       for (const provider of testSuite.providers as ApiProvider[]) {
         provider?.cleanup?.();
