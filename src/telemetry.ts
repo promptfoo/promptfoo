@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import { PostHog } from 'posthog-node';
 import { z } from 'zod';
 import { VERSION } from './constants';
-import { getEnvBool } from './envars';
+import { getEnvBool, getEnvString } from './envars';
 import { fetchWithTimeout } from './fetch';
 import { readGlobalConfig } from './globalConfig/globalConfig';
 import logger from './logger';
@@ -50,29 +50,29 @@ export class Telemetry {
   }
 
   identify() {
+    if (this.disabled) {
+      return;
+    }
     if (posthogClient && this.email) {
       posthogClient.identify({
         distinctId: this.id,
         properties: { email: this.email },
       });
     }
-    if (KA_ENDPOINT) {
-      fetch(KA_ENDPOINT, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ profile_id: this.id, email: this.email }),
-      }).then((res) => {
-        if (!res.ok) {
-          logger.debug(`Failed to identify user: ${res.statusText}`);
-        }
-      });
-    }
+
+    fetch(KA_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ profile_id: this.id, email: this.email }),
+    }).catch(() => {
+      // pass
+    });
   }
 
   get disabled() {
-    return getEnvBool('PROMPTFOO_DISABLE_TELEMETRY');
+    return getEnvBool('PROMPTFOO_DISABLE_TELEMETRY') || getEnvString('NODE_ENV') === 'test';
   }
 
   private recordTelemetryDisabled() {
@@ -111,16 +111,17 @@ export class Telemetry {
           },
         ],
       };
-      if (KA_ENDPOINT) {
-        fetch(KA_ENDPOINT, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'User-Agent': 'promptfoo/1.0.0',
-          },
-          body: JSON.stringify(kaBody),
-        });
-      }
+
+      fetch(KA_ENDPOINT, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': `promptfoo/${VERSION}`,
+        },
+        body: JSON.stringify(kaBody),
+      }).catch(() => {
+        // pass
+      });
     }
   }
 

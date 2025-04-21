@@ -111,7 +111,6 @@ describe('Global Config', () => {
   describe('writeGlobalConfig', () => {
     it('should write config to file in YAML format', () => {
       globalConfig.writeGlobalConfig({
-        id: 'test-id',
         ...mockConfig,
       });
 
