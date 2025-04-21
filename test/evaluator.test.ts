@@ -1,6 +1,12 @@
 import { randomUUID } from 'crypto';
 import glob from 'glob';
-import { evaluate, generateVarCombinations, isAllowedPrompt, newTokenUsage, runEval } from '../src/evaluator';
+import {
+  evaluate,
+  generateVarCombinations,
+  isAllowedPrompt,
+  newTokenUsage,
+  runEval,
+} from '../src/evaluator';
 import { runExtensionHook } from '../src/evaluatorHelpers';
 import logger from '../src/logger';
 import { runDbMigrations } from '../src/migrate';
@@ -126,7 +132,7 @@ describe('evaluator', () => {
         test: testSuite.tests![0],
         prompt: expect.any(Object),
       }),
-      undefined
+      undefined,
     );
     expect(summary.stats.successes).toBe(1);
     expect(summary.stats.failures).toBe(0);
@@ -1632,7 +1638,7 @@ describe('evaluator', () => {
           },
         }),
       }),
-      undefined
+      undefined,
     );
   });
 
@@ -1835,7 +1841,7 @@ describe('evaluator', () => {
       1,
       expect.stringContaining('User: Question 1A'),
       expect.anything(),
-      undefined
+      undefined,
     );
 
     // First conversation, second question (should include history)
@@ -1843,7 +1849,7 @@ describe('evaluator', () => {
       2,
       expect.stringContaining('User: Question 1A\nAssistant: Test output\nUser: Question 1B'),
       expect.anything(),
-      undefined
+      undefined,
     );
 
     // Second conversation, first question (should NOT include first conversation)
@@ -1851,7 +1857,7 @@ describe('evaluator', () => {
       3,
       expect.stringContaining('User: Question 2A'),
       expect.anything(),
-      undefined
+      undefined,
     );
 
     // Second conversation, second question (should only include second conversation history)
@@ -1859,7 +1865,7 @@ describe('evaluator', () => {
       4,
       expect.stringContaining('User: Question 2A\nAssistant: Test output\nUser: Question 2B'),
       expect.anything(),
-      undefined
+      undefined,
     );
   });
 
@@ -2045,21 +2051,49 @@ describe('evaluator', () => {
     expect(mockApiProviderWithError.callApi).toHaveBeenCalledTimes(1);
   });
 
-  it.skip('should handle evaluation timeout', async () => {
-    jest.useFakeTimers();
-    
+  it('should handle evaluation timeout', async () => {
+    // Use jest spies instead of full mocks for better control
+    const mockAddResult = jest.fn().mockResolvedValue(undefined);
+
     const slowApiProvider: ApiProvider = {
       id: jest.fn().mockReturnValue('slow-provider'),
       callApi: jest.fn().mockImplementation(() => {
-        return new Promise(resolve => {
+        return new Promise((resolve) => {
+          // This promise will never resolve within our timeout period
           setTimeout(() => {
             resolve({
               output: 'Slow response',
               tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
             });
-          }, 5000); // 5 seconds
+          }, 30000); // 30 seconds (much longer than our timeout)
         });
       }),
+      cleanup: jest.fn(), // Add cleanup method that should be called on timeout
+    };
+
+    // Create a simplified mock eval object
+    const mockEval = {
+      id: 'mock-eval-id',
+      results: [],
+      prompts: [],
+      resultsCount: 0,
+      persisted: false,
+      config: {},
+      addResult: mockAddResult,
+      addPrompts: jest.fn().mockResolvedValue(undefined),
+      fetchResultsByTestIdx: jest.fn().mockResolvedValue([]),
+      getResults: jest.fn().mockResolvedValue([]),
+      toEvaluateSummary: jest.fn().mockResolvedValue({
+        results: [],
+        prompts: [],
+        stats: {
+          successes: 0,
+          failures: 0,
+          errors: 1,
+          tokenUsage: newTokenUsage(),
+        },
+      }),
+      save: jest.fn().mockResolvedValue(undefined),
     };
 
     const testSuite: TestSuite = {
@@ -2068,55 +2102,33 @@ describe('evaluator', () => {
       tests: [{}],
     };
 
-    // Mock the Eval.create method to avoid database issues
-    jest.spyOn(Eval, 'create').mockImplementation(async () => {
-      return {
-        id: 'mock-eval-id',
-        results: [],
-        prompts: [],
-        resultsCount: 0,
-        persisted: false,
-        config: {},
-        addResult: jest.fn().mockResolvedValue(undefined),
-        addPrompts: jest.fn().mockResolvedValue(undefined),
-        fetchResultsByTestIdx: jest.fn().mockResolvedValue([]),
-        getResults: jest.fn().mockResolvedValue([]),
-        toEvaluateSummary: jest.fn().mockResolvedValue({
-          version: 3,
-          timestamp: new Date().toISOString(),
-          results: [{
-            failureReason: ResultFailureReason.ERROR,
-            error: 'Evaluation timed out after 1000ms',
-            success: false,
-            score: 0
-          }],
-          prompts: [],
-          stats: {
-            successes: 0,
-            failures: 0,
-            errors: 1,
-            tokenUsage: newTokenUsage()
-          }
-        }),
-        save: jest.fn().mockResolvedValue(undefined)
-      } as unknown as Eval;
-    });
-    
-    // Start the evaluation with a 1 second timeout
-    const evalPromise = evaluate(testSuite, await Eval.create({}, testSuite.prompts, { id: randomUUID() }), { timeoutMs: 1000 });
-    
-    // We need to use runAllTimers to make sure the inner timeout within processEvalStepWithTimeout fires
-    jest.runAllTimers();
-    
-    // Wait for the evaluation to complete
+    // Start the evaluation with a short timeout
+    const evalPromise = evaluate(testSuite, mockEval as unknown as Eval, { timeoutMs: 100 });
+
+    // Wait for the evaluation to complete (it should timeout quickly)
     await evalPromise;
-    
-    // Verify the timeout behavior
-    expect(slowApiProvider.callApi).toHaveBeenCalled();
-    
-    jest.useRealTimers();
-    jest.restoreAllMocks();
-  }, 10000); // Increase test timeout to avoid Jest timeouts
+
+    // Verify that callApi was called with a test prompt and context
+    expect(slowApiProvider.callApi).toHaveBeenCalledWith(
+      'Test prompt',
+      expect.anything(),
+      expect.objectContaining({
+        abortSignal: expect.any(AbortSignal),
+      }),
+    );
+
+    // Verify that a timeout result was added
+    expect(mockAddResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: expect.stringContaining('Evaluation timed out after 100ms'),
+        success: false,
+        failureReason: ResultFailureReason.ERROR,
+      }),
+    );
+
+    // Verify cleanup was called with no arguments
+    expect(slowApiProvider.cleanup).toHaveBeenCalledWith();
+  });
 });
 
 describe('generateVarCombinations', () => {
@@ -2294,7 +2306,11 @@ describe('runEval', () => {
     });
     const result = results[0];
     expect(result.success).toBe(true);
-    expect(mockProvider.callApi).toHaveBeenCalledWith('Using stored data', expect.anything(), undefined);
+    expect(mockProvider.callApi).toHaveBeenCalledWith(
+      'Using stored data',
+      expect.anything(),
+      undefined,
+    );
   });
 
   it('should store output in register when specified', async () => {

@@ -247,21 +247,25 @@ export async function runEval({
       const activeProvider = isApiProvider(test.provider) ? test.provider : provider;
       logger.debug(`Provider type: ${activeProvider.id()}`);
 
-      response = await activeProvider.callApi(renderedPrompt, {
-        // Always included
-        vars,
+      response = await activeProvider.callApi(
+        renderedPrompt,
+        {
+          // Always included
+          vars,
 
-        // Part of these may be removed in python and script providers, but every Javascript provider gets them
-        prompt,
-        filters,
-        originalProvider: provider,
-        test,
+          // Part of these may be removed in python and script providers, but every Javascript provider gets them
+          prompt,
+          filters,
+          originalProvider: provider,
+          test,
 
-        // All of these are removed in python and script providers, but every Javascript provider gets them
-        logger: logger as unknown as winston.Logger,
-        fetchWithCache,
-        getCache,
-      }, abortSignal ? { abortSignal } : undefined);
+          // All of these are removed in python and script providers, but every Javascript provider gets them
+          logger: logger as unknown as winston.Logger,
+          fetchWithCache,
+          getCache,
+        },
+        abortSignal ? { abortSignal } : undefined,
+      );
 
       logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
       logger.debug(`Provider response cached property explicitly: ${response.cached}`);
@@ -969,22 +973,22 @@ class Evaluator {
     const processEvalStepWithTimeout = async (evalStep: RunEvalOptions, index: number | string) => {
       // Get timeout value from options or environment, defaults to 0 (no timeout)
       const timeoutMs = options.timeoutMs || getEvalTimeoutMs();
-      
+
       if (timeoutMs <= 0) {
         // No timeout, process normally
         return processEvalStep(evalStep, index);
       }
-      
+
       // Create an AbortController to cancel the request if it times out
       const abortController = new AbortController();
       const { signal } = abortController;
-      
+
       // Add the abort signal to the evalStep
       const evalStepWithSignal = {
         ...evalStep,
-        abortSignal: signal
+        abortSignal: signal,
       };
-      
+
       try {
         return await Promise.race([
           processEvalStep(evalStepWithSignal, index),
@@ -992,7 +996,7 @@ class Evaluator {
             const timeoutId = setTimeout(() => {
               // Abort any ongoing requests
               abortController.abort();
-              
+
               // If the provider has a cleanup method, call it
               if (typeof evalStep.provider.cleanup === 'function') {
                 try {
@@ -1001,13 +1005,13 @@ class Evaluator {
                   logger.warn(`Error during provider cleanup: ${cleanupErr}`);
                 }
               }
-              
+
               reject(new Error(`Evaluation timed out after ${timeoutMs}ms`));
-              
+
               // Clear the timeout to prevent memory leaks
               clearTimeout(timeoutId);
             }, timeoutMs);
-          })
+          }),
         ]);
       } catch (error) {
         // Create and add an error result for timeout
@@ -1034,13 +1038,13 @@ class Evaluator {
           testCase: evalStep.test,
           promptId: evalStep.prompt.id || '',
         };
-        
+
         // Add the timeout result to the evaluation record
         await this.evalRecord.addResult(timeoutResult);
-        
+
         // Update stats
         this.stats.errors++;
-        
+
         // Update prompt metrics
         const { promptIdx } = timeoutResult;
         const metrics = prompts[promptIdx].metrics;
@@ -1048,7 +1052,7 @@ class Evaluator {
           metrics.testErrorCount += 1;
           metrics.totalLatencyMs += timeoutMs;
         }
-        
+
         // Progress callback
         if (options.progressCallback) {
           options.progressCallback(
@@ -1056,7 +1060,7 @@ class Evaluator {
             runEvalOptions.length,
             typeof index === 'number' ? index : 0,
             evalStep,
-            metrics || { 
+            metrics || {
               score: 0,
               testPassCount: 0,
               testFailCount: 0,

@@ -44,22 +44,30 @@ export async function openBrowser(
   };
 
   if (browserBehavior === BrowserBehavior.ASK) {
-    return new Promise((resolve, reject) => {
-      try {
-        const rl = readline.createInterface({
-          input: process.stdin,
-          output: process.stdout,
-        });
-        rl.question('Open URL in browser? (y/N): ', async (answer) => {
+    return new Promise((resolve) => {
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+      });
+
+      // Unref stdin to prevent it from keeping the process alive during tests
+      // Safely check if input exists and has unref method (handles test environment)
+      if (rl.input && typeof rl.input.unref === 'function') {
+        rl.input.unref();
+      }
+
+      rl.question('Open URL in browser? (y/N): ', async (answer) => {
+        try {
           if (answer.toLowerCase().startsWith('y')) {
             await doOpen();
           }
+        } catch (err) {
+          logger.error(`Error opening browser: ${err}`);
+        } finally {
           rl.close();
           resolve();
-        });
-      } catch (err) {
-        reject(err);
-      }
+        }
+      });
     });
   } else if (browserBehavior !== BrowserBehavior.SKIP) {
     await doOpen();
