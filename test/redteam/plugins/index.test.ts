@@ -152,12 +152,9 @@ describe('Plugins', () => {
   });
 
   describe('remote generation', () => {
-    // Test a simplified version of remote generation to avoid complexity
     it('should call remote generation with correct parameters', async () => {
-      // Mock shouldGenerateRemote to return true for this test
       jest.mocked(shouldGenerateRemote).mockReturnValue(true);
 
-      // Create a fake response for fetchWithCache
       const mockResponse = {
         data: { result: [{ test: 'case' }] },
         cached: false,
@@ -166,18 +163,13 @@ describe('Plugins', () => {
       };
       jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
-      // Use a plugin we know has canGenerateRemote=true
       const plugin = Plugins.find((p) => p.key === 'contracts');
-
-      // Simple test that mocking setup is complete
+      
       expect(plugin).toBeDefined();
-
-      // Verify the mock response can be returned correctly
       expect(mockResponse.data.result).toEqual([{ test: 'case' }]);
     });
 
     it('should handle remote generation errors', async () => {
-      // Mock shouldGenerateRemote to return true for this test
       jest.mocked(shouldGenerateRemote).mockReturnValue(true);
 
       jest.mocked(fetchWithCache).mockRejectedValue(new Error('Network error'));
@@ -380,7 +372,6 @@ describe('Plugins', () => {
   });
 
   describe('canGenerateRemote property', () => {
-    // Define plugins that should not need remote generation
     const noRemoteGenerationPlugins = [
       'beavertails',
       'custom',
@@ -392,17 +383,13 @@ describe('Plugins', () => {
       'unsafebench',
     ];
 
-    // Test a sample of plugins known to use local data sources
     it('dataset-based plugins should set canGenerateRemote to false', async () => {
-      // Mock each plugin to have the appropriate methods for testing
       const mockApiProvider = {
         callApi: jest.fn().mockResolvedValue({ output: 'test', error: null }),
         id: jest.fn().mockReturnValue('mock-provider'),
       };
 
-      // Test each plugin that shouldn't need remote generation
       for (const pluginKey of noRemoteGenerationPlugins) {
-        // Skip the custom plugin since it requires special setup
         if (pluginKey === 'custom') {
           continue;
         }
@@ -413,7 +400,6 @@ describe('Plugins', () => {
           continue;
         }
 
-        // Create a basic action params object
         const params = {
           provider: mockApiProvider,
           purpose: 'test',
@@ -423,21 +409,16 @@ describe('Plugins', () => {
           delayMs: 0,
         };
 
-        // Special handling for intent which needs a config.intent value
         if (pluginKey === 'intent') {
           params.config = { intent: 'test intent' };
         }
 
-        // Set up remote generation to be true
         jest.mocked(shouldGenerateRemote).mockReturnValue(true);
 
-        // Call the plugin action
         await plugin.action(params);
 
-        // Even with shouldGenerateRemote=true, these plugins should not call fetchWithCache
         expect(fetchWithCache).not.toHaveBeenCalled();
 
-        // Reset mocks for next iteration
         jest.clearAllMocks();
       }
     });
