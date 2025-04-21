@@ -986,6 +986,20 @@ export const PLUGINS = [
     pluginId: 'tool-discovery',
     vulnerabilityType: 'security',
   },
+  {
+    category: 'Trust and Safety',
+    description: 'Tests how well LLMs handle harmful queries using the DoNotAnswer dataset',
+    label: 'technical',
+    link: '/docs/red-team/plugins/donotanswer/',
+    name: 'DoNotAnswer',
+    pluginId: 'donotanswer',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'security',
+  },
 ] as const as readonly Plugin[];
 
 // Compile-time check
