@@ -1,12 +1,12 @@
-import Ajv from 'ajv';
 import OpenAI from 'openai';
 import type { TokenUsage } from '../../types';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
+import { getAjv } from '../../util/json';
 import { safeJsonStringify } from '../../util/json';
 import type { ProviderConfig } from '../shared';
 import { calculateCost } from '../shared';
 
-const ajv = new Ajv();
+const ajv = getAjv();
 
 // see https://platform.openai.com/docs/models
 export const OPENAI_CHAT_MODELS = [
