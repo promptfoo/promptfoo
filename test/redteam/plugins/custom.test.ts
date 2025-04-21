@@ -59,6 +59,10 @@ describe('CustomPlugin', () => {
     expect(template).toBe('Generate {{ n }} test prompts for {{ purpose }}');
   });
 
+  it('should set canGenerateRemote to false', () => {
+    expect(plugin.canGenerateRemote).toBe(false);
+  });
+
   it('should render the grader template with the correct purpose', () => {
     const assertions = plugin['getAssertions']('Some prompt');
     expect(assertions).toEqual([
