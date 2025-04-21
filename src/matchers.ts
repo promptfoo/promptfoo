@@ -42,6 +42,7 @@ import { isJavascriptFile } from './util/file';
 import invariant from './util/invariant';
 import { extractJsonObjects, extractFirstJsonObject } from './util/json';
 import { getNunjucksEngine } from './util/templates';
+import { doRemoteScoringWithPi } from './remoteScoring';
 
 const nunjucks = getNunjucksEngine(undefined, false, true);
 
@@ -508,6 +509,25 @@ export async function matchesLlmRubric(
     },
   };
 }
+
+
+export async function matchesPiScore(
+  llm_input: string,
+  llmOutput: string,
+  assertion?: Assertion | null,
+): Promise<GradingResult> {
+  return {
+    ...(await doRemoteScoringWithPi({
+      llm_input: llm_input,
+      llm_output: llmOutput,
+      scoring_spec: [{
+        question: assertion?.value as string || ''
+      }]
+    })),
+    assertion,
+  };
+}
+
 
 export async function matchesFactuality(
   input: string,
