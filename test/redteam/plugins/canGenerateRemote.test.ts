@@ -69,7 +69,12 @@ describe('canGenerateRemote property and behavior', () => {
       const plinyPlugin = new PlinyPlugin(mockProvider, 'test', 'test');
       const doNotAnswerPlugin = new DoNotAnswerPlugin(mockProvider, 'test', 'test');
       const intentPlugin = new IntentPlugin(mockProvider, 'test', 'test', { intent: 'test' });
-      const customPlugin = new CustomPlugin(mockProvider, 'test', 'test', 'path/to/custom-plugin.json');
+      const customPlugin = new CustomPlugin(
+        mockProvider,
+        'test',
+        'test',
+        'path/to/custom-plugin.json',
+      );
 
       // Verify each plugin has canGenerateRemote set to false
       expect(unsafeBenchPlugin.canGenerateRemote).toBe(false);
@@ -131,7 +136,7 @@ describe('canGenerateRemote property and behavior', () => {
       // Get a plugin that uses remote generation
       const contractsPlugin = Plugins.find((p) => p.key === 'contracts');
       expect(contractsPlugin).toBeDefined();
-      
+
       // Create an instance to verify canGenerateRemote is set
       const contractInstance = new ContractPlugin(mockProvider, 'test', 'test');
       expect(contractInstance.canGenerateRemote).toBe(true);

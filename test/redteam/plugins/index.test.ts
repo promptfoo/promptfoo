@@ -168,10 +168,10 @@ describe('Plugins', () => {
 
       // Use a plugin we know has canGenerateRemote=true
       const plugin = Plugins.find((p) => p.key === 'contracts');
-      
+
       // Simple test that mocking setup is complete
       expect(plugin).toBeDefined();
-      
+
       // Verify the mock response can be returned correctly
       expect(mockResponse.data.result).toEqual([{ test: 'case' }]);
     });
@@ -382,14 +382,14 @@ describe('Plugins', () => {
   describe('canGenerateRemote property', () => {
     // Define plugins that should not need remote generation
     const noRemoteGenerationPlugins = [
-      'unsafebench',
       'beavertails',
-      'harmbench',
-      'cyberseceval',
-      'pliny',
-      'donotanswer',
-      'intent',
       'custom',
+      'cyberseceval',
+      'donotanswer',
+      'harmbench',
+      'intent',
+      'pliny',
+      'unsafebench',
     ];
 
     // Test a sample of plugins known to use local data sources
