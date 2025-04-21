@@ -766,7 +766,7 @@ class Evaluator {
                 isRedteam: this.testSuite.redteam != null,
                 allTests: runEvalOptions,
                 concurrency,
-                abortSignal,
+                abortSignal: options.abortSignal,
               });
               promptIdx++;
             }
