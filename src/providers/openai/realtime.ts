@@ -105,18 +105,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     }
   }
 
-  // Add method to handle audio processing timeout
-  private setupAudioTimeout(reject: (reason: Error) => void): void {
-    if (this.audioTimeout) {
-      clearTimeout(this.audioTimeout);
-    }
-    this.audioTimeout = setTimeout(() => {
-      logger.error('Audio processing timed out');
-      this.resetAudioState();
-      reject(new Error('Audio processing timed out'));
-    }, this.config.websocketTimeout || 60000); // 60 second timeout for audio
-  }
-
   getRealtimeSessionBody() {
     // Default values
     const modalities = this.config.modalities || ['text', 'audio'];
@@ -634,6 +622,16 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       typeof context.prompt.config.functionCallHandler === 'function'
     ) {
       this.config.functionCallHandler = context.prompt.config.functionCallHandler;
+    }
+
+    // If no conversationId is provided in the metadata, set maintainContext to false
+    const conversationId =
+      context?.test && 'metadata' in context.test
+        ? (context.test.metadata as Record<string, any>)?.conversationId
+        : undefined;
+
+    if (!conversationId) {
+      this.config.maintainContext = false;
     }
 
     try {
