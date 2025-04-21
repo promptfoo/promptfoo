@@ -73,8 +73,9 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
   const deploymentName = getEnvString('AZURE_DEPLOYMENT_NAME') || env?.AZURE_DEPLOYMENT_NAME;
   const openaiDeploymentName =
     getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME') || env?.AZURE_OPENAI_DEPLOYMENT_NAME;
-  
-  const preferAzure = !hasOpenAiCredentials && 
+
+  const preferAzure =
+    !hasOpenAiCredentials &&
     (Boolean(hasAzureApiKey) || Boolean(azureClientCreds)) &&
     Boolean(deploymentName) &&
     Boolean(openaiDeploymentName);
