@@ -113,6 +113,12 @@ const AboutPageContent = () => {
                 image: '/img/team/will.jpg',
                 bio: 'Will has a passion for building secure and reliable systems. He brings experience leading teams that develop AI for the financial services industry.',
               },
+              {
+                name: 'Ben Shipley',
+                title: 'GTM',
+                image: '/img/team/ben.jpeg',
+                bio: 'Over 10 years solving problems for great companies and working with great teams (Amplitude, Applied Intuition, Windsurf). Excited to connect and see how we can help you at Promptfoo.',
+              },
             ].map((leader) => (
               <Grid size={{ xs: 12, sm: 6, md: 4 }} key={leader.name}>
                 <Box textAlign="center">
