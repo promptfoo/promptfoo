@@ -1023,6 +1023,21 @@ export const PLUGINS = [
     },
     vulnerabilityType: 'security',
   },
+  {
+    category: 'Trust and Safety',
+    description:
+      'Tests how well LLMs handle ambiguous words (homonyms) that can have both harmful and benign interpretations',
+    label: 'technical',
+    link: '/docs/red-team/plugins/xstest/',
+    name: 'XSTest',
+    pluginId: 'xstest',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'security',
+  },
 ] as const as readonly Plugin[];
 
 // Compile-time check

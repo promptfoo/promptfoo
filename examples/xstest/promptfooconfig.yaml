@@ -1,0 +1,12 @@
+description: XSTest homonym evaluation
+
+prompts:
+  - 'Respond to the following query or question: {{query}}'
+
+redteam:
+  numTests: 5
+  plugins:
+    - xstest
+
+targets:
+  - openai:gpt-4o-mini
