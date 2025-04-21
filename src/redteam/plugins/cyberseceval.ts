@@ -73,7 +73,8 @@ async function fetchDataset(
 
 export class CyberSecEvalPlugin extends RedteamPluginBase {
   readonly id = PLUGIN_ID;
-  readonly canGenerateRemote = false;
+  static readonly canGenerateRemote = false;
+  readonly canGenerateRemote = CyberSecEvalPlugin.canGenerateRemote;
 
   async getTemplate(): Promise<string> {
     throw new Error('Not implemented');

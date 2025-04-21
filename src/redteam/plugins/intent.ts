@@ -14,7 +14,8 @@ interface IntentPluginConfig {
 
 export class IntentPlugin extends RedteamPluginBase {
   readonly id = PLUGIN_ID;
-  readonly canGenerateRemote = false;
+  static readonly canGenerateRemote = false;
+  readonly canGenerateRemote = IntentPlugin.canGenerateRemote;
   private intents: Intent[];
 
   constructor(
