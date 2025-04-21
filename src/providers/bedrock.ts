@@ -403,15 +403,18 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
       // Check for standard usage format
       if (responseJson?.usage) {
         return {
-          prompt: typeof responseJson.usage.prompt_tokens === 'string' 
-            ? Number(responseJson.usage.prompt_tokens) 
-            : responseJson.usage.prompt_tokens,
-          completion: typeof responseJson.usage.completion_tokens === 'string' 
-            ? Number(responseJson.usage.completion_tokens) 
-            : responseJson.usage.completion_tokens,
-          total: typeof responseJson.usage.total_tokens === 'string' 
-            ? Number(responseJson.usage.total_tokens) 
-            : responseJson.usage.total_tokens,
+          prompt:
+            typeof responseJson.usage.prompt_tokens === 'string'
+              ? Number(responseJson.usage.prompt_tokens)
+              : responseJson.usage.prompt_tokens,
+          completion:
+            typeof responseJson.usage.completion_tokens === 'string'
+              ? Number(responseJson.usage.completion_tokens)
+              : responseJson.usage.completion_tokens,
+          total:
+            typeof responseJson.usage.total_tokens === 'string'
+              ? Number(responseJson.usage.total_tokens)
+              : responseJson.usage.total_tokens,
           numRequests: 1,
         };
       }
@@ -421,9 +424,11 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
       const completionTokens = responseJson?.generation_token_count;
 
       if (promptTokens !== undefined && completionTokens !== undefined) {
-        const promptTokensNum = typeof promptTokens === 'string' ? Number(promptTokens) : promptTokens;
-        const completionTokensNum = typeof completionTokens === 'string' ? Number(completionTokens) : completionTokens;
-        
+        const promptTokensNum =
+          typeof promptTokens === 'string' ? Number(promptTokens) : promptTokens;
+        const completionTokensNum =
+          typeof completionTokens === 'string' ? Number(completionTokens) : completionTokens;
+
         return {
           prompt: promptTokensNum,
           completion: completionTokensNum,
@@ -494,15 +499,18 @@ export const BEDROCK_MODEL = {
     tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
       if (responseJson?.usage) {
         return {
-          prompt: typeof responseJson.usage.prompt_tokens === 'string' 
-            ? Number(responseJson.usage.prompt_tokens) 
-            : responseJson.usage.prompt_tokens,
-          completion: typeof responseJson.usage.completion_tokens === 'string' 
-            ? Number(responseJson.usage.completion_tokens) 
-            : responseJson.usage.completion_tokens,
-          total: typeof responseJson.usage.total_tokens === 'string' 
-            ? Number(responseJson.usage.total_tokens) 
-            : responseJson.usage.total_tokens,
+          prompt:
+            typeof responseJson.usage.prompt_tokens === 'string'
+              ? Number(responseJson.usage.prompt_tokens)
+              : responseJson.usage.prompt_tokens,
+          completion:
+            typeof responseJson.usage.completion_tokens === 'string'
+              ? Number(responseJson.usage.completion_tokens)
+              : responseJson.usage.completion_tokens,
+          total:
+            typeof responseJson.usage.total_tokens === 'string'
+              ? Number(responseJson.usage.total_tokens)
+              : responseJson.usage.total_tokens,
           numRequests: 1,
         };
       }
@@ -592,9 +600,12 @@ export const BEDROCK_MODEL = {
       }
 
       return {
-        prompt: typeof usage.inputTokens === 'string' ? Number(usage.inputTokens) : usage.inputTokens,
-        completion: typeof usage.outputTokens === 'string' ? Number(usage.outputTokens) : usage.outputTokens,
-        total: typeof usage.totalTokens === 'string' ? Number(usage.totalTokens) : usage.totalTokens,
+        prompt:
+          typeof usage.inputTokens === 'string' ? Number(usage.inputTokens) : usage.inputTokens,
+        completion:
+          typeof usage.outputTokens === 'string' ? Number(usage.outputTokens) : usage.outputTokens,
+        total:
+          typeof usage.totalTokens === 'string' ? Number(usage.totalTokens) : usage.totalTokens,
         numRequests: 1,
       };
     },
@@ -638,15 +649,16 @@ export const BEDROCK_MODEL = {
       }
 
       const usage = responseJson.usage;
-      
+
       // Get input tokens
       const inputTokens = usage.input_tokens || usage.prompt_tokens;
       const inputTokensNum = typeof inputTokens === 'string' ? Number(inputTokens) : inputTokens;
-      
+
       // Get output tokens
       const outputTokens = usage.output_tokens || usage.completion_tokens;
-      const outputTokensNum = typeof outputTokens === 'string' ? Number(outputTokens) : outputTokens;
-      
+      const outputTokensNum =
+        typeof outputTokens === 'string' ? Number(outputTokens) : outputTokens;
+
       // Get or calculate total tokens
       let totalTokens = usage.totalTokens || usage.total_tokens;
       if (!totalTokens && inputTokensNum !== undefined && outputTokensNum !== undefined) {
@@ -766,15 +778,16 @@ export const BEDROCK_MODEL = {
       }
 
       const usage = responseJson.usage;
-      
+
       // Get input tokens
       const inputTokens = usage.input_tokens || usage.prompt_tokens;
       const inputTokensNum = typeof inputTokens === 'string' ? Number(inputTokens) : inputTokens;
-      
+
       // Get output tokens
       const outputTokens = usage.output_tokens || usage.completion_tokens;
-      const outputTokensNum = typeof outputTokens === 'string' ? Number(outputTokens) : outputTokens;
-      
+      const outputTokensNum =
+        typeof outputTokens === 'string' ? Number(outputTokens) : outputTokens;
+
       // Get or calculate total tokens
       let totalTokens = usage.totalTokens || usage.total_tokens;
       if (!totalTokens && inputTokensNum !== undefined && outputTokensNum !== undefined) {
@@ -834,15 +847,18 @@ export const BEDROCK_MODEL = {
       // If token usage is provided by the API, use it
       if (responseJson?.usage) {
         return {
-          prompt: typeof responseJson.usage.prompt_tokens === 'string' 
-            ? Number(responseJson.usage.prompt_tokens) 
-            : responseJson.usage.prompt_tokens,
-          completion: typeof responseJson.usage.completion_tokens === 'string' 
-            ? Number(responseJson.usage.completion_tokens) 
-            : responseJson.usage.completion_tokens,
-          total: typeof responseJson.usage.total_tokens === 'string' 
-            ? Number(responseJson.usage.total_tokens) 
-            : responseJson.usage.total_tokens,
+          prompt:
+            typeof responseJson.usage.prompt_tokens === 'string'
+              ? Number(responseJson.usage.prompt_tokens)
+              : responseJson.usage.prompt_tokens,
+          completion:
+            typeof responseJson.usage.completion_tokens === 'string'
+              ? Number(responseJson.usage.completion_tokens)
+              : responseJson.usage.completion_tokens,
+          total:
+            typeof responseJson.usage.total_tokens === 'string'
+              ? Number(responseJson.usage.total_tokens)
+              : responseJson.usage.total_tokens,
           numRequests: 1,
         };
       }
@@ -896,14 +912,16 @@ export const BEDROCK_MODEL = {
     output: (config: BedrockOptions, responseJson: any) => responseJson?.generations[0]?.text,
     tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
       if (responseJson?.meta?.billed_units) {
-        const inputTokens = typeof responseJson.meta.billed_units.input_tokens === 'string'
-          ? Number(responseJson.meta.billed_units.input_tokens)
-          : responseJson.meta.billed_units.input_tokens;
-          
-        const outputTokens = typeof responseJson.meta.billed_units.output_tokens === 'string'
-          ? Number(responseJson.meta.billed_units.output_tokens)
-          : responseJson.meta.billed_units.output_tokens;
-          
+        const inputTokens =
+          typeof responseJson.meta.billed_units.input_tokens === 'string'
+            ? Number(responseJson.meta.billed_units.input_tokens)
+            : responseJson.meta.billed_units.input_tokens;
+
+        const outputTokens =
+          typeof responseJson.meta.billed_units.output_tokens === 'string'
+            ? Number(responseJson.meta.billed_units.output_tokens)
+            : responseJson.meta.billed_units.output_tokens;
+
         return {
           prompt: inputTokens,
           completion: outputTokens,
@@ -961,14 +979,16 @@ export const BEDROCK_MODEL = {
     output: (config: BedrockOptions, responseJson: any) => responseJson?.text,
     tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
       if (responseJson?.meta?.billed_units) {
-        const inputTokens = typeof responseJson.meta.billed_units.input_tokens === 'string'
-          ? Number(responseJson.meta.billed_units.input_tokens)
-          : responseJson.meta.billed_units.input_tokens;
-          
-        const outputTokens = typeof responseJson.meta.billed_units.output_tokens === 'string'
-          ? Number(responseJson.meta.billed_units.output_tokens)
-          : responseJson.meta.billed_units.output_tokens;
-          
+        const inputTokens =
+          typeof responseJson.meta.billed_units.input_tokens === 'string'
+            ? Number(responseJson.meta.billed_units.input_tokens)
+            : responseJson.meta.billed_units.input_tokens;
+
+        const outputTokens =
+          typeof responseJson.meta.billed_units.output_tokens === 'string'
+            ? Number(responseJson.meta.billed_units.output_tokens)
+            : responseJson.meta.billed_units.output_tokens;
+
         return {
           prompt: inputTokens,
           completion: outputTokens,
@@ -1043,15 +1063,18 @@ ${prompt}
     tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
       if (responseJson?.usage) {
         return {
-          prompt: typeof responseJson.usage.prompt_tokens === 'string'
-            ? Number(responseJson.usage.prompt_tokens)
-            : responseJson.usage.prompt_tokens,
-          completion: typeof responseJson.usage.completion_tokens === 'string'
-            ? Number(responseJson.usage.completion_tokens)
-            : responseJson.usage.completion_tokens,
-          total: typeof responseJson.usage.total_tokens === 'string'
-            ? Number(responseJson.usage.total_tokens)
-            : responseJson.usage.total_tokens,
+          prompt:
+            typeof responseJson.usage.prompt_tokens === 'string'
+              ? Number(responseJson.usage.prompt_tokens)
+              : responseJson.usage.prompt_tokens,
+          completion:
+            typeof responseJson.usage.completion_tokens === 'string'
+              ? Number(responseJson.usage.completion_tokens)
+              : responseJson.usage.completion_tokens,
+          total:
+            typeof responseJson.usage.total_tokens === 'string'
+              ? Number(responseJson.usage.total_tokens)
+              : responseJson.usage.total_tokens,
           numRequests: 1,
         };
       }
@@ -1101,15 +1124,18 @@ ${prompt}
     tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
       if (responseJson?.usage) {
         return {
-          prompt: typeof responseJson.usage.prompt_tokens === 'string' 
-            ? Number(responseJson.usage.prompt_tokens) 
-            : responseJson.usage.prompt_tokens,
-          completion: typeof responseJson.usage.completion_tokens === 'string' 
-            ? Number(responseJson.usage.completion_tokens) 
-            : responseJson.usage.completion_tokens,
-          total: typeof responseJson.usage.total_tokens === 'string' 
-            ? Number(responseJson.usage.total_tokens) 
-            : responseJson.usage.total_tokens,
+          prompt:
+            typeof responseJson.usage.prompt_tokens === 'string'
+              ? Number(responseJson.usage.prompt_tokens)
+              : responseJson.usage.prompt_tokens,
+          completion:
+            typeof responseJson.usage.completion_tokens === 'string'
+              ? Number(responseJson.usage.completion_tokens)
+              : responseJson.usage.completion_tokens,
+          total:
+            typeof responseJson.usage.total_tokens === 'string'
+              ? Number(responseJson.usage.total_tokens)
+              : responseJson.usage.total_tokens,
           numRequests: 1,
         };
       }
@@ -1119,20 +1145,22 @@ ${prompt}
         responseJson?.prompt_tokens !== undefined &&
         responseJson?.completion_tokens !== undefined
       ) {
-        const promptTokens = typeof responseJson.prompt_tokens === 'string' 
-          ? Number(responseJson.prompt_tokens) 
-          : responseJson.prompt_tokens;
-        const completionTokens = typeof responseJson.completion_tokens === 'string' 
-          ? Number(responseJson.completion_tokens) 
-          : responseJson.completion_tokens;
-        
+        const promptTokens =
+          typeof responseJson.prompt_tokens === 'string'
+            ? Number(responseJson.prompt_tokens)
+            : responseJson.prompt_tokens;
+        const completionTokens =
+          typeof responseJson.completion_tokens === 'string'
+            ? Number(responseJson.completion_tokens)
+            : responseJson.completion_tokens;
+
         let totalTokens = responseJson.total_tokens;
         if (!totalTokens) {
           totalTokens = promptTokens + completionTokens;
         } else if (typeof totalTokens === 'string') {
           totalTokens = Number(totalTokens);
         }
-        
+
         return {
           prompt: promptTokens,
           completion: completionTokens,
@@ -1189,13 +1217,15 @@ ${prompt}
         responseJson?.prompt_tokens !== undefined &&
         responseJson?.completion_tokens !== undefined
       ) {
-        const promptTokens = typeof responseJson.prompt_tokens === 'string' 
-          ? Number(responseJson.prompt_tokens) 
-          : responseJson.prompt_tokens;
-        const completionTokens = typeof responseJson.completion_tokens === 'string' 
-          ? Number(responseJson.completion_tokens) 
-          : responseJson.completion_tokens;
-          
+        const promptTokens =
+          typeof responseJson.prompt_tokens === 'string'
+            ? Number(responseJson.prompt_tokens)
+            : responseJson.prompt_tokens;
+        const completionTokens =
+          typeof responseJson.completion_tokens === 'string'
+            ? Number(responseJson.completion_tokens)
+            : responseJson.completion_tokens;
+
         return {
           prompt: promptTokens,
           completion: completionTokens,
@@ -1209,20 +1239,22 @@ ${prompt}
         responseJson?.usage?.prompt_tokens !== undefined &&
         responseJson?.usage?.completion_tokens !== undefined
       ) {
-        const promptTokens = typeof responseJson.usage.prompt_tokens === 'string' 
-          ? Number(responseJson.usage.prompt_tokens) 
-          : responseJson.usage.prompt_tokens;
-        const completionTokens = typeof responseJson.usage.completion_tokens === 'string' 
-          ? Number(responseJson.usage.completion_tokens) 
-          : responseJson.usage.completion_tokens;
-        
+        const promptTokens =
+          typeof responseJson.usage.prompt_tokens === 'string'
+            ? Number(responseJson.usage.prompt_tokens)
+            : responseJson.usage.prompt_tokens;
+        const completionTokens =
+          typeof responseJson.usage.completion_tokens === 'string'
+            ? Number(responseJson.usage.completion_tokens)
+            : responseJson.usage.completion_tokens;
+
         let totalTokens = responseJson.usage.total_tokens;
         if (!totalTokens) {
           totalTokens = promptTokens + completionTokens;
         } else if (typeof totalTokens === 'string') {
           totalTokens = Number(totalTokens);
         }
-        
+
         return {
           prompt: promptTokens,
           completion: completionTokens,
@@ -1580,8 +1612,10 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
           output.generation_token_count;
 
         // Convert to numbers if they are strings to prevent string concatenation
-        const promptTokensNum = typeof promptTokens === 'string' ? Number(promptTokens) : promptTokens;
-        const completionTokensNum = typeof completionTokens === 'string' ? Number(completionTokens) : completionTokens;
+        const promptTokensNum =
+          typeof promptTokens === 'string' ? Number(promptTokens) : promptTokens;
+        const completionTokensNum =
+          typeof completionTokens === 'string' ? Number(completionTokens) : completionTokens;
 
         const totalTokens =
           output.usage?.totalTokens ??

@@ -1477,8 +1477,8 @@ describe('BEDROCK_MODEL token counting functionality', () => {
         usage: {
           inputTokens: 100,
           outputTokens: 200,
-          totalTokens: 300
-        }
+          totalTokens: 300,
+        },
       };
 
       const result = BEDROCK_MODEL.AMAZON_NOVA.tokenUsage!(mockResponse, 'Test prompt');
@@ -1495,8 +1495,8 @@ describe('BEDROCK_MODEL token counting functionality', () => {
         usage: {
           inputTokens: '113',
           outputTokens: '335',
-          totalTokens: '448'
-        }
+          totalTokens: '448',
+        },
       };
 
       const result = BEDROCK_MODEL.AMAZON_NOVA.tokenUsage!(mockResponse, 'Test prompt');
@@ -1516,8 +1516,8 @@ describe('BEDROCK_MODEL token counting functionality', () => {
           billed_units: {
             input_tokens: 50,
             output_tokens: 100,
-          }
-        }
+          },
+        },
       };
 
       const result = BEDROCK_MODEL.COHERE_COMMAND.tokenUsage!(mockResponse, 'Test prompt');
@@ -1535,8 +1535,8 @@ describe('BEDROCK_MODEL token counting functionality', () => {
           billed_units: {
             input_tokens: '50',
             output_tokens: '100',
-          }
-        }
+          },
+        },
       };
 
       const result = BEDROCK_MODEL.COHERE_COMMAND.tokenUsage!(mockResponse, 'Test prompt');
