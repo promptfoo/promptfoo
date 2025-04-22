@@ -42,8 +42,8 @@ const DEFAULT_CONFIG = {
     input: {
       audioType: 'SPEECH',
       encoding: 'base64',
-      mediaType: 'audio/mpeg',
-      sampleRateHertz: 16000,
+      mediaType: 'audio/lpcm',
+      sampleRateHertz: 8000,
       sampleSizeBits: 16,
       channelCount: 1,
     },
@@ -345,7 +345,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
             promptName: session.promptName,
             contentName: session.audioContentId,
             type: 'AUDIO',
-            interactive: false,
+            interactive: true,
             role: 'USER',
             audioInputConfiguration:
               this.config?.audioInputConfiguration || DEFAULT_CONFIG.audio.input,

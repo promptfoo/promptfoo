@@ -11,7 +11,7 @@ providers:
       textOutputConfiguration:
         mediaType: text/plain
       audioInputConfiguration:
-        mediaType: audio/mpeg
+        mediaType: audio/lpcm
         sampleRateHertz: 16000
         sampleSizeBits: 16
         channelCount: 1
@@ -39,7 +39,7 @@ defaultTest:
 
 tests:
   - vars:
-      audio_file: file://assets/hello.mp3
+      audio_file: file://assets/hello.wav
     metadata:
       type: audio
       conversationId: date
@@ -47,7 +47,7 @@ tests:
       - type: llm-rubric
         value: the date and time is today
   - vars:
-      audio_file: file://assets/weather.mp3
+      audio_file: file://assets/weather.wav
     metadata:
       type: audio
       conversationId: date
