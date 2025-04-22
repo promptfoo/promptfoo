@@ -15,6 +15,11 @@ describe('ContractPlugin', () => {
     };
   });
 
+  it('should have canGenerateRemote set to true', () => {
+    const plugin = new ContractPlugin(mockProvider, 'test purpose', 'test_var');
+    expect(plugin.canGenerateRemote).toBe(true);
+  });
+
   it('should generate test cases', async () => {
     const plugin = new ContractPlugin(mockProvider, 'test purpose', 'test_var');
     const tests = await plugin.generateTests(2);

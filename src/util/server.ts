@@ -11,6 +11,40 @@ export enum BrowserBehavior {
   OPEN_TO_REDTEAM_CREATE = 4,
 }
 
+/**
+ * Prompts the user with a question and returns a Promise that resolves with their answer
+ */
+export async function promptUser(question: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    try {
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+      });
+
+      rl.question(question, (answer) => {
+        rl.close();
+        resolve(answer);
+      });
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+/**
+ * Prompts the user with a yes/no question and returns a Promise that resolves with a boolean
+ */
+export async function promptYesNo(question: string, defaultYes = false): Promise<boolean> {
+  const suffix = defaultYes ? '(Y/n): ' : '(y/N): ';
+  const answer = await promptUser(`${question} ${suffix}`);
+
+  if (defaultYes) {
+    return !answer.toLowerCase().startsWith('n');
+  }
+  return answer.toLowerCase().startsWith('y');
+}
+
 export async function checkServerRunning(port = DEFAULT_PORT): Promise<boolean> {
   try {
     const response = await fetch(`http://localhost:${port}/health`);
@@ -44,30 +78,10 @@ export async function openBrowser(
   };
 
   if (browserBehavior === BrowserBehavior.ASK) {
-    return new Promise((resolve) => {
-      const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout,
-      });
-
-      // Unref stdin to prevent it from keeping the process alive during tests
-      if (process.stdin.unref) {
-        process.stdin.unref();
-      }
-
-      rl.question('Open URL in browser? (y/N): ', async (answer) => {
-        try {
-          if (answer.toLowerCase().startsWith('y')) {
-            await doOpen();
-          }
-        } catch (err) {
-          logger.error(`Error opening browser: ${err}`);
-        } finally {
-          rl.close();
-          resolve();
-        }
-      });
-    });
+    const shouldOpen = await promptYesNo('Open URL in browser?', false);
+    if (shouldOpen) {
+      await doOpen();
+    }
   } else if (browserBehavior !== BrowserBehavior.SKIP) {
     await doOpen();
   }

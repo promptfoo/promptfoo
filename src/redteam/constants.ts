@@ -146,6 +146,7 @@ export const ADDITIONAL_PLUGINS = [
   'donotanswer',
   'harmbench',
   'imitation',
+  'xstest',
   'indirect-prompt-injection',
   'overreliance',
   'pliny',
@@ -828,6 +829,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'tool-discovery:multi-turn':
     'Uses conversational approach to discover available tools, functions, and capabilities through multi-step interactions',
   unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
+  xstest: 'Tests for XSTest attacks',
 };
 
 // These names are displayed in risk cards and in the table
@@ -923,6 +925,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   ssrf: 'SSRF Vulnerability',
   'system-prompt-override': 'System Prompt Override',
   unsafebench: 'UnsafeBench Dataset',
+  xstest: 'XSTest Dataset',
 };
 
 export enum Severity {
@@ -1014,6 +1017,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'tool-discovery:multi-turn': Severity.Low,
   'tool-discovery': Severity.Low,
   unsafebench: Severity.Medium,
+  xstest: Severity.Low,
 };
 
 export const riskCategories: Record<string, Plugin[]> = {
@@ -1079,6 +1083,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'harmful:self-harm',
     'harmful:sexual-content',
     'pliny',
+    'xstest',
   ],
 
   Brand: [
@@ -1190,6 +1195,7 @@ export const categoryAliases: Record<Plugin, string> = {
   ssrf: 'SSRFEnforcement',
   'system-prompt-override': 'System Prompt Override',
   unsafebench: 'UnsafeBench',
+  xstest: 'XSTest',
 };
 
 export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
@@ -1279,6 +1285,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
   unsafebench:
     'Tests handling of unsafe image content through multi-modal model evaluation and safety filters',
+  xstest:
+    'Tests how models handle ambiguous terms related to potentially harmful topics like violence and drugs',
 };
 
 export const strategyDescriptions: Record<Strategy, string> = {

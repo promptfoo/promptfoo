@@ -308,6 +308,9 @@
                             },
                             "AWS_SAGEMAKER_MAX_RETRIES": {
                               "type": "string"
+                            },
+                            "PROMPTFOO_EVAL_TIMEOUT_MS": {
+                              "type": "string"
                             }
                           },
                           "additionalProperties": false
@@ -1147,7 +1150,8 @@
                           "tool-discovery",
                           "tool-discovery:multi-turn",
                           "toxicity",
-                          "unsafebench"
+                          "unsafebench",
+                          "xstest"
                         ]
                       },
                       {
@@ -1295,7 +1299,8 @@
                               "tool-discovery",
                               "tool-discovery:multi-turn",
                               "toxicity",
-                              "unsafebench"
+                              "unsafebench",
+                              "xstest"
                             ]
                           },
                           {
@@ -1434,6 +1439,9 @@
             },
             "showProgressBar": {
               "type": "boolean"
+            },
+            "timeoutMs": {
+              "type": "number"
             }
           },
           "additionalProperties": false
