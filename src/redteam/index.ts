@@ -17,6 +17,8 @@ import {
   ALIASED_PLUGIN_MAPPINGS,
   STRATEGY_EXEMPT_PLUGINS,
   FOUNDATION_PLUGINS,
+  Severity,
+  riskCategorySeverityMap,
 } from './constants';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
@@ -27,6 +29,7 @@ import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
 import { loadStrategy, Strategies, validateStrategies } from './strategies';
 import { DEFAULT_LANGUAGES } from './strategies/multilingual';
 import type { RedteamStrategyObject, SynthesizeOptions } from './types';
+import { getShortPluginId } from './util';
 
 /**
  * Determines the status of test generation based on requested and generated counts.
@@ -607,6 +610,10 @@ export async function synthesize({
               ...(t?.metadata || {}),
               pluginId: plugin.id,
               pluginConfig: resolvePluginConfig(plugin.config),
+              severity:
+                plugin.config?.severity ||
+                riskCategorySeverityMap[getShortPluginId(plugin.id)] ||
+                Severity.Low,
             },
           })),
         );
@@ -634,6 +641,10 @@ export async function synthesize({
               ...(t.metadata || {}),
               pluginId: plugin.id,
               pluginConfig: resolvePluginConfig(plugin.config),
+              severity:
+                plugin.config?.severity ||
+                riskCategorySeverityMap[getShortPluginId(plugin.id)] ||
+                Severity.Low,
             },
           })),
         );
