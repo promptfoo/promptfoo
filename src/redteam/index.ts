@@ -17,6 +17,8 @@ import {
   ALIASED_PLUGIN_MAPPINGS,
   STRATEGY_EXEMPT_PLUGINS,
   FOUNDATION_PLUGINS,
+  Severity,
+  riskCategorySeverityMap,
 } from './constants';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
@@ -27,6 +29,24 @@ import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
 import { loadStrategy, Strategies, validateStrategies } from './strategies';
 import { DEFAULT_LANGUAGES } from './strategies/multilingual';
 import type { RedteamStrategyObject, SynthesizeOptions } from './types';
+import { getShortPluginId } from './util';
+
+/**
+ * Gets the severity level for a plugin based on its ID and configuration.
+ * @param pluginId - The ID of the plugin.
+ * @param pluginConfig - Optional configuration for the plugin.
+ * @returns The severity level.
+ */
+function getPluginSeverity(pluginId: string, pluginConfig?: Record<string, any>): Severity {
+  if (pluginConfig?.severity) {
+    return pluginConfig.severity;
+  }
+
+  const shortId = getShortPluginId(pluginId);
+  return shortId in riskCategorySeverityMap
+    ? riskCategorySeverityMap[shortId as keyof typeof riskCategorySeverityMap]
+    : Severity.Low;
+}
 
 /**
  * Determines the status of test generation based on requested and generated counts.
@@ -607,6 +627,7 @@ export async function synthesize({
               ...(t?.metadata || {}),
               pluginId: plugin.id,
               pluginConfig: resolvePluginConfig(plugin.config),
+              severity: getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
             },
           })),
         );
@@ -634,6 +655,7 @@ export async function synthesize({
               ...(t.metadata || {}),
               pluginId: plugin.id,
               pluginConfig: resolvePluginConfig(plugin.config),
+              severity: getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
             },
           })),
         );
