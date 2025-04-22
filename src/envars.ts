@@ -1,3 +1,4 @@
+import cliState from './cliState';
 import type { EnvOverrides } from './types/env';
 
 // Define the supported environment variables and their types
@@ -64,6 +65,14 @@ export type EnvVars = {
   REQUEST_TIMEOUT_MS?: number;
   RESULT_HISTORY_LENGTH?: number;
   WEBHOOK_TIMEOUT?: number;
+
+  // HTTP proxy settings
+  HTTP_PROXY?: string;
+  HTTPS_PROXY?: string;
+
+  // Provider-specific
+  CDP_DOMAIN?: string;
+  PORTKEY_API_BASE_URL?: string;
 
   // 3rd party
   AI21_API_BASE_URL?: string;
@@ -167,7 +176,8 @@ export type EnvVars = {
   AZURE_CONTENT_SAFETY_API_KEY?: string;
 } & EnvOverrides;
 
-type EnvVarKey = keyof EnvVars;
+// Allow string access to any key for environment variables not explicitly listed
+export type EnvVarKey = keyof EnvVars | string;
 
 /**
  * Get an environment variable.
@@ -178,7 +188,17 @@ type EnvVarKey = keyof EnvVars;
 export function getEnvString(key: EnvVarKey): string | undefined;
 export function getEnvString(key: EnvVarKey, defaultValue: string): string;
 export function getEnvString(key: EnvVarKey, defaultValue?: string): string | undefined {
-  const value = process.env[key];
+  // First check if the key exists in CLI state env config
+  if (cliState.config?.env && typeof cliState.config.env === 'object') {
+    // Handle both ProviderEnvOverridesSchema and Record<string, string|number|boolean> type
+    const envValue = cliState.config.env[key as keyof typeof cliState.config.env];
+    if (envValue !== undefined) {
+      return String(envValue);
+    }
+  }
+
+  // Fallback to process.env
+  const value = process.env[key as string];
   if (value === undefined) {
     return defaultValue;
   }

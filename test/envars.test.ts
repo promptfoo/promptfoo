@@ -1,15 +1,26 @@
+import cliState from '../src/cliState';
 import { getEnvString, getEnvBool, getEnvInt, getEnvFloat, isCI } from '../src/envars';
 
 describe('envars', () => {
   const originalEnv = process.env;
+  const originalCliState = { ...cliState };
 
   beforeEach(() => {
     jest.resetModules();
     process.env = { ...originalEnv };
+    // Reset cliState to empty for each test
+    Object.keys(cliState).forEach((key) => {
+      delete cliState[key as keyof typeof cliState];
+    });
   });
 
   afterAll(() => {
     process.env = originalEnv;
+    // Restore original cliState
+    Object.keys(cliState).forEach((key) => {
+      delete cliState[key as keyof typeof cliState];
+    });
+    Object.assign(cliState, originalCliState);
   });
 
   describe('getEnvar', () => {
@@ -24,6 +35,29 @@ describe('envars', () => {
 
     it('should return the default value for a non-existing environment variable', () => {
       expect(getEnvString('PROMPTFOO_AUTHOR', 'default')).toBe('default');
+    });
+
+    it('should prioritize cliState.config.env over process.env', () => {
+      process.env.OPENAI_API_KEY = 'process-env-key';
+      cliState.config = {
+        env: {
+          OPENAI_API_KEY: 'config-env-key',
+        },
+      };
+
+      expect(getEnvString('OPENAI_API_KEY')).toBe('config-env-key');
+    });
+
+    it('should convert non-string values from cliState.config.env to strings', () => {
+      cliState.config = {
+        env: {
+          OPENAI_TEMPERATURE: 0.7 as any,
+          PROMPTFOO_CACHE_ENABLED: true as any,
+        },
+      };
+
+      expect(getEnvString('OPENAI_TEMPERATURE')).toBe('0.7');
+      expect(getEnvString('PROMPTFOO_CACHE_ENABLED')).toBe('true');
     });
   });
 
@@ -75,6 +109,17 @@ describe('envars', () => {
       delete process.env.PROMPTFOO_CACHE_ENABLED;
       expect(getEnvBool('PROMPTFOO_CACHE_ENABLED')).toBe(false);
     });
+
+    it('should prioritize cliState.config.env over process.env for boolean values', () => {
+      process.env.PROMPTFOO_CACHE_ENABLED = 'false';
+      cliState.config = {
+        env: {
+          PROMPTFOO_CACHE_ENABLED: true as any,
+        },
+      };
+
+      expect(getEnvBool('PROMPTFOO_CACHE_ENABLED')).toBe(true);
+    });
   });
 
   describe('getEnvInt', () => {
@@ -116,6 +161,17 @@ describe('envars', () => {
       delete process.env.PROMPTFOO_CACHE_MAX_FILE_COUNT;
       expect(getEnvInt('PROMPTFOO_CACHE_MAX_FILE_COUNT')).toBeUndefined();
     });
+
+    it('should prioritize cliState.config.env over process.env for integer values', () => {
+      process.env.PROMPTFOO_CACHE_MAX_FILE_COUNT = '100';
+      cliState.config = {
+        env: {
+          PROMPTFOO_CACHE_MAX_FILE_COUNT: 42 as any,
+        },
+      };
+
+      expect(getEnvInt('PROMPTFOO_CACHE_MAX_FILE_COUNT')).toBe(42);
+    });
   });
 
   describe('getEnvFloat', () => {
@@ -156,6 +212,17 @@ describe('envars', () => {
     it('should return undefined when no default value is provided and the environment variable is not set', () => {
       delete process.env.OPENAI_TEMPERATURE;
       expect(getEnvFloat('OPENAI_TEMPERATURE')).toBeUndefined();
+    });
+
+    it('should prioritize cliState.config.env over process.env for float values', () => {
+      process.env.OPENAI_TEMPERATURE = '1.0';
+      cliState.config = {
+        env: {
+          OPENAI_TEMPERATURE: 0.7 as any,
+        },
+      };
+
+      expect(getEnvFloat('OPENAI_TEMPERATURE')).toBe(0.7);
     });
   });
 
@@ -200,6 +267,17 @@ describe('envars', () => {
     it('should return true if any CI environment variable is set to true', () => {
       process.env.GITHUB_ACTIONS = 'true';
       process.env.TRAVIS = 'false';
+      expect(isCI()).toBe(true);
+    });
+
+    it('should prioritize cliState.config.env over process.env for CI detection', () => {
+      process.env.CI = 'false';
+      cliState.config = {
+        env: {
+          CI: 'true',
+        },
+      };
+
       expect(isCI()).toBe(true);
     });
   });
