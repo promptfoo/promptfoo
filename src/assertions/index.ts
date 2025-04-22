@@ -42,6 +42,7 @@ import { transform } from '../util/transform';
 import { handleAnswerRelevance } from './answerRelevance';
 import { AssertionsResult } from './assertionsResult';
 import { handleBleuScore } from './bleu';
+import { handleGleuScore } from './gleu';
 import { handleClassifier } from './classifier';
 import {
   handleContains,
@@ -59,13 +60,13 @@ import { handleEquals } from './equals';
 import { handleFactuality } from './factuality';
 import { handleIsValidFunctionCall } from './functionToolCall';
 import { handleGEval } from './geval';
-import { handleGleuScore } from './gleu';
 import { handleGuardrails } from './guardrails';
 import { handleJavascript } from './javascript';
 import { handleContainsJson, handleIsJson } from './json';
 import { handleLatency } from './latency';
 import { handleLevenshtein } from './levenshtein';
 import { handleLlmRubric } from './llmRubric';
+import { handleMeteorAssertion } from './meteor';
 import { handleModelGradedClosedQa } from './modelGradedClosedQa';
 import { handleModeration } from './moderation';
 import { handleIsValidOpenAiToolsCall } from './openai';
@@ -266,6 +267,7 @@ export async function runAssertion({
     latency: handleLatency,
     levenshtein: handleLevenshtein,
     'llm-rubric': handleLlmRubric,
+    meteor: handleMeteorAssertion,
     'model-graded-closedqa': handleModelGradedClosedQa,
     'model-graded-factuality': handleFactuality,
     moderation: handleModeration,

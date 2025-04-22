@@ -1,0 +1,38 @@
+prompts: >-
+  [{
+    "role": "system",
+    "content": "Translate text into {{ language }}."
+  }, {
+    "role": "user",
+    "content": "{{ input }}"
+  }]
+providers: [vertex:gemini-1.5-flash]
+defaultTest:
+  options:
+    rubricPrompt:
+      - role: system
+        content: >-
+          Evaluate the quality of the translation provided by an AI assistant to the user input displayed below.
+          Score the response on a scale of 0 to 10.
+          Output your response in the following JSON format: {pass: bool, score: number, reason: string}
+      - role: user
+        content: >-
+          [Input Start]
+          {{ input }}
+          [Input End]
+
+          [Translation Start]
+          {{ output }}
+          [Translation End]
+
+tests:
+  - vars:
+      input: "Happy families are all alike. \nAnd every unhappy family is unhappy in its own way."
+      language: "Chinese"
+    assert:
+      - type: llm-rubric
+  - vars:
+      input: "Whatever."
+      language: "Chinese"
+    assert:
+      - type: llm-rubric
