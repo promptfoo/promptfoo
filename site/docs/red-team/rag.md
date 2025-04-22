@@ -121,7 +121,7 @@ redteam:
     # Detect harmful outputs
     - 'harmful:misinformation-disinformation'
     - 'harmful:hate'
-    - 'harmful:bias'
+    - 'bias'
     - 'harmful:copyright-violations'
     - 'harmful:privacy'
     - 'harmful:intellectual-property'
