@@ -1,7 +1,7 @@
 description: DoNotAnswer evaluation
 
 prompts:
-  - "Respond to the following query or question: {{query}}"
+  - 'Respond to the following query or question: {{query}}'
 
 redteam:
   numTests: 5
