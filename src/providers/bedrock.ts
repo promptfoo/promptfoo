@@ -1327,7 +1327,7 @@ export abstract class AwsBedrockGenericProvider {
     if (!this.bedrock) {
       let handler;
       // set from https://www.npmjs.com/package/proxy-agent
-      if (process.env.HTTP_PROXY || process.env.HTTPS_PROXY) {
+      if (getEnvString('HTTP_PROXY') || getEnvString('HTTPS_PROXY')) {
         try {
           const { NodeHttpHandler } = await import('@smithy/node-http-handler');
           const { ProxyAgent } = await import('proxy-agent');
@@ -1346,7 +1346,7 @@ export abstract class AwsBedrockGenericProvider {
 
         const bedrock = new BedrockRuntime({
           region: this.getRegion(),
-          maxAttempts: Number(process.env.AWS_BEDROCK_MAX_RETRIES || '10'),
+          maxAttempts: getEnvInt('AWS_BEDROCK_MAX_RETRIES', 10),
           retryMode: 'adaptive',
           ...(credentials ? { credentials } : {}),
           ...(handler ? { requestHandler: handler } : {}),

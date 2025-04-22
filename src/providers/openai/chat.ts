@@ -1,6 +1,6 @@
 import { OpenAiGenericProvider } from '.';
 import { fetchWithCache } from '../../cache';
-import { getEnvFloat, getEnvInt } from '../../envars';
+import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
@@ -82,21 +82,18 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       ...(maxCompletionTokens ? { max_completion_tokens: maxCompletionTokens } : {}),
       ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
       ...(temperature ? { temperature } : {}),
-      ...(config.top_p !== undefined || process.env.OPENAI_TOP_P
-        ? { top_p: config.top_p ?? Number.parseFloat(process.env.OPENAI_TOP_P || '1') }
+      ...(config.top_p !== undefined || getEnvString('OPENAI_TOP_P')
+        ? { top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1) }
         : {}),
-      ...(config.presence_penalty !== undefined || process.env.OPENAI_PRESENCE_PENALTY
+      ...(config.presence_penalty !== undefined || getEnvString('OPENAI_PRESENCE_PENALTY')
         ? {
-            presence_penalty:
-              config.presence_penalty ??
-              Number.parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
+            presence_penalty: config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY', 0),
           }
         : {}),
-      ...(config.frequency_penalty !== undefined || process.env.OPENAI_FREQUENCY_PENALTY
+      ...(config.frequency_penalty !== undefined || getEnvString('OPENAI_FREQUENCY_PENALTY')
         ? {
             frequency_penalty:
-              config.frequency_penalty ??
-              Number.parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
+              config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0),
           }
         : {}),
       ...(config.functions

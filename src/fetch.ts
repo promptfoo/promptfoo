@@ -51,7 +51,7 @@ export function getProxyUrl(): string | undefined {
   const proxyEnvVars = ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy'];
 
   for (const envVar of proxyEnvVars) {
-    const proxyUrl = process.env[envVar];
+    const proxyUrl = getEnvString(envVar);
     if (proxyUrl) {
       logger.debug(`Found proxy configuration in ${envVar}: ${sanitizeUrl(proxyUrl)}`);
       return proxyUrl;
