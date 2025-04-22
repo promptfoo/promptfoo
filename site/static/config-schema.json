@@ -1030,6 +1030,7 @@
                           "debug-access",
                           "default",
                           "divergent-repetition",
+                          "donotanswer",
                           "excessive-agency",
                           "foundation",
                           "hallucination",
@@ -1146,7 +1147,8 @@
                           "tool-discovery",
                           "tool-discovery:multi-turn",
                           "toxicity",
-                          "unsafebench"
+                          "unsafebench",
+                          "xstest"
                         ]
                       },
                       {
@@ -1177,6 +1179,7 @@
                               "debug-access",
                               "default",
                               "divergent-repetition",
+                              "donotanswer",
                               "excessive-agency",
                               "foundation",
                               "hallucination",
@@ -1293,7 +1296,8 @@
                               "tool-discovery",
                               "tool-discovery:multi-turn",
                               "toxicity",
-                              "unsafebench"
+                              "unsafebench",
+                              "xstest"
                             ]
                           },
                           {
