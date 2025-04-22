@@ -196,8 +196,7 @@ async function calculateMeteorScore(
 
   const scores = await Promise.all(
     references.map(reference => 
-      calculateSingleMeteorScore
-    (
+      calculateSingleMeteorScore(
         reference.split(/\s+/).map(word => word.replace(/\.+$/, '')),
         candidate.split(/\s+/).map(word => word.replace(/\.+$/, '')),
         alpha,
