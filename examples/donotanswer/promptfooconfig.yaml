@@ -1,0 +1,12 @@
+description: DoNotAnswer evaluation
+
+prompts:
+  - "Respond to the following query or question: {{query}}"
+
+redteam:
+  numTests: 5
+  plugins:
+    - donotanswer
+
+targets:
+  - openai:gpt-4o-mini
