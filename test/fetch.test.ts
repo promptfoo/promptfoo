@@ -23,10 +23,11 @@ jest.mock('../src/util/time', () => ({
 jest.mock('undici', () => {
   const mockProxyAgentConstructor = jest.fn();
   const mockProxyAgentInstance = {
+    options: null,
     addRequest: jest.fn(),
     destroy: jest.fn(),
   };
-  
+
   mockProxyAgentConstructor.mockImplementation((options) => {
     mockProxyAgentInstance.options = options;
     return mockProxyAgentInstance;
@@ -67,7 +68,9 @@ jest.mock('../src/envars', () => {
       }
       return defaultValue;
     }),
-    getEnvInt: jest.fn().mockImplementation((key: string, defaultValue: number = 0) => defaultValue),
+    getEnvInt: jest
+      .fn()
+      .mockImplementation((key: string, defaultValue: number = 0) => defaultValue),
   };
 });
 
@@ -294,8 +297,7 @@ describe('fetchWithProxy', () => {
     const normalizedExpected = path.normalize(mockCertPath).replace(/^\w:/, '');
     expect(normalizedActual).toBe(normalizedExpected);
     expect(actualEncoding).toBe('utf8');
-    expect(ProxyAgent).toHaveBeenCalled();
-    expect(ProxyAgent.mock.calls[0][0]).toEqual({
+    expect(ProxyAgent).toHaveBeenCalledWith({
       uri: mockProxyUrl,
       proxyTls: {
         ca: mockCertContent,
@@ -339,8 +341,7 @@ describe('fetchWithProxy', () => {
     const normalizedActual = path.normalize(actualPath).replace(/^\w:/, '');
     const normalizedExpected = path.normalize(mockCertPath).replace(/^\w:/, '');
     expect(normalizedActual).toBe(normalizedExpected);
-    expect(ProxyAgent).toHaveBeenCalled();
-    expect(ProxyAgent.mock.calls[0][0]).toEqual({
+    expect(ProxyAgent).toHaveBeenCalledWith({
       uri: mockProxyUrl,
       proxyTls: {
         rejectUnauthorized: true,
@@ -354,19 +355,17 @@ describe('fetchWithProxy', () => {
 
   it('should disable SSL verification when PROMPTFOO_INSECURE_SSL is true', async () => {
     const mockProxyUrl = 'http://proxy.example.com';
-    
+
     // Set environment variables directly
     process.env.HTTPS_PROXY = mockProxyUrl;
     process.env.PROMPTFOO_INSECURE_SSL = 'true';
 
-    jest
-      .mocked(getEnvString)
-      .mockImplementation((key: string, defaultValue: string = '') => {
-        if (key === 'HTTPS_PROXY') {
-          return mockProxyUrl;
-        }
-        return defaultValue;
-      });
+    jest.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
+      if (key === 'HTTPS_PROXY') {
+        return mockProxyUrl;
+      }
+      return defaultValue;
+    });
     jest.mocked(getEnvBool).mockImplementation((key: string, defaultValue: boolean = false) => {
       if (key === 'PROMPTFOO_INSECURE_SSL') {
         return true;
@@ -379,8 +378,7 @@ describe('fetchWithProxy', () => {
 
     await fetchWithProxy('https://example.com');
 
-    expect(ProxyAgent).toHaveBeenCalled();
-    expect(ProxyAgent.mock.calls[0][0]).toEqual({
+    expect(ProxyAgent).toHaveBeenCalledWith({
       uri: mockProxyUrl,
       proxyTls: {
         rejectUnauthorized: false,
@@ -439,8 +437,7 @@ describe('fetchWithProxy', () => {
     expect(actualEncoding).toBe('utf8');
     expect(normalizedActual).toContain(normalizedBasePath);
     expect(normalizedActual).toContain(normalizedCertPath);
-    expect(ProxyAgent).toHaveBeenCalled();
-    expect(ProxyAgent.mock.calls[0][0]).toEqual({
+    expect(ProxyAgent).toHaveBeenCalledWith({
       uri: mockProxyUrl,
       proxyTls: {
         ca: mockCertContent,
@@ -503,18 +500,19 @@ describe('fetchWithProxy', () => {
       Object.entries(testCase.env).forEach(([key, value]) => {
         process.env[key] = value;
         // Also mock the getEnvString response
-        jest.mocked(getEnvString).mockImplementation((envKey: string, defaultValue: string = '') => {
-          if (envKey === key) {
-            return value;
-          }
-          return defaultValue;
-        });
+        jest
+          .mocked(getEnvString)
+          .mockImplementation((envKey: string, defaultValue: string = '') => {
+            if (envKey === key) {
+              return value;
+            }
+            return defaultValue;
+          });
       });
 
       await fetchWithProxy('https://example.com');
 
-      expect(ProxyAgent).toHaveBeenCalled();
-      expect(ProxyAgent.mock.calls[0][0]).toEqual({
+      expect(ProxyAgent).toHaveBeenCalledWith({
         uri: testCase.expected.url,
         proxyTls: {
           rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
