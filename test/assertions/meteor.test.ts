@@ -2,7 +2,6 @@ import type { AssertionParams } from 'src/types';
 import { handleMeteorAssertion } from '../../src/assertions/meteor';
 
 describe('METEOR score calculation', () => {
-
   it('identical sentences should have high METEOR score', async () => {
     const params = {
       assertion: { type: 'meteor', value: 'The cat sat on the mat' },
@@ -19,8 +18,10 @@ describe('METEOR score calculation', () => {
   it('nltk example', async () => {
     const params = {
       assertion: { type: 'meteor' },
-      renderedValue: 'It is a guide to action which ensures that the military always obeys the commands of the party',
-      outputString: 'It is a guide to action that ensures the military will forever heed Party commands',
+      renderedValue:
+        'It is a guide to action which ensures that the military always obeys the commands of the party',
+      outputString:
+        'It is a guide to action that ensures the military will forever heed Party commands',
       inverse: false,
     } as AssertionParams;
 
@@ -44,7 +45,7 @@ describe('METEOR score calculation', () => {
 
   it('should handle non matching sentences', async () => {
     const params = {
-      assertion: { type: 'meteor'},
+      assertion: { type: 'meteor' },
       renderedValue: 'The cat sat on the mat',
       outputString: 'non matching hypothesis',
       inverse: false,
@@ -56,16 +57,16 @@ describe('METEOR score calculation', () => {
     expect(result.score).toBeLessThan(0.5);
   });
 
-
   it('should handle multiple references', async () => {
     const params = {
-      assertion: { type: 'meteor'},
+      assertion: { type: 'meteor' },
       renderedValue: [
         'It is a guide to action that ensures that the military will forever heed Party commands',
         'It is the guiding principle which guarantees the military forces always being under the command of the Party',
-        'It is the practical guide for the army always to heed the directions of the party'
+        'It is the practical guide for the army always to heed the directions of the party',
       ],
-      outputString: 'It is a guide to action which ensures that the military always obeys the commands of the party',
+      outputString:
+        'It is a guide to action which ensures that the military always obeys the commands of the party',
     } as AssertionParams;
 
     const result = await handleMeteorAssertion(params);
@@ -88,18 +89,18 @@ describe('METEOR score calculation', () => {
 
   it('should handle multiple references and take best matching score', async () => {
     const params = {
-      assertion: { 
+      assertion: {
         type: 'meteor',
         value: [
           'The cat sat on the mat.',
           'There is a cat on the mat.',
-          'A cat is sitting on the mat.'
-        ]
+          'A cat is sitting on the mat.',
+        ],
       },
       renderedValue: [
         'The cat sat on the mat.',
         'There is a cat on the mat.',
-        'A cat is sitting on the mat.'
+        'A cat is sitting on the mat.',
       ],
       outputString: 'The cat was sitting on the mat.',
       inverse: false,
@@ -112,7 +113,7 @@ describe('METEOR score calculation', () => {
 
   it('should handle custom parameters', async () => {
     const params = {
-      assertion: { 
+      assertion: {
         type: 'meteor',
         value: 'The cat sat on the mat',
         threshold: 0.75,
@@ -132,7 +133,7 @@ describe('METEOR score calculation', () => {
       assertion: {
         type: 'meteor',
         value: 'The cat sat on the mat',
-        threshold: 0.8
+        threshold: 0.8,
       },
       renderedValue: 'The cat sat on the mat',
       outputString: 'The dog ran in the park',
