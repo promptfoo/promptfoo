@@ -1,0 +1,48 @@
+# Pi Scorer
+
+`pi` is a deterministic alternative to "LLM as a judge" evaluation.  It can quickly, and deterministically, 
+evaluate input and output pairs against any criteria.
+
+
+## How to use it
+
+To use the `pi` assertion type, add it to your test configuration like this:
+
+```yaml
+assert:
+  - type: pi
+    # Specify the criteria for grading the LLM output.  Criteria can be a string
+    value: Is not apologetic and provides a clear, concise answer
+```
+
+This assertion will use the pi scorer to grade the output based on the specified criteria.
+
+## How it works
+
+Under the hood, the `pi` assertion uses the `withpi` sdk to call the to  evaluate the output based on the criteria you provide. 
+
+Compared to LLM as a judge:
+- The inputs of the eval are the same: `llm_input` and `llm_response`
+- Pi does not need a system prompt, and is pretrained to score
+- Pi always generates the same score, when given the same input
+
+
+## Threshold Support
+
+The `pi` assertion type supports an optional `threshold` property that sets a minimum score requirement. When specified, the output must achieve a score greater than or equal to the threshold to pass. For example:
+
+
+The default threshold is `.5`
+
+
+```yaml
+assert:
+  - type: pi
+    value: Is not apologetic and provides a clear, concise answer
+    threshold: 0.8 # Requires a score of 0.8 or higher to pass
+```
+
+
+## Further reading
+
+See [Pi Documentation](https://docs.withpi.ai) for more options, scorer configuration, and calibration.

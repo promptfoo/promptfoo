@@ -4,6 +4,7 @@ import invariant from '../util/invariant';
 
 export const handlePiScorer = ({
   assertion,
+  prompt,
   renderedValue,
   outputString,
   context,
@@ -11,7 +12,8 @@ export const handlePiScorer = ({
 }: AssertionParams): Promise<GradingResult> => {
   invariant(
     typeof renderedValue === 'string',
-    '"llm-rubric" assertion type must have a string value',
+    '"pi" assertion type must have a string value',
   );
-  return matchesPiScore(renderedValue, context.prompt || '', outputString, assertion);
+  invariant(typeof prompt === 'string', '"pi" assertion must have a prompt that is a string');
+  return matchesPiScore(renderedValue, prompt, outputString, assertion);
 };
