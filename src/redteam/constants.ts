@@ -201,6 +201,8 @@ export const FRAMEWORK_NAMES: Record<string, string> = {
   'nist:ai:measure': 'NIST AI RMF',
   'owasp:api': 'OWASP API Top 10',
   'owasp:llm': 'OWASP LLM Top 10',
+  // TODO(Will): resume here...
+  'owasp:agentic': 'OWASP Agentic v1.0',
 };
 
 export const OWASP_LLM_TOP_10_NAMES = [
@@ -228,6 +230,8 @@ export const OWASP_API_TOP_10_NAMES = [
   'Improper Inventory Management',
   'Unsafe Consumption of APIs',
 ];
+
+export const OWASP_AGENTIC_NAMES = ['T1: Memory Poisoning'];
 
 export const OWASP_LLM_TOP_10_MAPPING: Record<
   string,
