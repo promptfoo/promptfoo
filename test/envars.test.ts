@@ -59,6 +59,27 @@ describe('envars', () => {
       expect(getEnvString('OPENAI_TEMPERATURE')).toBe('0.7');
       expect(getEnvString('PROMPTFOO_CACHE_ENABLED')).toBe('true');
     });
+
+    it('should handle HTTP proxy environment variables', () => {
+      process.env.HTTP_PROXY = 'http://proxy.example.com:8080';
+      process.env.HTTPS_PROXY = 'https://proxy.example.com:8443';
+
+      expect(getEnvString('HTTP_PROXY')).toBe('http://proxy.example.com:8080');
+      expect(getEnvString('HTTPS_PROXY')).toBe('https://proxy.example.com:8443');
+    });
+
+    it('should handle provider-specific environment variables', () => {
+      process.env.CDP_DOMAIN = 'custom.domain';
+      process.env.PORTKEY_API_BASE_URL = 'https://api.portkey.example.com';
+
+      expect(getEnvString('CDP_DOMAIN')).toBe('custom.domain');
+      expect(getEnvString('PORTKEY_API_BASE_URL')).toBe('https://api.portkey.example.com');
+    });
+
+    it('should handle arbitrary string keys not defined in EnvVars type', () => {
+      process.env.CUSTOM_ENV_VAR = 'custom value';
+      expect(getEnvString('CUSTOM_ENV_VAR')).toBe('custom value');
+    });
   });
 
   describe('getEnvBool', () => {
@@ -120,6 +141,11 @@ describe('envars', () => {
 
       expect(getEnvBool('PROMPTFOO_CACHE_ENABLED')).toBe(true);
     });
+
+    it('should handle arbitrary string keys for boolean values', () => {
+      process.env.CUSTOM_BOOL_VAR = 'true';
+      expect(getEnvBool('CUSTOM_BOOL_VAR')).toBe(true);
+    });
   });
 
   describe('getEnvInt', () => {
@@ -172,6 +198,11 @@ describe('envars', () => {
 
       expect(getEnvInt('PROMPTFOO_CACHE_MAX_FILE_COUNT')).toBe(42);
     });
+
+    it('should handle arbitrary string keys for integer values', () => {
+      process.env.CUSTOM_INT_VAR = '123';
+      expect(getEnvInt('CUSTOM_INT_VAR')).toBe(123);
+    });
   });
 
   describe('getEnvFloat', () => {
@@ -223,6 +254,11 @@ describe('envars', () => {
       };
 
       expect(getEnvFloat('OPENAI_TEMPERATURE')).toBe(0.7);
+    });
+
+    it('should handle arbitrary string keys for float values', () => {
+      process.env.CUSTOM_FLOAT_VAR = '3.14159';
+      expect(getEnvFloat('CUSTOM_FLOAT_VAR')).toBe(3.14159);
     });
   });
 
