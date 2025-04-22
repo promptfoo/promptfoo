@@ -66,7 +66,7 @@ export default class GoatProvider implements ApiProvider {
       })}`,
     );
     if (options.stateless !== undefined) {
-      telemetry.recordOnce('feature_used', {
+      telemetry.record('feature_used', {
         feature: 'stateless',
         state: String(options.stateless),
       });

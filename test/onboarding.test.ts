@@ -42,7 +42,7 @@ jest.mock('../src/database', () => ({
 }));
 
 jest.mock('../src/telemetry', () => ({
-  recordAndSend: jest.fn(),
+  record: jest.fn(),
 }));
 
 jest.mock('../src/fetch', () => ({

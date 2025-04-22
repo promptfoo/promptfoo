@@ -12,7 +12,6 @@ async function handlePrompt(id: string) {
   telemetry.record('command_used', {
     name: 'show prompt',
   });
-  await telemetry.send();
 
   const prompt = await getPromptFromHash(id);
   if (!prompt) {
@@ -67,7 +66,7 @@ async function handleEval(id: string) {
   telemetry.record('command_used', {
     name: 'show eval',
   });
-  await telemetry.send();
+
   const eval_ = await Eval.findById(id);
   if (!eval_) {
     logger.error(`No evaluation found with ID ${id}`);
@@ -99,7 +98,6 @@ async function handleDataset(id: string) {
   telemetry.record('command_used', {
     name: 'show dataset',
   });
-  await telemetry.send();
 
   const dataset = await getDatasetFromHash(id);
   if (!dataset) {
@@ -163,8 +161,6 @@ export async function showCommand(program: Command) {
       telemetry.record('command_used', {
         name: 'show',
       });
-
-      await telemetry.send();
 
       if (!id) {
         const latestEval = await Eval.latest();
