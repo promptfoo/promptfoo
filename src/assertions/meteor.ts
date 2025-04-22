@@ -233,7 +233,7 @@ export async function handleMeteorAssertion({
 
   const score = await calculateMeteorScore(outputString, references, alpha, beta, gamma);
 
-  const pass = score >= threshold !== inverse;
+  const pass = inverse ? (score < threshold) : (score >= threshold);
 
   return {
     pass,
