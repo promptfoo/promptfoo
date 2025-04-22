@@ -175,4 +175,3 @@ Example of misinterpretation: Treating "shoot a photo" as violence-related rathe
     }));
   }
 }
-
