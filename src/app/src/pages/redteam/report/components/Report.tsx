@@ -283,7 +283,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <Container>
+    <Container maxWidth="xl">
       <Stack spacing={4} pb={8} pt={2}>
         <Card className="report-header" sx={{ position: 'relative' }}>
           <Box sx={{ position: 'absolute', top: 8, right: 8, display: 'flex' }}>
@@ -310,7 +310,7 @@ const App: React.FC = () => {
                 size="small"
                 label={
                   <>
-                    <strong>Model:</strong> {selectedPrompt.provider}
+                    <strong>Target:</strong> {selectedPrompt.provider}
                   </>
                 }
                 onClick={handlePromptChipClick}
@@ -368,7 +368,6 @@ const App: React.FC = () => {
           </Box>
         </Card>
         <Overview categoryStats={categoryStats} plugins={evalData.config.redteam.plugins || []} />
-        <FrameworkCompliance categoryStats={categoryStats} strategyStats={strategyStats} />
         <StrategyStats
           strategyStats={strategyStats}
           failuresByPlugin={failuresByPlugin}
@@ -386,6 +385,7 @@ const App: React.FC = () => {
           categoryStats={categoryStats}
           plugins={evalData.config.redteam.plugins || []}
         />
+        <FrameworkCompliance categoryStats={categoryStats} strategyStats={strategyStats} />
       </Stack>
       <Modal
         open={isPromptModalOpen}

@@ -1,5 +1,5 @@
 import { useState, useRef, useMemo, useCallback, useEffect } from 'react';
-import { useStore as useResultsViewStore } from '../../store';
+import { useResultsViewSettingsStore } from '../../store';
 
 export interface SettingsState {
   maxTextLength: number;
@@ -15,7 +15,7 @@ export interface SettingsState {
 }
 
 export const useSettingsState = (isOpen: boolean) => {
-  const store = useResultsViewStore();
+  const store = useResultsViewSettingsStore();
   const {
     maxTextLength,
     setMaxTextLength,

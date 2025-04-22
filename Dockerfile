@@ -1,6 +1,6 @@
-FROM --platform=${BUILDPLATFORM} node:20-alpine
+FROM --platform=${BUILDPLATFORM} node:22.14.0-alpine
 
-FROM node:20-alpine AS base
+FROM node:22.14.0-alpine AS base
 
 RUN addgroup -S promptfoo && adduser -S promptfoo -G promptfoo
 

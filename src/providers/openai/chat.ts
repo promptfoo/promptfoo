@@ -4,8 +4,11 @@ import { getEnvFloat, getEnvInt } from '../../envars';
 import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
-import { renderVarsInObject } from '../../util';
-import { maybeLoadFromExternalFile } from '../../util';
+import {
+  maybeLoadFromExternalFile,
+  maybeLoadToolsFromExternalFile,
+  renderVarsInObject,
+} from '../../util';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from '../shared';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
 import { calculateOpenAICost } from './util';
@@ -30,7 +33,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   }
 
   protected isReasoningModel(): boolean {
-    return this.modelName.startsWith('o1') || this.modelName.startsWith('o3');
+    return (
+      this.modelName.startsWith('o1') ||
+      this.modelName.startsWith('o3') ||
+      this.modelName.startsWith('o4')
+    );
   }
 
   protected supportsTemperature(): boolean {
@@ -101,7 +108,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         : {}),
       ...(config.function_call ? { function_call: config.function_call } : {}),
       ...(config.tools
-        ? { tools: maybeLoadFromExternalFile(renderVarsInObject(config.tools, context?.vars)) }
+        ? { tools: maybeLoadToolsFromExternalFile(config.tools, context?.vars) }
         : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.tool_resources ? { tool_resources: config.tool_resources } : {}),

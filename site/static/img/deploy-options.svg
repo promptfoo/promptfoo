@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600">
+  <!-- Large Circle Around All Icons -->
+  <circle cx="400" cy="300" r="300" fill="none" stroke="#3182CE" stroke-width="5" stroke-dasharray="15,10" />
+  
+  <!-- On-Prem Section (Top of Triangle) -->
+  <g transform="translate(400, 100)">
+    <!-- Server Rack Icon -->
+    <rect x="-50" y="-60" width="100" height="120" rx="5" ry="5" fill="#4a5568" />
+    <!-- Server units -->
+    <rect x="-45" y="-55" width="90" height="25" rx="2" ry="2" fill="#2d3748" />
+    <rect x="-45" y="-25" width="90" height="25" rx="2" ry="2" fill="#2d3748" />
+    <rect x="-45" y="5" width="90" height="25" rx="2" ry="2" fill="#2d3748" />
+    <rect x="-45" y="35" width="90" height="20" rx="2" ry="2" fill="#2d3748" />
+    <!-- Server lights -->
+    <circle cx="-35" cy="-42.5" r="3" fill="#48bb78" />
+    <circle cx="-35" cy="-12.5" r="3" fill="#48bb78" />
+    <circle cx="-35" cy="17.5" r="3" fill="#f56565" />
+    <circle cx="-35" cy="45" r="3" fill="#48bb78" />
+    <!-- Server rack mounts -->
+    <rect x="-55" y="-55" width="5" height="115" fill="#718096" />
+    <rect x="50" y="-55" width="5" height="115" fill="#718096" />
+    <!-- Label -->
+    <text x="0" y="90" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#2d3748" text-anchor="middle">On-Prem</text>
+  </g>
+  
+  <!-- Local (CLI) Section (Bottom Left of Triangle) -->
+  <g transform="translate(250, 400)">
+    <!-- Terminal Icon -->
+    <rect x="-60" y="-60" width="120" height="100" rx="10" ry="10" fill="#2d3748" />
+    <rect x="-50" y="-50" width="100" height="80" rx="5" ry="5" fill="#1a202c" />
+    <text x="0" y="-20" font-family="monospace" font-size="18" fill="#48bb78" text-anchor="middle">$_</text>
+    <!-- Label -->
+    <text x="0" y="80" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#2d3748" text-anchor="middle">Local</text>
+  </g>
+  
+  <!-- Cloud Section (Bottom Right of Triangle) -->
+  <g transform="translate(550, 400)">
+    <!-- Cloud Icon -->
+    <path d="M0,-50 
+             C-40,-50 -50,-20 -40,0 
+             C-60,0 -60,40 -30,50 
+             C-20,70 20,70 30,50 
+             C70,60 70,20 50,10 
+             C60,-30 30,-50 0,-50" 
+          fill="#4299e1" />
+    <!-- Server lines -->
+    <line x1="-15" y1="0" x2="15" y2="0" stroke="#f7fafc" stroke-width="3" />
+    <line x1="-15" y1="10" x2="15" y2="10" stroke="#f7fafc" stroke-width="3" />
+    <line x1="-15" y1="20" x2="0" y2="20" stroke="#f7fafc" stroke-width="3" />
+    <!-- Label -->
+    <text x="0" y="90" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#2d3748" text-anchor="middle">Cloud</text>
+  </g>
+</svg>

@@ -10,7 +10,7 @@ import { BrowserBehavior } from '../../util/server';
 export function redteamReportCommand(program: Command) {
   program
     .command('report [directory]')
-    .description('Start browser ui and open to report')
+    .description('Start browser UI and open to report')
     .option('-p, --port <number>', 'Port number', DEFAULT_PORT.toString())
     .option('--filter-description <pattern>', 'Filter evals by description using a regex pattern')
     .option('--env-file, --env-path <path>', 'Path to .env file')

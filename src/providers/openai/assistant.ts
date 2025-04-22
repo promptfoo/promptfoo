@@ -4,8 +4,7 @@ import { OpenAiGenericProvider } from '.';
 import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
-import { renderVarsInObject } from '../../util';
-import { maybeLoadFromExternalFile } from '../../util';
+import { maybeLoadToolsFromExternalFile } from '../../util';
 import { sleep } from '../../util/time';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from '../shared';
 import type { OpenAiSharedOptions } from './types';
@@ -81,9 +80,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       assistant_id: this.assistantId,
       model: this.assistantConfig.modelName || undefined,
       instructions: this.assistantConfig.instructions || undefined,
-      tools:
-        maybeLoadFromExternalFile(renderVarsInObject(this.assistantConfig.tools, context?.vars)) ||
-        undefined,
+      tools: maybeLoadToolsFromExternalFile(this.assistantConfig.tools, context?.vars) || undefined,
       metadata: this.assistantConfig.metadata || undefined,
       temperature: this.assistantConfig.temperature || undefined,
       tool_choice: this.assistantConfig.toolChoice || undefined,

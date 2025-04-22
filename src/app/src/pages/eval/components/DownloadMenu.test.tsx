@@ -17,6 +17,7 @@ Object.assign(navigator, {
 
 vi.mock('./store', () => ({
   useStore: vi.fn(),
+  useResultsViewSettingsStore: vi.fn(),
 }));
 
 vi.mock('../../../hooks/useToast', () => ({

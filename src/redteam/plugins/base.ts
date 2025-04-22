@@ -11,7 +11,7 @@ import type {
   TestCase,
 } from '../../types';
 import type { AtomicTestCase, GradingResult } from '../../types';
-import { maybeLoadFromExternalFile } from '../../util';
+import { maybeLoadToolsFromExternalFile } from '../../util';
 import { retryWithDeduplication, sampleArray } from '../../util/generation';
 import invariant from '../../util/invariant';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
@@ -61,6 +61,13 @@ export abstract class RedteamPluginBase {
    * Unique identifier for the plugin.
    */
   abstract readonly id: string;
+
+  /**
+   * Whether this plugin can be generated remotely if OpenAI is not available.
+   * Defaults to true. Set to false for plugins that use static data sources
+   * like datasets, CSVs, or JSON files that don't need remote generation.
+   */
+  readonly canGenerateRemote: boolean = true;
 
   /**
    * Creates an instance of RedteamPluginBase.
@@ -281,7 +288,9 @@ export abstract class RedteamGraderBase {
       ...test.metadata,
       prompt,
       entities: test.metadata?.entities ?? [],
-      tools: maybeLoadFromExternalFile(provider?.config?.tools),
+      tools: provider?.config?.tools
+        ? maybeLoadToolsFromExternalFile(provider.config.tools)
+        : undefined,
       value: renderedValue,
     };
     // Grader examples are appended to all rubrics if present.

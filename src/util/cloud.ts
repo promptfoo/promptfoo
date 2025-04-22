@@ -1,14 +1,12 @@
 import { fetchWithProxy } from '../fetch';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
-import { getUnifiedConfig } from '../redteam/sharedFrontend';
 import type { UnifiedConfig } from '../types';
 import type { ProviderOptions } from '../types/providers';
 import { ProviderOptionsSchema } from '../validators/providers';
 import invariant from './invariant';
 
 const CHUNKED_RESULTS_BUILD_DATE = new Date('2025-01-10');
-const FORMATTED_CONFIG_ENDPOINT_BUILD_DATE = new Date('2025-03-07');
 
 export function makeRequest(path: string, method: string, body?: any): Promise<Response> {
   const apiHost = cloudConfig.getApiHost();
@@ -36,11 +34,6 @@ export async function targetApiBuildDate(): Promise<Date | null> {
   } catch {
     return null;
   }
-}
-
-export async function cloudCanBuildFormattedConfig() {
-  const buildDate = await targetApiBuildDate();
-  return buildDate != null && buildDate > FORMATTED_CONFIG_ENDPOINT_BUILD_DATE;
 }
 
 export async function getProviderFromCloud(id: string): Promise<ProviderOptions & { id: string }> {
@@ -77,30 +70,14 @@ export async function getConfigFromCloud(id: string): Promise<UnifiedConfig> {
     );
   }
   try {
-    const canBuildFormattedConfig = await cloudCanBuildFormattedConfig();
-
-    if (canBuildFormattedConfig) {
-      const response = await makeRequest(`api/redteam/configs/${id}/unified`, 'GET');
-      if (!response.ok) {
-        throw new Error(`Failed to fetch config from cloud: ${response.statusText}`);
-      }
-      const body = await response.json();
-      logger.info(`Config fetched from cloud: ${id}`);
-      logger.debug(`Config from cloud: ${JSON.stringify(body, null, 2)}`);
-      return body;
-    } else {
-      const response = await makeRequest(`api/redteam/configs/${id}`, 'GET');
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch config from cloud: ${response.statusText}`);
-      }
-
-      const body = await response.json();
-      logger.info(`Config fetched from cloud: ${id}`);
-      logger.debug(`Config from cloud: ${JSON.stringify(body, null, 2)}`);
-
-      return getUnifiedConfig(body.config);
+    const response = await makeRequest(`api/redteam/configs/${id}/unified`, 'GET');
+    if (!response.ok) {
+      throw new Error(`Failed to fetch config from cloud: ${response.statusText}`);
     }
+    const body = await response.json();
+    logger.info(`Config fetched from cloud: ${id}`);
+    logger.debug(`Config from cloud: ${JSON.stringify(body, null, 2)}`);
+    return body;
   } catch (e) {
     logger.error(`Failed to fetch config from cloud: ${id}.`);
     logger.error(String(e));

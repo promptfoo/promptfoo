@@ -1,5 +1,28 @@
+import Ajv from 'ajv';
+import addFormats from 'ajv-formats';
 import yaml from 'js-yaml';
+import { getEnvBool } from '../envars';
 import invariant from '../util/invariant';
+
+let ajvInstance: Ajv | null = null;
+
+export function resetAjv(): void {
+  if (process.env.NODE_ENV !== 'test') {
+    throw new Error('resetAjv can only be called in test environment');
+  }
+  ajvInstance = null;
+}
+
+export function getAjv(): Ajv {
+  if (!ajvInstance) {
+    const ajvOptions: ConstructorParameters<typeof Ajv>[0] = {
+      strictSchema: !getEnvBool('PROMPTFOO_DISABLE_AJV_STRICT_MODE'),
+    };
+    ajvInstance = new Ajv(ajvOptions);
+    addFormats(ajvInstance);
+  }
+  return ajvInstance;
+}
 
 export function isValidJson(str: string): boolean {
   try {
@@ -98,21 +121,42 @@ export function extractJsonObjects(str: string): object[] {
 
   for (let i = 0; i < str.length; i++) {
     if (str[i] === '{') {
-      for (let j = i + 1; j <= Math.min(i + maxJsonLength, str.length); j++) {
-        try {
-          const potentialJson = str.slice(i, j);
-          const processedJson = convertSlashCommentsToHash(potentialJson);
-          const parsedObj = yaml.load(processedJson, { json: true });
-          if (typeof parsedObj === 'object' && parsedObj !== null) {
-            jsonObjects.push(parsedObj);
-            i = j - 1; // Move i to the end of the valid JSON object
-            break;
-          }
-        } catch {
-          // If it's not valid YAML yet, continue to the next character
-          if (j === str.length || j === i + maxJsonLength) {
-            // If we've reached the end of the string or max length, stop trying with this starting point
-            break;
+      let openBraces = 1;
+      let closeBraces = 0;
+      let j = i + 1;
+
+      // Track braces as we go to detect potential JSON objects
+      while (j < Math.min(i + maxJsonLength, str.length) && openBraces > closeBraces) {
+        if (str[j] === '{') {
+          openBraces++;
+        }
+        if (str[j] === '}') {
+          closeBraces++;
+        }
+        j++;
+
+        // When we have a potential complete object OR we've reached the end
+        if (openBraces === closeBraces || j === str.length || j === i + maxJsonLength) {
+          try {
+            // If we're at the end but braces don't match, add missing closing braces
+            let potentialJson = str.slice(i, j);
+            if (openBraces > closeBraces) {
+              potentialJson += '}'.repeat(openBraces - closeBraces);
+            }
+
+            const processedJson = convertSlashCommentsToHash(potentialJson);
+            const parsedObj = yaml.load(processedJson, { json: true });
+
+            if (typeof parsedObj === 'object' && parsedObj !== null) {
+              jsonObjects.push(parsedObj);
+              i = j - 1; // Move i to the end of the valid JSON object
+              break;
+            }
+          } catch {
+            // If not valid yet, continue only if braces haven't balanced
+            if (openBraces === closeBraces) {
+              break;
+            }
           }
         }
       }

@@ -8,8 +8,10 @@ import logger, { setLogCallback, setLogLevel } from '../logger';
 import type Eval from '../models/eval';
 import { createShareableUrl } from '../share';
 import { isRunningUnderNpx } from '../util';
+import { checkRemoteHealth } from '../util/apiHealth';
 import { loadDefaultConfig } from '../util/config/default';
 import { doGenerateRedteam } from './commands/generate';
+import { getRemoteHealthUrl } from './remoteGeneration';
 import type { RedteamRunOptions } from './types';
 
 export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | undefined> {
@@ -20,8 +22,36 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     setLogCallback(options.logCallback);
   }
 
-  let configPath: string | undefined = options.config || 'promptfooconfig.yaml';
-  let redteamPath = options.output || 'redteam.yaml';
+  let configPath: string = options.config ?? 'promptfooconfig.yaml';
+
+  // If output filepath is not provided, locate the out file in the same directory as the config file:
+  let redteamPath;
+  if (options.output) {
+    redteamPath = options.output;
+  } else {
+    const configDir = path.dirname(configPath);
+    redteamPath = path.join(configDir, 'redteam.yaml');
+  }
+
+  // Check API health before proceeding
+  try {
+    const healthUrl = getRemoteHealthUrl();
+    if (healthUrl) {
+      logger.debug(`Checking Promptfoo API health at ${healthUrl}...`);
+      const healthResult = await checkRemoteHealth(healthUrl);
+      if (healthResult.status !== 'OK') {
+        throw new Error(
+          `Unable to proceed with redteam: ${healthResult.message}\n` +
+            'Please check your API configuration or try again later.',
+        );
+      }
+      logger.debug('API health check passed');
+    }
+  } catch (error) {
+    logger.warn(
+      `API health check failed with error: ${error}.\nPlease check your API configuration or try again later.`,
+    );
+  }
 
   if (options.liveRedteamConfig) {
     // Write liveRedteamConfig to a temporary file

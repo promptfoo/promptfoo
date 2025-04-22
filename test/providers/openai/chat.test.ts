@@ -810,11 +810,15 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const o1Provider = new OpenAiChatCompletionProvider('o1-mini');
       const o3Provider = new OpenAiChatCompletionProvider('o3-mini');
       const o1PreviewProvider = new OpenAiChatCompletionProvider('o1-preview');
+      const o3StandardProvider = new OpenAiChatCompletionProvider('o3');
+      const o4MiniProvider = new OpenAiChatCompletionProvider('o4-mini');
 
       expect(regularProvider['isReasoningModel']()).toBe(false);
       expect(o1Provider['isReasoningModel']()).toBe(true);
       expect(o3Provider['isReasoningModel']()).toBe(true);
       expect(o1PreviewProvider['isReasoningModel']()).toBe(true);
+      expect(o3StandardProvider['isReasoningModel']()).toBe(true);
+      expect(o4MiniProvider['isReasoningModel']()).toBe(true);
     });
 
     it('should handle temperature support correctly', () => {
@@ -822,11 +826,15 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const o1Provider = new OpenAiChatCompletionProvider('o1-mini');
       const o3Provider = new OpenAiChatCompletionProvider('o3-mini');
       const o1PreviewProvider = new OpenAiChatCompletionProvider('o1-preview');
+      const o4MiniProvider = new OpenAiChatCompletionProvider('o4-mini');
+      const gpt41Provider = new OpenAiChatCompletionProvider('gpt-4.1');
 
       expect(regularProvider['supportsTemperature']()).toBe(true);
       expect(o1Provider['supportsTemperature']()).toBe(false);
       expect(o3Provider['supportsTemperature']()).toBe(false);
       expect(o1PreviewProvider['supportsTemperature']()).toBe(false);
+      expect(o4MiniProvider['supportsTemperature']()).toBe(false);
+      expect(gpt41Provider['supportsTemperature']()).toBe(true);
     });
 
     it('should respect temperature settings based on model type', async () => {
@@ -925,6 +933,34 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const regularCall = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
       const regularBody = JSON.parse(regularCall[1].body);
       expect(regularBody.reasoning_effort).toBeUndefined();
+    });
+
+    it('should handle o4-mini with reasoning_effort and service_tier', async () => {
+      const mockResponse = {
+        data: {
+          choices: [{ message: { content: 'O4-mini response' } }],
+          usage: { total_tokens: 15, prompt_tokens: 8, completion_tokens: 7 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      // Test O4-mini model with reasoning_effort
+      const o4MiniProvider = new OpenAiChatCompletionProvider('o4-mini', {
+        config: {
+          reasoning_effort: 'medium',
+        } as any,
+      });
+      await o4MiniProvider.callApi('Test reasoning with o4-mini');
+
+      const o4Call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const o4Body = JSON.parse(o4Call[1].body);
+
+      expect(o4Body.reasoning_effort).toBe('medium');
+      expect(o4Body.temperature).toBeUndefined(); // o4-mini shouldn't have temperature
+      expect(o4Body.max_tokens).toBeUndefined(); // o4-mini shouldn't use max_tokens
     });
 
     it('should handle audio responses correctly', async () => {

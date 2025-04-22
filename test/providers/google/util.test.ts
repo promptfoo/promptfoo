@@ -2,12 +2,15 @@ import * as fs from 'fs';
 import { GoogleAuth } from 'google-auth-library';
 import * as nunjucks from 'nunjucks';
 import logger from '../../../src/logger';
+import type { Tool } from '../../../src/providers/google/types';
 import {
   maybeCoerceToGeminiFormat,
   geminiFormatAndSystemInstructions,
   getGoogleClient,
   hasGoogleDefaultCredentials,
   loadFile,
+  parseStringObject,
+  validateFunctionCall,
 } from '../../../src/providers/google/util';
 
 jest.mock('google-auth-library');
@@ -17,8 +20,18 @@ jest.mock('glob', () => ({
 }));
 
 jest.mock('fs', () => ({
-  existsSync: jest.fn(),
-  readFileSync: jest.fn(),
+  existsSync: jest.fn().mockImplementation((path) => {
+    if (path === 'file://system_instruction.json') {
+      return true;
+    }
+    return false;
+  }),
+  readFileSync: jest.fn().mockImplementation((path) => {
+    if (path === 'file://system_instruction.json') {
+      return 'system instruction';
+    }
+    throw new Error(`Mock file not found: ${path}`);
+  }),
   writeFileSync: jest.fn(),
   statSync: jest.fn(),
 }));
@@ -27,6 +40,186 @@ describe('util', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     (global as any).cachedAuth = undefined;
+  });
+
+  describe('parseStringObject', () => {
+    it('should parse string input to object', () => {
+      const input = '{"key": "value"}';
+      expect(parseStringObject(input)).toEqual({ key: 'value' });
+    });
+
+    it('should return object input as-is', () => {
+      const input = { key: 'value' };
+      expect(parseStringObject(input)).toBe(input);
+    });
+
+    it('should return undefined as-is', () => {
+      expect(parseStringObject(undefined)).toBeUndefined();
+    });
+  });
+
+  describe('validateFunctionCall', () => {
+    const mockFunctions: Tool[] = [
+      {
+        functionDeclarations: [
+          {
+            name: 'testFunction',
+            parameters: {
+              type: 'OBJECT',
+              properties: {
+                param1: { type: 'STRING' },
+              },
+              required: ['param1'],
+            },
+          },
+          {
+            name: 'emptyFunction',
+          },
+          {
+            name: 'invalidSchemaFunction',
+            parameters: {
+              type: 'OBJECT',
+              properties: {
+                param1: { type: 'STRING' },
+                param2: { type: 'STRING', enum: ['test'] },
+              },
+            },
+          },
+          {
+            name: 'propertyOrderingFunction',
+            parameters: {
+              type: 'OBJECT',
+              properties: {
+                param1: { type: 'STRING' },
+              },
+              propertyOrdering: ['param1', 'param2'],
+            },
+          },
+          {
+            name: 'uncompilableFunction',
+            parameters: {
+              type: 'OBJECT',
+              properties: {
+                param1: { type: 'TYPE_UNSPECIFIED' },
+              },
+            },
+          },
+        ],
+      },
+    ];
+
+    it('should validate Vertex/AIS format function call', () => {
+      const output = [
+        {
+          functionCall: {
+            name: 'testFunction',
+            args: '{"param1": "test"}',
+          },
+        },
+      ];
+      expect(() => validateFunctionCall(output, mockFunctions)).not.toThrow();
+    });
+
+    it('should validate Live format function call', () => {
+      const output = {
+        toolCall: {
+          functionCalls: [
+            {
+              name: 'testFunction',
+              args: '{"param1": "test"}',
+            },
+          ],
+        },
+      };
+      expect(() => validateFunctionCall(output, mockFunctions)).not.toThrow();
+    });
+
+    it('should validate empty function args', () => {
+      const output = [
+        {
+          functionCall: {
+            name: 'emptyFunction',
+            args: '{}',
+          },
+        },
+      ];
+      expect(() => validateFunctionCall(output, mockFunctions)).not.toThrow();
+    });
+
+    it('should validate function with no parameters', () => {
+      const output = [
+        {
+          functionCall: {
+            name: 'emptyFunction',
+            args: '{}',
+          },
+        },
+      ];
+      expect(() => validateFunctionCall(output, mockFunctions)).not.toThrow();
+    });
+
+    it('should throw error for invalid function call format', () => {
+      const output = {
+        invalidFormat: true,
+      };
+      expect(() => validateFunctionCall(output, mockFunctions)).toThrow(
+        'Google did not return a valid-looking function call',
+      );
+    });
+
+    it('should throw error for non-existent function', () => {
+      const output = [
+        {
+          functionCall: {
+            name: 'nonExistentFunction',
+            args: '{}',
+          },
+        },
+      ];
+      expect(() => validateFunctionCall(output, mockFunctions)).toThrow(
+        'Called "nonExistentFunction", but there is no function with that name',
+      );
+    });
+
+    it('should throw error for invalid args', () => {
+      const output = [
+        {
+          functionCall: {
+            name: 'testFunction',
+            args: '{}',
+          },
+        },
+      ];
+      expect(() => validateFunctionCall(output, mockFunctions)).toThrow(/does not match schema/);
+    });
+
+    it('should throw error when schema compilation fails', () => {
+      const output = [
+        {
+          functionCall: {
+            name: 'uncompilableFunction',
+            args: '{"param1": "test"}',
+          },
+        },
+      ];
+      expect(() => validateFunctionCall(output, mockFunctions)).toThrow(
+        /Tool schema doesn't compile with ajv:.*If this is a valid tool schema you may need to reformulate your assertion without is-valid-function-call/,
+      );
+    });
+
+    it('should throw error when propertyOrdering references invalid property', () => {
+      const output = [
+        {
+          functionCall: {
+            name: 'propertyOrderingFunction',
+            args: '{"param1": "test"}',
+          },
+        },
+      ];
+      expect(() => validateFunctionCall(output, mockFunctions)).toThrow(
+        /Tool schema doesn't compile with ajv:.*If this is a valid tool schema you may need to reformulate your assertion without is-valid-function-call/,
+      );
+    });
   });
 
   describe('maybeCoerceToGeminiFormat', () => {
@@ -131,6 +324,9 @@ describe('util', () => {
         coerced: false,
         systemInstruction: undefined,
       });
+      expect(logger.warn).toHaveBeenCalledWith(
+        `Unknown format for Gemini: ${JSON.stringify(input)}`,
+      );
     });
 
     it('should handle OpenAI chat format with mixed content types', () => {
@@ -364,7 +560,6 @@ describe('util', () => {
     });
 
     it('should handle string content', () => {
-      // This simulates the parsed YAML format
       const input = [
         {
           role: 'system',
@@ -421,6 +616,110 @@ describe('util', () => {
         systemInstruction: undefined,
       });
     });
+
+    it('should handle native Gemini format with system_instruction field', () => {
+      const input = {
+        system_instruction: { parts: [{ text: 'You are a helpful assistant' }] },
+        contents: [
+          {
+            parts: [{ text: 'Hello' }],
+          },
+        ],
+      };
+
+      const result = maybeCoerceToGeminiFormat(input);
+
+      expect(result).toEqual({
+        contents: [
+          {
+            parts: [{ text: 'Hello' }],
+          },
+        ],
+        coerced: true,
+        systemInstruction: { parts: [{ text: 'You are a helpful assistant' }] },
+      });
+    });
+
+    it('should handle native Gemini format with system_instruction but no contents field', () => {
+      const input = {
+        system_instruction: { parts: [{ text: 'You are a helpful assistant' }] },
+      };
+
+      const result = maybeCoerceToGeminiFormat(input);
+
+      expect(result).toEqual({
+        contents: [],
+        coerced: true,
+        systemInstruction: { parts: [{ text: 'You are a helpful assistant' }] },
+      });
+    });
+
+    it('should handle native Gemini format with system_instruction and empty contents array', () => {
+      const input = {
+        system_instruction: { parts: [{ text: 'You are a helpful assistant' }] },
+        contents: [],
+      };
+
+      const result = maybeCoerceToGeminiFormat(input);
+
+      expect(result).toEqual({
+        contents: [],
+        coerced: true,
+        systemInstruction: { parts: [{ text: 'You are a helpful assistant' }] },
+      });
+    });
+
+    it('should handle valid GeminiFormat array with system_instruction field', () => {
+      const input = {
+        system_instruction: { parts: [{ text: 'You are a helpful assistant' }] },
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: 'Hello, Gemini!' }],
+          },
+        ],
+      };
+
+      const result = maybeCoerceToGeminiFormat(input);
+
+      expect(result).toEqual({
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: 'Hello, Gemini!' }],
+          },
+        ],
+        coerced: true,
+        systemInstruction: { parts: [{ text: 'You are a helpful assistant' }] },
+      });
+    });
+
+    it('should handle system_instruction with different formats', () => {
+      const input = {
+        system_instruction: {
+          parts: [{ text: 'You are a helpful assistant' }, { text: 'Be concise and accurate' }],
+        },
+        contents: [
+          {
+            parts: [{ text: 'Hello' }],
+          },
+        ],
+      };
+
+      const result = maybeCoerceToGeminiFormat(input);
+
+      expect(result).toEqual({
+        contents: [
+          {
+            parts: [{ text: 'Hello' }],
+          },
+        ],
+        coerced: true,
+        systemInstruction: {
+          parts: [{ text: 'You are a helpful assistant' }, { text: 'Be concise and accurate' }],
+        },
+      });
+    });
   });
 
   describe('getGoogleClient', () => {
@@ -475,7 +774,6 @@ describe('util', () => {
 
   describe('loadFile', () => {
     it('should load from variable', async () => {
-      // This configuration was required to get the unit test working as in the full script
       nunjucks.configure({ autoescape: false });
 
       const config_var = '{{tool_file}}';
