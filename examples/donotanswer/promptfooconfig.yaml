@@ -7,10 +7,10 @@ prompts:
 
     {{query}}
 
+targets:
+  - openai:gpt-4.1-nano
+
 redteam:
   numTests: 5
   plugins:
     - donotanswer
-
-targets:
-  - openai:gpt-4.1-nano
