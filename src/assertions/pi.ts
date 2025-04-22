@@ -10,9 +10,8 @@ export const handlePiScorer = ({
   test,
 }: AssertionParams): Promise<GradingResult> => {
   invariant(
-    typeof renderedValue === 'string' || typeof renderedValue === 'undefined',
+    typeof renderedValue === 'string',
     '"llm-rubric" assertion type must have a string value',
   );
-
-  return matchesPiScore(context.prompt || '', outputString, assertion, context.vars);
+  return matchesPiScore(renderedValue, context.prompt || '', outputString, assertion);
 };
