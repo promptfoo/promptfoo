@@ -12,7 +12,7 @@ To use the `pi` assertion type, add it to your test configuration like this:
 assert:
   - type: pi
     # Specify the criteria for grading the LLM output.  Criteria can be a string
-    value: Is not apologetic and provides a clear, concise answer
+    value: Is the response not apologetic and provides a clear, concise answer?
 ```
 
 This assertion will use the pi scorer to grade the output based on the specified criteria.
@@ -22,7 +22,7 @@ This assertion will use the pi scorer to grade the output based on the specified
 Under the hood, the `pi` assertion uses the `withpi` sdk to call the to  evaluate the output based on the criteria you provide. 
 
 Compared to LLM as a judge:
-- The inputs of the eval are the same: `llm_input` and `llm_response`
+- The inputs of the eval are the same: `llm_input` and `llm_output`
 - Pi does not need a system prompt, and is pretrained to score
 - Pi always generates the same score, when given the same input
 
