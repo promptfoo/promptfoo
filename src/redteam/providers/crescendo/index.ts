@@ -110,7 +110,7 @@ export class CrescendoProvider implements ApiProvider {
 
     this.stateful = config.stateful ?? (config.stateless == null ? false : !config.stateless);
     if (config.stateless !== undefined) {
-      telemetry.recordOnce('feature_used', {
+      telemetry.record('feature_used', {
         feature: 'stateless',
         state: String(config.stateless),
       });
