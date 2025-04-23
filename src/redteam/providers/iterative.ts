@@ -20,6 +20,7 @@ import { shouldGenerateRemote } from '../remoteGeneration';
 import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } from './prompts';
 import type { TargetResponse } from './shared';
 import { checkPenalizedPhrases, getTargetResponse, redteamProviderManager } from './shared';
+import { getEnvInt } from '../../envars';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -440,12 +441,7 @@ class RedteamIterativeProvider implements ApiProvider {
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;
 
-    this.numIterations = Number.parseInt(
-      process.env.PROMPTFOO_NUM_JAILBREAK_ITERATIONS ||
-        (config.numIterations as string | undefined) ||
-        '10',
-      10,
-    );
+    this.numIterations = getEnvInt('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', 4);
 
     // Redteam provider can be set from the config.
 

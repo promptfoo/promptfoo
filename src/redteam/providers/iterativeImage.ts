@@ -15,6 +15,7 @@ import { extractFirstJsonObject } from '../../util/json';
 import { extractVariablesFromTemplates, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { getTargetResponse, redteamProviderManager, type TargetResponse } from './shared';
+import { getEnvInt } from '../../envars';
 
 interface ImageGenerationOutput {
   prompt: string;
@@ -246,7 +247,7 @@ async function runRedteamConversation({
 
   let targetPrompt: string | null = null;
 
-  const numIterations = Number.parseInt(process.env.PROMPTFOO_NUM_JAILBREAK_ITERATIONS ?? '4', 10);
+  const numIterations = getEnvInt('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', 4);
 
   for (let i = 0; i < numIterations; i++) {
     try {

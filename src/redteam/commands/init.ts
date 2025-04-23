@@ -32,6 +32,7 @@ import {
   HARM_PLUGINS,
 } from '../constants';
 import { doGenerateRedteam } from './generate';
+import { getEnvString } from '../../envars';
 
 const REDTEAM_CONFIG_TEMPLATE = `# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 
@@ -670,9 +671,9 @@ export function initCommand(program: Command) {
         setupEnv(opts.envPath);
         try {
           // Check if we're in a non-GUI environment
-          const hasDisplay =
-            process.env.DISPLAY || process.platform === 'win32' || process.platform === 'darwin';
-          const useGui = opts.gui && hasDisplay;
+          const isGUI =
+            getEnvString('DISPLAY') || process.platform === 'win32' || process.platform === 'darwin';
+          const useGui = opts.gui && isGUI;
 
           if (useGui) {
             const isRunning = await checkServerRunning();

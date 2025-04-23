@@ -21,7 +21,7 @@ import type {
 } from '@adaline/types';
 import { Vertex as GatewayVertex } from '@adaline/vertex';
 import { isCacheEnabled, getCache } from '../cache';
-import { getEnvFloat, getEnvInt } from '../envars';
+import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import type {
   ApiProvider,
@@ -520,7 +520,7 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
         });
       } else if (this.providerName === 'openrouter') {
         const provider = new GatewayOpenRouter();
-        const apiKey = this.config.apiKey || process.env['OPENROUTER_API_KEY'];
+        const apiKey = this.config.apiKey || getEnvString('OPENROUTER_API_KEY');
         if (!apiKey) {
           throw new Error(
             'OpenRouter API key is not set. Set the OPENROUTER_API_KEY environment variable or add `apiKey` to the provider config.',
@@ -542,7 +542,7 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
           gatewayConfig.presencePenalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY', 0);
       } else if (this.providerName === 'togetherai') {
         const provider = new GatewayTogetherAi();
-        const apiKey = this.config.apiKey || process.env['TOGETHER_API_KEY'];
+        const apiKey = this.config.apiKey || getEnvString('TOGETHER_API_KEY');
         if (!apiKey) {
           throw new Error(
             'TogetherAI API key is not set. Set the TOGETHER_API_KEY environment variable or add `apiKey` to the provider config.',

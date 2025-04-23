@@ -14,6 +14,7 @@ export type EnvVars = {
   PROMPTFOO_CACHE_PATH?: string;
   PROMPTFOO_CACHE_TTL?: number;
   PROMPTFOO_CACHE_TYPE?: 'memory' | 'disk';
+  PROMPTFOO_CLOUD_API_URL?: string;
   PROMPTFOO_CONFIG_DIR?: string;
   PROMPTFOO_CSV_DELIMITER?: string;
   PROMPTFOO_CSV_STRICT?: boolean;
@@ -38,6 +39,7 @@ export type EnvVars = {
   PROMPTFOO_ENABLE_DATABASE_LOGS?: boolean;
   PROMPTFOO_EXPERIMENTAL?: boolean;
   PROMPTFOO_FAILED_TEST_EXIT_CODE?: number;
+  PROMPTFOO_INSECURE_SSL?: boolean | string;
   PROMPTFOO_LOG_DIR?: string;
   PROMPTFOO_MAX_HARMFUL_TESTS_PER_REQUEST?: number;
   PROMPTFOO_NO_TESTCASE_ASSERT_WARNING?: boolean;
@@ -62,7 +64,7 @@ export type EnvVars = {
   PROMPTFOO_STRIP_METADATA?: boolean;
   PROMPTFOO_TELEMETRY_DEBUG?: boolean;
   PROMPTFOO_UNALIGNED_INFERENCE_ENDPOINT?: string;
-  PROMPTFOO_CLOUD_API_URL?: string;
+  PROMPTFOO_CA_CERT_PATH?: string;
   REQUEST_TIMEOUT_MS?: number;
   RESULT_HISTORY_LENGTH?: number;
   WEBHOOK_TIMEOUT?: number;
@@ -80,14 +82,27 @@ export type EnvVars = {
   // Node.js and system settings
   NODE_EXTRA_CA_CERTS?: string;
   NODE_TLS_REJECT_UNAUTHORIZED?: string;
-  API_PORT?: number;
+  API_PORT?: string | number;
   API_HOST?: string;
   JEST_WORKER_ID?: string;
   npm_lifecycle_script?: string;
+  VITE_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL?: string;
+  VITE_PUBLIC_PROMPTFOO_SHARE_API_URL?: string;
+  VITE_PUBLIC_PROMPTFOO_APP_SHARE_URL?: string;
+  VITE_PUBLIC_BASENAME?: string;
+  PROMPTFOO_JAILBREAK_TEMPERATURE?: string;
+  PROMPTFOO_NUM_JAILBREAK_ITERATIONS?: string;
+  IS_TESTING?: string | boolean;
+  DISPLAY?: string;
+  POSTHOG_KEY?: string;
 
   // Provider-specific
   CDP_DOMAIN?: string;
   PORTKEY_API_BASE_URL?: string;
+  CLOUDFLARE_API_KEY?: string;
+  CLOUDFLARE_ACCOUNT_ID?: string;
+  OPENROUTER_API_KEY?: string;
+  TOGETHER_API_KEY?: string;
 
   // 3rd party
   AI21_API_BASE_URL?: string;

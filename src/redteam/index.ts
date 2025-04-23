@@ -30,6 +30,7 @@ import { loadStrategy, Strategies, validateStrategies } from './strategies';
 import { DEFAULT_LANGUAGES } from './strategies/multilingual';
 import type { RedteamStrategyObject, SynthesizeOptions } from './types';
 import { getShortPluginId } from './util';
+import { getEnvString } from '../envars';
 
 /**
  * Gets the severity level for a plugin based on its ID and configuration.
@@ -557,7 +558,7 @@ export async function synthesize({
 
   const showProgressBar =
     !isWebUI &&
-    process.env.LOG_LEVEL !== 'debug' &&
+    getEnvString('LOG_LEVEL') !== 'debug' &&
     getLogLevel() !== 'debug' &&
     showProgressBarOverride !== false;
   if (showProgressBar) {
