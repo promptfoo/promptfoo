@@ -118,51 +118,146 @@ function FeatureComparisonTable() {
     {
       category: 'Security & Testing',
       items: [
-        { name: 'LLM evaluation capabilities', community: true, enterprise: true, enterpriseOnPrem: true },
-        { name: 'Basic vulnerability scanning', community: true, enterprise: true, enterpriseOnPrem: true },
-        { name: 'Advanced vulnerability detection', community: false, enterprise: true, enterpriseOnPrem: true },
-        { name: 'Remediation recommendations', community: false, enterprise: true, enterpriseOnPrem: true },
-        { name: 'Centralized guardrail dashboard', community: false, enterprise: true, enterpriseOnPrem: true },
-        { name: 'Customized red teaming plugins', community: false, enterprise: true, enterpriseOnPrem: true },
-        { name: 'Organization-specific scan templates', community: false, enterprise: true, enterpriseOnPrem: true },
-        { name: 'Saved target configurations', community: false, enterprise: true, enterpriseOnPrem: true },
-        { name: 'Searchable scan history', community: false, enterprise: true, enterpriseOnPrem: true },
-      ]
+        {
+          name: 'LLM evaluation capabilities',
+          community: true,
+          enterprise: true,
+          enterpriseOnPrem: true,
+        },
+        {
+          name: 'Basic vulnerability scanning',
+          community: true,
+          enterprise: true,
+          enterpriseOnPrem: true,
+        },
+        {
+          name: 'Advanced vulnerability detection',
+          community: false,
+          enterprise: true,
+          enterpriseOnPrem: true,
+        },
+        {
+          name: 'Remediation recommendations',
+          community: false,
+          enterprise: true,
+          enterpriseOnPrem: true,
+        },
+        {
+          name: 'Centralized guardrail dashboard',
+          community: false,
+          enterprise: true,
+          enterpriseOnPrem: true,
+        },
+        {
+          name: 'Customized red teaming plugins',
+          community: false,
+          enterprise: true,
+          enterpriseOnPrem: true,
+        },
+        {
+          name: 'Organization-specific scan templates',
+          community: false,
+          enterprise: true,
+          enterpriseOnPrem: true,
+        },
+        {
+          name: 'Saved target configurations',
+          community: false,
+          enterprise: true,
+          enterpriseOnPrem: true,
+        },
+        {
+          name: 'Searchable scan history',
+          community: false,
+          enterprise: true,
+          enterpriseOnPrem: true,
+        },
+      ],
     },
     {
       category: 'Team & Collaboration',
       items: [
-        { name: 'Teams-based access control and SSO', community: false, enterprise: true, enterpriseOnPrem: true },
-        { name: 'Team sharing & collaboration', community: false, enterprise: true, enterpriseOnPrem: true },
-        { name: 'Custom roles & permissions', community: false, enterprise: true, enterpriseOnPrem: true },
-        { name: 'Centralized dashboard', community: false, enterprise: true, enterpriseOnPrem: true },
-      ]
+        {
+          name: 'Teams-based access control and SSO',
+          community: false,
+          enterprise: true,
+          enterpriseOnPrem: true,
+        },
+        {
+          name: 'Team sharing & collaboration',
+          community: false,
+          enterprise: true,
+          enterpriseOnPrem: true,
+        },
+        {
+          name: 'Custom roles & permissions',
+          community: false,
+          enterprise: true,
+          enterpriseOnPrem: true,
+        },
+        {
+          name: 'Centralized dashboard',
+          community: false,
+          enterprise: true,
+          enterpriseOnPrem: true,
+        },
+      ],
     },
     {
       category: 'Integrations',
       items: [
         { name: 'CI/CD integration', community: true, enterprise: true, enterpriseOnPrem: true },
-        { name: 'Promptfoo API integration', community: false, enterprise: true, enterpriseOnPrem: true },
+        {
+          name: 'Promptfoo API integration',
+          community: false,
+          enterprise: true,
+          enterpriseOnPrem: true,
+        },
         { name: 'Webhooks', community: false, enterprise: true, enterpriseOnPrem: true },
-      ]
+      ],
     },
     {
       category: 'Infrastructure',
       items: [
         { name: 'Cloud deployment', community: false, enterprise: true, enterpriseOnPrem: false },
-        { name: 'On-premise deployment', community: false, enterprise: false, enterpriseOnPrem: true },
-        { name: 'Complete data isolation', community: false, enterprise: false, enterpriseOnPrem: true },
-      ]
+        {
+          name: 'On-premise deployment',
+          community: false,
+          enterprise: false,
+          enterpriseOnPrem: true,
+        },
+        {
+          name: 'Complete data isolation',
+          community: false,
+          enterprise: false,
+          enterpriseOnPrem: true,
+        },
+      ],
     },
     {
       category: 'Support & Services',
       items: [
         { name: 'Community support', community: true, enterprise: true, enterpriseOnPrem: true },
-        { name: 'Priority support & SLA guarantees', community: false, enterprise: true, enterpriseOnPrem: true },
-        { name: 'Dedicated support team', community: false, enterprise: true, enterpriseOnPrem: true },
-        { name: 'Dedicated deployment engineer', community: false, enterprise: false, enterpriseOnPrem: true },
-      ]
-    }
+        {
+          name: 'Priority support & SLA guarantees',
+          community: false,
+          enterprise: true,
+          enterpriseOnPrem: true,
+        },
+        {
+          name: 'Dedicated support team',
+          community: false,
+          enterprise: true,
+          enterpriseOnPrem: true,
+        },
+        {
+          name: 'Dedicated deployment engineer',
+          community: false,
+          enterprise: false,
+          enterpriseOnPrem: true,
+        },
+      ],
+    },
   ];
 
   return (
@@ -217,7 +312,8 @@ function EnterpriseFeatures() {
     },
     {
       title: 'Teams-Based Controls',
-      description: 'Manage your LLM applications with teams-based access control and SSO, granular permission profiles, and customizable API access.',
+      description:
+        'Manage your LLM applications with teams-based access control and SSO, granular permission profiles, and customizable API access.',
       image: '/img/enterprise-docs/add-team-members.png',
     },
     {
@@ -227,13 +323,13 @@ function EnterpriseFeatures() {
     },
     {
       title: 'Comprehensive Scanning & Compliance',
-      description:
-        'Verify compliance with industry frameworks and standards.',
+      description: 'Verify compliance with industry frameworks and standards.',
       image: '/img/compliance-frameworks.png',
     },
     {
       title: 'Organization-Specific Configurations',
-      description: 'Create customizable plugin collections, scan configurations, and target settings that can be shared among colleagues.',
+      description:
+        'Create customizable plugin collections, scan configurations, and target settings that can be shared among colleagues.',
       image: '/img/enterprise-docs/create-plugin-collection.gif',
     },
   ];
