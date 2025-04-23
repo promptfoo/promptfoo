@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Amazon Bedrock Nova Sonic with tool use and variables
+description: Amazon Bedrock Nova Sonic with a conversation
 
 providers:
   - id: bedrock:amazon.nova-sonic-v1:0
@@ -35,14 +35,18 @@ defaultTest:
     system_message: You are a helpful assistant. Answer the question based on the audio input.
   metadata:
     type: text
-    conversationId: date
+    conversationId: date_thread
 
+# The conversationId is a special metadata field that promptfoo uses to maintain conversation history between tests.
+# When multiple tests share the same conversationId (like "date_thread" here), each test's response is added to the
+# conversation history, allowing the model to reference previous exchanges. This enables testing of multi-turn
+# conversations where context from earlier interactions affects later responses.
 tests:
   - vars:
       audio_file: file://assets/hello.wav
     metadata:
       type: audio
-      conversationId: date
+      conversationId: date_thread
     assert:
       - type: llm-rubric
         value: the date and time is today
@@ -50,7 +54,7 @@ tests:
       audio_file: file://assets/weather.wav
     metadata:
       type: audio
-      conversationId: date
+      conversationId: date_thread
     assert:
       - type: llm-rubric
-        value: the weather is sunny
+        value: contains a weather report

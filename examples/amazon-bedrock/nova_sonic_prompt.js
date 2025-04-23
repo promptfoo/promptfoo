@@ -1,6 +1,17 @@
 /**
- * This function generates a properly formatted conversation for the OpenAI Realtime API.
+ * This function generates a properly formatted conversation for the Amazon Bedrock Nova Sonic model.
  * It handles the _conversation variable to maintain conversation history.
+ *
+ * @typedef {Object} Vars
+ * @property {string} [system_message] - System message to set the assistant's behavior
+ * @property {string} [audio_file] - Path to the audio file to be processed
+ * @property {Array<Object>} [_conversation] - Previous conversation history
+ * @property {string} [_conversation[].output] - The assistant's previous response
+ * @property {Object} [_conversation[].outputMetadata] - Metadata about the previous response
+ * @property {string} [_conversation[].outputMetadata.userTranscript] - Transcript of the user's previous input
+ *
+ * @param {Object} provider - The provider configuration
+ * @returns {Object} The formatted conversation for Nova Sonic
  */
 module.exports = async function ({ vars, provider }) {
   // Create the messages array starting with system message

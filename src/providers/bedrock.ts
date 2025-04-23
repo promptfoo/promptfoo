@@ -291,13 +291,7 @@ export interface BedrockAmazonNovaSonicGenerationOptions extends BedrockOptions 
         };
       };
     }[];
-    toolChoice?: {
-      any?: any;
-      auto?: any;
-      tool?: {
-        name: string;
-      };
-    };
+    toolChoice?: 'any' | 'auto' | string; // Tool name
   };
 }
 
