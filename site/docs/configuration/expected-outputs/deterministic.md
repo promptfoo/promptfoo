@@ -730,7 +730,105 @@ assert:
     threshold: 0.6
 ```
 
-### F-Score
+### METEOR 
+
+METEOR (Metric for Evaluation of Translation with Explicit ORdering) is an automatic metric for evaluating machine-generated text against reference text. It's particularly useful for assessing translation quality and text generation accuracy.
+
+#### How METEOR Works
+
+METEOR evaluates text by:
+1. Matching unigrams (words) between the generated text and reference(s) using:
+   - Exact matches (surface forms)
+   - Word stems (e.g., "running" → "run")
+   - Semantic meanings
+2. Computing a final score (0.0 to 1.0) based on:
+   - Unigram precision (accuracy of matched words)
+   - Unigram recall (coverage of reference words)
+   - Word order/fragmentation (how well the word order matches)
+
+#### Basic Usage
+
+```yaml
+assert:
+  - type: meteor
+    value: hello world    # Reference text to compare against
+```
+
+By default, METEOR uses a threshold of 0.5. Scores range from 0.0 (no match) to 1.0 (perfect match), with typical interpretations:
+- 0.0-0.2: Poor match
+- 0.2-0.4: Fair match
+- 0.4-0.6: Good match
+- 0.6-0.8: Very good match
+- 0.8-1.0: Excellent match
+
+#### Custom Threshold
+
+Set your own threshold based on your quality requirements:
+
+```yaml
+assert:
+  - type: meteor
+    value: hello world
+    threshold: 0.7    # Test fails if score < 0.7
+```
+
+#### Using Variables
+
+Useful when your reference text comes from test data or external sources:
+
+```yaml
+tests:
+  - vars:
+      reference_translation: "The weather is beautiful today"
+    assert:
+      - type: meteor
+        value: "{{reference_translation}}"
+        threshold: 0.6
+```
+
+#### Multiple References
+
+METEOR can evaluate against multiple reference texts, using the best-matching reference for scoring:
+
+```yaml
+assert:
+  - type: meteor
+    value:
+      - "Hello world"           # Reference 1
+      - "Hi there, world"       # Reference 2
+      - "Greetings, world"      # Reference 3
+    threshold: 0.6
+```
+
+This is particularly useful when:
+- Multiple valid translations/outputs exist
+- You're working with different writing styles
+- You want to account for acceptable variations
+
+#### Practical Example
+
+Here's how METEOR scores different outputs against the reference "The weather is beautiful today":
+
+```yaml
+tests:
+  - vars:
+      reference: "The weather is beautiful today"
+  - description: "Testing various outputs"
+    vars:
+      outputs:
+        - "The weather is beautiful today"      # Score: 1.0 (exact match)
+        - "Today's weather is beautiful"        # Score: ~0.85 (reordered)
+        - "The weather is nice today"          # Score: ~0.7 (synonym)
+        - "It is sunny outside"                # Score: ~0.3 (different words)
+    assert:
+      - type: meteor
+        value: "{{reference}}"
+        threshold: 0.6
+```
+
+Note: Actual scores may vary based on the specific METEOR implementation and parameters used.
+
+### F-Scoree
 
 F-score (also F1 score) is a measure of accuracy that considers both precision and recall. It is the harmonic mean of precision and recall, providing a single score that balances both metrics. The score ranges from 0 (worst) to 1 (best).
 
