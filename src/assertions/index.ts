@@ -42,6 +42,7 @@ import { transform } from '../util/transform';
 import { handleAnswerRelevance } from './answerRelevance';
 import { AssertionsResult } from './assertionsResult';
 import { handleBleuScore } from './bleu';
+import { handleGleuScore } from './gleu';
 import { handleClassifier } from './classifier';
 import {
   handleContains,
@@ -59,7 +60,6 @@ import { handleEquals } from './equals';
 import { handleFactuality } from './factuality';
 import { handleIsValidFunctionCall } from './functionToolCall';
 import { handleGEval } from './geval';
-import { handleGleuScore } from './gleu';
 import { handleGuardrails } from './guardrails';
 import { handleJavascript } from './javascript';
 import { handleContainsJson, handleIsJson } from './json';
