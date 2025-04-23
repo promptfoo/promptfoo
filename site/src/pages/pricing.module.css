@@ -1,7 +1,9 @@
 .pricingPage {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 2rem 1rem;
+  max-width: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 2rem 0;
+  background-color: var(--ifm-background-color);
 }
 
 .pricingHeader {
@@ -199,4 +201,69 @@
 .demoButton {
   font-size: 1.2rem;
   padding: 1rem 2rem;
+}
+
+/* Comparison table styles */
+.comparisonSection {
+  margin: 4rem auto;
+  max-width: 1200px;
+  padding: 0 1.5rem;
+}
+
+.tableWrapper {
+  overflow-x: auto;
+  margin-top: 2rem;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+}
+
+.comparisonTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 1rem;
+}
+
+.comparisonTable th,
+.comparisonTable td {
+  padding: 1rem;
+  border-bottom: 1px solid var(--ifm-color-emphasis-200);
+}
+
+.comparisonTable th {
+  background-color: var(--ifm-color-emphasis-100);
+  text-align: left;
+  font-weight: 600;
+}
+
+.comparisonTable th:not(:first-child),
+.comparisonTable td:not(:first-child) {
+  text-align: center;
+  width: 20%;
+}
+
+.categoryRow td {
+  background-color: #60a5fa;
+  color: white;
+  font-weight: 600;
+  padding: 0.75rem 1rem;
+}
+
+.centerCell {
+  text-align: center;
+}
+
+.comparisonTable .checkIcon {
+  color: var(--ifm-color-primary);
+}
+
+/* Make the table responsive */
+@media (max-width: 768px) {
+  .comparisonTable {
+    font-size: 0.9rem;
+  }
+  
+  .comparisonTable th,
+  .comparisonTable td {
+    padding: 0.75rem;
+  }
 }
