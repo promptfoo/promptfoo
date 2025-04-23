@@ -62,6 +62,7 @@ export type EnvVars = {
   PROMPTFOO_STRIP_METADATA?: boolean;
   PROMPTFOO_TELEMETRY_DEBUG?: boolean;
   PROMPTFOO_UNALIGNED_INFERENCE_ENDPOINT?: string;
+  PROMPTFOO_CLOUD_API_URL?: string;
   REQUEST_TIMEOUT_MS?: number;
   RESULT_HISTORY_LENGTH?: number;
   WEBHOOK_TIMEOUT?: number;
@@ -69,6 +70,20 @@ export type EnvVars = {
   // HTTP proxy settings
   HTTP_PROXY?: string;
   HTTPS_PROXY?: string;
+  http_proxy?: string;
+  https_proxy?: string;
+  ALL_PROXY?: string;
+  all_proxy?: string;
+  NO_PROXY?: string;
+  no_proxy?: string;
+
+  // Node.js and system settings
+  NODE_EXTRA_CA_CERTS?: string;
+  NODE_TLS_REJECT_UNAUTHORIZED?: string;
+  API_PORT?: number;
+  API_HOST?: string;
+  JEST_WORKER_ID?: string;
+  npm_lifecycle_script?: string;
 
   // Provider-specific
   CDP_DOMAIN?: string;
