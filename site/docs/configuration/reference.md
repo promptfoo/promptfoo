@@ -22,6 +22,7 @@ Here is the main structure of the promptfoo configuration file:
 | evaluateOptions.delay           | number                                                                                           | No       | Force the test runner to wait after each API call (milliseconds)                                                                                                                                            |
 | evaluateOptions.showProgressBar | boolean                                                                                          | No       | Whether to display the progress bar                                                                                                                                                                         |
 | extensions                      | string[]                                                                                         | No       | List of extension files to load. Each extension is a file path with a function name. Can be Python (.py) or JavaScript (.js) files. Supported hooks are 'beforeAll', 'afterAll', 'beforeEach', 'afterEach'. |
+| env                             | Record\<string, string \| number \| boolean\>                                                    | No       | Environment variables to set for the test run. These values will override existing environment variables. Can be used to set API keys and other configuration values needed by providers.                   |
 
 ### Test Case
 

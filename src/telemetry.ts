@@ -30,8 +30,9 @@ const KA_ENDPOINT = 'https://ka.promptfoo.app/';
 
 let posthogClient: PostHog | null = null;
 try {
-  if (process.env.POSTHOG_KEY) {
-    posthogClient = new PostHog(process.env.POSTHOG_KEY, {
+  const posthogKey = getEnvString('POSTHOG_KEY');
+  if (posthogKey) {
+    posthogClient = new PostHog(posthogKey, {
       host: EVENTS_ENDPOINT,
     });
   }

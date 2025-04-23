@@ -10,7 +10,7 @@ import nunjucks from 'nunjucks';
 import * as path from 'path';
 import cliState from '../cliState';
 import { TERMINAL_MAX_WIDTH } from '../constants';
-import { getEnvBool } from '../envars';
+import { getEnvBool, getEnvString } from '../envars';
 import { getDirectory, importModule } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
@@ -505,10 +505,13 @@ export function maybeLoadFromExternalFile(filePath: string | object | Function |
 }
 
 export function isRunningUnderNpx(): boolean {
+  const npmExecPath = getEnvString('npm_execpath');
+  const npmLifecycleScript = getEnvString('npm_lifecycle_script');
+
   return Boolean(
-    process.env.npm_execpath?.includes('npx') ||
+    (npmExecPath && npmExecPath.includes('npx')) ||
       process.execPath.includes('npx') ||
-      process.env.npm_lifecycle_script?.includes('npx'),
+      (npmLifecycleScript && npmLifecycleScript.includes('npx')),
   );
 }
 
