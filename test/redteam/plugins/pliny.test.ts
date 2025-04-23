@@ -59,6 +59,10 @@ With some content.
     expect(plugin.id).toBe('promptfoo:redteam:pliny');
   });
 
+  it('should set canGenerateRemote to false', () => {
+    expect(PlinyPlugin.canGenerateRemote).toBe(false);
+  });
+
   it('should return the inject variable as the template', async () => {
     const template = await plugin.getTemplate();
     expect(template).toBe('testVar');

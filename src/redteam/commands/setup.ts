@@ -9,7 +9,7 @@ import { BrowserBehavior, checkServerRunning, openBrowser } from '../../util/ser
 export function redteamSetupCommand(program: Command) {
   program
     .command('setup [configDirectory]')
-    .description('Start browser ui and open to redteam setup')
+    .description('Start browser UI and open to redteam setup')
     .option('-p, --port <number>', 'Port number', DEFAULT_PORT.toString())
     .option('--filter-description <pattern>', 'Filter evals by description using a regex pattern')
     .option('--env-file, --env-path <path>', 'Path to .env file')
@@ -27,7 +27,6 @@ export function redteamSetupCommand(program: Command) {
         telemetry.record('command_used', {
           name: 'redteam setup',
         });
-        await telemetry.send();
 
         if (directory) {
           setConfigDirectoryPath(directory);

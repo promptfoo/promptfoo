@@ -158,7 +158,7 @@ export default function ResultsView({
   defaultEvalId,
 }: ResultsViewProps) {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { author, table, setTable, config, setConfig, evalId, setAuthor } = useResultsViewStore();
 
   const {
@@ -174,9 +174,13 @@ export default function ResultsView({
   const { showToast } = useToast();
   const [searchText, setSearchText] = React.useState(searchParams.get('search') || '');
   const [debouncedSearchText] = useDebounce(searchText, 200);
-  const handleSearchTextChange = React.useCallback((text: string) => {
-    setSearchText(text);
-  }, []);
+  const handleSearchTextChange = React.useCallback(
+    (text: string) => {
+      setSearchParams((prev) => ({ ...prev, search: text }));
+      setSearchText(text);
+    },
+    [searchParams],
+  );
 
   const [failureFilter, setFailureFilter] = React.useState<{ [key: string]: boolean }>({});
   const handleFailureFilterToggle = React.useCallback(
@@ -190,6 +194,7 @@ export default function ResultsView({
   const { head } = table;
 
   const [filterMode, setFilterMode] = React.useState<FilterMode>('all');
+
   const handleFilterModeChange = (event: SelectChangeEvent<unknown>) => {
     const mode = event.target.value as FilterMode;
     setFilterMode(mode);

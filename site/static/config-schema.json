@@ -532,6 +532,7 @@
                                               "latency",
                                               "levenshtein",
                                               "llm-rubric",
+                                              "meteor",
                                               "model-graded-closedqa",
                                               "model-graded-factuality",
                                               "moderation",
@@ -1147,7 +1148,8 @@
                           "tool-discovery",
                           "tool-discovery:multi-turn",
                           "toxicity",
-                          "unsafebench"
+                          "unsafebench",
+                          "xstest"
                         ]
                       },
                       {
@@ -1295,7 +1297,8 @@
                               "tool-discovery",
                               "tool-discovery:multi-turn",
                               "toxicity",
-                              "unsafebench"
+                              "unsafebench",
+                              "xstest"
                             ]
                           },
                           {
