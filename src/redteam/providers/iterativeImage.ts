@@ -1,4 +1,5 @@
 import dedent from 'dedent';
+import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import type {
@@ -15,7 +16,6 @@ import { extractFirstJsonObject } from '../../util/json';
 import { extractVariablesFromTemplates, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { getTargetResponse, redteamProviderManager, type TargetResponse } from './shared';
-import { getEnvInt } from '../../envars';
 
 interface ImageGenerationOutput {
   prompt: string;

@@ -23,8 +23,7 @@ export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
     const apiKeyCandidate =
       this.config?.apiKey ||
       (this.config?.apiKeyEnvar
-        ? getEnvString(this.config.apiKeyEnvar) || 
-          this.env?.[this.config.apiKeyEnvar as keyof any]
+        ? getEnvString(this.config.apiKeyEnvar) || this.env?.[this.config.apiKeyEnvar as keyof any]
         : undefined) ||
       this.env?.VOYAGE_API_KEY ||
       getEnvString('VOYAGE_API_KEY');

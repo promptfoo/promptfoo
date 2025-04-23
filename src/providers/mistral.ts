@@ -1,4 +1,5 @@
 import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
+import type { EnvVarKey } from '../envars';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import type {
@@ -193,7 +194,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
     const apiKeyCandidate =
       this.config?.apiKey ||
       (this.config?.apiKeyEnvar
-        ? getEnvString(this.config.apiKeyEnvar) ||
+        ? getEnvString(this.config.apiKeyEnvar as EnvVarKey) ||
           this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
         : undefined) ||
       this.env?.MISTRAL_API_KEY ||
@@ -346,7 +347,7 @@ export class MistralEmbeddingProvider implements ApiProvider {
     const apiKeyCandidate =
       this.config?.apiKey ||
       (this.config?.apiKeyEnvar
-        ? getEnvString(this.config.apiKeyEnvar) ||
+        ? getEnvString(this.config.apiKeyEnvar as EnvVarKey) ||
           this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
         : undefined) ||
       this.env?.MISTRAL_API_KEY ||

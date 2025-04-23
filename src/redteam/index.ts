@@ -5,6 +5,7 @@ import Table from 'cli-table3';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import cliState from '../cliState';
+import { getEnvString } from '../envars';
 import logger, { getLogLevel } from '../logger';
 import { isProviderOptions, type TestCase, type TestCaseWithPlugin } from '../types';
 import { checkRemoteHealth } from '../util/apiHealth';
@@ -30,7 +31,6 @@ import { loadStrategy, Strategies, validateStrategies } from './strategies';
 import { DEFAULT_LANGUAGES } from './strategies/multilingual';
 import type { RedteamStrategyObject, SynthesizeOptions } from './types';
 import { getShortPluginId } from './util';
-import { getEnvString } from '../envars';
 
 /**
  * Gets the severity level for a plugin based on its ID and configuration.

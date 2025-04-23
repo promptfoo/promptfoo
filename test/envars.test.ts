@@ -1,4 +1,5 @@
 import cliState from '../src/cliState';
+import type { EnvVarKey } from '../src/envars';
 import { getEnvString, getEnvBool, getEnvInt, getEnvFloat, isCI } from '../src/envars';
 
 describe('envars', () => {
@@ -78,7 +79,7 @@ describe('envars', () => {
 
     it('should handle arbitrary string keys not defined in EnvVars type', () => {
       process.env.CUSTOM_ENV_VAR = 'custom value';
-      expect(getEnvString('CUSTOM_ENV_VAR')).toBe('custom value');
+      expect(getEnvString('CUSTOM_ENV_VAR' as EnvVarKey)).toBe('custom value');
     });
   });
 
@@ -144,7 +145,7 @@ describe('envars', () => {
 
     it('should handle arbitrary string keys for boolean values', () => {
       process.env.CUSTOM_BOOL_VAR = 'true';
-      expect(getEnvBool('CUSTOM_BOOL_VAR')).toBe(true);
+      expect(getEnvBool('CUSTOM_BOOL_VAR' as EnvVarKey)).toBe(true);
     });
   });
 
@@ -201,7 +202,7 @@ describe('envars', () => {
 
     it('should handle arbitrary string keys for integer values', () => {
       process.env.CUSTOM_INT_VAR = '123';
-      expect(getEnvInt('CUSTOM_INT_VAR')).toBe(123);
+      expect(getEnvInt('CUSTOM_INT_VAR' as EnvVarKey)).toBe(123);
     });
   });
 
@@ -258,7 +259,7 @@ describe('envars', () => {
 
     it('should handle arbitrary string keys for float values', () => {
       process.env.CUSTOM_FLOAT_VAR = '3.14159';
-      expect(getEnvFloat('CUSTOM_FLOAT_VAR')).toBe(3.14159);
+      expect(getEnvFloat('CUSTOM_FLOAT_VAR' as EnvVarKey)).toBe(3.14159);
     });
   });
 
