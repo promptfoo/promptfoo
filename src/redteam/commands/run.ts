@@ -3,6 +3,7 @@ import type { Command } from 'commander';
 import dedent from 'dedent';
 import { z } from 'zod';
 import cliState from '../../cliState';
+import { CLOUD_PROVIDER_PREFIX } from '../../constants';
 import logger, { setLogLevel } from '../../logger';
 import telemetry from '../../telemetry';
 import { setupEnv } from '../../util';
@@ -48,6 +49,7 @@ export function redteamRunCommand(program: Command) {
       '--filter-providers, --filter-targets <providers>',
       'Only run tests with these providers (regex match)',
     )
+    .option('-t, --target <id>', 'Cloud provider target ID to run the scan on')
     .action(async (opts: RedteamRunOptions) => {
       setupEnv(opts.envPath);
       telemetry.record('command_used', {
@@ -60,6 +62,10 @@ export function redteamRunCommand(program: Command) {
 
       if (opts.config && UUID_REGEX.test(opts.config)) {
         const configObj = await getConfigFromCloud(opts.config);
+
+        if (opts.target && UUID_REGEX.test(opts.target)) {
+          configObj.targets = [{ id: `${CLOUD_PROVIDER_PREFIX}${opts.target}`, config: {} }];
+        }
 
         opts.liveRedteamConfig = configObj;
 
