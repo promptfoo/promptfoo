@@ -17,6 +17,9 @@ assert:
 
 This assertion will use the pi scorer to grade the output based on the specified criteria.
 
+Make sure to set the `WITHPI_API_KEY` in your environment variables.  You can create a key for free here:
+https://build.withpi.ai/account/keys
+
 ## How it works
 
 Under the hood, the `pi` assertion uses the `withpi` sdk to call the to  evaluate the output based on the criteria you provide. 
