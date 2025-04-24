@@ -237,6 +237,46 @@ describe('evaluator', () => {
     expect(summary.results[0].response?.output).toBe('Test output');
   });
 
+  it('evaluate with vars from file', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt {{ var1 }}')],
+      tests: [
+        {
+          vars: { var1: 'file://test/fixtures/test_file.txt' },
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.stats.tokenUsage).toEqual({
+      total: 10,
+      prompt: 5,
+      completion: 5,
+      cached: 0,
+      numRequests: 1,
+      completionDetails: {
+        reasoning: 0,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+      },
+      assertions: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
+      },
+    });
+    expect(summary.results[0].prompt.raw).toBe('Test prompt <h1>Sample Report</h1><p>This is a test report with some data for the year 2023.</p><table><tr><th>Month</th><th>Revenue</th></tr><tr><td>January</td><td>,000</td></tr><tr><td>February</td><td>,000</td></tr></table>');
+    expect(summary.results[0].prompt.label).toBe('Test prompt {{ var1 }}');
+    expect(summary.results[0].response?.output).toBe('Test output');
+  });
+
   it('evaluate with named prompt', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],

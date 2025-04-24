@@ -35,6 +35,7 @@ import {
 } from './types';
 import { isApiProvider } from './types/providers';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
+import { processConfigFileReferences } from './util/fileReference';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
 import { safeJsonStringify } from './util/json';
@@ -664,6 +665,7 @@ class Evaluator {
       testCase.vars = { ...testSuite.defaultTest?.vars, ...testCase?.vars };
 
       if (testCase.vars) {
+        testCase.vars = await processConfigFileReferences(testCase.vars);
         const varWithSpecialColsRemoved: Vars = {};
         const inputTransformForIndividualTest = testCase.options?.transformVars;
         const inputTransform = inputTransformForIndividualTest || inputTransformDefault;
@@ -685,9 +687,11 @@ class Evaluator {
           );
           testCase.vars = { ...testCase.vars, ...transformedVars };
         }
-        for (const varName of Object.keys(testCase.vars)) {
-          varNames.add(varName);
-          varWithSpecialColsRemoved[varName] = testCase.vars[varName];
+        if (testCase.vars) {
+          for (const varName of Object.keys(testCase.vars)) {
+            varNames.add(varName);
+            varWithSpecialColsRemoved[varName] = testCase.vars[varName];
+          }
         }
         varsWithSpecialColsRemoved.push(varWithSpecialColsRemoved);
       }
