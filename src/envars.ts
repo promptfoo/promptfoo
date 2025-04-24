@@ -276,43 +276,8 @@ export type EnvVars = {
   WATSONX_AI_BEARER_TOKEN?: string;
   WATSONX_AI_PROJECT_ID?: string;
 
-  // WithPi
+  // Pi Labs
   WITHPI_API_KEY?: string;
-
-  // node/npm
-  NODE_ENV?: string;
-  npm_execpath?: string;
-
-  // CI
-  CI?: boolean;
-  CIRCLECI?: boolean;
-  GITHUB_ACTIONS?: boolean;
-  GITLAB_CI?: boolean;
-  JENKINS?: boolean;
-  TRAVIS?: boolean;
-  APPVEYOR?: boolean;
-  CODEBUILD_BUILD_ID?: boolean;
-  TF_BUILD?: boolean;
-  BITBUCKET_COMMIT?: boolean;
-  BUDDY?: boolean;
-  BUILDKITE?: boolean;
-  TEAMCITY_VERSION?: boolean;
-
-  // Azure OpenAI auth params
-  AZURE_CLIENT_SECRET?: string;
-  AZURE_CLIENT_ID?: string;
-  AZURE_TENANT_ID?: string;
-  AZURE_AUTHORITY_HOST?: string;
-  AZURE_TOKEN_SCOPE?: string;
-  AZURE_DEPLOYMENT_NAME?: string;
-  AZURE_EMBEDDING_DEPLOYMENT_NAME?: string;
-  AZURE_OPENAI_DEPLOYMENT_NAME?: string;
-  AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME?: string;
-
-  // Azure Content Safety params
-  AZURE_CONTENT_SAFETY_ENDPOINT?: string;
-  AZURE_CONTENT_SAFETY_API_VERSION?: string;
-  AZURE_CONTENT_SAFETY_API_KEY?: string;
 } & EnvOverrides;
 
 // Allow string access to any key for environment variables not explicitly listed
