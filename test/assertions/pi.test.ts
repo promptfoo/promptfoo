@@ -110,7 +110,7 @@ describe('handlePiScorer', () => {
       outputString: 'test output',
       prompt: 'test prompt',
       providerResponse: {},
-      renderedValue: 'test value',
+      renderedValue: 'test question',
       test: {
         options: {
           rubricPrompt: 'test rubric',

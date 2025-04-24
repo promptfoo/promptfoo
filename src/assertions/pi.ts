@@ -2,13 +2,11 @@ import {  matchesPiScore } from '../matchers';
 import type { AssertionParams, GradingResult } from '../types';
 import invariant from '../util/invariant';
 
-export const handlePiScorer = ({
+export const handlePiScorer = async ({
   assertion,
   prompt,
   renderedValue,
   outputString,
-  context,
-  test,
 }: AssertionParams): Promise<GradingResult> => {
   invariant(
     typeof renderedValue === 'string',
