@@ -1,6 +1,6 @@
 # Pi Scorer
 
-`pi` is a deterministic alternative to "LLM as a judge" evaluation.  It can quickly, and deterministically, 
+`pi` is a more accurate alternative to "LLM as a judge" evaluation.  It can quickly, and accurately, 
 evaluate input and output pairs against any criteria.
 
 
