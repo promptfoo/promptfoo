@@ -64,6 +64,9 @@ export const FOUNDATION_PLUGINS = [
   'religion',
 ] as const;
 
+export const AGENTIC_PLUGINS = ['agentic:memory-poisoning'] as const;
+export type AgenticPlugin = (typeof AGENTIC_PLUGINS)[number];
+
 export const COLLECTIONS = ['default', 'foundation', 'harmful', 'pii'] as const;
 export type Collection = (typeof COLLECTIONS)[number];
 
@@ -186,14 +189,20 @@ export type Plugin =
   | Collection
   | ConfigRequiredPlugin
   | HarmPlugin
-  | PIIPlugin;
+  | PIIPlugin
+  | AgenticPlugin;
 
 export const DEFAULT_PLUGINS: ReadonlySet<Plugin> = new Set([
   ...[...BASE_PLUGINS, ...(Object.keys(HARM_PLUGINS) as HarmPlugin[]), ...PII_PLUGINS].sort(),
 ] as const satisfies readonly Plugin[]);
 
 export const ALL_PLUGINS: readonly Plugin[] = [
-  ...new Set([...DEFAULT_PLUGINS, ...ADDITIONAL_PLUGINS, ...CONFIG_REQUIRED_PLUGINS]),
+  ...new Set([
+    ...DEFAULT_PLUGINS,
+    ...ADDITIONAL_PLUGINS,
+    ...CONFIG_REQUIRED_PLUGINS,
+    ...AGENTIC_PLUGINS,
+  ]),
 ].sort() as Plugin[];
 
 export const FRAMEWORK_NAMES: Record<string, string> = {
@@ -201,7 +210,6 @@ export const FRAMEWORK_NAMES: Record<string, string> = {
   'nist:ai:measure': 'NIST AI RMF',
   'owasp:api': 'OWASP API Top 10',
   'owasp:llm': 'OWASP LLM Top 10',
-  // TODO(Will): resume here...
   'owasp:agentic': 'OWASP Agentic v1.0',
 };
 
@@ -372,6 +380,19 @@ export const OWASP_API_TOP_10_MAPPING: Record<
   },
   'owasp:api:10': {
     plugins: ['debug-access', 'harmful:privacy'],
+    strategies: [],
+  },
+};
+
+/**
+ * OWASP Agentic AI - Threats and Mitigations v1.0 (February 2025)
+ */
+export const OWASP_AGENTIC_REDTEAM_MAPPING: Record<
+  string,
+  { plugins: Plugin[]; strategies: Strategy[] }
+> = {
+  'owasp:agentic:t01': {
+    plugins: ['agentic:memory-poisoning'],
     strategies: [],
   },
 };
@@ -626,6 +647,7 @@ export const ALIASED_PLUGINS = [
   ...Object.keys(NIST_AI_RMF_MAPPING),
   ...Object.keys(OWASP_API_TOP_10_MAPPING),
   ...Object.keys(OWASP_LLM_TOP_10_MAPPING),
+  ...Object.keys(OWASP_AGENTIC_REDTEAM_MAPPING),
 ] as const;
 
 export const ALIASED_PLUGIN_MAPPINGS: Record<
@@ -637,6 +659,7 @@ export const ALIASED_PLUGIN_MAPPINGS: Record<
   'owasp:api': OWASP_API_TOP_10_MAPPING,
   'owasp:llm': OWASP_LLM_TOP_10_MAPPING,
   'owasp:llm:redteam': OWASP_LLM_RED_TEAM_MAPPING,
+  'owasp:agentic:redteam': OWASP_AGENTIC_REDTEAM_MAPPING,
   toxicity: {
     toxicity: {
       plugins: [

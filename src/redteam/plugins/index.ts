@@ -263,6 +263,7 @@ function createRemotePlugin<T extends PluginConfig>(
   };
 }
 const remotePlugins: PluginFactory[] = [
+  'agentic:memory-poisoning',
   'ascii-smuggling',
   'bfla',
   'bola',
