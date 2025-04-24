@@ -1,5 +1,5 @@
 import type nunjucks from 'nunjucks';
-import {handlePiScorer} from '../../src/assertions/pi';
+import { handlePiScorer } from '../../src/assertions/pi';
 import { matchesClosedQa, matchesPiScore } from '../../src/matchers';
 import type { AssertionParams } from '../../src/types';
 import { getNunjucksEngine } from '../../src/util/templates';
@@ -123,11 +123,9 @@ describe('handlePiScorer', () => {
 
     await handlePiScorer(params);
 
-    expect(matchesPiScore).toHaveBeenCalledWith(
-      'test question',
-      'test prompt',
-      'test output',
-      { type: 'pi', value: 'test question' },
-    );
+    expect(matchesPiScore).toHaveBeenCalledWith('test question', 'test prompt', 'test output', {
+      type: 'pi',
+      value: 'test question',
+    });
   });
 });

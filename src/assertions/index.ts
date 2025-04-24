@@ -70,6 +70,7 @@ import { handleModelGradedClosedQa } from './modelGradedClosedQa';
 import { handleModeration } from './moderation';
 import { handleIsValidOpenAiToolsCall } from './openai';
 import { handlePerplexity, handlePerplexityScore } from './perplexity';
+import { handlePiScorer } from './pi';
 import { handlePython } from './python';
 import { handleRedteam } from './redteam';
 import { handleIsRefusal } from './refusal';
@@ -81,7 +82,6 @@ import { handleStartsWith } from './startsWith';
 import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
 import { handleWebhook } from './webhook';
 import { handleIsXml } from './xml';
-import { handlePiScorer } from './pi';
 
 const ASSERTIONS_MAX_CONCURRENCY = getEnvInt('PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', 3);
 
@@ -278,7 +278,7 @@ export async function runAssertion({
     similar: handleSimilar,
     'starts-with': handleStartsWith,
     webhook: handleWebhook,
-    pi: handlePiScorer
+    pi: handlePiScorer,
   };
 
   const handler = assertionHandlers[baseType as keyof typeof assertionHandlers];

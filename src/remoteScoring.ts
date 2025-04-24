@@ -1,20 +1,18 @@
 import { fetchWithCache } from './cache';
+import { getEnvString } from './envars';
 import logger from './logger';
 import { REQUEST_TIMEOUT_MS } from './providers/shared';
 import type { GradingResult } from './types';
-import { getEnvString } from './envars';
-
 
 type PiQuestion = {
   question: string;
-}
+};
 type PiScoringSpec = PiQuestion[];
 type RemotePiScoringPayload = {
   llm_input: string;
   llm_output: string;
   scoring_spec: PiScoringSpec;
 };
-
 
 export function getWithPiApiKey(): string | undefined {
   // Check env var first
@@ -27,19 +25,23 @@ export function getWithPiApiKey(): string | undefined {
 type WithPiGradingResult = {
   question_scores: Record<string, number>;
   total_score: number;
-}
+};
 
-function convertPiResultToGradingResult(result: WithPiGradingResult, threshold: number) : GradingResult {
+function convertPiResultToGradingResult(
+  result: WithPiGradingResult,
+  threshold: number,
+): GradingResult {
   return {
     pass: result.total_score > threshold,
     score: result.total_score,
     namedScores: result.question_scores,
-    reason: 'Pi Scorer'
-  }
+    reason: 'Pi Scorer',
+  };
 }
-const WITHPI_API_URL = `https://api.withpi.ai/v1/scoring_system/score`
+const WITHPI_API_URL = `https://api.withpi.ai/v1/scoring_system/score`;
 export async function doRemoteScoringWithPi(
-  payload: RemotePiScoringPayload, passThreshold: number=.5
+  payload: RemotePiScoringPayload,
+  passThreshold: number = 0.5,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   try {
     const apiKey = getWithPiApiKey();
@@ -52,7 +54,7 @@ export async function doRemoteScoringWithPi(
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-api-key': apiKey
+            'x-api-key': apiKey,
           },
           body,
         },
@@ -60,7 +62,9 @@ export async function doRemoteScoringWithPi(
       );
       return convertPiResultToGradingResult(data, passThreshold);
     } else {
-      throw new Error(`Env var WITHPI_API_KEY must be set. Visit https://docs.withpi.ai for more information.`)
+      throw new Error(
+        `Env var WITHPI_API_KEY must be set. Visit https://docs.withpi.ai for more information.`,
+      );
     }
   } catch (error) {
     throw new Error(`Could not perform remote grading: ${error}`);

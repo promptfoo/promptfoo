@@ -23,6 +23,7 @@ import { getDefaultProviders } from './providers/defaults';
 import { LLAMA_GUARD_REPLICATE_PROVIDER } from './redteam/constants';
 import { shouldGenerateRemote } from './redteam/remoteGeneration';
 import { doRemoteGrading } from './remoteGrading';
+import { doRemoteScoringWithPi } from './remoteScoring';
 import type {
   ApiClassificationProvider,
   ApiEmbeddingProvider,
@@ -42,7 +43,6 @@ import { isJavascriptFile } from './util/file';
 import invariant from './util/invariant';
 import { extractJsonObjects, extractFirstJsonObject } from './util/json';
 import { getNunjucksEngine } from './util/templates';
-import { doRemoteScoringWithPi } from './remoteScoring';
 
 const nunjucks = getNunjucksEngine(undefined, false, true);
 
@@ -510,8 +510,6 @@ export async function matchesLlmRubric(
   };
 }
 
-
-
 export async function matchesPiScore(
   renderedValue: string,
   llmInput: string,
@@ -519,17 +517,21 @@ export async function matchesPiScore(
   assertion?: Assertion | null,
 ): Promise<GradingResult> {
   return {
-    ...(await doRemoteScoringWithPi({
-      llm_input: llmInput,
-      llm_output: llmOutput,
-      scoring_spec: [{
-        question: renderedValue
-      }]
-    }, assertion?.threshold )),
+    ...(await doRemoteScoringWithPi(
+      {
+        llm_input: llmInput,
+        llm_output: llmOutput,
+        scoring_spec: [
+          {
+            question: renderedValue,
+          },
+        ],
+      },
+      assertion?.threshold,
+    )),
     assertion,
   };
 }
-
 
 export async function matchesFactuality(
   input: string,
