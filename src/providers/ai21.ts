@@ -1,4 +1,5 @@
 import { fetchWithCache } from '../cache';
+import type { EnvVarKey } from '../envars';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import type { ApiProvider, ProviderResponse, TokenUsage } from '../types';
@@ -24,7 +25,7 @@ const AI21_CHAT_MODELS = [
 
 interface AI21ChatCompletionOptions {
   apiKey?: string;
-  apiKeyEnvar?: string;
+  apiKeyEnvar?: EnvVarKey;
   apiBaseUrl?: string;
   temperature?: number;
   top_p?: number;
@@ -105,7 +106,7 @@ export class AI21ChatCompletionProvider implements ApiProvider {
     return (
       this.config.apiKey ||
       (this.config?.apiKeyEnvar
-        ? process.env[this.config.apiKeyEnvar] ||
+        ? getEnvString(this.config.apiKeyEnvar) ||
           this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
         : undefined) ||
       this.env?.AI21_API_KEY ||

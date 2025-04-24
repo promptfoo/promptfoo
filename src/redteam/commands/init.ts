@@ -11,6 +11,7 @@ import dedent from 'dedent';
 import fs from 'fs';
 import * as path from 'path';
 import { DEFAULT_PORT } from '../../constants';
+import { getEnvString } from '../../envars';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../../globalConfig/globalConfig';
 import logger from '../../logger';
@@ -134,7 +135,7 @@ def call_api(prompt, options, context):
 `;
 
 function recordOnboardingStep(step: string, properties: EventProperties = {}) {
-  telemetry.recordAndSend('funnel', {
+  telemetry.record('funnel', {
     type: 'redteam onboarding',
     step,
     ...properties,
@@ -670,9 +671,11 @@ export function initCommand(program: Command) {
         setupEnv(opts.envPath);
         try {
           // Check if we're in a non-GUI environment
-          const hasDisplay =
-            process.env.DISPLAY || process.platform === 'win32' || process.platform === 'darwin';
-          const useGui = opts.gui && hasDisplay;
+          const isGUI =
+            getEnvString('DISPLAY') ||
+            process.platform === 'win32' ||
+            process.platform === 'darwin';
+          const useGui = opts.gui && isGUI;
 
           if (useGui) {
             const isRunning = await checkServerRunning();
