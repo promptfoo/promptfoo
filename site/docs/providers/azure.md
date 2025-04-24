@@ -62,7 +62,7 @@ providers:
 
 ## Provider Types
 
-- `azure:chat:<deployment name>` - uses the given deployment (for chat endpoints such as gpt-35-turbo, gpt-4)
+- `azure:chat:<deployment name>` - uses the given deployment (for chat endpoints such as gpt-4.1, gpt-4.1-mini, gpt-4.1-nano, gpt-4o)
 - `azure:completion:<deployment name>` - uses the given deployment (for completion endpoints such as gpt-35-instruct)
 
 ## Environment Variables
@@ -86,42 +86,21 @@ The Azure OpenAI provider supports the following environment variables:
 
 Note: For API URLs, you only need to set one of `AZURE_API_HOST`, `AZURE_API_BASE_URL`, or `AZURE_BASE_URL`. If multiple are set, the provider will use them in that order of preference.
 
-### Default Deployment
+## Using Azure as the Default Provider
 
-If `AZURE_DEPLOYMENT_NAME` is set, it will be automatically used as the default deployment when no other provider is configured. This makes Azure OpenAI the default provider when:
+Azure can serve as the default provider for all promptfoo operations without explicit configuration in each test. This is useful for teams standardizing on Azure.
 
-1. No OpenAI API key is present (`OPENAI_API_KEY` is not set)
-2. Azure authentication is configured (either via API key or client credentials)
-3. `AZURE_DEPLOYMENT_NAME` is set
-
-For example, if you have these environment variables set:
+Set these environment variables:
 
 ```bash
-AZURE_DEPLOYMENT_NAME=gpt-4
+AZURE_DEPLOYMENT_NAME=your-deployment-name
 AZURE_API_KEY=your-api-key
-AZURE_API_HOST=your-host.openai.azure.com
+AZURE_API_HOST=your-resource.openai.azure.com
 ```
 
-Or these client credential environment variables:
+With these variables set, Azure handles all operations (generation, grading, suggestions) except moderation.
 
-```bash
-AZURE_DEPLOYMENT_NAME=gpt-4
-AZURE_CLIENT_ID=your-client-id
-AZURE_CLIENT_SECRET=your-client-secret
-AZURE_TENANT_ID=your-tenant-id
-AZURE_API_HOST=your-host.openai.azure.com
-```
-
-Then Azure OpenAI will be used as the default provider for all operations including:
-
-- Dataset generation
-- Grading
-- Suggestions
-- Synthesis
-
-Because embedding models are distinct from text generation, to set an embedding provider you must specify `AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME`.
-
-Note that any moderation tasks will still use the OpenAI API.
+For embedding operations, set `AZURE_EMBEDDING_DEPLOYMENT_NAME` to your embedding model deployment.
 
 ## Configuration
 
@@ -185,7 +164,7 @@ npm i @azure/identity
 
 ## Model-graded tests
 
-[Model-graded assertions](/docs/configuration/expected-outputs/model-graded/) such as `factuality` or `llm-rubric` use gpt-4.1-2025-04-14 by default. If you are using Azure, you must override the grader to point to your Azure deployment.
+[Model-graded assertions](/docs/configuration/expected-outputs/model-graded/) such as `factuality` or `llm-rubric` use gpt-4.1 by default. If you are using Azure, you must override the grader to point to your Azure deployment.
 
 The easiest way to do this for _all_ your test cases is to add the [`defaultTest`](/docs/configuration/guide/#default-test-cases) property to your config:
 
@@ -193,7 +172,7 @@ The easiest way to do this for _all_ your test cases is to add the [`defaultTest
 defaultTest:
   options:
     provider:
-      id: azure:chat:gpt-4-deployment-name
+      id: azure:chat:gpt-4.1-deployment-name
       config:
         apiHost: 'xxxxxxx.openai.azure.com'
 ```
@@ -230,7 +209,7 @@ tests:
 
 ### Similarity
 
-The `similar` assertion type requires an embedding model such as `text-embedding-ada-002`. Be sure to specify a deployment with an embedding model, not a chat model, when overriding the grader.
+The `similar` assertion type requires an embedding model such as `text-embedding-3-large`. Be sure to specify a deployment with an embedding model, not a chat model, when overriding the grader.
 
 ## AI Services
 
@@ -252,11 +231,11 @@ providers:
 
 (The inconsistency in naming convention between `deployment_id` and `dataSources` reflects the actual naming in the Azure API.)
 
-## Configuration
+## Configuration Properties
 
 These properties can be set under the provider `config` key`:
 
-General config
+### General Configuration
 
 | Name       | Description                                 |
 | ---------- | ------------------------------------------- |
@@ -265,7 +244,7 @@ General config
 | apiKey     | API key.                                    |
 | apiVersion | API version.                                |
 
-Azure-specific config
+### Azure-specific Configuration
 
 | Name               | Description                                                     |
 | ------------------ | --------------------------------------------------------------- |
@@ -277,29 +256,28 @@ Azure-specific config
 | deployment_id      | Azure cognitive services deployment ID.                         |
 | dataSources        | Azure cognitive services parameter for specifying data sources. |
 
-OpenAI config:
+### OpenAI Configuration
 
-| Name                  | Description                                                                                                                                                                                                                                   |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| o1                    | Set to `true` if your Azure deployment uses an o1 model. Since Azure allows custom model naming, this flag is required to properly handle o1 models which do not support certain parameters. **(Deprecated, use `isReasoningModel` instead)** |
-| isReasoningModel      | Set to `true` if your Azure deployment uses a reasoning model (o1, o3-mini, etc.). This is the preferred flag over the deprecated `o1` flag.                                                                                                  |
-| max_completion_tokens | Maximum number of tokens to generate for reasoning models. Only used when `isReasoningModel` or `o1` is set to `true`.                                                                                                                        |
-| reasoning_effort      | Allows you to control how long the reasoning model thinks before answering, 'low', 'medium' or 'high'. Only used when `isReasoningModel` or `o1` is set to `true`.                                                                            |
-| temperature           | Controls randomness of the output. Not supported for reasoning models and will be automatically excluded when `isReasoningModel` or `o1` is `true`.                                                                                           |
-| max_tokens            | Maximum number of tokens to generate. Not supported for reasoning models and will be automatically excluded when `isReasoningModel` or `o1` is `true`.                                                                                        |
-| top_p                 | Controls nucleus sampling.                                                                                                                                                                                                                    |
-| frequency_penalty     | Penalizes new tokens based on their frequency.                                                                                                                                                                                                |
-| presence_penalty      | Penalizes new tokens based on their presence.                                                                                                                                                                                                 |
-| best_of               | Generates multiple outputs and chooses the best.                                                                                                                                                                                              |
-| functions             | Specifies functions available for use.                                                                                                                                                                                                        |
-| function_call         | Controls automatic function calling.                                                                                                                                                                                                          |
-| response_format       | Specifies the format of the response.                                                                                                                                                                                                         |
-| stop                  | Specifies stop sequences for the generation.                                                                                                                                                                                                  |
-| passthrough           | Anything under `passthrough` will be sent as a top-level request param                                                                                                                                                                        |
+| Name                  | Description                                                                                                                                                        |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| isReasoningModel      | Set to `true` if your Azure deployment uses a reasoning model (o3, o4-mini, o3-mini-2024, etc.).                                                                   |
+| max_completion_tokens | Maximum number of tokens to generate for reasoning models. Only used when `isReasoningModel` or `o1` is set to `true`.                                             |
+| reasoning_effort      | Allows you to control how long the reasoning model thinks before answering, 'low', 'medium' or 'high'. Only used when `isReasoningModel` or `o1` is set to `true`. |
+| temperature           | Controls randomness of the output. Not supported for reasoning models and will be automatically excluded when `isReasoningModel` or `o1` is `true`.                |
+| max_tokens            | Maximum number of tokens to generate. Not supported for reasoning models and will be automatically excluded when `isReasoningModel` or `o1` is `true`.             |
+| top_p                 | Controls nucleus sampling.                                                                                                                                         |
+| frequency_penalty     | Penalizes new tokens based on their frequency.                                                                                                                     |
+| presence_penalty      | Penalizes new tokens based on their presence.                                                                                                                      |
+| best_of               | Generates multiple outputs and chooses the best.                                                                                                                   |
+| functions             | Specifies functions available for use.                                                                                                                             |
+| function_call         | Controls automatic function calling.                                                                                                                               |
+| response_format       | Specifies the format of the response.                                                                                                                              |
+| stop                  | Specifies stop sequences for the generation.                                                                                                                       |
+| passthrough           | Anything under `passthrough` will be sent as a top-level request param                                                                                             |
 
-## Using Reasoning Models (o1, o3-mini)
+## Using Reasoning Models (o3, o4-mini, o3-mini-2024)
 
-Azure OpenAI now supports reasoning models like `o1` and `o3-mini`. These models operate differently from standard models with specific requirements:
+Azure OpenAI now supports reasoning models like `o3`, `o4-mini`, and `o3-mini-2024`. These models operate differently from standard models with specific requirements:
 
 1. They use `max_completion_tokens` instead of `max_tokens`
 2. They don't support `temperature` (it's ignored)
@@ -310,10 +288,10 @@ Since Azure allows custom deployment names that don't necessarily reflect the un
 ```yaml
 # For chat endpoints
 providers:
-  - id: azure:chat:my-o3-mini-deployment
+  - id: azure:chat:my-o3-mini-2025-deployment
     config:
       apiHost: 'xxxxxxxx.openai.azure.com'
-      # Set this flag to true for reasoning models (o1, o3-mini)
+      # Set this flag to true for reasoning models (o3, o3-mini-2024)
       isReasoningModel: true
       # Use max_completion_tokens instead of max_tokens
       max_completion_tokens: 25000
@@ -322,7 +300,7 @@ providers:
 
 # For completion endpoints
 providers:
-  - id: azure:completion:my-o1-deployment
+  - id: azure:completion:my-o3-deployment
     config:
       apiHost: 'xxxxxxxx.openai.azure.com'
       isReasoningModel: true
@@ -342,7 +320,7 @@ prompts:
   - 'Solve this complex math problem: {{problem}}'
 
 providers:
-  - id: azure:chat:my-o3-mini-deployment
+  - id: azure:chat:my-o3-mini-2024-deployment
     config:
       apiHost: 'xxxxxxxx.openai.azure.com'
       isReasoningModel: true
@@ -388,7 +366,7 @@ providers:
       apiHost: 'your-deployment-name.services.ai.azure.com'
       apiVersion: '2024-05-01-preview'
       isReasoningModel: true
-      max_completion_tokens: 2048
+      max_completion_tokens: 4000
       reasoning_effort: 'medium' # Options: low, medium, high
 ```
 
