@@ -7,11 +7,11 @@ import React from 'react';
 import PluginTable from '../\_shared/PluginTable';
 import StrategyTable from '../\_shared/StrategyTable';
 
-# Redteam Configuration
+# Red team Configuration
 
-The `redteam` section in your `promptfooconfig.yaml` file is used when generating redteam tests via `promptfoo redteam run` or `promptfoo redteam generate`. It allows you to specify the plugins and other parameters of your redteam tests.
+The `redteam` section in your `promptfooconfig.yaml` file is used when generating redteam tests via `promptfoo redteam run` or `promptfoo redteam generate`. It allows you to specify the plugins and other parameters of your red team tests.
 
-The most important components of your redteam configuration are:
+The most important components of your red team configuration are:
 
 - **Targets**: The endpoints or models you want to test (also known as "providers").
 - **Plugins**: Adversarial input generators that produce potentially malicious payloads.
@@ -22,7 +22,7 @@ The most important components of your redteam configuration are:
 
 Red teams happen in three steps:
 
-- `promptfoo redteam init` to initialize a basic redteam configuration
+- `promptfoo redteam init` to initialize a basic red team configuration
 - `promptfoo redteam run` to generate adversarial test cases and run them against the target
 - `promptfoo redteam report` to view the results
 
@@ -30,7 +30,7 @@ Red teams happen in three steps:
 
 ## Configuration Structure
 
-The redteam configuration uses the following YAML structure:
+The red team configuration uses the following YAML structure:
 
 ```yaml
 targets:
@@ -53,7 +53,7 @@ redteam:
 | ----------------------- | ------------------------- | ------------------------------------------------------------------------ | ------------------------------- |
 | `injectVar`             | `string`                  | Variable to inject adversarial inputs into                               | Inferred from prompts           |
 | `numTests`              | `number`                  | Default number of tests to generate per plugin                           | 5                               |
-| `plugins`               | `Array<string\|object>`   | Plugins to use for redteam generation                                    | `default`                       |
+| `plugins`               | `Array<string\|object>`   | Plugins to use for red team generation                                   | `default`                       |
 | `provider` or `targets` | `string\|ProviderOptions` | Endpoint or AI model provider for generating adversarial inputs          | `openai:gpt-4o`                 |
 | `purpose`               | `string`                  | Description of prompt templates' purpose to guide adversarial generation | Inferred from prompts           |
 | `strategies`            | `Array<string\|object>`   | Strategies to apply to other plugins                                     | `jailbreak`, `prompt-injection` |
@@ -152,7 +152,7 @@ plugins:
 
 ### Plugins
 
-[Plugins](/docs/red-team/plugins/) are specified as an array of either strings (plugin IDs) or objects with `id` and optional `numTests` properties. They must exactly match the plugin IDs available in the redteam system.
+[Plugins](/docs/red-team/plugins/) are specified as an array of either strings (plugin IDs) or objects with `id` and optional `numTests` properties. They must exactly match the plugin IDs available in the red team system.
 
 See [Plugins](/docs/red-team/plugins/) for more information.
 
@@ -298,7 +298,7 @@ In addition to the predefined plugins, you can create one or more custom policie
 
 #### Configuring Custom Policies
 
-To use a custom policy, add a `policy` field to your redteam configuration:
+To use a custom policy, add a `policy` field to your red team configuration:
 
 ```yaml
 redteam:
@@ -639,7 +639,7 @@ def call_api(prompt, options, context):
         }
 ```
 
-There is no limitation to the number of requests or actions your Python script can take. Here's an example provider that uses a headless browser to click around on a webpage for the redteam:
+There is no limitation to the number of requests or actions your Python script can take. Here's an example provider that uses a headless browser to click around on a webpage for the red team:
 
 ```py
 import json
@@ -685,7 +685,7 @@ def call_api(prompt, options, context):
 
 If you just want to send the entire adversarial input as-is to your target, omit the `prompts` field.
 
-In this case, be sure to specify a `purpose`, because the redteam generator can no longer infer the purpose from your prompt. The purpose is used to tailor the adversarial inputs:
+In this case, be sure to specify a `purpose`, because the red team generator can no longer infer the purpose from your prompt. The purpose is used to tailor the adversarial inputs:
 
 ```yaml
 purpose: 'Act as a travel agent with a focus on European holidays'
@@ -733,7 +733,7 @@ For more detailed information on configuration options, refer to the [ProviderOp
 1. Start with a configuration created by `promptfoo redteam init`
 2. Remove irrelevant plugins for your use case
 3. Adjust `numTests` for individual plugins based on importance
-4. Run a redteam evaluation and generate additional tests as needed
+4. Run a red team evaluation and generate additional tests as needed
 
 ## Example Configurations
 
