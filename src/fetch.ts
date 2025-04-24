@@ -4,6 +4,7 @@ import type { ConnectionOptions } from 'tls';
 import { ProxyAgent, setGlobalDispatcher } from 'undici';
 import cliState from './cliState';
 import { VERSION } from './constants';
+import type { EnvVarKey } from './envars';
 import { getEnvBool, getEnvInt, getEnvString } from './envars';
 import logger from './logger';
 import invariant from './util/invariant';
@@ -48,10 +49,10 @@ export function sanitizeUrl(url: string): string {
 }
 
 export function getProxyUrl(): string | undefined {
-  const proxyEnvVars = ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy'];
+  const proxyEnvVars: EnvVarKey[] = ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy'];
 
   for (const envVar of proxyEnvVars) {
-    const proxyUrl = process.env[envVar];
+    const proxyUrl = getEnvString(envVar);
     if (proxyUrl) {
       logger.debug(`Found proxy configuration in ${envVar}: ${sanitizeUrl(proxyUrl)}`);
       return proxyUrl;

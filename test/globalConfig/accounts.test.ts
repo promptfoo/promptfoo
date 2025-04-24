@@ -27,13 +27,16 @@ describe('accounts', () => {
   describe('getUserEmail', () => {
     it('should return email from global config', () => {
       jest.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
         account: { email: 'test@example.com' },
       });
       expect(getUserEmail()).toBe('test@example.com');
     });
 
     it('should return null if no email in config', () => {
-      jest.mocked(readGlobalConfig).mockReturnValue({});
+      jest.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+      });
       expect(getUserEmail()).toBeNull();
     });
   });
@@ -57,6 +60,7 @@ describe('accounts', () => {
     it('should fall back to user email if no env var', () => {
       jest.mocked(getEnvString).mockReturnValue('');
       jest.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
         account: { email: 'test@example.com' },
       });
       expect(getAuthor()).toBe('test@example.com');
@@ -64,7 +68,9 @@ describe('accounts', () => {
 
     it('should return null if no author found', () => {
       jest.mocked(getEnvString).mockReturnValue('');
-      jest.mocked(readGlobalConfig).mockReturnValue({});
+      jest.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+      });
       expect(getAuthor()).toBeNull();
     });
   });
@@ -72,7 +78,9 @@ describe('accounts', () => {
   describe('promptForEmailUnverified', () => {
     beforeEach(() => {
       jest.mocked(isCI).mockReturnValue(false);
-      jest.mocked(readGlobalConfig).mockReturnValue({});
+      jest.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+      });
     });
 
     it('should use CI email if in CI environment', async () => {
@@ -85,6 +93,7 @@ describe('accounts', () => {
 
     it('should not prompt for email if already set', async () => {
       jest.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
         account: { email: 'existing@example.com' },
       });
 
@@ -198,6 +207,7 @@ describe('accounts', () => {
     it('should use user email when not in CI environment', async () => {
       jest.mocked(isCI).mockReturnValue(false);
       jest.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
         account: { email: 'test@example.com' },
       });
 
@@ -219,6 +229,7 @@ describe('accounts', () => {
     it('should exit if limit exceeded', async () => {
       jest.mocked(isCI).mockReturnValue(false);
       jest.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
         account: { email: 'test@example.com' },
       });
 
@@ -239,6 +250,7 @@ describe('accounts', () => {
     it('should display warning message when status is show_usage_warning', async () => {
       jest.mocked(isCI).mockReturnValue(false);
       jest.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
         account: { email: 'test@example.com' },
       });
 
@@ -262,6 +274,7 @@ describe('accounts', () => {
     it('should handle fetch errors', async () => {
       jest.mocked(isCI).mockReturnValue(false);
       jest.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
         account: { email: 'test@example.com' },
       });
       jest.mocked(fetchWithTimeout).mockRejectedValue(new Error('Network error'));

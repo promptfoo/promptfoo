@@ -1,4 +1,5 @@
 import type { TokenCredential } from '@azure/identity';
+import type { EnvVarKey } from '../../envars';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import type {
@@ -65,7 +66,7 @@ export class AzureGenericProvider implements ApiProvider {
     return (
       this.config?.apiKey ||
       (this.config?.apiKeyEnvar
-        ? process.env[this.config.apiKeyEnvar] ||
+        ? getEnvString(this.config.apiKeyEnvar as EnvVarKey) ||
           this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
         : undefined) ||
       this.env?.AZURE_API_KEY ||

@@ -1,9 +1,10 @@
 import chalk from 'chalk';
+import { getEnvString } from '../envars';
 import { fetchWithProxy } from '../fetch';
 import logger from '../logger';
 import { readGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
 
-export const API_HOST = process.env.API_HOST || 'https://api.promptfoo.app';
+export const API_HOST = getEnvString('API_HOST', 'https://api.promptfoo.app');
 
 interface CloudUser {
   id: string;

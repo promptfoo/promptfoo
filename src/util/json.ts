@@ -1,5 +1,28 @@
+import Ajv from 'ajv';
+import addFormats from 'ajv-formats';
 import yaml from 'js-yaml';
+import { getEnvBool, getEnvString } from '../envars';
 import invariant from '../util/invariant';
+
+let ajvInstance: Ajv | null = null;
+
+export function resetAjv(): void {
+  if (getEnvString('NODE_ENV') !== 'test') {
+    throw new Error('resetAjv can only be called in test environment');
+  }
+  ajvInstance = null;
+}
+
+export function getAjv(): Ajv {
+  if (!ajvInstance) {
+    const ajvOptions: ConstructorParameters<typeof Ajv>[0] = {
+      strictSchema: !getEnvBool('PROMPTFOO_DISABLE_AJV_STRICT_MODE'),
+    };
+    ajvInstance = new Ajv(ajvOptions);
+    addFormats(ajvInstance);
+  }
+  return ajvInstance;
+}
 
 export function isValidJson(str: string): boolean {
   try {

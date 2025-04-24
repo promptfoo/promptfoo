@@ -3,6 +3,7 @@ import { Router } from 'express';
 import type { Request, Response } from 'express';
 import type { ZodError } from 'zod-validation-error';
 import { fromZodError } from 'zod-validation-error';
+import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { loadApiProvider } from '../../providers';
 import type { ProviderOptions, ProviderTestResponse } from '../../types/providers';
@@ -46,7 +47,7 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
     return;
   }
 
-  const HOST = process.env.PROMPTFOO_CLOUD_API_URL || 'https://api.promptfoo.app';
+  const HOST = getEnvString('PROMPTFOO_CLOUD_API_URL', 'https://api.promptfoo.app');
   try {
     // Call the the agent helper to evaluate the results of the provider
     const testAnalyzerResponse = await fetch(`${HOST}/providers/test`, {

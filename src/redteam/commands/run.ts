@@ -30,7 +30,7 @@ export function redteamRunCommand(program: Command) {
     )
     .option(
       '-o, --output [path]',
-      'Path to output file for generated tests. Defaults to redteam.yaml',
+      'Path to output file for generated tests. Defaults to redteam.yaml in the same directory as the configuration file.',
     )
     .option('--no-cache', 'Do not read or write results to disk cache', false)
     .option('--env-file, --env-path <path>', 'Path to .env file')
@@ -53,7 +53,6 @@ export function redteamRunCommand(program: Command) {
       telemetry.record('command_used', {
         name: 'redteam run',
       });
-      await telemetry.send();
 
       if (opts.verbose) {
         setLogLevel('debug');

@@ -1,4 +1,4 @@
-import * as React from 'react';
+import React, { useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { ShiftKeyProvider } from '@app/contexts/ShiftKeyContext';
@@ -74,17 +74,22 @@ export default function Eval({
     },
     [setTable, setConfig, setEvalId, setAuthor],
   );
+  const [searchParams] = useSearchParams();
+  const searchEvalId = searchParams.get('evalId');
 
-  const handleRecentEvalSelection = async (id: string) => {
-    navigate(`/eval/?evalId=${encodeURIComponent(id)}`);
-  };
+  const handleRecentEvalSelection = useCallback(
+    async (id: string) => {
+      navigate({
+        pathname: `/eval/${encodeURIComponent(id)}`,
+        search: searchParams.toString(),
+      });
+    },
+    [searchParams, navigate],
+  );
 
   const [defaultEvalId, setDefaultEvalId] = React.useState<string>(
     defaultEvalIdProp || recentEvals[0]?.evalId,
   );
-
-  const [searchParams] = useSearchParams();
-  const searchEvalId = searchParams.get('evalId');
 
   React.useEffect(() => {
     const evalId = searchEvalId || fetchId;
