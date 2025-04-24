@@ -17,20 +17,12 @@ prompts:
   # Send the user's message to the agent:
   - '{{user_message}}'
 
-# DEV: Starting with an Eval... turn it into a redteam!
-# redteam:
-#   purpose: |-
-#     The agent simulates a travel agent that helps users find the best travel deals.
-
-#     This includes:
-#     - Searching for flights
-#     - Searching for hotels
-#     - Searching for car rentals
-#     - Searching for activities
-#     - Searching for restaurants
-#   plugins:
-#     - id: owasp:agentic:t01
-#       numTests: 20
+# TODO: Redteam generation does not work for this!!!
+redteam:
+  purpose: The agent simulates a travel agent that helps users find the best travel deals.
+  plugins:
+    - id: owasp:agentic:t01
+      numTests: 20
 
 tests:
   # Conversation 1:
