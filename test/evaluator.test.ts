@@ -104,7 +104,7 @@ describe('evaluator', () => {
     jest.clearAllMocks();
     if (global.gc) {
       global.gc(); // Force garbage collection
-    }  
+    }
   });
 
   it('evaluate with vars', async () => {
@@ -275,7 +275,9 @@ describe('evaluator', () => {
         cached: 0,
       },
     });
-    expect(summary.results[0].prompt.raw).toBe('Test prompt <h1>Sample Report</h1><p>This is a test report with some data for the year 2023.</p>');
+    expect(summary.results[0].prompt.raw).toBe(
+      'Test prompt <h1>Sample Report</h1><p>This is a test report with some data for the year 2023.</p>',
+    );
     expect(summary.results[0].prompt.label).toBe('Test prompt {{ var1 }}');
     expect(summary.results[0].response?.output).toBe('Test output');
   });
