@@ -903,6 +903,75 @@ describe('AIStudioChatProvider', () => {
       );
     });
 
+    it('should handle string-based tools format', async () => {
+      provider = new AIStudioChatProvider('gemini-2.0-flash', {
+        config: {
+          apiKey: 'test-key',
+          tools: ['google_search']
+        },
+      });
+
+      const mockResponse = {
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [{ text: 'response with search results using string format' }],
+                role: 'model'
+              },
+              groundingMetadata: {
+                webSearchQueries: ['test query']
+              }
+            }
+          ],
+          usageMetadata: {
+            totalTokenCount: 20,
+            promptTokenCount: 8,
+            candidatesTokenCount: 12
+          }
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {}
+      };
+
+      jest.mocked(util.maybeCoerceToGeminiFormat).mockReturnValueOnce({
+        contents: [{ role: 'user', parts: [{ text: 'What is the latest news?' }] }],
+        coerced: false,
+        systemInstruction: undefined,
+      });
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const response = await provider.callGemini('What is the latest news?');
+
+      expect(response).toEqual({
+        cached: false,
+        output: 'response with search results using string format',
+        raw: mockResponse.data,
+        tokenUsage: {
+          numRequests: 1,
+          total: 20,
+          prompt: 8,
+          completion: 12,
+        }
+      });
+
+      // Verify the string format is properly converted to object format in the API call
+      expect(cache.fetchWithCache).toHaveBeenCalledWith(
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=test-key',
+        {
+          body: expect.stringContaining('"google_search":{}'),
+          headers: { 'Content-Type': 'application/json' },
+          method: 'POST',
+        },
+        300000,
+        'json',
+        false,
+      );
+    });
+
     it('should handle Google Search retrieval for Gemini 1.5 models', async () => {
       provider = new AIStudioChatProvider('gemini-1.5-flash', {
         config: {

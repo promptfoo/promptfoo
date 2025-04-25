@@ -21,6 +21,21 @@ import {
 } from './util';
 import type { GeminiResponseData } from './util';
 
+// Add a new helper function to process string tools into object format
+function processTools(tools: any[] | undefined): any[] | undefined {
+  if (!tools || !Array.isArray(tools)) {
+    return tools;
+  }
+  
+  return tools.map(tool => {
+    // If it's a string like "google_search", convert to {google_search: {}}
+    if (typeof tool === 'string') {
+      return { [tool]: {} };
+    }
+    return tool;
+  });
+}
+
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
 
 class AIStudioGenericProvider implements ApiProvider {
@@ -203,7 +218,9 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
       },
       safetySettings: this.config.safetySettings,
       ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),
-      ...(this.config.tools ? { tools: loadFile(this.config.tools, context?.vars) } : {}),
+      ...(this.config.tools 
+        ? { tools: processTools(loadFile(this.config.tools, context?.vars)) } 
+        : {}),
       ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
     };
 

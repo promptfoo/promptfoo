@@ -174,6 +174,63 @@ providers:
 
 For more details, see the [Gemini API documentation](https://ai.google.dev/docs).
 
+### Search Grounding
+
+Search grounding allows Gemini models to access the internet to retrieve current information, making them more accurate for questions about recent events, facts, or real-time data.
+
+Enable Google Search as a tool for your Gemini models using either of these formats:
+
+```yaml
+# Option 1: Object format (standard API format)
+providers:
+  - id: google:gemini-2.5-flash-preview-04-17
+    config:
+      tools:
+        - google_search: {}
+
+# Option 2: Simplified string format
+providers:
+  - id: google:gemini-2.5-flash-preview-04-17
+    config:
+      tools: ["google_search"]
+```
+
+You can also combine Search grounding with thinking capabilities:
+
+```yaml
+providers:
+  - id: google:gemini-2.5-pro-exp-03-25
+    config:
+      generationConfig:
+        thinkingConfig:
+          thinkingBudget: 1024
+      tools: ["google_search"]
+```
+
+#### Use Cases
+
+Search grounding improves responses that require:
+- Current events and news
+- Recent developments
+- Stock prices and market data
+- Sports results
+- Technical documentation updates
+
+#### Understanding the Results
+
+When using Search grounding, the API response includes special metadata:
+- `groundingMetadata` - Contains information about search results used
+- `groundingChunks` - Web sources that informed the response
+- `webSearchQueries` - Queries used to retrieve information
+
+:::info
+Per Google's requirements, if you use Search grounding in your application, you must display Google Search Suggestions, which are included in the API response metadata.
+:::
+
+For more details, see the [Google AI Studio documentation on Grounding with Google Search](https://ai.google.dev/docs/gemini_api/grounding).
+
+For a complete working example of Search grounding in promptfoo, see the [google-aistudio-search example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-aistudio-search).
+
 ## Google Live API
 
 Promptfoo now supports Google's WebSocket-based Live API, which enables low-latency bidirectional voice and video interactions with Gemini models. This API provides real-time interactive capabilities beyond what's available in the standard REST API.
