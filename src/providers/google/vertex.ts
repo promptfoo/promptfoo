@@ -29,7 +29,6 @@ import {
   loadFile,
   mergeParts,
   formatCandidateContents,
-  processTools,
 } from './util';
 
 class VertexGenericProvider implements ApiProvider {
@@ -271,9 +270,7 @@ export class VertexChatProvider extends VertexGenericProvider {
       },
       ...(this.config.safetySettings ? { safetySettings: this.config.safetySettings } : {}),
       ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),
-      ...(this.config.tools
-        ? { tools: processTools(loadFile(this.config.tools, context?.vars)) }
-        : {}),
+      ...(this.config.tools ? { tools: loadFile(this.config.tools, context?.vars) } : {}),
       ...(systemInstruction ? { systemInstruction } : {}),
     };
     logger.debug(`Preparing to call Google Vertex API (Gemini) with body: ${JSON.stringify(body)}`);

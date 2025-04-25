@@ -13,7 +13,7 @@ import type {
 } from '../../types';
 import type { CompletionOptions, FunctionCall } from './types';
 import type { GeminiFormat } from './util';
-import { geminiFormatAndSystemInstructions, loadFile, processTools } from './util';
+import { geminiFormatAndSystemInstructions, loadFile } from './util';
 
 const formatContentMessage = (contents: GeminiFormat, contentIndex: number) => {
   if (contents[contentIndex].role != 'user') {
@@ -269,9 +269,7 @@ export class GoogleLiveProvider implements ApiProvider {
               ...this.config.generationConfig,
             },
             ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),
-            ...(this.config.tools
-              ? { tools: processTools(loadFile(this.config.tools, context?.vars)) }
-              : {}),
+            ...(this.config.tools ? { tools: loadFile(this.config.tools, context?.vars) } : {}),
             ...(systemInstruction ? { systemInstruction } : {}),
           },
         };
