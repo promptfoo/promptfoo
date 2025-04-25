@@ -28,56 +28,23 @@ interface SafetyRating {
   blocked: boolean;
 }
 
-// Grounding metadata interfaces
-interface SearchEntryPoint {
-  renderedContent: string;
-}
-
-interface WebChunk {
-  uri: string;
-  title: string;
-}
-
-interface GroundingChunk {
-  web?: WebChunk;
-}
-
-interface GroundingSegment {
-  startIndex?: number;
-  endIndex?: number;
-  text?: string;
-}
-
-interface GroundingSupport {
-  segment: GroundingSegment;
-  groundingChunkIndices: number[];
-  confidenceScores: number[];
-}
-
-interface GroundingMetadata {
-  searchEntryPoint?: SearchEntryPoint;
-  groundingChunks?: GroundingChunk[];
-  groundingSupports?: GroundingSupport[];
-  webSearchQueries?: string[];
-}
-
 interface Candidate {
   content: Content;
   finishReason?:
-    | 'FINISH_REASON_UNSPECIFIED'
-    | 'STOP'
-    | 'MAX_TOKENS'
-    | 'SAFETY'
-    | 'RECITATION'
-    | 'OTHER'
     | 'BLOCKLIST'
+    | 'FINISH_REASON_UNSPECIFIED'
+    | 'MALFORMED_FUNCTION_CALL'
+    | 'MAX_TOKENS'
+    | 'OTHER'
     | 'PROHIBITED_CONTENT'
+    | 'RECITATION'
+    | 'SAFETY'
     | 'SPII'
-    | 'MALFORMED_FUNCTION_CALL';
+    | 'STOP';
+  groundingChunks?: Record<string, any>[];
+  groundingMetadata?: Record<string, any>;
+  groundingSupports?: Record<string, any>[];
   safetyRatings: SafetyRating[];
-  groundingMetadata?: GroundingMetadata;
-  groundingChunks?: GroundingChunk[];
-  groundingSupports?: GroundingSupport[];
   webSearchQueries?: string[];
 }
 
