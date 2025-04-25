@@ -33,7 +33,7 @@ tests:
       - type: contains
         value: stock
       - type: javascript
-        value: "!!result.raw?.candidates?.[0]?.groundingMetadata"
+        value: "!!output?.raw?.candidates?.[0]?.groundingMetadata"
 
   # Test a technical question
   - vars:
@@ -42,7 +42,7 @@ tests:
       - type: contains
         value: TypeScript
       - type: javascript
-        value: "!!result.raw?.candidates?.[0]?.groundingMetadata"
+        value: "!!output?.raw?.candidates?.[0]?.groundingMetadata"
 
   # Test a factual question
   - vars:
@@ -51,4 +51,4 @@ tests:
       - type: contains
         value: Super Bowl
       - type: javascript
-        value: "!!result.raw?.candidates?.[0]?.groundingMetadata" 
+        value: "!!output?.raw?.candidates?.[0]?.groundingMetadata" 
