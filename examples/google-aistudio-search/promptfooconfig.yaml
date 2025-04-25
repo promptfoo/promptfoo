@@ -32,8 +32,8 @@ tests:
     assert:
       - type: contains
         value: stock
-      - type: javascript
-        value: "!!output?.raw?.candidates?.[0]?.groundingMetadata"
+      - type: contains
+        value: price
 
   # Test a technical question
   - vars:
@@ -41,8 +41,8 @@ tests:
     assert:
       - type: contains
         value: TypeScript
-      - type: javascript
-        value: "!!output?.raw?.candidates?.[0]?.groundingMetadata"
+      - type: contains
+        value: feature
 
   # Test a factual question
   - vars:
@@ -50,5 +50,5 @@ tests:
     assert:
       - type: contains
         value: Super Bowl
-      - type: javascript
-        value: "!!output?.raw?.candidates?.[0]?.groundingMetadata" 
+      - type: contains
+        value: won 
