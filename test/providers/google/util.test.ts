@@ -897,10 +897,10 @@ describe('util', () => {
       const tools = [
         {
           google_search: {},
-        },
+        } as any,
         {
           code_execution: {},
-        },
+        } as any,
         {
           google_search_retrieval: {
             dynamicRetrievalConfig: {
@@ -908,7 +908,7 @@ describe('util', () => {
               dynamicThreshold: 0,
             },
           },
-        },
+        } as any,
       ];
 
       const normalized = normalizeTools(tools);
@@ -944,7 +944,7 @@ describe('util', () => {
         {
           google_search: { property1: 'value1' },
           googleSearch: { property2: 'value2' },
-        },
+        } as any,
       ];
 
       const normalized = normalizeTools(tools);
@@ -967,7 +967,7 @@ describe('util', () => {
             },
           ],
           google_search: {},
-        },
+        } as any,
       ];
 
       const normalized = normalizeTools(tools);

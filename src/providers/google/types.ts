@@ -76,11 +76,14 @@ interface GoogleSearchRetrieval {
 export interface Tool {
   functionDeclarations?: FunctionDeclaration[];
   googleSearchRetrieval?: GoogleSearchRetrieval;
-  google_search_retrieval?: GoogleSearchRetrieval;
   codeExecution?: object;
-  code_execution?: object;
   googleSearch?: object;
-  google_search?: object;
+
+  // Note: These snake_case properties are supported but should be accessed with type assertions
+  // Type definitions included for documentation purposes only
+  // google_search_retrieval?: GoogleSearchRetrieval;
+  // code_execution?: object;
+  // google_search?: object;
 }
 
 export interface CompletionOptions {

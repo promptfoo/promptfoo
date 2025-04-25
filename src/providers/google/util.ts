@@ -346,19 +346,20 @@ export function normalizeTools(tools: Tool[]): Tool[] {
   return tools.map((tool) => {
     const normalizedTool: Tool = { ...tool };
 
+    // Use index access with type assertion to avoid TypeScript errors
     // Handle google_search -> googleSearch conversion
-    if (normalizedTool.google_search && !normalizedTool.googleSearch) {
-      normalizedTool.googleSearch = normalizedTool.google_search;
+    if ((tool as any).google_search && !normalizedTool.googleSearch) {
+      normalizedTool.googleSearch = (tool as any).google_search;
     }
 
     // Handle code_execution -> codeExecution conversion
-    if (normalizedTool.code_execution && !normalizedTool.codeExecution) {
-      normalizedTool.codeExecution = normalizedTool.code_execution;
+    if ((tool as any).code_execution && !normalizedTool.codeExecution) {
+      normalizedTool.codeExecution = (tool as any).code_execution;
     }
 
     // Handle google_search_retrieval -> googleSearchRetrieval conversion
-    if (normalizedTool.google_search_retrieval && !normalizedTool.googleSearchRetrieval) {
-      normalizedTool.googleSearchRetrieval = normalizedTool.google_search_retrieval;
+    if ((tool as any).google_search_retrieval && !normalizedTool.googleSearchRetrieval) {
+      normalizedTool.googleSearchRetrieval = (tool as any).google_search_retrieval;
     }
 
     return normalizedTool;
