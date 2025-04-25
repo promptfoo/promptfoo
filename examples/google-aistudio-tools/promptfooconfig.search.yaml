@@ -1,27 +1,40 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 
-description: Vertex AI Search grounding demonstration
+description: Web search grounding with Google Gemini models
 
 prompts:
   - '{{query}}'
 
 providers:
-  # Google Search as a tool (using Vertex AI with Gemini 2.0 Pro)
-  - id: vertex:gemini-2.0-pro
+  # Google Search as a tool (using Gemini 2.5 Flash)
+  - id: google:gemini-2.5-flash-preview-04-17
     config:
       temperature: 0.2
       maxOutputTokens: 1024
-      tools: ['google_search']
+      tools:
+        - google_search: {}
 
   # Alternate version with thinking capabilities
-  - id: vertex:gemini-2.5-flash-preview-04-17
+  - id: google:gemini-2.5-pro-exp-03-25
     config:
       temperature: 0.2
       maxOutputTokens: 1024
       generationConfig:
         thinkingConfig:
           thinkingBudget: 1024
-      tools: ['google_search']
+      tools:
+        - google_search: {}
+
+  # Dynamic retrieval configuration for Gemini 1.5 models
+  - id: google:gemini-1.5-flash
+    config:
+      temperature: 0.2
+      maxOutputTokens: 1024
+      tools:
+        - googleSearchRetrieval:
+            dynamicRetrievalConfig:
+              mode: 'MODE_DYNAMIC'
+              dynamicThreshold: 0
 
 tests:
   # Test current events
@@ -35,18 +48,18 @@ tests:
 
   # Test a technical question
   - vars:
-      query: What are the latest features in Python 3.13?
+      query: What are the latest features in TypeScript?
     assert:
       - type: contains
-        value: Python
+        value: TypeScript
       - type: contains
         value: feature
 
   # Test a factual question
   - vars:
-      query: Who won the latest Formula 1 Grand Prix?
+      query: Who won the most recent Super Bowl?
     assert:
       - type: contains
-        value: Formula 1
+        value: Super Bowl
       - type: contains
         value: won

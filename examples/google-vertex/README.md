@@ -19,10 +19,17 @@ This directory contains example configurations for testing different Google Vert
   - Context customization
 
 - `promptfooconfig.llama.yaml`: Examples using Llama models
+
   - Vision capabilities
   - Safety with Llama Guard
   - Complex reasoning tasks
   - Text generation
+
+- `promptfooconfig.search.yaml`: Examples using Search grounding
+  - Google Search integration with Gemini models
+  - Real-time information retrieval
+  - Web-grounded responses
+  - Support for current events, financial data, and technical updates
 
 ## Prerequisites
 
@@ -67,6 +74,9 @@ This directory contains example configurations for testing different Google Vert
 
    # Test Llama models
    promptfoo eval -c promptfooconfig.llama.yaml
+
+   # Test Search grounding
+   promptfoo eval -c promptfooconfig.search.yaml
    ```
 
 3. View results:
@@ -85,9 +95,41 @@ This directory contains example configurations for testing different Google Vert
 - Complex reasoning tasks
 - Technical writing
 - Code analysis
+- Search grounding with real-time information
+
+## Using Search Grounding
+
+The search grounding feature allows Gemini models on Vertex AI to access up-to-date information from the web, making responses more accurate for:
+
+- Current events and news
+- Recent developments
+- Stock prices and market data
+- Sports results
+- Technical documentation updates
+
+You can enable Search grounding using either of these formats:
+
+```yaml
+# String format (simpler)
+tools: ['google_search']
+
+# Object format (matches Google's API)
+tools:
+  - google_search: {}
+```
+
+When using Search grounding, the response includes metadata with:
+
+- `groundingMetadata` - Information about search results
+- `groundingChunks` - Web sources used
+- `webSearchQueries` - Queries the model used
+- `searchEntryPoint` - HTML for displaying Google Search Suggestions
+
+**Note:** Google requires applications to display Search Suggestions when using search grounding in user-facing applications.
 
 ## Learn More
 
 - [Vertex AI Provider Documentation](https://www.promptfoo.dev/docs/providers/vertex/)
 - [Google Cloud Vertex AI Documentation](https://cloud.google.com/vertex-ai/docs)
+- [Google documentation on Grounding with Google Search](https://ai.google.dev/docs/gemini_api/grounding)
 - [promptfoo Documentation](https://www.promptfoo.dev/docs/)
