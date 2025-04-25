@@ -515,19 +515,6 @@ export function parseStringObject(input: string | any) {
   return input;
 }
 
-/**
- * Process tools configuration
- * @param tools Array of tools
- * @returns Processed tools array
- */
-export function processTools(tools: any[] | undefined): any[] | undefined {
-  if (!tools || !Array.isArray(tools) || tools.length === 0) {
-    return undefined;
-  }
-
-  return tools;
-}
-
 export function validateFunctionCall(
   output: string | object,
   functions?: Tool[] | string,
