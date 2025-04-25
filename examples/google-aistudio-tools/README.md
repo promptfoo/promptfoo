@@ -1,34 +1,21 @@
-# Google AI Studio (Gemini) Example
+# Google AI Studio Tools Example
 
-This example demonstrates using Google's Gemini models with promptfoo to evaluate math puzzle solving capabilities.
+This example demonstrates how to use tools with Google AI Studio's Gemini models in promptfoo.
 
-## Prerequisites
+The example shows both function calling and Google Search grounding, a feature that allows Gemini to retrieve up-to-date information from the web.
 
-- promptfoo CLI installed (`npm install -g promptfoo` or `brew install promptfoo`)
-- Google AI Studio API key set as `GOOGLE_API_KEY`
+## Usage
 
-## Available Models
+Run the example:
 
-The example tests across multiple Gemini models:
-
-- Gemini 2.5 Pro Experimental
-- Gemini 2.0 Flash
-- Gemini 2.0 Flash Thinking
-- Gemini 1.5 Flash
-- Gemini 1.5 Pro - Standard model for complex reasoning, used with both structured JSON output and function calling capabilities
-
-## Running the Eval
-
-1. Get a local copy of the configuration:
-
-```sh
-promptfoo init --example google-aistudio-gemini
+```bash
+promptfoo eval -c examples/google-aistudio-tools/promptfooconfig.yaml
 ```
 
-2. Run the example:
+## Example Files
 
-```sh
-promptfoo eval
-```
+- `promptfooconfig.yaml`: Main configuration file
+- `tools.json`: Function definitions for function calling
+- `search-tools.json`: Google Search configuration for grounding with search
 
-Afterwards, you can view the results by running `promptfoo view`
+For more information, see the [Google AI Studio documentation](https://ai.google.dev/docs).

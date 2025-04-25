@@ -4,6 +4,8 @@ prompts:
   - |
     Given this math puzzle: {{puzzle}}
     Please solve this step by step, showing your reasoning process.
+  - |
+    {{search_query}}
 
 providers:
   - id: google:gemini-2.5-flash-preview-04-17
@@ -29,6 +31,25 @@ providers:
       maxOutputTokens: 1024
       topP: 0.9
       topK: 40
+
+  # Google Search grounding example with Gemini 2.0
+  - id: google:gemini-2.0-flash
+    config:
+      temperature: 0.2
+      maxOutputTokens: 1024
+      tools:
+        - google_search: {}
+
+  # Google Search retrieval example with Gemini 1.5
+  - id: google:gemini-1.5-flash
+    config:
+      temperature: 0.2
+      maxOutputTokens: 1024
+      tools:
+        - google_search_retrieval:
+            dynamic_retrieval_config:
+              mode: "MODE_DYNAMIC"
+              dynamic_threshold: 0.3
 
   # Structured output example
   - id: google:gemini-1.5-pro
@@ -81,3 +102,18 @@ tests:
       - type: llm-rubric
         value: |
           The answer should be 52.5 mph.
+
+  # Test for search grounding
+  - vars:
+      search_query: What is the current Google stock price?
+    assert:
+      - type: contains
+        value: stock
+      - type: json-contains
+        value:
+          candidates:
+            - groundingMetadata:
+                webSearchQueries: []
+        transform: raw
+      - type: javascript
+        value: "!!result.raw.candidates[0].groundingMetadata && !!result.raw.candidates[0].groundingMetadata.webSearchQueries"
