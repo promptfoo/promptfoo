@@ -1,0 +1,56 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: Google Search grounding demonstration
+
+prompts:
+  - "{{query}}"
+
+providers:
+  # Google Search as a tool (for Gemini 2.0 models)
+  - id: google-search-gemini-2
+    provider: google:gemini-2.0-flash
+    config:
+      temperature: 0.2
+      maxOutputTokens: 1024
+      tools:
+        - google_search: {}
+
+  # Google Search retrieval (for Gemini 1.5 models)
+  - id: google-search-gemini-1-5
+    provider: google:gemini-1.5-flash
+    config:
+      temperature: 0.2
+      maxOutputTokens: 1024
+      tools:
+        - google_search_retrieval:
+            dynamic_retrieval_config:
+              mode: "MODE_DYNAMIC"
+              dynamic_threshold: 0.3
+
+tests:
+  # Test current events
+  - vars:
+      query: What is the current Google stock price?
+    assert:
+      - type: contains
+        value: stock
+      - type: javascript
+        value: "!!result.raw?.candidates?.[0]?.groundingMetadata"
+
+  # Test a technical question
+  - vars:
+      query: What are the latest features in TypeScript?
+    assert:
+      - type: contains
+        value: TypeScript
+      - type: javascript
+        value: "!!result.raw?.candidates?.[0]?.groundingMetadata"
+
+  # Test a factual question
+  - vars:
+      query: Who won the most recent Super Bowl?
+    assert:
+      - type: contains
+        value: Super Bowl
+      - type: javascript
+        value: "!!result.raw?.candidates?.[0]?.groundingMetadata" 
