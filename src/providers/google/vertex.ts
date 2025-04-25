@@ -271,8 +271,8 @@ export class VertexChatProvider extends VertexGenericProvider {
       },
       ...(this.config.safetySettings ? { safetySettings: this.config.safetySettings } : {}),
       ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),
-      ...(this.config.tools 
-        ? { tools: processTools(loadFile(this.config.tools, context?.vars)) } 
+      ...(this.config.tools
+        ? { tools: processTools(loadFile(this.config.tools, context?.vars)) }
         : {}),
       ...(systemInstruction ? { systemInstruction } : {}),
     };

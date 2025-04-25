@@ -23,6 +23,7 @@ Search grounding allows Gemini models on Vertex AI to access the internet to ret
 - Technical documentation updates
 
 The example uses two approaches:
+
 - Gemini 2.0 Pro with Google Search as a tool
 - Gemini 2.5 Flash with thinking capabilities and Search grounding
 
@@ -50,7 +51,7 @@ The simplest way to enable Search grounding is with the string format:
 providers:
   - id: vertex:gemini-2.0-pro
     config:
-      tools: ["google_search"]
+      tools: ['google_search']
 ```
 
 ### Object Syntax (Alternative)
@@ -99,4 +100,4 @@ While the functionality is similar to the Google AI Studio provider, there are s
 ## See Also
 
 - [Vertex AI Provider Documentation](/docs/providers/vertex)
-- [Google documentation on Grounding with Google Search](https://ai.google.dev/docs/gemini_api/grounding) 
+- [Google documentation on Grounding with Google Search](https://ai.google.dev/docs/gemini_api/grounding)

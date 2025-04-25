@@ -3,7 +3,7 @@
 description: Vertex AI Search grounding demonstration
 
 prompts:
-  - "{{query}}"
+  - '{{query}}'
 
 providers:
   # Google Search as a tool (using Vertex AI with Gemini 2.0 Pro)
@@ -11,7 +11,7 @@ providers:
     config:
       temperature: 0.2
       maxOutputTokens: 1024
-      tools: ["google_search"]
+      tools: ['google_search']
 
   # Alternate version with thinking capabilities
   - id: vertex:gemini-2.5-flash-preview-04-17
@@ -21,7 +21,7 @@ providers:
       generationConfig:
         thinkingConfig:
           thinkingBudget: 1024
-      tools: ["google_search"]
+      tools: ['google_search']
 
 tests:
   # Test current events
@@ -49,4 +49,4 @@ tests:
       - type: contains
         value: Formula 1
       - type: contains
-        value: won 
+        value: won

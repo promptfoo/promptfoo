@@ -66,18 +66,26 @@ interface FunctionDeclaration {
 
 export type FunctionParameters = Record<string, unknown>;
 
-interface GoogleSearchRetrieval {
-  dynamicRetrievalConfig: {
+interface GoogleSearchRetrievalConfig {
+  dynamicRetrievalConfig?: {
     mode?: 'MODE_UNSPECIFIED' | 'MODE_DYNAMIC';
     dynamicThreshold?: number;
+  };
+  dynamic_retrieval_config?: {
+    mode?: 'MODE_UNSPECIFIED' | 'MODE_DYNAMIC';
+    dynamic_threshold?: number;
   };
 }
 
 export interface Tool {
   functionDeclarations?: FunctionDeclaration[];
-  googleSearchRetrieval?: GoogleSearchRetrieval;
-  codeExecution?: object;
+  googleSearchRetrieval?: GoogleSearchRetrievalConfig;
   googleSearch?: object;
+  codeExecution?: object;
+  // Support for snake_case variants
+  google_search?: object;
+  google_search_retrieval?: GoogleSearchRetrievalConfig;
+  code_execution?: object;
 }
 
 export interface CompletionOptions {

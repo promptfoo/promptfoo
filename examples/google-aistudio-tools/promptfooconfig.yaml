@@ -2,7 +2,7 @@
 
 # Learn more about building a configuration: https://promptfoo.dev/docs/configuration/guide
 
-description: 'Google AI Studio Function Calling Demonstration'
+description: 'Function calling with Google AI Studio Gemini models'
 
 prompts:
   - What is the weather in {{location}}?

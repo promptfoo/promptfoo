@@ -28,6 +28,39 @@ interface SafetyRating {
   blocked: boolean;
 }
 
+// Grounding metadata interfaces
+interface SearchEntryPoint {
+  renderedContent: string;
+}
+
+interface WebChunk {
+  uri: string;
+  title: string;
+}
+
+interface GroundingChunk {
+  web?: WebChunk;
+}
+
+interface GroundingSegment {
+  startIndex?: number;
+  endIndex?: number;
+  text?: string;
+}
+
+interface GroundingSupport {
+  segment: GroundingSegment;
+  groundingChunkIndices: number[];
+  confidenceScores: number[];
+}
+
+interface GroundingMetadata {
+  searchEntryPoint?: SearchEntryPoint;
+  groundingChunks?: GroundingChunk[];
+  groundingSupports?: GroundingSupport[];
+  webSearchQueries?: string[];
+}
+
 interface Candidate {
   content: Content;
   finishReason?:
@@ -42,6 +75,10 @@ interface Candidate {
     | 'SPII'
     | 'MALFORMED_FUNCTION_CALL';
   safetyRatings: SafetyRating[];
+  groundingMetadata?: GroundingMetadata;
+  groundingChunks?: GroundingChunk[];
+  groundingSupports?: GroundingSupport[];
+  webSearchQueries?: string[];
 }
 
 interface GeminiUsageMetadata {
@@ -479,35 +516,16 @@ export function parseStringObject(input: string | any) {
 }
 
 /**
- * Process tools configuration, converting string tool names to object format
- * @param tools Array of tools that can include strings or objects
- * @returns Processed tools array with all entries in object format
+ * Process tools configuration
+ * @param tools Array of tools
+ * @returns Processed tools array
  */
 export function processTools(tools: any[] | undefined): any[] | undefined {
-  if (!tools) {
-    return tools;
+  if (!tools || !Array.isArray(tools) || tools.length === 0) {
+    return undefined;
   }
 
-  if (!Array.isArray(tools)) {
-    logger.warn(`Tools configuration is not an array: ${JSON.stringify(tools)}`);
-    return tools;
-  }
-
-  return tools.map((tool) => {
-    // If it's a string like "google_search", convert to {google_search: {}}
-    if (typeof tool === 'string') {
-      // Log warning if the tool name might be invalid
-      if (
-        !['google_search', 'googleSearch', 'google_search_retrieval', 'codeExecution'].includes(
-          tool,
-        )
-      ) {
-        logger.warn(`Potentially unsupported tool name: "${tool}"`);
-      }
-      return { [tool]: {} };
-    }
-    return tool;
-  });
+  return tools;
 }
 
 export function validateFunctionCall(

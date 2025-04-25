@@ -477,7 +477,7 @@ The simplest way to enable Search grounding is with the string format:
 providers:
   - id: vertex:gemini-2.0-pro
     config:
-      tools: ["google_search"]
+      tools: ['google_search']
 ```
 
 Alternatively, you can use the standard object format that matches Google's API:
@@ -501,12 +501,13 @@ providers:
       generationConfig:
         thinkingConfig:
           thinkingBudget: 1024
-      tools: ["google_search"]
+      tools: ['google_search']
 ```
 
 #### Use Cases
 
 Search grounding is particularly valuable for:
+
 - Current events and news
 - Recent developments
 - Stock prices and market data
@@ -516,6 +517,7 @@ Search grounding is particularly valuable for:
 #### Working with Response Metadata
 
 When using Search grounding, the API response includes additional metadata:
+
 - `groundingMetadata` - Contains information about search results used
 - `groundingChunks` - Web sources that informed the response
 - `webSearchQueries` - Queries used to retrieve information

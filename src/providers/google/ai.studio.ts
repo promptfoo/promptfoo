@@ -299,6 +299,12 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
         raw: data,
         cached,
         ...(guardrails && { guardrails }),
+        metadata: {
+          ...(candidate.groundingChunks && { groundingChunks: candidate.groundingChunks }),
+          ...(candidate.groundingMetadata && { groundingMetadata: candidate.groundingMetadata }),
+          ...(candidate.groundingSupports && { groundingSupports: candidate.groundingSupports }),
+          ...(candidate.webSearchQueries && { webSearchQueries: candidate.webSearchQueries }),
+        },
       };
     } catch (err) {
       return {

@@ -1,21 +1,6 @@
-# Google AI Studio Function Calling Example
+# google-aistudio-tools
 
-This example demonstrates how to use function calling capabilities with Google AI Studio's Gemini models in promptfoo.
-
-## Prerequisites
-
-- promptfoo CLI installed (`npm install -g promptfoo` or `brew install promptfoo`)
-- Google AI Studio API key set as `GOOGLE_API_KEY`
-
-## Overview
-
-Function calling allows Gemini models to request specific structured actions like API calls. In this example:
-
-- The model responds to weather queries using a predefined function schema
-- The system validates that models correctly produce function calls with proper parameters
-- We use function calling with the Gemini 2.0 Flash model
-
-## Running the Example
+This example demonstrates how to use Google AI Studio's function calling and search capabilities with promptfoo.
 
 You can run this example with:
 
@@ -23,23 +8,93 @@ You can run this example with:
 npx promptfoo@latest init --example google-aistudio-tools
 ```
 
-Or run directly with:
+## Prerequisites
+
+- Google AI Studio API key set as `GOOGLE_API_KEY` in your environment
+
+## Overview
+
+This example shows how to:
+
+1. **Function Calling**: Use Gemini to invoke predefined functions based on user queries
+2. **Google Search Integration**: Get up-to-date information from the web using Gemini models with search grounding
+
+## Function Calling Example
+
+The function calling configuration (`promptfooconfig.yaml`) demonstrates:
+
+- Defining a weather function in `tools.json`
+- Validating that Gemini models correctly produce structured function calls
+- Testing that the location parameter matches the user's query
+
+Run with:
 
 ```bash
-promptfoo eval -c examples/google-aistudio-tools/promptfooconfig.yaml
+promptfoo eval -c promptfooconfig.yaml
+```
+
+## Search Grounding Example
+
+The search grounding configuration (`promptfooconfig.search.yaml`) demonstrates:
+
+- Using Gemini 2.5 Flash with Google Search as a tool
+- Using Gemini 2.5 Pro with thinking capabilities and Search grounding
+- Using Gemini 1.5 Flash with dynamic retrieval configuration
+- Testing queries that benefit from real-time web information
+- Verifying responses include relevant information
+
+Run with:
+
+```bash
+promptfoo eval -c promptfooconfig.search.yaml
 ```
 
 ## Example Files
 
-- `promptfooconfig.yaml`: Main configuration file defining providers, prompts and tests
-- `tools.json`: Function definitions for the weather function calling example
+- `promptfooconfig.yaml`: Function calling configuration
+- `promptfooconfig.search.yaml`: Search grounding configuration
+- `tools.json`: Function definition for the weather example
 
-## Expected Outputs
+## Notes on Google Search Integration
 
-The tests verify that:
+When using Search grounding in your own applications:
 
-1. The model returns a valid function call
-2. The function name is correct (`get_current_weather`)
-3. The location parameter matches the user's query
+- The API response includes search metadata and sources
+- Google requires displaying "Google Search Suggestions" in user-facing apps
+- Models can retrieve current information about events, prices, and technical updates
 
-For more information, see the [Google AI Studio Function Calling documentation](https://ai.google.dev/docs/function_calling).
+### Search Methods
+
+This example demonstrates three approaches to search:
+
+1. **Search as a tool** (Gemini 2.5): Allows the model to decide when to use search
+
+   ```yaml
+   tools:
+     - google_search: {}
+   ```
+
+2. **Search with thinking** (Gemini 2.5): Adds thinking capabilities for better reasoning
+
+   ```yaml
+   generationConfig:
+     thinkingConfig:
+       thinkingBudget: 1024
+   tools:
+     - google_search: {}
+   ```
+
+3. **Dynamic retrieval** (Gemini 1.5): Controls when to use search with threshold settings
+   ```yaml
+   tools:
+     - googleSearchRetrieval:
+         dynamicRetrievalConfig:
+           mode: 'MODE_DYNAMIC'
+           dynamicThreshold: 0 # 0 = always use search, 1 = never use search
+   ```
+
+## Further Resources
+
+- [Google AI Studio Function Calling documentation](https://ai.google.dev/docs/function_calling)
+- [Google AI Studio Search Grounding documentation](https://ai.google.dev/docs/gemini_api/grounding)
+- [promptfoo Google Provider documentation](/docs/providers/google)

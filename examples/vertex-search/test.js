@@ -4,7 +4,7 @@ const { evaluate } = require('promptfoo');
 
 async function runVertexSearchDemo() {
   console.log('Running Vertex AI Search grounding demo...');
-  
+
   const results = await evaluate({
     prompts: [
       'What is the current price of Bitcoin?',
@@ -38,11 +38,11 @@ async function runVertexSearchDemo() {
   for (const result of results.results) {
     console.log(`\nQuery: ${result.prompt}`);
     console.log(`Response: ${result.outputs[0].output.substring(0, 200)}...`);
-    
+
     // Check if groundingMetadata is present (indicates search was used)
     const hasSearchMetadata = result.outputs[0].raw?.candidates?.[0]?.groundingMetadata;
     console.log(`Search was used: ${hasSearchMetadata ? 'Yes' : 'No'}`);
-    
+
     if (hasSearchMetadata) {
       // Show search queries used
       const searchQueries =
@@ -57,4 +57,4 @@ if (require.main === module) {
   runVertexSearchDemo().catch((error) => console.error('Error running demo:', error));
 }
 
-module.exports = { runVertexSearchDemo }; 
+module.exports = { runVertexSearchDemo };
