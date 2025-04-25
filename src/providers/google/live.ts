@@ -38,8 +38,6 @@ const formatContentMessage = (contents: GeminiFormat, contentIndex: number) => {
   return contentMessage;
 };
 
-const DEFAULT_GOOGLE_API_HOST = 'generativelanguage.googleapis.com';
-
 export class GoogleLiveProvider implements ApiProvider {
   config: CompletionOptions;
   modelName: string;
