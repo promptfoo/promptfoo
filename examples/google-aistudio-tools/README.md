@@ -37,6 +37,7 @@ promptfoo eval -c examples/google-aistudio-tools/promptfooconfig.yaml
 ## Expected Outputs
 
 The tests verify that:
+
 1. The model returns a valid function call
 2. The function name is correct (`get_current_weather`)
 3. The location parameter matches the user's query

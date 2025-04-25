@@ -826,9 +826,9 @@ describe('AIStudioChatProvider', () => {
           apiKey: 'test-key',
           tools: [
             {
-              google_search: {}
-            }
-          ]
+              google_search: {},
+            },
+          ],
         },
       });
 
@@ -838,34 +838,34 @@ describe('AIStudioChatProvider', () => {
             {
               content: {
                 parts: [{ text: 'response with search results' }],
-                role: 'model'
+                role: 'model',
               },
               groundingMetadata: {
                 searchEntryPoint: {
-                  renderedContent: '<rendered search suggestion HTML>'
+                  renderedContent: '<rendered search suggestion HTML>',
                 },
                 groundingChunks: [
                   {
                     web: {
                       uri: 'https://vertexaisearch.cloud.google.com/grounding-api-redirect/test',
-                      title: 'test.com'
-                    }
-                  }
+                      title: 'test.com',
+                    },
+                  },
                 ],
-                webSearchQueries: ['test query']
-              }
-            }
+                webSearchQueries: ['test query'],
+              },
+            },
           ],
           usageMetadata: {
             totalTokenCount: 15,
             promptTokenCount: 8,
-            candidatesTokenCount: 7
-          }
+            candidatesTokenCount: 7,
+          },
         },
         cached: false,
         status: 200,
         statusText: 'OK',
-        headers: {}
+        headers: {},
       };
 
       jest.mocked(util.maybeCoerceToGeminiFormat).mockReturnValueOnce({
@@ -887,7 +887,7 @@ describe('AIStudioChatProvider', () => {
           total: 15,
           prompt: 8,
           completion: 7,
-        }
+        },
       });
 
       expect(cache.fetchWithCache).toHaveBeenCalledWith(
@@ -907,7 +907,7 @@ describe('AIStudioChatProvider', () => {
       provider = new AIStudioChatProvider('gemini-2.0-flash', {
         config: {
           apiKey: 'test-key',
-          tools: ['google_search']
+          tools: ['google_search'],
         },
       });
 
@@ -917,23 +917,23 @@ describe('AIStudioChatProvider', () => {
             {
               content: {
                 parts: [{ text: 'response with search results using string format' }],
-                role: 'model'
+                role: 'model',
               },
               groundingMetadata: {
-                webSearchQueries: ['test query']
-              }
-            }
+                webSearchQueries: ['test query'],
+              },
+            },
           ],
           usageMetadata: {
             totalTokenCount: 20,
             promptTokenCount: 8,
-            candidatesTokenCount: 12
-          }
+            candidatesTokenCount: 12,
+          },
         },
         cached: false,
         status: 200,
         statusText: 'OK',
-        headers: {}
+        headers: {},
       };
 
       jest.mocked(util.maybeCoerceToGeminiFormat).mockReturnValueOnce({
@@ -955,7 +955,7 @@ describe('AIStudioChatProvider', () => {
           total: 20,
           prompt: 8,
           completion: 12,
-        }
+        },
       });
 
       // Verify the string format is properly converted to object format in the API call
@@ -981,11 +981,11 @@ describe('AIStudioChatProvider', () => {
               google_search_retrieval: {
                 dynamic_retrieval_config: {
                   mode: 'MODE_DYNAMIC',
-                  dynamic_threshold: 0.3
-                }
-              }
-            }
-          ]
+                  dynamic_threshold: 0.3,
+                },
+              },
+            },
+          ],
         },
       });
 
@@ -995,34 +995,34 @@ describe('AIStudioChatProvider', () => {
             {
               content: {
                 parts: [{ text: 'response with search retrieval' }],
-                role: 'model'
+                role: 'model',
               },
               groundingMetadata: {
                 searchEntryPoint: {
-                  renderedContent: '<rendered search suggestion HTML>'
+                  renderedContent: '<rendered search suggestion HTML>',
                 },
                 groundingChunks: [
                   {
                     web: {
                       uri: 'https://vertexaisearch.cloud.google.com/grounding-api-redirect/test-retrieval',
-                      title: 'retrieval.com'
-                    }
-                  }
+                      title: 'retrieval.com',
+                    },
+                  },
                 ],
-                webSearchQueries: ['retrieval query']
-              }
-            }
+                webSearchQueries: ['retrieval query'],
+              },
+            },
           ],
           usageMetadata: {
             totalTokenCount: 15,
             promptTokenCount: 8,
-            candidatesTokenCount: 7
-          }
+            candidatesTokenCount: 7,
+          },
         },
         cached: false,
         status: 200,
         statusText: 'OK',
-        headers: {}
+        headers: {},
       };
 
       jest.mocked(util.maybeCoerceToGeminiFormat).mockReturnValueOnce({
@@ -1044,13 +1044,15 @@ describe('AIStudioChatProvider', () => {
           total: 15,
           prompt: 8,
           completion: 7,
-        }
+        },
       });
 
       expect(cache.fetchWithCache).toHaveBeenCalledWith(
         'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=test-key',
         {
-          body: expect.stringContaining('"google_search_retrieval":{"dynamic_retrieval_config":{"mode":"MODE_DYNAMIC","dynamic_threshold":0.3}}'),
+          body: expect.stringContaining(
+            '"google_search_retrieval":{"dynamic_retrieval_config":{"mode":"MODE_DYNAMIC","dynamic_threshold":0.3}}',
+          ),
           headers: { 'Content-Type': 'application/json' },
           method: 'POST',
         },

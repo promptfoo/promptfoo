@@ -12,12 +12,13 @@ This example demonstrates using Google's Gemini 2.5 models with Search grounding
 Search grounding allows Gemini models to access the internet to retrieve current information, making them more accurate for questions about recent events, facts, or real-time data. This improves responses that require:
 
 - Current events and news
-- Recent developments 
+- Recent developments
 - Stock prices and market data
 - Sports results
 - Technical documentation updates
 
 The example uses two approaches:
+
 - Gemini 2.5 Flash with Google Search as a tool
 - Gemini 2.5 Pro with thinking capabilities and Search grounding
 
@@ -45,7 +46,7 @@ The simplest way to enable Google Search grounding is with the string format:
 providers:
   - id: google:gemini-2.5-flash-preview-04-17
     config:
-      tools: ["google_search"]
+      tools: ['google_search']
 ```
 
 ### Object Syntax (Alternative)

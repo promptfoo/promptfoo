@@ -271,8 +271,8 @@ export class GoogleLiveProvider implements ApiProvider {
               ...this.config.generationConfig,
             },
             ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),
-            ...(this.config.tools 
-              ? { tools: processTools(loadFile(this.config.tools, context?.vars)) } 
+            ...(this.config.tools
+              ? { tools: processTools(loadFile(this.config.tools, context?.vars)) }
               : {}),
             ...(systemInstruction ? { systemInstruction } : {}),
           },

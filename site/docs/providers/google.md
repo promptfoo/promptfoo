@@ -180,10 +180,11 @@ Search grounding allows Gemini models to access the internet to retrieve current
 
 :::info
 Search grounding is supported on most Gemini 1.5 and 2.x models including:
+
 - Gemini 2.5 Flash and Pro models
 - Gemini 2.0 Flash and Pro models
 - Gemini 1.5 Flash and Pro models
-:::
+  :::
 
 Enable Google Search as a tool for your Gemini models using either of these formats:
 
@@ -211,12 +212,13 @@ providers:
       generationConfig:
         thinkingConfig:
           thinkingBudget: 1024
-      tools: ["google_search"]
+      tools: ['google_search']
 ```
 
 #### Use Cases
 
 Search grounding improves responses that require:
+
 - Current events and news
 - Recent developments
 - Stock prices and market data
@@ -226,6 +228,7 @@ Search grounding improves responses that require:
 #### Understanding the Results
 
 When using Search grounding, the API response includes special metadata:
+
 - `groundingMetadata` - Contains information about search results used
 - `groundingChunks` - Web sources that informed the response
 - `webSearchQueries` - Queries used to retrieve information

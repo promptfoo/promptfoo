@@ -18,7 +18,7 @@ import {
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
-  processTools
+  processTools,
 } from './util';
 import type { GeminiResponseData } from './util';
 
@@ -204,8 +204,8 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
       },
       safetySettings: this.config.safetySettings,
       ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),
-      ...(this.config.tools 
-        ? { tools: processTools(loadFile(this.config.tools, context?.vars)) } 
+      ...(this.config.tools
+        ? { tools: processTools(loadFile(this.config.tools, context?.vars)) }
         : {}),
       ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
     };
