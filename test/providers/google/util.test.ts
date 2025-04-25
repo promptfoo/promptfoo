@@ -11,6 +11,7 @@ import {
   loadFile,
   parseStringObject,
   validateFunctionCall,
+  normalizeTools,
 } from '../../../src/providers/google/util';
 
 jest.mock('google-auth-library');
@@ -888,6 +889,107 @@ describe('util', () => {
 
       expect(contents).toEqual([{ parts: [{ text: 'user message' }], role: 'user' }]);
       expect(systemInstruction).toEqual({ parts: [{ text: 'system instruction' }] });
+    });
+  });
+
+  describe('normalizeTools', () => {
+    it('should convert snake_case to camelCase for tool properties', () => {
+      const tools = [
+        {
+          google_search: {},
+        },
+        {
+          code_execution: {},
+        },
+        {
+          google_search_retrieval: {
+            dynamicRetrievalConfig: {
+              mode: 'MODE_DYNAMIC',
+              dynamicThreshold: 0,
+            },
+          },
+        },
+      ];
+
+      const normalized = normalizeTools(tools);
+
+      expect(normalized).toEqual([
+        {
+          google_search: {},
+          googleSearch: {},
+        },
+        {
+          code_execution: {},
+          codeExecution: {},
+        },
+        {
+          google_search_retrieval: {
+            dynamicRetrievalConfig: {
+              mode: 'MODE_DYNAMIC',
+              dynamicThreshold: 0,
+            },
+          },
+          googleSearchRetrieval: {
+            dynamicRetrievalConfig: {
+              mode: 'MODE_DYNAMIC',
+              dynamicThreshold: 0,
+            },
+          },
+        },
+      ]);
+    });
+
+    it('should not override existing camelCase properties', () => {
+      const tools = [
+        {
+          google_search: { property1: 'value1' },
+          googleSearch: { property2: 'value2' },
+        },
+      ];
+
+      const normalized = normalizeTools(tools);
+
+      expect(normalized).toEqual([
+        {
+          google_search: { property1: 'value1' },
+          googleSearch: { property2: 'value2' },
+        },
+      ]);
+    });
+
+    it('should leave other properties unchanged', () => {
+      const tools = [
+        {
+          functionDeclarations: [
+            {
+              name: 'testFunction',
+              description: 'A test function',
+            },
+          ],
+          google_search: {},
+        },
+      ];
+
+      const normalized = normalizeTools(tools);
+
+      expect(normalized).toEqual([
+        {
+          functionDeclarations: [
+            {
+              name: 'testFunction',
+              description: 'A test function',
+            },
+          ],
+          google_search: {},
+          googleSearch: {},
+        },
+      ]);
+    });
+
+    it('should handle empty arrays', () => {
+      const tools: any[] = [];
+      const normalized = normalizeTools(tools);
+      expect(normalized).toEqual([]);
     });
   });
 });

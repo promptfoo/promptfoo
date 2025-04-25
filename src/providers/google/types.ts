@@ -76,8 +76,11 @@ interface GoogleSearchRetrieval {
 export interface Tool {
   functionDeclarations?: FunctionDeclaration[];
   googleSearchRetrieval?: GoogleSearchRetrieval;
+  google_search_retrieval?: GoogleSearchRetrieval;
   codeExecution?: object;
+  code_execution?: object;
   googleSearch?: object;
+  google_search?: object;
 }
 
 export interface CompletionOptions {

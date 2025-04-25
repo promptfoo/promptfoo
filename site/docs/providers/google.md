@@ -180,14 +180,14 @@ Search grounding allows Gemini models to access the internet for up-to-date info
 
 #### Basic Usage
 
-To enable Search grounding, use the object format that matches Google's API:
+To enable Search grounding (supports both camelCase and snake_case formats):
 
 ```yaml
 providers:
   - id: google:gemini-2.5-flash-preview-04-17
     config:
       tools:
-        - google_search: {}
+        - googleSearch: {} # or google_search: {}
 ```
 
 #### Combining with Other Features
@@ -202,7 +202,7 @@ providers:
         thinkingConfig:
           thinkingBudget: 1024
       tools:
-        - google_search: {}
+        - googleSearch: {} # or google_search: {}
 ```
 
 #### Supported Models
