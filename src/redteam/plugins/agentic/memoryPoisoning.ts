@@ -2,7 +2,9 @@ import dedent from 'dedent';
 import { OpenAiResponsesProvider } from '../../../providers/openai/responses';
 import { RedteamGraderBase } from '../base';
 
-export const PLUGIN_ID = 'promptfoo:redteam:agentic:memory-poisoning';
+export const PLUGIN_ID = 'agentic:memory-poisoning';
+
+export const FULL_PLUGIN_ID = `promptfoo:redteam:${PLUGIN_ID}`;
 
 // TODO(Will): This description is reductive.
 export const PLUGIN_DESCRIPTION = dedent`
@@ -10,7 +12,7 @@ export const PLUGIN_DESCRIPTION = dedent`
 `;
 
 export class MemoryPoisoningPluginGrader extends RedteamGraderBase {
-  readonly id = PLUGIN_ID;
+  readonly id = FULL_PLUGIN_ID;
   rubric = '';
 
   renderRubric(vars: {
