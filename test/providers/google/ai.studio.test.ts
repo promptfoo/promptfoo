@@ -821,14 +821,19 @@ describe('AIStudioChatProvider', () => {
     });
 
     it('should handle Google Search as a tool', async () => {
+      // Reset the Nunjucks mock to return the non-rendered value for these tests
+      jest.mocked(templates.getNunjucksEngine).mockReturnValue({
+        renderString: jest.fn((str) => str),
+      } as any);
+      
       provider = new AIStudioChatProvider('gemini-2.0-flash', {
         config: {
           apiKey: 'test-key',
           tools: [
             {
-              google_search: {},
-            },
-          ],
+              google_search: {}
+            }
+          ]
         },
       });
 
@@ -891,7 +896,7 @@ describe('AIStudioChatProvider', () => {
       });
 
       expect(cache.fetchWithCache).toHaveBeenCalledWith(
-        'https://rendered-generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=rendered-test-key',
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=test-key',
         {
           body: expect.stringContaining('"google_search":{}'),
           headers: { 'Content-Type': 'application/json' },
@@ -904,10 +909,15 @@ describe('AIStudioChatProvider', () => {
     });
 
     it('should handle string-based tools format', async () => {
+      // Reset the Nunjucks mock to return the non-rendered value for these tests
+      jest.mocked(templates.getNunjucksEngine).mockReturnValue({
+        renderString: jest.fn((str) => str),
+      } as any);
+      
       provider = new AIStudioChatProvider('gemini-2.0-flash', {
         config: {
           apiKey: 'test-key',
-          tools: ['google_search'],
+          tools: ['google_search']
         },
       });
 
@@ -960,7 +970,7 @@ describe('AIStudioChatProvider', () => {
 
       // Verify the string format is properly converted to object format in the API call
       expect(cache.fetchWithCache).toHaveBeenCalledWith(
-        'https://rendered-generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=rendered-test-key',
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=test-key',
         {
           body: expect.stringContaining('"google_search":{}'),
           headers: { 'Content-Type': 'application/json' },
@@ -973,6 +983,11 @@ describe('AIStudioChatProvider', () => {
     });
 
     it('should handle Google Search retrieval for Gemini 1.5 models', async () => {
+      // Reset the Nunjucks mock to return the non-rendered value for these tests
+      jest.mocked(templates.getNunjucksEngine).mockReturnValue({
+        renderString: jest.fn((str) => str),
+      } as any);
+      
       provider = new AIStudioChatProvider('gemini-1.5-flash', {
         config: {
           apiKey: 'test-key',
@@ -981,11 +996,11 @@ describe('AIStudioChatProvider', () => {
               google_search_retrieval: {
                 dynamic_retrieval_config: {
                   mode: 'MODE_DYNAMIC',
-                  dynamic_threshold: 0.3,
-                },
-              },
-            },
-          ],
+                  dynamic_threshold: 0.3
+                }
+              }
+            }
+          ]
         },
       });
 
@@ -1048,11 +1063,9 @@ describe('AIStudioChatProvider', () => {
       });
 
       expect(cache.fetchWithCache).toHaveBeenCalledWith(
-        'https://rendered-generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=rendered-test-key',
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=test-key',
         {
-          body: expect.stringContaining(
-            '"google_search_retrieval":{"dynamic_retrieval_config":{"mode":"MODE_DYNAMIC","dynamic_threshold":0.3}}',
-          ),
+          body: expect.stringContaining('"google_search_retrieval":{"dynamic_retrieval_config":{"mode":"MODE_DYNAMIC","dynamic_threshold":0.3}}'),
           headers: { 'Content-Type': 'application/json' },
           method: 'POST',
         },
