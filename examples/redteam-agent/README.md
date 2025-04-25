@@ -26,7 +26,5 @@ This example demonstrates redteaming a travel agent agent implemented using Lang
 4. Run the redteam:
 
    ```sh
-   promptfoo redteam run --config examples/redteam-agent/promptfooconfig.yaml -j 1
+   promptfoo redteam run --config examples/redteam-agent/promptfooconfig.yaml
    ```
-
-   Note: The `-j 1` flag disables test concurrency, ensuring that messages (test cases) are passed to the provider in sequence.
