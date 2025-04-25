@@ -109,7 +109,6 @@ const flightLookup = tool(
     const flights = Array.from({ length: numFlights }, () => {
       const airline = airlines[Math.floor(Math.random() * airlines.length)];
       const departureTime = generateDepartureTime();
-      const basePrice = Math.floor(Math.random() * 300) + 100;
 
       return {
         flightNumber: `${airline.code}${Math.floor(Math.random() * 9000) + 1000}`,
@@ -120,20 +119,6 @@ const flightLookup = tool(
         departureTime,
         arrivalTime: generateArrivalTime(departureTime),
         duration: generateFlightTime(),
-        prices: {
-          economy: basePrice,
-          business: basePrice * 2.5,
-          first: basePrice * 4,
-        },
-        seatsAvailable: {
-          economy: Math.floor(Math.random() * 50) + 10,
-          business: Math.floor(Math.random() * 10) + 5,
-          first: Math.floor(Math.random() * 5) + 1,
-        },
-        stops: Math.random() < 0.7 ? 0 : 1, // 70% chance of direct flight
-        aircraft: ['Boeing 737', 'Airbus A320', 'Boeing 787', 'Airbus A350'][
-          Math.floor(Math.random() * 4)
-        ],
         status: ['On Time', 'On Time', 'On Time', 'Delayed'][Math.floor(Math.random() * 4)], // 75% chance of being on time
       };
     });

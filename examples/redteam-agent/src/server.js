@@ -14,16 +14,17 @@ app.use(express.urlencoded({ extended: true }));
 const router = express.Router();
 
 router.post('/chat', async (req, res) => {
-  const { message, conversation_id } = req.body;
+  const { message } = req.body;
+  const sessionId = req.headers['x-promptfoo-session'];
 
   const agentState = await agent.invoke(
     { messages: [new HumanMessage(message)] },
-    { configurable: { thread_id: conversation_id } },
+    { configurable: { thread_id: sessionId } },
   );
 
   const agentMessage = agentState.messages[agentState.messages.length - 1].content;
 
-  console.debug({ conversation_id, message, agentMessage });
+  console.debug({ sessionId, message, agentMessage });
 
   res.send({ message: agentMessage });
 });
