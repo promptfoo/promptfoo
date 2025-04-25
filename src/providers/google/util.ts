@@ -478,6 +478,34 @@ export function parseStringObject(input: string | any) {
   return input;
 }
 
+/**
+ * Process tools configuration, converting string tool names to object format
+ * @param tools Array of tools that can include strings or objects
+ * @returns Processed tools array with all entries in object format
+ */
+export function processTools(tools: any[] | undefined): any[] | undefined {
+  if (!tools) {
+    return tools;
+  }
+  
+  if (!Array.isArray(tools)) {
+    logger.warn(`Tools configuration is not an array: ${JSON.stringify(tools)}`);
+    return tools;
+  }
+  
+  return tools.map(tool => {
+    // If it's a string like "google_search", convert to {google_search: {}}
+    if (typeof tool === 'string') {
+      // Log warning if the tool name might be invalid
+      if (!['google_search', 'googleSearch', 'google_search_retrieval', 'codeExecution'].includes(tool)) {
+        logger.warn(`Potentially unsupported tool name: "${tool}"`);
+      }
+      return { [tool]: {} };
+    }
+    return tool;
+  });
+}
+
 export function validateFunctionCall(
   output: string | object,
   functions?: Tool[] | string,

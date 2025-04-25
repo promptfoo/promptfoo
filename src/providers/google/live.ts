@@ -10,32 +10,10 @@ import type {
   CallApiContextParams,
   ProviderOptions,
   ProviderResponse,
-  GuardrailResponse,
 } from '../../types';
-import '../../util';
 import type { CompletionOptions, FunctionCall } from './types';
 import type { GeminiFormat } from './util';
-import { geminiFormatAndSystemInstructions, loadFile } from './util';
-import { fetchWithCache } from '../../cache';
-import type { EnvOverrides } from '../../types/env';
-import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
-import { createWebSocket, getWebSocketFetchFn, subscribeToData } from '../../util/websocket';
-import { WebSocketLive } from './google-live-client';
-
-// Helper function to process string tools into object format
-function processTools(tools: any[] | undefined): any[] | undefined {
-  if (!tools || !Array.isArray(tools)) {
-    return tools;
-  }
-  
-  return tools.map(tool => {
-    // If it's a string like "google_search", convert to {google_search: {}}
-    if (typeof tool === 'string') {
-      return { [tool]: {} };
-    }
-    return tool;
-  });
-}
+import { geminiFormatAndSystemInstructions, loadFile, processTools } from './util';
 
 const formatContentMessage = (contents: GeminiFormat, contentIndex: number) => {
   if (contents[contentIndex].role != 'user') {
@@ -92,34 +70,12 @@ export class GoogleLiveProvider implements ApiProvider {
       );
     }
 
-    // Process and configure the request
     const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
       prompt,
       context?.vars,
       this.config.systemInstruction,
     );
-
-    const config = {
-      contents,
-      generationConfig: {
-        ...(this.config.temperature !== undefined && { temperature: this.config.temperature }),
-        ...(this.config.topP !== undefined && { topP: this.config.topP }),
-        ...(this.config.topK !== undefined && { topK: this.config.topK }),
-        ...(this.config.stopSequences !== undefined && {
-          stopSequences: this.config.stopSequences,
-        }),
-        ...(this.config.maxOutputTokens !== undefined && {
-          maxOutputTokens: this.config.maxOutputTokens,
-        }),
-        ...this.config.generationConfig,
-      },
-      safetySettings: this.config.safetySettings,
-      ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),
-      ...(this.config.tools
-        ? { tools: processTools(loadFile(this.config.tools, context?.vars)) }
-        : {}),
-      ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
-    };
+    let contentIndex = 0;
 
     let statefulApi: ChildProcess | undefined;
     if (this.config.functionToolStatefulApi?.file) {
@@ -186,7 +142,8 @@ export class GoogleLiveProvider implements ApiProvider {
 
           // Handle setup complete response
           if (response.setupComplete) {
-            const contentMessage = formatContentMessage(contents, 0);
+            const contentMessage = formatContentMessage(contents, contentIndex);
+            contentIndex += 1;
             logger.debug(`WebSocket sent: ${JSON.stringify(contentMessage)}`);
             ws.send(JSON.stringify(contentMessage));
           }
@@ -248,8 +205,9 @@ export class GoogleLiveProvider implements ApiProvider {
               }
             }
           } else if (response.serverContent?.turnComplete) {
-            if (0 < contents.length) {
-              const contentMessage = formatContentMessage(contents, 0);
+            if (contentIndex < contents.length) {
+              const contentMessage = formatContentMessage(contents, contentIndex);
+              contentIndex += 1;
               logger.debug(`WebSocket sent: ${JSON.stringify(contentMessage)}`);
               ws.send(JSON.stringify(contentMessage));
             } else {
