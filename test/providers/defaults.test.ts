@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
 import { AzureModerationProvider } from '../../src/providers/azure/moderation';
 import {
   getDefaultProviders,
@@ -19,6 +20,7 @@ class MockProvider implements ApiProvider {
   id(): string {
     return this.providerId;
   }
+
   async callApi() {
     return {};
   }
@@ -41,7 +43,6 @@ describe('Provider override tests', () => {
   it('should override all completion providers when setDefaultCompletionProviders is called', async () => {
     const mockProvider = new MockProvider('test-completion-provider');
     await setDefaultCompletionProviders(mockProvider);
-
     const providers = await getDefaultProviders();
 
     expect(providers.datasetGenerationProvider.id()).toBe('test-completion-provider');
@@ -49,18 +50,15 @@ describe('Provider override tests', () => {
     expect(providers.gradingProvider.id()).toBe('test-completion-provider');
     expect(providers.suggestionsProvider.id()).toBe('test-completion-provider');
     expect(providers.synthesizeProvider.id()).toBe('test-completion-provider');
-
     expect(providers.embeddingProvider.id()).not.toBe('test-completion-provider');
   });
 
   it('should override embedding provider when setDefaultEmbeddingProviders is called', async () => {
     const mockProvider = new MockProvider('test-embedding-provider');
     await setDefaultEmbeddingProviders(mockProvider);
-
     const providers = await getDefaultProviders();
 
     expect(providers.embeddingProvider.id()).toBe('test-embedding-provider');
-
     expect(providers.datasetGenerationProvider.id()).not.toBe('test-embedding-provider');
     expect(providers.gradingJsonProvider.id()).not.toBe('test-embedding-provider');
     expect(providers.gradingProvider.id()).not.toBe('test-embedding-provider');
@@ -82,7 +80,6 @@ describe('Provider override tests', () => {
     expect(providers.gradingProvider.id()).toBe('test-completion-provider');
     expect(providers.suggestionsProvider.id()).toBe('test-completion-provider');
     expect(providers.synthesizeProvider.id()).toBe('test-completion-provider');
-
     expect(providers.embeddingProvider.id()).toBe('test-embedding-provider');
   });
 
@@ -107,7 +104,7 @@ describe('Provider override tests', () => {
   it('should use AzureModerationProvider when AZURE_CONTENT_SAFETY_ENDPOINT is provided via env overrides', async () => {
     const envOverrides: EnvOverrides = {
       AZURE_CONTENT_SAFETY_ENDPOINT: 'https://test-endpoint.com',
-    } as EnvOverrides;
+    };
 
     const providers = await getDefaultProviders(envOverrides);
 
@@ -122,7 +119,7 @@ describe('Provider override tests', () => {
       AZURE_CONTENT_SAFETY_ENDPOINT: 'https://test-endpoint.com',
       AZURE_CONTENT_SAFETY_API_KEY: 'test-api-key',
       AZURE_CONTENT_SAFETY_API_VERSION: '2024-01-01',
-    } as EnvOverrides;
+    };
 
     const providers = await getDefaultProviders(envOverrides);
 
@@ -131,5 +128,26 @@ describe('Provider override tests', () => {
     expect(moderationProvider.modelName).toBe('text-content-safety');
     expect(moderationProvider.endpoint).toBe('https://test-endpoint.com');
     expect(moderationProvider.apiVersion).toBe('2024-01-01');
+  });
+
+  it('should use Azure Chat Completion provider when Azure OpenAI credentials are set', async () => {
+    process.env.AZURE_OPENAI_API_KEY = 'test-key';
+    process.env.AZURE_OPENAI_DEPLOYMENT_NAME = 'test-deployment';
+    process.env.AZURE_OPENAI_API_HOST = 'test-host';
+
+    const providers = await getDefaultProviders();
+
+    expect(providers.datasetGenerationProvider).toBeInstanceOf(AzureChatCompletionProvider);
+    expect(providers.gradingProvider).toBeInstanceOf(AzureChatCompletionProvider);
+    expect(providers.suggestionsProvider).toBeInstanceOf(AzureChatCompletionProvider);
+
+    const provider = providers.datasetGenerationProvider as AzureChatCompletionProvider;
+    expect(provider.config).toEqual({
+      apiHost: 'test-host',
+      apiKey: 'test-key',
+    });
+
+    const jsonProvider = providers.gradingJsonProvider as AzureChatCompletionProvider;
+    expect(jsonProvider.config.response_format).toEqual({ type: 'json_object' });
   });
 });
