@@ -212,7 +212,7 @@ providers:
       generationConfig:
         thinkingConfig:
           thinkingBudget: 1024
-      tools: ['google_search']
+      tools: ["google_search"]
 ```
 
 #### Use Cases
