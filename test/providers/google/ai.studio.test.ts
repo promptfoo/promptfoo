@@ -825,15 +825,15 @@ describe('AIStudioChatProvider', () => {
       jest.mocked(templates.getNunjucksEngine).mockReturnValue({
         renderString: jest.fn((str) => str),
       } as any);
-      
+
       provider = new AIStudioChatProvider('gemini-2.0-flash', {
         config: {
           apiKey: 'test-key',
           tools: [
             {
-              google_search: {}
-            }
-          ]
+              google_search: {},
+            },
+          ],
         },
       });
 
@@ -913,11 +913,11 @@ describe('AIStudioChatProvider', () => {
       jest.mocked(templates.getNunjucksEngine).mockReturnValue({
         renderString: jest.fn((str) => str),
       } as any);
-      
+
       provider = new AIStudioChatProvider('gemini-2.0-flash', {
         config: {
           apiKey: 'test-key',
-          tools: ['google_search']
+          tools: ['google_search'],
         },
       });
 
@@ -987,7 +987,7 @@ describe('AIStudioChatProvider', () => {
       jest.mocked(templates.getNunjucksEngine).mockReturnValue({
         renderString: jest.fn((str) => str),
       } as any);
-      
+
       provider = new AIStudioChatProvider('gemini-1.5-flash', {
         config: {
           apiKey: 'test-key',
@@ -996,11 +996,11 @@ describe('AIStudioChatProvider', () => {
               google_search_retrieval: {
                 dynamic_retrieval_config: {
                   mode: 'MODE_DYNAMIC',
-                  dynamic_threshold: 0.3
-                }
-              }
-            }
-          ]
+                  dynamic_threshold: 0.3,
+                },
+              },
+            },
+          ],
         },
       });
 
@@ -1065,7 +1065,9 @@ describe('AIStudioChatProvider', () => {
       expect(cache.fetchWithCache).toHaveBeenCalledWith(
         'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=test-key',
         {
-          body: expect.stringContaining('"google_search_retrieval":{"dynamic_retrieval_config":{"mode":"MODE_DYNAMIC","dynamic_threshold":0.3}}'),
+          body: expect.stringContaining(
+            '"google_search_retrieval":{"dynamic_retrieval_config":{"mode":"MODE_DYNAMIC","dynamic_threshold":0.3}}',
+          ),
           headers: { 'Content-Type': 'application/json' },
           method: 'POST',
         },
