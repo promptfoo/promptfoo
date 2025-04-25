@@ -1,5 +1,8 @@
 ---
 sidebar_label: Choosing the best GPT model
+title: Choosing the Best GPT Model for Your Application
+description: Compare OpenAI's GPT-4.1 and GPT-4.1-mini models on your own data to measure performance, cost, and latency for your specific use case.
+keywords: [gpt-4.1, gpt-4.1-mini, model comparison, cost-benefit analysis, openai, promptfoo, benchmark]
 ---
 
 # Choosing the best GPT model: benchmark on your own data
@@ -10,7 +13,7 @@ New model releases often score well on benchmarks. But generic benchmarks are fo
 
 The end result will be a side-by-side comparison that looks like this:
 
-![gpt 4.1-mini vs gpt 4.1](/img/docs/gpt-4o-mini-vs-gpt-4o.png)
+![GPT-4.1-mini vs GPT-4.1 comparison](/img/docs/gpt-4o-mini-vs-gpt-4o.png)
 
 ## Prerequisites
 
@@ -23,13 +26,13 @@ To start, make sure you have:
 
 Create a dedicated directory for your comparison project:
 
-```sh
+```bash
 npx promptfoo@latest init gpt-comparison
 ```
 
 Edit `promptfooconfig.yaml` to include both models:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - openai:gpt-4.1-mini
   - openai:gpt-4.1
@@ -39,7 +42,7 @@ providers:
 
 For our comparison, we'll use a simple prompt:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 prompts:
   - 'Solve this riddle: {{riddle}}'
 ```
@@ -50,7 +53,7 @@ Feel free to add multiple prompts and tailor to your use case.
 
 Above, we have a `{{riddle}}` placeholder variable. Each test case runs the prompts with a different riddle:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 tests:
   - vars:
       riddle: 'I speak without a mouth and hear without ears. I have no body, but I come alive with wind. What am I?'
@@ -64,13 +67,13 @@ tests:
 
 Execute the comparison with the following command:
 
-```
+```bash
 npx promptfoo@latest eval
 ```
 
 This will process the riddles against both GPT-4.1-mini and GPT-4.1, providing you with side-by-side results in your command line interface:
 
-```sh
+```bash
 npx promptfoo@latest view
 ```
 
@@ -80,7 +83,7 @@ To streamline the evaluation process, you can add various types of assertions to
 
 In this case, we're especially interested in `cost` and `latency` assertions given the tradeoffs between the two models:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 tests:
   - vars:
       riddle: 'I speak without a mouth and hear without ears. I have no body, but I come alive with wind. What am I?'
@@ -125,7 +128,7 @@ For more info on available assertion types, see [assertions & metrics](/docs/con
 
 Finally, we'll use `defaultTest` to clean things up a bit and apply global `latency` and `cost` requirements. Here's the final eval config:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - openai:gpt-4.1-mini
   - openai:gpt-4.1
@@ -168,10 +171,18 @@ For more info on setting up the config, see the [configuration guide](/docs/conf
 
 In the end, you will see a result like this:
 
-![gpt 4.1-mini vs gpt 4.1](/img/docs/gpt-4o-mini-vs-gpt-4o.png)
+![GPT-4.1-mini vs GPT-4.1 comparison](/img/docs/gpt-4o-mini-vs-gpt-4o.png)
 
 In this particular eval, the models performed very similarly in terms of answers, but it looks like GPT-4.1-mini exceeded our maximum latency. Notably, GPT-4.1 was about 35x more expensive compared to GPT-4.1-mini.
 
 Of course, this is a limited example test set. The tradeoff between cost, latency, and accuracy is going to be tailored for each application. That's why it's important to run your own eval.
 
 I encourage you to experiment with your own test cases and use this guide as a starting point. To learn more, see [Getting Started](/docs/getting-started).
+
+## See Also
+
+- [Mixtral vs GPT Comparison](/docs/guides/mixtral-vs-gpt)
+- [GPT-4.1-nano vs GPT-4.1 Benchmark](/docs/guides/gpt-3.5-vs-gpt-4)
+- [LLaMA vs GPT Comparison](/docs/guides/compare-llama2-vs-gpt)
+- [Evaluating LLM Temperature](/docs/guides/evaluate-llm-temperature)
+- [Cost Analysis and Optimization](/docs/guides/cost-analysis)

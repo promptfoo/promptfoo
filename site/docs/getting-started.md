@@ -283,9 +283,9 @@ You can also output a nice [spreadsheet](https://docs.google.com/spreadsheets/d/
 
 ### Model quality
 
-In [this next example](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-4o-vs-4o-mini), we evaluate the difference between GPT 4o and GPT 4o mini outputs for a given prompt:
+In [this next example](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-4.1-vs-4.1-mini), we evaluate the difference between GPT-4.1 and GPT-4.1-mini outputs for a given prompt:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 prompts:
   - file://prompt1.txt
   - file://prompt2.txt

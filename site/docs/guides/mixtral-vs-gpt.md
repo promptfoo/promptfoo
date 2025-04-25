@@ -1,5 +1,8 @@
 ---
 sidebar_label: Mixtral vs GPT
+title: Mixtral vs GPT-4.1 Benchmark
+description: Learn how to compare Mixtral and GPT-4.1 models on your own data using promptfoo. Run objective evaluations with custom test cases for your specific use case.
+keywords: [mixtral, gpt-4.1, llm comparison, model benchmark, promptfoo, mistral ai]
 ---
 
 # Mixtral vs GPT: Run a benchmark with your own data
@@ -19,7 +22,7 @@ In this guide, we'll walk through the steps to compare three large language mode
 
 Create a new directory for your comparison project and initialize it with `promptfoo init`.
 
-```sh
+```bash
 npx promptfoo@latest init mixtral-gpt-comparison
 ```
 
@@ -27,7 +30,7 @@ npx promptfoo@latest init mixtral-gpt-comparison
 
 Edit your `promptfooconfig.yaml` to include the models you want to compare. Here's an example configuration with Mixtral, GPT-4.1-mini, and GPT-4.1:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - replicate:mistralai/mixtral-8x7b-instruct-v0.1:2b56576fcfbe32fa0526897d8385dd3fb3d36ba6fd0dbe033c72886b81ade93e
   - openai:gpt-4.1-mini
@@ -36,7 +39,7 @@ providers:
 
 Set your API keys as environment variables:
 
-```sh
+```bash
 export REPLICATE_API_TOKEN=your_replicate_api_token
 export OPENAI_API_KEY=your_openai_api_key
 ```
@@ -58,7 +61,7 @@ Local options such as [ollama](/docs/providers/ollama), [vllm](/docs/providers/v
 
 Customize the behavior of each model by setting parameters such as `temperature` and `max_tokens` or `max_length`:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: openai:gpt-4.1-mini
     // highlight-start
@@ -84,7 +87,7 @@ providers:
 
 Set up the prompts that you want to run for each model. In this case, we'll just use a simple prompt, because we want to compare model performance.
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 prompts:
   - 'Answer this as best you can: {{query}}'
 ```
@@ -95,7 +98,7 @@ If desired, you can test multiple prompts (just add more to the list), or test [
 
 Define the test cases that you want to use for the evaluation. This includes setting up variables that will be interpolated into the prompts:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 tests:
   - vars:
       query: 'What is the capital of France?'
@@ -136,7 +139,7 @@ Optionally, you can set up assertions to automatically assess the output for cor
 
 With everything configured, run the evaluation using the `promptfoo` CLI:
 
-```
+```bash
 npx promptfoo@latest eval
 ```
 
@@ -144,7 +147,7 @@ This command will execute each test case against each configured model and recor
 
 To visualize the results, use the `promptfoo` viewer:
 
-```sh
+```bash
 npx promptfoo@latest view
 ```
 
@@ -154,7 +157,7 @@ It will show results like so:
 
 You can also output the results to a file in various formats, such as JSON, YAML, or CSV:
 
-```
+```bash
 npx promptfoo@latest eval -o results.csv
 ```
 
@@ -166,10 +169,18 @@ Contrast this with public benchmarks from the [Chatbot Arena](https://lmarena.ai
 
 | Model                      | Arena rating | MT-bench score |
 | -------------------------- | ------------ | -------------- |
-| gpt-4.1                    | 1243         | 9.32           |
+| GPT-4.1                    | 1363         | 9.32           |
+| GPT-4.1-mini               | 1322         | 8.32           |
 | Mixtral-8x7b-Instruct-v0.1 | 1121         | 8.3            |
-| gpt-4.1-mini               | 1074         | 8.32           |
 
 While public benchmarks tell you how these models perform on _generic_ tasks, they are no substitute for running a benchmark on your _own_ data and use cases.
 
-The examples above highlighted a few cases where GPT outperforms Mixtral: notably, GPT-4 was better at following JSON output instructions. But, GPT 3.5 had the highest eval score because of the latency requirements that we added to one of the test cases. Overall, the best choice is going to depend largely on the test cases that you construct and your own application constraints.
+The examples above highlighted a few cases where GPT outperforms Mixtral: notably, GPT-4.1 was better at following JSON output instructions. But, GPT-4.1-mini had the highest eval score in our custom test because of the latency requirements that we added to one of the test cases. Overall, the best choice is going to depend largely on the test cases that you construct and your own application constraints.
+
+## See Also
+
+- [Choosing the Best GPT Model](/docs/guides/choosing-best-gpt-model)
+- [Comparing GPT-4.1 vs GPT-4.1-mini](/docs/guides/gpt-4-vs-gpt-4o)
+- [LLaMA vs GPT Comparison](/docs/guides/compare-llama2-vs-gpt)
+- [Configuration Guide](/docs/configuration/guide)
+- [Model Providers Reference](/docs/providers)
