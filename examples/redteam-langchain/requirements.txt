@@ -9,7 +9,7 @@ charset-normalizer==3.4.1
 dataclasses-json==0.6.7
 distro==1.9.0
 frozenlist==1.5.0
-h11==0.14.0
+h11==0.16.0
 httpcore==1.0.7
 httpx==0.28.1
 httpx-sse==0.4.0

@@ -197,7 +197,8 @@ export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
     return (
       this.config.apiKey ||
       (this.config?.apiKeyEnvar
-        ? process.env[this.config.apiKeyEnvar] || this.env?.[this.config.apiKeyEnvar as keyof any]
+        ? getEnvString(this.config.apiKeyEnvar) ||
+          this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
         : undefined) ||
       this.env?.COHERE_API_KEY ||
       getEnvString('COHERE_API_KEY')
