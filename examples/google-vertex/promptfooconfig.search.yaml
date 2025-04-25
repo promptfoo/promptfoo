@@ -11,7 +11,8 @@ providers:
     config:
       temperature: 0.2
       maxOutputTokens: 1024
-      tools: ['google_search': {}]
+      tools:
+        - googleSearch: {}
 
   # Alternate version with thinking capabilities
   - id: vertex:gemini-2.5-flash-preview-04-17
@@ -21,15 +22,16 @@ providers:
       generationConfig:
         thinkingConfig:
           thinkingBudget: 1024
-      tools: ['google_search': {}]
+      tools:
+        - googleSearch: {}
 
-  # Object-based format alternative
-  - id: vertex:gemini-2.0-pro
+  # Object-based format alternative (same as first provider, with different id)
+  - id: vertex:gemini-2.0-pro-2
     config:
       temperature: 0.2
       maxOutputTokens: 1024
       tools:
-        - google_search: {}
+        - googleSearch: {}
 
 tests:
   # Test current events

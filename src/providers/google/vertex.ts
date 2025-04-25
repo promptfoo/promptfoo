@@ -380,7 +380,36 @@ export class VertexChatProvider extends VertexGenericProvider {
           cached: false,
           output,
           tokenUsage,
+          metadata: {},
         };
+
+        // Extract search grounding metadata from candidates
+        const candidateWithMetadata = dataWithResponse
+          .map((datum) => getCandidate(datum))
+          .find(
+            (candidate) =>
+              candidate.groundingMetadata ||
+              candidate.groundingChunks ||
+              candidate.groundingSupports ||
+              candidate.webSearchQueries,
+          );
+
+        if (candidateWithMetadata) {
+          response.metadata = {
+            ...(candidateWithMetadata.groundingMetadata && {
+              groundingMetadata: candidateWithMetadata.groundingMetadata,
+            }),
+            ...(candidateWithMetadata.groundingChunks && {
+              groundingChunks: candidateWithMetadata.groundingChunks,
+            }),
+            ...(candidateWithMetadata.groundingSupports && {
+              groundingSupports: candidateWithMetadata.groundingSupports,
+            }),
+            ...(candidateWithMetadata.webSearchQueries && {
+              webSearchQueries: candidateWithMetadata.webSearchQueries,
+            }),
+          };
+        }
 
         if (isCacheEnabled()) {
           await cache.set(cacheKey, JSON.stringify(response));

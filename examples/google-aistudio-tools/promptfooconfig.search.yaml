@@ -12,7 +12,7 @@ providers:
       temperature: 0.2
       maxOutputTokens: 1024
       tools:
-        - google_search: {}
+        - googleSearch: {}
 
   # Alternate version with thinking capabilities
   - id: google:gemini-2.5-pro-exp-03-25
@@ -23,7 +23,7 @@ providers:
         thinkingConfig:
           thinkingBudget: 1024
       tools:
-        - google_search: {}
+        - googleSearch: {}
 
   # Dynamic retrieval configuration for Gemini 1.5 models
   - id: google:gemini-1.5-flash

@@ -226,6 +226,16 @@ export class GoogleLiveProvider implements ApiProvider {
                   toolCall: { functionCalls: function_calls_total },
                   statefulApiState,
                 },
+                metadata: {
+                  ...(response.groundingMetadata && {
+                    groundingMetadata: response.groundingMetadata,
+                  }),
+                  ...(response.groundingChunks && { groundingChunks: response.groundingChunks }),
+                  ...(response.groundingSupports && {
+                    groundingSupports: response.groundingSupports,
+                  }),
+                  ...(response.webSearchQueries && { webSearchQueries: response.webSearchQueries }),
+                },
               });
               ws.close();
             }
