@@ -2,22 +2,15 @@
 
 # Learn more about building a configuration: https://promptfoo.dev/docs/configuration/guide
 
-description: 'Google AI Studio Tools demonstration'
+description: 'Google AI Studio Function Calling Demonstration'
 
 prompts:
   - What is the weather in {{location}}?
-  - "{{search_query}}"
 
 providers:
-  - id: 'google-function-calling'
-    provider: 'google:gemini-2.0-flash-001'
+  - id: 'google:gemini-2.0-flash-001'
     config:
       tools: file://tools.json
-
-  - id: 'google-search-grounding'
-    provider: 'google:gemini-2.0-flash'
-    config:
-      tools: file://search-tools.json
 
 defaultTest:
   options:
@@ -27,23 +20,23 @@ defaultTest:
       text: 'google:gemini-2.0-flash-001'
 
 tests:
-  # Function calling example - use first prompt
+  # Function calling tests
   - vars:
       location: San Francisco
-    provider: google-function-calling
     assert:
       - type: is-valid-function-call
       - type: equals
         value: get_current_weather
+        # Transform is a cleaner way to pick out specific properties
         transform: output[0].functionCall.name
       - type: similar
         value: '{{location}}'
         threshold: 0.9
+        # Transform returns only the parsed location argument
         transform: output[0].functionCall.args.location
 
   - vars:
       location: New York
-    provider: google-function-calling
     assert:
       - type: is-valid-function-call
       - type: equals
@@ -53,24 +46,3 @@ tests:
         value: '{{location}}'
         threshold: 0.9
         transform: output[0].functionCall.args.location
-
-  # Google Search examples - use second prompt
-  - vars:
-      search_query: What is the current Google stock price?
-    prompt: 1
-    provider: google-search-grounding
-    assert:
-      - type: contains
-        value: stock
-      - type: javascript
-        value: "!!result.raw?.candidates?.[0]?.groundingMetadata"
-
-  - vars:
-      search_query: What are the latest developments in AI?
-    prompt: 1
-    provider: google-search-grounding
-    assert:
-      - type: contains
-        value: AI
-      - type: javascript
-        value: "!!result.raw?.candidates?.[0]?.groundingMetadata"
