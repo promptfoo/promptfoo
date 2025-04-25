@@ -891,7 +891,7 @@ describe('AIStudioChatProvider', () => {
       });
 
       expect(cache.fetchWithCache).toHaveBeenCalledWith(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=test-key',
+        'https://rendered-generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=rendered-test-key',
         {
           body: expect.stringContaining('"google_search":{}'),
           headers: { 'Content-Type': 'application/json' },
@@ -960,7 +960,7 @@ describe('AIStudioChatProvider', () => {
 
       // Verify the string format is properly converted to object format in the API call
       expect(cache.fetchWithCache).toHaveBeenCalledWith(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=test-key',
+        'https://rendered-generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=rendered-test-key',
         {
           body: expect.stringContaining('"google_search":{}'),
           headers: { 'Content-Type': 'application/json' },
@@ -1048,7 +1048,7 @@ describe('AIStudioChatProvider', () => {
       });
 
       expect(cache.fetchWithCache).toHaveBeenCalledWith(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=test-key',
+        'https://rendered-generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=rendered-test-key',
         {
           body: expect.stringContaining(
             '"google_search_retrieval":{"dynamic_retrieval_config":{"mode":"MODE_DYNAMIC","dynamic_threshold":0.3}}',
