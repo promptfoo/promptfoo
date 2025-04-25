@@ -35,6 +35,31 @@ Or run it directly:
 promptfoo eval -c examples/google-aistudio-search/promptfooconfig.yaml
 ```
 
+## Configuration Examples
+
+### Simple String Syntax (Recommended)
+
+The simplest way to enable Google Search grounding is with the string format:
+
+```yaml
+providers:
+  - id: google:gemini-2.5-flash-preview-04-17
+    config:
+      tools: ["google_search"]
+```
+
+### Object Syntax (Alternative)
+
+You can also use the object-based syntax which matches Google's API format:
+
+```yaml
+providers:
+  - id: google:gemini-2.5-flash-preview-04-17
+    config:
+      tools:
+        - google_search: {}
+```
+
 ## Example Queries
 
 This example tests a variety of queries that benefit from search grounding:
@@ -42,6 +67,8 @@ This example tests a variety of queries that benefit from search grounding:
 1. "What is the current Google stock price?" - Current financial information
 2. "What are the latest features in TypeScript?" - Technical updates
 3. "Who won the most recent Super Bowl?" - Sports results
+
+Try modifying the queries to test other real-time information use cases!
 
 ## Understanding the Results
 
@@ -60,4 +87,7 @@ Per Google's requirements, if you use Search grounding in your own application, 
 
 - `promptfooconfig.yaml` - Main configuration showing how to enable search
 
-For more information, see the [Google AI Studio documentation on Grounding with Google Search](https://ai.google.dev/docs/gemini_api/grounding).
+## See Also
+
+- [Google Provider Documentation](/docs/providers/google)
+- [Google AI Studio documentation on Grounding with Google Search](https://ai.google.dev/docs/gemini_api/grounding)
