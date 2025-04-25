@@ -3,7 +3,7 @@
 description: Google Search grounding demonstration
 
 prompts:
-  - '{{query}}'
+  - "{{query}}"
 
 providers:
   # Google Search as a tool (using Gemini 2.5 Flash)
@@ -11,7 +11,7 @@ providers:
     config:
       temperature: 0.2
       maxOutputTokens: 1024
-      tools: ['google_search']
+      tools: ["google_search"]
 
   # Alternate version with thinking capabilities
   - id: google:gemini-2.5-pro-exp-03-25
@@ -21,7 +21,7 @@ providers:
       generationConfig:
         thinkingConfig:
           thinkingBudget: 1024
-      tools: ['google_search']
+      tools: ["google_search"]
 
 tests:
   # Test current events

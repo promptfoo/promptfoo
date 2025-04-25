@@ -46,7 +46,7 @@ The simplest way to enable Google Search grounding is with the string format:
 providers:
   - id: google:gemini-2.5-flash-preview-04-17
     config:
-      tools: ['google_search']
+      tools: ["google_search"]
 ```
 
 ### Object Syntax (Alternative)

@@ -176,34 +176,32 @@ For more details, see the [Gemini API documentation](https://ai.google.dev/docs)
 
 ### Search Grounding
 
-Search grounding allows Gemini models to access the internet to retrieve current information, making them more accurate for questions about recent events, facts, or real-time data.
+Search grounding allows Gemini models to access the internet for up-to-date information, enhancing responses about recent events and real-time data.
 
-:::info
-Search grounding is supported on most Gemini 1.5 and 2.x models including:
+#### Basic Usage
 
-- Gemini 2.5 Flash and Pro models
-- Gemini 2.0 Flash and Pro models
-- Gemini 1.5 Flash and Pro models
-  :::
-
-Enable Google Search as a tool for your Gemini models using either of these formats:
+The simplest way to enable Search grounding is with the string format:
 
 ```yaml
-# Option 1: Object format (standard API format)
-providers:
-  - id: google:gemini-2.5-flash-preview-04-17
-    config:
-      tools:
-        - google_search: {}
-
-# Option 2: Simplified string format
 providers:
   - id: google:gemini-2.5-flash-preview-04-17
     config:
       tools: ["google_search"]
 ```
 
-You can also combine Search grounding with thinking capabilities:
+Alternatively, you can use the standard object format that matches Google's API:
+
+```yaml
+providers:
+  - id: google:gemini-2.5-flash-preview-04-17
+    config:
+      tools:
+        - google_search: {}
+```
+
+#### Combining with Other Features
+
+You can combine Search grounding with thinking capabilities for better reasoning:
 
 ```yaml
 providers:
@@ -212,41 +210,47 @@ providers:
       generationConfig:
         thinkingConfig:
           thinkingBudget: 1024
-      tools: ['google_search']
+      tools: ["google_search"]
 ```
+
+#### Supported Models
+
+:::info
+Search grounding works with most recent Gemini models including:
+- Gemini 2.5 Flash and Pro models
+- Gemini 2.0 Flash and Pro models
+- Gemini 1.5 Flash and Pro models
+:::
 
 #### Use Cases
 
-Search grounding improves responses that require:
-
+Search grounding is particularly valuable for:
 - Current events and news
 - Recent developments
 - Stock prices and market data
 - Sports results
 - Technical documentation updates
 
-#### Understanding the Results
+#### Working with Response Metadata
 
-When using Search grounding, the API response includes special metadata:
-
+When using Search grounding, the API response includes additional metadata:
 - `groundingMetadata` - Contains information about search results used
 - `groundingChunks` - Web sources that informed the response
 - `webSearchQueries` - Queries used to retrieve information
 
-#### Limitations
+#### Limitations and Requirements
 
 - Search results may vary by region and time
 - Results may be subject to Google Search rate limits
 - Search grounding may incur additional costs beyond normal API usage
-- Search will only be performed when the model determines it's necessary for answering the query
+- Search will only be performed when the model determines it's necessary
+- **Important**: Per Google's requirements, applications using Search grounding must display Google Search Suggestions included in the API response metadata
 
-:::info
-Per Google's requirements, if you use Search grounding in your application, you must display Google Search Suggestions, which are included in the API response metadata.
-:::
+#### Example and Resources
+
+For a complete working example, see the [google-aistudio-search example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-aistudio-search).
 
 For more details, see the [Google AI Studio documentation on Grounding with Google Search](https://ai.google.dev/docs/gemini_api/grounding).
-
-For a complete working example of Search grounding in promptfoo, see the [google-aistudio-search example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-aistudio-search).
 
 ## Google Live API
 
