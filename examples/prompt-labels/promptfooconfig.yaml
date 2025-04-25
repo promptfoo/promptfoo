@@ -6,12 +6,12 @@ prompts:
     label: knowledge_base_query
 
 providers:
-  - id: openai:gpt-4o
+  - id: openai:gpt-4.1
     label: 4o
     prompts:
       - content_generation
-  - id: openai:gpt-4o-mini
-    label: '3.5'
+  - id: openai:gpt-4.1-mini
+    label: '4.1-mini'
     prompts:
       - knowledge_base_query
 tests:

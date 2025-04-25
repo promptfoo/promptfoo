@@ -1,17 +1,17 @@
-# gpt-4o-vs-4o-mini (Comparing GPT-4o and GPT-4o-Mini)
+# gpt-4.1-vs-4.1-mini (Comparing GPT-4.1 and GPT-4.1-Mini)
 
 ## Quick Start
 
 1. Initialize this example by running:
 
    ```bash
-   npx promptfoo@latest init --example gpt-4o-vs-4o-mini
+   npx promptfoo@latest init --example gpt-4.1-vs-4.1-mini
    ```
 
-2. Navigate to the newly created `gpt-4o-vs-4o-mini` directory:
+2. Navigate to the newly created `gpt-4.1-vs-4.1-mini` directory:
 
    ```bash
-   cd gpt-4o-vs-4o-mini
+   cd gpt-4.1-vs-4.1-mini
    ```
 
 3. Set an OpenAI API key directly in your environment:

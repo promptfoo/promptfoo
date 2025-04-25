@@ -4,13 +4,13 @@ sidebar_label: Choosing the best GPT model
 
 # Choosing the best GPT model: benchmark on your own data
 
-This guide will walk you through how to compare OpenAI's GPT-4o and GPT-4o-mini, top contenders for the most powerful and effective GPT models. This testing framework will give you the chance to test the models' reasoning capabilities, cost, and latency.
+This guide will walk you through how to compare OpenAI's GPT-4.1 and GPT-4.1-mini, top contenders for the most powerful and effective GPT models. This testing framework will give you the chance to test the models' reasoning capabilities, cost, and latency.
 
 New model releases often score well on benchmarks. But generic benchmarks are for generic use cases. If you're building an LLM app, you should evaluate these models on your own data and make an informed decision based on your specific needs.
 
 The end result will be a side-by-side comparison that looks like this:
 
-![gpt 4o-mini vs gpt 4o](/img/docs/gpt-4o-mini-vs-gpt-4o.png)
+![gpt 4.1-mini vs gpt 4.1](/img/docs/gpt-4o-mini-vs-gpt-4o.png)
 
 ## Prerequisites
 
@@ -31,8 +31,8 @@ Edit `promptfooconfig.yaml` to include both models:
 
 ```yaml title=promptfooconfig.yaml
 providers:
-  - openai:gpt-4o-mini
-  - openai:gpt-4
+  - openai:gpt-4.1-mini
+  - openai:gpt-4.1
 ```
 
 ## Step 2: Crafting the prompts
@@ -55,7 +55,7 @@ tests:
   - vars:
       riddle: 'I speak without a mouth and hear without ears. I have no body, but I come alive with wind. What am I?'
   - vars:
-      riddle: 'You see a boat filled with people. It has not sunk, but when you look again you don’t see a single person on the boat. Why?'
+      riddle: 'You see a boat filled with people. It has not sunk, but when you look again you don't see a single person on the boat. Why?'
   - vars:
       riddle: 'The more of this there is, the less you see. What is it?'
 ```
@@ -68,7 +68,7 @@ Execute the comparison with the following command:
 npx promptfoo@latest eval
 ```
 
-This will process the riddles against both GPT-3.5 and GPT-4, providing you with side-by-side results in your command line interface:
+This will process the riddles against both GPT-4.1-mini and GPT-4.1, providing you with side-by-side results in your command line interface:
 
 ```sh
 npx promptfoo@latest view
@@ -98,7 +98,7 @@ tests:
       - type: llm-rubric
         value: Do not apologize
   - vars:
-      riddle: 'You see a boat filled with people. It has not sunk, but when you look again you don’t see a single person on the boat. Why?'
+      riddle: 'You see a boat filled with people. It has not sunk, but when you look again you don't see a single person on the boat. Why?'
     assert:
       - type: cost
         threshold: 0.002
@@ -127,8 +127,8 @@ Finally, we'll use `defaultTest` to clean things up a bit and apply global `late
 
 ```yaml
 providers:
-  - openai:gpt-4o-mini
-  - openai:gpt-4
+  - openai:gpt-4.1-mini
+  - openai:gpt-4.1
 
 prompts:
   - 'Solve this riddle: {{riddle}}'
@@ -151,7 +151,7 @@ tests:
       - type: contains
         value: echo
   - vars:
-      riddle: "You see a boat filled with people. It has not sunk, but when you look again you don’t see a single person on the boat. Why?"
+      riddle: "You see a boat filled with people. It has not sunk, but when you look again you don't see a single person on the boat. Why?"
     assert:
       - type: llm-rubric
         value: explains that the people are below deck
@@ -168,9 +168,9 @@ For more info on setting up the config, see the [configuration guide](/docs/conf
 
 In the end, you will see a result like this:
 
-![gpt 4o-mini vs gpt 4o](/img/docs/gpt-4o-mini-vs-gpt-4o.png)
+![gpt 4.1-mini vs gpt 4.1](/img/docs/gpt-4o-mini-vs-gpt-4o.png)
 
-In this particular eval, the models performed very similarly in terms of answers, but it looks like GPT-4o-mini exceeded our maximum latency. Notably, 4o was about 35x more expensive compared to 4o-mini.
+In this particular eval, the models performed very similarly in terms of answers, but it looks like GPT-4.1-mini exceeded our maximum latency. Notably, GPT-4.1 was about 35x more expensive compared to GPT-4.1-mini.
 
 Of course, this is a limited example test set. The tradeoff between cost, latency, and accuracy is going to be tailored for each application. That's why it's important to run your own eval.
 

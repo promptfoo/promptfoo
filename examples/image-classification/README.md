@@ -1,6 +1,6 @@
 # Image Classification Example with Promptfoo
 
-This example demonstrates how to use Promptfoo for image classification tasks using the Fashion MNIST dataset. The example uses GPT-4o and GPT-4o-mini with a structured json schema to analyze images, including classification, color analysis, and additional attributes.
+This example demonstrates how to use Promptfoo for image classification tasks using the Fashion MNIST dataset. The example uses GPT-4.1 and GPT-4.1-mini with a structured json schema to analyze images, including classification, color analysis, and additional attributes.
 
 ## Getting Started
 

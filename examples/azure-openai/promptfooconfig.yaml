@@ -3,7 +3,7 @@ prompts:
   - 'Generate one very interesting fact about {{topic}}'
 
 providers:
-  - id: azure:chat:gpt-4o-deployment1
+  - id: azure:chat:gpt-4.1-deployment1
     config:
       apiHost: 'your-org.openai.azure.com'
 
