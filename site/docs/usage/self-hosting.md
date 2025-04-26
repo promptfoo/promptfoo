@@ -38,7 +38,7 @@ The self-hosted app is an Express server serving the web UI and API.
 - No support for horizontal scalability
 - No built-in authentication or SSO capabilities
 
-For a scaleable enterprise-grade option with all the above capabilities, consider our [Enterprise platform](/docs/enterprise/).
+For a scalable enterprise-grade option with all the above capabilities, consider our [Enterprise platform](/docs/enterprise/).
 :::
 
 ## Method 1: Using Pre-built Docker Images (Recommended Start)
