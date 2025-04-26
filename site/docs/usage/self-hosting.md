@@ -29,10 +29,16 @@ Self-hosting enables you to:
 
 The self-hosted app is an Express server serving the web UI and API.
 
-:::danger
+:::note
 **Self-hosting is not recommended for production use cases.**
 
-For a scaleable enterprise-grade option that can be deployed on-prem, consider our [Enterprise platform](/docs/enterprise/).
+- Uses SQLite as the database backend, which requires manual persistence management
+- Built for individual or experimental usage
+- No multi-team support or role-based access control.
+- No support for horizontal scalability
+- No built-in authentication or SSO capabilities
+
+For a scaleable enterprise-grade option with all the above capabilities, consider our [Enterprise platform](/docs/enterprise/).
 :::
 
 ## Method 1: Using Pre-built Docker Images (Recommended Start)
