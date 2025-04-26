@@ -503,6 +503,7 @@ describe('HttpProvider', () => {
         undefined,
       );
     });
+
     it('should use HTTPS when useHttps option is enabled', async () => {
       const rawRequest = dedent`
         GET /api/data HTTP/1.1
@@ -747,6 +748,36 @@ describe('HttpProvider', () => {
         undefined,
       );
       expect(result).toBe('PARSED');
+    });
+
+    it('parser returns object', async () => {
+      provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: { key: '{{ prompt }}' },
+          transformResponse: (data: any) => {
+            return {
+              output: data.result,
+              metadata: { something: 1 },
+              tokenUsage: { prompt: 2, completion: 3, total: 4 },
+            };
+          },
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ result: 'response text' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test prompt');
+      expect(result.output).toBe('response text');
+      expect(result.metadata).toStrictEqual({ something: 1 });
+      expect(result.tokenUsage).toStrictEqual({ prompt: 2, completion: 3, total: 4 });
     });
 
     it('should throw error for unsupported parser type', async () => {
