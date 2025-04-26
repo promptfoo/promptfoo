@@ -17,17 +17,23 @@ keywords:
   - team collaboration
 ---
 
-# Self-hosting promptfoo
+# Self-hosting Promptfoo
 
-promptfoo provides a Docker image that allows you to host a central server that stores your team's evals. This guide covers various deployment methods.
+Promptfoo provides a basic Docker image that allows you to host a server that stores evals. This guide covers various deployment methods.
 
 Self-hosting enables you to:
 
-- Share evals with your team
+- Share evals to a private instance
 - Run evals in your CI/CD pipeline and aggregate results
 - Keep sensitive data off your local machine
 
 The self-hosted app is an Express server serving the web UI and API.
+
+:::danger
+**Self-hosting is not recommended for production use cases.**
+
+For a scaleable enterprise-grade option that can be deployed on-prem, consider our [Enterprise platform](/docs/enterprise/).
+:::
 
 ## Method 1: Using Pre-built Docker Images (Recommended Start)
 
