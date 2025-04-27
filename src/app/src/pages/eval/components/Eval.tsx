@@ -1,7 +1,7 @@
 import React, { useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { IS_RUNNING_LOCALLY } from '@app/constants';
 import EnterpriseBanner from '@app/components/EnterpriseBanner';
+import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { ShiftKeyProvider } from '@app/contexts/ShiftKeyContext';
 import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
@@ -212,7 +212,7 @@ export default function Eval({
       </div>
     );
   }
-  
+
   // Check if this is a redteam eval
   const isRedteam = config?.redteam !== undefined;
 
