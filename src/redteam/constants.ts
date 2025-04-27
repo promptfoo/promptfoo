@@ -726,6 +726,7 @@ export const ADDITIONAL_STRATEGIES = [
   'math-prompt',
   'morse',
   'multilingual',
+  'other-encodings',
   'pandamonium',
   'piglatin',
   'prompt-injection',
@@ -808,6 +809,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'math-prompt': 'Tests handling of mathematical notation-based attacks',
   morse: 'Tests handling of content encoded in Morse code to potentially bypass filters',
   multilingual: 'Tests handling of attacks across multiple languages',
+  'other-encodings':
+    'Tests handling of content encoded with various encodings to potentially bypass filters',
   overreliance: 'Tests for overreliance on system assumptions',
   pandamonium:
     "[Experimental] Promptfoo's blackbox jailbreak. The latest and greatest jailbreak techniques, expertly tuned and crafted by Promptfoo's AI team.",
@@ -911,6 +914,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'math-prompt': 'Mathematical Notation Attack',
   morse: 'Morse Code Encoding',
   multilingual: 'Cross-Language Attack',
+  'other-encodings': 'Alternative Encodings',
   overreliance: 'Overreliance',
   pandamonium: '[Experimental] Pandamonium',
   piglatin: 'Pig Latin Encoding',
@@ -1324,6 +1328,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
   'math-prompt': 'Tests resilience against mathematical notation-based attacks',
   morse: 'Tests detection and handling of text encoded in Morse code',
   multilingual: 'Evaluates cross-language attack vector handling',
+  'other-encodings': 'Tests detection and handling of various alternative text encodings',
   pandamonium:
     "Promptfoo's exclusive dynamic jailbreak strategy currently in development. Note: This is an expensive jailbreak strategy with no limit on probes.",
   piglatin: 'Tests detection and handling of text transformed into Pig Latin',
@@ -1353,6 +1358,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   'math-prompt': 'Mathematical Encoding',
   morse: 'Morse Code',
   multilingual: 'Multilingual Encoding',
+  'other-encodings': 'Alternative Encodings',
   pandamonium: 'Pandamonium',
   piglatin: 'Pig Latin',
   'prompt-injection': 'Prompt Injection',
