@@ -18,6 +18,46 @@ const PressContent = () => {
       createTheme({
         palette: {
           mode: colorMode === 'dark' ? 'dark' : 'light',
+          primary: {
+            main: colorMode === 'dark' ? '#61dafb' : '#2563eb',
+            light: colorMode === 'dark' ? '#79e2ff' : '#3b82f6',
+            dark: colorMode === 'dark' ? '#50c8f3' : '#1d4ed8',
+          },
+          secondary: {
+            main: colorMode === 'dark' ? '#f06292' : '#d946ef',
+          },
+          text: {
+            primary: colorMode === 'dark' ? '#ffffff' : '#121212',
+            secondary: colorMode === 'dark' ? '#c9c9c9' : '#374151',
+          },
+          divider: colorMode === 'dark' ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.12)',
+        },
+        typography: {
+          h1: {
+            fontWeight: 700,
+          },
+          h2: {
+            fontWeight: 700,
+          },
+          h3: {
+            fontWeight: 600,
+          },
+          h4: {
+            fontWeight: 600,
+          },
+          h5: {
+            fontWeight: 600,
+          },
+          h6: {
+            fontWeight: 600,
+          },
+          subtitle1: {
+            fontWeight: 500,
+          },
+          subtitle2: {
+            fontWeight: 500,
+            color: colorMode === 'dark' ? '#b8b8b8' : '#4b5563',
+          },
         },
       }),
     [colorMode],
@@ -136,7 +176,7 @@ const PressContent = () => {
                   ].map((article) => (
                     <Grid item xs={12} md={6} key={article.link}>
                       <Link href={article.link} className={styles.articleLink}>
-                        <Typography variant="subtitle2" color="text.secondary" component="span">
+                        <Typography variant="subtitle2" color="text.secondary" component="span" sx={{ fontWeight: 500 }}>
                           {article.publication}
                         </Typography>
                         <Typography variant="body2">{article.title}</Typography>

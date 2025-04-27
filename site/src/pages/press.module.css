@@ -4,20 +4,26 @@
 
 .assetCard {
   transition: transform 0.2s ease-in-out;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
 }
 
 .assetCard:hover {
   transform: translateY(-4px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
 .coverageItem {
   transition: all 0.2s ease-in-out;
-  border: 1px solid var(--ifm-color-emphasis-200);
+  border: 1px solid var(--ifm-color-emphasis-300);
   border-radius: 8px;
+  box-shadow: 0 2px 5px var(--ifm-color-emphasis-100);
+  background-color: var(--ifm-card-background-color);
 }
 
 .coverageItem:hover {
-  background-color: var(--ifm-color-emphasis-100);
+  background-color: var(--ifm-hover-overlay);
+  border-color: var(--ifm-color-emphasis-400);
+  box-shadow: 0 4px 8px var(--ifm-color-emphasis-200);
 }
 
 .articleLink {
@@ -26,13 +32,50 @@
   border-radius: 6px;
   text-decoration: none !important;
   transition: all 0.2s ease-in-out;
+  color: var(--ifm-font-color-base);
 }
 
 .articleLink:hover {
-  background-color: var(--ifm-color-emphasis-200);
+  background-color: var(--ifm-hover-overlay);
+  color: var(--ifm-color-primary);
 }
 
 .articleLink span {
   display: block;
   margin-bottom: 0.25rem;
+  color: var(--ifm-color-emphasis-700);
+  font-weight: 500;
+}
+
+[data-theme='dark'] .articleLink span {
+  color: var(--ifm-color-emphasis-500);
+}
+
+[data-theme='dark'] .articleLink:hover {
+  background-color: var(--ifm-color-emphasis-200);
+}
+
+[data-theme='dark'] .coverageItem {
+  border-color: var(--ifm-color-emphasis-300);
+}
+
+[data-theme='dark'] .coverageItem:hover {
+  border-color: var(--ifm-color-emphasis-500);
+}
+
+/* Additional contrast improvements */
+[data-theme='dark'] a {
+  color: var(--ifm-color-primary-lighter);
+}
+
+[data-theme='dark'] a:hover {
+  color: var(--ifm-color-primary-lightest);
+}
+
+[data-theme='light'] a {
+  color: var(--ifm-color-primary-darker);
+}
+
+[data-theme='light'] a:hover {
+  color: var(--ifm-color-primary-darkest);
 }
