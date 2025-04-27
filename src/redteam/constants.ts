@@ -421,7 +421,10 @@ export const OWASP_LLM_RED_TEAM_MAPPING: Record<
       'prompt-injection',
       'hex',
       'base64',
+      'homoglyph',
       'leetspeak',
+      'morse',
+      'piglatin',
       'rot13',
     ],
   },
@@ -715,13 +718,16 @@ export const ADDITIONAL_STRATEGIES = [
   'gcg',
   'goat',
   'hex',
+  'homoglyph',
   'image',
   'jailbreak:likert',
   'jailbreak:tree',
   'leetspeak',
   'math-prompt',
+  'morse',
   'multilingual',
   'pandamonium',
+  'piglatin',
   'prompt-injection',
   'retry',
   'rot13',
@@ -830,6 +836,9 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Uses conversational approach to discover available tools, functions, and capabilities through multi-step interactions',
   unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
   xstest: 'Tests for XSTest attacks',
+  homoglyph: 'Tests handling of homoglyph (visually similar Unicode characters) encoding to bypass filters',
+  morse: 'Tests handling of content encoded in Morse code to potentially bypass filters',
+  piglatin: 'Tests handling of content translated to Pig Latin to potentially bypass filters',
 };
 
 // These names are displayed in risk cards and in the table
@@ -926,6 +935,9 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'system-prompt-override': 'System Prompt Override',
   unsafebench: 'UnsafeBench Dataset',
   xstest: 'XSTest Dataset',
+  homoglyph: 'Homoglyph Encoding',
+  morse: 'Morse Code Encoding',
+  piglatin: 'Pig Latin Encoding',
 };
 
 export enum Severity {
@@ -1313,6 +1325,9 @@ export const strategyDescriptions: Record<Strategy, string> = {
   'prompt-injection': 'Tests direct prompt injection vulnerability detection',
   retry: 'Automatically incorporates previously failed test cases to prevent regression',
   rot13: 'Assesses handling of ROT13-encoded malicious payloads',
+  homoglyph: 'Tests detection and handling of text with homoglyphs (visually similar Unicode characters)',
+  morse: 'Tests detection and handling of text encoded in Morse code',
+  piglatin: 'Tests detection and handling of text transformed into Pig Latin',
 };
 
 export const strategyDisplayNames: Record<Strategy, string> = {
@@ -1338,6 +1353,9 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   'prompt-injection': 'Prompt Injection',
   retry: 'Regression Testing',
   rot13: 'ROT13 Encoding',
+  homoglyph: 'Homoglyph Encoding',
+  morse: 'Morse Code',
+  piglatin: 'Pig Latin',
 };
 
 export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
