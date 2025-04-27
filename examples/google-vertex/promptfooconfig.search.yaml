@@ -6,15 +6,12 @@ prompts:
   - '{{query}}'
 
 providers:
-  # Google Search as a tool (using Vertex AI with Gemini 2.0 Pro)
-  - id: vertex:gemini-2.0-pro
+  - id: vertex:gemini-2.0-flash
     config:
       temperature: 0.2
       maxOutputTokens: 1024
       tools:
         - googleSearch: {}
-
-  # Alternate version with thinking capabilities
   - id: vertex:gemini-2.5-flash-preview-04-17
     config:
       temperature: 0.2
@@ -22,14 +19,6 @@ providers:
       generationConfig:
         thinkingConfig:
           thinkingBudget: 1024
-      tools:
-        - googleSearch: {}
-
-  # Object-based format alternative (same as first provider, with different id)
-  - id: vertex:gemini-2.0-pro-2
-    config:
-      temperature: 0.2
-      maxOutputTokens: 1024
       tools:
         - googleSearch: {}
 
