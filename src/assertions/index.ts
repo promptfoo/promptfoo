@@ -276,7 +276,7 @@ export async function runAssertion({
             pass: false,
             score: 0,
             reason:
-              'METEOR assertion requires the natural package. Please install it using: npm install natural@^8.0.1',
+              'METEOR assertion requires the natural package. Please install it using: npm install natural',
             assertion: params.assertion,
           };
         }
