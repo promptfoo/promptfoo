@@ -27,10 +27,10 @@ async function importFfmpeg(): Promise<any> {
     logger.warn(`fluent-ffmpeg library not available: ${error}`);
     throw new Error(
       'To use the video strategy, please install fluent-ffmpeg: npm install fluent-ffmpeg\n' +
-      'Also make sure you have FFmpeg installed on your system:\n' +
-      '- macOS: brew install ffmpeg\n' +
-      '- Ubuntu/Debian: apt-get install ffmpeg\n' +
-      '- Windows: Download from ffmpeg.org'
+        'Also make sure you have FFmpeg installed on your system:\n' +
+        '- macOS: brew install ffmpeg\n' +
+        '- Ubuntu/Debian: apt-get install ffmpeg\n' +
+        '- Windows: Download from ffmpeg.org',
     );
   }
 }
@@ -51,26 +51,26 @@ export async function textToVideo(text: string): Promise<string> {
     if (neverGenerateRemote()) {
       // For simplicity in this initial implementation, we'll create a local video
       // This will be a very basic implementation that doesn't require external services
-      
+
       const ffmpegModule = await importFfmpeg();
-      
+
       const fs = await import('fs');
       const os = await import('os');
       const path = await import('path');
-      
+
       // Create temporary directory for video creation
       const tempDir = path.join(os.tmpdir(), 'promptfoo-video');
       if (!fs.existsSync(tempDir)) {
         fs.mkdirSync(tempDir, { recursive: true });
       }
-      
+
       // Create a text file with the content
       const textFilePath = path.join(tempDir, 'text.txt');
       fs.writeFileSync(textFilePath, text);
-      
+
       // Create output video file path
       const outputPath = path.join(tempDir, 'output-video.mp4');
-      
+
       // Create a promise to handle the ffmpeg process
       return new Promise((resolve, reject) => {
         // Create a simple video with the text
@@ -80,7 +80,7 @@ export async function textToVideo(text: string): Promise<string> {
           .input(textFilePath)
           .inputOptions(['-f', 'concat']) // Use text as input
           .complexFilter([
-            `[0:v]drawtext=fontfile=/System/Library/Fonts/Helvetica.ttc:text='${text.replace(/'/g, "\\'")}':fontcolor=black:fontsize=24:x=(w-text_w)/2:y=(h-text_h)/2[v]`
+            `[0:v]drawtext=fontfile=/System/Library/Fonts/Helvetica.ttc:text='${text.replace(/'/g, "\\'")}':fontcolor=black:fontsize=24:x=(w-text_w)/2:y=(h-text_h)/2[v]`,
           ])
           .outputOptions(['-map', '[v]'])
           .save(outputPath)
@@ -88,7 +88,7 @@ export async function textToVideo(text: string): Promise<string> {
             // Read the video file and convert to base64
             const videoData = fs.readFileSync(outputPath);
             const base64Video = videoData.toString('base64');
-            
+
             // Clean up temporary files
             try {
               fs.unlinkSync(textFilePath);
@@ -96,7 +96,7 @@ export async function textToVideo(text: string): Promise<string> {
             } catch (error) {
               logger.warn(`Failed to clean up temporary files: ${error}`);
             }
-            
+
             resolve(base64Video);
           })
           .on('error', (err: Error) => {
@@ -107,7 +107,9 @@ export async function textToVideo(text: string): Promise<string> {
     } else {
       // In the future, this could use a remote API for more sophisticated video generation
       // Similar to the audio strategy
-      throw new Error('Local video generation requires fluent-ffmpeg. Future versions may support remote generation.');
+      throw new Error(
+        'Local video generation requires fluent-ffmpeg. Future versions may support remote generation.',
+      );
     }
   } catch (error) {
     logger.error(`Error generating video from text: ${error}`);
@@ -236,3 +238,5 @@ async function main() {
 if (require.main === module) {
   main();
 }
+
+export { ffmpegCache, importFfmpeg, main };
