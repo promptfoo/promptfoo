@@ -55,6 +55,7 @@ export async function runRedteamConversation({
   prompt,
   redteamProvider,
   targetProvider,
+  judgeProvider,
   test,
   vars,
 }: {
@@ -66,6 +67,7 @@ export async function runRedteamConversation({
   prompt: Prompt;
   redteamProvider: ApiProvider;
   targetProvider: ApiProvider;
+  judgeProvider?: ApiProvider;
   test?: AtomicTestCase;
   vars: Record<string, string | object>;
 }): Promise<{
@@ -111,6 +113,9 @@ export async function runRedteamConversation({
     graderPassed: boolean | undefined;
     guardrails: GuardrailResponse | undefined;
   }[] = [];
+
+  // Use separate providers when provided, otherwise fall back to redteamProvider
+  const actualJudgeProvider = judgeProvider || redteamProvider;
 
   for (let i = 0; i < numIterations; i++) {
     logger.debug(`[Iterative] Starting iteration ${i + 1}/${numIterations}`);
@@ -187,16 +192,16 @@ export async function runRedteamConversation({
         content: targetPrompt,
       },
     ]);
-    const isOnTopicResp = await redteamProvider.callApi(isOnTopicBody, {
+    const isOnTopicResp = await actualJudgeProvider.callApi(isOnTopicBody, {
       prompt: {
         raw: isOnTopicBody,
         label: 'on-topic',
       },
       vars: {},
     });
-    if (redteamProvider.delay) {
-      logger.debug(`[Iterative] Sleeping for ${redteamProvider.delay}ms`);
-      await sleep(redteamProvider.delay);
+    if (actualJudgeProvider.delay) {
+      logger.debug(`[Iterative] Sleeping for ${actualJudgeProvider.delay}ms`);
+      await sleep(actualJudgeProvider.delay);
     }
     logger.debug(`[Iterative] Raw onTopic response: ${JSON.stringify(isOnTopicResp)}`);
 
@@ -287,16 +292,16 @@ export async function runRedteamConversation({
         `,
       },
     ]);
-    const judgeResp = await redteamProvider.callApi(judgeBody, {
+    const judgeResp = await actualJudgeProvider.callApi(judgeBody, {
       prompt: {
         raw: judgeBody,
         label: 'judge',
       },
       vars: {},
     });
-    if (redteamProvider.delay) {
-      logger.debug(`[Iterative] Sleeping for ${redteamProvider.delay}ms`);
-      await sleep(redteamProvider.delay);
+    if (actualJudgeProvider.delay) {
+      logger.debug(`[Iterative] Sleeping for ${actualJudgeProvider.delay}ms`);
+      await sleep(actualJudgeProvider.delay);
     }
     logger.debug(`[Iterative] Raw judge response: ${JSON.stringify(judgeResp)}`);
     if (judgeResp.error) {
@@ -434,6 +439,7 @@ export async function runRedteamConversation({
 
 class RedteamIterativeProvider implements ApiProvider {
   private readonly redteamProvider: RedteamFileConfig['provider'];
+  private readonly judgeProvider?: RedteamFileConfig['provider'];
   private readonly injectVar: string;
   private readonly numIterations: number;
   constructor(readonly config: Record<string, string | object>) {
@@ -443,16 +449,19 @@ class RedteamIterativeProvider implements ApiProvider {
 
     this.numIterations = getEnvInt('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', 4);
 
-    // Redteam provider can be set from the config.
-
+    // Set up providers from config or use defaults
     if (shouldGenerateRemote()) {
       this.redteamProvider = new PromptfooChatCompletionProvider({
         task: 'iterative',
         jsonOnly: true,
         preferSmallModel: false,
       });
+      // For remote generation, use the same provider for all tasks
+      this.judgeProvider = this.redteamProvider;
     } else {
+      // Use provided providers or fall back to defaults
       this.redteamProvider = config.redteamProvider;
+      this.judgeProvider = config.judgeProvider;
     }
   }
 
@@ -482,6 +491,10 @@ class RedteamIterativeProvider implements ApiProvider {
         jsonOnly: true,
       }),
       targetProvider: context.originalProvider,
+      judgeProvider: this.judgeProvider ? await redteamProviderManager.getProvider({
+        provider: this.judgeProvider,
+        jsonOnly: true,
+      }) : undefined,
       injectVar: this.injectVar,
       numIterations: this.numIterations,
       context,

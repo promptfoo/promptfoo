@@ -94,6 +94,17 @@ export interface RedteamCliGenerateOptions extends CommonOptions {
 export interface RedteamFileConfig extends CommonOptions {
   entities?: string[];
   severity?: Record<Plugin, Severity>;
+  provider?: ApiProvider;
+  attackProvider?: ApiProvider;
+  judgeProvider?: ApiProvider;
+  injectVar?: string;
+  plugins?: (string | { id: string; numTests?: number; config?: Record<string, any> })[];
+  strategies?: (string | { id: string })[];
+  numTests?: number;
+  purpose?: string;
+  language?: string;
+  delay?: number;
+  sharing?: boolean;
 }
 
 export interface SynthesizeOptions extends CommonOptions {

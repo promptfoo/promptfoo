@@ -179,6 +179,8 @@ export async function doGenerateRedteam(
     entities: redteamConfig?.entities,
     plugins,
     provider: redteamConfig?.provider || options.provider,
+    attackProvider: redteamConfig?.attackProvider || options.attackProvider,
+    judgeProvider: redteamConfig?.judgeProvider || options.judgeProvider,
     purpose: redteamConfig?.purpose || options.purpose,
     strategies: strategyObjs,
     delay: redteamConfig?.delay || options.delay,
@@ -346,6 +348,14 @@ export function redteamGenerateCommand(
     .option(
       '--provider <provider>',
       `Provider to use for generating adversarial tests. Defaults to: ${REDTEAM_MODEL}`,
+    )
+    .option(
+      '--attack-provider <provider>',
+      'Provider to use for generating attack prompts. Overrides --provider for attack generation',
+    )
+    .option(
+      '--judge-provider <provider>',
+      'Provider to use for judging responses and checking if prompts are on-topic',
     )
     .option(
       '--injectVar <varname>',
