@@ -1,5 +1,7 @@
 ---
 sidebar_position: 102
+title: Other Encodings - Alternative Text Transformation Strategies
+description: Learn how to test LLM resilience using Morse code and Pig Latin text transformations to bypass content filters and evaluate model security.
 ---
 
 # Other Encodings
@@ -28,7 +30,7 @@ For example, "Hello World" becomes:
 
 Add the Morse code strategy to your red team configuration:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 strategies:
   - morse # Apply Morse code transformation
 ```
@@ -55,7 +57,7 @@ elloHay orldWay
 
 Add the Pig Latin strategy to your red team configuration:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 strategies:
   - piglatin # Apply Pig Latin transformation
 ```
@@ -64,8 +66,8 @@ strategies:
 
 Here's a complete example that applies these encoding transformations to test cases:
 
-```yaml
-# promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'Answer this question: {{prompt}}'
 
@@ -89,3 +91,16 @@ These encoding transformations are static, deterministic processes that don't re
 ## Security Considerations
 
 Alternative text encodings can be used to bypass content filters that rely on exact string matching. By replacing standard text with these encoded versions, attackers might be able to evade detection of prohibited content. These strategies help evaluate how well models handle these types of evasion techniques.
+
+Some specific security benefits of testing with these encodings:
+
+- Identifies weaknesses in content moderation systems that rely on keyword matching
+- Tests model comprehension of obfuscated harmful content
+- Evaluates guardrail effectiveness against simple transformation techniques
+- Helps develop more robust safety mechanisms for public-facing AI applications
+
+## See Also
+
+- [ROT13 Encoding](rot13.md) - Another simple character substitution encoding
+- [Base64 Encoding](base64.md) - Binary-to-text encoding strategy
+- [Leetspeak Encoding](leetspeak.md) - Character substitution with numbers and symbols
