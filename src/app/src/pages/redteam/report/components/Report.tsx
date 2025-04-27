@@ -1,6 +1,6 @@
 import React from 'react';
-import { callApi } from '@app/utils/api';
 import EnterpriseBanner from '@app/components/EnterpriseBanner';
+import { callApi } from '@app/utils/api';
 import WarningIcon from '@mui/icons-material/Warning';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
@@ -23,7 +23,6 @@ import {
   type EvaluateSummaryV2,
   isProviderOptions,
 } from '@promptfoo/types';
-// We check cloud login status directly in our component
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import FrameworkCompliance from './FrameworkCompliance';
 import Overview from './Overview';
@@ -287,7 +286,7 @@ const App: React.FC = () => {
   return (
     <Container maxWidth="xl">
       <Stack spacing={4} pb={8} pt={2}>
-        {evalData.config.redteam && <EnterpriseBanner evalId={evalId || ''} sx={{ mb: 2 }} />}
+        {evalData.config.redteam && <EnterpriseBanner evalId={evalId || ''} />}
         <Card className="report-header" sx={{ position: 'relative' }}>
           <Box sx={{ position: 'absolute', top: 8, right: 8, display: 'flex' }}>
             <ReportDownloadButton
