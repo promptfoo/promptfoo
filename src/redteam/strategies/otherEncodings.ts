@@ -83,11 +83,11 @@ function toPigLatin(text: string): string {
     .map((word) => {
       // Extract any trailing punctuation
       const punctuationMatch = word.match(/([a-zA-Z0-9]+)([^a-zA-Z0-9]*)$/);
-      if (!punctuationMatch) {
-        // Skip empty strings or non-alphabet characters
-        if (!word.match(/^[a-zA-Z]/)) {
-          return word;
-        }
+      if (
+        !punctuationMatch && // Skip empty strings or non-alphabet characters
+        !word.match(/^[a-zA-Z]/)
+      ) {
+        return word;
       }
 
       // Split the word into base and punctuation if there's punctuation
