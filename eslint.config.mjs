@@ -48,6 +48,7 @@ export default [
       '@typescript-eslint/ban-types': 0,
       '@typescript-eslint/consistent-type-imports': 'error',
       '@typescript-eslint/no-explicit-any': 0,
+      '@typescript-eslint/no-non-null-assertion': 'error',
       '@typescript-eslint/no-unsafe-function-type': 0,
       '@typescript-eslint/no-unused-vars': [
         'error',
@@ -82,6 +83,25 @@ export default [
       '@typescript-eslint/no-require-imports': 0,
       '@typescript-eslint/no-unused-vars': 0,
       '@typescript-eslint/no-var-requires': 0,
+    },
+  },
+  {
+    files: ['**/*.test.ts', '**/*.test.tsx', 'test/**', 'test-examples/**', 'scratch/**', 'src/**'],
+    rules: {
+      '@typescript-eslint/no-non-null-assertion': 0,
+      '@typescript-eslint/no-require-imports': 0,
+    },
+  },
+  {
+    files: [
+      'src/__mocks__/**',
+      'src/esm.ts',
+      'src/providers/sagemaker.ts',
+      'src/util/testCaseReader.ts',
+      'test/telemetry.test.ts',
+    ],
+    rules: {
+      '@typescript-eslint/no-unused-disable-directives': 0,
     },
   },
 ];

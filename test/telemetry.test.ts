@@ -156,13 +156,10 @@ describe('Telemetry', () => {
     });
 
     // Re-import to trigger the initialization code
-    jest.isolateModules(() => {
-      jest.doMock('../src/constants', () => ({
-        VERSION: '1.0.0',
-      }));
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      require('../src/telemetry');
-    });
+    jest.doMock('../src/constants', () => ({
+      VERSION: '1.0.0',
+    }));
+    require('../src/telemetry');
 
     // Verify PostHog was initialized with the key from getEnvString
     expect(PostHog).toHaveBeenCalledWith('config-posthog-key', expect.any(Object));
