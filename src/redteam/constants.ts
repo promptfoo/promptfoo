@@ -743,6 +743,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   audio: 'Tests handling of audio content',
   base64: 'Tests handling of Base64-encoded malicious payloads',
   basic: 'Original plugin tests without any additional strategies or optimizations',
+  homoglyph:
+    'Tests handling of homoglyph (visually similar Unicode characters) encoding to bypass filters',
   beavertails: 'Tests handling of malicious prompts from the BeaverTails dataset',
   'best-of-n': 'Jailbreak technique published by Anthropic and Stanford',
   bfla: 'Tests for broken function-level authorization vulnerabilities (OWASP API 5)',
@@ -847,6 +849,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   audio: 'Audio Content',
   base64: 'Base64 Payload Encoding',
   basic: 'Baseline Testing',
+  homoglyph: 'Homoglyph Encoding',
   beavertails: 'BeaverTails Dataset',
   'best-of-n': 'Best-of-N',
   bfla: 'Function-Level Authorization Bypass',
@@ -1307,6 +1310,8 @@ export const strategyDescriptions: Record<Strategy, string> = {
   basic: 'Equivalent to no strategy. Always included. Can be disabled in configuration.',
   'best-of-n': 'Jailbreak technique published by Anthropic and Stanford',
   citation: 'Exploits academic authority bias to circumvent content filtering mechanisms',
+  homoglyph:
+    'Tests detection and handling of text with homoglyphs (visually similar Unicode characters)',
   crescendo: 'Executes progressive multi-turn attacks with escalating malicious intent',
   default: 'Applies standard security testing methodology',
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
@@ -1336,6 +1341,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   basic: 'Basic',
   'best-of-n': 'Best-of-N',
   citation: 'Authority Bias',
+  homoglyph: 'Homoglyph Encoding',
   crescendo: 'Multi-turn Crescendo',
   default: 'Basic',
   gcg: 'Greedy Coordinate Gradient',

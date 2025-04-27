@@ -181,6 +181,17 @@ export const strategies: Strategy[] = [
   },
   {
     category: 'Static (Single-Turn)',
+    strategy: 'homoglyph',
+    displayName: 'Homoglyph',
+    description: 'Unicode confusable characters',
+    longDescription:
+      'Tests detection and handling of text with homoglyphs (visually similar Unicode characters) to bypass content filters',
+    cost: 'Low',
+    asrIncrease: '20-30%',
+    link: '/docs/red-team/strategies/homoglyph/',
+  },
+  {
+    category: 'Static (Single-Turn)',
     strategy: 'basic',
     displayName: 'Basic',
     description: 'Plugin-generated test cases',

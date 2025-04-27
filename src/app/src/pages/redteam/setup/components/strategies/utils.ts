@@ -17,6 +17,7 @@ export const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   gcg: 1,
   goat: 5,
   hex: 1,
+  homoglyph: 1,
   image: 1,
   jailbreak: 10,
   'jailbreak:composite': 5,
