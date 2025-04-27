@@ -71,7 +71,13 @@ providers:
       tool_config:
         function_calling_config:
           mode: 'auto'
-
+defaultTest:
+  options:
+    provider:
+      text:
+        id: google:gemini-2.0-flash-exp
+      embedding:
+        id: google:embedding:text-embedding-004
 tests:
   - vars:
       puzzle: 'If a train travels at 60 mph for 2.5 hours, then at 40 mph for 1.5 hours, what is the average speed for the entire journey?'
@@ -81,3 +87,5 @@ tests:
       - type: llm-rubric
         value: |
           The answer should be 52.5 mph.
+      - type: similar
+        value: 52.5 mph

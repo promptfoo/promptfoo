@@ -34,13 +34,21 @@ let defaultCompletionProvider: ApiProvider;
 let defaultEmbeddingProvider: ApiProvider;
 
 /**
- * This will override all of the completion type providers defined in the constant COMPLETION_PROVIDERS
- * @param provider - The provider to set as the default completion provider.
+ * Overrides the default completion providers with the specified ApiProvider.
+ *
+ * This will override all of the completion type providers defined in the constant COMPLETION_PROVIDERS.
+ *
+ * @param provider - The ApiProvider to set as the default for completion roles.
  */
 export async function setDefaultCompletionProviders(provider: ApiProvider) {
   defaultCompletionProvider = provider;
 }
 
+/**
+ * Overrides the default embedding providers with the specified ApiProvider.
+ *
+ * @param provider - The ApiProvider to set as the default for embedding roles.
+ */
 export async function setDefaultEmbeddingProviders(provider: ApiProvider) {
   defaultEmbeddingProvider = provider;
 }
@@ -58,17 +66,19 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     env?.AZURE_OPENAI_API_KEY ||
     getEnvString('AZURE_API_KEY') ||
     env?.AZURE_API_KEY;
-  const hasAzureClientCreds =
+  const azureClientCreds =
     (getEnvString('AZURE_CLIENT_ID') || env?.AZURE_CLIENT_ID) &&
     (getEnvString('AZURE_CLIENT_SECRET') || env?.AZURE_CLIENT_SECRET) &&
     (getEnvString('AZURE_TENANT_ID') || env?.AZURE_TENANT_ID);
+  const deploymentName = getEnvString('AZURE_DEPLOYMENT_NAME') || env?.AZURE_DEPLOYMENT_NAME;
+  const openaiDeploymentName =
+    getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME') || env?.AZURE_OPENAI_DEPLOYMENT_NAME;
 
   const preferAzure =
-    !getEnvString('OPENAI_API_KEY') &&
-    !env?.OPENAI_API_KEY &&
-    (hasAzureApiKey || hasAzureClientCreds) &&
-    (getEnvString('AZURE_DEPLOYMENT_NAME') || env?.AZURE_DEPLOYMENT_NAME) &&
-    (getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME') || env?.AZURE_OPENAI_DEPLOYMENT_NAME);
+    !hasOpenAiCredentials &&
+    (Boolean(hasAzureApiKey) || Boolean(azureClientCreds)) &&
+    Boolean(deploymentName) &&
+    Boolean(openaiDeploymentName);
 
   let providers: Pick<DefaultProviders, keyof DefaultProviders>;
 
@@ -147,14 +157,14 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
 
   if (defaultCompletionProvider) {
     logger.debug(`Overriding default completion provider: ${defaultCompletionProvider.id()}`);
-    COMPLETION_PROVIDERS.forEach((provider) => {
-      providers[provider] = defaultCompletionProvider;
+    COMPLETION_PROVIDERS.forEach((providerKey) => {
+      providers[providerKey] = defaultCompletionProvider;
     });
   }
 
   if (defaultEmbeddingProvider) {
-    EMBEDDING_PROVIDERS.forEach((provider) => {
-      providers[provider] = defaultEmbeddingProvider;
+    EMBEDDING_PROVIDERS.forEach((providerKey) => {
+      providers[providerKey] = defaultEmbeddingProvider;
     });
   }
   return providers;

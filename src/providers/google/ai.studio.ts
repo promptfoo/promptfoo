@@ -304,3 +304,71 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
     }
   }
 }
+
+export class GoogleEmbeddingProvider extends GoogleGenericProvider {
+  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+    if (!this.getApiKey()) {
+      throw new Error('Google API key is not set for embedding');
+    }
+
+    // Format request body according to the API spec
+    const body = {
+      model: `models/${this.modelName}`,
+      content: {
+        parts: [
+          {
+            text,
+          },
+        ],
+      },
+    };
+
+    // Use embedContent endpoint
+    const endpoint = 'embedContent';
+    const url = `https://${this.getApiHost()}/v1/models/${this.modelName}:${endpoint}?key=${this.getApiKey()}`;
+
+    logger.debug(`Calling Google Embedding API: ${url} with body: ${JSON.stringify(body)}`);
+
+    let data,
+      _cached = false;
+    try {
+      ({ data, cached: _cached } = await fetchWithCache(
+        url,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        },
+        REQUEST_TIMEOUT_MS,
+        'json',
+        false,
+      ));
+    } catch (err) {
+      logger.error(`Google Embedding API call error: ${err}`);
+      throw err;
+    }
+
+    logger.debug(`Google Embedding API response: ${JSON.stringify(data)}`);
+
+    try {
+      // The embedding is returned in data.embedding.values
+      const embedding = data.embedding?.values;
+      if (!embedding) {
+        throw new Error('No embedding values found in Google Embedding API response');
+      }
+
+      return {
+        embedding,
+        tokenUsage: {
+          prompt: 0,
+          completion: 0,
+          total: 0,
+          numRequests: 1,
+        },
+      };
+    } catch (err) {
+      logger.error(`Error processing Google Embedding API response: ${JSON.stringify(data)}`);
+      throw err;
+    }
+  }
+}
