@@ -25,6 +25,7 @@ import { addRetryTestCases } from './retry';
 import { addRot13 } from './rot13';
 import { addAudioToBase64 } from './simpleAudio';
 import { addImageToBase64 } from './simpleImage';
+import { addVideoToBase64 } from './simpleVideo';
 import { addCompositeTestCases } from './singleTurnComposite';
 
 export interface Strategy {
@@ -164,10 +165,19 @@ export const Strategies: Strategy[] = [
   },
   {
     id: 'audio',
-    action: async (testCases, injectVar) => {
+    action: async (testCases, injectVar, config) => {
       logger.debug(`Adding audio encoding to ${testCases.length} test cases`);
-      const newTestCases = await addAudioToBase64(testCases, injectVar);
+      const newTestCases = await addAudioToBase64(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} audio encoded test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'video',
+    action: async (testCases, injectVar) => {
+      logger.debug(`Adding video encoding to ${testCases.length} test cases`);
+      const newTestCases = await addVideoToBase64(testCases, injectVar);
+      logger.debug(`Added ${newTestCases.length} video encoded test cases`);
       return newTestCases;
     },
   },
