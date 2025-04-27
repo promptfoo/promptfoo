@@ -95,3 +95,5 @@ export function addHomoglyphs(testCases: TestCase[], injectVar: string): TestCas
     },
   }));
 }
+
+export { homoglyphMap, toHomoglyphs };
