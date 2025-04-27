@@ -3,9 +3,12 @@ import { callApi } from '@app/utils/api';
 import type { EventProperties, TelemetryEventTypes } from '@promptfoo/telemetry';
 
 export function useTelemetry() {
+  const telemetryDisabled = ['1', 'true'].includes(import.meta.env.VITE_PROMPTFOO_DISABLE_TELEMETRY);
+
   const recordEvent = useCallback(
     async (eventName: TelemetryEventTypes, properties: EventProperties) => {
-      if (!['0', 'false'].includes(import.meta.env.VITE_PROMPTFOO_DISABLE_TELEMETRY)) {
+      // Skip telemetry if disabled
+      if (telemetryDisabled) {
         return;
       }
 
@@ -24,8 +27,8 @@ export function useTelemetry() {
         console.error('Failed to record telemetry event:', error);
       }
     },
-    [],
+    [telemetryDisabled],
   );
 
-  return { recordEvent };
+  return { recordEvent, telemetryDisabled };
 }

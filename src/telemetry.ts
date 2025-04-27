@@ -65,15 +65,20 @@ export class Telemetry {
       });
     }
 
-    fetch(KA_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ profile_id: this.id, email: this.email }),
-    }).catch(() => {
-      // pass
-    });
+    // Make non-blocking request
+    (async () => {
+      try {
+        await fetch(KA_ENDPOINT, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ profile_id: this.id, email: this.email }),
+        });
+      } catch {
+        // Silently ignore errors
+      }
+    })();
   }
 
   get disabled() {
@@ -88,49 +93,58 @@ export class Telemetry {
   }
 
   record(eventName: TelemetryEventTypes, properties: EventProperties): void {
+    // Skip all telemetry recording when disabled
     if (this.disabled) {
-      this.recordTelemetryDisabled();
-    } else {
-      this.sendEvent(eventName, properties);
+      return;
     }
+
+    // If we get here, telemetry is enabled, so just send the event
+    this.sendEvent(eventName, properties);
   }
 
   private sendEvent(eventName: TelemetryEventTypes, properties: EventProperties): void {
     if (getEnvString('NODE_ENV') === 'test') {
       return;
     }
-    if (posthogClient) {
-      const globalConfig = readGlobalConfig();
-      posthogClient.capture({
-        distinctId: globalConfig.id,
-        event: eventName,
-        properties: { ...properties, packageVersion: VERSION },
-      });
-    }
-    const kaBody = {
-      profile_id: this.id,
-      email: this.email,
-      events: [
-        {
-          message_id: randomUUID(),
-          type: 'track',
-          event: eventName,
-          properties,
-          sent_at: new Date().toISOString(),
-        },
-      ],
-    };
+    
+    // Run telemetry in background, don't block execution
+    (async () => {
+      try {
+        if (posthogClient) {
+          const globalConfig = readGlobalConfig();
+          posthogClient.capture({
+            distinctId: globalConfig.id,
+            event: eventName,
+            properties: { ...properties, packageVersion: VERSION },
+          });
+        }
+        
+        const kaBody = {
+          profile_id: this.id,
+          email: this.email,
+          events: [
+            {
+              message_id: randomUUID(),
+              type: 'track',
+              event: eventName,
+              properties,
+              sent_at: new Date().toISOString(),
+            },
+          ],
+        };
 
-    fetch(KA_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': `promptfoo/${VERSION}`,
-      },
-      body: JSON.stringify(kaBody),
-    }).catch(() => {
-      // pass
-    });
+        await fetch(KA_ENDPOINT, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'User-Agent': `promptfoo/${VERSION}`,
+          },
+          body: JSON.stringify(kaBody),
+        });
+      } catch {
+        // Silently ignore telemetry errors
+      }
+    })();
   }
 
   /**

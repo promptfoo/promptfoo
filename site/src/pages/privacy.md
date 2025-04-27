@@ -18,7 +18,9 @@ If you explicitly run the share command, your inputs/outputs are stored in Cloud
 
 Promptfoo collects basic anonymous telemetry by default. This telemetry helps us decide how to spend time on development. An event is recorded when a command is run (e.g. `init`, `eval`, `view`) or an assertion is used (along with the type of assertion, e.g. `is-json`, `similar`, `llm-rubric`). No additional information is collected.
 
-To disable telemetry, set the following environment variable: `PROMPTFOO_DISABLE_TELEMETRY=1`.
+To disable telemetry, set the environment variable: `PROMPTFOO_DISABLE_TELEMETRY=1`
+
+All telemetry requests are non-blocking and won't affect application performance. When telemetry is disabled, no data is sent.
 
 Promptfoo hosts free unaligned inference endpoints for harmful test case generation when running `promptfoo redteam generate`. You can disable remote generation with: `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=1`
 

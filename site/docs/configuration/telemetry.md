@@ -13,11 +13,19 @@ An event is recorded when:
 
 No additional information is collected. The above list is exhaustive.
 
+## Disabling Telemetry
+
 To disable telemetry, set the following environment variable:
 
 ```sh
 PROMPTFOO_DISABLE_TELEMETRY=1
 ```
+
+## How Telemetry Works
+
+- Telemetry requests are non-blocking and won't impact application performance
+- No personally identifiable information is collected
+- If telemetry is disabled, no data is sent
 
 ## Updates
 
