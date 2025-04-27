@@ -1,15 +1,17 @@
-import * as React from 'react';
+import React, { useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import EnterpriseBanner from '@app/components/EnterpriseBanner';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { ShiftKeyProvider } from '@app/contexts/ShiftKeyContext';
 import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
+import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import type { SharedResults, ResultLightweightWithLabel, ResultsFile } from '@promptfoo/types';
 import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
-import { useStore } from './store';
+import { useResultsViewSettingsStore, useStore } from './store';
 import './Eval.css';
 
 interface EvalOptions {
@@ -37,8 +39,10 @@ export default function Eval({
     evalId,
     setEvalId,
     setAuthor,
-    setInComparisonMode,
   } = useStore();
+
+  const { setInComparisonMode } = useResultsViewSettingsStore();
+
   const [loaded, setLoaded] = React.useState(false);
   const [failed, setFailed] = React.useState(false);
   const [recentEvals, setRecentEvals] = React.useState<ResultLightweightWithLabel[]>(
@@ -72,17 +76,22 @@ export default function Eval({
     },
     [setTable, setConfig, setEvalId, setAuthor],
   );
+  const [searchParams] = useSearchParams();
+  const searchEvalId = searchParams.get('evalId');
 
-  const handleRecentEvalSelection = async (id: string) => {
-    navigate(`/eval/?evalId=${encodeURIComponent(id)}`);
-  };
+  const handleRecentEvalSelection = useCallback(
+    async (id: string) => {
+      navigate({
+        pathname: `/eval/${encodeURIComponent(id)}`,
+        search: searchParams.toString(),
+      });
+    },
+    [searchParams, navigate],
+  );
 
   const [defaultEvalId, setDefaultEvalId] = React.useState<string>(
     defaultEvalIdProp || recentEvals[0]?.evalId,
   );
-
-  const [searchParams] = useSearchParams();
-  const searchEvalId = searchParams.get('evalId');
 
   React.useEffect(() => {
     const evalId = searchEvalId || fetchId;
@@ -204,8 +213,16 @@ export default function Eval({
     );
   }
 
+  // Check if this is a redteam eval
+  const isRedteam = config?.redteam !== undefined;
+
   return (
     <ShiftKeyProvider>
+      {isRedteam && evalId && (
+        <Box sx={{ mb: 2, mt: 2, mx: 2 }}>
+          <EnterpriseBanner evalId={evalId} />
+        </Box>
+      )}
       <ResultsView
         defaultEvalId={defaultEvalId}
         recentEvals={recentEvals}

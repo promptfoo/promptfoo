@@ -10,7 +10,7 @@ import { cloudConfig } from './globalConfig/cloud';
 import logger from './logger';
 import type Eval from './models/eval';
 import type { SharedResults } from './types';
-import { cloudCanAcceptChunkedResults } from './util/cloud';
+import { cloudCanAcceptChunkedResults, makeRequest as makeCloudRequest } from './util/cloud';
 
 export interface ShareDomainResult {
   domain: string;
@@ -107,6 +107,8 @@ function calculateMedianResultSize(results: any[], sampleSize: number = 25): num
 
 function createChunks(results: any[], targetChunkSize: number): any[][] {
   const medianSize = calculateMedianResultSize(results);
+  // PROMPTFOO_SHARE_CHUNK_SIZE lets you directly specify how many results to include in each chunk.
+  // The value represents the number of results per chunk, not a byte size.
   const estimatedResultsPerChunk =
     getEnvInt('PROMPTFOO_SHARE_CHUNK_SIZE') ??
     Math.max(1, Math.floor(targetChunkSize / medianSize));
@@ -372,6 +374,37 @@ async function handleLegacyResults(evalRecord: Eval, url: string): Promise<strin
   return responseJson.id ?? null;
 }
 
+/**
+ * Constructs the shareable URL for an eval.
+ * @param eval_ The eval to get the shareable URL for.
+ * @param showAuth Whether to show the authentication information in the URL.
+ * @returns The shareable URL for the eval.
+ */
+export async function getShareableUrl(
+  eval_: Eval,
+  showAuth: boolean = false,
+): Promise<string | null> {
+  const { domain } = determineShareDomain(eval_);
+
+  // For custom self-hosted setups, ensure we're using the same domain as the API
+  const customDomain = getEnvString('PROMPTFOO_REMOTE_APP_BASE_URL');
+  const finalDomain = customDomain || domain;
+
+  const fullUrl = cloudConfig.isEnabled()
+    ? `${finalDomain}/eval/${eval_.id}`
+    : SHARE_VIEW_BASE_URL === DEFAULT_SHARE_VIEW_BASE_URL && !customDomain
+      ? `${finalDomain}/eval/${eval_.id}`
+      : `${finalDomain}/eval/?evalId=${eval_.id}`;
+
+  return showAuth ? fullUrl : stripAuthFromUrl(fullUrl);
+}
+
+/**
+ * Shares an eval and returns the shareable URL.
+ * @param evalRecord The eval to share.
+ * @param showAuth Whether to show the authentication information in the URL.
+ * @returns The shareable URL for the eval.
+ */
 export async function createShareableUrl(
   evalRecord: Eval,
   showAuth: boolean = false,
@@ -404,17 +437,32 @@ export async function createShareableUrl(
   }
   logger.debug(`New eval ID on remote instance: ${evalId}`);
 
-  const { domain } = determineShareDomain(evalRecord);
+  return getShareableUrl(evalRecord, showAuth);
+}
 
-  // For custom self-hosted setups, ensure we're using the same domain as the API
-  const customDomain = getEnvString('PROMPTFOO_REMOTE_APP_BASE_URL');
-  const finalDomain = customDomain || domain;
-
-  const fullUrl = cloudConfig.isEnabled()
-    ? `${finalDomain}/eval/${evalId}`
-    : SHARE_VIEW_BASE_URL === DEFAULT_SHARE_VIEW_BASE_URL && !customDomain
-      ? `${finalDomain}/eval/${evalId}`
-      : `${finalDomain}/eval/?evalId=${evalId}`;
-
-  return showAuth ? fullUrl : stripAuthFromUrl(fullUrl);
+/**
+ * Checks whether an eval has been shared.
+ * @param eval_ The eval to check.
+ * @returns True if the eval has been shared, false otherwise.
+ */
+export async function hasEvalBeenShared(eval_: Eval): Promise<boolean> {
+  try {
+    // GET /api/results/:id
+    const res = await makeCloudRequest(`results/${eval_.id}`, 'GET');
+    switch (res.status) {
+      // 200: Eval already exists i.e. it has been shared before.
+      case 200:
+        return true;
+      // 404: Eval not found i.e. it has not been shared before.
+      case 404:
+        return false;
+      default:
+        throw new Error(
+          `[hasEvalBeenShared]: unexpected API error: ${res.status}\n${res.statusText}`,
+        );
+    }
+  } catch (e) {
+    logger.error(`[hasEvalBeenShared]: error checking if eval has been shared: ${e}`);
+    return false;
+  }
 }

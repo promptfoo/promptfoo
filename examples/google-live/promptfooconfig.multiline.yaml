@@ -17,10 +17,10 @@ tests:
     assert:
       - type: icontains
         value: salt
-        transform: JSON.parse(output).text
+        transform: output.text
       - type: icontains
         value: weathering
-        transform: JSON.parse(output).text
+        transform: output.text
   - vars:
       first_message: hey
       second_message: tell me about hawaii

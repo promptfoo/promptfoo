@@ -1,6 +1,9 @@
+import chalk from 'chalk';
 import type { Command } from 'commander';
+import dedent from 'dedent';
 import { z } from 'zod';
 import cliState from '../../cliState';
+import { CLOUD_PROVIDER_PREFIX } from '../../constants';
 import logger, { setLogLevel } from '../../logger';
 import telemetry from '../../telemetry';
 import { setupEnv } from '../../util';
@@ -14,14 +17,21 @@ const UUID_REGEX = /^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}
 export function redteamRunCommand(program: Command) {
   program
     .command('run')
-    .description('Run red teaming process (init, generate, and evaluate)')
+    .description(
+      dedent`
+        ${chalk.red('Red team')} a target application, a two-step process:
+
+        1. Generates dynamic attack probes (i.e. test cases) tailored to your target application using specialized uncensored models.
+        2. Evaluates the generated probes against your target application.
+      `,
+    )
     .option(
       '-c, --config [path]',
       'Path to configuration file or cloud config UUID. Defaults to promptfooconfig.yaml',
     )
     .option(
       '-o, --output [path]',
-      'Path to output file for generated tests. Defaults to redteam.yaml',
+      'Path to output file for generated tests. Defaults to redteam.yaml in the same directory as the configuration file.',
     )
     .option('--no-cache', 'Do not read or write results to disk cache', false)
     .option('--env-file, --env-path <path>', 'Path to .env file')
@@ -39,12 +49,12 @@ export function redteamRunCommand(program: Command) {
       '--filter-providers, --filter-targets <providers>',
       'Only run tests with these providers (regex match)',
     )
+    .option('-t, --target <id>', 'Cloud provider target ID to run the scan on')
     .action(async (opts: RedteamRunOptions) => {
       setupEnv(opts.envPath);
       telemetry.record('command_used', {
         name: 'redteam run',
       });
-      await telemetry.send();
 
       if (opts.verbose) {
         setLogLevel('debug');
@@ -52,6 +62,10 @@ export function redteamRunCommand(program: Command) {
 
       if (opts.config && UUID_REGEX.test(opts.config)) {
         const configObj = await getConfigFromCloud(opts.config);
+
+        if (opts.target && UUID_REGEX.test(opts.target)) {
+          configObj.targets = [{ id: `${CLOUD_PROVIDER_PREFIX}${opts.target}`, config: {} }];
+        }
 
         opts.liveRedteamConfig = configObj;
 

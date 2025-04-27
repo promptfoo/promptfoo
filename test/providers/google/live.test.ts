@@ -1,7 +1,7 @@
 import axios from 'axios';
 import dedent from 'dedent';
 import WebSocket from 'ws';
-import { GoogleMMLiveProvider } from '../../../src/providers/google/live';
+import { GoogleLiveProvider } from '../../../src/providers/google/live';
 
 jest.mock('ws');
 jest.mock('axios');
@@ -50,10 +50,10 @@ const simulateCompletionMessage = (mockWs: jest.Mocked<WebSocket>) => {
   simulateMessage(mockWs, { serverContent: { turnComplete: true } });
 };
 
-describe('GoogleMMLiveProvider', () => {
+describe('GoogleLiveProvider', () => {
   let mockWs: jest.Mocked<WebSocket>;
   const mockedAxios = axios as jest.Mocked<typeof axios>;
-  let provider: GoogleMMLiveProvider;
+  let provider: GoogleLiveProvider;
 
   beforeEach(() => {
     mockWs = {
@@ -72,7 +72,7 @@ describe('GoogleMMLiveProvider', () => {
       .mocked(jest.requireMock('../../../src/python/pythonUtils').validatePythonPath)
       .mockImplementation(async (path: string) => path);
 
-    provider = new GoogleMMLiveProvider('gemini-2.0-flash-exp', {
+    provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
       config: {
         generationConfig: {
           response_modalities: ['text'],
@@ -114,7 +114,7 @@ describe('GoogleMMLiveProvider', () => {
 
     const response = await provider.callApi('test prompt');
     expect(response).toEqual({
-      output: JSON.stringify({ text: 'test response', toolCall: { functionCalls: [] } }),
+      output: { text: 'test response', toolCall: { functionCalls: [] } },
     });
   });
 
@@ -149,7 +149,7 @@ describe('GoogleMMLiveProvider', () => {
 
     const response = await provider.callApi('test prompt');
     expect(response).toEqual({
-      output: JSON.stringify({
+      output: {
         text: 'I was not able to retrieve weather information.',
         toolCall: {
           functionCalls: [
@@ -160,7 +160,7 @@ describe('GoogleMMLiveProvider', () => {
             },
           ],
         },
-      }),
+      },
     });
   });
 
@@ -189,7 +189,7 @@ describe('GoogleMMLiveProvider', () => {
 
     const response = await provider.callApi('test prompt');
     expect(response).toEqual({
-      output: JSON.stringify({
+      output: {
         text: "\n```tool_outputs\n{'status': 'called'}\n```\n",
         toolCall: {
           functionCalls: [
@@ -197,7 +197,7 @@ describe('GoogleMMLiveProvider', () => {
             { name: 'call_me', args: {}, id: 'function-call-15919291184864374131' },
           ],
         },
-      }),
+      },
     });
   });
 
@@ -247,10 +247,10 @@ describe('GoogleMMLiveProvider', () => {
 
     const response = await provider.callApi('test prompt');
     expect(response).toEqual({
-      output: JSON.stringify({
+      output: {
         text: 'The sea is salty primarily due to the erosion of rocks on land. Rainwater, which is slightly acidic due to dissolved carbon dioxide, erodes rocks and carries dissolved minerals and salts into rivers.',
         toolCall: { functionCalls: [] },
-      }),
+      },
     });
   });
 
@@ -274,10 +274,10 @@ describe('GoogleMMLiveProvider', () => {
 
     const response = await provider.callApi('\n');
     expect(response).toEqual({
-      output: JSON.stringify({
+      output: {
         text: '\nThe result of multiplying 1341 by 23 is 30843.\n',
         toolCall: { functionCalls: [] },
-      }),
+      },
     });
   });
 
@@ -302,10 +302,10 @@ describe('GoogleMMLiveProvider', () => {
       '[{"role":"user","content":"hey"},{"role":"user","content":"tell me about hawaii"}]',
     );
     expect(response).toEqual({
-      output: JSON.stringify({
+      output: {
         text: "Hey there! How can I help you today?\nOkay, let's talk about Hawaii! It's a truly fascinating place with a unique culture, history, and geography.",
         toolCall: { functionCalls: [] },
-      }),
+      },
     });
   });
 
@@ -326,7 +326,7 @@ describe('GoogleMMLiveProvider', () => {
   });
 
   it('should handle timeout', async () => {
-    provider = new GoogleMMLiveProvider('gemini-2.0-flash-exp', {
+    provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
       config: {
         generationConfig: {
           response_modalities: ['text'],
@@ -341,7 +341,7 @@ describe('GoogleMMLiveProvider', () => {
   });
 
   it('should throw an error if API key is not set', async () => {
-    const providerWithoutKey = new GoogleMMLiveProvider('gemini-2.0-flash-exp', {
+    const providerWithoutKey = new GoogleLiveProvider('gemini-2.0-flash-exp', {
       config: {
         generationConfig: {
           response_modalities: ['text'],
@@ -388,7 +388,7 @@ describe('GoogleMMLiveProvider', () => {
 
     const mockAddNumbers = jest.fn().mockResolvedValue({ sum: 5 + 6 });
 
-    provider = new GoogleMMLiveProvider('gemini-2.0-flash-exp', {
+    provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
       config: {
         generationConfig: {
           response_modalities: ['text'],
@@ -421,14 +421,14 @@ describe('GoogleMMLiveProvider', () => {
 
     const response = await provider.callApi('What is the sum of 5 and 6?');
     expect(response).toEqual({
-      output: JSON.stringify({
+      output: {
         text: 'The sum of 5 and 6 is 11.\n',
         toolCall: {
           functionCalls: [
             { name: 'addNumbers', args: { a: 5, b: 6 }, id: 'function-call-13767088400406609799' },
           ],
         },
-      }),
+      },
     });
     expect(mockAddNumbers).toHaveBeenCalledTimes(1);
     expect(mockAddNumbers).toHaveBeenCalledWith('{"a":5,"b":6}');
@@ -461,7 +461,7 @@ describe('GoogleMMLiveProvider', () => {
       }, 60);
       return mockWs;
     });
-    provider = new GoogleMMLiveProvider('gemini-2.0-flash-exp', {
+    provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
       config: {
         generationConfig: {
           response_modalities: ['text'],
@@ -492,14 +492,14 @@ describe('GoogleMMLiveProvider', () => {
 
     const response = await provider.callApi('Call the error function');
     expect(response).toEqual({
-      output: JSON.stringify({
+      output: {
         text: 'The function `errorFunction` has been called and it returned an error as expected.',
         toolCall: {
           functionCalls: [
             { name: 'errorFunction', args: {}, id: 'function-call-7580472343952164416' },
           ],
         },
-      }),
+      },
     });
   });
 
@@ -553,7 +553,7 @@ describe('GoogleMMLiveProvider', () => {
       return mockWs;
     });
 
-    provider = new GoogleMMLiveProvider('gemini-2.0-flash-exp', {
+    provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
       config: {
         generationConfig: {
           response_modalities: ['text'],
@@ -561,7 +561,7 @@ describe('GoogleMMLiveProvider', () => {
         timeoutMs: 500,
         apiKey: 'test-api-key',
         functionToolStatefulApi: {
-          file: 'examples/google-multimodal-live/counter_api.py',
+          file: 'examples/google-live/counter_api.py',
           url: 'http://127.0.0.1:5000',
         },
         tools: [
@@ -594,7 +594,7 @@ describe('GoogleMMLiveProvider', () => {
 
     const response = await provider.callApi('Add to the counter until it reaches 5');
     expect(response).toEqual({
-      output: JSON.stringify({
+      output: {
         text: 'The counter has been incremented until it reached 5.\n',
         toolCall: {
           functionCalls: [
@@ -606,7 +606,7 @@ describe('GoogleMMLiveProvider', () => {
           ],
         },
         statefulApiState: { counter: 5 },
-      }),
+      },
     });
     expect(mockedAxios.get).toHaveBeenCalledTimes(6);
   });
@@ -619,7 +619,7 @@ describe('GoogleMMLiveProvider', () => {
 
       validatePythonPathMock.mockResolvedValueOnce('/custom/python/bin');
 
-      const providerWithCustomPython = new GoogleMMLiveProvider('gemini-2.0-flash-exp', {
+      const providerWithCustomPython = new GoogleLiveProvider('gemini-2.0-flash-exp', {
         config: {
           generationConfig: {
             response_modalities: ['text'],
@@ -627,7 +627,7 @@ describe('GoogleMMLiveProvider', () => {
           timeoutMs: 500,
           apiKey: 'test-api-key',
           functionToolStatefulApi: {
-            file: 'examples/google-multimodal-live/counter_api.py',
+            file: 'examples/google-live/counter_api.py',
             url: 'http://127.0.0.1:8765',
             pythonExecutable: '/custom/python/path',
           },
@@ -649,7 +649,7 @@ describe('GoogleMMLiveProvider', () => {
       expect(validatePythonPathMock).toHaveBeenCalledWith('/custom/python/path', true);
 
       expect(mockSpawn).toHaveBeenCalledWith('/custom/python/bin', [
-        'examples/google-multimodal-live/counter_api.py',
+        'examples/google-live/counter_api.py',
       ]);
     });
 
@@ -666,7 +666,7 @@ describe('GoogleMMLiveProvider', () => {
       console.error = mockError;
 
       try {
-        const providerWithPythonError = new GoogleMMLiveProvider('gemini-2.0-flash-exp', {
+        const providerWithPythonError = new GoogleLiveProvider('gemini-2.0-flash-exp', {
           config: {
             generationConfig: {
               response_modalities: ['text'],
@@ -674,7 +674,7 @@ describe('GoogleMMLiveProvider', () => {
             timeoutMs: 500,
             apiKey: 'test-api-key',
             functionToolStatefulApi: {
-              file: 'examples/google-multimodal-live/counter_api.py',
+              file: 'examples/google-live/counter_api.py',
               url: 'http://127.0.0.1:8765',
             },
           },
@@ -717,7 +717,7 @@ describe('GoogleMMLiveProvider', () => {
       ).validatePythonPath;
       validatePythonPathMock.mockResolvedValueOnce('python3');
 
-      const providerWithStatefulApi = new GoogleMMLiveProvider('gemini-2.0-flash-exp', {
+      const providerWithStatefulApi = new GoogleLiveProvider('gemini-2.0-flash-exp', {
         config: {
           generationConfig: {
             response_modalities: ['text'],
@@ -725,7 +725,7 @@ describe('GoogleMMLiveProvider', () => {
           timeoutMs: 500,
           apiKey: 'test-api-key',
           functionToolStatefulApi: {
-            file: 'examples/google-multimodal-live/counter_api.py',
+            file: 'examples/google-live/counter_api.py',
             url: 'http://127.0.0.1:8765',
           },
         },
@@ -758,7 +758,7 @@ describe('GoogleMMLiveProvider', () => {
       validatePythonPathMock.mockResolvedValueOnce('/env/python3');
 
       try {
-        const providerWithEnvPython = new GoogleMMLiveProvider('gemini-2.0-flash-exp', {
+        const providerWithEnvPython = new GoogleLiveProvider('gemini-2.0-flash-exp', {
           config: {
             generationConfig: {
               response_modalities: ['text'],
@@ -766,7 +766,7 @@ describe('GoogleMMLiveProvider', () => {
             timeoutMs: 500,
             apiKey: 'test-api-key',
             functionToolStatefulApi: {
-              file: 'examples/google-multimodal-live/counter_api.py',
+              file: 'examples/google-live/counter_api.py',
               url: 'http://127.0.0.1:8765',
             },
           },
@@ -787,7 +787,7 @@ describe('GoogleMMLiveProvider', () => {
         expect(validatePythonPathMock).toHaveBeenCalledWith('/env/python3', true);
 
         expect(mockSpawn).toHaveBeenCalledWith('/env/python3', [
-          'examples/google-multimodal-live/counter_api.py',
+          'examples/google-live/counter_api.py',
         ]);
       } finally {
         if (originalEnv) {
@@ -815,7 +815,7 @@ describe('GoogleMMLiveProvider', () => {
       ).validatePythonPath;
       validatePythonPathMock.mockResolvedValueOnce('python3');
 
-      const providerWithCleanup = new GoogleMMLiveProvider('gemini-2.0-flash-exp', {
+      const providerWithCleanup = new GoogleLiveProvider('gemini-2.0-flash-exp', {
         config: {
           generationConfig: {
             response_modalities: ['text'],
@@ -823,7 +823,7 @@ describe('GoogleMMLiveProvider', () => {
           timeoutMs: 500,
           apiKey: 'test-api-key',
           functionToolStatefulApi: {
-            file: 'examples/google-multimodal-live/counter_api.py',
+            file: 'examples/google-live/counter_api.py',
             url: 'http://127.0.0.1:8765',
           },
         },

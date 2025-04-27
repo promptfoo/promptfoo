@@ -25,7 +25,7 @@ export function authCommand(program: Command) {
       telemetry.record('command_used', {
         name: 'auth login',
       });
-      await telemetry.send();
+
       try {
         if (cmdObj.apiKey) {
           token = cmdObj.apiKey;
@@ -65,6 +65,14 @@ export function authCommand(program: Command) {
     .command('logout')
     .description('Logout')
     .action(async () => {
+      const email = getUserEmail();
+      const apiKey = cloudConfig.getApiKey();
+
+      if (!email && !apiKey) {
+        logger.info(chalk.yellow("You're already logged out - no active session to terminate"));
+        return;
+      }
+
       await cloudConfig.delete();
       // Always unset email on logout
       setUserEmail('');
@@ -107,7 +115,6 @@ export function authCommand(program: Command) {
         telemetry.record('command_used', {
           name: 'auth whoami',
         });
-        await telemetry.send();
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         logger.error(`Failed to get user info: ${errorMessage}`);

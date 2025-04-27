@@ -49,6 +49,7 @@ function CompareEvalMenuItem({ onComparisonEvalSelected }: CompareEvalMenuItemPr
         title="Select an eval to compare"
         description="Only evals with the same dataset can be compared."
         focusedEvalId={currentEvalId ?? undefined}
+        filterByDatasetId
       />
     </>
   );

@@ -11,7 +11,7 @@ import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import FailReasonCarousel from './FailReasonCarousel';
 import CommentDialog from './TableCommentDialog';
 import TruncatedText from './TruncatedText';
-import { useStore as useResultsViewStore } from './store';
+import { useResultsViewSettingsStore } from './store';
 
 type CSSPropertiesWithCustomVars = React.CSSProperties & {
   [key: `--${string}`]: string | number;
@@ -50,7 +50,8 @@ function EvalOutputCell({
   searchText: string;
 }) {
   const { renderMarkdown, prettifyJson, showPrompts, showPassFail, maxImageWidth, maxImageHeight } =
-    useResultsViewStore();
+    useResultsViewSettingsStore();
+
   const [openPrompt, setOpen] = React.useState(false);
   const [activeRating, setActiveRating] = React.useState<boolean | null>(
     output.gradingResult?.componentResults?.find((result) => result.assertion?.type === 'human')
@@ -274,6 +275,22 @@ function EvalOutputCell({
     }
   }, [onRating, output.score, output.gradingResult?.comment]);
 
+  const [linked, setLinked] = React.useState(false);
+  const handleRowShareLink = React.useCallback(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('rowId', String(rowIndex + 1));
+
+    navigator.clipboard
+      .writeText(url.toString())
+      .then(() => {
+        setLinked(true);
+        setTimeout(() => setLinked(false), 3000);
+      })
+      .catch((error) => {
+        console.error('Failed to copy link to clipboard:', error);
+      });
+  }, [rowIndex]);
+
   const [copied, setCopied] = React.useState(false);
   const handleCopy = React.useCallback(() => {
     navigator.clipboard.writeText(output.text);
@@ -407,6 +424,15 @@ function EvalOutputCell({
               <span>🌟</span>
             </Tooltip>
           </span>
+          <span
+            className="action"
+            onClick={handleRowShareLink}
+            onMouseDown={(e) => e.preventDefault()}
+          >
+            <Tooltip title="Share output">
+              <span>{linked ? '✅' : '🔗'}</span>
+            </Tooltip>
+          </span>
         </>
       )}
       {output.prompt && (
@@ -416,15 +442,17 @@ function EvalOutputCell({
               <span>🔎</span>
             </Tooltip>
           </span>
-          <EvalOutputPromptDialog
-            open={openPrompt}
-            onClose={handlePromptClose}
-            prompt={output.prompt}
-            provider={output.provider}
-            gradingResults={output.gradingResult?.componentResults}
-            output={text}
-            metadata={output.metadata}
-          />
+          {openPrompt && (
+            <EvalOutputPromptDialog
+              open={openPrompt}
+              onClose={handlePromptClose}
+              prompt={output.prompt}
+              provider={output.provider}
+              gradingResults={output.gradingResult?.componentResults}
+              output={text}
+              metadata={output.metadata}
+            />
+          )}
         </>
       )}
       <span
@@ -607,14 +635,16 @@ function EvalOutputCell({
           <img src={lightboxImage} alt="Lightbox" />
         </div>
       )}
-      <CommentDialog
-        open={commentDialogOpen}
-        contextText={getCombinedContextText()}
-        commentText={commentText}
-        onClose={handleCommentClose}
-        onSave={handleCommentSave}
-        onChange={setCommentText}
-      />
+      {commentDialogOpen && (
+        <CommentDialog
+          open={commentDialogOpen}
+          contextText={getCombinedContextText()}
+          commentText={commentText}
+          onClose={handleCommentClose}
+          onSave={handleCommentSave}
+          onChange={setCommentText}
+        />
+      )}
     </div>
   );
 }

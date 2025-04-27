@@ -19,7 +19,7 @@ strategies:
   - id: best-of-n
     config:
       useBasicRefusal: false
-      maxConcurrency: 5 # Maximum concurrent API calls (default)
+      maxConcurrency: 3 # Maximum concurrent API calls (default)
       nSteps: 10000 # Maximum number of attempts (optional)
       maxCandidatesPerStep: 1 # Maximum candidates per batch (optional)
 ```
@@ -56,7 +56,7 @@ We recommend using this setting whenever possible if the default response to you
 ### maxConcurrency
 
 **Type:** `number`  
-**Default:** `5`
+**Default:** `3`
 
 Maximum number of prompt variations to test simultaneously. Higher values increase throughput. We recommend setting this as high as your rate limits allow.
 

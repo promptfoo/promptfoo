@@ -10,12 +10,21 @@ import { ShiftKeyProvider } from '../../../contexts/ShiftKeyContext';
 import type { EvalOutputCellProps } from './EvalOutputCell';
 import EvalOutputCell from './EvalOutputCell';
 
+// Mock the EvalOutputPromptDialog component to check what props are passed to it
+vi.mock('./EvalOutputPromptDialog', () => ({
+  default: vi.fn(({ metadata }) => (
+    <div data-testid="dialog-component" data-metadata={JSON.stringify(metadata)}>
+      Mocked Dialog Component
+    </div>
+  )),
+}));
+
 const renderWithProviders = (ui: React.ReactElement) => {
   return render(<ShiftKeyProvider>{ui}</ShiftKeyProvider>);
 };
 
 vi.mock('./store', () => ({
-  useStore: () => ({
+  useResultsViewSettingsStore: () => ({
     prettifyJson: false,
     renderMarkdown: true,
     showPassFail: true,
@@ -94,6 +103,7 @@ describe('EvalOutputCell', () => {
       score: 0.8,
       text: 'Test output text',
       testCase: {},
+      metadata: { testKey: 'testValue' },
     },
     promptIndex: 0,
     rowIndex: 0,
@@ -106,9 +116,40 @@ describe('EvalOutputCell', () => {
     vi.clearAllMocks();
   });
 
-  it('renders cell with output text', () => {
+  it('passes metadata correctly to the dialog', async () => {
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
-    expect(screen.getByText('Test output text')).toBeInTheDocument();
+    await userEvent.click(screen.getByText('🔎'));
+
+    const dialogComponent = screen.getByTestId('dialog-component');
+    expect(dialogComponent).toBeInTheDocument();
+
+    // Check that metadata is passed correctly
+    const passedMetadata = JSON.parse(dialogComponent.getAttribute('data-metadata') || '{}');
+    expect(passedMetadata.testKey).toBe('testValue');
+  });
+
+  it('preserves existing metadata citations', async () => {
+    const propsWithMetadataCitations = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        metadata: {
+          testKey: 'testValue',
+          citations: [{ source: 'metadata source', content: 'metadata content' }],
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithMetadataCitations} />);
+    await userEvent.click(screen.getByText('🔎'));
+
+    const dialogComponent = screen.getByTestId('dialog-component');
+    const passedMetadata = JSON.parse(dialogComponent.getAttribute('data-metadata') || '{}');
+
+    // Metadata citations should be preserved
+    expect(passedMetadata.citations).toEqual([
+      { source: 'metadata source', content: 'metadata content' },
+    ]);
   });
 
   it('displays pass/fail status correctly', () => {
@@ -275,6 +316,82 @@ describe('EvalOutputCell', () => {
     const sourceElement = screen.getByTestId('audio-player').querySelector('source');
     expect(sourceElement).toHaveAttribute('src', 'data:audio/wav;base64,base64audiodata');
     expect(sourceElement).toHaveAttribute('type', 'audio/wav');
+  });
+
+  it('allows copying row link to clipboard', async () => {
+    const originalClipboard = navigator.clipboard;
+    const mockClipboard = {
+      writeText: vi.fn().mockResolvedValue(undefined),
+    };
+    Object.defineProperty(navigator, 'clipboard', {
+      value: mockClipboard,
+      configurable: true,
+      writable: true,
+    });
+
+    const originalURL = global.URL;
+    const mockUrl = {
+      toString: vi.fn().mockReturnValue('https://example.com/?rowId=1'),
+      searchParams: {
+        set: vi.fn(),
+      },
+    };
+    global.URL = vi.fn(() => mockUrl) as any;
+
+    renderWithProviders(<EvalOutputCell {...defaultProps} />);
+
+    const shareButton = screen.getByLabelText('Share output');
+    expect(shareButton).toBeInTheDocument();
+
+    await userEvent.click(shareButton);
+
+    expect(mockUrl.searchParams.set).toHaveBeenCalledWith('rowId', '1');
+
+    expect(mockClipboard.writeText).toHaveBeenCalled();
+
+    Object.defineProperty(navigator, 'clipboard', {
+      value: originalClipboard,
+      configurable: true,
+      writable: true,
+    });
+    global.URL = originalURL;
+  });
+
+  it('shows checkmark after copying link', async () => {
+    const originalClipboard = navigator.clipboard;
+    const mockClipboard = {
+      writeText: vi.fn().mockResolvedValue(undefined),
+    };
+    Object.defineProperty(navigator, 'clipboard', {
+      value: mockClipboard,
+      configurable: true,
+      writable: true,
+    });
+
+    const mockUrl = {
+      toString: vi.fn().mockReturnValue('https://example.com/?rowId=1'),
+      searchParams: {
+        set: vi.fn(),
+      },
+    };
+    const originalURL = global.URL;
+    global.URL = vi.fn(() => mockUrl) as any;
+
+    renderWithProviders(<EvalOutputCell {...defaultProps} />);
+
+    const shareButtonWrapper = screen.getByText('🔗').closest('.action');
+    expect(shareButtonWrapper).toBeInTheDocument();
+
+    await userEvent.click(shareButtonWrapper!);
+
+    expect(mockClipboard.writeText).toHaveBeenCalled();
+
+    Object.defineProperty(navigator, 'clipboard', {
+      value: originalClipboard,
+      configurable: true,
+      writable: true,
+    });
+    global.URL = originalURL;
   });
 });
 

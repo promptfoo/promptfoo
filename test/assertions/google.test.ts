@@ -3,13 +3,16 @@ import path from 'path';
 import { runAssertion } from '../../src/assertions';
 import type { Tool } from '../../src/providers/google//types';
 import { AIStudioChatProvider } from '../../src/providers/google/ai.studio';
-import { GoogleMMLiveProvider } from '../../src/providers/google/live';
+import { GoogleLiveProvider } from '../../src/providers/google/live';
 import { validateFunctionCall } from '../../src/providers/google/util';
 import { VertexChatProvider } from '../../src/providers/google/vertex';
 import type { ApiProvider, AtomicTestCase, GradingResult } from '../../src/types';
 
 jest.mock('fs');
-jest.mock('path');
+jest.mock('path', () => ({
+  ...jest.requireActual('path'),
+  resolve: jest.fn(),
+}));
 
 const mockedFs = jest.mocked(fs);
 const mockedPath = jest.mocked(path);
@@ -53,15 +56,18 @@ describe('Google assertions', () => {
 
   describe('API agnostic handleIsValidFunctionCall assertions', () => {
     it('should pass when vertex/ais function call matches schema', () => {
-      const functionOutput = {
-        functionCall: {
-          name: 'getCurrentTemperature',
-          args: '{"location": "San Francisco, CA", "unit": "Fahrenheit"}',
+      const functionOutput = [
+        { text: 'test text' },
+        {
+          functionCall: {
+            name: 'getCurrentTemperature',
+            args: '{"location": "San Francisco, CA", "unit": "Fahrenheit"}',
+          },
         },
-      };
+      ];
 
       expect(() => {
-        validateFunctionCall(JSON.stringify(functionOutput), mockProvider.config.tools, {});
+        validateFunctionCall(functionOutput, mockProvider.config.tools, {});
       }).not.toThrow();
     });
 
@@ -83,55 +89,63 @@ describe('Google assertions', () => {
     });
 
     it('should pass when matches schema no args', () => {
-      const functionOutput = {
-        functionCall: {
-          name: 'addOne',
-          args: '{}',
+      const functionOutput = [
+        {
+          functionCall: {
+            name: 'addOne',
+            args: '{}',
+          },
         },
-      };
+      ];
 
       expect(() => {
-        validateFunctionCall(JSON.stringify(functionOutput), mockProvider.config.tools, {});
+        validateFunctionCall(functionOutput, mockProvider.config.tools, {});
       }).not.toThrow();
     });
 
     it('should fail when doesnt match schema parameters', () => {
-      const functionOutput = {
-        functionCall: {
-          name: 'addOne',
-          args: '{"number": 1}',
+      const functionOutput = [
+        {
+          functionCall: {
+            name: 'addOne',
+            args: '{"number": 1}',
+          },
         },
-      };
+      ];
 
       expect(() => {
-        validateFunctionCall(JSON.stringify(functionOutput), mockProvider.config.tools, {});
+        validateFunctionCall(functionOutput, mockProvider.config.tools, {});
       }).toThrow(
         'Call to "addOne":\n{"name":"addOne","args":"{\\"number\\": 1}"}\ndoes not match schema:\n{"name":"addOne"}',
       );
     });
 
     it('should fail when matches schema no args', () => {
-      const functionOutput = {
-        functionCall: {
-          name: 'getCurrentTemperature',
-          args: '{}',
+      const functionOutput = [
+        {
+          functionCall: {
+            name: 'getCurrentTemperature',
+            args: '{}',
+          },
         },
-      };
+      ];
 
       expect(() => {
-        validateFunctionCall(JSON.stringify(functionOutput), mockProvider.config.tools, {});
+        validateFunctionCall(functionOutput, mockProvider.config.tools, {});
       }).toThrow(
         'Call to "getCurrentTemperature":\n{"name":"getCurrentTemperature","args":"{}"}\ndoes not match schema:\n{"name":"getCurrentTemperature","parameters":{"type":"OBJECT","properties":{"location":{"type":"STRING"},"unit":{"type":"STRING","enum":["Celsius","Fahrenheit"]}},"required":["location","unit"]}}',
       );
     });
 
     it('should load functions from external file', () => {
-      const functionOutput = {
-        functionCall: {
-          name: 'getCurrentTemperature',
-          args: '{"location": "San Francisco, CA", "unit": "Fahrenheit"}',
+      const functionOutput = [
+        {
+          functionCall: {
+            name: 'getCurrentTemperature',
+            args: '{"location": "San Francisco, CA", "unit": "Fahrenheit"}',
+          },
         },
-      };
+      ];
 
       const mockYamlContent = `
       [
@@ -178,12 +192,14 @@ describe('Google assertions', () => {
     });
 
     it('should render variables in function definitions', () => {
-      const functionOutput = {
-        functionCall: {
-          name: 'getCurrentTemperature',
-          args: '{"location": "San Francisco, CA", "unit": "custom_unit"}',
+      const functionOutput = [
+        {
+          functionCall: {
+            name: 'getCurrentTemperature',
+            args: '{"location": "San Francisco, CA", "unit": "custom_unit"}',
+          },
         },
-      };
+      ];
 
       const varProvider = {
         ...mockProvider,
@@ -216,12 +232,14 @@ describe('Google assertions', () => {
     });
 
     it('should fail when functions are not defined', () => {
-      const functionOutput = {
-        functionCall: {
-          name: 'getCurrentTemperature',
-          args: '{"location": "San Francisco, CA"}',
+      const functionOutput = [
+        {
+          functionCall: {
+            name: 'getCurrentTemperature',
+            args: '{"location": "San Francisco, CA"}',
+          },
         },
-      };
+      ];
 
       const emptyProvider = {
         ...mockProvider,
@@ -230,7 +248,7 @@ describe('Google assertions', () => {
         },
       };
       expect(() => {
-        validateFunctionCall(JSON.stringify(functionOutput), emptyProvider.config.tools, {});
+        validateFunctionCall(functionOutput, emptyProvider.config.tools, {});
       }).toThrow('Called "getCurrentTemperature", but there is no function with that name');
     });
 
@@ -242,12 +260,14 @@ describe('Google assertions', () => {
     });
 
     it('should fail when function call does not match schema', () => {
-      const functionOutput = {
-        functionCall: {
-          name: 'getCurrentTemperature',
-          args: '{"location": "San Francisco, CA"}', // missing required 'unit'
+      const functionOutput = [
+        {
+          functionCall: {
+            name: 'getCurrentTemperature',
+            args: '{"location": "San Francisco, CA"}', // missing required 'unit'
+          },
         },
-      };
+      ];
       expect(() => {
         validateFunctionCall(functionOutput, mockProvider.config.tools, {});
       }).toThrow(
@@ -258,7 +278,7 @@ describe('Google assertions', () => {
 
   describe('AI Studio api is-valid-function-call assertion', () => {
     it('should pass for a valid function call with correct arguments', async () => {
-      const output = JSON.stringify({ functionCall: { args: '{"x": 10, "y": 20}', name: 'add' } });
+      const output = [{ functionCall: { args: '{"x": 10, "y": 20}', name: 'add' } }];
 
       const provider = new AIStudioChatProvider('foo', {
         config: {
@@ -303,9 +323,11 @@ describe('Google assertions', () => {
     });
 
     it('should fail for an invalid function call with incorrect arguments', async () => {
-      const output = JSON.stringify({
-        functionCall: { args: '{"x": "10", "y": 20}', name: 'add' },
-      });
+      const output = [
+        {
+          functionCall: { args: '{"x": "10", "y": 20}', name: 'add' },
+        },
+      ];
 
       const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
@@ -346,7 +368,7 @@ describe('Google assertions', () => {
 
   describe('Vertex api is-valid-function-call assertion', () => {
     it('should pass for a valid function call with correct arguments', async () => {
-      const output = JSON.stringify({ functionCall: { args: '{"x": 10, "y": 20}', name: 'add' } });
+      const output = [{ functionCall: { args: '{"x": 10, "y": 20}', name: 'add' } }];
 
       const provider = new VertexChatProvider('foo', {
         config: {
@@ -391,9 +413,11 @@ describe('Google assertions', () => {
     });
 
     it('should fail for an invalid function call with incorrect arguments', async () => {
-      const output = JSON.stringify({
-        functionCall: { args: '{"x": "10", "y": 20}', name: 'add' },
-      });
+      const output = [
+        {
+          functionCall: { args: '{"x": "10", "y": 20}', name: 'add' },
+        },
+      ];
 
       const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
@@ -438,7 +462,7 @@ describe('Google assertions', () => {
         toolCall: { functionCalls: [{ args: { x: 10, y: 20 }, name: 'add' }] },
       });
 
-      const provider = new GoogleMMLiveProvider('foo', {
+      const provider = new GoogleLiveProvider('foo', {
         config: {
           tools: [
             {
@@ -487,7 +511,7 @@ describe('Google assertions', () => {
 
       const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
-        provider: new GoogleMMLiveProvider('foo', {
+        provider: new GoogleLiveProvider('foo', {
           config: {
             tools: [
               {

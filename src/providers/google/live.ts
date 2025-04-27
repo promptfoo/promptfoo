@@ -39,7 +39,7 @@ const formatContentMessage = (contents: GeminiFormat, contentIndex: number) => {
   return contentMessage;
 };
 
-export class GoogleMMLiveProvider implements ApiProvider {
+export class GoogleLiveProvider implements ApiProvider {
   config: CompletionOptions;
   modelName: string;
 
@@ -53,7 +53,7 @@ export class GoogleMMLiveProvider implements ApiProvider {
   }
 
   toString(): string {
-    return `[Google Multimodal Live Provider ${this.modelName}]`;
+    return `[Google Live Provider ${this.modelName}]`;
   }
 
   getApiKey(): string | undefined {
@@ -222,11 +222,11 @@ export class GoogleMMLiveProvider implements ApiProvider {
                 }
               }
               resolve({
-                output: JSON.stringify({
+                output: {
                   text: response_text_total,
                   toolCall: { functionCalls: function_calls_total },
                   statefulApiState,
-                }),
+                },
               });
               ws.close();
             }

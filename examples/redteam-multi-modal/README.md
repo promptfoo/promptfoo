@@ -164,7 +164,7 @@ npx promptfoo@latest redteam eval -c redteam.yaml
 
 ### Purpose Statement
 
-When configuring your redteam tests, ensure that the `purpose` statement in your configuration is relevant to the image content in some way. This helps create more realistic and contextually appropriate test scenarios.
+When configuring your red team tests, ensure that the `purpose` statement in your configuration is relevant to the image content in some way. This helps create more realistic and contextually appropriate test scenarios.
 
 For example, in the static image example, the purpose statement references NASA and Buzz Aldrin, which is directly relevant to the moon landing image:
 

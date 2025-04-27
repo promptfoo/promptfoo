@@ -1,6 +1,7 @@
 ---
 sidebar_label: AWS Bedrock
 sidebar_position: 3
+description: Learn how to use Amazon Bedrock models in your evaluations, including Claude, Llama, Nova, and other models
 ---
 
 # Bedrock
@@ -181,7 +182,11 @@ providers:
             name: 'calculator'
 ```
 
-Note: Nova models use a slightly different configuration structure compared to other Bedrock models, with separate `interfaceConfig` and `toolConfig` sections.
+:::note
+
+Nova models use a slightly different configuration structure compared to other Bedrock models, with separate `interfaceConfig` and `toolConfig` sections.
+
+:::
 
 ### AI21 Models
 
@@ -222,12 +227,16 @@ config:
   showThinking: true # Whether to include thinking content in the output (default: true)
 ```
 
+:::tip
+
 The `showThinking` parameter controls whether thinking content is included in the response output:
 
 - When set to `true` (default), thinking content will be included in the output
 - When set to `false`, thinking content will be excluded from the output
 
 This is useful when you want to use thinking for better reasoning but don't want to expose the thinking process to end users.
+
+:::
 
 ### Titan Models
 
@@ -301,13 +310,17 @@ This allows you to access the model's reasoning process during generation while 
 
 ## Model-graded tests
 
-You can use Bedrock models to grade outputs. By default, model-graded tests use OpenAI and require the `OPENAI_API_KEY` environment variable to be set. However, when using AWS Bedrock, you have the option of overriding the grader for [model-graded assertions](/docs/configuration/expected-outputs/model-graded/) to point to AWS Bedrock or other providers.
+You can use Bedrock models to grade outputs. By default, model-graded tests use gpt-4.1-2025-04-14 and require the `OPENAI_API_KEY` environment variable to be set. However, when using AWS Bedrock, you have the option of overriding the grader for [model-graded assertions](/docs/configuration/expected-outputs/model-graded/) to point to AWS Bedrock or other providers.
 
-Note that because of how model-graded evals are implemented, **the LLM grading models must support chat-formatted prompts** (except for embedding or classification models).
+:::warning
+
+Because of how model-graded evals are implemented, **the LLM grading models must support chat-formatted prompts** (except for embedding or classification models).
+
+:::
 
 To set this for all your test cases, add the [`defaultTest`](/docs/configuration/guide/#default-test-cases) property to your config:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 defaultTest:
   options:
     provider:
@@ -504,10 +517,103 @@ If you see this error. Make sure you have access to the model in the region you'
    - Enable access for the specific model
 2. Check your region configuration matches the model's region.
 
+## Knowledge Base
+
+AWS Bedrock Knowledge Bases provide Retrieval Augmented Generation (RAG) functionality, allowing you to query a knowledge base with natural language and get responses based on your data.
+
+### Prerequisites
+
+To use the Knowledge Base provider, you need:
+
+1. An existing Knowledge Base created in AWS Bedrock
+2. Install the required SDK:
+
+   ```sh
+   npm install -g @aws-sdk/client-bedrock-agent-runtime
+   ```
+
+### Configuration
+
+Configure the Knowledge Base provider by specifying `kb` in your provider ID. Note that the model ID needs to include the regional prefix (`us.`, `eu.`, or `apac.`):
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: bedrock:kb:us.anthropic.claude-3-7-sonnet-20250219-v1:0
+    config:
+      region: 'us-east-2'
+      knowledgeBaseId: 'YOUR_KNOWLEDGE_BASE_ID'
+      temperature: 0.0
+      max_tokens: 1000
+```
+
+The provider ID follows this pattern: `bedrock:kb:[REGIONAL_MODEL_ID]`
+
+For example:
+
+- `bedrock:kb:us.anthropic.claude-3-7-sonnet-20250219-v1:0` (US region)
+- `bedrock:kb:eu.anthropic.claude-3-sonnet-20240229-v1:0` (EU region)
+
+Configuration options include:
+
+- `knowledgeBaseId` (required): The ID of your AWS Bedrock Knowledge Base
+- `region`: AWS region where your Knowledge Base is deployed (e.g., 'us-east-1', 'us-east-2', 'eu-west-1')
+- `temperature`: Controls randomness in response generation (default: 0.0)
+- `max_tokens`: Maximum number of tokens in the generated response
+- `accessKeyId`, `secretAccessKey`, `sessionToken`: AWS credentials (if not using environment variables or IAM roles)
+- `profile`: AWS profile name for SSO authentication
+
+### Example
+
+Here's a complete example to test your Knowledge Base with a few questions:
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - 'What is the capital of France?'
+  - 'Tell me about quantum computing.'
+
+providers:
+  # Knowledge Base provider
+  - id: bedrock:kb:us.anthropic.claude-3-7-sonnet-20250219-v1:0
+    config:
+      region: 'us-east-2'
+      knowledgeBaseId: 'YOUR_KNOWLEDGE_BASE_ID'
+      temperature: 0.0
+      max_tokens: 1000
+
+  # Regular Claude model for comparison
+  - id: bedrock:us.anthropic.claude-3-7-sonnet-20250219-v1:0
+    config:
+      region: 'us-east-2'
+      temperature: 0.0
+      max_tokens: 1000
+
+tests:
+  - description: 'Basic factual questions from the knowledge base'
+```
+
+### Citations
+
+The Knowledge Base provider returns both the generated response and citations from the source documents. These citations are included in the evaluation results and can be used to verify the accuracy of the responses.
+
+:::info
+
+When viewing evaluation results in the UI, citations appear in a separate section within the details view of each response. You can click on the source links to visit the original documents or copy citation content for reference.
+
+:::
+
+### Response Format
+
+When using the Knowledge Base provider, the response will include:
+
+1. **output**: The text response generated by the model based on your query
+2. **metadata.citations**: An array of citations that includes:
+   - `retrievedReferences`: References to source documents that informed the response
+   - `generatedResponsePart`: Parts of the response that correspond to specific citations
+
 ## See Also
 
 - [Amazon SageMaker Provider](./sagemaker.md) - For custom-deployed or fine-tuned models on AWS
-- [Configuration Reference](../configuration/reference.md)
-- [Command Line Interface](../usage/command-line.md)
-- [Provider Options](../providers/index.md)
-- [Amazon Bedrock Examples](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock)
+- [Configuration Reference](../configuration/reference.md) - Complete configuration options for promptfoo
+- [Command Line Interface](../usage/command-line.md) - How to use promptfoo from the command line
+- [Provider Options](../providers/index.md) - Overview of all supported providers
+- [Amazon Bedrock Examples](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock) - Runnable examples of Bedrock integration, including Knowledge Base examples

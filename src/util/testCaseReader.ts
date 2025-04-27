@@ -91,20 +91,20 @@ export async function readStandaloneTestsFile(
   const fileExtension = parsePath(pathWithoutFunction).ext.slice(1);
 
   if (varsPath.startsWith('huggingface://datasets/')) {
-    telemetry.recordAndSendOnce('feature_used', {
+    telemetry.record('feature_used', {
       feature: 'huggingface dataset',
     });
     return await fetchHuggingFaceDataset(varsPath);
   }
   if (isJavascriptFile(pathWithoutFunction)) {
-    telemetry.recordAndSendOnce('feature_used', {
+    telemetry.record('feature_used', {
       feature: 'js tests file',
     });
     const mod = await importModule(pathWithoutFunction, maybeFunctionName);
     return typeof mod === 'function' ? await mod() : mod;
   }
   if (fileExtension === 'py') {
-    telemetry.recordAndSendOnce('feature_used', {
+    telemetry.record('feature_used', {
       feature: 'python tests file',
     });
     const result = await runPython(pathWithoutFunction, maybeFunctionName ?? 'generate_tests', []);
@@ -119,12 +119,12 @@ export async function readStandaloneTestsFile(
   let rows: CsvRow[] = [];
 
   if (varsPath.startsWith('https://docs.google.com/spreadsheets/')) {
-    telemetry.recordAndSendOnce('feature_used', {
+    telemetry.record('feature_used', {
       feature: 'csv tests file - google sheet',
     });
     rows = await fetchCsvFromGoogleSheet(varsPath);
   } else if (fileExtension === 'csv') {
-    telemetry.recordAndSendOnce('feature_used', {
+    telemetry.record('feature_used', {
       feature: 'csv tests file - local',
     });
     const delimiter = getEnvString('PROMPTFOO_CSV_DELIMITER', ',');
@@ -168,14 +168,20 @@ export async function readStandaloneTestsFile(
       throw e;
     }
   } else if (fileExtension === 'json') {
-    telemetry.recordAndSendOnce('feature_used', {
+    telemetry.record('feature_used', {
       feature: 'json tests file',
     });
-    rows = yaml.load(fs.readFileSync(resolvedVarsPath, 'utf-8')) as unknown as any;
+    const fileContent = fs.readFileSync(resolvedVarsPath, 'utf-8');
+    const jsonData = yaml.load(fileContent) as any;
+    const testCases: TestCase[] = Array.isArray(jsonData) ? jsonData : [jsonData];
+    return testCases.map((item, idx) => ({
+      ...item,
+      description: item.description || `Row #${idx + 1}`,
+    }));
   }
   // Handle .jsonl files
   else if (fileExtension === 'jsonl') {
-    telemetry.recordAndSendOnce('feature_used', {
+    telemetry.record('feature_used', {
       feature: 'jsonl tests file',
     });
 
@@ -188,12 +194,11 @@ export async function readStandaloneTestsFile(
         const row = JSON.parse(line);
         return {
           ...row,
-          options: row.options ?? {},
           description: `Row #${idx + 1}`,
         };
       });
   } else if (fileExtension === 'yaml' || fileExtension === 'yml') {
-    telemetry.recordAndSendOnce('feature_used', {
+    telemetry.record('feature_used', {
       feature: 'yaml tests file',
     });
     rows = yaml.load(fs.readFileSync(resolvedVarsPath, 'utf-8')) as unknown as any;
@@ -280,7 +285,7 @@ export async function loadTestsFromGlob(
   basePath: string = '',
 ): Promise<TestCase[]> {
   if (loadTestsGlob.startsWith('huggingface://datasets/')) {
-    telemetry.recordAndSendOnce('feature_used', {
+    telemetry.record('feature_used', {
       feature: 'huggingface dataset',
     });
     return await fetchHuggingFaceDataset(loadTestsGlob);

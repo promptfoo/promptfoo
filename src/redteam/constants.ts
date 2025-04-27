@@ -26,6 +26,7 @@ export const FOUNDATION_PLUGINS = [
   'beavertails',
   'contracts',
   'cyberseceval',
+  'donotanswer',
   'divergent-repetition',
   'excessive-agency',
   'hallucination',
@@ -142,8 +143,10 @@ export const ADDITIONAL_PLUGINS = [
   'cyberseceval',
   'debug-access',
   'divergent-repetition',
+  'donotanswer',
   'harmbench',
   'imitation',
+  'xstest',
   'indirect-prompt-injection',
   'overreliance',
   'pliny',
@@ -199,6 +202,32 @@ export const FRAMEWORK_NAMES: Record<string, string> = {
   'owasp:api': 'OWASP API Top 10',
   'owasp:llm': 'OWASP LLM Top 10',
 };
+
+export const OWASP_LLM_TOP_10_NAMES = [
+  'Prompt Injection',
+  'Sensitive Information Disclosure',
+  'Supply Chain',
+  'Improper Output Handling',
+  'Insecure Output Handling',
+  'Excessive Agency',
+  'System Prompt Leakage',
+  'Vector and Embedding Weaknesses',
+  'Misinformation',
+  'Unbounded Consumption',
+];
+
+export const OWASP_API_TOP_10_NAMES = [
+  'Broken Object Level Authorization',
+  'Broken Authentication',
+  'Broken Object Property Level Authorization',
+  'Unrestricted Resource Consumption',
+  'Broken Function Level Authorization',
+  'Unrestricted Access to Sensitive Business Flows',
+  'Server Side Request Forgery',
+  'Security Misconfiguration',
+  'Improper Inventory Management',
+  'Unsafe Consumption of APIs',
+];
 
 export const OWASP_LLM_TOP_10_MAPPING: Record<
   string,
@@ -392,6 +421,7 @@ export const OWASP_LLM_RED_TEAM_MAPPING: Record<
       'prompt-injection',
       'hex',
       'base64',
+      'homoglyph',
       'leetspeak',
       'rot13',
     ],
@@ -686,6 +716,7 @@ export const ADDITIONAL_STRATEGIES = [
   'gcg',
   'goat',
   'hex',
+  'homoglyph',
   'image',
   'jailbreak:likert',
   'jailbreak:tree',
@@ -708,6 +739,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   audio: 'Tests handling of audio content',
   base64: 'Tests handling of Base64-encoded malicious payloads',
   basic: 'Original plugin tests without any additional strategies or optimizations',
+  homoglyph:
+    'Tests handling of homoglyph (visually similar Unicode characters) encoding to bypass filters',
   beavertails: 'Tests handling of malicious prompts from the BeaverTails dataset',
   'best-of-n': 'Jailbreak technique published by Anthropic and Stanford',
   bfla: 'Tests for broken function-level authorization vulnerabilities (OWASP API 5)',
@@ -719,6 +752,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   crescendo: 'Multi-turn attack strategy that gradually escalates malicious intent',
   'cross-session-leak': 'Tests for information leakage between user sessions',
   cyberseceval: "Tests prompt injection attacks from Meta's CyberSecEval dataset",
+  donotanswer: 'Tests for vulnerabilities to Do Not Answer attacks',
   'debug-access': 'Tests for exposed debugging interfaces and commands',
   default: 'Standard security testing plugins',
   'divergent-repetition':
@@ -799,6 +833,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'tool-discovery:multi-turn':
     'Uses conversational approach to discover available tools, functions, and capabilities through multi-step interactions',
   unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
+  xstest: 'Tests for XSTest attacks',
 };
 
 // These names are displayed in risk cards and in the table
@@ -807,6 +842,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   audio: 'Audio Content',
   base64: 'Base64 Payload Encoding',
   basic: 'Baseline Testing',
+  homoglyph: 'Homoglyph Encoding',
   beavertails: 'BeaverTails Dataset',
   'best-of-n': 'Best-of-N',
   bfla: 'Function-Level Authorization Bypass',
@@ -818,6 +854,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   crescendo: 'Multi-Turn Crescendo',
   'cross-session-leak': 'Cross-Session Data Leakage',
   cyberseceval: 'CyberSecEval Dataset',
+  donotanswer: 'Do Not Answer Dataset',
   'debug-access': 'Debug Interface Exposure',
   default: 'Standard Security Suite',
   'divergent-repetition': 'Divergent Repetition',
@@ -893,6 +930,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   ssrf: 'SSRF Vulnerability',
   'system-prompt-override': 'System Prompt Override',
   unsafebench: 'UnsafeBench Dataset',
+  xstest: 'XSTest Dataset',
 };
 
 export enum Severity {
@@ -923,6 +961,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   contracts: Severity.Medium,
   'cross-session-leak': Severity.Medium,
   cyberseceval: Severity.Medium,
+  donotanswer: Severity.Medium,
   'debug-access': Severity.High,
   default: Severity.Low,
   'divergent-repetition': Severity.Medium,
@@ -983,6 +1022,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'tool-discovery:multi-turn': Severity.Low,
   'tool-discovery': Severity.Low,
   unsafebench: Severity.Medium,
+  xstest: Severity.Low,
 };
 
 export const riskCategories: Record<string, Plugin[]> = {
@@ -1036,6 +1076,7 @@ export const riskCategories: Record<string, Plugin[]> = {
   'Trust & Safety': [
     'beavertails',
     'cyberseceval',
+    'donotanswer',
     'harmbench',
     'harmful:child-exploitation',
     'harmful:graphic-content',
@@ -1047,6 +1088,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'harmful:self-harm',
     'harmful:sexual-content',
     'pliny',
+    'xstest',
   ],
 
   Brand: [
@@ -1096,6 +1138,7 @@ export const categoryAliases: Record<Plugin, string> = {
   contracts: 'ContractualCommitment',
   'cross-session-leak': 'CrossSessionLeak',
   cyberseceval: 'CyberSecEval',
+  donotanswer: 'DoNotAnswer',
   'debug-access': 'DebugAccess',
   default: 'Default',
   'divergent-repetition': 'DivergentRepetition',
@@ -1157,6 +1200,7 @@ export const categoryAliases: Record<Plugin, string> = {
   ssrf: 'SSRFEnforcement',
   'system-prompt-override': 'System Prompt Override',
   unsafebench: 'UnsafeBench',
+  xstest: 'XSTest',
 };
 
 export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
@@ -1179,6 +1223,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'cross-session-leak':
     'Tests for information leakage vulnerabilities between different user sessions',
   cyberseceval: "Tests prompt injection attacks from Meta's CyberSecEval dataset",
+  donotanswer: 'Tests for vulnerabilities to Do Not Answer attacks',
   'debug-access':
     'Identifies exposed debugging interfaces and unauthorized command execution vectors',
   default: 'Executes comprehensive baseline security testing across multiple risk categories',
@@ -1245,6 +1290,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
   unsafebench:
     'Tests handling of unsafe image content through multi-modal model evaluation and safety filters',
+  xstest:
+    'Tests how models handle ambiguous terms related to potentially harmful topics like violence and drugs',
 };
 
 export const strategyDescriptions: Record<Strategy, string> = {
@@ -1253,6 +1300,8 @@ export const strategyDescriptions: Record<Strategy, string> = {
   basic: 'Equivalent to no strategy. Always included. Can be disabled in configuration.',
   'best-of-n': 'Jailbreak technique published by Anthropic and Stanford',
   citation: 'Exploits academic authority bias to circumvent content filtering mechanisms',
+  homoglyph:
+    'Tests detection and handling of text with homoglyphs (visually similar Unicode characters)',
   crescendo: 'Executes progressive multi-turn attacks with escalating malicious intent',
   default: 'Applies standard security testing methodology',
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
@@ -1279,6 +1328,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   basic: 'Basic',
   'best-of-n': 'Best-of-N',
   citation: 'Authority Bias',
+  homoglyph: 'Homoglyph Encoding',
   crescendo: 'Multi-turn Crescendo',
   default: 'Basic',
   gcg: 'Greedy Coordinate Gradient',
@@ -1304,8 +1354,8 @@ export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
   'Minimal Test': 'Minimal set of plugins to validate your setup',
   MITRE: 'MITRE ATLAS framework',
   NIST: 'NIST AI Risk Management Framework',
-  'OWASP API': 'OWASP API Top 10',
-  'OWASP LLM': 'OWASP LLM Top 10',
+  'OWASP API Top 10': 'OWASP API security vulnerabilities framework',
+  'OWASP LLM Top 10': 'OWASP LLM security vulnerabilities framework',
   'OWASP Gen AI Red Team': 'OWASP Gen AI Red Teaming Best Practices',
   RAG: 'Recommended plugins plus additional tests for RAG specific scenarios like access control',
   Recommended: 'A broad set of plugins recommended by Promptfoo',

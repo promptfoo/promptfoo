@@ -503,12 +503,12 @@
                                               "answer-relevance",
                                               "bleu",
                                               "classifier",
+                                              "contains",
                                               "contains-all",
                                               "contains-any",
                                               "contains-json",
                                               "contains-sql",
                                               "contains-xml",
-                                              "contains",
                                               "context-faithfulness",
                                               "context-recall",
                                               "context-relevance",
@@ -516,10 +516,11 @@
                                               "equals",
                                               "factuality",
                                               "g-eval",
+                                              "gleu",
                                               "guardrails",
+                                              "icontains",
                                               "icontains-all",
                                               "icontains-any",
-                                              "icontains",
                                               "is-json",
                                               "is-refusal",
                                               "is-sql",
@@ -531,11 +532,12 @@
                                               "latency",
                                               "levenshtein",
                                               "llm-rubric",
+                                              "meteor",
                                               "model-graded-closedqa",
                                               "model-graded-factuality",
                                               "moderation",
-                                              "perplexity-score",
                                               "perplexity",
+                                              "perplexity-score",
                                               "python",
                                               "regex",
                                               "rouge-n",
@@ -1029,6 +1031,7 @@
                           "debug-access",
                           "default",
                           "divergent-repetition",
+                          "donotanswer",
                           "excessive-agency",
                           "foundation",
                           "hallucination",
@@ -1145,7 +1148,8 @@
                           "tool-discovery",
                           "tool-discovery:multi-turn",
                           "toxicity",
-                          "unsafebench"
+                          "unsafebench",
+                          "xstest"
                         ]
                       },
                       {
@@ -1176,6 +1180,7 @@
                               "debug-access",
                               "default",
                               "divergent-repetition",
+                              "donotanswer",
                               "excessive-agency",
                               "foundation",
                               "hallucination",
@@ -1292,7 +1297,8 @@
                               "tool-discovery",
                               "tool-discovery:multi-turn",
                               "toxicity",
-                              "unsafebench"
+                              "unsafebench",
+                              "xstest"
                             ]
                           },
                           {
@@ -1345,6 +1351,7 @@
                           "gcg",
                           "goat",
                           "hex",
+                          "homoglyph",
                           "image",
                           "jailbreak",
                           "jailbreak:composite",
@@ -1384,7 +1391,7 @@
                   }
                 ]
               },
-              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports audio, base64, basic, best-of-n, citation, crescendo, default, gcg, goat, hex, image, jailbreak, jailbreak:composite, jailbreak:likert, jailbreak:tree, leetspeak, math-prompt, multilingual, pandamonium, prompt-injection, retry, rot13",
+              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports audio, base64, basic, best-of-n, citation, crescendo, default, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak:composite, jailbreak:likert, jailbreak:tree, leetspeak, math-prompt, multilingual, pandamonium, prompt-injection, retry, rot13",
               "default": [
                 "default"
               ]

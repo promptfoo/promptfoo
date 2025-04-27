@@ -18,6 +18,7 @@
   "devDependencies": {
     "@calcom/embed-react": "^1.5.2",
     "@docusaurus/core": "^3.7.0",
+    "@docusaurus/module-type-aliases": "^3.7.0",
     "@docusaurus/plugin-client-redirects": "^3.7.0",
     "@docusaurus/plugin-content-docs": "^3.7.0",
     "@docusaurus/plugin-google-gtag": "^3.7.0",
@@ -28,6 +29,7 @@
     "@monaco-editor/react": "^4.7.0",
     "@mui/icons-material": "^6.1.10",
     "@segment/ajv-human-errors": "^2.15.0",
+    "@tsconfig/docusaurus": "^2.0.3",
     "canvas-confetti": "^1.9.3",
     "clsx": "^2.1.1",
     "dedent": "^1.5.3",
@@ -37,9 +39,7 @@
     "prism-react-renderer": "^2.4.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "@docusaurus/module-type-aliases": "^3.7.0",
-    "@tsconfig/docusaurus": "^2.0.3",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.3"
   },
   "browserslist": {
     "production": [
@@ -55,5 +55,8 @@
   },
   "engines": {
     "node": ">=18"
+  },
+  "dependencies": {
+    "swiper": "^11.2.6"
   }
 }

@@ -1,4 +1,4 @@
-# google-multimodal-live (Google Live API with Gemini)
+# google-live (Google Live API with Gemini)
 
 This example demonstrates how to use promptfoo with Google's WebSocket-based Live API, which enables low-latency bidirectional interactions with Gemini models. The example includes four different configurations:
 
@@ -20,7 +20,7 @@ You can obtain a Google AI Studio API key from the [Google AI Studio website](ht
 You can initialize this example with:
 
 ```bash
-npx promptfoo@latest init --example google-multimodal-live
+npx promptfoo@latest init --example google-live
 ```
 
 This will create a directory with all necessary configuration files. After running any evaluation, you can view the results by running:
