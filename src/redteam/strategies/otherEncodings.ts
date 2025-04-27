@@ -5,24 +5,68 @@ import type { TestCase } from '../../types';
  */
 function toMorseCode(text: string): string {
   const morseMap: Record<string, string> = {
-    'a': '.-', 'b': '-...', 'c': '-.-.', 'd': '-..', 'e': '.', 'f': '..-.', 
-    'g': '--.', 'h': '....', 'i': '..', 'j': '.---', 'k': '-.-', 'l': '.-..', 
-    'm': '--', 'n': '-.', 'o': '---', 'p': '.--.', 'q': '--.-', 'r': '.-.', 
-    's': '...', 't': '-', 'u': '..-', 'v': '...-', 'w': '.--', 'x': '-..-', 
-    'y': '-.--', 'z': '--..', '0': '-----', '1': '.----', '2': '..---', 
-    '3': '...--', '4': '....-', '5': '.....', '6': '-....', '7': '--...', 
-    '8': '---..', '9': '----.', '.': '.-.-.-', ',': '--..--', '?': '..--..', 
-    "'": '.----.', '!': '-.-.--', '/': '-..-.', '(': '-.--.', ')': '-.--.-', 
-    '&': '.-...', ':': '---...', ';': '-.-.-.', '=': '-...-', '+': '.-.-.', 
-    '-': '-....-', '_': '..--.-', '"': '.-..-.', '$': '...-..-', '@': '.--.-.'
+    a: '.-',
+    b: '-...',
+    c: '-.-.',
+    d: '-..',
+    e: '.',
+    f: '..-.',
+    g: '--.',
+    h: '....',
+    i: '..',
+    j: '.---',
+    k: '-.-',
+    l: '.-..',
+    m: '--',
+    n: '-.',
+    o: '---',
+    p: '.--.',
+    q: '--.-',
+    r: '.-.',
+    s: '...',
+    t: '-',
+    u: '..-',
+    v: '...-',
+    w: '.--',
+    x: '-..-',
+    y: '-.--',
+    z: '--..',
+    '0': '-----',
+    '1': '.----',
+    '2': '..---',
+    '3': '...--',
+    '4': '....-',
+    '5': '.....',
+    '6': '-....',
+    '7': '--...',
+    '8': '---..',
+    '9': '----.',
+    '.': '.-.-.-',
+    ',': '--..--',
+    '?': '..--..',
+    "'": '.----.',
+    '!': '-.-.--',
+    '/': '-..-.',
+    '(': '-.--.',
+    ')': '-.--.-',
+    '&': '.-...',
+    ':': '---...',
+    ';': '-.-.-.',
+    '=': '-...-',
+    '+': '.-.-.',
+    '-': '-....-',
+    _: '..--.-',
+    '"': '.-..-.',
+    $: '...-..-',
+    '@': '.--.-.',
   };
 
   return text
     .toLowerCase()
     .split('')
-    .map(char => {
+    .map((char) => {
       if (char === ' ') {
-        return '/'
+        return '/';
       }
       return morseMap[char] || char;
     })
@@ -36,14 +80,14 @@ function toPigLatin(text: string): string {
   // Split by spaces to get words
   return text
     .split(' ')
-    .map(word => {
+    .map((word) => {
       // Extract any trailing punctuation
       const punctuationMatch = word.match(/([a-zA-Z0-9]+)([^a-zA-Z0-9]*)$/);
-      if (!punctuationMatch) {
-        // Skip empty strings or non-alphabet characters
-        if (!word.match(/^[a-zA-Z]/)) {
-          return word;
-        }
+      if (
+        !punctuationMatch && // Skip empty strings or non-alphabet characters
+        !word.match(/^[a-zA-Z]/)
+      ) {
+        return word;
       }
 
       // Split the word into base and punctuation if there's punctuation
@@ -62,7 +106,7 @@ function toPigLatin(text: string): string {
 
       // Find position of first vowel
       const vowelIndex = baseWord.search(/[aeiouAEIOU]/i);
-      
+
       // If no vowels, just add 'ay' at the end
       if (vowelIndex === -1) {
         return baseWord + 'ay' + punctuation;
@@ -79,16 +123,16 @@ function toPigLatin(text: string): string {
 // Define the enum for encoding types
 export enum EncodingType {
   MORSE = 'morse',
-  PIG_LATIN = 'pig-latin'
+  PIG_LATIN = 'pig-latin',
 }
 
 /**
  * Apply the specified encoding transformation to test cases
  */
 export function addOtherEncodings(
-  testCases: TestCase[], 
-  injectVar: string, 
-  encodingType: EncodingType = EncodingType.MORSE
+  testCases: TestCase[],
+  injectVar: string,
+  encodingType: EncodingType = EncodingType.MORSE,
 ): TestCase[] {
   // Choose the transformation based on encoding type
   const transformer = (() => {

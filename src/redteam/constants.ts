@@ -838,7 +838,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Uses conversational approach to discover available tools, functions, and capabilities through multi-step interactions',
   unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
   xstest: 'Tests for XSTest attacks',
-  homoglyph: 'Tests handling of homoglyph (visually similar Unicode characters) encoding to bypass filters',
+  homoglyph:
+    'Tests handling of homoglyph (visually similar Unicode characters) encoding to bypass filters',
   morse: 'Tests handling of content encoded in Morse code to potentially bypass filters',
   piglatin: 'Tests handling of content translated to Pig Latin to potentially bypass filters',
 };
@@ -1330,7 +1331,8 @@ export const strategyDescriptions: Record<Strategy, string> = {
   'prompt-injection': 'Tests direct prompt injection vulnerability detection',
   retry: 'Automatically incorporates previously failed test cases to prevent regression',
   rot13: 'Assesses handling of ROT13-encoded malicious payloads',
-  homoglyph: 'Tests detection and handling of text with homoglyphs (visually similar Unicode characters)',
+  homoglyph:
+    'Tests detection and handling of text with homoglyphs (visually similar Unicode characters)',
   morse: 'Tests detection and handling of text encoded in Morse code',
   piglatin: 'Tests detection and handling of text transformed into Pig Latin',
 };

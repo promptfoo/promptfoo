@@ -13,11 +13,13 @@ The Morse code strategy converts all characters in the test payload to dots and 
 ### How It Works
 
 Standard ASCII characters are converted to their Morse code equivalents:
+
 - Letters are converted to sequences of dots (.) and dashes (-)
 - Spaces between words are replaced with forward slashes (/)
 - Characters without a Morse code equivalent remain unchanged
 
 For example, "Hello World" becomes:
+
 ```
 .... . .-.. .-.. --- / .-- --- .-. .-.. -..
 ```
@@ -28,7 +30,7 @@ Add the Morse code strategy to your red team configuration:
 
 ```yaml
 strategies:
-  - morse   # Apply Morse code transformation
+  - morse # Apply Morse code transformation
 ```
 
 ## Pig Latin
@@ -38,11 +40,13 @@ The Pig Latin strategy transforms text according to the playful language game ru
 ### How It Works
 
 The transformation follows these rules:
+
 - For words beginning with consonants, the initial consonant cluster is moved to the end and "ay" is added
 - For words beginning with vowels, "way" is added to the end
 - Punctuation and numbers remain unchanged
 
 For example, "Hello World" becomes:
+
 ```
 elloHay orldWay
 ```
@@ -53,7 +57,7 @@ Add the Pig Latin strategy to your red team configuration:
 
 ```yaml
 strategies:
-  - piglatin   # Apply Pig Latin transformation
+  - piglatin # Apply Pig Latin transformation
 ```
 
 ## Example
@@ -73,9 +77,9 @@ redteam:
   plugins:
     - owasp:llm
   strategies:
-    - basic     # Include original prompts
-    - morse     # Apply Morse code transformation
-    - piglatin  # Apply Pig Latin transformation
+    - basic # Include original prompts
+    - morse # Apply Morse code transformation
+    - piglatin # Apply Pig Latin transformation
 ```
 
 ## Technical Details

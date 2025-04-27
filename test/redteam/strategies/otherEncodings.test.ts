@@ -26,11 +26,13 @@ describe('other encodings strategy', () => {
     expect(result).toHaveLength(testCases.length);
 
     // The 'prompt' value should be converted to Morse code
-    expect(result[0].vars!.prompt).toBe('.... . .-.. .-.. --- / .-- --- .-. .-.. -.. -.-.-- / .---- ..--- ...--');
+    expect(result[0].vars!.prompt).toBe(
+      '.... . .-.. .-.. --- / .-- --- .-. .-.. -.. -.-.-- / .---- ..--- ...--',
+    );
 
     // Check that other vars are not affected
     expect(result[0].vars!.expected).toBe('normal value');
-    
+
     // Check that metadata and assertion are updated correctly
     expect(result[0].metadata?.strategyId).toBe('other-encodings');
     expect(result[0].metadata?.encodingType).toBe(EncodingType.MORSE);
@@ -49,7 +51,7 @@ describe('other encodings strategy', () => {
 
     // Check that other vars are not affected
     expect(result[0].vars!.expected).toBe('normal value');
-    
+
     // Check that metadata and assertion are updated correctly
     expect(result[0].metadata?.strategyId).toBe('other-encodings');
     expect(result[0].metadata?.encodingType).toBe(EncodingType.PIG_LATIN);
