@@ -3474,7 +3474,7 @@ describe('METEOR assertion', () => {
         pass: true,
         score: 0.85,
         reason: 'METEOR test passed',
-        assertion: { type: 'meteor' }
+        assertion: { type: 'meteor' },
       }),
     }));
 
@@ -3504,7 +3504,7 @@ describe('METEOR assertion', () => {
   it('should handle errors when natural package is missing', async () => {
     // Mock dynamic import to simulate the module not being found
     jest.mock('../../src/assertions/meteor', () => {
-      throw new Error('Cannot find module \'natural\'');
+      throw new Error("Cannot find module 'natural'");
     });
 
     // Import after mocking
@@ -3525,7 +3525,9 @@ describe('METEOR assertion', () => {
     // Verify the error is handled correctly
     expect(result.pass).toBe(false);
     expect(result.score).toBe(0);
-    expect(result.reason).toBe('METEOR assertion requires the natural package. Please install it using: npm install natural');
+    expect(result.reason).toBe(
+      'METEOR assertion requires the natural package. Please install it using: npm install natural',
+    );
     expect(result.assertion).toEqual({
       type: 'meteor',
       value: 'Expected output',
@@ -3543,16 +3545,18 @@ describe('METEOR assertion', () => {
     const { runAssertion } = await import('../../src/assertions');
 
     // The error should be rethrown
-    await expect(runAssertion({
-      prompt: 'Test prompt',
-      provider: {} as any,
-      assertion: {
-        type: 'meteor',
-        value: 'Expected output',
-        threshold: 0.7,
-      },
-      test: {} as any,
-      providerResponse: { output: 'Actual output' },
-    })).rejects.toThrow('Some other error');
+    await expect(
+      runAssertion({
+        prompt: 'Test prompt',
+        provider: {} as any,
+        assertion: {
+          type: 'meteor',
+          value: 'Expected output',
+          threshold: 0.7,
+        },
+        test: {} as any,
+        providerResponse: { output: 'Actual output' },
+      }),
+    ).rejects.toThrow('Some other error');
   });
 });
