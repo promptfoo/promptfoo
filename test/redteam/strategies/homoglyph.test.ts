@@ -22,6 +22,10 @@ describe('homoglyph strategy', () => {
     },
   ];
 
+  afterEach(() => {
+    jest.resetAllMocks();
+  });
+
   describe('toHomoglyphs', () => {
     it('should convert lowercase letters', () => {
       expect(toHomoglyphs('abcdefghijklmnopqrstuvwxyz')).not.toBe('abcdefghijklmnopqrstuvwxyz');
@@ -57,6 +61,19 @@ describe('homoglyph strategy', () => {
       // Note: Length check removed since homoglyphs may have different UTF-16 lengths
       expect(output).toBeTruthy();
     });
+
+    it('should handle all mapped characters', () => {
+      // Test each mapped character individually rather than all at once
+      Object.keys(homoglyphMap).forEach((char) => {
+        const result = toHomoglyphs(char);
+        expect(result).toBe(homoglyphMap[char]);
+      });
+    });
+
+    it('should handle non-ASCII characters not in the map', () => {
+      const nonAsciiChars = '☺★♥♦♣♠€£¥©®™';
+      expect(toHomoglyphs(nonAsciiChars)).toBe(nonAsciiChars);
+    });
   });
 
   describe('addHomoglyphs', () => {
@@ -64,11 +81,25 @@ describe('homoglyph strategy', () => {
       const injectVar = 'prompt';
       const result = addHomoglyphs(testCases, injectVar);
 
-      expect(result).toHaveLength(testCases.length);
-      expect(result[0].vars!.prompt).not.toBe('Hello World! 123');
-      expect(result[0].vars!.expected).toBe('normal value');
-      expect(result[0].metadata?.strategyId).toBe('homoglyph');
-      expect(result[0].assert?.[0].metric).toBe('original-metric/Homoglyph');
+      expect(result).toEqual([
+        {
+          ...testCases[0],
+          vars: {
+            ...testCases[0].vars,
+            prompt: expect.not.stringMatching(/^Hello World! 123$/),
+          },
+          metadata: {
+            strategyId: 'homoglyph',
+          },
+          assert: [
+            {
+              type: 'equals',
+              value: 'expected value',
+              metric: 'original-metric/Homoglyph',
+            },
+          ],
+        },
+      ]);
     });
 
     it('should handle undefined vars', () => {
@@ -89,7 +120,7 @@ describe('homoglyph strategy', () => {
       const testCase: TestCase = { vars: { prompt: longString } };
       const result = addHomoglyphs([testCase], 'prompt');
       expect(result[0].vars!.prompt).not.toBe(longString);
-      expect(result[0].vars!.prompt).toBeTruthy();
+      expect(result[0].vars!.prompt).toBe(homoglyphMap['a'].repeat(1000));
     });
 
     it('should handle special characters', () => {
@@ -97,6 +128,42 @@ describe('homoglyph strategy', () => {
       const testCase: TestCase = { vars: { prompt: specialChars } };
       const result = addHomoglyphs([testCase], 'prompt');
       expect(result[0].vars!.prompt).toBe(specialChars);
+    });
+
+    it('should handle null input by converting to string', () => {
+      const testCase: TestCase = { vars: { prompt: null as any } };
+      const result = addHomoglyphs([testCase], 'prompt');
+      expect(result[0].vars!.prompt).toBe(toHomoglyphs('null'));
+    });
+
+    it('should handle numeric input by converting to string', () => {
+      const testCase: TestCase = { vars: { prompt: 12345 } };
+      const result = addHomoglyphs([testCase], 'prompt');
+      expect(result[0].vars!.prompt).toBe(toHomoglyphs('12345'));
+    });
+
+    it('should preserve assertion objects', () => {
+      const testCase: TestCase = {
+        vars: { prompt: 'test' },
+        assert: [
+          { type: 'equals', value: 'expected', metric: 'metric1' },
+          { type: 'contains', value: 'partial', metric: 'metric2' },
+        ],
+      };
+
+      const result = addHomoglyphs([testCase], 'prompt');
+
+      expect(result[0].assert).toEqual([
+        { type: 'equals', value: 'expected', metric: 'metric1/Homoglyph' },
+        { type: 'contains', value: 'partial', metric: 'metric2/Homoglyph' },
+      ]);
+    });
+
+    it('should handle test cases with no assertions', () => {
+      const testCase: TestCase = { vars: { prompt: 'test' } };
+      const result = addHomoglyphs([testCase], 'prompt');
+
+      expect(result[0].assert).toBeUndefined();
     });
   });
 });
