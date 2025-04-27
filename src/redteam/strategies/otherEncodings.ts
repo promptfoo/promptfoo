@@ -3,7 +3,7 @@ import type { TestCase } from '../../types';
 /**
  * Convert text to Morse code
  */
-function toMorseCode(text: string): string {
+export function toMorseCode(text: string): string {
   const morseMap: Record<string, string> = {
     a: '.-',
     b: '-...',
@@ -76,7 +76,7 @@ function toMorseCode(text: string): string {
 /**
  * Convert text to Pig Latin
  */
-function toPigLatin(text: string): string {
+export function toPigLatin(text: string): string {
   // Split by spaces to get words
   return text
     .split(' ')
@@ -175,5 +175,3 @@ export function addOtherEncodings(
     },
   }));
 }
-
-export { toMorseCode, toPigLatin };
