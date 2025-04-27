@@ -12,7 +12,7 @@ import RedteamPandamoniumProvider from '../redteam/providers/pandamonium';
 import { ServerToolDiscoveryMultiProvider } from '../redteam/providers/toolDiscoveryMulti';
 import type { LoadApiProviderContext } from '../types';
 import type { ApiProvider, ProviderOptions } from '../types/providers';
-import { getResolvedRelativePath, isJavascriptFile } from '../util/file';
+import { isJavascriptFile } from '../util/file';
 import { AI21ChatCompletionProvider } from './ai21';
 import { AlibabaChatCompletionProvider, AlibabaEmbeddingProvider } from './alibaba';
 import { AnthropicCompletionProvider } from './anthropic/completion';
@@ -74,6 +74,7 @@ import {
   ReplicateProvider,
   ReplicateImageProvider,
 } from './replicate';
+import { createScriptBasedProviderFactory } from './scriptBasedProvider';
 import { ScriptCompletionProvider } from './scriptCompletion';
 import { SequenceProvider } from './sequence';
 import { SimulatedUser } from './simulatedUser';
@@ -94,6 +95,9 @@ interface ProviderFactory {
 }
 
 export const providerMap: ProviderFactory[] = [
+  createScriptBasedProviderFactory('exec', null, ScriptCompletionProvider),
+  createScriptBasedProviderFactory('golang', 'go', GolangProvider),
+  createScriptBasedProviderFactory('python', 'py', PythonProvider),
   {
     test: (providerPath: string) => providerPath.startsWith('adaline:'),
     create: async (
@@ -441,22 +445,6 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
-    test: (providerPath: string) => providerPath.startsWith('exec:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      // Load script module
-      const scriptPath = providerPath.split(':')[1];
-      // Resolve relative paths against context.basePath or current working directory
-      // If using a cloud config, always use process.cwd() instead of context.basePath
-      const isCloudConfig = providerOptions.config?.isCloudConfig === true;
-      const resolvedPath = getResolvedRelativePath(scriptPath, context.basePath, isCloudConfig);
-      return new ScriptCompletionProvider(resolvedPath, providerOptions);
-    },
-  },
-  {
     test: (providerPath: string) => providerPath.startsWith('f5:'),
     create: async (
       providerPath: string,
@@ -530,26 +518,6 @@ export const providerMap: ProviderFactory[] = [
           apiKeyEnvar: 'GITHUB_TOKEN',
         },
       });
-    },
-  },
-  {
-    test: (providerPath: string) =>
-      providerPath.startsWith('golang:') ||
-      (providerPath.startsWith('file://') &&
-        (providerPath.endsWith('.go') || providerPath.includes('.go:'))),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      const scriptPath = providerPath.startsWith('file://')
-        ? providerPath.slice('file://'.length)
-        : providerPath.split(':').slice(1).join(':');
-      // Resolve relative paths against context.basePath or current working directory
-      // If using a cloud config, always use process.cwd() instead of context.basePath
-      const isCloudConfig = providerOptions.config?.isCloudConfig === true;
-      const resolvedPath = getResolvedRelativePath(scriptPath, context.basePath, isCloudConfig);
-      return new GolangProvider(resolvedPath, providerOptions);
     },
   },
   {
@@ -1143,26 +1111,6 @@ export const providerMap: ProviderFactory[] = [
       throw new Error(
         `Invalid Huggingface provider path: ${providerPath}. Use one of the following providers: huggingface:feature-extraction:<model name>, huggingface:text-generation:<model name>, huggingface:text-classification:<model name>, huggingface:token-classification:<model name>`,
       );
-    },
-  },
-  {
-    test: (providerPath: string) =>
-      providerPath.startsWith('python:') ||
-      (providerPath.startsWith('file://') &&
-        (providerPath.endsWith('.py') || providerPath.includes('.py:'))),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      const scriptPath = providerPath.startsWith('file://')
-        ? providerPath.slice('file://'.length)
-        : providerPath.split(':').slice(1).join(':');
-      // Resolve relative paths against context.basePath or current working directory
-      // If using a cloud config, always use process.cwd() instead of context.basePath
-      const isCloudConfig = providerOptions.config?.isCloudConfig === true;
-      const resolvedPath = getResolvedRelativePath(scriptPath, context.basePath, isCloudConfig);
-      return new PythonProvider(resolvedPath, providerOptions);
     },
   },
   {
