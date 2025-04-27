@@ -13,6 +13,7 @@ import { addCrescendo } from './crescendo';
 import { addGcgTestCases } from './gcg';
 import { addGoatTestCases } from './goat';
 import { addHexEncoding } from './hex';
+import { addHomoglyphs } from './homoglyph';
 import { addIterativeJailbreaks } from './iterative';
 import { addLeetspeak } from './leetspeak';
 import { addLikertTestCases } from './likert';
@@ -42,6 +43,15 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding Base64 encoding to ${testCases.length} test cases`);
       const newTestCases = addBase64Encoding(testCases, injectVar);
       logger.debug(`Added ${newTestCases.length} Base64 encoded test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'homoglyph',
+    action: async (testCases, injectVar) => {
+      logger.debug(`Adding Homoglyph encoding to ${testCases.length} test cases`);
+      const newTestCases = addHomoglyphs(testCases, injectVar);
+      logger.debug(`Added ${newTestCases.length} Homoglyph encoded test cases`);
       return newTestCases;
     },
   },
