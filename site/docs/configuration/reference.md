@@ -208,7 +208,7 @@ interface ProviderOptions {
   id?: ProviderId;
   config?: any;
 
-  // A label is required when running a redteam
+  // A label is required when running a red team
   // It can be used to uniquely identify targets even if the provider id changes.
   label?: string;
 

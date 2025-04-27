@@ -4,7 +4,7 @@ sidebar_label: Retry Failed Tests
 
 # Retry Strategy
 
-The retry strategy automatically incorporates previously failed test cases into your test suite, creating a regression testing system for target LLM systems. Each redteam scan learns from past failures, making promptfoo increasingly effective at finding vulnerabilities in your target. The retry strategy runs first in your pipeline, allowing other strategies to build upon these historical test cases.
+The retry strategy automatically incorporates previously failed test cases into your test suite, creating a regression testing system for target LLM systems. Each red team scan learns from past failures, making promptfoo increasingly effective at finding vulnerabilities in your target. The retry strategy runs first in your pipeline, allowing other strategies to build upon these historical test cases.
 
 :::note
 The retry strategy is target-specific - it only retries test cases that previously failed against the same target system (identified by target label). This ensures that the retried test cases are relevant to the specific target's known vulnerabilities.
@@ -73,7 +73,7 @@ And previously some hate speech tests failed against your target, the retry stra
 
 ## Best Practices
 
-1. Review and grade your most recent redteam scan before generating new test cases
+1. Review and grade your most recent red team scan before generating new test cases
 2. Use it in combination with other strategies for maximum coverage
 
 :::info
