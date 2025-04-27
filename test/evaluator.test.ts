@@ -8,6 +8,22 @@ import Eval from '../src/models/eval';
 import { type ApiProvider, type TestSuite, type Prompt, ResultFailureReason } from '../src/types';
 import { sleep } from '../src/util/time';
 
+jest.mock('../src/util/fileReference', () => ({
+  ...jest.requireActual('../src/util/fileReference'),
+  processConfigFileReferences: jest.fn().mockImplementation(async (config) => {
+    if (
+      typeof config === 'object' &&
+      config !== null &&
+      config.var1 === 'file://test/fixtures/test_file.txt'
+    ) {
+      return {
+        var1: '<h1>Sample Report</h1><p>This is a test report with some data for the year 2023.</p>',
+      };
+    }
+    return config;
+  }),
+}));
+
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
 }));
@@ -241,6 +257,10 @@ describe('evaluator', () => {
   });
 
   it('evaluate with vars from file', async () => {
+    const processConfigFileReferences = jest.mocked(
+      (await import('../src/util/fileReference')).processConfigFileReferences,
+    );
+
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt {{ var1 }}')],
@@ -254,7 +274,18 @@ describe('evaluator', () => {
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
+    expect(processConfigFileReferences).toHaveBeenCalledWith({
+      var1: 'file://test/fixtures/test_file.txt',
+    });
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(mockApiProvider.callApi).toHaveBeenCalledWith(
+      'Test prompt <h1>Sample Report</h1><p>This is a test report with some data for the year 2023.</p>',
+      expect.objectContaining({
+        vars: {
+          var1: '<h1>Sample Report</h1><p>This is a test report with some data for the year 2023.</p>',
+        },
+      }),
+    );
     expect(summary.stats.successes).toBe(1);
     expect(summary.stats.failures).toBe(0);
     expect(summary.stats.tokenUsage).toEqual({

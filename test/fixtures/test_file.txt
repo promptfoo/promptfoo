@@ -1,1 +1,0 @@
-<h1>Sample Report</h1><p>This is a test report with some data for the year 2023.</p>
