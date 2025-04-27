@@ -1,9 +1,11 @@
 import React, { useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
+import EnterpriseBanner from '@app/components/EnterpriseBanner';
 import { ShiftKeyProvider } from '@app/contexts/ShiftKeyContext';
 import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
+import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import type { SharedResults, ResultLightweightWithLabel, ResultsFile } from '@promptfoo/types';
 import { io as SocketIOClient } from 'socket.io-client';
@@ -210,9 +212,17 @@ export default function Eval({
       </div>
     );
   }
+  
+  // Check if this is a redteam eval
+  const isRedteam = config?.redteam !== undefined;
 
   return (
     <ShiftKeyProvider>
+      {isRedteam && evalId && (
+        <Box sx={{ mb: 2, mt: 2, mx: 2 }}>
+          <EnterpriseBanner evalId={evalId} />
+        </Box>
+      )}
       <ResultsView
         defaultEvalId={defaultEvalId}
         recentEvals={recentEvals}
