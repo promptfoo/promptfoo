@@ -734,7 +734,7 @@ assert:
 
 METEOR (Metric for Evaluation of Translation with Explicit ORdering) is an automatic metric for evaluating machine-generated text against reference text. It's particularly useful for assessing translation quality and text generation accuracy.
 
-> **Note:** METEOR requires the `natural` package. If you want to use METEOR assertions, install it using: `npm install natural@^8.0.1`
+> **Note:** METEOR requires the `natural` package. If you want to use METEOR assertions, install it using: `npm install natural@latest`
 
 #### How METEOR Works
 
