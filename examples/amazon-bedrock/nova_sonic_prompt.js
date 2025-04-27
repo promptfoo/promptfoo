@@ -7,8 +7,8 @@
  * @property {string} [audio_file] - Path to the audio file to be processed
  * @property {Array<Object>} [_conversation] - Previous conversation history
  * @property {string} [_conversation[].output] - The assistant's previous response
- * @property {Object} [_conversation[].outputMetadata] - Metadata about the previous response
- * @property {string} [_conversation[].outputMetadata.userTranscript] - Transcript of the user's previous input
+ * @property {Object} [_conversation[].metadata] - Metadata about the previous response
+ * @property {string} [_conversation[].metadata.userTranscript] - Transcript of the user's previous input
  *
  * @param {Object} provider - The provider configuration
  * @returns {Object} The formatted conversation for Nova Sonic
@@ -36,7 +36,7 @@ module.exports = async function ({ vars, provider }) {
         content: [
           {
             type: 'input_text',
-            text: completion?.outputMetadata?.userTranscript || '',
+            text: completion?.metadata?.userTranscript || '',
           },
         ],
       });

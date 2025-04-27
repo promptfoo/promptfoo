@@ -280,7 +280,7 @@ export async function runEval({
         prompt: renderedJson || renderedPrompt,
         input: conversationLastInput || renderedJson || renderedPrompt,
         output: response.output || '',
-        outputMetadata: response.metadata,
+        metadata: response.metadata,
       });
     }
 

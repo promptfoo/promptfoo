@@ -123,7 +123,7 @@ export type OutputConfig = z.infer<typeof OutputConfigSchema>;
 
 export type EvalConversations = Record<
   string,
-  { prompt: string | object; input: string; output: string | object; outputMetadata?: object }[]
+  { prompt: string | object; input: string; output: string | object; metadata?: object }[]
 >;
 
 export type EvalRegisters = Record<string, string | object>;
