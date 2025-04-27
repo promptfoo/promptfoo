@@ -3455,3 +3455,44 @@ describe('containsXml', () => {
     expect(result.isValid).toBe(true);
   });
 });
+
+// Special test for METEOR
+describe('METEOR assertion', () => {
+  beforeEach(() => {
+    // Mock the meteor module and handler
+    jest.mock('../../src/assertions/meteor', () => ({
+      handleMeteorAssertion: jest.fn().mockResolvedValue({
+        pass: true,
+        score: 0.85,
+        reason: 'METEOR test passed',
+      }),
+    }));
+    jest.resetModules();
+  });
+
+  afterEach(() => {
+    jest.resetModules();
+    jest.unmock('../../src/assertions/meteor');
+  });
+
+  it('should handle METEOR assertion', async () => {
+    // Import the mocked runAssertion function
+    const { runAssertion } = await import('../../src/assertions');
+
+    const result = await runAssertion({
+      prompt: 'Test prompt',
+      provider: new OpenAiChatCompletionProvider('echo'),
+      assertion: {
+        type: 'meteor',
+        value: 'Expected output',
+        threshold: 0.7,
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Actual output' },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(0.85);
+    expect(result.reason).toBe('METEOR test passed');
+  });
+});

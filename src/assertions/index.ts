@@ -66,7 +66,6 @@ import { handleContainsJson, handleIsJson } from './json';
 import { handleLatency } from './latency';
 import { handleLevenshtein } from './levenshtein';
 import { handleLlmRubric } from './llmRubric';
-import { handleMeteorAssertion } from './meteor';
 import { handleModelGradedClosedQa } from './modelGradedClosedQa';
 import { handleModeration } from './moderation';
 import { handleIsValidOpenAiToolsCall } from './openai';
@@ -267,7 +266,23 @@ export async function runAssertion({
     latency: handleLatency,
     levenshtein: handleLevenshtein,
     'llm-rubric': handleLlmRubric,
-    meteor: handleMeteorAssertion,
+    meteor: async (params: AssertionParams) => {
+      try {
+        const { handleMeteorAssertion } = await import('./meteor');
+        return handleMeteorAssertion(params);
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('Cannot find module')) {
+          return {
+            pass: false,
+            score: 0,
+            reason:
+              'METEOR assertion requires the natural package. Please install it using: npm install natural@^8.0.1',
+            assertion: params.assertion,
+          };
+        }
+        throw error;
+      }
+    },
     'model-graded-closedqa': handleModelGradedClosedQa,
     'model-graded-factuality': handleFactuality,
     moderation: handleModeration,
