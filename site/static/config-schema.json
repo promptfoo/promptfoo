@@ -532,6 +532,7 @@
                                               "latency",
                                               "levenshtein",
                                               "llm-rubric",
+                                              "meteor",
                                               "model-graded-closedqa",
                                               "model-graded-factuality",
                                               "moderation",
