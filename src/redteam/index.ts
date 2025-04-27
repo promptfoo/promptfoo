@@ -5,6 +5,7 @@ import Table from 'cli-table3';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import cliState from '../cliState';
+import { getEnvString } from '../envars';
 import logger, { getLogLevel } from '../logger';
 import { isProviderOptions, type TestCase, type TestCaseWithPlugin } from '../types';
 import { checkRemoteHealth } from '../util/apiHealth';
@@ -557,7 +558,7 @@ export async function synthesize({
 
   const showProgressBar =
     !isWebUI &&
-    process.env.LOG_LEVEL !== 'debug' &&
+    getEnvString('LOG_LEVEL') !== 'debug' &&
     getLogLevel() !== 'debug' &&
     showProgressBarOverride !== false;
   if (showProgressBar) {

@@ -144,7 +144,7 @@ export abstract class SageMakerGenericProvider {
 
         this.sagemakerRuntime = new SageMakerRuntimeClient({
           region: this.getRegion(),
-          maxAttempts: Number(process.env.AWS_SAGEMAKER_MAX_RETRIES || '3'),
+          maxAttempts: getEnvInt('AWS_SAGEMAKER_MAX_RETRIES', 3),
           retryMode: 'adaptive',
           ...(credentials ? { credentials } : {}),
         });

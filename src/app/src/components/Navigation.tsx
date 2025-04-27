@@ -103,7 +103,7 @@ function CreateDropdown() {
           Eval
         </MenuItem>
         <MenuItem onClick={handleClose} component={Link} to="/redteam/setup">
-          Redteam
+          Red team
         </MenuItem>
       </Menu>
     </>

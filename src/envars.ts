@@ -1,22 +1,20 @@
+import cliState from './cliState';
 import type { EnvOverrides } from './types/env';
 
 // Define the supported environment variables and their types
 export type EnvVars = {
+  //=========================================================================
+  // Core promptfoo configuration
+  //=========================================================================
   LOG_LEVEL?: 'error' | 'warn' | 'info' | 'debug';
-  NEXT_PUBLIC_PROMPTFOO_BASE_URL?: string;
-  NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL?: string;
-  PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY?: number;
-  PROMPTFOO_AUTHOR?: string;
+  NODE_ENV?: string;
+  npm_execpath?: string;
+  npm_lifecycle_script?: string;
+
+  //=========================================================================
+  // promptfoo feature flags
+  //=========================================================================
   PROMPTFOO_CACHE_ENABLED?: boolean;
-  PROMPTFOO_CACHE_MAX_FILE_COUNT?: number;
-  PROMPTFOO_CACHE_MAX_SIZE?: number;
-  PROMPTFOO_CACHE_PATH?: string;
-  PROMPTFOO_CACHE_TTL?: number;
-  PROMPTFOO_CACHE_TYPE?: 'memory' | 'disk';
-  PROMPTFOO_CONFIG_DIR?: string;
-  PROMPTFOO_CSV_DELIMITER?: string;
-  PROMPTFOO_CSV_STRICT?: boolean;
-  PROMPTFOO_DELAY_MS?: number;
   PROMPTFOO_DISABLE_AJV_STRICT_MODE?: boolean;
   PROMPTFOO_DISABLE_CONVERSATION_VAR?: boolean;
   PROMPTFOO_DISABLE_ERROR_LOG?: boolean;
@@ -36,10 +34,39 @@ export type EnvVars = {
   PROMPTFOO_DISABLE_VAR_EXPANSION?: boolean;
   PROMPTFOO_ENABLE_DATABASE_LOGS?: boolean;
   PROMPTFOO_EXPERIMENTAL?: boolean;
+  PROMPTFOO_NO_TESTCASE_ASSERT_WARNING?: boolean;
+  PROMPTFOO_RETRY_5XX?: boolean;
+  PROMPTFOO_SELF_HOSTED?: boolean;
+  PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES?: boolean;
+  PROMPTFOO_STRICT_FILES?: boolean;
+  PROMPTFOO_STRIP_GRADING_RESULT?: boolean;
+  PROMPTFOO_STRIP_METADATA?: boolean;
+  PROMPTFOO_STRIP_PROMPT_TEXT?: boolean;
+  PROMPTFOO_STRIP_RESPONSE_OUTPUT?: boolean;
+  PROMPTFOO_STRIP_TEST_VARS?: boolean;
+  PROMPTFOO_TELEMETRY_DEBUG?: boolean;
+
+  //=========================================================================
+  // promptfoo configuration options
+  //=========================================================================
+  PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY?: number;
+  PROMPTFOO_AUTHOR?: string;
+  PROMPTFOO_CACHE_MAX_FILE_COUNT?: number;
+  PROMPTFOO_CACHE_MAX_SIZE?: number;
+  PROMPTFOO_CACHE_PATH?: string;
+  PROMPTFOO_CACHE_TTL?: number;
+  PROMPTFOO_CACHE_TYPE?: 'memory' | 'disk';
+  PROMPTFOO_CLOUD_API_URL?: string;
+  PROMPTFOO_CONFIG_DIR?: string;
+  PROMPTFOO_CSV_DELIMITER?: string;
+  PROMPTFOO_CSV_STRICT?: boolean;
+  PROMPTFOO_DELAY_MS?: number;
   PROMPTFOO_FAILED_TEST_EXIT_CODE?: number;
+  PROMPTFOO_INSECURE_SSL?: boolean | string;
+  PROMPTFOO_JAILBREAK_TEMPERATURE?: string;
   PROMPTFOO_LOG_DIR?: string;
   PROMPTFOO_MAX_HARMFUL_TESTS_PER_REQUEST?: number;
-  PROMPTFOO_NO_TESTCASE_ASSERT_WARNING?: boolean;
+  PROMPTFOO_NUM_JAILBREAK_ITERATIONS?: string;
   PROMPTFOO_PASS_RATE_THRESHOLD?: number;
   PROMPTFOO_PROMPT_SEPARATOR?: string;
   PROMPTFOO_PYTHON?: string;
@@ -48,30 +75,85 @@ export type EnvVars = {
   PROMPTFOO_REMOTE_GENERATION_URL?: string;
   PROMPTFOO_REQUEST_BACKOFF_MS?: number;
   PROMPTFOO_REQUIRE_JSON_PROMPTS?: boolean;
-  PROMPTFOO_RETRY_5XX?: boolean;
-  PROMPTFOO_SELF_HOSTED?: boolean;
   PROMPTFOO_SHARING_APP_BASE_URL?: string;
   PROMPTFOO_SHARE_CHUNK_SIZE?: number;
-  PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES?: boolean;
-  PROMPTFOO_STRICT_FILES?: boolean;
-  PROMPTFOO_STRIP_PROMPT_TEXT?: boolean;
-  PROMPTFOO_STRIP_RESPONSE_OUTPUT?: boolean;
-  PROMPTFOO_STRIP_TEST_VARS?: boolean;
-  PROMPTFOO_STRIP_GRADING_RESULT?: boolean;
-  PROMPTFOO_STRIP_METADATA?: boolean;
-  PROMPTFOO_TELEMETRY_DEBUG?: boolean;
   PROMPTFOO_UNALIGNED_INFERENCE_ENDPOINT?: string;
+  PROMPTFOO_CA_CERT_PATH?: string;
+
+  //=========================================================================
+  // HTTP proxy settings
+  //=========================================================================
+  ALL_PROXY?: string;
+  all_proxy?: string;
+  HTTP_PROXY?: string;
+  http_proxy?: string;
+  HTTPS_PROXY?: string;
+  https_proxy?: string;
+  NO_PROXY?: string;
+  no_proxy?: string;
+
+  //=========================================================================
+  // System and network settings
+  //=========================================================================
+  API_HOST?: string;
+  API_PORT?: string | number;
+  DISPLAY?: string;
+  IS_TESTING?: string | boolean;
+  JEST_WORKER_ID?: string;
+  NODE_EXTRA_CA_CERTS?: string;
+  NODE_TLS_REJECT_UNAUTHORIZED?: string;
+  POSTHOG_KEY?: string;
   REQUEST_TIMEOUT_MS?: number;
   RESULT_HISTORY_LENGTH?: number;
   WEBHOOK_TIMEOUT?: number;
 
-  // 3rd party
+  //=========================================================================
+  // UI configuration
+  //=========================================================================
+  /**
+   * @deprecated Use PROMPTFOO_REMOTE_APP_BASE_URL instead
+   */
+  NEXT_PUBLIC_PROMPTFOO_BASE_URL?: string;
+  /**
+   * @deprecated Use PROMPTFOO_REMOTE_API_BASE_URL instead
+   */
+  NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL?: string;
+  VITE_PUBLIC_BASENAME?: string;
+  VITE_PUBLIC_PROMPTFOO_APP_SHARE_URL?: string;
+  VITE_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL?: string;
+  VITE_PUBLIC_PROMPTFOO_SHARE_API_URL?: string;
+
+  //=========================================================================
+  // Continuous Integration
+  //=========================================================================
+  APPVEYOR?: boolean;
+  BITBUCKET_COMMIT?: boolean;
+  BUDDY?: boolean;
+  BUILDKITE?: boolean;
+  CI?: boolean;
+  CIRCLECI?: boolean;
+  CODEBUILD_BUILD_ID?: boolean;
+  GITHUB_ACTIONS?: boolean;
+  GITLAB_CI?: boolean;
+  JENKINS?: boolean;
+  TEAMCITY_VERSION?: boolean;
+  TF_BUILD?: boolean;
+  TRAVIS?: boolean;
+
+  //=========================================================================
+  // Provider-specific settings
+  //=========================================================================
+  // AI21
   AI21_API_BASE_URL?: string;
   AI21_API_KEY?: string;
+
+  // Anthropic
   ANTHROPIC_API_KEY?: string;
   ANTHROPIC_MAX_TOKENS?: number;
   ANTHROPIC_STOP?: string;
   ANTHROPIC_TEMPERATURE?: number;
+
+  // AWS Bedrock
   AWS_BEDROCK_FREQUENCY_PENALTY?: string;
   AWS_BEDROCK_MAX_GEN_LEN?: number;
   AWS_BEDROCK_MAX_NEW_TOKENS?: number;
@@ -82,29 +164,75 @@ export type EnvVars = {
   AWS_BEDROCK_STOP?: string;
   AWS_BEDROCK_TEMPERATURE?: number;
   AWS_BEDROCK_TOP_P?: string;
+
+  // Azure OpenAI auth params
+  AZURE_AUTHORITY_HOST?: string;
+  AZURE_CLIENT_ID?: string;
+  AZURE_CLIENT_SECRET?: string;
+  AZURE_DEPLOYMENT_NAME?: string;
+  AZURE_EMBEDDING_DEPLOYMENT_NAME?: string;
+  AZURE_OPENAI_DEPLOYMENT_NAME?: string;
+  AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME?: string;
+  AZURE_TENANT_ID?: string;
+  AZURE_TOKEN_SCOPE?: string;
+
+  // Azure Content Safety params
+  AZURE_CONTENT_SAFETY_API_KEY?: string;
+  AZURE_CONTENT_SAFETY_API_VERSION?: string;
+  AZURE_CONTENT_SAFETY_ENDPOINT?: string;
+
+  // Cohere
   COHERE_CLIENT_NAME?: string;
   COHERE_K?: string;
   COHERE_MAX_TOKENS?: string;
   COHERE_P?: string;
   COHERE_TEMPERATURE?: string;
+
+  // Cloudflare
+  CLOUDFLARE_ACCOUNT_ID?: string;
+  CLOUDFLARE_API_KEY?: string;
+
+  // CDP
+  CDP_DOMAIN?: string;
+
+  // FAL
   FAL_KEY?: string;
+
+  // Groq
   GROQ_API_KEY?: string;
+
+  // Helicone
   HELICONE_API_KEY?: string;
+
+  // Hugging Face
   /** @deprecated Use HF_TOKEN instead */
   HF_API_TOKEN?: string;
   HF_TOKEN?: string;
+
+  // Langfuse
   LANGFUSE_HOST?: string;
   LANGFUSE_PUBLIC_KEY?: string;
   LANGFUSE_SECRET_KEY?: string;
+
+  // LLaMa
   LLAMA_BASE_URL?: string;
+
+  // Local AI
   LOCALAI_BASE_URL?: string;
   LOCALAI_TEMPERATURE?: number;
+
+  // Mistral
   MISTRAL_MAX_TOKENS?: string;
   MISTRAL_TEMPERATURE?: string;
   MISTRAL_TOP_K?: string;
   MISTRAL_TOP_P?: string;
+
+  // Ollama
   OLLAMA_API_KEY?: string;
   OLLAMA_BASE_URL?: string;
+
+  // OpenAI
+  OPENAI_API_KEY?: string;
   OPENAI_BEST_OF?: number;
   OPENAI_FREQUENCY_PENALTY?: number;
   OPENAI_MAX_COMPLETION_TOKENS?: number;
@@ -113,7 +241,15 @@ export type EnvVars = {
   OPENAI_STOP?: string;
   OPENAI_TEMPERATURE?: number;
   OPENAI_TOP_P?: number;
+
+  // OpenRouter
+  OPENROUTER_API_KEY?: string;
+
+  // Portkey
+  PORTKEY_API_BASE_URL?: string;
   PORTKEY_API_KEY?: string;
+
+  // Replicate
   REPLICATE_MAX_LENGTH?: number;
   REPLICATE_MAX_NEW_TOKENS?: number;
   REPLICATE_REPETITION_PENALTY?: number;
@@ -123,51 +259,26 @@ export type EnvVars = {
   REPLICATE_TEMPERATURE?: number;
   REPLICATE_TOP_K?: number;
   REPLICATE_TOP_P?: number;
+
+  // Together AI
+  TOGETHER_API_KEY?: string;
+
+  // Vertex AI
   VERTEX_API_VERSION?: string;
+
+  // Voyage AI
   VOYAGE_API_BASE_URL?: string;
   VOYAGE_API_KEY?: string;
+
+  // Watson X
   WATSONX_AI_APIKEY?: string;
   WATSONX_AI_AUTH_TYPE?: string;
   WATSONX_AI_BEARER_TOKEN?: string;
   WATSONX_AI_PROJECT_ID?: string;
-
-  // node/npm
-  NODE_ENV?: string;
-  npm_execpath?: string;
-
-  // CI
-  CI?: boolean;
-  CIRCLECI?: boolean;
-  GITHUB_ACTIONS?: boolean;
-  GITLAB_CI?: boolean;
-  JENKINS?: boolean;
-  TRAVIS?: boolean;
-  APPVEYOR?: boolean;
-  CODEBUILD_BUILD_ID?: boolean;
-  TF_BUILD?: boolean;
-  BITBUCKET_COMMIT?: boolean;
-  BUDDY?: boolean;
-  BUILDKITE?: boolean;
-  TEAMCITY_VERSION?: boolean;
-
-  // Azure OpenAI auth params
-  AZURE_CLIENT_SECRET?: string;
-  AZURE_CLIENT_ID?: string;
-  AZURE_TENANT_ID?: string;
-  AZURE_AUTHORITY_HOST?: string;
-  AZURE_TOKEN_SCOPE?: string;
-  AZURE_DEPLOYMENT_NAME?: string;
-  AZURE_EMBEDDING_DEPLOYMENT_NAME?: string;
-  AZURE_OPENAI_DEPLOYMENT_NAME?: string;
-  AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME?: string;
-
-  // Azure Content Safety params
-  AZURE_CONTENT_SAFETY_ENDPOINT?: string;
-  AZURE_CONTENT_SAFETY_API_VERSION?: string;
-  AZURE_CONTENT_SAFETY_API_KEY?: string;
 } & EnvOverrides;
 
-type EnvVarKey = keyof EnvVars;
+// Allow string access to any key for environment variables not explicitly listed
+export type EnvVarKey = keyof EnvVars;
 
 /**
  * Get an environment variable.
@@ -178,7 +289,17 @@ type EnvVarKey = keyof EnvVars;
 export function getEnvString(key: EnvVarKey): string | undefined;
 export function getEnvString(key: EnvVarKey, defaultValue: string): string;
 export function getEnvString(key: EnvVarKey, defaultValue?: string): string | undefined {
-  const value = process.env[key];
+  // First check if the key exists in CLI state env config
+  if (cliState.config?.env && typeof cliState.config.env === 'object') {
+    // Handle both ProviderEnvOverridesSchema and Record<string, string|number|boolean> type
+    const envValue = cliState.config.env[key as keyof typeof cliState.config.env];
+    if (envValue !== undefined) {
+      return String(envValue);
+    }
+  }
+
+  // Fallback to process.env
+  const value = process.env[key as string];
   if (value === undefined) {
     return defaultValue;
   }
@@ -246,6 +367,10 @@ export function getEnvFloat(key: EnvVarKey, defaultValue?: number): number | und
   return defaultValue;
 }
 
+/**
+ * Check if the application is running in a CI environment.
+ * @returns True if running in a CI environment, false otherwise.
+ */
 export function isCI() {
   return (
     getEnvBool('CI') ||

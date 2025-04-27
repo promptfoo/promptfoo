@@ -66,12 +66,12 @@ We offer two deployment models:
 <small>⚠️ indicates limited quantity in Community version. [Contact us](https://www.promptfoo.dev/contact/) for more information.</small>
 </p>
 
-Both Enterprise products support [sharing evaluation results](/docs/usage/sharing) through shareable URLs, with privacy controls that match your deployment model. Enterprise users can share within their organization, while Enterprise On-Prem users can configure self-hosted sharing for complete control over data.
+Both Enterprise products support [sharing results](/docs/usage/sharing) through shareable URLs, with privacy controls that match your deployment model. Enterprise users can share within their organization, while Enterprise On-Prem users can configure self-hosted sharing for complete control over data.
 
 ## Connection with Open-Source
 
-Both Promptfoo Enterprise and Promptfoo Enterprise On-Prem are fully compatible with the open-source version of Promptfoo. This means that you can use your existing open-source Promptfoo evals with either solution.
+Both Promptfoo Enterprise and Promptfoo Enterprise On-Prem are fully compatible with the open-source version of Promptfoo. This means that you can use your existing open-source Promptfoo results with either solution.
 
-## Contacting Sales
+## Learn more
 
 If you are interested in learning more about Promptfoo Enterprise, please [contact us](https://www.promptfoo.dev/contact/).

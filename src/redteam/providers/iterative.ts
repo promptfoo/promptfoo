@@ -1,4 +1,5 @@
 import dedent from 'dedent';
+import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
@@ -440,12 +441,7 @@ class RedteamIterativeProvider implements ApiProvider {
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;
 
-    this.numIterations = Number.parseInt(
-      process.env.PROMPTFOO_NUM_JAILBREAK_ITERATIONS ||
-        (config.numIterations as string | undefined) ||
-        '10',
-      10,
-    );
+    this.numIterations = getEnvInt('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', 4);
 
     // Redteam provider can be set from the config.
 

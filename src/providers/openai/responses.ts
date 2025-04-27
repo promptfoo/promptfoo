@@ -1,6 +1,6 @@
 import { OpenAiGenericProvider } from '.';
 import { fetchWithCache } from '../../cache';
-import { getEnvFloat, getEnvInt } from '../../envars';
+import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
@@ -144,8 +144,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
       ...(temperature ? { temperature } : {}),
       ...(instructions ? { instructions } : {}),
-      ...(config.top_p !== undefined || process.env.OPENAI_TOP_P
-        ? { top_p: config.top_p ?? Number.parseFloat(process.env.OPENAI_TOP_P || '1') }
+      ...(config.top_p !== undefined || getEnvString('OPENAI_TOP_P')
+        ? { top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1) }
         : {}),
       ...(config.tools
         ? { tools: maybeLoadToolsFromExternalFile(config.tools, context?.vars) }
