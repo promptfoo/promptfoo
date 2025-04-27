@@ -1,7 +1,7 @@
 import type { TestCase } from '../../types';
 
 // Map of standard characters to homoglyph unicode characters
-const homoglyphMap: { [key: string]: string } = {
+export const homoglyphMap: { [key: string]: string } = {
   a: 'а', // Cyrillic а (U+0430)
   b: 'Ƅ', // Latin small letter b with topbar
   c: 'с', // Cyrillic с (U+0441)
@@ -68,7 +68,7 @@ const homoglyphMap: { [key: string]: string } = {
 /**
  * Convert text to homoglyphs (visually similar Unicode characters)
  */
-function toHomoglyphs(text: string): string {
+export function toHomoglyphs(text: string): string {
   return text
     .split('')
     .map((char) => homoglyphMap[char] || char)
@@ -95,5 +95,3 @@ export function addHomoglyphs(testCases: TestCase[], injectVar: string): TestCas
     },
   }));
 }
-
-export { homoglyphMap, toHomoglyphs };
