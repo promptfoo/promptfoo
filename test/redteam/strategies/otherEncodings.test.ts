@@ -30,7 +30,7 @@ describe('other encodings strategy', () => {
         '.... . .-.. .-.. --- / .-- --- .-. .-.. -.. -.-.-- / .---- ..--- ...--',
       );
       expect(result[0].assert?.[0].metric).toBe('original-metric/Morse');
-      
+
       // Check that other vars are not affected
       expect(result[0].vars!.expected).toBe('normal value');
 
@@ -67,7 +67,7 @@ describe('other encodings strategy', () => {
       const result = addOtherEncodings(testCases, 'prompt', EncodingType.PIG_LATIN);
       expect(result[0].vars!.prompt).toBe('elloHay orldWay! 123');
       expect(result[0].assert?.[0].metric).toBe('original-metric/PigLatin');
-      
+
       // Check that other vars are not affected
       expect(result[0].vars!.expected).toBe('normal value');
 
