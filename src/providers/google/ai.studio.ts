@@ -15,13 +15,70 @@ import { CHAT_MODELS } from './shared';
 import type { CompletionOptions } from './types';
 import {
   loadFile,
-  formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
 } from './util';
-import type { GeminiResponseData } from './util';
+import type {
+  GeminiResponseData,
+} from './util';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
+
+/**
+ * Format candidate contents to extract text and other content parts
+ */
+export function formatCandidateContents(candidate: any): any[] {
+  if (!candidate.content || !candidate.content.parts) {
+    return [];
+  }
+
+  const formattedParts: any[] = [];
+
+  for (const part of candidate.content.parts) {
+    if (part.text) {
+      formattedParts.push({ text: part.text });
+    }
+
+    // Handle executable code
+    if (part.executable_code) {
+      formattedParts.push({
+        text: `\n\`\`\`${part.executable_code.language.toLowerCase()}\n${part.executable_code.code}\n\`\`\`\n`,
+      });
+    }
+
+    // Handle code execution results
+    if (part.code_execution_result) {
+      if (part.code_execution_result.outcome === 'OUTCOME_OK') {
+        formattedParts.push({
+          text: `\nOutput:\n\`\`\`\n${part.code_execution_result.output}\n\`\`\`\n`,
+        });
+      } else {
+        formattedParts.push({
+          text: `\nError:\n\`\`\`\n${part.code_execution_result.output}\n\`\`\`\n`,
+        });
+      }
+    }
+
+    // Handle function call
+    if (part.functionCall) {
+      try {
+        const functionCall = {
+          name: part.functionCall.name,
+          args: part.functionCall.args,
+        };
+        formattedParts.push({
+          text: `\n\nFunction call: ${JSON.stringify(functionCall, null, 2)}\n`,
+        });
+      } catch (_) {
+        formattedParts.push({
+          text: `\n\nFunction call: ${JSON.stringify(part.functionCall, null, 2)}\n`,
+        });
+      }
+    }
+  }
+
+  return formattedParts;
+}
 
 class AIStudioGenericProvider implements ApiProvider {
   modelName: string;

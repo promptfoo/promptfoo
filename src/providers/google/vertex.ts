@@ -14,7 +14,11 @@ import type {
 import type { EnvOverrides } from '../../types/env';
 import { isValidJson } from '../../util/json';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
-import type { ClaudeRequest, ClaudeResponse, CompletionOptions } from './types';
+import type {
+  ClaudeRequest,
+  ClaudeResponse,
+  CompletionOptions,
+} from './types';
 import type {
   GeminiApiResponse,
   GeminiErrorResponse,
@@ -28,8 +32,61 @@ import {
   getGoogleClient,
   loadFile,
   mergeParts,
-  formatCandidateContents,
 } from './util';
+
+// Update the formatCandidateContents function to handle code execution
+export function formatCandidateContents(candidate: any): any[] {
+  if (!candidate.content || !candidate.content.parts) {
+    return [];
+  }
+
+  const formattedParts: any[] = [];
+
+  for (const part of candidate.content.parts) {
+    if (part.text) {
+      formattedParts.push({ text: part.text });
+    }
+
+    // Handle executable code
+    if (part.executable_code) {
+      formattedParts.push({
+        text: `\n\`\`\`${part.executable_code.language.toLowerCase()}\n${part.executable_code.code}\n\`\`\`\n`,
+      });
+    }
+
+    // Handle code execution results
+    if (part.code_execution_result) {
+      if (part.code_execution_result.outcome === 'OUTCOME_OK') {
+        formattedParts.push({
+          text: `\nOutput:\n\`\`\`\n${part.code_execution_result.output}\n\`\`\`\n`,
+        });
+      } else {
+        formattedParts.push({
+          text: `\nError:\n\`\`\`\n${part.code_execution_result.output}\n\`\`\`\n`,
+        });
+      }
+    }
+
+    // Handle function call
+    if (part.functionCall) {
+      try {
+        const functionCall = {
+          name: part.functionCall.name,
+          args: part.functionCall.args,
+        };
+        formattedParts.push({
+          text: `\n\nFunction call: ${JSON.stringify(functionCall, null, 2)}\n`,
+        });
+      } catch (_) {
+        formattedParts.push({
+          text: `\n\nFunction call: ${JSON.stringify(part.functionCall, null, 2)}\n`,
+        });
+      }
+    }
+  }
+
+  return formattedParts;
+}
 
 class VertexGenericProvider implements ApiProvider {
   modelName: string;
