@@ -26,6 +26,7 @@ import { AzureModerationProvider } from './azure/moderation';
 import { BAMProvider } from './bam';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './bedrock';
 import { BrowserProvider } from './browser';
+import { createCerebrasProvider } from './cerebras';
 import { ClouderaAiChatCompletionProvider } from './cloudera';
 import * as CloudflareAiProviders from './cloudflare-ai';
 import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './cohere';
@@ -324,6 +325,19 @@ export const providerMap: ProviderFactory[] = [
           ...providerOptions.config,
           modelType,
         },
+      });
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('cerebras:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createCerebrasProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
       });
     },
   },
