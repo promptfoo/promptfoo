@@ -6,6 +6,7 @@ import { getEnvBool, getEnvString } from './envars';
 import { fetchWithTimeout } from './fetch';
 import { readGlobalConfig } from './globalConfig/globalConfig';
 import logger from './logger';
+import { isLocalDev } from './util/isLocalDev';
 
 export const TelemetryEventSchema = z.object({
   event: z.enum([
@@ -24,18 +25,16 @@ export type TelemetryEvent = z.infer<typeof TelemetryEventSchema>;
 export type TelemetryEventTypes = TelemetryEvent['event'];
 export type EventProperties = TelemetryEvent['properties'];
 
+export const POSTHOG_KEY = 'phc_E5n5uHnDo2eREJL1uqX1cIlbkoRby4yFWt3V94HqRRg';
 const CONSENT_ENDPOINT = 'https://api.promptfoo.dev/consent';
 const EVENTS_ENDPOINT = 'https://a.promptfoo.app';
 const KA_ENDPOINT = 'https://ka.promptfoo.app/';
 
 let posthogClient: PostHog | null = null;
 try {
-  const posthogKey = getEnvString('POSTHOG_KEY');
-  if (posthogKey) {
-    posthogClient = new PostHog(posthogKey, {
-      host: EVENTS_ENDPOINT,
-    });
-  }
+  posthogClient = new PostHog(POSTHOG_KEY, {
+    host: EVENTS_ENDPOINT,
+  });
 } catch {
   posthogClient = null;
 }
@@ -77,7 +76,7 @@ export class Telemetry {
   }
 
   get disabled() {
-    return getEnvBool('PROMPTFOO_DISABLE_TELEMETRY');
+    return getEnvBool('PROMPTFOO_DISABLE_TELEMETRY') || isLocalDev();
   }
 
   private recordTelemetryDisabled() {
