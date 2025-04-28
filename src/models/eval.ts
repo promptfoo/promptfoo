@@ -493,6 +493,7 @@ export default class Eval {
 
   async toResultsFile(): Promise<ResultsFile> {
     const results: ResultsFile = {
+      id: this.id,
       version: this.version(),
       createdAt: new Date(this.createdAt).toISOString(),
       results: await this.toEvaluateSummary(),

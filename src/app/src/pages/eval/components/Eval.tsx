@@ -122,13 +122,10 @@ export default function Eval({
         setTableFromResultsFile(data);
         setConfig(data?.config);
         setAuthor(data?.author || null);
-        fetchRecentFileEvals().then((newRecentEvals) => {
-          if (newRecentEvals && newRecentEvals.length > 0) {
-            setDefaultEvalId(newRecentEvals[0]?.evalId);
-            setEvalId(newRecentEvals[0]?.evalId);
-            console.log('setting default eval id', newRecentEvals[0]?.evalId);
-          }
-        });
+        const latestEvalId = data.id;
+        setDefaultEvalId(latestEvalId);
+        setEvalId(latestEvalId);
+        console.log('setting default eval id', latestEvalId);
       });
 
       socket.on('update', (data) => {
@@ -136,15 +133,10 @@ export default function Eval({
         setTableFromResultsFile(data);
         setConfig(data.config);
         setAuthor(data.author || null);
-        fetchRecentFileEvals().then((newRecentEvals) => {
-          if (newRecentEvals && newRecentEvals.length > 0) {
-            const newId = newRecentEvals[0]?.evalId;
-            if (newId) {
-              setDefaultEvalId(newId);
-              setEvalId(newId);
-            }
-          }
-        });
+        const latestEvalId = data.id;
+        setDefaultEvalId(latestEvalId);
+        setEvalId(latestEvalId);
+        console.log('setting default eval id', latestEvalId);
       });
 
       return () => {
