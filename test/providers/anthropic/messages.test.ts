@@ -182,6 +182,7 @@ describe('AnthropicMessagesProvider', () => {
           ],
           temperature: 0,
           stream: false,
+          tools: [],
           top_p: 0.9,
           custom_param: 'test_value',
         },
@@ -218,6 +219,7 @@ describe('AnthropicMessagesProvider', () => {
           ],
           temperature: 0,
           stream: false,
+          tools: [],
         },
         {},
       );
@@ -260,15 +262,16 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should return cached response for legacy caching behavior', async () => {
+      const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022');
       jest
         .spyOn(provider.anthropic.messages, 'create')
         .mockImplementation()
         .mockResolvedValue({
-          content: [],
-        } as unknown as Anthropic.Messages.Message);
+          content: [{ type: 'text', text: 'Test response' }],
+        } as Anthropic.Messages.Message);
 
       const cacheKey =
-        'anthropic:{"model":"claude-3-5-sonnet-20241022","max_tokens":1024,"messages":[{"role":"user","content":[{"type":"text","text":"What is the forecast in San Francisco?"}]}],"stream":false,"temperature":0,"tools":[{"name":"get_weather","description":"Get the current weather in a given location","input_schema":{"type":"object","properties":{"location":{"type":"string","description":"The city and state, e.g. San Francisco, CA"},"unit":{"type":"string","enum":["celsius","fahrenheit"]}},"required":["location"]}}]}';
+        'anthropic:{"model":"claude-3-5-sonnet-20241022","max_tokens":1024,"messages":[{"role":"user","content":[{"type":"text","text":"What is the forecast in San Francisco?"}]}],"stream":false,"temperature":0}';
 
       await getCache().set(cacheKey, 'Test output');
 
@@ -397,6 +400,7 @@ describe('AnthropicMessagesProvider', () => {
             type: 'enabled',
             budget_tokens: 2048,
           },
+          tools: [],
         },
         {},
       );
@@ -540,6 +544,7 @@ describe('AnthropicMessagesProvider', () => {
             type: 'enabled',
             budget_tokens: 2048,
           },
+          tools: [],
         },
         {},
       );
