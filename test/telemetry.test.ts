@@ -1,4 +1,5 @@
 import { PostHog } from 'posthog-node';
+import type { EnvVarKey } from '../src/envars';
 import { fetchWithTimeout } from '../src/fetch';
 import { Telemetry } from '../src/telemetry';
 
