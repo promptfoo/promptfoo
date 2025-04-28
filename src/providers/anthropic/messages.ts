@@ -7,7 +7,7 @@ import type { ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
 import { maybeLoadToolsFromExternalFile } from '../../util';
 import { MCPClient } from '../mcp/client';
-import type { MCPTool } from '../mcp/types';
+import { transformMCPToolsToAnthropic } from '../mcp/transform';
 import { AnthropicGenericProvider } from './generic';
 import type { AnthropicMessageOptions } from './types';
 import {
@@ -17,20 +17,6 @@ import {
   getTokenUsage,
   ANTHROPIC_MODELS,
 } from './util';
-
-/**
- * Transforms MCP tools into Anthropic's tool format
- */
-function transformMCPTools(tools: MCPTool[]): Anthropic.Tool[] {
-  return tools.map((tool) => ({
-    name: tool.name,
-    description: tool.description,
-    input_schema: {
-      type: 'object',
-      ...tool.inputSchema,
-    },
-  }));
-}
 
 export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   declare config: AnthropicMessageOptions;
@@ -98,7 +84,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     // Get MCP tools if client is initialized
     let mcpTools: Anthropic.Tool[] = [];
     if (this.mcpClient) {
-      mcpTools = transformMCPTools(this.mcpClient.getAllTools());
+      mcpTools = transformMCPToolsToAnthropic(this.mcpClient.getAllTools());
     }
 
     const params: Anthropic.MessageCreateParams = {

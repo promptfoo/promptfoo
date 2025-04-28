@@ -1,3 +1,4 @@
+import type Anthropic from '@anthropic-ai/sdk';
 import type { OpenAiTool } from '../openai/util';
 import type { MCPTool } from './types';
 
@@ -27,4 +28,15 @@ export function transformMCPToolsToOpenAi(tools: MCPTool[]): OpenAiTool[] {
       },
     };
   });
+}
+
+export function transformMCPToolsToAnthropic(tools: MCPTool[]): Anthropic.Tool[] {
+  return tools.map((tool) => ({
+    name: tool.name,
+    description: tool.description,
+    input_schema: {
+      type: 'object',
+      ...tool.inputSchema,
+    },
+  }));
 }
