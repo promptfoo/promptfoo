@@ -120,10 +120,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     }
 
     const cache = await getCache();
-    // Remove tools from cache key to ensure tool state is fresh each time
-    const cacheKeyParams = { ...params };
-    delete cacheKeyParams.tools;
-    const cacheKey = `anthropic:${JSON.stringify(cacheKeyParams)}`;
+    const cacheKey = `anthropic:${JSON.stringify(params)}`;
 
     if (isCacheEnabled()) {
       // Try to get the cached response
@@ -131,16 +128,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       if (cachedResponse) {
         logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
         try {
-          const parsedCachedResponse = JSON.parse(cachedResponse) as Anthropic.Messages.Message & {
-            tools?: Anthropic.Tool[];
-          };
-          // Ensure current tools are used even with cached response
-          if (mcpTools.length > 0 || this.config.tools) {
-            parsedCachedResponse.tools = [
-              ...mcpTools,
-              ...(maybeLoadToolsFromExternalFile(this.config.tools) || []),
-            ];
-          }
+          const parsedCachedResponse = JSON.parse(cachedResponse) as Anthropic.Messages.Message;
           return {
             output: outputFromMessage(parsedCachedResponse, this.config.showThinking ?? true),
             tokenUsage: getTokenUsage(parsedCachedResponse, true),
