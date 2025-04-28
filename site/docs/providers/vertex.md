@@ -2,112 +2,6 @@
 
 The `vertex` provider enables integration with Google's [Vertex AI](https://cloud.google.com/vertex-ai) platform, which provides access to foundation models including Gemini, PaLM (Bison), Llama, Claude, and specialized models for text, code, and embeddings.
 
-## Available Models
-
-### Latest Gemini Models
-
-- `vertex:gemini-2.5-flash-preview-04-17` - Latest Flash model with thinking capabilities for enhanced reasoning
-- `vertex:gemini-2.5-pro-exp-03-25` - Latest thinking model for complex reasoning (2M context)
-- `vertex:gemini-2.0-flash-001` - Next-gen workhorse model for all daily tasks. Supports text, code, images, audio, video, video with audio, and PDF inputs.
-- `vertex:gemini-2.0-pro-exp-02-05` - Strongest model quality, especially for code & world knowledge (2M context). Supports text, images, video, audio, and PDF inputs.
-- `vertex:gemini-2.0-flash-lite-preview-02-05` - Cost-effective offering for high throughput. Supports text, images, video, audio, and PDF inputs.
-- `vertex:gemini-2.0-flash-thinking-exp-01-21` - Enhanced reasoning with thinking process in responses. Supports text and images.
-- `vertex:gemini-1.5-flash` - Speed and efficiency for high-volume applications. Supports text, code, images, audio, video, video with audio, and PDF inputs.
-- `vertex:gemini-1.5-pro` - Long-context understanding and general-purpose use. Supports text, code, images, audio, video, video with audio, and PDF inputs.
-- `vertex:gemini-1.5-pro-latest` - Latest Gemini 1.5 Pro model with same capabilities as gemini-1.5-pro
-- `vertex:gemini-1.0-pro` - Best performing model for text-only tasks (deprecated)
-- `vertex:gemini-1.0-pro-vision` - Best performing image and video understanding model (deprecated)
-
-### Claude Models
-
-Anthropic's Claude models are available with the following versions:
-
-- `vertex:claude-3-haiku@20240307` - Fast Claude 3 Haiku
-- `vertex:claude-3-sonnet@20240229` - Claude 3 Sonnet
-- `vertex:claude-3-opus@20240229` - Claude 3 Opus (Public Preview)
-- `vertex:claude-3-5-haiku@20241022` - Claude 3.5 Haiku
-- `vertex:claude-3-5-sonnet-v2@20241022` - Claude 3.5 Sonnet
-
-:::note
-Claude models require explicit access enablement through the [Vertex AI Model Garden](https://console.cloud.google.com/vertex-ai/publishers). Navigate to the Model Garden, search for "Claude", and enable the specific models you need.
-:::
-
-Note: Claude models support up to 200,000 tokens context length and include built-in safety features.
-
-### Llama Models (Preview)
-
-Meta's Llama models are available through Vertex AI with the following versions:
-
-- `vertex:llama4-scout-instruct-maas` - Llama 4 Scout 17B (16 experts) with 10M context
-- `vertex:llama4-maverick-instruct-maas` - Llama 4 Maverick 17B (128 experts) with 1M context
-- `vertex:llama-3.3-70b-instruct-maas` - Latest Llama 3.3 70B model (Preview)
-- `vertex:llama-3.2-90b-vision-instruct-maas` - Vision-capable Llama 3.2 90B (Preview)
-- `vertex:llama-3.1-405b-instruct-maas` - Llama 3.1 405B (GA)
-- `vertex:llama-3.1-70b-instruct-maas` - Llama 3.1 70B (Preview)
-- `vertex:llama-3.1-8b-instruct-maas` - Llama 3.1 8B (Preview)
-
-Note: Llama models support built-in safety features through Llama Guard. Llama 4 models support up to 10M tokens context length (Scout) and 1M tokens (Maverick) and are natively multimodal, supporting both text and image inputs.
-
-#### Llama Configuration Example
-
-```yaml
-providers:
-  - id: vertex:llama-3.3-70b-instruct-maas
-    config:
-      region: us-central1 # Llama models are only available in this region
-      temperature: 0.7
-      maxOutputTokens: 1024
-      llamaConfig:
-        safetySettings:
-          enabled: true # Llama Guard is enabled by default
-          llama_guard_settings: {} # Optional custom settings
-
-  - id: vertex:llama4-scout-instruct-maas
-    config:
-      region: us-central1
-      temperature: 0.7
-      maxOutputTokens: 2048
-      llamaConfig:
-        safetySettings:
-          enabled: true
-```
-
-By default, Llama models use Llama Guard for content safety. You can disable it by setting `enabled: false`, but this is not recommended for production use.
-
-### Gemma Models (Open Models)
-
-- `vertex:gemma` - Lightweight text model for generation and summarization
-- `vertex:codegemma` - Code-specialized model for generation and completion
-- `vertex:paligemma` - Vision-language model for image tasks
-
-### PaLM 2 (Bison) Models
-
-Please note the PaLM (Bison) models are [scheduled for deprecation (April 2025)](https://cloud.google.com/vertex-ai/generative-ai/docs/legacy/legacy-models) and it's recommended to migrate to the Gemini models.
-
-- `vertex:chat-bison[@001|@002]` - Chat model
-- `vertex:chat-bison-32k[@001|@002]` - Extended context chat
-- `vertex:codechat-bison[@001|@002]` - Code-specialized chat
-- `vertex:codechat-bison-32k[@001|@002]` - Extended context code chat
-- `vertex:text-bison[@001|@002]` - Text completion
-- `vertex:text-unicorn[@001]` - Specialized text model
-- `vertex:code-bison[@001|@002]` - Code completion
-- `vertex:code-bison-32k[@001|@002]` - Extended context code completion
-
-### Embedding Models
-
-- `vertex:textembedding-gecko@001` - Text embeddings (3,072 tokens, 768d)
-- `vertex:textembedding-gecko@002` - Text embeddings (2,048 tokens, 768d)
-- `vertex:textembedding-gecko@003` - Text embeddings (2,048 tokens, 768d)
-- `vertex:text-embedding-004` - Latest text embeddings (2,048 tokens, ≤768d)
-- `vertex:text-embedding-005` - Latest text embeddings (2,048 tokens, ≤768d)
-- `vertex:textembedding-gecko-multilingual@001` - Multilingual embeddings (2,048 tokens, 768d)
-- `vertex:text-multilingual-embedding-002` - Latest multilingual embeddings (2,048 tokens, ≤768d)
-- `vertex:multimodalembedding` - Multimodal embeddings for text, image, and video
-
-:::tip
-If you're using Google AI Studio directly, see the [`google` provider](/docs/providers/google) documentation instead.
-:::
-
 ## Setup and Authentication
 
 ### 1. Install Dependencies
@@ -214,6 +108,112 @@ Control AI safety filters:
 ```
 
 See [Google's SafetySetting API documentation](https://ai.google.dev/api/generate-content#safetysetting) for details.
+
+## Available Models
+
+### Latest Gemini Models
+
+- `vertex:gemini-2.5-flash-preview-04-17` - Latest Flash model with thinking capabilities for enhanced reasoning
+- `vertex:gemini-2.5-pro-exp-03-25` - Latest thinking model for complex reasoning (2M context)
+- `vertex:gemini-2.0-flash-001` - Next-gen workhorse model for all daily tasks. Supports text, code, images, audio, video, video with audio, and PDF inputs.
+- `vertex:gemini-2.0-pro-exp-02-05` - Strongest model quality, especially for code & world knowledge (2M context). Supports text, images, video, audio, and PDF inputs.
+- `vertex:gemini-2.0-flash-lite-preview-02-05` - Cost-effective offering for high throughput. Supports text, images, video, audio, and PDF inputs.
+- `vertex:gemini-2.0-flash-thinking-exp-01-21` - Enhanced reasoning with thinking process in responses. Supports text and images.
+- `vertex:gemini-1.5-flash` - Speed and efficiency for high-volume applications. Supports text, code, images, audio, video, video with audio, and PDF inputs.
+- `vertex:gemini-1.5-pro` - Long-context understanding and general-purpose use. Supports text, code, images, audio, video, video with audio, and PDF inputs.
+- `vertex:gemini-1.5-pro-latest` - Latest Gemini 1.5 Pro model with same capabilities as gemini-1.5-pro
+- `vertex:gemini-1.0-pro` - Best performing model for text-only tasks (deprecated)
+- `vertex:gemini-1.0-pro-vision` - Best performing image and video understanding model (deprecated)
+
+### Claude Models
+
+Anthropic's Claude models are available with the following versions:
+
+- `vertex:claude-3-haiku@20240307` - Fast Claude 3 Haiku
+- `vertex:claude-3-sonnet@20240229` - Claude 3 Sonnet
+- `vertex:claude-3-opus@20240229` - Claude 3 Opus (Public Preview)
+- `vertex:claude-3-5-haiku@20241022` - Claude 3.5 Haiku
+- `vertex:claude-3-5-sonnet-v2@20241022` - Claude 3.5 Sonnet
+
+:::note
+Claude models require explicit access enablement through the [Vertex AI Model Garden](https://console.cloud.google.com/vertex-ai/publishers). Navigate to the Model Garden, search for "Claude", and enable the specific models you need.
+:::
+
+Note: Claude models support up to 200,000 tokens context length and include built-in safety features.
+
+### Llama Models (Preview)
+
+Meta's Llama models are available through Vertex AI with the following versions:
+
+- `vertex:llama4-scout-instruct-maas` - Llama 4 Scout 17B (16 experts) with 10M context
+- `vertex:llama4-maverick-instruct-maas` - Llama 4 Maverick 17B (128 experts) with 1M context
+- `vertex:llama-3.3-70b-instruct-maas` - Latest Llama 3.3 70B model (Preview)
+- `vertex:llama-3.2-90b-vision-instruct-maas` - Vision-capable Llama 3.2 90B (Preview)
+- `vertex:llama-3.1-405b-instruct-maas` - Llama 3.1 405B (GA)
+- `vertex:llama-3.1-70b-instruct-maas` - Llama 3.1 70B (Preview)
+- `vertex:llama-3.1-8b-instruct-maas` - Llama 3.1 8B (Preview)
+
+Note: Llama models support built-in safety features through Llama Guard. Llama 4 models support up to 10M tokens context length (Scout) and 1M tokens (Maverick) and are natively multimodal, supporting both text and image inputs.
+
+#### Llama Configuration Example
+
+```yaml
+providers:
+  - id: vertex:llama-3.3-70b-instruct-maas
+    config:
+      region: us-central1 # Llama models are only available in this region
+      temperature: 0.7
+      maxOutputTokens: 1024
+      llamaConfig:
+        safetySettings:
+          enabled: true # Llama Guard is enabled by default
+          llama_guard_settings: {} # Optional custom settings
+
+  - id: vertex:llama4-scout-instruct-maas
+    config:
+      region: us-central1
+      temperature: 0.7
+      maxOutputTokens: 2048
+      llamaConfig:
+        safetySettings:
+          enabled: true
+```
+
+By default, Llama models use Llama Guard for content safety. You can disable it by setting `enabled: false`, but this is not recommended for production use.
+
+### Gemma Models (Open Models)
+
+- `vertex:gemma` - Lightweight text model for generation and summarization
+- `vertex:codegemma` - Code-specialized model for generation and completion
+- `vertex:paligemma` - Vision-language model for image tasks
+
+### PaLM 2 (Bison) Models
+
+Please note the PaLM (Bison) models are [scheduled for deprecation (April 2025)](https://cloud.google.com/vertex-ai/generative-ai/docs/legacy/legacy-models) and it's recommended to migrate to the Gemini models.
+
+- `vertex:chat-bison[@001|@002]` - Chat model
+- `vertex:chat-bison-32k[@001|@002]` - Extended context chat
+- `vertex:codechat-bison[@001|@002]` - Code-specialized chat
+- `vertex:codechat-bison-32k[@001|@002]` - Extended context code chat
+- `vertex:text-bison[@001|@002]` - Text completion
+- `vertex:text-unicorn[@001]` - Specialized text model
+- `vertex:code-bison[@001|@002]` - Code completion
+- `vertex:code-bison-32k[@001|@002]` - Extended context code completion
+
+### Embedding Models
+
+- `vertex:textembedding-gecko@001` - Text embeddings (3,072 tokens, 768d)
+- `vertex:textembedding-gecko@002` - Text embeddings (2,048 tokens, 768d)
+- `vertex:textembedding-gecko@003` - Text embeddings (2,048 tokens, 768d)
+- `vertex:text-embedding-004` - Latest text embeddings (2,048 tokens, ≤768d)
+- `vertex:text-embedding-005` - Latest text embeddings (2,048 tokens, ≤768d)
+- `vertex:textembedding-gecko-multilingual@001` - Multilingual embeddings (2,048 tokens, 768d)
+- `vertex:text-multilingual-embedding-002` - Latest multilingual embeddings (2,048 tokens, ≤768d)
+- `vertex:multimodalembedding` - Multimodal embeddings for text, image, and video
+
+:::tip
+If you're using Google AI Studio directly, see the [`google` provider](/docs/providers/google) documentation instead.
+:::
 
 ## Model-Specific Features
 
