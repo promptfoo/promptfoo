@@ -13,6 +13,8 @@ import type {
 } from '../../types';
 import type { EnvOverrides } from '../../types/env';
 import { isValidJson } from '../../util/json';
+import { MCPClient } from '../mcp/client';
+import { transformMCPToolsToGoogle } from '../mcp/transform';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import type { ClaudeRequest, ClaudeResponse, CompletionOptions } from './types';
 import type {
@@ -112,6 +114,8 @@ class VertexGenericProvider implements ApiProvider {
 }
 
 export class VertexChatProvider extends VertexGenericProvider {
+  private mcpClient: MCPClient | null = null;
+  private initializationPromise: Promise<void> | null = null;
   // TODO(ian): Completion models
   // https://cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versioning#gemini-model-versions
   constructor(
@@ -119,6 +123,14 @@ export class VertexChatProvider extends VertexGenericProvider {
     options: { config?: CompletionOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     super(modelName, options);
+    if (this.config.mcp?.enabled) {
+      this.initializationPromise = this.initializeMCP();
+    }
+  }
+
+  private async initializeMCP(): Promise<void> {
+    this.mcpClient = new MCPClient(this.config.mcp!);
+    await this.mcpClient.initialize();
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
@@ -249,12 +261,22 @@ export class VertexChatProvider extends VertexGenericProvider {
   }
 
   async callGeminiApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    if (this.initializationPromise) {
+      await this.initializationPromise;
+    }
     // https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#gemini-pro
     const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
       prompt,
       context?.vars,
       this.config.systemInstruction,
     );
+    // --- MCP tool injection logic ---
+    const mcpTools = this.mcpClient ? transformMCPToolsToGoogle(this.mcpClient.getAllTools()) : [];
+    const allTools = [
+      ...mcpTools,
+      ...(Array.isArray(this.config.tools) ? loadFile(this.config.tools, context?.vars) : []),
+    ];
+    // --- End MCP tool injection logic ---
     // https://ai.google.dev/api/rest/v1/models/streamGenerateContent
     const body = {
       contents: contents as GeminiFormat,
@@ -270,7 +292,7 @@ export class VertexChatProvider extends VertexGenericProvider {
       },
       ...(this.config.safetySettings ? { safetySettings: this.config.safetySettings } : {}),
       ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),
-      ...(this.config.tools ? { tools: loadFile(this.config.tools, context?.vars) } : {}),
+      ...(allTools.length > 0 ? { tools: allTools } : {}),
       ...(systemInstruction ? { systemInstruction } : {}),
     };
     logger.debug(`Preparing to call Google Vertex API (Gemini) with body: ${JSON.stringify(body)}`);
@@ -677,6 +699,13 @@ export class VertexChatProvider extends VertexGenericProvider {
       return {
         error: `Llama API response error: ${String(err)}. Response data: ${JSON.stringify(data)}`,
       };
+    }
+  }
+
+  async cleanup(): Promise<void> {
+    if (this.mcpClient) {
+      await this.mcpClient.cleanup();
+      this.mcpClient = null;
     }
   }
 }
