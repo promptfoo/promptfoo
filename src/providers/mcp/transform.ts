@@ -1,4 +1,9 @@
 import type Anthropic from '@anthropic-ai/sdk';
+import type {
+  Tool as GoogleTool,
+  FunctionDeclaration as GoogleFunctionDeclaration,
+  Schema as GoogleSchema,
+} from '../google/types';
 import type { OpenAiTool } from '../openai/util';
 import type { MCPTool } from './types';
 
@@ -39,4 +44,22 @@ export function transformMCPToolsToAnthropic(tools: MCPTool[]): Anthropic.Tool[]
       ...tool.inputSchema,
     },
   }));
+}
+
+export function transformMCPToolsToGoogle(tools: MCPTool[]): GoogleTool[] {
+  const functionDeclarations: GoogleFunctionDeclaration[] = tools.map((tool) => {
+    const schema = tool.inputSchema as any;
+    let parameters: GoogleSchema = { type: 'OBJECT', properties: {} };
+    if (schema && typeof schema === 'object' && 'properties' in schema) {
+      parameters = { type: 'OBJECT', ...schema };
+    } else {
+      parameters = { type: 'OBJECT', properties: schema || {} };
+    }
+    return {
+      name: tool.name,
+      description: tool.description,
+      parameters,
+    };
+  });
+  return [{ functionDeclarations }];
 }
