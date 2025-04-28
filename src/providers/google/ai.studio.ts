@@ -210,7 +210,7 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
     const mcpTools = this.mcpClient ? transformMCPToolsToGoogle(this.mcpClient.getAllTools()) : [];
     const allTools = [
       ...mcpTools,
-      ...(Array.isArray(this.config.tools) ? loadFile(this.config.tools, context?.vars) : []),
+      ...(this.config.tools ? loadFile(this.config.tools, context?.vars) : []),
     ];
     // --- End MCP tool injection logic ---
 
