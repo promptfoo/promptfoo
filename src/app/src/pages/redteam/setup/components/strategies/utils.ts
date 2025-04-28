@@ -25,8 +25,11 @@ export const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   'jailbreak:tree': 150,
   leetspeak: 1,
   'math-prompt': 1,
+  morse: 1,
   multilingual: 3, // This won't matter, we multiply all probes by number of languages
+  'other-encodings': 1,
   pandamonium: 5,
+  piglatin: 1,
   'prompt-injection': 1,
   retry: 1,
   rot13: 1,
