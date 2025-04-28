@@ -695,6 +695,34 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
           </AccordionDetails>
         </Accordion>
 
+        <Accordion
+          expanded={expandedCategories.has('Custom Policy')}
+          onChange={(event, expanded) => {
+            setExpandedCategories((prev) => {
+              const newSet = new Set(prev);
+              if (expanded) {
+                newSet.add('Custom Policy');
+              } else {
+                newSet.delete('Custom Policy');
+              }
+              return newSet;
+            });
+          }}
+        >
+          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+            <Typography variant="h6" sx={{ fontWeight: 'medium' }}>
+              Custom Policy
+            </Typography>
+          </AccordionSummary>
+          <AccordionDetails>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Typography variant="body2" color="text.secondary">
+                Add your custom policy content here.
+              </Typography>
+            </Box>
+          </AccordionDetails>
+        </Accordion>
+
         <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
           <Button
             variant="outlined"

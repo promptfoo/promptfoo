@@ -74,6 +74,7 @@ import {
   ReplicateProvider,
   ReplicateImageProvider,
 } from './replicate';
+import { createScriptBasedProviderFactory } from './scriptBasedProvider';
 import { ScriptCompletionProvider } from './scriptCompletion';
 import { SequenceProvider } from './sequence';
 import { SimulatedUser } from './simulatedUser';
@@ -94,6 +95,9 @@ interface ProviderFactory {
 }
 
 export const providerMap: ProviderFactory[] = [
+  createScriptBasedProviderFactory('exec', null, ScriptCompletionProvider),
+  createScriptBasedProviderFactory('golang', 'go', GolangProvider),
+  createScriptBasedProviderFactory('python', 'py', PythonProvider),
   {
     test: (providerPath: string) => providerPath.startsWith('adaline:'),
     create: async (
@@ -441,18 +445,6 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
-    test: (providerPath: string) => providerPath.startsWith('exec:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      // Load script module
-      const scriptPath = providerPath.split(':')[1];
-      return new ScriptCompletionProvider(scriptPath, providerOptions);
-    },
-  },
-  {
     test: (providerPath: string) => providerPath.startsWith('f5:'),
     create: async (
       providerPath: string,
@@ -526,22 +518,6 @@ export const providerMap: ProviderFactory[] = [
           apiKeyEnvar: 'GITHUB_TOKEN',
         },
       });
-    },
-  },
-  {
-    test: (providerPath: string) =>
-      providerPath.startsWith('golang:') ||
-      (providerPath.startsWith('file://') &&
-        (providerPath.endsWith('.go') || providerPath.includes('.go:'))),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      const scriptPath = providerPath.startsWith('file://')
-        ? providerPath.slice('file://'.length)
-        : providerPath.split(':').slice(1).join(':');
-      return new GolangProvider(scriptPath, providerOptions);
     },
   },
   {
@@ -1135,22 +1111,6 @@ export const providerMap: ProviderFactory[] = [
       throw new Error(
         `Invalid Huggingface provider path: ${providerPath}. Use one of the following providers: huggingface:feature-extraction:<model name>, huggingface:text-generation:<model name>, huggingface:text-classification:<model name>, huggingface:token-classification:<model name>`,
       );
-    },
-  },
-  {
-    test: (providerPath: string) =>
-      providerPath.startsWith('python:') ||
-      (providerPath.startsWith('file://') &&
-        (providerPath.endsWith('.py') || providerPath.includes('.py:'))),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      const scriptPath = providerPath.startsWith('file://')
-        ? providerPath.slice('file://'.length)
-        : providerPath.split(':').slice(1).join(':');
-      return new PythonProvider(scriptPath, providerOptions);
     },
   },
   {

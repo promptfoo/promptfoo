@@ -16,7 +16,12 @@ describe('validateStrategies', () => {
   });
 
   it('should validate valid strategies', async () => {
-    const validStrategies: RedteamStrategyObject[] = [{ id: 'basic' }, { id: 'base64' }];
+    const validStrategies: RedteamStrategyObject[] = [
+      { id: 'basic' },
+      { id: 'base64' },
+      { id: 'morse' },
+      { id: 'piglatin' },
+    ];
     await expect(validateStrategies(validStrategies)).resolves.toBeUndefined();
   });
 
@@ -59,6 +64,18 @@ describe('loadStrategy', () => {
     const strategy = await loadStrategy('basic');
     expect(strategy).toBeDefined();
     expect(strategy.id).toBe('basic');
+  });
+
+  it('should load morse strategy', async () => {
+    const strategy = await loadStrategy('morse');
+    expect(strategy).toBeDefined();
+    expect(strategy.id).toBe('morse');
+  });
+
+  it('should load piglatin strategy', async () => {
+    const strategy = await loadStrategy('piglatin');
+    expect(strategy).toBeDefined();
+    expect(strategy.id).toBe('piglatin');
   });
 
   it('should throw error for non-existent strategy', async () => {
