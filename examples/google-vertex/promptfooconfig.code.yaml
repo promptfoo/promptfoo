@@ -1,0 +1,42 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: Google Vertex AI Code Execution demonstration
+
+prompts:
+  - '{{query}}'
+
+providers:
+  - id: vertex:gemini-2.0-flash
+    config:
+      temperature: 0.2
+      maxOutputTokens: 1024
+      tools:
+        - codeExecution: {}
+
+tests:
+  # Test mathematical calculations
+  - vars:
+      query: What is the sum of the first 50 prime numbers? Generate and run code for the calculation.
+    assert:
+      - type: contains
+        value: prime
+      - type: contains
+        value: code
+
+  # Test data visualization
+  - vars:
+      query: Create a simple bar chart showing population growth over 5 years with sample data.
+    assert:
+      - type: contains
+        value: matplotlib
+      - type: contains
+        value: chart
+
+  # Test data analysis
+  - vars:
+      query: Generate sample data and calculate the mean, median, and standard deviation.
+    assert:
+      - type: contains
+        value: statistics
+      - type: contains
+        value: deviation

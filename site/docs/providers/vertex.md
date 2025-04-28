@@ -522,3 +522,46 @@ When using Search grounding, the API response includes additional metadata:
 - Search will only be performed when the model determines it's necessary
 
 For more details, see the [Google documentation on Grounding with Google Search](https://ai.google.dev/docs/gemini_api/grounding).
+
+### Code Execution
+
+Vertex AI's Gemini models support code execution, enabling them to generate and run Python code as part of their reasoning process.
+
+#### Basic Usage
+
+To enable code execution with Vertex AI:
+
+```yaml
+providers:
+  - id: vertex:gemini-2.0-flash
+    config:
+      tools:
+        - codeExecution: {} # or code_execution: {}
+```
+
+#### Features and Capabilities
+
+- Supports Python code generation and execution
+- Includes common data science libraries:
+  - matplotlib
+  - numpy
+  - pandas
+  - sympy
+  - scikit-learn
+  - and more
+- Maximum runtime: 30 seconds
+- Code generation, execution, and output interpretation in a single response
+
+#### Example Applications
+
+- Mathematical problem solving
+- Data analysis and statistical computations
+- Chart and graph generation
+- Text processing and analysis
+- Algorithmic solutions
+
+#### Working Example
+
+A complete configuration for testing code execution is available in the [google-vertex-code example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-vertex/promptfooconfig.code.yaml).
+
+For more details on the code execution environment and capabilities, see the [Google Cloud documentation on Code Execution](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/code-execution).

@@ -356,3 +356,63 @@ promptfoo init --example google-live-tools
 - Maximum of 4M tokens per minute
 
 For more details, see the [Live API documentation](https://ai.google.dev/gemini-api/docs/live).
+
+### Code Execution
+
+Code execution allows Gemini models to generate and run Python code to solve problems or process data.
+
+#### Basic Usage
+
+To enable code execution:
+
+```yaml
+providers:
+  - id: google:gemini-2.0-flash
+    config:
+      tools:
+        - codeExecution: {} # or code_execution: {}
+```
+
+#### Capabilities
+
+- Only Python code execution is supported
+- Code environment includes libraries like matplotlib, numpy, pandas, sympy, etc.
+- Maximum runtime: 30 seconds
+- Handles complex calculations, data analysis, and visualization
+
+#### Output Format
+
+Code execution results are presented in a readable format:
+
+````
+# Generated Python code in markdown code blocks
+```python
+import numpy as np
+
+# Calculate the sum of the first 10 numbers
+numbers = np.arange(1, 11)
+sum_result = np.sum(numbers)
+print(f"The sum is: {sum_result}")
+````
+
+# Execution results in markdown blocks
+
+Output:
+
+```
+The sum is: 55
+```
+
+#### Example Use Cases
+
+- Mathematical calculations and symbolic math
+- Data processing and statistical analysis
+- Generating charts and visualizations
+- Processing and transforming text
+- Solving algorithms and puzzles
+
+#### Working Example
+
+For a complete working example, see the [google-aistudio-code example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-aistudio-tools/promptfooconfig.code.yaml).
+
+For more details, see the [Google AI documentation on Code Execution](https://ai.google.dev/docs/gemini_api/code_execution).

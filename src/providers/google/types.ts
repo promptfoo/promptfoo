@@ -211,3 +211,30 @@ export interface ClaudeResponse {
     output_tokens: number;
   };
 }
+
+export interface InlineData {
+  mimeType: string;
+  data: string;
+}
+
+// New interfaces for code execution
+export interface ExecutableCode {
+  language: 'PYTHON';
+  code: string;
+}
+
+export interface CodeExecutionResult {
+  outcome: 'OUTCOME_OK' | 'OUTCOME_ERROR';
+  output: string;
+}
+
+// Add code execution related content part types
+export interface ContentPart {
+  text?: string;
+  inlineData?: InlineData;
+  functionCall?: FunctionCall;
+  functionResponse?: FunctionResponse;
+  // Code execution specific parts
+  executable_code?: ExecutableCode;
+  code_execution_result?: CodeExecutionResult;
+}

@@ -1088,5 +1088,90 @@ describe('AIStudioChatProvider', () => {
         false,
       );
     });
+
+    it('should handle code execution responses', async () => {
+      const provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          tools: [{ codeExecution: {} }],
+        },
+      });
+
+      const mockResponse = {
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [
+                  { text: 'Let me calculate the sum of the first 10 numbers:' },
+                  {
+                    executable_code: {
+                      language: 'PYTHON',
+                      code: 'sum = 0\nfor i in range(1, 11):\n    sum += i\nprint(f"The sum of numbers from 1 to 10 is {sum}")',
+                    },
+                  },
+                  {
+                    code_execution_result: {
+                      outcome: 'OUTCOME_OK',
+                      output: 'The sum of numbers from 1 to 10 is 55\n',
+                    },
+                  },
+                  { text: 'Therefore, the sum of the first 10 numbers is 55.' },
+                ],
+                role: 'model',
+              },
+              finishReason: 'STOP',
+              safetyRatings: [],
+            },
+          ],
+          usageMetadata: {
+            totalTokenCount: 100,
+            promptTokenCount: 40,
+            candidatesTokenCount: 60,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValueOnce(mockResponse);
+      jest.mocked(util.maybeCoerceToGeminiFormat).mockReturnValueOnce({
+        contents: [
+          { role: 'user', parts: [{ text: 'Calculate the sum of numbers from 1 to 10' }] },
+        ],
+        coerced: false,
+        systemInstruction: undefined,
+      });
+
+      const response = await provider.callGemini('Calculate the sum of numbers from 1 to 10');
+
+      expect(response).toEqual({
+        output:
+          'Let me calculate the sum of the first 10 numbers:\n\n```python\nsum = 0\nfor i in range(1, 11):\n    sum += i\nprint(f"The sum of numbers from 1 to 10 is {sum}")\n```\n\nOutput:\n```\nThe sum of numbers from 1 to 10 is 55\n\n```\nTherefore, the sum of the first 10 numbers is 55.',
+        raw: mockResponse.data,
+        cached: false,
+        tokenUsage: {
+          numRequests: 1,
+          total: 100,
+          prompt: 40,
+          completion: 60,
+        },
+        metadata: {},
+      });
+
+      expect(cache.fetchWithCache).toHaveBeenCalledWith(
+        'https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=test-key',
+        {
+          body: expect.stringContaining('"codeExecution":{}'),
+          headers: { 'Content-Type': 'application/json' },
+          method: 'POST',
+        },
+        300000,
+        'json',
+        false,
+      );
+    });
   });
 });

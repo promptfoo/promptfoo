@@ -13,14 +13,8 @@ import { getNunjucksEngine } from '../../util/templates';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { CHAT_MODELS } from './shared';
 import type { CompletionOptions } from './types';
-import {
-  loadFile,
-  geminiFormatAndSystemInstructions,
-  getCandidate,
-} from './util';
-import type {
-  GeminiResponseData,
-} from './util';
+import { loadFile, geminiFormatAndSystemInstructions, getCandidate } from './util';
+import type { GeminiResponseData } from './util';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
 
@@ -58,6 +52,14 @@ export function formatCandidateContents(candidate: any): any[] {
         });
       }
     }
+    
+    // Handle inline data (images/visualizations)
+    if (part.inline_data) {
+      formattedParts.push({
+        text: `\n[Image: Generated visualization]\n`,
+        inline_data: part.inline_data
+      });
+    }
 
     // Handle function call
     if (part.functionCall) {
@@ -69,7 +71,7 @@ export function formatCandidateContents(candidate: any): any[] {
         formattedParts.push({
           text: `\n\nFunction call: ${JSON.stringify(functionCall, null, 2)}\n`,
         });
-      } catch (_) {
+      } catch {
         formattedParts.push({
           text: `\n\nFunction call: ${JSON.stringify(part.functionCall, null, 2)}\n`,
         });

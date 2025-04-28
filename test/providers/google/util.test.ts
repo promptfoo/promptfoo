@@ -991,5 +991,22 @@ describe('util', () => {
       const normalized = normalizeTools(tools);
       expect(normalized).toEqual([]);
     });
+
+    it('should convert code_execution to codeExecution', () => {
+      const tools = [
+        {
+          code_execution: {},
+        } as any,
+      ];
+
+      const normalized = normalizeTools(tools);
+
+      expect(normalized).toEqual([
+        {
+          code_execution: {},
+          codeExecution: {},
+        },
+      ]);
+    });
   });
 });

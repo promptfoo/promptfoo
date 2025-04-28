@@ -14,11 +14,7 @@ import type {
 import type { EnvOverrides } from '../../types/env';
 import { isValidJson } from '../../util/json';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
-import type {
-  ClaudeRequest,
-  ClaudeResponse,
-  CompletionOptions,
-} from './types';
+import type { ClaudeRequest, ClaudeResponse, CompletionOptions } from './types';
 import type {
   GeminiApiResponse,
   GeminiErrorResponse,
@@ -66,6 +62,14 @@ export function formatCandidateContents(candidate: any): any[] {
         });
       }
     }
+    
+    // Handle inline data (images/visualizations)
+    if (part.inline_data) {
+      formattedParts.push({
+        text: `\n[Image: Generated visualization]\n`,
+        inline_data: part.inline_data
+      });
+    }
 
     // Handle function call
     if (part.functionCall) {
@@ -77,7 +81,7 @@ export function formatCandidateContents(candidate: any): any[] {
         formattedParts.push({
           text: `\n\nFunction call: ${JSON.stringify(functionCall, null, 2)}\n`,
         });
-      } catch (_) {
+      } catch {
         formattedParts.push({
           text: `\n\nFunction call: ${JSON.stringify(part.functionCall, null, 2)}\n`,
         });
