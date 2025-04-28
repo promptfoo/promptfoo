@@ -5,6 +5,7 @@ process.env.AZURE_OPENAI_API_HOST = 'azure.openai.host';
 process.env.AZURE_OPENAI_API_KEY = 'foo';
 process.env.HF_API_TOKEN = 'foo';
 process.env.IS_TESTING = 'true';
+process.env.NODE_ENV = 'test';
 process.env.OPENAI_API_KEY = 'foo';
 process.env.PROMPTFOO_CONFIG_DIR = TEST_CONFIG_DIR;
 

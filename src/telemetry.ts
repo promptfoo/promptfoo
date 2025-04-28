@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import { PostHog } from 'posthog-node';
 import { z } from 'zod';
 import { VERSION } from './constants';
-import { getEnvBool, getEnvString } from './envars';
+import { getEnvBool } from './envars';
 import { fetchWithTimeout } from './fetch';
 import { readGlobalConfig } from './globalConfig/globalConfig';
 import logger from './logger';
@@ -95,7 +95,7 @@ export class Telemetry {
   }
 
   private sendEvent(eventName: TelemetryEventTypes, properties: EventProperties): void {
-    if (getEnvString('NODE_ENV') === 'test') {
+    if (process.env.NODE_ENV === 'test') {
       return;
     }
     if (posthogClient) {

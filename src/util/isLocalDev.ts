@@ -2,6 +2,10 @@ import fs from 'fs';
 import path from 'path';
 
 export function isLocalDev(): boolean {
+  if (process.env.NODE_ENV === 'test') {
+    return true;
+  }
+
   // If we're inside node_modules, it's definitely NOT local dev
   if (__dirname.includes('node_modules')) {
     return false;
