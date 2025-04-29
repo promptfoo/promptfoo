@@ -9,7 +9,7 @@ function PricingHeader() {
   return (
     <header className={styles.pricingHeader}>
       <h1>LLM security and testing for teams of all sizes</h1>
-      <p>Choose the plan that's right for your team</p>
+      <p>Choose the plan that's right for your team.</p>
     </header>
   );
 }
@@ -270,7 +270,7 @@ function FeatureComparisonTable() {
               <th>Feature</th>
               <th>Community</th>
               <th>Enterprise</th>
-              <th>Enterprise On-Prem</th>
+              <th>Enterprise On-Premise</th>
             </tr>
           </thead>
           <tbody>
@@ -393,7 +393,7 @@ function DemoCTA() {
   return (
     <section className={styles.demoCTA}>
       <h2>Ready to get started?</h2>
-      <p>Schedule a demo to see how Promptfoo can help secure your LLM applications</p>
+      <p>Schedule a demo to see how Promptfoo can help secure your LLM applications.</p>
       <Link
         to="https://cal.com/team/promptfoo/intro2"
         className={clsx('button', 'button--lg', 'button--primary', styles.demoButton)}
