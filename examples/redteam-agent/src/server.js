@@ -17,6 +17,8 @@ router.post('/chat', async (req, res) => {
   const { message } = req.body;
   const sessionId = req.headers['x-promptfoo-session'];
 
+  console.debug({ type: 'request', sessionId, message });
+
   const agentState = await agent.invoke(
     { messages: [new HumanMessage(message)] },
     { configurable: { thread_id: sessionId } },
@@ -24,15 +26,15 @@ router.post('/chat', async (req, res) => {
 
   const agentMessage = agentState.messages[agentState.messages.length - 1].content;
 
-  console.debug({ sessionId, message, agentMessage });
-
   res.send({ message: agentMessage });
 });
 
 app.use('/api', router);
 
-app.listen(5000, () => {
-  console.log('Travel agent API is running on port 5000');
+const port = process.env.PORT || 3090;
+
+app.listen(port, () => {
+  console.log(`Travel agent API is running on port ${port}`);
 });
 
 module.exports = app;

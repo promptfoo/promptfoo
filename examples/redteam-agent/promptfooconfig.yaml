@@ -4,14 +4,13 @@ description: Agent Redteam
 providers:
   - id: http
     config:
-      url: http://localhost:5000/api/chat
+      url: http://localhost:3090/api/chat
       method: POST
       headers:
         'Content-Type': 'application/json'
         'x-promptfoo-session': '{{sessionId}}'
       body:
         'message': '{{prompt}}'
-        'conversation_id': '{{conversation_id}}'
       transformResponse: 'json.message'
 
 prompts:
