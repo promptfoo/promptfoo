@@ -96,7 +96,7 @@ export class Telemetry {
   }
 
   private sendEvent(eventName: TelemetryEventTypes, properties: EventProperties): void {
-    if (posthogClient) {
+    if (posthogClient && !getEnvBool('IS_TESTING')) {
       const globalConfig = readGlobalConfig();
       posthogClient.capture({
         distinctId: globalConfig.id,

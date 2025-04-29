@@ -3,11 +3,6 @@ const fs = require('fs');
 /* eslint-disable-next-line @typescript-eslint/no-require-imports */
 const path = require('path');
 
-if (!process.env.PROMPTFOO_POSTHOG_KEY) {
-  console.error('Error: PROMPTFOO_POSTHOG_KEY environment variable must be set during build');
-  process.exit(1);
-}
-
 const filePath = path.join(__dirname, '../dist/src/telemetry.js');
 
 try {
