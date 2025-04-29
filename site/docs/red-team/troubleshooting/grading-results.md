@@ -65,7 +65,7 @@ You can customize the grader at the plugin level to provide additional granulari
 
 ### Customizing Graders for Specific Plugins in Promptfoo Enterprise
 
-Within Promptfoo Enterprise, you can customize the grader at the plugin level. Provide an example output that you would consider a pass or fail, then elaborate on the reason why. Providing more concrete examples will provide additional context to the LLM grader, which will in turn improve the efficacy of grading.
+Within Promptfoo Enterprise, you can customize the grader at the plugin level. Provide an example output that you would consider a pass or fail, then elaborate on the reason why. Including more concrete examples gives additional context to the LLM grader, improving the efficacy of grading.
 
 <div align="center">
   <img src="/img/docs/grading/customize_grader.png" alt="Customize grader" width="900" />
@@ -105,7 +105,7 @@ You can review the results of the grader by going into **Evals** section of the 
   <img src="/img/docs/grading/eval_assertions_view.png" alt="Eval results view" width="900" />
 </div>
 
-Scores range from 0 to 1 and help guide the judge in agentic cases to distinguish outputs are more impactful or higher risk. A score of `0` means there is a complete jailbreak, whereas a score of `1` indicates the output passed without compromise.
+Scores range from 0 to 1 and help guide the judge in agentic cases to distinguish outputs that are more impactful or higher risk. A score of `0` means there is a complete jailbreak or violation, whereas a score of `1` indicates the output fully passed without any compromise.
 
 Inside the evals view, you can review the grader reasoning for each result, modify whether it was a pass or fail, and edit the test score.
 
