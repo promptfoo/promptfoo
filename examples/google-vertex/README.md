@@ -107,15 +107,12 @@ The search grounding feature allows Gemini models on Vertex AI to access up-to-d
 - Sports results
 - Technical documentation updates
 
-You can enable Search grounding using either of these formats:
+You can enable Search grounding using this format:
 
 ```yaml
-# String format (simpler)
-tools: ['google_search']
-
 # Object format (matches Google's API)
 tools:
-  - google_search: {}
+  - googleSearch: {}
 ```
 
 When using Search grounding, the response includes metadata with:

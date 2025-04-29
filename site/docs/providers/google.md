@@ -180,7 +180,7 @@ Search grounding allows Gemini models to access the internet for up-to-date info
 
 #### Basic Usage
 
-To enable Search grounding (supports both camelCase and snake_case formats):
+To enable Search grounding:
 
 ```yaml
 providers:
@@ -202,7 +202,7 @@ providers:
         thinkingConfig:
           thinkingBudget: 1024
       tools:
-        - googleSearch: {} # or google_search: {}
+        - googleSearch: {}
 ```
 
 #### Supported Models

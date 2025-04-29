@@ -71,7 +71,7 @@ This example demonstrates three approaches to search:
 
    ```yaml
    tools:
-     - google_search: {}
+     - googleSearch: {}
    ```
 
 2. **Search with thinking** (Gemini 2.5): Adds thinking capabilities for better reasoning
@@ -81,7 +81,7 @@ This example demonstrates three approaches to search:
      thinkingConfig:
        thinkingBudget: 1024
    tools:
-     - google_search: {}
+     - googleSearch: {}
    ```
 
 3. **Dynamic retrieval** (Gemini 1.5): Controls when to use search with threshold settings

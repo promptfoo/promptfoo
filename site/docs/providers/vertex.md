@@ -471,14 +471,14 @@ Search grounding allows Gemini models to access the internet for up-to-date info
 
 #### Basic Usage
 
-Use the object format to enable Search grounding (supports both camelCase and snake_case formats):
+Use the object format to enable Search grounding:
 
 ```yaml
 providers:
   - id: vertex:gemini-2.0-pro
     config:
       tools:
-        - googleSearch: {} # or google_search: {}
+        - googleSearch: {}
 ```
 
 #### Combining with Other Features
@@ -493,7 +493,7 @@ providers:
         thinkingConfig:
           thinkingBudget: 1024
       tools:
-        - googleSearch: {} # or google_search: {}
+        - googleSearch: {}
 ```
 
 #### Use Cases
