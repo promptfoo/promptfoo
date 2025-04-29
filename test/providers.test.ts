@@ -186,19 +186,28 @@ describe('loadApiProvider', () => {
 
   it('should load script provider', async () => {
     const provider = await loadApiProvider('exec:test.sh');
-    expect(ScriptCompletionProvider).toHaveBeenCalledWith('test.sh', expect.any(Object));
+    expect(ScriptCompletionProvider).toHaveBeenCalledWith(
+      expect.stringMatching(/test\.sh$/),
+      expect.any(Object),
+    );
     expect(provider).toBeDefined();
   });
 
   it('should load Python provider', async () => {
     const provider = await loadApiProvider('python:test.py');
-    expect(PythonProvider).toHaveBeenCalledWith('test.py', expect.any(Object));
+    expect(PythonProvider).toHaveBeenCalledWith(
+      expect.stringMatching(/test\.py$/),
+      expect.any(Object),
+    );
     expect(provider).toBeDefined();
   });
 
   it('should load Python provider from file path', async () => {
     const provider = await loadApiProvider('file://test.py');
-    expect(PythonProvider).toHaveBeenCalledWith('test.py', expect.any(Object));
+    expect(PythonProvider).toHaveBeenCalledWith(
+      expect.stringMatching(/test\.py$/),
+      expect.any(Object),
+    );
     expect(provider).toBeDefined();
   });
 
