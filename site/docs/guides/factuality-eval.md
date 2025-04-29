@@ -214,7 +214,7 @@ The quality of your reference answers is crucial for accurate factuality evaluat
 
 ### Selecting the Grading Provider
 
-By default, promptfoo uses gpt-4.1-2025-04-14 for grading. To specify a different grading model:
+By default, promptfoo uses `gpt-4.1-2025-04-14` for grading. To specify a different grading model:
 
 ```yaml
 defaultTest:
