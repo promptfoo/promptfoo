@@ -246,6 +246,28 @@ export const strategies: Strategy[] = [
     link: '/docs/red-team/strategies/rot13/',
   },
   {
+    category: 'Static (Single-Turn)',
+    strategy: 'morse',
+    displayName: 'Morse Code',
+    description: 'Dots and dashes encoding',
+    longDescription:
+      'Tests handling of text encoded in Morse code (dots and dashes) to potentially bypass content filters',
+    cost: 'Low',
+    asrIncrease: '20-30%',
+    link: '/docs/red-team/strategies/other-encodings/#morse-code',
+  },
+  {
+    category: 'Static (Single-Turn)',
+    strategy: 'piglatin',
+    displayName: 'Pig Latin',
+    description: 'Word transformation encoding',
+    longDescription:
+      'Tests handling of text transformed into Pig Latin (rearranging word parts) to potentially bypass content filters',
+    cost: 'Low',
+    asrIncrease: '20-30%',
+    link: '/docs/red-team/strategies/other-encodings/#pig-latin',
+  },
+  {
     category: 'Regression',
     strategy: 'retry',
     displayName: 'Retry',

@@ -26,7 +26,6 @@ export default function Careers(): JSX.Element {
         </p>
         <p>We are currently hiring:</p>
         <ul>
-          <li>Founding Account Executive</li>
           <li>Founding Developer Relations</li>
           <li>Senior Software Engineers</li>
         </ul>
@@ -38,7 +37,7 @@ export default function Careers(): JSX.Element {
           If you're interested in exploring opportunities, please reach out to{' '}
           <a href="mailto:careers@promptfoo.dev">careers@promptfoo.dev</a>. Include a link to your
           LinkedIn or GitHub profile in your email. We carefully review all applications. We will
-          give preference to applicants who have already made contributions to promptfoo.
+          give preference to applicants who have used or made contributions to Promptfoo.
         </p>
       </main>
     </Layout>

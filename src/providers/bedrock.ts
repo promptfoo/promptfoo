@@ -276,6 +276,7 @@ export enum LlamaVersion {
   V3_1 = 3.1,
   V3_2 = 3.2,
   V3_3 = 3.3,
+  V4 = 4,
 }
 
 export interface LlamaMessage {
@@ -341,6 +342,21 @@ export const formatPromptLlama3Instruct = (messages: LlamaMessage[]): string => 
   return formattedPrompt;
 };
 
+// Llama 4 format uses different tags
+export const formatPromptLlama4 = (messages: LlamaMessage[]): string => {
+  let formattedPrompt = '<|begin_of_text|>';
+
+  for (const message of messages) {
+    formattedPrompt += dedent`<|header_start|>${message.role}<|header_end|>
+
+${message.content.trim()}<|eot|>`;
+  }
+
+  // Add assistant header for completion
+  formattedPrompt += '<|header_start|>assistant<|header_end|>';
+  return formattedPrompt;
+};
+
 export const getLlamaModelHandler = (version: LlamaVersion) => {
   if (
     ![
@@ -349,6 +365,7 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
       LlamaVersion.V3_1,
       LlamaVersion.V3_2,
       LlamaVersion.V3_3,
+      LlamaVersion.V4,
     ].includes(version)
   ) {
     throw new Error(`Unsupported LLAMA version: ${version}`);
@@ -373,6 +390,9 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
         case LlamaVersion.V3_2:
         case LlamaVersion.V3_3:
           finalPrompt = formatPromptLlama3Instruct(messages as LlamaMessage[]);
+          break;
+        case LlamaVersion.V4:
+          finalPrompt = formatPromptLlama4(messages as LlamaMessage[]);
           break;
         default:
           throw new Error(`Unsupported LLAMA version: ${version}`);
@@ -816,6 +836,7 @@ export const BEDROCK_MODEL = {
   LLAMA3_1: getLlamaModelHandler(LlamaVersion.V3_1),
   LLAMA3_2: getLlamaModelHandler(LlamaVersion.V3_2),
   LLAMA3_3: getLlamaModelHandler(LlamaVersion.V3_3),
+  LLAMA4: getLlamaModelHandler(LlamaVersion.V4),
   COHERE_COMMAND: {
     params: (
       config: BedrockCohereCommandGenerationOptions,
@@ -1175,6 +1196,8 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'meta.llama3-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
   'meta.llama3-8b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
+  'meta.llama4-scout-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
+  'meta.llama4-maverick-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
   'mistral.mistral-7b-instruct-v0:2': BEDROCK_MODEL.MISTRAL,
   'mistral.mistral-large-2402-v1:0': BEDROCK_MODEL.MISTRAL,
   'mistral.mistral-large-2407-v1:0': BEDROCK_MODEL.MISTRAL_LARGE_2407,
@@ -1188,6 +1211,8 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'apac.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'apac.meta.llama4-scout-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
+  'apac.meta.llama4-maverick-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
 
   // EU Models
   'eu.amazon.nova-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
@@ -1198,6 +1223,8 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'eu.anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.meta.llama3-2-1b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'eu.meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
+  'eu.meta.llama4-scout-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
+  'eu.meta.llama4-maverick-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
 
   // Gov Cloud Models
   'us-gov.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -1223,6 +1250,8 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'us.meta.llama3-2-90b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'us.meta.llama3-3-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_3,
+  'us.meta.llama4-scout-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
+  'us.meta.llama4-maverick-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
 };
 
 // See https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
@@ -1251,6 +1280,9 @@ function getHandlerForModel(modelName: string) {
   }
   if (modelName.includes('meta.llama3-3')) {
     return BEDROCK_MODEL.LLAMA3_3;
+  }
+  if (modelName.includes('meta.llama4')) {
+    return BEDROCK_MODEL.LLAMA4;
   }
   if (modelName.includes('meta.llama3')) {
     return BEDROCK_MODEL.LLAMA3;

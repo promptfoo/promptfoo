@@ -226,7 +226,11 @@ export async function createTransformResponse(
     return (data, text, context) => {
       try {
         const result = parser(data, text, context);
-        return { output: result };
+        if (typeof result === 'object') {
+          return result;
+        } else {
+          return { output: result };
+        }
       } catch (err) {
         logger.error(`Error in response transform function: ${String(err)}`);
         throw err;
