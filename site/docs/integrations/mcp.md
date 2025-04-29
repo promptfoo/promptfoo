@@ -1,6 +1,7 @@
 ---
 title: Using MCP (Model Context Protocol) in Promptfoo
-sidebar_position: 50
+description: Configure and integrate Model Context Protocol (MCP) with Promptfoo to enable tool use, memory, and agentic capabilities across different LLM providers
+sidebar_position: 20
 ---
 
 # Using MCP (Model Context Protocol) in Promptfoo
@@ -32,6 +33,8 @@ providers:
   - `args`: Arguments to pass to the command (e.g., `['-y', '@modelcontextprotocol/server-memory']`).
   - `name`: (Optional) A name for the server instance.
 - You can also connect to a remote MCP server by specifying a `url` instead of `command`/`args`.
+
+MCP servers can be run locally or accessed remotely. For development and testing, a local server is often simplest, while production environments may use a centralized remote server.
 
 #### Example: Connecting to a Remote MCP Server
 
@@ -125,6 +128,8 @@ MCP is supported by most major providers in Promptfoo, including:
 - Ensure your MCP server is running and accessible.
 - Check your provider logs for MCP connection errors.
 
----
+## See Also
 
-For advanced use cases, see the [Promptfoo MCP source code](https://github.com/promptfoo/promptfoo) or open an issue for help.
+- [Configuration Reference](../configuration/reference.md)
+- [Provider Configuration](../providers/index.md)
+- [Tool-Using LLM Evaluation](../guides/tool-using-llms.md)
