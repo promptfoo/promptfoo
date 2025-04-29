@@ -119,6 +119,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
         prompt: 5,
         completion: 5,
       },
+      metadata: {},
     });
 
     expect(vertexUtil.getGoogleClient).toHaveBeenCalledWith();
@@ -287,6 +288,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
         prompt: 8,
         completion: 7,
       },
+      metadata: {},
     });
 
     expect(mockRequest).toHaveBeenCalledWith(
@@ -373,6 +375,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
         prompt: 5,
         completion: 5,
       },
+      metadata: {},
     });
 
     expect(fs.existsSync).toHaveBeenCalledWith(expect.stringContaining('tools.json'));
