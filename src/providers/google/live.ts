@@ -11,7 +11,6 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../../types';
-import '../../util';
 import type { CompletionOptions, FunctionCall } from './types';
 import type { GeminiFormat } from './util';
 import { geminiFormatAndSystemInstructions, loadFile } from './util';
@@ -226,6 +225,16 @@ export class GoogleLiveProvider implements ApiProvider {
                   text: response_text_total,
                   toolCall: { functionCalls: function_calls_total },
                   statefulApiState,
+                },
+                metadata: {
+                  ...(response.groundingMetadata && {
+                    groundingMetadata: response.groundingMetadata,
+                  }),
+                  ...(response.groundingChunks && { groundingChunks: response.groundingChunks }),
+                  ...(response.groundingSupports && {
+                    groundingSupports: response.groundingSupports,
+                  }),
+                  ...(response.webSearchQueries && { webSearchQueries: response.webSearchQueries }),
                 },
               });
               ws.close();

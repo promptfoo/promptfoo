@@ -1,3 +1,5 @@
+import type { MCPConfig } from '../mcp/types';
+
 interface Blob {
   mimeType: string;
   data: string; // base64-encoded string
@@ -57,7 +59,7 @@ export const VALID_SCHEMA_TYPES: ReadonlyArray<SchemaType> = [
   'OBJECT',
 ];
 
-interface FunctionDeclaration {
+export interface FunctionDeclaration {
   name: string;
   description?: string;
   parameters?: Schema;
@@ -78,6 +80,12 @@ export interface Tool {
   googleSearchRetrieval?: GoogleSearchRetrieval;
   codeExecution?: object;
   googleSearch?: object;
+
+  // Note: These snake_case properties are supported but should be accessed with type assertions
+  // Type definitions included for documentation purposes only
+  // google_search_retrieval?: GoogleSearchRetrieval;
+  // code_execution?: object;
+  // google_search?: object;
 }
 
 export interface CompletionOptions {
@@ -166,6 +174,8 @@ export interface CompletionOptions {
       llama_guard_settings?: Record<string, unknown>;
     };
   };
+
+  mcp?: MCPConfig;
 }
 
 // Claude API interfaces
