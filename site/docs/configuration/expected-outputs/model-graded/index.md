@@ -149,7 +149,7 @@ tests:
 
 ## Overriding the LLM grader
 
-By default, model-graded asserts use gpt-4.1-2025-04-14 for grading. If you do not have access to gpt-4.1-2025-04-14 or prefer not to use it, you can override the rubric grader. There are several ways to do this, depending on your preferred workflow:
+By default, model-graded asserts use `gpt-4.1-2025-04-14` for grading. If you do not have access to `gpt-4.1-2025-04-14` or prefer not to use it, you can override the rubric grader. There are several ways to do this, depending on your preferred workflow:
 
 1. Using the `--grader` CLI option:
 
