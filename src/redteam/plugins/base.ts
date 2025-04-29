@@ -101,14 +101,9 @@ export abstract class RedteamPluginBase {
    * Generates test cases based on the plugin's configuration.
    * @param n - The number of test cases to generate.
    * @param delayMs - The delay in milliseconds between plugin API calls.
-   * @param templateGetter - A function that returns a promise of a template string.
    * @returns A promise that resolves to an array of TestCase objects.
    */
-  async generateTests(
-    n: number,
-    delayMs: number = 0,
-    templateGetter: () => Promise<string> = this.getTemplate,
-  ): Promise<TestCase[]> {
+  async generateTests(n: number, delayMs: number = 0): Promise<TestCase[]> {
     logger.debug(`Generating ${n} test cases`);
     const batchSize = 20;
 
@@ -125,7 +120,7 @@ export abstract class RedteamPluginBase {
 
       logger.debug(`Generating batch of ${currentBatchSize} prompts`);
       const nunjucks = getNunjucksEngine();
-      const renderedTemplate = nunjucks.renderString(await templateGetter(), {
+      const renderedTemplate = nunjucks.renderString(await this.getTemplate(), {
         purpose: this.purpose,
         n: currentBatchSize,
         examples: this.config.examples,
@@ -156,10 +151,6 @@ export abstract class RedteamPluginBase {
     const allPrompts = await retryWithDeduplication(generatePrompts, n);
     const prompts = sampleArray(allPrompts, n);
     logger.debug(`${this.constructor.name} generated test cases from ${prompts.length} prompts`);
-
-    if (prompts.length !== n) {
-      logger.warn(`Expected ${n} prompts, got ${prompts.length} for ${this.constructor.name}`);
-    }
 
     return this.promptsToTestCases(prompts);
   }
