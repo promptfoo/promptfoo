@@ -108,6 +108,9 @@ function findLargestResultSize(results: any[], sampleSize: number = 1000): numbe
 }
 
 function createChunks(results: any[]): any[][] {
+  if (results.length === 0) {
+    return [];
+  }
   const largestResult = findLargestResultSize(results);
   // Constants
   const TARGET_CHUNK_SIZE = 10 * 1024 * 1024; // 10MB in bytes
