@@ -9,7 +9,7 @@ function PricingHeader() {
   return (
     <header className={styles.pricingHeader}>
       <h1>LLM security and testing for teams of all sizes</h1>
-      <p>Choose the plan that's right for your team</p>
+      <p>Choose the plan that's right for your team.</p>
     </header>
   );
 }
@@ -19,7 +19,7 @@ function PricingTable() {
     {
       name: 'Community',
       price: 'Free Forever',
-      description: 'Our open-source tool, perfect for individual developers and small teams',
+      description: 'Our open-source tool, perfect for individual developers and small teams.',
       features: [
         'All LLM evaluation features',
         'All model providers and integrations',
@@ -48,9 +48,11 @@ function PricingTable() {
         'Team sharing & collaboration',
         'Continuous monitoring',
         'Centralized security/compliance dashboard',
-        'Customized red teaming plugins',
-        'SSO and Access Control',
-        'Cloud deployment',
+        'Customizable scan templates and target settings',
+        'SSO and granular permission profiles',
+        'Promptfoo API access',
+        'Managed cloud deployment',
+        'Professional services support',
         'Priority support & SLA guarantees',
       ],
       cta: 'Schedule Demo',
@@ -60,12 +62,13 @@ function PricingTable() {
     {
       name: 'On-Premise',
       price: 'Custom',
-      description: 'For organizations that require full control over their infrastructure',
+      description: 'For organizations that require full control over their infrastructure.',
       features: [
         'All Enterprise features',
         'Deployment on your own infrastructure',
         'Complete data isolation',
-        'Dedicated support team',
+        'Dedicated runner',
+        'Assigned deployment engineer',
       ],
       cta: 'Contact Us',
       ctaLink: '/contact/',
@@ -110,24 +113,224 @@ function PricingTable() {
   );
 }
 
+function FeatureComparisonTable() {
+  const features = [
+    {
+      category: 'Security & Testing',
+      items: [
+        {
+          name: 'LLM evaluation capabilities',
+          community: true,
+          enterprise: true,
+          enterpriseOnPrem: true,
+        },
+        {
+          name: 'Basic vulnerability scanning',
+          community: true,
+          enterprise: true,
+          enterpriseOnPrem: true,
+        },
+        {
+          name: 'Advanced vulnerability detection',
+          community: false,
+          enterprise: true,
+          enterpriseOnPrem: true,
+        },
+        {
+          name: 'Remediation recommendations',
+          community: false,
+          enterprise: true,
+          enterpriseOnPrem: true,
+        },
+        {
+          name: 'Centralized guardrail dashboard',
+          community: false,
+          enterprise: true,
+          enterpriseOnPrem: true,
+        },
+        {
+          name: 'Customized red teaming plugins',
+          community: false,
+          enterprise: true,
+          enterpriseOnPrem: true,
+        },
+        {
+          name: 'Organization-specific scan templates',
+          community: false,
+          enterprise: true,
+          enterpriseOnPrem: true,
+        },
+        {
+          name: 'Saved target configurations',
+          community: false,
+          enterprise: true,
+          enterpriseOnPrem: true,
+        },
+        {
+          name: 'Searchable scan history',
+          community: false,
+          enterprise: true,
+          enterpriseOnPrem: true,
+        },
+      ],
+    },
+    {
+      category: 'Team & Collaboration',
+      items: [
+        {
+          name: 'Teams-based access control and SSO',
+          community: false,
+          enterprise: true,
+          enterpriseOnPrem: true,
+        },
+        {
+          name: 'Team sharing & collaboration',
+          community: false,
+          enterprise: true,
+          enterpriseOnPrem: true,
+        },
+        {
+          name: 'Custom roles & permissions',
+          community: false,
+          enterprise: true,
+          enterpriseOnPrem: true,
+        },
+        {
+          name: 'Centralized dashboard',
+          community: false,
+          enterprise: true,
+          enterpriseOnPrem: true,
+        },
+      ],
+    },
+    {
+      category: 'Integrations',
+      items: [
+        { name: 'CI/CD integration', community: true, enterprise: true, enterpriseOnPrem: true },
+        {
+          name: 'Promptfoo API integration',
+          community: false,
+          enterprise: true,
+          enterpriseOnPrem: true,
+        },
+        { name: 'Webhooks', community: false, enterprise: true, enterpriseOnPrem: true },
+      ],
+    },
+    {
+      category: 'Infrastructure',
+      items: [
+        { name: 'Cloud deployment', community: false, enterprise: true, enterpriseOnPrem: false },
+        {
+          name: 'On-premise deployment',
+          community: false,
+          enterprise: false,
+          enterpriseOnPrem: true,
+        },
+        {
+          name: 'Complete data isolation',
+          community: false,
+          enterprise: false,
+          enterpriseOnPrem: true,
+        },
+      ],
+    },
+    {
+      category: 'Support & Services',
+      items: [
+        { name: 'Community support', community: true, enterprise: true, enterpriseOnPrem: true },
+        {
+          name: 'Priority support & SLA guarantees',
+          community: false,
+          enterprise: true,
+          enterpriseOnPrem: true,
+        },
+        {
+          name: 'Dedicated support team',
+          community: false,
+          enterprise: true,
+          enterpriseOnPrem: true,
+        },
+        {
+          name: 'Dedicated deployment engineer',
+          community: false,
+          enterprise: false,
+          enterpriseOnPrem: true,
+        },
+      ],
+    },
+  ];
+
+  return (
+    <section className={styles.comparisonSection}>
+      <h2>Feature Comparison</h2>
+      <div className={styles.tableWrapper}>
+        <table className={styles.comparisonTable}>
+          <thead>
+            <tr>
+              <th>Feature</th>
+              <th>Community</th>
+              <th>Enterprise</th>
+              <th>Enterprise On-Premise</th>
+            </tr>
+          </thead>
+          <tbody>
+            {features.map((featureGroup, groupIndex) => (
+              <React.Fragment key={groupIndex}>
+                <tr className={styles.categoryRow}>
+                  <td colSpan={4}>{featureGroup.category}</td>
+                </tr>
+                {featureGroup.items.map((feature, featureIndex) => (
+                  <tr key={featureIndex}>
+                    <td>{feature.name}</td>
+                    <td className={styles.centerCell}>
+                      {feature.community ? <CheckIcon className={styles.checkIcon} /> : '—'}
+                    </td>
+                    <td className={styles.centerCell}>
+                      {feature.enterprise ? <CheckIcon className={styles.checkIcon} /> : '—'}
+                    </td>
+                    <td className={styles.centerCell}>
+                      {feature.enterpriseOnPrem ? <CheckIcon className={styles.checkIcon} /> : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </React.Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 function EnterpriseFeatures() {
   const features = [
     {
       title: 'Reports & Continuous Monitoring',
       description:
         'Understand your LLM security status across all projects with real-time alerts and automated evaluations.',
-      image: '/img/continuous-monitoring@2x.png',
+      image: '/img/continuous-monitoring-framed.png',
     },
     {
       title: 'Issue Tracking & Guided Remediation',
       description: 'Track remediation progress and get suggested steps for each issue.',
-      image: '/img/riskreport-2@2x.png',
+      image: '/img/vulnerability-list-framed.png',
     },
     {
       title: 'Comprehensive Scanning & Compliance',
+      description: 'Verify compliance with industry frameworks and standards.',
+      image: '/img/compliance-frameworks.png',
+    },
+    {
+      title: 'Organization-Specific Configurations',
       description:
-        'Additional plugins, help with creating custom plugins, and support for common standards frameworks.',
-      image: '/img/report-with-compliance@2x.png',
+        'Create customizable plugin collections, scan configurations, and target settings that can be shared among colleagues.',
+      image: '/img/enterprise-docs/create-plugin-collection.gif',
+    },
+    {
+      title: 'Teams-Based Controls',
+      description:
+        'Manage your LLM applications with teams-based access control and SSO, granular permission profiles, and customizable API access.',
+      image: '/img/enterprise-docs/add-team-members.png',
     },
   ];
 
@@ -190,7 +393,7 @@ function DemoCTA() {
   return (
     <section className={styles.demoCTA}>
       <h2>Ready to get started?</h2>
-      <p>Schedule a demo to see how Promptfoo can help secure your LLM applications</p>
+      <p>Schedule a demo to see how Promptfoo can help secure your LLM applications.</p>
       <Link
         to="https://cal.com/team/promptfoo/intro2"
         className={clsx('button', 'button--lg', 'button--primary', styles.demoButton)}
@@ -211,6 +414,7 @@ export default function Pricing(): JSX.Element {
         <PricingHeader />
         <PricingTable />
         <EnterpriseFeatures />
+        <FeatureComparisonTable />
         <FAQSection />
         <DemoCTA />
       </main>
