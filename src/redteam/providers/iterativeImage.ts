@@ -1,4 +1,5 @@
 import dedent from 'dedent';
+import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import type {
@@ -246,7 +247,7 @@ async function runRedteamConversation({
 
   let targetPrompt: string | null = null;
 
-  const numIterations = Number.parseInt(process.env.PROMPTFOO_NUM_JAILBREAK_ITERATIONS ?? '4', 10);
+  const numIterations = getEnvInt('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', 4);
 
   for (let i = 0; i < numIterations; i++) {
     try {

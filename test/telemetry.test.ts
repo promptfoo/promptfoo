@@ -37,6 +37,25 @@ jest.mock('../src/constants', () => ({
   VERSION: '1.0.0',
 }));
 
+// Mock envars
+jest.mock('../src/envars', () => ({
+  getEnvBool: jest.fn().mockImplementation((key) => {
+    if (key === 'PROMPTFOO_DISABLE_TELEMETRY') {
+      return process.env.PROMPTFOO_DISABLE_TELEMETRY === '1';
+    }
+    return false;
+  }),
+  getEnvString: jest.fn().mockImplementation((key) => {
+    if (key === 'POSTHOG_KEY') {
+      return process.env.POSTHOG_KEY || undefined;
+    }
+    if (key === 'NODE_ENV') {
+      return process.env.NODE_ENV || undefined;
+    }
+    return undefined;
+  }),
+}));
+
 describe('Telemetry', () => {
   let originalEnv: NodeJS.ProcessEnv;
   let mockPostHogInstance: any;

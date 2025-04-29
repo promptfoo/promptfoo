@@ -114,6 +114,7 @@ export type RedteamAssertionTypes = `promptfoo:redteam:${string}`;
 export interface RedteamRunOptions {
   id?: string;
   config?: string;
+  target?: string;
   output?: string;
   cache?: boolean;
   envPath?: string;

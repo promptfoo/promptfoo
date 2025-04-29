@@ -31,17 +31,21 @@ interface SafetyRating {
 interface Candidate {
   content: Content;
   finishReason?:
-    | 'FINISH_REASON_UNSPECIFIED'
-    | 'STOP'
-    | 'MAX_TOKENS'
-    | 'SAFETY'
-    | 'RECITATION'
-    | 'OTHER'
     | 'BLOCKLIST'
+    | 'FINISH_REASON_UNSPECIFIED'
+    | 'MALFORMED_FUNCTION_CALL'
+    | 'MAX_TOKENS'
+    | 'OTHER'
     | 'PROHIBITED_CONTENT'
+    | 'RECITATION'
+    | 'SAFETY'
     | 'SPII'
-    | 'MALFORMED_FUNCTION_CALL';
+    | 'STOP';
+  groundingChunks?: Record<string, any>[];
+  groundingMetadata?: Record<string, any>;
+  groundingSupports?: Record<string, any>[];
   safetyRatings: SafetyRating[];
+  webSearchQueries?: string[];
 }
 
 interface GeminiUsageMetadata {
@@ -333,6 +337,35 @@ export function mergeParts(parts1: Part[] | string | undefined, parts2: Part[] |
   return array1;
 }
 
+/**
+ * Normalizes tools configuration to handle both snake_case and camelCase formats.
+ * This ensures compatibility with both Google API formats while maintaining
+ * consistent behavior in our codebase.
+ */
+export function normalizeTools(tools: Tool[]): Tool[] {
+  return tools.map((tool) => {
+    const normalizedTool: Tool = { ...tool };
+
+    // Use index access with type assertion to avoid TypeScript errors
+    // Handle google_search -> googleSearch conversion
+    if ((tool as any).google_search && !normalizedTool.googleSearch) {
+      normalizedTool.googleSearch = (tool as any).google_search;
+    }
+
+    // Handle code_execution -> codeExecution conversion
+    if ((tool as any).code_execution && !normalizedTool.codeExecution) {
+      normalizedTool.codeExecution = (tool as any).code_execution;
+    }
+
+    // Handle google_search_retrieval -> googleSearchRetrieval conversion
+    if ((tool as any).google_search_retrieval && !normalizedTool.googleSearchRetrieval) {
+      normalizedTool.googleSearchRetrieval = (tool as any).google_search_retrieval;
+    }
+
+    return normalizedTool;
+  });
+}
+
 export function loadFile(
   config_var: Tool[] | string | undefined,
   context_vars: Record<string, string | object> | undefined,
@@ -346,12 +379,19 @@ export function loadFile(
   const fileContents = maybeLoadFromExternalFile(renderVarsInObject(config_var, context_vars));
   if (typeof fileContents === 'string') {
     try {
-      return JSON.parse(fileContents);
+      const parsedContents = JSON.parse(fileContents);
+      return Array.isArray(parsedContents) ? normalizeTools(parsedContents) : parsedContents;
     } catch (err) {
       logger.debug(`ERROR: failed to convert file contents to JSON:\n${JSON.stringify(err)}`);
       return fileContents;
     }
   }
+
+  // If fileContents is already an array of tools, normalize them
+  if (Array.isArray(fileContents)) {
+    return normalizeTools(fileContents);
+  }
+
   return fileContents;
 }
 

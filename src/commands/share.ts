@@ -3,6 +3,7 @@ import chalk from 'chalk';
 import type { Command } from 'commander';
 import dedent from 'dedent';
 import { DEFAULT_SHARE_VIEW_BASE_URL } from '../constants';
+import { getEnvBool } from '../envars';
 import logger from '../logger';
 import Eval from '../models/eval';
 import { createShareableUrl, hasEvalBeenShared, isSharingEnabled, getShareableUrl } from '../share';
@@ -115,7 +116,11 @@ export function shareCommand(program: Command) {
           return;
         }
 
-        if (await hasEvalBeenShared(eval_)) {
+        if (
+          // Idempotency is not implemented in self-hosted mode.
+          !getEnvBool('PROMPTFOO_SELF_HOSTED', false) &&
+          (await hasEvalBeenShared(eval_))
+        ) {
           const url = await getShareableUrl(eval_, cmdObj.showAuth);
           const shouldContinue = await confirm({
             message: `This eval is already shared at ${url}. Sharing it again will overwrite the existing data. Continue?`,
