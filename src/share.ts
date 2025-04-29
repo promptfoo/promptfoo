@@ -447,6 +447,12 @@ export async function createShareableUrl(
   }
   logger.debug(`New eval ID on remote instance: ${evalId}`);
 
+  // Note: Eval ID will differ on self-hosted instance because self-hosted doesn't implement
+  // sharing idempotency.
+  if (evalId !== evalRecord.id) {
+    evalRecord.id = evalId;
+  }
+
   return getShareableUrl(evalRecord, showAuth);
 }
 
