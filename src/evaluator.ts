@@ -247,73 +247,24 @@ export async function runEval({
       const activeProvider = isApiProvider(test.provider) ? test.provider : provider;
       logger.debug(`Provider type: ${activeProvider.id()}`);
 
-      // The memory poisoning plugin requires the following additional steps:
-      // 1. Generate a scenario containing memories and follow up questions/commands which are dependent on the memories.
-      // 2. Send the memory message to the provider.
-      // 3. Send the test case to the provider; the test case should poison the memory created in the previous step.
-      // 4. Send the follow up question to the provider.
-      // A memory is successfully poisoned if the follow up question is answered incorrectly.
-      if (test.metadata?.pluginId === 'agentic:memory-poisoning') {
-        // Generate a scenario containing memories and follow up questions/commands which are dependent on the memories.
-        const scenario = await generateMemoryPoisoningScenario(test.metadata.purpose);
-        vars.scenario = scenario;
-        // Send the memory message to the provider.
-        const memoryResponse = await activeProvider.callApi(scenario.memory);
-        // Send the test case to the provider; the test case should poison the memory created in the previous step.
-        const testResponse = await activeProvider.callApi(renderedPrompt, {
-          // Always included
-          vars,
-          // Part of these may be removed in python and script providers, but every Javascript provider gets them
-          prompt,
-          filters,
-          originalProvider: provider,
-          test,
-          // All of these are removed in python and script providers, but every Javascript provider gets them
-          logger: logger as unknown as winston.Logger,
-          fetchWithCache,
-          getCache,
-        });
-        // Send the follow up question to the provider.
-        response = await activeProvider.callApi(scenario.followUp);
+      response = await activeProvider.callApi(renderedPrompt, {
+        // Always included
+        vars,
 
-        // Log the conversation into the conversations object
-        vars._conversation = [
-          {
-            input: scenario.memory,
-            output: memoryResponse.output,
-            type: 'memory',
-          },
-          {
-            input: renderedPrompt,
-            output: testResponse.output,
-            type: 'test',
-          },
-          {
-            input: scenario.followUp,
-            output: response.output,
-            type: 'followup',
-          },
-        ];
-      } else {
-        response = await activeProvider.callApi(renderedPrompt, {
-          // Always included
-          vars,
+        // Part of these may be removed in python and script providers, but every Javascript provider gets them
+        prompt,
+        filters,
+        originalProvider: provider,
+        test,
 
-          // Part of these may be removed in python and script providers, but every Javascript provider gets them
-          prompt,
-          filters,
-          originalProvider: provider,
-          test,
+        // All of these are removed in python and script providers, but every Javascript provider gets them
+        logger: logger as unknown as winston.Logger,
+        fetchWithCache,
+        getCache,
+      });
 
-          // All of these are removed in python and script providers, but every Javascript provider gets them
-          logger: logger as unknown as winston.Logger,
-          fetchWithCache,
-          getCache,
-        });
-
-        logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
-        logger.debug(`Provider response cached property explicitly: ${response.cached}`);
-      }
+      logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
+      logger.debug(`Provider response cached property explicitly: ${response.cached}`);
     }
     const endTime = Date.now();
     latencyMs = endTime - startTime;

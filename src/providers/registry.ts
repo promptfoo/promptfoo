@@ -2,6 +2,10 @@ import dedent from 'dedent';
 import path from 'path';
 import { importModule } from '../esm';
 import logger from '../logger';
+import {
+  PLUGIN_ID as MEMORY_POISONING_PLUGIN_ID,
+  MemoryPoisoningProvider,
+} from '../redteam/plugins/agentic/memoryPoisoning';
 import RedteamBestOfNProvider from '../redteam/providers/bestOfN';
 import RedteamCrescendoProvider from '../redteam/providers/crescendo';
 import RedteamGoatProvider from '../redteam/providers/goat';
@@ -94,6 +98,16 @@ interface ProviderFactory {
 }
 
 export const providerMap: ProviderFactory[] = [
+  {
+    test: (providerPath: string) => providerPath === MEMORY_POISONING_PLUGIN_ID,
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return new MemoryPoisoningProvider(providerOptions);
+    },
+  },
   {
     test: (providerPath: string) => providerPath.startsWith('adaline:'),
     create: async (
