@@ -311,12 +311,6 @@ function EnterpriseFeatures() {
       image: '/img/continuous-monitoring-framed.png',
     },
     {
-      title: 'Teams-Based Controls',
-      description:
-        'Manage your LLM applications with teams-based access control and SSO, granular permission profiles, and customizable API access.',
-      image: '/img/enterprise-docs/add-team-members.png',
-    },
-    {
       title: 'Issue Tracking & Guided Remediation',
       description: 'Track remediation progress and get suggested steps for each issue.',
       image: '/img/vulnerability-list-framed.png',
@@ -331,6 +325,12 @@ function EnterpriseFeatures() {
       description:
         'Create customizable plugin collections, scan configurations, and target settings that can be shared among colleagues.',
       image: '/img/enterprise-docs/create-plugin-collection.gif',
+    },
+    {
+      title: 'Teams-Based Controls',
+      description:
+        'Manage your LLM applications with teams-based access control and SSO, granular permission profiles, and customizable API access.',
+      image: '/img/enterprise-docs/add-team-members.png',
     },
   ];
 
