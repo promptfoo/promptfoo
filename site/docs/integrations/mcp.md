@@ -132,4 +132,3 @@ MCP is supported by most major providers in Promptfoo, including:
 
 - [Configuration Reference](../configuration/reference.md)
 - [Provider Configuration](../providers/index.md)
-- [Tool-Using LLM Evaluation](../guides/tool-using-llms.md)
