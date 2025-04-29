@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import { PostHog } from 'posthog-node';
 import { z } from 'zod';
 import { VERSION } from './constants';
-import { getEnvBool, getEnvString } from './envars';
+import { getEnvBool } from './envars';
 import { fetchWithTimeout } from './fetch';
 import { readGlobalConfig } from './globalConfig/globalConfig';
 import logger from './logger';
@@ -24,18 +24,18 @@ export type TelemetryEvent = z.infer<typeof TelemetryEventSchema>;
 export type TelemetryEventTypes = TelemetryEvent['event'];
 export type EventProperties = TelemetryEvent['properties'];
 
+export const POSTHOG_KEY = process.env.PROMPTFOO_POSTHOG_KEY;
 const CONSENT_ENDPOINT = 'https://api.promptfoo.dev/consent';
 const EVENTS_ENDPOINT = 'https://a.promptfoo.app';
 const KA_ENDPOINT = 'https://ka.promptfoo.app/';
 
 let posthogClient: PostHog | null = null;
 try {
-  const posthogKey = getEnvString('POSTHOG_KEY');
-  if (posthogKey) {
-    posthogClient = new PostHog(posthogKey, {
-      host: EVENTS_ENDPOINT,
-    });
-  }
+  posthogClient = POSTHOG_KEY
+    ? new PostHog(POSTHOG_KEY, {
+        host: EVENTS_ENDPOINT,
+      })
+    : null;
 } catch {
   posthogClient = null;
 }
@@ -96,9 +96,6 @@ export class Telemetry {
   }
 
   private sendEvent(eventName: TelemetryEventTypes, properties: EventProperties): void {
-    if (getEnvString('NODE_ENV') === 'test') {
-      return;
-    }
     if (posthogClient) {
       const globalConfig = readGlobalConfig();
       posthogClient.capture({
