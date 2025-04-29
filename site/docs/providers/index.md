@@ -223,3 +223,44 @@ providers:
       presence_penalty: 0.5
       stop: ["\n", 'Human:', 'AI:']
 ```
+
+## Model Context Protocol (MCP)
+
+Promptfoo supports the Model Context Protocol (MCP) for enabling advanced tool use and agentic capabilities in LLM providers. MCP allows you to connect providers to external MCP servers to enable tool orchestration, memory, and more.
+
+### Basic MCP Configuration
+
+Enable MCP for a provider by adding the `mcp` block to your provider's configuration:
+
+```yaml
+providers:
+  - id: openai:gpt-4.1-mini
+    config:
+      temperature: 0.7
+      mcp:
+        enabled: true
+        server:
+          command: npx
+          args: ['-y', '@modelcontextprotocol/server-memory']
+          name: memory
+```
+
+### Multiple MCP Servers
+
+You can connect a single provider to multiple MCP servers:
+
+```yaml
+providers:
+  - id: openai:gpt-4.1-mini
+    config:
+      mcp:
+        enabled: true
+        servers:
+          - command: npx
+            args: ['-y', '@modelcontextprotocol/server-memory']
+            name: server_a
+          - url: http://localhost:8001
+            name: server_b
+```
+
+For detailed MCP documentation and advanced configurations, see the [MCP Integration Guide](../integrations/mcp.md).
