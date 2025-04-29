@@ -86,6 +86,8 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     if (this.mcpClient) {
       mcpTools = transformMCPToolsToAnthropic(this.mcpClient.getAllTools());
     }
+    const fileTools = maybeLoadToolsFromExternalFile(this.config.tools) || [];
+    const allTools = [...mcpTools, ...fileTools];
 
     const params: Anthropic.MessageCreateParams = {
       model: this.modelName,
@@ -99,8 +101,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         this.config.thinking || thinking
           ? this.config.temperature
           : this.config.temperature || getEnvFloat('ANTHROPIC_TEMPERATURE', 0),
-      // Always include tools parameter
-      tools: [...mcpTools, ...(maybeLoadToolsFromExternalFile(this.config.tools) || [])],
+      ...(allTools.length > 0 ? { tools: allTools } : {}),
       ...(this.config.tool_choice ? { tool_choice: this.config.tool_choice } : {}),
       ...(this.config.thinking || thinking ? { thinking: this.config.thinking || thinking } : {}),
       ...(typeof this.config?.extra_body === 'object' && this.config.extra_body
