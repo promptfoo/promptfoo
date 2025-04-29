@@ -63,6 +63,19 @@ describe('evaluator', () => {
 
       expect(evaluations).toContainEqual(expect.objectContaining({ evalId: eval3.id }));
     });
+
+    it('should return evaluations in descending order by createdAt', async () => {
+      const eval1 = await EvalFactory.create();
+      const eval2 = await EvalFactory.create();
+      const eval3 = await EvalFactory.create();
+
+      const evaluations = await getEvalSummaries();
+
+      expect(evaluations).toHaveLength(3);
+      expect(evaluations[0].evalId).toBe(eval3.id);
+      expect(evaluations[1].evalId).toBe(eval2.id);
+      expect(evaluations[2].evalId).toBe(eval1.id);
+    });
   });
 
   describe('delete', () => {

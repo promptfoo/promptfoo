@@ -1,3 +1,5 @@
+import type { MCPConfig } from '../mcp/types';
+
 interface Blob {
   mimeType: string;
   data: string; // base64-encoded string
@@ -57,7 +59,7 @@ export const VALID_SCHEMA_TYPES: ReadonlyArray<SchemaType> = [
   'OBJECT',
 ];
 
-interface FunctionDeclaration {
+export interface FunctionDeclaration {
   name: string;
   description?: string;
   parameters?: Schema;
@@ -172,6 +174,8 @@ export interface CompletionOptions {
       llama_guard_settings?: Record<string, unknown>;
     };
   };
+
+  mcp?: MCPConfig;
 }
 
 // Claude API interfaces
