@@ -1,12 +1,12 @@
 import dedent from 'dedent';
+import { OpenAiResponsesProvider } from '../../../providers/openai/responses';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderOptions,
   ProviderResponse,
-} from 'src/types/providers';
-import { OpenAiResponsesProvider } from '../../../providers/openai/responses';
+} from '../../../types/providers';
 import invariant from '../../../util/invariant';
 import { RedteamGraderBase } from '../base';
 
