@@ -16,7 +16,6 @@ import logger from './logger';
 import type Eval from './models/eval';
 import { generateIdFromPrompt } from './models/prompt';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
-import { generateMemoryPoisoningScenario } from './redteam/plugins/agentic/memoryPoisoning';
 import { isPandamoniumProvider } from './redteam/providers/pandamonium';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
@@ -168,7 +167,7 @@ export async function runEval({
   evaluateOptions,
   testIdx,
   promptIdx,
-  conversations = {}, //
+  conversations, //
   registers,
   isRedteam,
   allTests,
@@ -275,7 +274,7 @@ export async function runEval({
       // Use the `content` field if present (OpenAI chat format)
       conversationLastInput = lastElt?.content || lastElt;
     }
-    if (Object.keys(conversations).length > 0) {
+    if (conversations) {
       conversations[conversationKey] = conversations[conversationKey] || [];
       conversations[conversationKey].push({
         prompt: renderedJson || renderedPrompt,
