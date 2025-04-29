@@ -2,10 +2,8 @@ import dedent from 'dedent';
 import path from 'path';
 import { importModule } from '../esm';
 import logger from '../logger';
-import {
-  PLUGIN_ID as MEMORY_POISONING_PLUGIN_ID,
-  MemoryPoisoningProvider,
-} from '../redteam/plugins/agentic/memoryPoisoning';
+import { MEMORY_POISONING_PLUGIN_ID } from '../redteam/plugins/agentic/constants';
+import { MemoryPoisoningProvider } from '../redteam/providers/agentic/memoryPoisoning';
 import RedteamBestOfNProvider from '../redteam/providers/bestOfN';
 import RedteamCrescendoProvider from '../redteam/providers/crescendo';
 import RedteamGoatProvider from '../redteam/providers/goat';

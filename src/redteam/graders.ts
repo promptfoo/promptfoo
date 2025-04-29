@@ -1,7 +1,5 @@
-import {
-  MemoryPoisoningPluginGrader,
-  FULL_PLUGIN_ID as AGENTIC_MEMORY_POISONING_PLUGIN_ID,
-} from './plugins/agentic/memoryPoisoning';
+import { REDTEAM_MEMORY_POISONING_PLUGIN_ID } from './plugins/agentic/constants';
+import { MemoryPoisoningPluginGrader } from './plugins/agentic/memoryPoisoning';
 import { AsciiSmugglingGrader } from './plugins/asciiSmuggling';
 import type { RedteamGraderBase } from './plugins/base';
 import { BeavertailsGrader } from './plugins/beavertails';
@@ -61,7 +59,7 @@ import { UnsafeBenchGrader } from './plugins/unsafebench';
 import type { RedteamAssertionTypes } from './types';
 
 export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
-  [AGENTIC_MEMORY_POISONING_PLUGIN_ID]: new MemoryPoisoningPluginGrader(),
+  [REDTEAM_MEMORY_POISONING_PLUGIN_ID]: new MemoryPoisoningPluginGrader(),
   'promptfoo:redteam:ascii-smuggling': new AsciiSmugglingGrader(),
   'promptfoo:redteam:beavertails': new BeavertailsGrader(),
   'promptfoo:redteam:bfla': new BflaGrader(),

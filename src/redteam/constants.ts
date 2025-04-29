@@ -1,4 +1,4 @@
-import { PLUGIN_ID as AGENTIC_MEMORY_POISONING_PLUGIN_ID } from './plugins/agentic/memoryPoisoning';
+import { MEMORY_POISONING_PLUGIN_ID } from './plugins/agentic/constants';
 
 export const DEFAULT_NUM_TESTS_PER_PLUGIN = 5;
 
@@ -66,7 +66,7 @@ export const FOUNDATION_PLUGINS = [
   'religion',
 ] as const;
 
-export const AGENTIC_PLUGINS = [AGENTIC_MEMORY_POISONING_PLUGIN_ID] as const;
+export const AGENTIC_PLUGINS = [MEMORY_POISONING_PLUGIN_ID] as const;
 export type AgenticPlugin = (typeof AGENTIC_PLUGINS)[number];
 
 export const COLLECTIONS = ['default', 'foundation', 'harmful', 'pii'] as const;
@@ -394,7 +394,7 @@ export const OWASP_AGENTIC_REDTEAM_MAPPING: Record<
   { plugins: Plugin[]; strategies: Strategy[] }
 > = {
   'owasp:agentic:t01': {
-    plugins: [AGENTIC_MEMORY_POISONING_PLUGIN_ID],
+    plugins: [MEMORY_POISONING_PLUGIN_ID],
     strategies: [],
   },
 };
@@ -769,8 +769,7 @@ export const ALL_STRATEGIES = [..._ALL_STRATEGIES].sort();
 export type Strategy = (typeof ALL_STRATEGIES)[number];
 
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
-  [AGENTIC_MEMORY_POISONING_PLUGIN_ID]:
-    'Tests whether an agent is vulnerable to memory poisoning attacks',
+  [MEMORY_POISONING_PLUGIN_ID]: 'Tests whether an agent is vulnerable to memory poisoning attacks',
   'ascii-smuggling': 'Tests vulnerability to Unicode tag-based instruction smuggling attacks',
   audio: 'Tests handling of audio content',
   base64: 'Tests handling of Base64-encoded malicious payloads',
@@ -878,7 +877,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
 
 // These names are displayed in risk cards and in the table
 export const displayNameOverrides: Record<Plugin | Strategy, string> = {
-  [AGENTIC_MEMORY_POISONING_PLUGIN_ID]: 'Agentic Memory Poisoning',
+  [MEMORY_POISONING_PLUGIN_ID]: 'Agentic Memory Poisoning',
   'ascii-smuggling': 'ASCII Smuggling',
   audio: 'Audio Content',
   base64: 'Base64 Payload Encoding',
@@ -996,7 +995,7 @@ export const severityDisplayNames: Record<Severity, string> = {
  * Use getRiskCategorySeverityMap() whenever possible to respect the user's severity settings.
  */
 export const riskCategorySeverityMap: Record<Plugin, Severity> = {
-  [AGENTIC_MEMORY_POISONING_PLUGIN_ID]: Severity.High,
+  [MEMORY_POISONING_PLUGIN_ID]: Severity.High,
   'ascii-smuggling': Severity.Low,
   beavertails: Severity.Low,
   bfla: Severity.High,
@@ -1174,7 +1173,7 @@ export const categoryLabels = Object.keys(categoryMapReverse);
 
 // Map from plugin name to metric name or harm category
 export const categoryAliases: Record<Plugin, string> = {
-  [AGENTIC_MEMORY_POISONING_PLUGIN_ID]: 'AgenticMemoryPoisoning',
+  [MEMORY_POISONING_PLUGIN_ID]: 'AgenticMemoryPoisoning',
   'ascii-smuggling': 'AsciiSmuggling',
   beavertails: 'BeaverTails',
   bfla: 'BFLAEnforcement',
@@ -1258,8 +1257,7 @@ export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
 );
 
 export const pluginDescriptions: Record<Plugin, string> = {
-  [AGENTIC_MEMORY_POISONING_PLUGIN_ID]:
-    'Tests whether an agent is vulnerable to memory poisoning attacks',
+  [MEMORY_POISONING_PLUGIN_ID]: 'Tests whether an agent is vulnerable to memory poisoning attacks',
   'ascii-smuggling': 'Tests for ASCII-based prompt smuggling vulnerabilities',
   beavertails: 'Tests handling of malicious prompts from the BeaverTails dataset',
   bfla: 'Evaluates function-level authorization controls to identify privilege escalation vulnerabilities (OWASP API Security Top 10 #5)',

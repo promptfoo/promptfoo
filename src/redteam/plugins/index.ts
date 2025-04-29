@@ -18,7 +18,7 @@ import {
   shouldGenerateRemote,
 } from '../remoteGeneration';
 import { getShortPluginId } from '../util';
-import { PLUGIN_ID as MEMORY_POISONING_PLUGIN_ID } from './agentic/memoryPoisoning';
+import { MEMORY_POISONING_PLUGIN_ID } from './agentic/constants';
 import { type RedteamPluginBase } from './base';
 import { BeavertailsPlugin } from './beavertails';
 import { ContractPlugin } from './contracts';
