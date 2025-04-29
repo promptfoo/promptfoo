@@ -95,10 +95,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     // --- MCP tool injection logic ---
     const mcpTools = this.mcpClient ? transformMCPToolsToOpenAi(this.mcpClient.getAllTools()) : [];
-    const allTools = [
-      ...mcpTools,
-      ...(maybeLoadToolsFromExternalFile(config.tools, context?.vars) || []),
-    ];
+    const fileTools = config.tools
+      ? maybeLoadToolsFromExternalFile(config.tools, context?.vars) || []
+      : [];
+    const allTools = [...mcpTools, ...fileTools];
     // --- End MCP tool injection logic ---
 
     const body = {
