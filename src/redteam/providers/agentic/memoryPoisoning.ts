@@ -1,4 +1,4 @@
-import { VERSION } from 'src/constants';
+import { VERSION } from '../../../constants';
 import { getUserEmail } from '../../../globalConfig/accounts';
 import logger from '../../../logger';
 import type {
