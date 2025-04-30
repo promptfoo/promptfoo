@@ -130,6 +130,7 @@ describe('RedteamIterativeProvider', () => {
         redteamProvider: mockRedteamProvider,
         targetProvider: mockTargetProvider,
         vars: { test: 'goal' },
+        usePromptfooCloudAttacker: false,
       });
 
       expect(result.metadata.finalIteration).toBe(1);
