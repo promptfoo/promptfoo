@@ -71,6 +71,7 @@ type CommonOptions = {
   delay?: number;
   remote?: boolean;
   sharing?: boolean;
+  usePromptfooCloudAttacker?: boolean;
 };
 
 // NOTE: Remember to edit validators/redteam.ts:RedteamGenerateOptionsSchema if you edit this schema
@@ -94,6 +95,7 @@ export interface RedteamCliGenerateOptions extends CommonOptions {
 export interface RedteamFileConfig extends CommonOptions {
   entities?: string[];
   severity?: Record<Plugin, Severity>;
+  usePromptfooCloudAttacker?: boolean;
 }
 
 export interface SynthesizeOptions extends CommonOptions {

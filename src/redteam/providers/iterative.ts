@@ -18,7 +18,12 @@ import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { shouldGenerateRemote } from '../remoteGeneration';
-import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } from './prompts';
+import {
+  ATTACKER_SYSTEM_PROMPT,
+  CLOUD_ATTACKER_SYSTEM_PROMPT,
+  JUDGE_SYSTEM_PROMPT,
+  ON_TOPIC_SYSTEM_PROMPT,
+} from './prompts';
 import type { TargetResponse } from './shared';
 import { checkPenalizedPhrases, getTargetResponse, redteamProviderManager } from './shared';
 
@@ -57,6 +62,7 @@ export async function runRedteamConversation({
   targetProvider,
   test,
   vars,
+  usePromptfooCloudAttacker,
 }: {
   context?: CallApiContextParams;
   filters: NunjucksFilterMap | undefined;
@@ -68,6 +74,7 @@ export async function runRedteamConversation({
   targetProvider: ApiProvider;
   test?: AtomicTestCase;
   vars: Record<string, string | object>;
+  usePromptfooCloudAttacker: boolean;
 }): Promise<{
   output: string;
   metadata: IterativeMetadata;
@@ -76,7 +83,9 @@ export async function runRedteamConversation({
   const nunjucks = getNunjucksEngine();
   const goal = vars[injectVar];
 
-  const redteamSystemPrompt = nunjucks.renderString(ATTACKER_SYSTEM_PROMPT, { goal });
+  const redteamSystemPrompt = usePromptfooCloudAttacker
+    ? nunjucks.renderString(CLOUD_ATTACKER_SYSTEM_PROMPT, { goal })
+    : nunjucks.renderString(ATTACKER_SYSTEM_PROMPT, { goal });
 
   const onTopicSystemPrompt = nunjucks.renderString(ON_TOPIC_SYSTEM_PROMPT, { goal });
 
@@ -340,7 +349,17 @@ export async function runRedteamConversation({
       // Update the user message to include both scores
       redteamHistory.push({
         role: 'user',
-        content: dedent`
+        content: usePromptfooCloudAttacker
+          ? dedent`
+          OBJECTIVE: ${goal}
+
+          CURRENT SCORE: ${currentScore} ${isOnTopic ? '' : '(your prompt was off-topic)'}${
+            containsPenalizedPhrase ? ' (contains penalized phrase)' : ''
+          }
+          PREVIOUS BEST SCORE: ${previousScore}
+          EXPLANATION: ${parsed.currentResponse.explanation}
+        `
+          : dedent`
           LANGUAGE MODEL OUTPUT: ${targetResponse.output}
 
           OBJECTIVE: ${goal}
@@ -436,12 +455,14 @@ class RedteamIterativeProvider implements ApiProvider {
   private readonly redteamProvider: RedteamFileConfig['provider'];
   private readonly injectVar: string;
   private readonly numIterations: number;
+  private readonly usePromptfooCloudAttacker: boolean;
   constructor(readonly config: Record<string, string | object>) {
     logger.debug(`[Iterative] Constructor config: ${JSON.stringify(config)}`);
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;
 
     this.numIterations = getEnvInt('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', 4);
+    this.usePromptfooCloudAttacker = Boolean(config.usePromptfooCloudAttacker);
 
     // Redteam provider can be set from the config.
 
@@ -487,6 +508,7 @@ class RedteamIterativeProvider implements ApiProvider {
       context,
       options,
       test: context.test,
+      usePromptfooCloudAttacker: this.usePromptfooCloudAttacker,
     });
   }
 }

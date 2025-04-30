@@ -1,21 +1,21 @@
 import dedent from 'dedent';
 import { z } from 'zod';
 import {
-  ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
-  DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
   ADDITIONAL_STRATEGIES as REDTEAM_ADDITIONAL_STRATEGIES,
-  DEFAULT_STRATEGIES,
+  ALIASED_PLUGIN_MAPPINGS,
+  ALIASED_PLUGINS,
+  ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   ALL_STRATEGIES,
+  COLLECTIONS,
+  DEFAULT_NUM_TESTS_PER_PLUGIN,
+  DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
+  DEFAULT_STRATEGIES,
+  FOUNDATION_PLUGINS,
   HARM_PLUGINS,
   PII_PLUGINS,
-  COLLECTIONS,
-  ALIASED_PLUGINS,
-  DEFAULT_NUM_TESTS_PER_PLUGIN,
-  ALIASED_PLUGIN_MAPPINGS,
-  type Strategy,
   type Plugin,
-  FOUNDATION_PLUGINS,
+  type Strategy,
 } from '../redteam/constants';
 import type { RedteamFileConfig, RedteamPluginObject, RedteamStrategy } from '../redteam/types';
 import { isJavascriptFile } from '../util/file';
@@ -206,6 +206,10 @@ export const RedteamConfigSchema = z
       .nonnegative()
       .optional()
       .describe('Delay in milliseconds between plugin API calls'),
+    usePromptfooCloudAttacker: z
+      .boolean()
+      .optional()
+      .describe('Whether to use Promptfoo Cloud attacker model instead of the default'),
   })
   .transform((data): RedteamFileConfig => {
     const pluginMap = new Map<string, RedteamPluginObject>();
@@ -334,6 +338,9 @@ export const RedteamConfigSchema = z
       ...(data.language ? { language: data.language } : {}),
       ...(data.provider ? { provider: data.provider } : {}),
       ...(data.purpose ? { purpose: data.purpose } : {}),
+      ...(data.usePromptfooCloudAttacker
+        ? { usePromptfooCloudAttacker: data.usePromptfooCloudAttacker }
+        : {}),
     };
   });
 
