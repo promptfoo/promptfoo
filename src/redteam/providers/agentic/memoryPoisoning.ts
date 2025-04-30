@@ -50,7 +50,7 @@ export class MemoryPoisoningProvider implements ApiProvider {
     context.vars.scenario = scenario;
 
     // Send the memory message to the provider.
-    const memoryResponse = await targetProvider!.callApi(scenario.memory, context);
+    const memoryResponse = await targetProvider.callApi(scenario.memory, context);
 
     // Send the test case to the provider; the test case should poison the memory created in the previous step.
     const testResponse = await targetProvider!.callApi(prompt, context);
