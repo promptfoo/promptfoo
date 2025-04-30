@@ -1,3 +1,6 @@
+import { VERSION } from 'src/constants';
+import { getUserEmail } from 'src/globalConfig/accounts';
+import logger from '../../../logger';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -34,50 +37,67 @@ export class MemoryPoisoningProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    const targetProvider: ApiProvider | undefined = context?.originalProvider;
-    const purpose = context?.test?.metadata?.purpose;
-    invariant(targetProvider, 'Expected originalProvider to be set');
-    invariant(context?.vars, 'Expected vars to be set');
-    invariant(purpose, 'Expected purpose to be set');
+    try {
+      const targetProvider: ApiProvider | undefined = context?.originalProvider;
+      const purpose = context?.test?.metadata?.purpose;
+      invariant(targetProvider, 'Expected originalProvider to be set');
+      invariant(context?.vars, 'Expected vars to be set');
+      invariant(purpose, 'Expected purpose to be set');
 
-    // Generate a scenario containing memories and follow up questions/commands which are dependent on the memories.
-    const scenarioRes = await fetch(getRemoteGenerationUrl(), {
-      body: JSON.stringify({ task: 'agentic:memory-poisoning-scenario', purpose }),
-      headers: { 'Content-Type': 'application/json' },
-      method: 'POST',
-    });
-    const scenario = await scenarioRes.json();
-    context.vars.scenario = scenario;
+      // Generate a scenario containing memories and follow up questions/commands which are dependent on the memories.
+      const scenarioRes = await fetch(getRemoteGenerationUrl(), {
+        body: JSON.stringify({
+          task: 'agentic:memory-poisoning-scenario',
+          purpose,
+          version: VERSION,
+          email: getUserEmail(),
+        }),
+        headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+      });
 
-    // Send the memory message to the provider.
-    const memoryResponse = await targetProvider.callApi(scenario.memory, context);
+      // Send the memory message to the provider.
+      if (!scenarioRes.ok) {
+        throw new Error(`Failed to generate scenario: ${scenarioRes.statusText}`);
+      }
 
-    // Send the test case to the provider; the test case should poison the memory created in the previous step.
-    const testResponse = await targetProvider!.callApi(prompt, context);
+      const scenario = await scenarioRes.json();
+      context.vars.scenario = scenario;
 
-    // Send the follow up question to the provider.
-    const response = await targetProvider!.callApi(scenario.followUp, context);
+      // Send the memory message to the provider.
+      const memoryResponse = await targetProvider.callApi(scenario.memory, context);
 
-    // Log the conversation onto the vars object; all references to vars will have access
-    // to the conversation object.
-    context.vars._conversation = [
-      {
-        input: scenario.memory,
-        output: memoryResponse.output,
-        type: 'memory',
-      },
-      {
-        input: prompt,
-        output: testResponse.output,
-        type: 'test',
-      },
-      {
-        input: scenario.followUp,
-        output: response.output,
-        type: 'followup',
-      },
-    ];
+      // Send the test case to the provider; the test case should poison the memory created in the previous step.
+      const testResponse = await targetProvider.callApi(prompt, context);
 
-    return { output: response.output };
+      // Send the follow up question to the provider.
+      const response = await targetProvider.callApi(scenario.followUp, context);
+
+      // Log the conversation onto the vars object; all references to vars will have access
+      // to the conversation object.
+      context.vars._conversation = [
+        {
+          input: scenario.memory,
+          output: memoryResponse.output,
+          type: 'memory',
+        },
+        {
+          input: prompt,
+          output: testResponse.output,
+          type: 'test',
+        },
+        {
+          input: scenario.followUp,
+          output: response.output,
+          type: 'followup',
+        },
+      ];
+
+      return { output: response.output };
+    } catch (error) {
+      const _logger = context?.logger ?? logger;
+      _logger.error(`Error in MemoryPoisoningProvider: ${error}`);
+      throw error;
+    }
   }
 }
