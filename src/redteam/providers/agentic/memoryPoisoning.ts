@@ -1,5 +1,5 @@
 import { VERSION } from 'src/constants';
-import { getUserEmail } from 'src/globalConfig/accounts';
+import { getUserEmail } from '../../../globalConfig/accounts';
 import logger from '../../../logger';
 import type {
   ApiProvider,
