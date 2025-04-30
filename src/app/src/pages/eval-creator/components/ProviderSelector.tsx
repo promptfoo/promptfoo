@@ -214,6 +214,21 @@ const defaultProviders: ProviderOptions[] = (
         region: 'us-east-1',
       },
     },
+    {
+      id: 'bedrock:us.amazon.nova-sonic-v1:0',
+      label: 'Bedrock: Amazon Nova Sonic',
+      config: {
+        inferenceConfiguration: {
+          maxTokens: 1024,
+          temperature: 0.7,
+          topP: 0.95,
+        },
+        textOutputConfiguration: {
+          mediaType: 'text/plain',
+        },
+        region: 'us-east-1',
+      },
+    },
   ])
   .concat([
     {

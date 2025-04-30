@@ -265,6 +265,12 @@ export const providerMap: ProviderFactory[] = [
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
 
+      // Handle nova-sonic model
+      if (modelType === 'nova-sonic' || modelType.includes('amazon.nova-sonic')) {
+        const { NovaSonicProvider } = await import('./bedrock/nova-sonic');
+        return new NovaSonicProvider('amazon.nova-sonic-v1:0', providerOptions);
+      }
+
       if (modelType === 'completion') {
         // Backwards compatibility: `completion` used to be required
         return new AwsBedrockCompletionProvider(modelName, providerOptions);
