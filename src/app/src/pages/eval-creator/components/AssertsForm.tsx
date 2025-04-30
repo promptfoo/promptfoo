@@ -65,6 +65,7 @@ const assertTypes: AssertionType[] = [
   'context-relevance',
   'select-best',
   'moderation',
+  'finish-reason',
 ];
 
 const AssertsForm: React.FC<AssertsFormProps> = ({ onAdd, initialValues }) => {

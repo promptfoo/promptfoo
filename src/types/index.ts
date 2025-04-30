@@ -410,6 +410,7 @@ export const BaseAssertionTypesSchema = z.enum([
   'cost',
   'equals',
   'factuality',
+  'finish-reason',
   'g-eval',
   'gleu',
   'guardrails',

@@ -1171,5 +1171,28 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(result.audio).toBeUndefined(); // No audio returned
       expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
     });
+
+    it('should surface a normalised finishReason', async () => {
+      const mockResponse = {
+        data: {
+          choices: [
+            {
+              message: { content: 'done' },
+              finish_reason: 'length',
+            },
+          ],
+          usage: { total_tokens: 3, prompt_tokens: 1, completion_tokens: 2 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const result = await provider.callApi('hi');
+
+      expect(result.finishReason).toBe('length'); // confirms adapter ran the normaliser
+    });
   });
 });
