@@ -527,7 +527,7 @@ Example with assertions:
 
 ```csv title="tests_with_assertions.csv"
 input,__expected1,__expected2,__expected3
-"What's the capital of France?","contains: Paris","llm-rubric: Is the response accurate and factual?","python: file://verify_capitals.py"
+"What's the capital of France? Respond only with the city name.","contains: Paris","llm-rubric: Is the response accurate and factual?","python: file://verify_capitals.py"
 "What is the sum of 15 + 27","equals: 42","contains: sum","javascript: file://check_math.js"
 ```
 
