@@ -466,9 +466,9 @@ export function generateVarCombinations(
 
 // Helper function to calculate group size and count based on concurrency
 function calculateProgressGroups(concurrency: number): { groupSize: number; numGroups: number } {
-  if (concurrency <= 10) {
+  if (concurrency <= 20) {
     return { groupSize: 1, numGroups: concurrency };
-  } else if (concurrency <= 30) {
+  } else if (concurrency <= 40) {
     return { groupSize: 5, numGroups: Math.ceil(concurrency / 5) };
   } else if (concurrency <= 100) {
     return { groupSize: 10, numGroups: Math.ceil(concurrency / 10) };
