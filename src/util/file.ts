@@ -5,6 +5,9 @@ import * as path from 'path';
 import { getNunjucksEngine } from './templates';
 import cliState from '../cliState';
 
+/**
+ * Array of supported JavaScript and TypeScript file extensions
+ */
 export const JAVASCRIPT_EXTENSIONS = ['js', 'cjs', 'mjs', 'ts', 'cts', 'mts'];
 
 /**
@@ -104,4 +107,30 @@ export function maybeLoadFromExternalFile(filePath: string | object | Function |
     return records;
   }
   return contents;
+}
+
+/**
+ * Resolves a relative file path with respect to a base path, handling cloud configuration appropriately.
+ * When using a cloud configuration, the current working directory is always used instead of the context's base path.
+ *
+ * @param filePath - The relative or absolute file path to resolve.
+ * @param contextBasePath - The base path from the context (typically the directory containing the config file).
+ * @param isCloudConfig - Whether this is a cloud configuration.
+ * @returns The resolved absolute file path.
+ */
+export function getResolvedRelativePath(
+  filePath: string,
+  contextBasePath?: string,
+  isCloudConfig?: boolean,
+): string {
+  // If it's already an absolute path, return it as is
+  if (path.isAbsolute(filePath)) {
+    return filePath;
+  }
+
+  // If using a cloud config, always use process.cwd() instead of contextBasePath
+  const basePath = isCloudConfig === true ? process.cwd() : contextBasePath || process.cwd();
+
+  // Join the basePath and filePath to get the resolved path
+  return path.join(basePath, filePath);
 }

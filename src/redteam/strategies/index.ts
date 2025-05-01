@@ -13,11 +13,13 @@ import { addCrescendo } from './crescendo';
 import { addGcgTestCases } from './gcg';
 import { addGoatTestCases } from './goat';
 import { addHexEncoding } from './hex';
+import { addHomoglyphs } from './homoglyph';
 import { addIterativeJailbreaks } from './iterative';
 import { addLeetspeak } from './leetspeak';
 import { addLikertTestCases } from './likert';
 import { addMathPrompt } from './mathPrompt';
 import { addMultilingual } from './multilingual';
+import { addOtherEncodings, EncodingType } from './otherEncodings';
 import { addPandamonium } from './pandamonium';
 import { addInjections } from './promptInjections';
 import { addRetryTestCases } from './retry';
@@ -42,6 +44,15 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding Base64 encoding to ${testCases.length} test cases`);
       const newTestCases = addBase64Encoding(testCases, injectVar);
       logger.debug(`Added ${newTestCases.length} Base64 encoded test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'homoglyph',
+    action: async (testCases, injectVar) => {
+      logger.debug(`Adding Homoglyph encoding to ${testCases.length} test cases`);
+      const newTestCases = addHomoglyphs(testCases, injectVar);
+      logger.debug(`Added ${newTestCases.length} Homoglyph encoded test cases`);
       return newTestCases;
     },
   },
@@ -221,6 +232,24 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding ROT13 encoding to ${testCases.length} test cases`);
       const newTestCases = addRot13(testCases, injectVar);
       logger.debug(`Added ${newTestCases.length} ROT13 encoded test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'morse',
+    action: async (testCases, injectVar) => {
+      logger.debug(`Adding Morse code encoding to ${testCases.length} test cases`);
+      const newTestCases = addOtherEncodings(testCases, injectVar, EncodingType.MORSE);
+      logger.debug(`Added ${newTestCases.length} Morse code encoded test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'piglatin',
+    action: async (testCases, injectVar) => {
+      logger.debug(`Adding Pig Latin encoding to ${testCases.length} test cases`);
+      const newTestCases = addOtherEncodings(testCases, injectVar, EncodingType.PIG_LATIN);
+      logger.debug(`Added ${newTestCases.length} Pig Latin encoded test cases`);
       return newTestCases;
     },
   },

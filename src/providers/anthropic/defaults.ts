@@ -116,7 +116,6 @@ export function getAnthropicProviders(
   env?: EnvOverrides,
 ): Pick<
   DefaultProviders,
-  | 'datasetGenerationProvider'
   | 'gradingJsonProvider'
   | 'gradingProvider'
   | 'llmRubricProvider'
@@ -128,7 +127,6 @@ export function getAnthropicProviders(
   const llmRubricProvider = llmRubricProviderFactory.getInstance(env);
 
   return {
-    datasetGenerationProvider: gradingProvider,
     gradingJsonProvider: gradingProvider,
     gradingProvider,
     llmRubricProvider,

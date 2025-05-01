@@ -123,7 +123,7 @@ export type OutputConfig = z.infer<typeof OutputConfigSchema>;
 
 export type EvalConversations = Record<
   string,
-  { prompt: string | object; input: string; output: string | object }[]
+  { prompt: string | object; input: string; output: string | object; metadata?: object }[]
 >;
 
 export type EvalRegisters = Record<string, string | object>;
@@ -417,6 +417,7 @@ export const BaseAssertionTypesSchema = z.enum([
   'latency',
   'levenshtein',
   'llm-rubric',
+  'meteor',
   'model-graded-closedqa',
   'model-graded-factuality',
   'moderation',

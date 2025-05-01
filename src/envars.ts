@@ -164,6 +164,7 @@ export type EnvVars = {
   AWS_BEDROCK_STOP?: string;
   AWS_BEDROCK_TEMPERATURE?: number;
   AWS_BEDROCK_TOP_P?: string;
+  CEREBRAS_API_KEY?: string;
 
   // Azure OpenAI auth params
   AZURE_AUTHORITY_HOST?: string;
