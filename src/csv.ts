@@ -90,7 +90,7 @@ export function assertionFromString(expected: string): Assertion {
     } else if (type === 'contains-json' || type === 'is-json') {
       return {
         type: fullType as AssertionType,
-        value: value ? value.trim() : value,
+        value,
       };
     } else if (
       type === 'answer-relevance' ||
