@@ -33,9 +33,11 @@ import invariant from '../util/invariant';
 import { getConfigDirectoryPath } from './config/manage';
 import { sha256 } from './createHash';
 import { convertTestResultsToTableRow, getHeaderForTable } from './exportToFile';
-import { isJavascriptFile } from './file';
+import { isJavascriptFile, maybeLoadFromExternalFile } from './file';
 import { getNunjucksEngine } from './templates';
-import { maybeLoadFromExternalFile } from './file';
+
+// Re-export the maybeLoadFromExternalFile function
+export { maybeLoadFromExternalFile };
 
 const outputToSimpleString = (output: EvaluateTableOutput) => {
   const passFailText = output.pass
