@@ -468,19 +468,6 @@ export function generateVarCombinations(
   return combinations;
 }
 
-// Helper function to calculate group size and count based on concurrency
-function calculateProgressGroups(concurrency: number): { groupSize: number; numGroups: number } {
-  if (concurrency <= 20) {
-    return { groupSize: 1, numGroups: concurrency };
-  } else if (concurrency <= 40) {
-    return { groupSize: 5, numGroups: Math.ceil(concurrency / 5) };
-  } else if (concurrency <= 100) {
-    return { groupSize: 10, numGroups: Math.ceil(concurrency / 10) };
-  } else {
-    return { groupSize: 20, numGroups: Math.ceil(concurrency / 20) };
-  }
-}
-
 class Evaluator {
   evalRecord: Eval;
   testSuite: TestSuite;
@@ -998,14 +985,18 @@ class Evaluator {
           .replace(/\n/g, ' ');
         logger.info(`[${numComplete}/${total}] Running ${provider} with vars: ${vars}`);
       } else if (multibar && evalStep) {
-        const { groupSize, numGroups } = calculateProgressGroups(concurrency);
-        const groupIndex = Math.floor(index / groupSize) % numGroups;
-        const progressbar = multiProgressBars[groupIndex];
+        // Determine number of progress bars (max 20)
+        const numProgressBars = Math.min(concurrency, 20);
 
-        // Calculate active threads in this group
-        const groupStartIndex = groupIndex * groupSize;
-        const groupEndIndex = Math.min((groupIndex + 1) * groupSize, concurrency);
-        const activeThreads = Math.min(groupEndIndex - groupStartIndex, groupSize);
+        // Calculate which progress bar to use
+        const progressBarIndex = index % numProgressBars;
+        const progressbar = multiProgressBars[progressBarIndex];
+
+        // Calculate how many threads are assigned to this progress bar
+        const minThreadsPerBar = Math.floor(concurrency / numProgressBars);
+        const extraThreads = concurrency % numProgressBars;
+        const threadsForThisBar =
+          progressBarIndex < extraThreads ? minThreadsPerBar + 1 : minThreadsPerBar;
 
         progressbar.increment({
           provider: evalStep.provider.label || evalStep.provider.id(),
@@ -1015,7 +1006,7 @@ class Evaluator {
             .join(' ')
             .slice(0, 10)
             .replace(/\n/g, ' '),
-          activeThreads,
+          activeThreads: threadsForThisBar,
         });
       } else {
         logger.debug(`Eval #${index + 1} complete (${numComplete} of ${runEvalOptions.length})`);
@@ -1028,12 +1019,16 @@ class Evaluator {
         return;
       }
 
-      const { groupSize, numGroups } = calculateProgressGroups(concurrency);
+      // Determine number of progress bars (max 20)
+      const numProgressBars = Math.min(concurrency, 20);
+
+      const showThreadCounts = concurrency > numProgressBars;
 
       multibar = new cliProgress.MultiBar(
         {
-          format:
-            'Group {groupId} [{bar}] {percentage}% | {value}/{total} | {activeThreads}/{maxThreads} threads | {provider} "{prompt}" {vars}',
+          format: showThreadCounts
+            ? 'Group {groupId} [{bar}] {percentage}% | {value}/{total} | {activeThreads}/{maxThreads} threads | {provider} "{prompt}" {vars}'
+            : 'Group {groupId} [{bar}] {percentage}% | {value}/{total} | {provider} "{prompt}" {vars}',
           hideCursor: true,
         },
         cliProgress.Presets.shades_classic,
@@ -1043,20 +1038,25 @@ class Evaluator {
         return;
       }
 
-      const stepsPerGroup = Math.floor(evalOptions.length / numGroups);
-      const remainingSteps = evalOptions.length % numGroups;
+      const stepsPerProgressBar = Math.floor(evalOptions.length / numProgressBars);
+      const remainingSteps = evalOptions.length % numProgressBars;
       multiProgressBars = [];
 
-      for (let i = 0; i < numGroups; i++) {
-        const totalSteps = i < remainingSteps ? stepsPerGroup + 1 : stepsPerGroup;
+      for (let i = 0; i < numProgressBars; i++) {
+        const totalSteps = i < remainingSteps ? stepsPerProgressBar + 1 : stepsPerProgressBar;
         if (totalSteps > 0) {
+          // Calculate how many threads are assigned to this progress bar
+          const minThreadsPerBar = Math.floor(concurrency / numProgressBars);
+          const extraThreads = concurrency % numProgressBars;
+          const threadsForThisBar = i < extraThreads ? minThreadsPerBar + 1 : minThreadsPerBar;
+
           const progressbar = multibar.create(totalSteps, 0, {
-            groupId: `${i + 1}/${numGroups}`,
+            groupId: `${i + 1}/${numProgressBars}`,
             provider: '',
             prompt: '',
             vars: '',
             activeThreads: 0,
-            maxThreads: groupSize,
+            maxThreads: threadsForThisBar,
           });
           multiProgressBars.push(progressbar);
         }
