@@ -70,7 +70,8 @@ export function assertionFromString(expected: string): Assertion {
       string,
       BaseAssertionTypes,
       string,
-      string,
+      // Note: whether value is defined depends on the type of assertion.
+      string?,
     ];
     const fullType: AssertionType = notPrefix ? `not-${type}` : type;
     const parsedThreshold = thresholdStr ? Number.parseFloat(thresholdStr) : Number.NaN;
@@ -84,12 +85,12 @@ export function assertionFromString(expected: string): Assertion {
     ) {
       return {
         type: fullType as AssertionType,
-        value: value.split(',').map((s) => s.trim()),
+        value: value ? value.split(',').map((s) => s.trim()) : value,
       };
     } else if (type === 'contains-json' || type === 'is-json') {
       return {
         type: fullType as AssertionType,
-        value: value.trim(),
+        value: value ? value.trim() : value,
       };
     } else if (
       type === 'answer-relevance' ||
@@ -109,13 +110,13 @@ export function assertionFromString(expected: string): Assertion {
       const defaultThreshold = type === 'similar' ? DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD : 0.75;
       return {
         type: fullType as AssertionType,
-        value: value.trim(),
+        value: value ? value.trim() : value,
         threshold: threshold ?? defaultThreshold,
       };
     } else {
       return {
         type: fullType as AssertionType,
-        value: value.trim(),
+        value: value ? value.trim() : value,
       };
     }
   }
