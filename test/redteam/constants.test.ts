@@ -13,6 +13,7 @@ import {
   CONFIG_REQUIRED_PLUGINS,
   DEFAULT_PLUGINS,
   ALL_PLUGINS,
+  DATASET_PLUGINS,
   Severity,
   severityDisplayNames,
   PLUGIN_PRESET_DESCRIPTIONS,
@@ -90,6 +91,26 @@ describe('constants', () => {
     expect(ALL_PLUGINS).toEqual(
       [...new Set([...DEFAULT_PLUGINS, ...ADDITIONAL_PLUGINS, ...CONFIG_REQUIRED_PLUGINS])].sort(),
     );
+  });
+
+  it('DATASET_PLUGINS should contain expected plugins', () => {
+    const expectedPlugins = [
+      'beavertails',
+      'cyberseceval',
+      'donotanswer',
+      'harmbench',
+      'pliny',
+      'unsafebench',
+      'xstest',
+    ];
+
+    expect(DATASET_PLUGINS).toEqual(expectedPlugins);
+    expect(DATASET_PLUGINS).toHaveLength(7);
+
+    // Verify each expected plugin exists
+    expectedPlugins.forEach((plugin) => {
+      expect(DATASET_PLUGINS).toContain(plugin);
+    });
   });
 
   it('Severity enum should have expected values', () => {
