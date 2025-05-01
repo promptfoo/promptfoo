@@ -110,13 +110,13 @@ export function assertionFromString(expected: string): Assertion {
       const defaultThreshold = type === 'similar' ? DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD : 0.75;
       return {
         type: fullType as AssertionType,
-        value: value ? value.trim() : value,
+        value: value?.trim?.(),
         threshold: threshold ?? defaultThreshold,
       };
     } else {
       return {
         type: fullType as AssertionType,
-        value: value ? value.trim() : value,
+        value: value?.trim?.(),
       };
     }
   }
