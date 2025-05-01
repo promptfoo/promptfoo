@@ -59,6 +59,7 @@ export async function runRedteamConversation({
   options,
   prompt,
   redteamProvider,
+  gradingProvider,
   targetProvider,
   test,
   vars,
@@ -71,6 +72,7 @@ export async function runRedteamConversation({
   options?: CallApiOptionsParams;
   prompt: Prompt;
   redteamProvider: ApiProvider;
+  gradingProvider: ApiProvider;
   targetProvider: ApiProvider;
   test?: AtomicTestCase;
   vars: Record<string, string | object>;
@@ -196,16 +198,16 @@ export async function runRedteamConversation({
         content: targetPrompt,
       },
     ]);
-    const isOnTopicResp = await redteamProvider.callApi(isOnTopicBody, {
+    const isOnTopicResp = await gradingProvider.callApi(isOnTopicBody, {
       prompt: {
         raw: isOnTopicBody,
         label: 'on-topic',
       },
       vars: {},
     });
-    if (redteamProvider.delay) {
-      logger.debug(`[Iterative] Sleeping for ${redteamProvider.delay}ms`);
-      await sleep(redteamProvider.delay);
+    if (gradingProvider.delay) {
+      logger.debug(`[Iterative] Sleeping for ${gradingProvider.delay}ms`);
+      await sleep(gradingProvider.delay);
     }
     logger.debug(`[Iterative] Raw onTopic response: ${JSON.stringify(isOnTopicResp)}`);
 
@@ -265,7 +267,7 @@ export async function runRedteamConversation({
           goal as string,
           targetResponse.output,
           test,
-          redteamProvider,
+          gradingProvider,
           assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
         );
         graderPassed = grade.pass;
@@ -296,16 +298,16 @@ export async function runRedteamConversation({
         `,
       },
     ]);
-    const judgeResp = await redteamProvider.callApi(judgeBody, {
+    const judgeResp = await gradingProvider.callApi(judgeBody, {
       prompt: {
         raw: judgeBody,
         label: 'judge',
       },
       vars: {},
     });
-    if (redteamProvider.delay) {
-      logger.debug(`[Iterative] Sleeping for ${redteamProvider.delay}ms`);
-      await sleep(redteamProvider.delay);
+    if (gradingProvider.delay) {
+      logger.debug(`[Iterative] Sleeping for ${gradingProvider.delay}ms`);
+      await sleep(gradingProvider.delay);
     }
     logger.debug(`[Iterative] Raw judge response: ${JSON.stringify(judgeResp)}`);
     if (judgeResp.error) {
@@ -456,6 +458,7 @@ class RedteamIterativeProvider implements ApiProvider {
   private readonly injectVar: string;
   private readonly numIterations: number;
   private readonly usePromptfooCloudAttacker: boolean;
+  private readonly gradingProvider: RedteamFileConfig['provider'];
   constructor(readonly config: Record<string, string | object>) {
     logger.debug(`[Iterative] Constructor config: ${JSON.stringify(config)}`);
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
@@ -467,6 +470,11 @@ class RedteamIterativeProvider implements ApiProvider {
     // Redteam provider can be set from the config.
 
     if (shouldGenerateRemote()) {
+      this.gradingProvider = new PromptfooChatCompletionProvider({
+        task: 'judge',
+        jsonOnly: true,
+        preferSmallModel: false,
+      });
       this.redteamProvider = new PromptfooChatCompletionProvider({
         task: 'iterative',
         jsonOnly: true,
@@ -500,6 +508,10 @@ class RedteamIterativeProvider implements ApiProvider {
       vars: context.vars,
       redteamProvider: await redteamProviderManager.getProvider({
         provider: this.redteamProvider,
+        jsonOnly: true,
+      }),
+      gradingProvider: await redteamProviderManager.getProvider({
+        provider: this.gradingProvider,
         jsonOnly: true,
       }),
       targetProvider: context.originalProvider,
