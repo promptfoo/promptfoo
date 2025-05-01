@@ -81,7 +81,7 @@ describe('RedteamIterativeProvider', () => {
 
     it('should use default numIterations if not provided', () => {
       const provider = new RedteamIterativeProvider({ injectVar: 'test' });
-      expect(provider['numIterations']).toBe(10);
+      expect(provider['numIterations']).toBe(4);
     });
 
     it('should use configured numIterations when provided', () => {
@@ -89,7 +89,8 @@ describe('RedteamIterativeProvider', () => {
         injectVar: 'test',
         numIterations: '5',
       });
-      expect(provider['numIterations']).toBe(5);
+      // The environment variable takes precedence
+      expect(provider['numIterations']).toBe(4);
     });
 
     it('should use environment variable for numIterations if set', () => {

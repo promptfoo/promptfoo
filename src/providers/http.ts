@@ -226,10 +226,11 @@ export async function createTransformResponse(
     return (data, text, context) => {
       try {
         const result = parser(data, text, context);
-        if (typeof result === 'string') {
+        if (typeof result === 'object') {
+          return result;
+        } else {
           return { output: result };
         }
-        return { output: result };
       } catch (err) {
         logger.error(`Error in response transform function: ${String(err)}`);
         throw err;
@@ -841,7 +842,19 @@ export class HttpProvider implements ApiProvider {
     context?: CallApiContextParams,
   ): Promise<ProviderResponse> {
     invariant(this.config.request, 'Expected request to be set in http provider config');
-    const renderedRequest = getNunjucksEngine().renderString(this.config.request, vars);
+
+    // Transform prompt using request transform
+    const prompt = vars.prompt;
+    const transformFn = await this.transformRequest;
+    const transformedPrompt = await transformFn(prompt);
+    logger.debug(
+      `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(transformedPrompt)}. Original prompt: ${safeJsonStringify(prompt)}`,
+    );
+
+    const renderedRequest = getNunjucksEngine().renderString(this.config.request, {
+      ...vars,
+      prompt: transformedPrompt,
+    });
     const parsedRequest = parseRawRequest(renderedRequest.trim());
 
     const protocol = this.url.startsWith('https') || this.config.useHttps ? 'https' : 'http';

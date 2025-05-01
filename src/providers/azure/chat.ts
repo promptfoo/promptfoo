@@ -2,14 +2,42 @@ import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt } from '../../envars';
 import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
-import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
+import {
+  maybeLoadFromExternalFile,
+  maybeLoadToolsFromExternalFile,
+  renderVarsInObject,
+} from '../../util';
 import invariant from '../../util/invariant';
+import { MCPClient } from '../mcp/client';
+import { transformMCPToolsToOpenAi } from '../mcp/transform';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { DEFAULT_AZURE_API_VERSION } from './defaults';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost } from './util';
 
 export class AzureChatCompletionProvider extends AzureGenericProvider {
+  private mcpClient: MCPClient | null = null;
+  protected initializationPromise: Promise<void> | null = null;
+
+  constructor(...args: ConstructorParameters<typeof AzureGenericProvider>) {
+    super(...args);
+    if (this.config.mcp?.enabled) {
+      this.initializationPromise = this.initializeMCP();
+    }
+  }
+
+  private async initializeMCP(): Promise<void> {
+    this.mcpClient = new MCPClient(this.config.mcp!);
+    await this.mcpClient.initialize();
+  }
+
+  async cleanup(): Promise<void> {
+    if (this.mcpClient) {
+      await this.mcpClient.cleanup();
+      this.mcpClient = null;
+    }
+  }
+
   /**
    * Check if the current deployment is configured as a reasoning model
    */
@@ -49,6 +77,14 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     // Get reasoning effort for reasoning models
     const reasoningEffort = config.reasoning_effort ?? 'medium';
 
+    // --- MCP tool injection logic ---
+    const mcpTools = this.mcpClient ? transformMCPToolsToOpenAi(this.mcpClient.getAllTools()) : [];
+    const fileTools = config.tools
+      ? maybeLoadToolsFromExternalFile(config.tools, context?.vars) || []
+      : [];
+    const allTools = [...mcpTools, ...fileTools];
+    // --- End MCP tool injection logic ---
+
     // Build the request body
     const body = {
       model: this.deploymentName,
@@ -74,11 +110,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           }
         : {}),
       ...(config.function_call ? { function_call: config.function_call } : {}),
-      ...(config.tools
-        ? {
-            tools: maybeLoadFromExternalFile(renderVarsInObject(config.tools, context?.vars)),
-          }
-        : {}),
+      ...(allTools.length > 0 ? { tools: allTools } : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.deployment_id ? { deployment_id: config.deployment_id } : {}),
       ...(config.dataSources ? { dataSources: config.dataSources } : {}),
@@ -97,6 +129,9 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    if (this.initializationPromise) {
+      await this.initializationPromise;
+    }
     await this.ensureInitialized();
     invariant(this.authHeaders, 'auth headers are not initialized');
 

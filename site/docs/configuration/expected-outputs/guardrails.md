@@ -51,9 +51,9 @@ Pass/fail logic of the assertion:
 For Azure, if the prompt fails the input content safety filter, the response status is 400 with code `content_filter`. In this case, the guardrails assertion passes.
 :::
 
-## Redteaming Configuration
+## Red Team Configuration
 
-When using guardrails assertions for redteaming scenarios, you should specify the `guardrails` property:
+When using guardrails assertions for red teaming scenarios, you should specify the `guardrails` property:
 
 ```yaml
 assert:

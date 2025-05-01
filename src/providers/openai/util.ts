@@ -1,12 +1,12 @@
-import Ajv from 'ajv';
 import OpenAI from 'openai';
 import type { TokenUsage } from '../../types';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
+import { getAjv } from '../../util/json';
 import { safeJsonStringify } from '../../util/json';
 import type { ProviderConfig } from '../shared';
 import { calculateCost } from '../shared';
 
-const ajv = new Ajv();
+const ajv = getAjv();
 
 // see https://platform.openai.com/docs/models
 export const OPENAI_CHAT_MODELS = [
@@ -55,6 +55,27 @@ export const OPENAI_CHAT_MODELS = [
     cost: {
       input: 5 / 1e6,
       output: 15 / 1e6,
+    },
+  })),
+  ...['gpt-4.1', 'gpt-4.1-2025-04-14'].map((model) => ({
+    id: model,
+    cost: {
+      input: 2 / 1e6,
+      output: 8 / 1e6,
+    },
+  })),
+  ...['gpt-4.1-mini', 'gpt-4.1-mini-2025-04-14'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.4 / 1e6,
+      output: 1.6 / 1e6,
+    },
+  })),
+  ...['gpt-4.1-nano', 'gpt-4.1-nano-2025-04-14'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.1 / 1e6,
+      output: 0.4 / 1e6,
     },
   })),
   ...['gpt-4.5-preview', 'gpt-4.5-preview-2025-02-27'].map((model) => ({

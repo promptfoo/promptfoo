@@ -6,7 +6,8 @@ You can use it by specifying one of the [available models](https://ai.google.dev
 
 ## Available Models
 
-- `google:gemini-2.5-pro-exp-03-25` - Latest thinking model, designed to tackle increasingly complex problems with enhanced reasoning capabilities.
+- `google:gemini-2.5-flash-preview-04-17` - Latest Flash model with thinking capabilities for enhanced reasoning
+- `google:gemini-2.5-pro-exp-03-25` - Latest thinking model, designed to tackle increasingly complex problems with enhanced reasoning capabilities
 - `google:gemini-2.0-flash-exp` - Multimodal model with next generation features
 - `google:gemini-2.0-flash-thinking-exp` - Optimized for complex reasoning and problem-solving
 - `google:gemini-1.5-flash-8b` - Fast and cost-efficient multimodal model
@@ -37,6 +38,23 @@ providers:
       topK: 40 # Top-k sampling
       stopSequences: ['END'] # Stop generation at these sequences
 ```
+
+### Thinking Configuration
+
+For models that support thinking capabilities (like Gemini 2.5 Flash), you can configure the thinking budget:
+
+```yaml
+providers:
+  - id: google:gemini-2.5-flash-preview-04-17
+    config:
+      generationConfig:
+        temperature: 0.7
+        maxOutputTokens: 2048
+        thinkingConfig:
+          thinkingBudget: 1024 # Controls tokens allocated for thinking process
+```
+
+The thinking configuration allows the model to show its reasoning process before providing the final answer, which can be helpful for complex tasks that require step-by-step thinking.
 
 You can also specify a response schema for structured output:
 
@@ -156,6 +174,79 @@ providers:
 
 For more details, see the [Gemini API documentation](https://ai.google.dev/docs).
 
+### Search Grounding
+
+Search grounding allows Gemini models to access the internet for up-to-date information, enhancing responses about recent events and real-time data.
+
+#### Basic Usage
+
+To enable Search grounding:
+
+```yaml
+providers:
+  - id: google:gemini-2.5-flash-preview-04-17
+    config:
+      tools:
+        - googleSearch: {} # or google_search: {}
+```
+
+#### Combining with Other Features
+
+You can combine Search grounding with thinking capabilities for better reasoning:
+
+```yaml
+providers:
+  - id: google:gemini-2.5-pro-exp-03-25
+    config:
+      generationConfig:
+        thinkingConfig:
+          thinkingBudget: 1024
+      tools:
+        - googleSearch: {}
+```
+
+#### Supported Models
+
+:::info
+Search grounding works with most recent Gemini models including:
+
+- Gemini 2.5 Flash and Pro models
+- Gemini 2.0 Flash and Pro models
+- Gemini 1.5 Flash and Pro models
+  :::
+
+#### Use Cases
+
+Search grounding is particularly valuable for:
+
+- Current events and news
+- Recent developments
+- Stock prices and market data
+- Sports results
+- Technical documentation updates
+
+#### Working with Response Metadata
+
+When using Search grounding, the API response includes additional metadata:
+
+- `groundingMetadata` - Contains information about search results used
+- `groundingChunks` - Web sources that informed the response
+- `webSearchQueries` - Queries used to retrieve information
+
+#### Limitations and Requirements
+
+- Search results may vary by region and time
+- Results may be subject to Google Search rate limits
+- Search grounding may incur additional costs beyond normal API usage
+- Search will only be performed when the model determines it's necessary
+- **Important**: Per Google's requirements, applications using Search grounding must display Google Search Suggestions included in the API response metadata
+
+#### Example and Resources
+
+For a complete working example, see the [google-aistudio-search example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-aistudio-search).
+
+For more details, see the [Google AI Studio documentation on Grounding with Google Search](https://ai.google.dev/docs/gemini_api/grounding).
+
 ## Google Live API
 
 Promptfoo now supports Google's WebSocket-based Live API, which enables low-latency bidirectional voice and video interactions with Gemini models. This API provides real-time interactive capabilities beyond what's available in the standard REST API.
@@ -251,10 +342,10 @@ Try the examples:
 
 ```sh
 # Basic text-only example
-promptfoo init --example google-multimodal-live
+promptfoo init --example google-live
 
 # Function calling and tools example
-promptfoo init --example google-multimodal-live-tools
+promptfoo init --example google-live-tools
 ```
 
 ### Limitations

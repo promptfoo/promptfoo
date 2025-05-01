@@ -90,6 +90,18 @@ const AboutPageContent = () => {
                 bio: `Steve brings decades of expertise in engineering, product, and cybersecurity. He has led technical and product teams, and conducted pentests at companies like Microsoft, Shopify, Intercom, and PwC. Most recently he was scaling AI products at Discord.`,
               },
               {
+                name: 'Matthew Bou',
+                title: 'Enterprise GTM Lead',
+                image: '/img/team/matt.jpeg',
+                bio: "Matt's a three-time founding sales team member with a track record of building GTM from scratch. He's helped startups land and grow Fortune 500 accounts, leading to three exits. At Promptfoo, he leads enterprise sales, helping teams accelerate and secure LLMs.",
+              },
+              {
+                name: 'Ben Shipley',
+                title: 'Enterprise GTM Lead',
+                image: '/img/team/ben.jpeg',
+                bio: 'Ben brings go-to-market expertise as an early GTM hire at multiple high-growth startups including Windsurf, Applied Intuition, and Amplitude. He specializes in building strategic relationships and helping enterprises implement and secure their AI solutions.',
+              },
+              {
                 name: 'Vanessa Sauter',
                 title: 'Principal Solutions Architect',
                 image: '/img/team/vanessa.jpeg',
@@ -112,6 +124,12 @@ const AboutPageContent = () => {
                 title: 'Senior Engineer',
                 image: '/img/team/will.jpg',
                 bio: 'Will has a passion for building secure and reliable systems. He brings experience leading teams that develop AI for the financial services industry.',
+              },
+              {
+                name: 'Asmi Gulati',
+                title: 'AI Red Team',
+                image: '/img/team/asmi.jpeg',
+                bio: 'Asmi specializes in prompt hacking and develops educational content for Promptfoo. In her free time she maintains https://aisimplyexplained.com/',
               },
             ].map((leader) => (
               <Grid size={{ xs: 12, sm: 6, md: 4 }} key={leader.name}>

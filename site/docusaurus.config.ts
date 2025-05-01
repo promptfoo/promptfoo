@@ -111,20 +111,24 @@ const config: Config = {
       items: [
         {
           type: 'dropdown',
-          label: 'Product',
+          label: 'Products',
           position: 'left',
           items: [
             {
-              to: '/security/',
-              label: 'Gen AI Security',
+              to: '/red-teaming/',
+              label: 'Red Teaming',
             },
             {
-              to: '/llm-vulnerability-scanner/',
-              label: 'Vulnerability Scanner',
+              to: '/guardrails/',
+              label: 'Guardrails',
+            },
+            {
+              to: '/model-security/',
+              label: 'Model Security',
             },
             {
               to: '/docs/getting-started/',
-              label: 'LLM Evaluations',
+              label: 'Evaluations',
             },
           ],
         },
@@ -173,6 +177,10 @@ const config: Config = {
               label: 'Foundation Model Reports',
             },
             {
+              to: 'https://www.promptfoo.dev/lm-security-db/',
+              label: 'Language Model Security DB',
+            },
+            {
               href: 'https://github.com/promptfoo/promptfoo',
               label: 'GitHub',
             },
@@ -183,6 +191,12 @@ const config: Config = {
           ],
         },
         { to: '/pricing/', label: 'Enterprise', position: 'left' },
+        {
+          to: 'https://promptfoo.app',
+          position: 'right',
+          'aria-label': 'Promptfoo App',
+          label: 'Log in',
+        },
         {
           href: 'https://github.com/promptfoo/promptfoo',
           position: 'right',
@@ -204,16 +218,20 @@ const config: Config = {
           title: 'Product',
           items: [
             {
-              label: 'Docs',
-              to: '/docs/intro/',
+              label: 'Red Teaming',
+              to: '/red-teaming/',
             },
             {
-              label: 'Command Line',
+              label: 'Guardrails',
+              to: '/guardrails/',
+            },
+            {
+              label: 'Model Security',
+              to: '/model-security/',
+            },
+            {
+              label: 'Evaluations',
               to: '/docs/getting-started/',
-            },
-            {
-              label: 'Node Package',
-              to: '/docs/usage/node-package/',
             },
             {
               label: 'Enterprise',
@@ -235,6 +253,10 @@ const config: Config = {
             {
               label: 'Foundation Model Reports',
               to: 'https://www.promptfoo.dev/models/',
+            },
+            {
+              label: 'Language Model Security DB',
+              to: 'https://www.promptfoo.dev/lm-security-db/',
             },
             {
               label: 'Running Benchmarks',
@@ -280,6 +302,10 @@ const config: Config = {
             {
               label: 'Careers',
               to: '/careers/',
+            },
+            {
+              label: 'Log in',
+              to: 'https://promptfoo.app',
             },
           ],
         },
@@ -360,6 +386,10 @@ const config: Config = {
           {
             from: '/docs/providers/palm',
             to: '/docs/providers/google',
+          },
+          {
+            from: '/docs',
+            to: '/docs/intro',
           },
         ],
       },

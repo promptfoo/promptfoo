@@ -1,3 +1,5 @@
+import type { MCPConfig } from '../mcp/types';
+
 interface Blob {
   mimeType: string;
   data: string; // base64-encoded string
@@ -31,7 +33,7 @@ export interface Content {
   role?: string;
 }
 
-interface Schema {
+export interface Schema {
   type: 'TYPE_UNSPECIFIED' | 'STRING' | 'NUMBER' | 'INTEGER' | 'BOOLEAN' | 'ARRAY' | 'OBJECT';
   format?: string;
   description?: string;
@@ -45,7 +47,19 @@ interface Schema {
   items?: Schema;
 }
 
-interface FunctionDeclaration {
+type SchemaType = Schema['type']; // Create a type alias for convenience
+
+export const VALID_SCHEMA_TYPES: ReadonlyArray<SchemaType> = [
+  'TYPE_UNSPECIFIED',
+  'STRING',
+  'NUMBER',
+  'INTEGER',
+  'BOOLEAN',
+  'ARRAY',
+  'OBJECT',
+];
+
+export interface FunctionDeclaration {
   name: string;
   description?: string;
   parameters?: Schema;
@@ -66,6 +80,12 @@ export interface Tool {
   googleSearchRetrieval?: GoogleSearchRetrieval;
   codeExecution?: object;
   googleSearch?: object;
+
+  // Note: These snake_case properties are supported but should be accessed with type assertions
+  // Type definitions included for documentation purposes only
+  // google_search_retrieval?: GoogleSearchRetrieval;
+  // code_execution?: object;
+  // google_search?: object;
 }
 
 export interface CompletionOptions {
@@ -109,6 +129,11 @@ export interface CompletionOptions {
 
     // Live API
     response_modalities?: string[];
+
+    // Thinking configuration
+    thinkingConfig?: {
+      thinkingBudget?: number;
+    };
   };
 
   responseSchema?: string;
@@ -149,6 +174,8 @@ export interface CompletionOptions {
       llama_guard_settings?: Record<string, unknown>;
     };
   };
+
+  mcp?: MCPConfig;
 }
 
 // Claude API interfaces

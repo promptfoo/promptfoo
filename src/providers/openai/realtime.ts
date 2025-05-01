@@ -8,7 +8,7 @@ import type {
   TokenUsage,
 } from '../../types';
 import type { EnvOverrides } from '../../types/env';
-import { renderVarsInObject } from '../../util';
+import { maybeLoadToolsFromExternalFile } from '../../util';
 import type { OpenAiCompletionOptions } from './types';
 import { OPENAI_REALTIME_MODELS } from './util';
 
@@ -39,6 +39,7 @@ export interface OpenAiRealtimeOptions extends OpenAiCompletionOptions {
   tool_choice?: 'none' | 'auto' | 'required' | { type: 'function'; function?: { name: string } };
   functionCallHandler?: (name: string, args: string) => Promise<string>; // Handler for function calls
   apiVersion?: string; // Optional API version
+  maintainContext?: boolean;
 }
 
 interface WebSocketMessage {
@@ -63,6 +64,19 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
   config: OpenAiRealtimeOptions;
 
+  // Add persistent connection handling
+  persistentConnection: WebSocket | null = null;
+  previousItemId: string | null = null;
+  assistantMessageIds: string[] = []; // Track assistant message IDs
+  private activeTimeouts: Set<NodeJS.Timeout> = new Set();
+
+  // Add audio state management
+  private lastAudioItemId: string | null = null;
+  private currentAudioBuffer: Buffer[] = [];
+  private currentAudioFormat: string = 'wav';
+  private isProcessingAudio: boolean = false;
+  private audioTimeout: NodeJS.Timeout | null = null;
+
   constructor(
     modelName: string,
     options: { config?: OpenAiRealtimeOptions; id?: string; env?: EnvOverrides } = {},
@@ -72,6 +86,23 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     }
     super(modelName, options);
     this.config = options.config || {};
+
+    // Enable maintainContext by default
+    if (this.config.maintainContext === undefined) {
+      this.config.maintainContext = true;
+    }
+  }
+
+  // Add method to reset audio state
+  private resetAudioState(): void {
+    this.lastAudioItemId = null;
+    this.currentAudioBuffer = [];
+    this.currentAudioFormat = 'wav';
+    this.isProcessingAudio = false;
+    if (this.audioTimeout) {
+      clearTimeout(this.audioTimeout);
+      this.audioTimeout = null;
+    }
   }
 
   getRealtimeSessionBody() {
@@ -105,7 +136,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     }
 
     if (this.config.tools && this.config.tools.length > 0) {
-      body.tools = renderVarsInObject(this.config.tools);
+      body.tools = maybeLoadToolsFromExternalFile(this.config.tools);
       // If tools are provided but no tool_choice, default to auto
       if (this.config.tool_choice === undefined) {
         body.tool_choice = 'auto';
@@ -257,7 +288,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
                 // Add tools if configured
                 if (this.config.tools && this.config.tools.length > 0) {
-                  responseEvent.response.tools = this.config.tools;
+                  responseEvent.response.tools = maybeLoadToolsFromExternalFile(this.config.tools);
                   if (Object.prototype.hasOwnProperty.call(this.config, 'tool_choice')) {
                     responseEvent.response.tool_choice = this.config.tool_choice;
                   } else {
@@ -593,9 +624,18 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       this.config.functionCallHandler = context.prompt.config.functionCallHandler;
     }
 
+    // If no conversationId is provided in the metadata, set maintainContext to false
+    const conversationId =
+      context?.test && 'metadata' in context.test
+        ? (context.test.metadata as Record<string, any>)?.conversationId
+        : undefined;
+
+    if (!conversationId) {
+      this.config.maintainContext = false;
+    }
+
     try {
       // Extract the message content for WebSocket communications
-      // This approach is similar to parseChatPrompt but specialized for Realtime API
       let promptText = prompt;
 
       try {
@@ -635,9 +675,15 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         logger.debug('Using prompt as is - not a JSON structure');
       }
 
-      // Connect directly to the WebSocket API using API key
-      logger.debug(`Connecting directly to OpenAI Realtime API WebSocket with API key`);
-      const result = await this.directWebSocketRequest(promptText);
+      // Use a persistent connection if we should maintain conversation context
+      let result;
+      if (this.config.maintainContext === true) {
+        result = await this.persistentWebSocketRequest(promptText);
+      } else {
+        // Connect directly to the WebSocket API using API key
+        logger.debug(`Connecting directly to OpenAI Realtime API WebSocket with API key`);
+        result = await this.directWebSocketRequest(promptText);
+      }
 
       // Format the output - if function calls occurred, include that info
       let finalOutput = result.output;
@@ -831,7 +877,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
                 // Add tools if configured
                 if (this.config.tools && this.config.tools.length > 0) {
-                  responseEvent.response.tools = this.config.tools;
+                  responseEvent.response.tools = maybeLoadToolsFromExternalFile(this.config.tools);
                   if (Object.prototype.hasOwnProperty.call(this.config, 'tool_choice')) {
                     responseEvent.response.tool_choice = this.config.tool_choice;
                   } else {
@@ -1146,5 +1192,327 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         }
       });
     });
+  }
+
+  // New method for persistent connection
+  async persistentWebSocketRequest(prompt: string): Promise<RealtimeResponse> {
+    return new Promise((resolve, reject) => {
+      logger.debug(`Using persistent WebSocket connection to OpenAI Realtime API`);
+
+      // Create a new connection if needed or use existing
+      const connection = this.persistentConnection;
+
+      if (connection) {
+        // Connection already exists, just set up message handlers
+        this.setupMessageHandlers(prompt, resolve, reject);
+      } else {
+        // Create new connection
+        const wsUrl = `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(this.modelName)}`;
+        logger.debug(`Connecting to WebSocket URL: ${wsUrl}`);
+
+        // Add WebSocket options with required headers
+        const wsOptions = {
+          headers: {
+            Authorization: `Bearer ${this.getApiKey()}`,
+            'OpenAI-Beta': 'realtime=v1',
+            'User-Agent': 'promptfoo Realtime API Client',
+            Origin: 'https://api.openai.com',
+          },
+          handshakeTimeout: 10000,
+          perMessageDeflate: false,
+        };
+
+        this.persistentConnection = new WebSocket(wsUrl, wsOptions);
+
+        // Handle connection establishment
+        this.persistentConnection.once('open', () => {
+          logger.debug('Persistent WebSocket connection established successfully');
+          this.setupMessageHandlers(prompt, resolve, reject);
+        });
+
+        this.persistentConnection.once('error', (err: Error) => {
+          logger.error(`WebSocket connection error: ${err}`);
+          reject(err);
+        });
+      }
+    });
+  }
+
+  // Helper method to set up message handlers for persistent WebSocket
+  private setupMessageHandlers(
+    prompt: string,
+    resolve: (value: RealtimeResponse) => void,
+    reject: (reason: Error) => void,
+  ): void {
+    // Reset audio state at the start of each request
+    this.resetAudioState();
+
+    // Set main request timeout
+    const requestTimeout = setTimeout(() => {
+      logger.error('WebSocket response timed out');
+      this.resetAudioState();
+      reject(new Error('WebSocket response timed out'));
+    }, this.config.websocketTimeout || 30000); // 30 second default timeout
+
+    // Accumulators for response text and errors
+    let responseText = '';
+    let responseError = '';
+    let textDone = false;
+    let audioDone = true; // Default to true, set to false when audio processing starts
+    let _usage: {
+      total_tokens?: number;
+      prompt_tokens?: number;
+      completion_tokens?: number;
+    } | null = null;
+
+    // Track message IDs and function call state
+    let _messageId = '';
+    let _responseId = '';
+    const functionCallOccurred = false;
+    const functionCallResults: string[] = [];
+
+    const sendEvent = (event: any) => {
+      if (!event.event_id) {
+        event.event_id = this.generateEventId();
+      }
+
+      const connection = this.persistentConnection;
+      if (connection) {
+        connection.send(JSON.stringify(event));
+      }
+
+      return event.event_id;
+    };
+
+    // Store cleanup function for message handler
+    let cleanupMessageHandler: (() => void) | null = null;
+
+    const resolveResponse = () => {
+      // Clean up message handler if it exists
+      if (cleanupMessageHandler) {
+        cleanupMessageHandler();
+      }
+
+      clearTimeout(requestTimeout);
+
+      // Handle empty response cases
+      if (responseText.length === 0) {
+        logger.warn('Empty response text detected');
+        if (this.currentAudioBuffer.length > 0) {
+          responseText = '[Audio response received]';
+        } else {
+          responseText = '[No response received from API]';
+        }
+      }
+
+      // Prepare final response with audio if available
+      const finalAudioData =
+        this.currentAudioBuffer.length > 0
+          ? Buffer.concat(this.currentAudioBuffer).toString('base64')
+          : null;
+
+      const hadAudio = this.currentAudioBuffer.length > 0;
+      const finalAudioFormat = this.currentAudioFormat;
+
+      this.resetAudioState();
+
+      resolve({
+        output: responseText,
+        tokenUsage: {
+          total: _usage?.total_tokens || 0,
+          prompt: _usage?.prompt_tokens || 0,
+          completion: _usage?.completion_tokens || 0,
+          cached: 0,
+        },
+        cached: false,
+        metadata: {
+          responseId: _responseId,
+          messageId: _messageId,
+          usage: _usage,
+          ...(hadAudio && {
+            audio: {
+              data: finalAudioData,
+              format: finalAudioFormat,
+            },
+          }),
+        },
+        ...(hadAudio && {
+          audio: {
+            data: finalAudioData,
+            format: finalAudioFormat,
+            transcript: responseText,
+          },
+        }),
+        functionCallOccurred,
+        functionCallResults,
+      });
+    };
+
+    const checkAndResolve = () => {
+      // Only resolve if both text and audio are done (or no audio was processed)
+      if (textDone && audioDone) {
+        resolveResponse();
+      } else {
+        logger.info(`Waiting for completion - Text done: ${textDone}, Audio done: ${audioDone}`);
+      }
+    };
+
+    const messageHandler = async (data: Buffer) => {
+      try {
+        const message = JSON.parse(data.toString()) as WebSocketMessage;
+
+        switch (message.type) {
+          case 'conversation.item.created':
+            if (message.item.role === 'user') {
+              _messageId = message.item.id;
+              this.previousItemId = _messageId;
+
+              // Send response creation event immediately after user message
+              sendEvent({
+                type: 'response.create',
+                response: {
+                  modalities: this.config.modalities || ['text', 'audio'],
+                  instructions: this.config.instructions || 'You are a helpful assistant.',
+                  voice: this.config.voice || 'alloy',
+                  temperature: this.config.temperature ?? 0.8,
+                },
+              });
+            } else if (message.item.role === 'assistant') {
+              this.assistantMessageIds.push(message.item.id);
+              this.previousItemId = message.item.id;
+            }
+            break;
+
+          case 'response.created':
+            _responseId = message.response.id;
+            break;
+
+          case 'response.text.delta':
+          case 'response.audio_transcript.delta':
+            responseText += message.delta;
+            clearTimeout(requestTimeout);
+            break;
+
+          case 'response.text.done':
+          case 'response.audio_transcript.done':
+            textDone = true;
+            if (message.text && message.text.length > 0) {
+              responseText = message.text;
+            }
+            checkAndResolve();
+            break;
+
+          case 'response.audio.delta':
+            if (!this.isProcessingAudio) {
+              this.isProcessingAudio = true;
+              audioDone = false;
+              clearTimeout(requestTimeout);
+            }
+
+            if (message.item_id !== this.lastAudioItemId) {
+              this.lastAudioItemId = message.item_id;
+              this.currentAudioBuffer = [];
+            }
+
+            if (message.audio && message.audio.length > 0) {
+              try {
+                const audioBuffer = Buffer.from(message.audio, 'base64');
+                this.currentAudioBuffer.push(audioBuffer);
+              } catch (error) {
+                logger.error(`Error processing audio data: ${error}`);
+              }
+            }
+            break;
+
+          case 'response.audio.done':
+            if (message.format) {
+              this.currentAudioFormat = message.format;
+            }
+            this.isProcessingAudio = false;
+            audioDone = true;
+            checkAndResolve();
+            break;
+
+          case 'response.done':
+            if (message.usage) {
+              _usage = message.usage;
+            }
+            // Mark both as done if we get response.done without any audio processing
+            if (!this.isProcessingAudio) {
+              audioDone = true;
+              textDone = true;
+            }
+            checkAndResolve();
+            break;
+
+          case 'error':
+            responseError = message.message || 'Unknown WebSocket error';
+            logger.error(`WebSocket error: ${responseError}`);
+            clearTimeout(requestTimeout);
+            this.resetAudioState();
+            reject(new Error(responseError));
+            break;
+        }
+      } catch (error) {
+        logger.error(`Error processing WebSocket message: ${error}`);
+        clearTimeout(requestTimeout);
+        this.resetAudioState();
+        reject(new Error(`Error processing WebSocket message: ${error}`));
+      }
+    };
+
+    // Add message handler for this request
+    if (this.persistentConnection) {
+      this.persistentConnection.on('message', messageHandler);
+      this.persistentConnection.once('error', (error: Error) => {
+        logger.error(`WebSocket error: ${error}`);
+        clearTimeout(requestTimeout);
+        this.resetAudioState();
+        this.persistentConnection = null;
+        reject(error);
+      });
+
+      // Set up cleanup function
+      cleanupMessageHandler = () => {
+        if (this.persistentConnection) {
+          this.persistentConnection.removeListener('message', messageHandler);
+        }
+      };
+    }
+
+    // Create a conversation item with the user's prompt
+    sendEvent({
+      type: 'conversation.item.create',
+      previous_item_id: this.previousItemId,
+      item: {
+        type: 'message',
+        role: 'user',
+        content: [
+          {
+            type: 'input_text',
+            text: prompt,
+          },
+        ],
+      },
+    });
+  }
+
+  // Add cleanup method to close WebSocket connections
+  cleanup(): void {
+    if (this.persistentConnection) {
+      logger.info('Cleaning up persistent WebSocket connection');
+      // Clear all timeouts
+      this.activeTimeouts.forEach((t) => clearTimeout(t));
+      this.activeTimeouts.clear();
+
+      // Reset audio state
+      this.resetAudioState();
+
+      // Close connection and reset state
+      this.persistentConnection.close();
+      this.persistentConnection = null;
+      this.previousItemId = null;
+      this.assistantMessageIds = [];
+    }
   }
 }

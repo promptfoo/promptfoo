@@ -1,15 +1,19 @@
-import Ajv from 'ajv';
 import type { AnySchema } from 'ajv';
 import type { GoogleAuth } from 'google-auth-library';
 import Clone from 'rfdc';
 import { z } from 'zod';
 import logger from '../../logger';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
+import { getAjv } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { parseChatPrompt } from '../shared';
-import type { Content, Part, Tool } from './types';
+import { VALID_SCHEMA_TYPES } from './types';
+import type { Content, FunctionCall, Part, Tool } from './types';
 
-const ajv = new Ajv();
+const ajv = getAjv();
+// property_ordering is an optional field sometimes present in gemini tool configs, but ajv doesn't know about it.
+// At the moment we will just ignore it, so the is-valid-function-call won't check property field ordering.
+ajv.addKeyword('property_ordering');
 const clone = Clone();
 
 type Probability = 'NEGLIGIBLE' | 'LOW' | 'MEDIUM' | 'HIGH';
@@ -27,17 +31,21 @@ interface SafetyRating {
 interface Candidate {
   content: Content;
   finishReason?:
-    | 'FINISH_REASON_UNSPECIFIED'
-    | 'STOP'
-    | 'MAX_TOKENS'
-    | 'SAFETY'
-    | 'RECITATION'
-    | 'OTHER'
     | 'BLOCKLIST'
+    | 'FINISH_REASON_UNSPECIFIED'
+    | 'MALFORMED_FUNCTION_CALL'
+    | 'MAX_TOKENS'
+    | 'OTHER'
     | 'PROHIBITED_CONTENT'
+    | 'RECITATION'
+    | 'SAFETY'
     | 'SPII'
-    | 'MALFORMED_FUNCTION_CALL';
+    | 'STOP';
+  groundingChunks?: Record<string, any>[];
+  groundingMetadata?: Record<string, any>;
+  groundingSupports?: Record<string, any>[];
   safetyRatings: SafetyRating[];
+  webSearchQueries?: string[];
 }
 
 interface GeminiUsageMetadata {
@@ -128,14 +136,48 @@ export function maybeCoerceToGeminiFormat(contents: any): {
   const parseResult = GeminiFormatSchema.safeParse(contents);
 
   if (parseResult.success) {
+    // Check for native Gemini system_instruction format
+    let systemInst = undefined;
+    if (typeof contents === 'object' && 'system_instruction' in contents) {
+      systemInst = contents.system_instruction;
+      // We need to modify the contents to remove system_instruction
+      // since it's already extracted to systemInst
+      if (typeof contents === 'object' && 'contents' in contents) {
+        contents = contents.contents;
+      }
+      coerced = true;
+    }
+
     return {
       contents: parseResult.data,
       coerced,
-      systemInstruction: undefined,
+      systemInstruction: systemInst,
     };
   }
 
   let coercedContents: GeminiFormat;
+
+  // Handle native Gemini format with system_instruction
+  if (
+    typeof contents === 'object' &&
+    !Array.isArray(contents) &&
+    'system_instruction' in contents
+  ) {
+    const systemInst = contents.system_instruction;
+
+    if ('contents' in contents) {
+      coercedContents = contents.contents;
+    } else {
+      // If contents field is not present, use an empty array
+      coercedContents = [];
+    }
+
+    return {
+      contents: coercedContents,
+      coerced: true,
+      systemInstruction: systemInst,
+    };
+  }
 
   if (typeof contents === 'string') {
     coercedContents = [
@@ -248,20 +290,80 @@ export async function hasGoogleDefaultCredentials() {
   }
 }
 
-export function stringifyCandidateContents(data: GeminiResponseData) {
-  let output = '';
-  for (const candidate of data.candidates) {
-    if (candidate.content?.parts) {
-      for (const part of candidate.content.parts) {
-        if ('text' in part) {
-          output += part.text;
-        } else {
-          output += JSON.stringify(part);
-        }
+export function getCandidate(data: GeminiResponseData) {
+  if (!(data && data.candidates && data.candidates.length === 1)) {
+    throw new Error('Expected one candidate in API response.');
+  }
+  const candidate = data.candidates[0];
+  return candidate;
+}
+
+export function formatCandidateContents(candidate: Candidate) {
+  if (candidate.content?.parts) {
+    let output = '';
+    let is_text = true;
+    for (const part of candidate.content.parts) {
+      if ('text' in part) {
+        output += part.text;
+      } else {
+        is_text = false;
       }
     }
+    if (is_text) {
+      return output;
+    } else {
+      return candidate.content.parts;
+    }
+  } else {
+    throw new Error(`No output found in response: ${JSON.stringify(candidate)}`);
   }
-  return output;
+}
+
+export function mergeParts(parts1: Part[] | string | undefined, parts2: Part[] | string) {
+  if (parts1 === undefined) {
+    return parts2;
+  }
+
+  if (typeof parts1 === 'string' && typeof parts2 === 'string') {
+    return parts1 + parts2;
+  }
+
+  const array1: Part[] = typeof parts1 === 'string' ? [{ text: parts1 }] : parts1;
+
+  const array2: Part[] = typeof parts2 === 'string' ? [{ text: parts2 }] : parts2;
+
+  array1.push(...array2);
+
+  return array1;
+}
+
+/**
+ * Normalizes tools configuration to handle both snake_case and camelCase formats.
+ * This ensures compatibility with both Google API formats while maintaining
+ * consistent behavior in our codebase.
+ */
+export function normalizeTools(tools: Tool[]): Tool[] {
+  return tools.map((tool) => {
+    const normalizedTool: Tool = { ...tool };
+
+    // Use index access with type assertion to avoid TypeScript errors
+    // Handle google_search -> googleSearch conversion
+    if ((tool as any).google_search && !normalizedTool.googleSearch) {
+      normalizedTool.googleSearch = (tool as any).google_search;
+    }
+
+    // Handle code_execution -> codeExecution conversion
+    if ((tool as any).code_execution && !normalizedTool.codeExecution) {
+      normalizedTool.codeExecution = (tool as any).code_execution;
+    }
+
+    // Handle google_search_retrieval -> googleSearchRetrieval conversion
+    if ((tool as any).google_search_retrieval && !normalizedTool.googleSearchRetrieval) {
+      normalizedTool.googleSearchRetrieval = (tool as any).google_search_retrieval;
+    }
+
+    return normalizedTool;
+  });
 }
 
 export function loadFile(
@@ -277,12 +379,19 @@ export function loadFile(
   const fileContents = maybeLoadFromExternalFile(renderVarsInObject(config_var, context_vars));
   if (typeof fileContents === 'string') {
     try {
-      return JSON.parse(fileContents);
+      const parsedContents = JSON.parse(fileContents);
+      return Array.isArray(parsedContents) ? normalizeTools(parsedContents) : parsedContents;
     } catch (err) {
       logger.debug(`ERROR: failed to convert file contents to JSON:\n${JSON.stringify(err)}`);
       return fileContents;
     }
   }
+
+  // If fileContents is already an array of tools, normalize them
+  if (Array.isArray(fileContents)) {
+    return normalizeTools(fileContents);
+  }
+
   return fileContents;
 }
 
@@ -375,16 +484,22 @@ function normalizeSchemaTypes(schemaNode: any): any {
       const value = schemaNode[key];
 
       if (key === 'type') {
-        // Convert type value(s) to lowercase
-        if (typeof value === 'string') {
+        if (
+          typeof value === 'string' &&
+          (VALID_SCHEMA_TYPES as ReadonlyArray<string>).includes(value)
+        ) {
+          // Convert type value(s) to lowercase
           newNode[key] = value.toLowerCase();
         } else if (Array.isArray(value)) {
           // Handle type arrays like ["STRING", "NULL"]
-          newNode[key] = value.map((t) => (typeof t === 'string' ? t.toLowerCase() : t));
-        } else {
-          throw new Error(
-            `Schema types must be string or array of string. Received: ${JSON.stringify(value)}`,
+          newNode[key] = value.map((t) =>
+            typeof t === 'string' && (VALID_SCHEMA_TYPES as ReadonlyArray<string>).includes(t)
+              ? t.toLowerCase()
+              : t,
           );
+        } else {
+          // Handle type used as function field rather than a schema type definition
+          newNode[key] = normalizeSchemaTypes(value);
         }
       } else {
         // Recursively process nested objects/arrays
@@ -396,42 +511,71 @@ function normalizeSchemaTypes(schemaNode: any): any {
   return newNode;
 }
 
+export function parseStringObject(input: string | any) {
+  if (typeof input === 'string') {
+    return JSON.parse(input);
+  }
+  return input;
+}
+
 export function validateFunctionCall(
   output: string | object,
   functions?: Tool[] | string,
   vars?: Record<string, string | object>,
 ) {
-  if (typeof output === 'object' && 'functionCall' in output) {
-    output = (output as { functionCall: any }).functionCall;
-  }
-  const functionCall = output as { args: string; name: string };
-  if (
-    typeof functionCall !== 'object' ||
-    typeof functionCall.name !== 'string' ||
-    typeof functionCall.args !== 'string'
-  ) {
+  let functionCalls: FunctionCall[];
+  try {
+    let parsedOutput: object | Content = parseStringObject(output);
+    if ('toolCall' in parsedOutput) {
+      // Live Format
+      parsedOutput = (parsedOutput as { toolCall: any }).toolCall;
+      functionCalls = (parsedOutput as { functionCalls: any }).functionCalls;
+    } else if (Array.isArray(parsedOutput)) {
+      // Vertex and AIS Format
+      functionCalls = parsedOutput
+        .filter((obj) => Object.prototype.hasOwnProperty.call(obj, 'functionCall'))
+        .map((obj) => obj.functionCall);
+    } else {
+      throw new Error();
+    }
+  } catch {
     throw new Error(
-      `Google did not return a valid-looking function call: ${JSON.stringify(functionCall)}`,
+      `Google did not return a valid-looking function call: ${JSON.stringify(output)}`,
     );
   }
 
-  // Parse function call and validate it against schema
   const interpolatedFunctions = loadFile(functions, vars) as Tool[];
-  const functionArgs = JSON.parse(functionCall.args);
-  const functionName = functionCall.name;
-  const functionDeclarations = interpolatedFunctions?.find((f) => 'functionDeclarations' in f);
-  let functionSchema = functionDeclarations?.functionDeclarations?.find(
-    (f) => f.name === functionName,
-  )?.parameters;
-  if (!functionSchema) {
-    throw new Error(`Called "${functionName}", but there is no function with that name`);
-  }
 
-  functionSchema = normalizeSchemaTypes(functionSchema);
-  const validate = ajv.compile(functionSchema as AnySchema);
-  if (!validate(functionArgs)) {
-    throw new Error(
-      `Call to "${functionName}" does not match schema: ${JSON.stringify(validate.errors)}`,
+  for (const functionCall of functionCalls) {
+    // Parse function call and validate it against schema
+    const functionName = functionCall.name;
+    const functionArgs = parseStringObject(functionCall.args);
+    const functionDeclarations = interpolatedFunctions?.find((f) => 'functionDeclarations' in f);
+    const functionSchema = functionDeclarations?.functionDeclarations?.find(
+      (f) => f.name === functionName,
     );
+    if (!functionSchema) {
+      throw new Error(`Called "${functionName}", but there is no function with that name`);
+    }
+    if (Object.keys(functionArgs).length !== 0 && functionSchema?.parameters) {
+      const parameterSchema = normalizeSchemaTypes(functionSchema.parameters);
+      let validate;
+      try {
+        validate = ajv.compile(parameterSchema as AnySchema);
+      } catch (err) {
+        throw new Error(
+          `Tool schema doesn't compile with ajv: ${err}. If this is a valid tool schema you may need to reformulate your assertion without is-valid-function-call.`,
+        );
+      }
+      if (!validate(functionArgs)) {
+        throw new Error(
+          `Call to "${functionName}":\n${JSON.stringify(functionCall)}\ndoes not match schema:\n${JSON.stringify(validate.errors)}`,
+        );
+      }
+    } else if (!(JSON.stringify(functionArgs) === '{}' && !functionSchema?.parameters)) {
+      throw new Error(
+        `Call to "${functionName}":\n${JSON.stringify(functionCall)}\ndoes not match schema:\n${JSON.stringify(functionSchema)}`,
+      );
+    }
   }
 }

@@ -15,7 +15,7 @@ import type {
   ProviderResponse,
 } from '../types/providers';
 import type { TokenUsage } from '../types/shared';
-import { maybeLoadFromExternalFile } from '../util';
+import { maybeLoadToolsFromExternalFile } from '../util';
 import { outputFromMessage, parseMessages } from './anthropic/util';
 import { novaOutputFromMessage, novaParseMessages } from './bedrockUtil';
 import { parseChatPrompt } from './shared';
@@ -235,6 +235,66 @@ export interface BedrockAmazonNovaGenerationOptions extends BedrockOptions {
     };
   };
 }
+
+export type ContentType = 'AUDIO' | 'TEXT' | 'TOOL';
+
+export type AudioMediaType = 'audio/wav' | 'audio/lpcm' | 'audio/mulaw' | 'audio/mpeg';
+export type TextMediaType = 'text/plain' | 'application/json';
+
+export interface AudioConfiguration {
+  readonly mediaType: AudioMediaType;
+  readonly sampleRateHertz: number;
+  readonly sampleSizeBits: number;
+  readonly channelCount: number;
+  readonly encoding: string;
+  readonly audioType: 'SPEECH';
+}
+
+export interface TextConfiguration {
+  readonly contentType: ContentType;
+  readonly mediaType: TextMediaType;
+}
+
+export interface BedrockAmazonNovaSonicGenerationOptions extends BedrockOptions {
+  interfaceConfig?: {
+    max_new_tokens?: number;
+    temperature?: number;
+    top_p?: number;
+    top_k?: number;
+    stopSequences?: string[];
+  };
+  audioInputConfiguration?: Omit<AudioConfiguration, 'voiceId'>;
+  audioOutputConfiguration?: Omit<AudioConfiguration, 'mediaType'> & {
+    mediaType: 'audio/lpcm';
+    voiceId?: 'matthew' | 'tiffany' | 'amy';
+  };
+  textInputConfiguration?: TextConfiguration;
+  textOutputConfiguration?: Omit<TextConfiguration, 'mediaType'> & {
+    mediaType: 'text/plain';
+  };
+  toolConfig?: {
+    tools?: {
+      toolSpec: {
+        name: string;
+        description?: string;
+        inputSchema: {
+          json: {
+            type: 'object';
+            properties: {
+              [propertyName: string]: {
+                description: string;
+                type: string;
+              };
+            };
+            required: string[];
+          };
+        };
+      };
+    }[];
+    toolChoice?: 'any' | 'auto' | string; // Tool name
+  };
+}
+
 export interface BedrockDeepseekGenerationOptions extends BedrockOptions {
   max_tokens?: number;
   temperature?: number;
@@ -276,6 +336,7 @@ export enum LlamaVersion {
   V3_1 = 3.1,
   V3_2 = 3.2,
   V3_3 = 3.3,
+  V4 = 4,
 }
 
 export interface LlamaMessage {
@@ -341,6 +402,21 @@ export const formatPromptLlama3Instruct = (messages: LlamaMessage[]): string => 
   return formattedPrompt;
 };
 
+// Llama 4 format uses different tags
+export const formatPromptLlama4 = (messages: LlamaMessage[]): string => {
+  let formattedPrompt = '<|begin_of_text|>';
+
+  for (const message of messages) {
+    formattedPrompt += dedent`<|header_start|>${message.role}<|header_end|>
+
+${message.content.trim()}<|eot|>`;
+  }
+
+  // Add assistant header for completion
+  formattedPrompt += '<|header_start|>assistant<|header_end|>';
+  return formattedPrompt;
+};
+
 export const getLlamaModelHandler = (version: LlamaVersion) => {
   if (
     ![
@@ -349,6 +425,7 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
       LlamaVersion.V3_1,
       LlamaVersion.V3_2,
       LlamaVersion.V3_3,
+      LlamaVersion.V4,
     ].includes(version)
   ) {
     throw new Error(`Unsupported LLAMA version: ${version}`);
@@ -373,6 +450,9 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
         case LlamaVersion.V3_2:
         case LlamaVersion.V3_3:
           finalPrompt = formatPromptLlama3Instruct(messages as LlamaMessage[]);
+          break;
+        case LlamaVersion.V4:
+          finalPrompt = formatPromptLlama4(messages as LlamaMessage[]);
           break;
         default:
           throw new Error(`Unsupported LLAMA version: ${version}`);
@@ -713,7 +793,7 @@ export const BEDROCK_MODEL = {
       addConfigParam(
         params,
         'tools',
-        maybeLoadFromExternalFile(config?.tools),
+        maybeLoadToolsFromExternalFile(config?.tools),
         undefined,
         undefined,
       );
@@ -816,6 +896,7 @@ export const BEDROCK_MODEL = {
   LLAMA3_1: getLlamaModelHandler(LlamaVersion.V3_1),
   LLAMA3_2: getLlamaModelHandler(LlamaVersion.V3_2),
   LLAMA3_3: getLlamaModelHandler(LlamaVersion.V3_3),
+  LLAMA4: getLlamaModelHandler(LlamaVersion.V4),
   COHERE_COMMAND: {
     params: (
       config: BedrockCohereCommandGenerationOptions,
@@ -901,7 +982,7 @@ export const BEDROCK_MODEL = {
       addConfigParam(params, 'presence_penalty', config?.presence_penalty);
       addConfigParam(params, 'seed', config?.seed);
       addConfigParam(params, 'return_prompt', config?.return_prompt);
-      addConfigParam(params, 'tools', maybeLoadFromExternalFile(config?.tools));
+      addConfigParam(params, 'tools', maybeLoadToolsFromExternalFile(config?.tools));
       addConfigParam(params, 'tool_results', config?.tool_results);
       addConfigParam(params, 'stop_sequences', stop);
       addConfigParam(params, 'raw_prompting', config?.raw_prompting);
@@ -1175,6 +1256,8 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'meta.llama3-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
   'meta.llama3-8b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
+  'meta.llama4-scout-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
+  'meta.llama4-maverick-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
   'mistral.mistral-7b-instruct-v0:2': BEDROCK_MODEL.MISTRAL,
   'mistral.mistral-large-2402-v1:0': BEDROCK_MODEL.MISTRAL,
   'mistral.mistral-large-2407-v1:0': BEDROCK_MODEL.MISTRAL_LARGE_2407,
@@ -1188,6 +1271,8 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'apac.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'apac.meta.llama4-scout-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
+  'apac.meta.llama4-maverick-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
 
   // EU Models
   'eu.amazon.nova-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
@@ -1198,6 +1283,8 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'eu.anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.meta.llama3-2-1b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'eu.meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
+  'eu.meta.llama4-scout-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
+  'eu.meta.llama4-maverick-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
 
   // Gov Cloud Models
   'us-gov.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -1223,6 +1310,8 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'us.meta.llama3-2-90b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'us.meta.llama3-3-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_3,
+  'us.meta.llama4-scout-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
+  'us.meta.llama4-maverick-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
 };
 
 // See https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
@@ -1251,6 +1340,9 @@ function getHandlerForModel(modelName: string) {
   }
   if (modelName.includes('meta.llama3-3')) {
     return BEDROCK_MODEL.LLAMA3_3;
+  }
+  if (modelName.includes('meta.llama4')) {
+    return BEDROCK_MODEL.LLAMA4;
   }
   if (modelName.includes('meta.llama3')) {
     return BEDROCK_MODEL.LLAMA3;
@@ -1287,7 +1379,7 @@ export abstract class AwsBedrockGenericProvider {
     this.id = id ? () => id : this.id;
 
     if (this.config.guardrailIdentifier) {
-      telemetry.recordAndSendOnce('feature_used', {
+      telemetry.record('feature_used', {
         feature: 'guardrail',
         provider: 'bedrock',
       });
@@ -1306,6 +1398,7 @@ export abstract class AwsBedrockGenericProvider {
     AwsCredentialIdentity | AwsCredentialIdentityProvider | undefined
   > {
     if (this.config.accessKeyId && this.config.secretAccessKey) {
+      logger.debug(`Using credentials from config file`);
       return {
         accessKeyId: this.config.accessKeyId,
         secretAccessKey: this.config.secretAccessKey,
@@ -1313,9 +1406,12 @@ export abstract class AwsBedrockGenericProvider {
       };
     }
     if (this.config.profile) {
+      logger.debug(`Using SSO profile: ${this.config.profile}`);
       const { fromSSO } = await import('@aws-sdk/credential-provider-sso');
       return fromSSO({ profile: this.config.profile });
     }
+
+    logger.debug(`No explicit credentials in config, falling back to AWS default chain`);
     return undefined;
   }
 
@@ -1323,7 +1419,7 @@ export abstract class AwsBedrockGenericProvider {
     if (!this.bedrock) {
       let handler;
       // set from https://www.npmjs.com/package/proxy-agent
-      if (process.env.HTTP_PROXY || process.env.HTTPS_PROXY) {
+      if (getEnvString('HTTP_PROXY') || getEnvString('HTTPS_PROXY')) {
         try {
           const { NodeHttpHandler } = await import('@smithy/node-http-handler');
           const { ProxyAgent } = await import('proxy-agent');
@@ -1339,15 +1435,18 @@ export abstract class AwsBedrockGenericProvider {
       try {
         const { BedrockRuntime } = await import('@aws-sdk/client-bedrock-runtime');
         const credentials = await this.getCredentials();
+
         const bedrock = new BedrockRuntime({
           region: this.getRegion(),
-          maxAttempts: Number(process.env.AWS_BEDROCK_MAX_RETRIES || '10'),
+          maxAttempts: getEnvInt('AWS_BEDROCK_MAX_RETRIES', 10),
           retryMode: 'adaptive',
           ...(credentials ? { credentials } : {}),
           ...(handler ? { requestHandler: handler } : {}),
         });
+
         this.bedrock = bedrock;
-      } catch {
+      } catch (err) {
+        logger.error(`Error creating BedrockRuntime: ${err}`);
         throw new Error(
           'The @aws-sdk/client-bedrock-runtime package is required as a peer dependency. Please install it in your project or globally.',
         );
@@ -1406,6 +1505,20 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
     let response;
     try {
       const bedrockInstance = await this.getBedrockInstance();
+
+      try {
+        const testCredentials = await bedrockInstance.config.credentials?.();
+        logger.debug(
+          `Actual credentials being used: ${
+            testCredentials?.accessKeyId
+              ? `accessKeyId starts with: ${testCredentials.accessKeyId.substring(0, 4)}...`
+              : 'no explicit credentials (using instance metadata)'
+          }`,
+        );
+      } catch (credErr) {
+        logger.debug(`Error getting credentials: ${credErr}`);
+      }
+
       response = await bedrockInstance.invokeModel({
         modelId: this.modelName,
         ...(this.config.guardrailIdentifier

@@ -168,7 +168,7 @@ export async function runEval({
   evaluateOptions,
   testIdx,
   promptIdx,
-  conversations, //
+  conversations,
   registers,
   isRedteam,
   allTests,
@@ -197,13 +197,8 @@ export async function runEval({
 
   // Overwrite vars with any saved register values
   Object.assign(vars, registers);
-  // Render the prompt
-  const renderedPrompt = await renderPrompt(prompt, vars, filters, provider);
-  let renderedJson = undefined;
-  try {
-    renderedJson = JSON.parse(renderedPrompt);
-  } catch {}
 
+  // Initialize these outside try block so they're in scope for the catch
   const setup = {
     provider: {
       id: provider.id(),
@@ -211,15 +206,23 @@ export async function runEval({
       config: provider.config,
     },
     prompt: {
-      raw: renderedPrompt,
+      raw: '',
       label: promptLabel,
       config: prompt.config,
     },
     vars,
   };
-  // Call the API
   let latencyMs = 0;
+
   try {
+    // Render the prompt
+    const renderedPrompt = await renderPrompt(prompt, vars, filters, provider);
+    let renderedJson = undefined;
+    try {
+      renderedJson = JSON.parse(renderedPrompt);
+    } catch {}
+    setup.prompt.raw = renderedPrompt;
+
     const startTime = Date.now();
     let response: ProviderResponse = {
       output: '',
@@ -278,6 +281,7 @@ export async function runEval({
         prompt: renderedJson || renderedPrompt,
         input: conversationLastInput || renderedJson || renderedPrompt,
         output: response.output || '',
+        metadata: response.metadata,
       });
     }
 
@@ -621,7 +625,7 @@ class Evaluator {
 
     // Build scenarios and add to tests
     if (testSuite.scenarios && testSuite.scenarios.length > 0) {
-      telemetry.recordAndSendOnce('feature_used', {
+      telemetry.record('feature_used', {
         feature: 'scenarios',
       });
       for (const scenario of testSuite.scenarios) {

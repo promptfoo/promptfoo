@@ -1,4 +1,5 @@
 import type OpenAI from 'openai';
+import type { MCPConfig } from '../mcp/types';
 import { type OpenAiFunction, type OpenAiTool } from './util';
 
 export interface OpenAiSharedOptions {
@@ -52,7 +53,7 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   modalities?: string[];
   audio?: {
     bitrate?: string;
-    format?: string;
+    format?: string | 'wav' | 'mp3' | 'flac' | 'opus' | 'pcm16' | 'aac';
     speed?: number;
     voice?: string;
   };
@@ -76,4 +77,5 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
     OpenAI.FunctionDefinition['name'],
     (arg: string) => Promise<string>
   >;
+  mcp?: MCPConfig;
 };

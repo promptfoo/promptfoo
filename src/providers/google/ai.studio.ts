@@ -10,10 +10,17 @@ import type {
 import type { EnvOverrides } from '../../types/env';
 import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
 import { getNunjucksEngine } from '../../util/templates';
+import { MCPClient } from '../mcp/client';
+import { transformMCPToolsToGoogle } from '../mcp/transform';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { CHAT_MODELS } from './shared';
 import type { CompletionOptions } from './types';
-import { loadFile, stringifyCandidateContents, geminiFormatAndSystemInstructions } from './util';
+import {
+  loadFile,
+  formatCandidateContents,
+  geminiFormatAndSystemInstructions,
+  getCandidate,
+} from './util';
 import type { GeminiResponseData } from './util';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
@@ -77,6 +84,9 @@ class AIStudioGenericProvider implements ApiProvider {
 }
 
 export class AIStudioChatProvider extends AIStudioGenericProvider {
+  private mcpClient: MCPClient | null = null;
+  private initializationPromise: Promise<void> | null = null;
+
   constructor(
     modelName: string,
     options: { config?: CompletionOptions; id?: string; env?: EnvOverrides } = {},
@@ -85,9 +95,20 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
       logger.debug(`Using unknown Google chat model: ${modelName}`);
     }
     super(modelName, options);
+    if (this.config.mcp?.enabled) {
+      this.initializationPromise = this.initializeMCP();
+    }
+  }
+
+  private async initializeMCP(): Promise<void> {
+    this.mcpClient = new MCPClient(this.config.mcp!);
+    await this.mcpClient.initialize();
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    if (this.initializationPromise) {
+      await this.initializationPromise;
+    }
     if (!this.getApiKey()) {
       throw new Error(
         'Google API key is not set. Set the GOOGLE_API_KEY environment variable or add `apiKey` to the provider config.',
@@ -173,6 +194,9 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
   }
 
   async callGemini(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    if (this.initializationPromise) {
+      await this.initializationPromise;
+    }
     const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
       prompt,
       context?.vars,
@@ -181,6 +205,14 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
 
     // Determine API version based on model
     const apiVersion = this.modelName === 'gemini-2.0-flash-thinking-exp' ? 'v1alpha' : 'v1beta';
+
+    // --- MCP tool injection logic ---
+    const mcpTools = this.mcpClient ? transformMCPToolsToGoogle(this.mcpClient.getAllTools()) : [];
+    const allTools = [
+      ...mcpTools,
+      ...(this.config.tools ? loadFile(this.config.tools, context?.vars) : []),
+    ];
+    // --- End MCP tool injection logic ---
 
     const body: Record<string, any> = {
       contents,
@@ -198,7 +230,7 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
       },
       safetySettings: this.config.safetySettings,
       ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),
-      ...(this.config.tools ? { tools: loadFile(this.config.tools, context?.vars) } : {}),
+      ...(allTools.length > 0 ? { tools: allTools } : {}),
       ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
     };
 
@@ -247,18 +279,15 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
     }
 
     logger.debug(`\tGoogle API response: ${JSON.stringify(data)}`);
-    let output;
-    if (data.candidates && data.candidates[0]?.content?.parts) {
-      output = stringifyCandidateContents(data);
-    }
-
-    if (!data?.candidates || data.candidates.length === 0) {
+    let output, candidate;
+    try {
+      candidate = getCandidate(data);
+      output = formatCandidateContents(candidate);
+    } catch (err) {
       return {
-        error: `API did not return any candidate responses: ${JSON.stringify(data)}`,
+        error: `${String(err)}`,
       };
     }
-
-    const candidate = data.candidates[0];
 
     try {
       let guardrails: GuardrailResponse | undefined;
@@ -294,11 +323,24 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
         raw: data,
         cached,
         ...(guardrails && { guardrails }),
+        metadata: {
+          ...(candidate.groundingChunks && { groundingChunks: candidate.groundingChunks }),
+          ...(candidate.groundingMetadata && { groundingMetadata: candidate.groundingMetadata }),
+          ...(candidate.groundingSupports && { groundingSupports: candidate.groundingSupports }),
+          ...(candidate.webSearchQueries && { webSearchQueries: candidate.webSearchQueries }),
+        },
       };
     } catch (err) {
       return {
         error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
       };
+    }
+  }
+
+  async cleanup(): Promise<void> {
+    if (this.mcpClient) {
+      await this.mcpClient.cleanup();
+      this.mcpClient = null;
     }
   }
 }

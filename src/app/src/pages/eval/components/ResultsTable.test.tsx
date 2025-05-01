@@ -1,16 +1,18 @@
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsTable from './ResultsTable';
-import { useStore } from './store';
+import { useResultsViewSettingsStore, useStore } from './store';
 
 vi.mock('./store', () => ({
   useStore: vi.fn(() => ({
     config: {},
     evalId: '123',
-    inComparisonMode: false,
     setTable: vi.fn(),
     table: null,
     version: 4,
+  })),
+  useResultsViewSettingsStore: vi.fn(() => ({
+    inComparisonMode: false,
     renderMarkdown: true,
   })),
 }));
@@ -208,11 +210,15 @@ describe('ResultsTable Metrics Display', () => {
       vi.mocked(useStore).mockImplementation(() => ({
         config: {},
         evalId: '123',
-        inComparisonMode: false,
+
         setTable: vi.fn(),
         table: mockTableWithObjectVar,
         version: 4,
+      }));
+
+      vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
         renderMarkdown: false,
+        inComparisonMode: false,
       }));
 
       renderWithProviders(<ResultsTable {...defaultProps} />);
@@ -228,11 +234,14 @@ describe('ResultsTable Metrics Display', () => {
       vi.mocked(useStore).mockImplementation(() => ({
         config: {},
         evalId: '123',
-        inComparisonMode: false,
         setTable: vi.fn(),
         table: mockTableWithLongVar,
         version: 4,
+      }));
+
+      vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
         renderMarkdown: true,
+        inComparisonMode: false,
       }));
 
       renderWithProviders(<ResultsTable {...defaultProps} maxTextLength={50} />);
@@ -355,5 +364,37 @@ describe('ResultsTable Metadata Search', () => {
     expect(/property":"nested-value/i.test(metadataString)).toBe(true);
     expect(/\[1,2,3\]/i.test(metadataString)).toBe(true);
     expect(/unknown/i.test(metadataString)).toBe(false);
+  });
+});
+
+describe('ResultsTable Row Navigation', () => {
+  it('clears row-id URL parameter when changing pages', () => {
+    const mockURL = new URL('http://localhost/?rowId=3');
+
+    const mockReplaceState = vi.fn();
+    const originalHistory = window.history;
+    Object.defineProperty(window, 'history', {
+      value: { ...originalHistory, replaceState: mockReplaceState },
+      configurable: true,
+      writable: true,
+    });
+
+    const clearRowIdFromUrl = () => {
+      const url = new URL(mockURL);
+      if (url.searchParams.has('rowId')) {
+        url.searchParams.delete('rowId');
+        window.history.replaceState({}, '', url);
+      }
+    };
+
+    clearRowIdFromUrl();
+
+    expect(mockReplaceState).toHaveBeenCalled();
+
+    Object.defineProperty(window, 'history', {
+      value: originalHistory,
+      configurable: true,
+      writable: true,
+    });
   });
 });

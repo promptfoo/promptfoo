@@ -5,6 +5,7 @@ import { handleIsValidFunctionCall } from '../../src/assertions/functionToolCall
 import { handleIsValidOpenAiToolsCall } from '../../src/assertions/openai';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { validateFunctionCall } from '../../src/providers/openai/util';
+import type { OpenAiTool } from '../../src/providers/openai/util';
 import type {
   Assertion,
   ApiProvider,
@@ -12,12 +13,21 @@ import type {
   AtomicTestCase,
   GradingResult,
 } from '../../src/types';
+import { maybeLoadToolsFromExternalFile } from '../../src/util';
 
 jest.mock('fs');
-jest.mock('path');
+jest.mock('path', () => ({
+  ...jest.requireActual('path'),
+  resolve: jest.fn(),
+}));
+jest.mock('../../src/util', () => ({
+  ...jest.requireActual('../../src/util'),
+  maybeLoadToolsFromExternalFile: jest.fn(),
+}));
 
 const mockedFs = jest.mocked(fs);
 const mockedPath = jest.mocked(path);
+const mockMaybeLoadToolsFromExternalFile = jest.mocked(maybeLoadToolsFromExternalFile);
 
 const toolsAssertion: Assertion = {
   type: 'is-valid-openai-tools-call',
@@ -75,6 +85,7 @@ describe('OpenAI assertions', () => {
     jest.resetAllMocks();
     mockedPath.resolve.mockImplementation((...args) => args[args.length - 1]);
     mockedFs.existsSync.mockReturnValue(true);
+    mockMaybeLoadToolsFromExternalFile.mockImplementation((input) => input);
   });
 
   describe('is-valid-openai-function-call assertion', () => {
@@ -585,7 +596,6 @@ describe('OpenAI assertions', () => {
   });
 
   describe('handleIsValidOpenAiToolsCall', () => {
-    // Basic validation tests
     it('should pass when tool calls match schema', () => {
       const toolsOutput = [
         {
@@ -618,7 +628,6 @@ describe('OpenAI assertions', () => {
       });
     });
 
-    // External file loading tests
     it('should load tools from external file', () => {
       const toolsOutput = [
         {
@@ -631,27 +640,31 @@ describe('OpenAI assertions', () => {
         },
       ];
 
-      const mockYamlContent = `
-- type: function
-  function:
-    name: getCurrentTemperature
-    parameters:
-      type: object
-      properties:
-        location:
-          type: string
-        unit:
-          type: string
-          enum: [Celsius, Fahrenheit]
-      required: [location, unit]
-`;
+      // Define the array of tools that should be returned by the mock
+      const mockParsedTools = [
+        {
+          type: 'function',
+          function: {
+            name: 'getCurrentTemperature',
+            parameters: {
+              type: 'object',
+              properties: {
+                location: { type: 'string' },
+                unit: { type: 'string', enum: ['Celsius', 'Fahrenheit'] },
+              },
+              required: ['location', 'unit'],
+            },
+          },
+        },
+      ];
 
-      mockedFs.readFileSync.mockReturnValue(mockYamlContent);
+      // Make sure the mock returns an array, not a string or object
+      mockMaybeLoadToolsFromExternalFile.mockReturnValue(mockParsedTools);
 
       const fileProvider = {
         id: () => 'test-provider',
         config: {
-          tools: 'file://./test/fixtures/weather_tools.yaml',
+          tools: 'file://./test/fixtures/weather_tools.json' as unknown as OpenAiTool[],
         },
         callApi: async () => ({ output: '' }),
       } as ApiProvider;
@@ -675,14 +688,13 @@ describe('OpenAI assertions', () => {
         assertion: toolsAssertion,
       });
 
-      expect(mockedFs.existsSync).toHaveBeenCalledWith('./test/fixtures/weather_tools.yaml');
-      expect(mockedFs.readFileSync).toHaveBeenCalledWith(
-        './test/fixtures/weather_tools.yaml',
-        'utf8',
+      // Verify mockMaybeLoadToolsFromExternalFile was called with the file path
+      expect(mockMaybeLoadToolsFromExternalFile).toHaveBeenCalledWith(
+        'file://./test/fixtures/weather_tools.json',
+        {},
       );
     });
 
-    // Variable rendering tests
     it('should render variables in tool definitions', () => {
       const toolsOutput = [
         {
@@ -736,7 +748,6 @@ describe('OpenAI assertions', () => {
       });
     });
 
-    // Error cases
     it('should fail when tools are not defined', () => {
       const toolsOutput = [
         {
@@ -832,6 +843,207 @@ describe('OpenAI assertions', () => {
         pass: false,
         score: 0,
         reason: expect.stringContaining('must have required property'),
+        assertion: toolsAssertion,
+      });
+    });
+
+    it('should use maybeLoadToolsFromExternalFile to process tools', () => {
+      const toolOutput = {
+        tool_calls: [
+          {
+            type: 'function',
+            function: {
+              name: 'getCurrentTemperature',
+              arguments: '{"location": "San Francisco, CA", "unit": "Fahrenheit"}',
+            },
+          },
+        ],
+      };
+
+      const mockTools = [
+        {
+          type: 'function',
+          function: {
+            name: 'getCurrentTemperature',
+            parameters: {
+              type: 'object',
+              properties: {
+                location: { type: 'string' },
+                unit: { type: 'string', enum: ['Celsius', 'Fahrenheit'] },
+              },
+              required: ['location', 'unit'],
+            },
+          },
+        },
+      ];
+
+      // Set up the mock to return processed tools
+      mockMaybeLoadToolsFromExternalFile.mockReturnValue(mockTools);
+
+      const result = handleIsValidOpenAiToolsCall({
+        assertion: toolsAssertion,
+        output: toolOutput,
+        provider: mockProvider,
+        test: { vars: { city: 'San Francisco, CA' } },
+        baseType: toolsAssertion.type,
+        context: mockContext,
+        inverse: false,
+        outputString: JSON.stringify(toolOutput),
+        providerResponse: { output: toolOutput },
+      });
+
+      expect(mockMaybeLoadToolsFromExternalFile).toHaveBeenCalledWith(mockProvider.config.tools, {
+        city: 'San Francisco, CA',
+      });
+
+      expect(result).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+        assertion: toolsAssertion,
+      });
+    });
+
+    it('should handle external file references for tools', () => {
+      const toolOutput = {
+        tool_calls: [
+          {
+            type: 'function',
+            function: {
+              name: 'getCurrentTemperature',
+              arguments: '{"location": "San Francisco, CA", "unit": "Fahrenheit"}',
+            },
+          },
+        ],
+      };
+
+      // Mock a provider with tools from a file reference
+      const fileProvider = new OpenAiChatCompletionProvider('test-provider', {
+        config: {
+          tools: 'file://./test/fixtures/weather_tools.json' as unknown as OpenAiTool[],
+        },
+      });
+
+      // Set up the mock to return processed tools from the external file
+      const mockToolsFromFile = [
+        {
+          type: 'function',
+          function: {
+            name: 'getCurrentTemperature',
+            parameters: {
+              type: 'object',
+              properties: {
+                location: { type: 'string' },
+                unit: { type: 'string', enum: ['Celsius', 'Fahrenheit'] },
+              },
+              required: ['location', 'unit'],
+            },
+          },
+        },
+      ];
+      mockMaybeLoadToolsFromExternalFile.mockReturnValue(mockToolsFromFile);
+
+      const result = handleIsValidOpenAiToolsCall({
+        assertion: toolsAssertion,
+        output: toolOutput,
+        provider: fileProvider,
+        test: { vars: {} },
+        baseType: toolsAssertion.type,
+        context: { ...mockContext, provider: fileProvider },
+        inverse: false,
+        outputString: JSON.stringify(toolOutput),
+        providerResponse: { output: toolOutput },
+      });
+
+      // Check that the function was called with the file path
+      expect(mockMaybeLoadToolsFromExternalFile).toHaveBeenCalledWith(
+        'file://./test/fixtures/weather_tools.json',
+        {},
+      );
+
+      expect(result).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+        assertion: toolsAssertion,
+      });
+    });
+
+    it('should handle variable substitution in tools', () => {
+      const toolOutput = {
+        tool_calls: [
+          {
+            type: 'function',
+            function: {
+              name: 'getCurrentTemperature',
+              arguments: '{"location": "San Francisco, CA", "unit": "custom_unit"}',
+            },
+          },
+        ],
+      };
+
+      // Create a provider with tools that contain variable placeholders
+      const varProvider = new OpenAiChatCompletionProvider('test-provider', {
+        config: {
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'getCurrentTemperature',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    location: { type: 'string' },
+                    unit: { type: 'string', enum: ['{{unit}}'] },
+                  },
+                  required: ['location', 'unit'],
+                },
+              },
+            },
+          ],
+        },
+      });
+
+      // Set up the mock to return tools with variables resolved
+      const processedTools = [
+        {
+          type: 'function',
+          function: {
+            name: 'getCurrentTemperature',
+            parameters: {
+              type: 'object',
+              properties: {
+                location: { type: 'string' },
+                unit: { type: 'string', enum: ['custom_unit'] },
+              },
+              required: ['location', 'unit'],
+            },
+          },
+        },
+      ];
+      mockMaybeLoadToolsFromExternalFile.mockReturnValue(processedTools);
+
+      const result = handleIsValidOpenAiToolsCall({
+        assertion: toolsAssertion,
+        output: toolOutput,
+        provider: varProvider,
+        test: { vars: { unit: 'custom_unit' } },
+        baseType: toolsAssertion.type,
+        context: { ...mockContext, provider: varProvider },
+        inverse: false,
+        outputString: JSON.stringify(toolOutput),
+        providerResponse: { output: toolOutput },
+      });
+
+      // Verify the function was called with variables
+      expect(mockMaybeLoadToolsFromExternalFile).toHaveBeenCalledWith(varProvider.config.tools, {
+        unit: 'custom_unit',
+      });
+
+      expect(result).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
         assertion: toolsAssertion,
       });
     });

@@ -10,7 +10,7 @@ npx promptfoo@latest init --example redteam-azure-assistant
 
 ## Overview
 
-This example demonstrates how to security test an Azure OpenAI Assistant that has access to sensitive HR data through function tools. It includes mock HR database functions and a configured redteam setup.
+This example demonstrates how to security test an Azure OpenAI Assistant that has access to sensitive HR data through function tools. It includes mock HR database functions and a configured red team setup.
 
 ## Quick Start
 
@@ -52,7 +52,7 @@ This example demonstrates how to security test an Azure OpenAI Assistant that ha
 
 - **Mock HR Functions**: Employee data, salary information, and document access
 - **Security Boundaries**: System instructions limiting access to sensitive data
-- **Redteam Configuration**: Pre-configured to test data privacy, access control, and security
+- **Red team Configuration**: Pre-configured to test data privacy, access control, and security
 - **Named Entities**: Sample employee names for more realistic attacks
 
 ## Security Testing Focus

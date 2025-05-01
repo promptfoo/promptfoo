@@ -21,8 +21,8 @@ interface AtomicTestCase {
   success?: boolean;
   score?: number;
   failureReason?: string;
+  metadata?: Record<string, any>;
 }
-
 export interface ProviderModerationResponse {
   error?: string;
   flags?: ModerationFlag[];
@@ -73,6 +73,7 @@ export interface ApiProvider {
   label?: ProviderLabel;
   transform?: string;
   toJSON?: () => any;
+  cleanup?: () => void;
 }
 
 export interface ApiEmbeddingProvider extends ApiProvider {
@@ -189,7 +190,6 @@ export interface ProviderTestResponse {
  * Interface defining the default providers used by the application
  */
 export interface DefaultProviders {
-  datasetGenerationProvider: ApiProvider;
   embeddingProvider: ApiProvider;
   gradingJsonProvider: ApiProvider;
   gradingProvider: ApiProvider;

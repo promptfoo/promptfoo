@@ -46,7 +46,7 @@ import ResultsCharts from './ResultsCharts';
 import ResultsTable from './ResultsTable';
 import ShareModal from './ShareModal';
 import SettingsModal from './TableSettings/TableSettingsModal';
-import { useStore as useResultsViewStore } from './store';
+import { useStore as useResultsViewStore, useResultsViewSettingsStore } from './store';
 import type { EvaluateTable, FilterMode, ResultLightweightWithLabel } from './types';
 import './ResultsView.css';
 
@@ -158,29 +158,29 @@ export default function ResultsView({
   defaultEvalId,
 }: ResultsViewProps) {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { author, table, setTable, config, setConfig, evalId, setAuthor } = useResultsViewStore();
+
   const {
-    author,
-    table,
-    setTable,
-    config,
-    setConfig,
-    maxTextLength,
-    wordBreak,
-    showInferenceDetails,
-    evalId,
     setInComparisonMode,
     columnStates,
     setColumnState,
-    setAuthor,
-  } = useResultsViewStore();
+    maxTextLength,
+    wordBreak,
+    showInferenceDetails,
+  } = useResultsViewSettingsStore();
+
   const { setStateFromConfig } = useMainStore();
   const { showToast } = useToast();
   const [searchText, setSearchText] = React.useState(searchParams.get('search') || '');
   const [debouncedSearchText] = useDebounce(searchText, 200);
-  const handleSearchTextChange = (text: string) => {
-    setSearchText(text);
-  };
+  const handleSearchTextChange = React.useCallback(
+    (text: string) => {
+      setSearchParams((prev) => ({ ...prev, search: text }));
+      setSearchText(text);
+    },
+    [searchParams],
+  );
 
   const [failureFilter, setFailureFilter] = React.useState<{ [key: string]: boolean }>({});
   const handleFailureFilterToggle = React.useCallback(
@@ -194,6 +194,7 @@ export default function ResultsView({
   const { head } = table;
 
   const [filterMode, setFilterMode] = React.useState<FilterMode>('all');
+
   const handleFilterModeChange = (event: SelectChangeEvent<unknown>) => {
     const mode = event.target.value as FilterMode;
     setFilterMode(mode);
@@ -489,18 +490,20 @@ export default function ResultsView({
             size="small"
             fullWidth
             value={config?.description || evalId || ''}
-            InputProps={{
-              readOnly: true,
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon />
-                </InputAdornment>
-              ),
-              endAdornment: (
-                <InputAdornment position="end">
-                  <ArrowDropDownIcon />
-                </InputAdornment>
-              ),
+            slotProps={{
+              input: {
+                readOnly: true,
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon />
+                  </InputAdornment>
+                ),
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <ArrowDropDownIcon />
+                  </InputAdornment>
+                ),
+              },
             }}
             onClick={() => setEvalSelectorDialogOpen(true)}
             placeholder="Search or select an eval..."

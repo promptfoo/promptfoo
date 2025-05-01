@@ -119,6 +119,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
         prompt: 5,
         completion: 5,
       },
+      metadata: {},
     });
 
     expect(vertexUtil.getGoogleClient).toHaveBeenCalledWith();
@@ -274,17 +275,20 @@ describe('VertexChatProvider.callGeminiApi', () => {
 
     expect(response).toEqual({
       cached: false,
-      output: JSON.stringify({
-        functionCall: {
-          name: 'get_weather',
-          args: { location: 'San Francisco' },
+      output: [
+        {
+          functionCall: {
+            name: 'get_weather',
+            args: { location: 'San Francisco' },
+          },
         },
-      }),
+      ],
       tokenUsage: {
         total: 15,
         prompt: 8,
         completion: 7,
       },
+      metadata: {},
     });
 
     expect(mockRequest).toHaveBeenCalledWith(
@@ -371,6 +375,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
         prompt: 5,
         completion: 5,
       },
+      metadata: {},
     });
 
     expect(fs.existsSync).toHaveBeenCalledWith(expect.stringContaining('tools.json'));

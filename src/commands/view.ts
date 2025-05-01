@@ -9,7 +9,7 @@ import { BrowserBehavior } from '../util/server';
 export function viewCommand(program: Command) {
   program
     .command('view [directory]')
-    .description('Start browser ui')
+    .description('Start browser UI')
     .option('-p, --port <number>', 'Port number', DEFAULT_PORT.toString())
     .option('-y, --yes', 'Skip confirmation and auto-open the URL')
     .option('-n, --no', 'Skip confirmation and do not open the URL')
@@ -31,7 +31,6 @@ export function viewCommand(program: Command) {
         telemetry.record('command_used', {
           name: 'view',
         });
-        await telemetry.send();
 
         if (directory) {
           setConfigDirectoryPath(directory);

@@ -123,7 +123,7 @@ export async function renderPrompt(
           yaml.load(fs.readFileSync(filePath, 'utf8')) as string | object,
         );
       } else if (fileExtension === 'pdf' && !getEnvBool('PROMPTFOO_DISABLE_PDF_AS_TEXT')) {
-        telemetry.recordOnce('feature_used', {
+        telemetry.record('feature_used', {
           feature: 'extract_text_from_pdf',
         });
         vars[varName] = await extractTextFromPDF(filePath);
@@ -137,7 +137,7 @@ export async function renderPrompt(
             ? 'video'
             : 'audio';
 
-        telemetry.recordOnce('feature_used', {
+        telemetry.record('feature_used', {
           feature: `load_${fileType}_as_base64`,
         });
 
@@ -271,7 +271,7 @@ export async function runExtensionHook(
     return;
   }
 
-  telemetry.recordOnce('feature_used', {
+  telemetry.record('feature_used', {
     feature: 'extension_hook',
   });
 

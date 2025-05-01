@@ -4,6 +4,7 @@ import { useToast } from '@app/hooks/useToast';
 import YamlEditor from '@app/pages/eval-creator/components/YamlEditor';
 import { callApi } from '@app/utils/api';
 import AssessmentIcon from '@mui/icons-material/Assessment';
+import CloseIcon from '@mui/icons-material/Close';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import SaveIcon from '@mui/icons-material/Save';
 import SearchIcon from '@mui/icons-material/Search';
@@ -321,6 +322,13 @@ export default function Review() {
                   key={label}
                   label={count > 1 ? `${label} (${count})` : label}
                   size="small"
+                  onDelete={() => {
+                    const newPlugins = config.plugins.filter((plugin) => {
+                      const pluginLabel = getPluginSummary(plugin).label;
+                      return pluginLabel !== label;
+                    });
+                    updateConfig('plugins', newPlugins);
+                  }}
                   sx={{
                     backgroundColor:
                       label === 'Custom Policy' ? theme.palette.primary.main : undefined,
@@ -340,7 +348,24 @@ export default function Review() {
             </Typography>
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
               {strategySummary.map(([label, count]) => (
-                <Chip key={label} label={count > 1 ? `${label} (${count})` : label} size="small" />
+                <Chip
+                  key={label}
+                  label={count > 1 ? `${label} (${count})` : label}
+                  size="small"
+                  onDelete={() => {
+                    const strategyId =
+                      Object.entries(strategyDisplayNames).find(
+                        ([id, displayName]) => displayName === label,
+                      )?.[0] || label;
+
+                    const newStrategies = config.strategies.filter((strategy) => {
+                      const id = getStrategyId(strategy);
+                      return id !== strategyId;
+                    });
+
+                    updateConfig('strategies', newStrategies);
+                  }}
+                />
               ))}
             </Box>
           </Paper>
@@ -360,6 +385,7 @@ export default function Review() {
                       p: 1.5,
                       borderRadius: 1,
                       bgcolor: theme.palette.action.hover,
+                      position: 'relative',
                     }}
                   >
                     <Typography
@@ -370,10 +396,33 @@ export default function Review() {
                         WebkitBoxOrient: 'vertical',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
+                        paddingRight: '24px',
                       }}
                     >
                       {policy.config.policy}
                     </Typography>
+                    <IconButton
+                      size="small"
+                      onClick={() => {
+                        const newPlugins = config.plugins.filter(
+                          (p, i) =>
+                            !(
+                              typeof p === 'object' &&
+                              p.id === 'policy' &&
+                              p.config?.policy === policy.config.policy
+                            ),
+                        );
+                        updateConfig('plugins', newPlugins);
+                      }}
+                      sx={{
+                        position: 'absolute',
+                        right: 4,
+                        top: 4,
+                        padding: '2px',
+                      }}
+                    >
+                      <CloseIcon fontSize="small" />
+                    </IconButton>
                   </Box>
                 ))}
               </Stack>
@@ -395,6 +444,7 @@ export default function Review() {
                       p: 1.5,
                       borderRadius: 1,
                       bgcolor: theme.palette.action.hover,
+                      position: 'relative',
                     }}
                   >
                     <Typography
@@ -405,10 +455,46 @@ export default function Review() {
                         WebkitBoxOrient: 'vertical',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
+                        paddingRight: '24px',
                       }}
                     >
                       {intent}
                     </Typography>
+                    <IconButton
+                      size="small"
+                      onClick={() => {
+                        const intentPlugin = config.plugins.find(
+                          (p): p is { id: 'intent'; config: { intent: string | string[] } } =>
+                            typeof p === 'object' &&
+                            p.id === 'intent' &&
+                            p.config?.intent !== undefined,
+                        );
+
+                        if (intentPlugin) {
+                          const currentIntents = Array.isArray(intentPlugin.config.intent)
+                            ? intentPlugin.config.intent
+                            : [intentPlugin.config.intent];
+
+                          const newIntents = currentIntents.filter((i) => i !== intent);
+
+                          const newPlugins = config.plugins.map((p) =>
+                            typeof p === 'object' && p.id === 'intent'
+                              ? { ...p, config: { ...p.config, intent: newIntents } }
+                              : p,
+                          );
+
+                          updateConfig('plugins', newPlugins);
+                        }
+                      }}
+                      sx={{
+                        position: 'absolute',
+                        right: 4,
+                        top: 4,
+                        padding: '2px',
+                      }}
+                    >
+                      <CloseIcon fontSize="small" />
+                    </IconButton>
                   </Box>
                 ))}
                 {intents.length > 5 && (

@@ -52,17 +52,7 @@ import RedteamImageIterativeProvider from '../../src/redteam/providers/iterative
 import RedteamIterativeTreeProvider from '../../src/redteam/providers/iterativeTree';
 import type { ProviderOptionsMap, ProviderFunction } from '../../src/types';
 
-jest.mock('fs', () => ({
-  readFileSync: jest.fn(),
-  writeFileSync: jest.fn(),
-  statSync: jest.fn(),
-  readdirSync: jest.fn(),
-  existsSync: jest.fn(),
-  mkdirSync: jest.fn(),
-  promises: {
-    readFile: jest.fn(),
-  },
-}));
+jest.mock('fs');
 
 jest.mock('glob', () => ({
   globSync: jest.fn(),
@@ -1210,7 +1200,7 @@ describe('loadApiProvider', () => {
   it('loadApiProvider with xai', async () => {
     const provider = await loadApiProvider('xai:grok-2');
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
-    expect(provider.id()).toBe('grok-2');
+    expect(provider.id()).toBe('xai:grok-2');
     expect(provider.config.apiBaseUrl).toBe('https://api.x.ai/v1');
     expect(provider.config.apiKeyEnvar).toBe('XAI_API_KEY');
   });

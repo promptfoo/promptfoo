@@ -26,6 +26,7 @@ import { AzureModerationProvider } from './azure/moderation';
 import { BAMProvider } from './bam';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './bedrock';
 import { BrowserProvider } from './browser';
+import { createCerebrasProvider } from './cerebras';
 import { ClouderaAiChatCompletionProvider } from './cloudera';
 import * as CloudflareAiProviders from './cloudflare-ai';
 import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './cohere';
@@ -34,7 +35,7 @@ import { EchoProvider } from './echo';
 import { FalImageGenerationProvider } from './fal';
 import { GolangProvider } from './golangCompletion';
 import { AIStudioChatProvider } from './google/ai.studio';
-import { GoogleMMLiveProvider } from './google/live';
+import { GoogleLiveProvider } from './google/live';
 import { VertexChatProvider, VertexEmbeddingProvider } from './google/vertex';
 import { GroqProvider } from './groq';
 import { HttpProvider } from './http';
@@ -74,6 +75,7 @@ import {
   ReplicateProvider,
   ReplicateImageProvider,
 } from './replicate';
+import { createScriptBasedProviderFactory } from './scriptBasedProvider';
 import { ScriptCompletionProvider } from './scriptCompletion';
 import { SequenceProvider } from './sequence';
 import { SimulatedUser } from './simulatedUser';
@@ -94,6 +96,9 @@ interface ProviderFactory {
 }
 
 export const providerMap: ProviderFactory[] = [
+  createScriptBasedProviderFactory('exec', null, ScriptCompletionProvider),
+  createScriptBasedProviderFactory('golang', 'go', GolangProvider),
+  createScriptBasedProviderFactory('python', 'py', PythonProvider),
   {
     test: (providerPath: string) => providerPath.startsWith('adaline:'),
     create: async (
@@ -260,12 +265,22 @@ export const providerMap: ProviderFactory[] = [
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
 
+      // Handle nova-sonic model
+      if (modelType === 'nova-sonic' || modelType.includes('amazon.nova-sonic')) {
+        const { NovaSonicProvider } = await import('./bedrock/nova-sonic');
+        return new NovaSonicProvider('amazon.nova-sonic-v1:0', providerOptions);
+      }
+
       if (modelType === 'completion') {
         // Backwards compatibility: `completion` used to be required
         return new AwsBedrockCompletionProvider(modelName, providerOptions);
       }
       if (modelType === 'embeddings' || modelType === 'embedding') {
         return new AwsBedrockEmbeddingProvider(modelName, providerOptions);
+      }
+      if (modelType === 'kb' || modelType === 'knowledge-base') {
+        const { AwsBedrockKnowledgeBaseProvider } = await import('./bedrockKnowledgeBase');
+        return new AwsBedrockKnowledgeBaseProvider(modelName, providerOptions);
       }
       return new AwsBedrockCompletionProvider(
         `${modelType}${modelName ? `:${modelName}` : ''}`,
@@ -316,6 +331,19 @@ export const providerMap: ProviderFactory[] = [
           ...providerOptions.config,
           modelType,
         },
+      });
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('cerebras:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createCerebrasProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
       });
     },
   },
@@ -437,18 +465,6 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
-    test: (providerPath: string) => providerPath.startsWith('exec:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      // Load script module
-      const scriptPath = providerPath.split(':')[1];
-      return new ScriptCompletionProvider(scriptPath, providerOptions);
-    },
-  },
-  {
     test: (providerPath: string) => providerPath.startsWith('f5:'),
     create: async (
       providerPath: string,
@@ -522,22 +538,6 @@ export const providerMap: ProviderFactory[] = [
           apiKeyEnvar: 'GITHUB_TOKEN',
         },
       });
-    },
-  },
-  {
-    test: (providerPath: string) =>
-      providerPath.startsWith('golang:') ||
-      (providerPath.startsWith('file://') &&
-        (providerPath.endsWith('.go') || providerPath.includes('.go:'))),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      const scriptPath = providerPath.startsWith('file://')
-        ? providerPath.slice('file://'.length)
-        : providerPath.split(':').slice(1).join(':');
-      return new GolangProvider(scriptPath, providerOptions);
     },
   },
   {
@@ -902,8 +902,8 @@ export const providerMap: ProviderFactory[] = [
         const modelName = splits.slice(2).join(':');
 
         if (serviceType === 'live') {
-          // This is a Multimodal Live API request
-          return new GoogleMMLiveProvider(modelName, providerOptions);
+          // This is a Live API request
+          return new GoogleLiveProvider(modelName, providerOptions);
         }
       }
 
@@ -1131,22 +1131,6 @@ export const providerMap: ProviderFactory[] = [
       throw new Error(
         `Invalid Huggingface provider path: ${providerPath}. Use one of the following providers: huggingface:feature-extraction:<model name>, huggingface:text-generation:<model name>, huggingface:text-classification:<model name>, huggingface:token-classification:<model name>`,
       );
-    },
-  },
-  {
-    test: (providerPath: string) =>
-      providerPath.startsWith('python:') ||
-      (providerPath.startsWith('file://') &&
-        (providerPath.endsWith('.py') || providerPath.includes('.py:'))),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      const scriptPath = providerPath.startsWith('file://')
-        ? providerPath.slice('file://'.length)
-        : providerPath.split(':').slice(1).join(':');
-      return new PythonProvider(scriptPath, providerOptions);
     },
   },
   {

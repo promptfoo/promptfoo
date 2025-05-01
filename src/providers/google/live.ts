@@ -11,7 +11,6 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../../types';
-import '../../util';
 import type { CompletionOptions, FunctionCall } from './types';
 import type { GeminiFormat } from './util';
 import { geminiFormatAndSystemInstructions, loadFile } from './util';
@@ -39,7 +38,7 @@ const formatContentMessage = (contents: GeminiFormat, contentIndex: number) => {
   return contentMessage;
 };
 
-export class GoogleMMLiveProvider implements ApiProvider {
+export class GoogleLiveProvider implements ApiProvider {
   config: CompletionOptions;
   modelName: string;
 
@@ -53,7 +52,7 @@ export class GoogleMMLiveProvider implements ApiProvider {
   }
 
   toString(): string {
-    return `[Google Multimodal Live Provider ${this.modelName}]`;
+    return `[Google Live Provider ${this.modelName}]`;
   }
 
   getApiKey(): string | undefined {
@@ -222,11 +221,21 @@ export class GoogleMMLiveProvider implements ApiProvider {
                 }
               }
               resolve({
-                output: JSON.stringify({
+                output: {
                   text: response_text_total,
                   toolCall: { functionCalls: function_calls_total },
                   statefulApiState,
-                }),
+                },
+                metadata: {
+                  ...(response.groundingMetadata && {
+                    groundingMetadata: response.groundingMetadata,
+                  }),
+                  ...(response.groundingChunks && { groundingChunks: response.groundingChunks }),
+                  ...(response.groundingSupports && {
+                    groundingSupports: response.groundingSupports,
+                  }),
+                  ...(response.webSearchQueries && { webSearchQueries: response.webSearchQueries }),
+                },
               });
               ws.close();
             }

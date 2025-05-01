@@ -29,6 +29,7 @@ import type {
 } from '../types';
 import { OutputFileExtension, TestSuiteSchema } from '../types';
 import { CommandLineOptionsSchema } from '../types';
+import { isApiProvider } from '../types/providers';
 import { isRunningUnderNpx, maybeLoadFromExternalFile } from '../util';
 import { printBorder, setupEnv, writeMultipleOutputs } from '../util';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
@@ -114,7 +115,6 @@ export async function doEval(
       // Only set when redteam is enabled for sure, because we don't know if config is loaded yet
       ...(Boolean(config?.redteam) && { isRedteam: true }),
     });
-    await telemetry.send();
 
     if (cmdObj.write) {
       await runDbMigrations();
@@ -155,6 +155,20 @@ export async function doEval(
     }
 
     ({ config, testSuite, basePath: _basePath } = await resolveConfigs(cmdObj, defaultConfig));
+
+    // Check if config has redteam section but no test cases
+    if (
+      config.redteam &&
+      (!testSuite.tests || testSuite.tests.length === 0) &&
+      (!testSuite.scenarios || testSuite.scenarios.length === 0)
+    ) {
+      logger.warn(
+        chalk.yellow(dedent`
+        Warning: Config file has a redteam section but no test cases.
+        Did you mean to run ${chalk.bold('promptfoo redteam generate')} instead?
+        `),
+      );
+    }
 
     // Ensure evaluateOptions from the config file are applied
     if (config.evaluateOptions) {
@@ -439,7 +453,6 @@ export async function doEval(
       duration: Math.round((Date.now() - startTime) / 1000),
       isRedteam,
     });
-    await telemetry.send();
 
     if (cmdObj.watch) {
       if (initialization) {
@@ -530,6 +543,16 @@ export async function doEval(
     if (testSuite.redteam) {
       showRedteamProviderLabelMissingWarning(testSuite);
     }
+
+    // Clean up any WebSocket connections
+    if (testSuite.providers.length > 0) {
+      for (const provider of testSuite.providers) {
+        if (isApiProvider(provider)) {
+          provider?.cleanup?.();
+        }
+      }
+    }
+
     return ret;
   };
 
