@@ -12,6 +12,7 @@ import AccordionSummary from '@mui/material/AccordionSummary';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
+import Chip from '@mui/material/Chip';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton';
@@ -22,6 +23,7 @@ import { alpha } from '@mui/material/styles';
 import {
   ALL_PLUGINS,
   DEFAULT_PLUGINS,
+  DATASET_PLUGINS,
   FOUNDATION_PLUGINS,
   HARM_PLUGINS,
   MITRE_ATLAS_MAPPING,
@@ -460,6 +462,21 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                           )}
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                             {displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
+                            {DATASET_PLUGINS.includes(plugin as any) && (
+                              <Chip
+                                label="Dataset"
+                                size="small"
+                                sx={{
+                                  backgroundColor: (theme) => alpha(theme.palette.info.main, 0.1),
+                                  color: 'info.main',
+                                  borderColor: 'info.main',
+                                  border: 1,
+                                  ml: 1,
+                                  fontSize: '0.7rem',
+                                  height: '20px',
+                                }}
+                              />
+                            )}
                           </Box>
                           <Typography variant="body2" color="text.secondary">
                             {subCategoryDescriptions[plugin]}
