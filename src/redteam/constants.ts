@@ -1093,14 +1093,9 @@ export const riskCategories: Record<string, Plugin[]> = {
     'harmful:unsafe-practices',
     'harmful:violent-crime',
     'harmful:weapons:ied',
-    'unsafebench',
   ],
 
   'Trust & Safety': [
-    'beavertails',
-    'cyberseceval',
-    'donotanswer',
-    'harmbench',
     'harmful:child-exploitation',
     'harmful:graphic-content',
     'harmful:harassment-bullying',
@@ -1110,8 +1105,6 @@ export const riskCategories: Record<string, Plugin[]> = {
     'harmful:radicalization',
     'harmful:self-harm',
     'harmful:sexual-content',
-    'pliny',
-    'xstest',
   ],
 
   Brand: [
