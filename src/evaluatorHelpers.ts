@@ -251,7 +251,9 @@ export async function renderPrompt(
     // Recursively walk the JSON structure. If we find a string, render it with nunjucks.
     return JSON.stringify(renderVarsInObject(parsed, vars), null, 2);
   } catch {
-    return renderVarsInObject(nunjucks.renderString(basePrompt, vars), vars);
+    // Use `renderString` instead of `renderVarsInObject` because `getNunjucksEngine` checks for
+    // disabled templating and the `renderVarsInObject` calls this method when passed a string:
+    return nunjucks.renderString(basePrompt, vars);
   }
 }
 
