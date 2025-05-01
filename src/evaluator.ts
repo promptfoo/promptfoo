@@ -11,7 +11,7 @@ import { fetchWithCache, getCache } from './cache';
 import cliState from './cliState';
 import { updateSignalFile } from './database/signal';
 import { getEnvBool, getEnvInt, isCI, getEvalTimeoutMs } from './envars';
-import { renderPrompt, runExtensionHook } from './evaluatorHelpers';
+import { renderPrompt, runExtensionHook, collectFileMetadata } from './evaluatorHelpers';
 import logger from './logger';
 import type Eval from './models/eval';
 import { generateIdFromPrompt } from './models/prompt';
@@ -302,6 +302,9 @@ export async function runEval({
       logger.debug(`Skipping delay because response is cached`);
     }
 
+    // Metadata used to display media in the results table
+    const fileMetadata = collectFileMetadata(vars);
+
     const ret: EvaluateResult = {
       ...setup,
       response,
@@ -314,6 +317,7 @@ export async function runEval({
       metadata: {
         ...test.metadata,
         ...response.metadata,
+        ...fileMetadata,
       },
       promptIdx,
       testIdx,
