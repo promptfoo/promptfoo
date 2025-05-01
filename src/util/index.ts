@@ -1,4 +1,3 @@
-import { parse as csvParse } from 'csv-parse/sync';
 import { stringify } from 'csv-stringify/sync';
 import dedent from 'dedent';
 import dotenv from 'dotenv';
@@ -8,7 +7,6 @@ import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import nunjucks from 'nunjucks';
 import * as path from 'path';
-import cliState from '../cliState';
 import { TERMINAL_MAX_WIDTH } from '../constants';
 import { getEnvBool, getEnvString } from '../envars';
 import { getDirectory, importModule } from '../esm';
@@ -37,6 +35,7 @@ import { sha256 } from './createHash';
 import { convertTestResultsToTableRow, getHeaderForTable } from './exportToFile';
 import { isJavascriptFile } from './file';
 import { getNunjucksEngine } from './templates';
+import { maybeLoadFromExternalFile } from './file';
 
 const outputToSimpleString = (output: EvaluateTableOutput) => {
   const passFailText = output.pass
@@ -451,8 +450,6 @@ export function parsePathOrGlob(
   };
 }
 
-export { maybeLoadFromExternalFile } from './file';
-
 export function isRunningUnderNpx(): boolean {
   const npmExecPath = getEnvString('npm_execpath');
   const npmLifecycleScript = getEnvString('npm_lifecycle_script');
@@ -465,10 +462,6 @@ export function isRunningUnderNpx(): boolean {
 }
 
 /**
- * Renders variables in a tools object and loads from external file if applicable.
- * This function combines renderVarsInObject and maybeLoadFromExternalFile into a single step
- * specifically for handling tools configurations.
- *
  * @param tools - The tools configuration object or array to process.
  * @param vars - Variables to use for rendering.
  * @returns The processed tools configuration with variables rendered and content loaded from files if needed.
@@ -477,6 +470,5 @@ export function maybeLoadToolsFromExternalFile(
   tools: any,
   vars?: Record<string, string | object>,
 ): any {
-  const { maybeLoadFromExternalFile } = require('./file');
   return maybeLoadFromExternalFile(renderVarsInObject(tools, vars));
 }
