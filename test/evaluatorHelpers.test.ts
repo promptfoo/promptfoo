@@ -265,6 +265,18 @@ describe('renderPrompt', () => {
     expect(renderedPrompt).toBe('{{ var1 }}');
   });
 
+  it('should respect Nunjucks escaped strings when variable is provided as a template string', async () => {
+    const prompt = toPrompt(`{{ '{{ var1 }}' }}`);
+    const renderedPrompt = await renderPrompt(prompt, { var1: 'value1' }, {});
+    expect(renderedPrompt).toBe('{{ var1 }}');
+  });
+
+  it('should respect Nunjucks escaped strings when no variables are provided', async () => {
+    const prompt = toPrompt(`{{ '{{ var1 }}' }}`);
+    const renderedPrompt = await renderPrompt(prompt, {}, {});
+    expect(renderedPrompt).toBe('{{ var1 }}');
+  });
+
   it('should render variables that are template strings', async () => {
     const prompt = toPrompt('{{ var1 }}');
     const renderedPrompt = await renderPrompt(prompt, { var1: '{{ var2 }}', var2: 'value2' }, {});
