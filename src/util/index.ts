@@ -375,6 +375,29 @@ export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | obj
     return obj;
   }
   if (typeof obj === 'string') {
+    // Look for literal placeholder syntax: [[literal:content]] which should render as {{content}}
+    const literalRegex = /\[\[literal:(.*?)\]\]/g;
+    if (literalRegex.test(obj)) {
+      // First, create a unique placeholder for each literal expression
+      const literals: string[] = [];
+      const processedString = obj.replace(literalRegex, (_, content) => {
+        const placeholder = `__LITERAL_PLACEHOLDER_${literals.length}__`;
+        literals.push(content);
+        return placeholder;
+      });
+      
+      // Process the string with Nunjucks normally
+      const renderedString = nunjucks.renderString(processedString, vars);
+      
+      // Replace each placeholder with its corresponding {{content}}
+      let result = renderedString;
+      literals.forEach((content, index) => {
+        result = result.replace(`__LITERAL_PLACEHOLDER_${index}__`, `{{${content}}}`);
+      });
+      
+      return result as unknown as T;
+    }
+    
     return nunjucks.renderString(obj, vars) as unknown as T;
   }
   if (Array.isArray(obj)) {

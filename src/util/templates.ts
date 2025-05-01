@@ -4,6 +4,34 @@ import { getEnvBool } from '../envars';
 import type { NunjucksFilterMap } from '../types';
 
 /**
+ * Custom Nunjucks extension that allows for verbatim placeholders using the verbatim tag.
+ */
+class VerbatimExtension {
+  tags = ['verbatim'];
+  
+  parse(parser: any, nodes: any) {
+    // Get the token that opened the tag.
+    const token = parser.nextToken();
+    
+    // Parse the arguments inside the tag
+    const args = parser.parseSignature(null, true);
+    parser.advanceAfterBlockEnd(token.value);
+    
+    // Parse the content until the close tag
+    const body = parser.parseUntilBlocks('endverbatim');
+    parser.advanceAfterBlockEnd();
+    
+    // Return a node that just returns the body content directly without processing
+    return new nodes.CallExtension(this, 'run', args, [body]);
+  }
+  
+  run(_context: any, _args: any, body: () => string) {
+    // Return the content without processing
+    return body();
+  }
+}
+
+/**
  * Get a Nunjucks engine instance with optional filters and configuration.
  * @param filters - Optional map of custom Nunjucks filters.
  * @param throwOnUndefined - Whether to throw an error on undefined variables.
@@ -27,6 +55,9 @@ export function getNunjucksEngine(
     throwOnUndefined,
   });
 
+  // Add custom extensions
+  env.addExtension('VerbatimExtension', new VerbatimExtension());
+
   // Configure environment variables as template globals unless disabled. Defaults to disabled in self-hosted mode
   if (
     !getEnvBool('PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS', getEnvBool('PROMPTFOO_SELF_HOSTED', false))
@@ -39,6 +70,19 @@ export function getNunjucksEngine(
 
   env.addFilter('load', function (str) {
     return JSON.parse(str);
+  });
+  
+  // Add a filter to escape curly braces for literal output
+  env.addFilter('literal', function (str) {
+    return `{{${str}}}`;
+  });
+
+  // Add a filter to escape Nunjucks syntax
+  env.addFilter('escape_template', function (str) {
+    if (typeof str !== 'string') {
+      return str;
+    }
+    return str.replace(/\{\{/g, '{ {').replace(/\}\}/g, '} }');
   });
 
   if (filters) {
