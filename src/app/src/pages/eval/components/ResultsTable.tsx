@@ -470,6 +470,65 @@ function ResultsTable({
               ),
               cell: (info: CellContext<EvaluateTableRow, string>) => {
                 let value: string | object = info.getValue();
+
+                // Get the first output that has metadata for checking file metadata
+                const row = info.row.original;
+                const output = row.outputs && row.outputs.length > 0 ? row.outputs[0] : null;
+                const fileMetadata = output?.metadata?.fileMetadata as
+                  | Record<string, { path: string; type: string; format?: string }>
+                  | undefined;
+                const isMediaFile = fileMetadata && fileMetadata[varName];
+
+                if (isMediaFile) {
+                  // Handle various media types
+                  const mediaMetadata = fileMetadata[varName];
+                  const mediaType = mediaMetadata.type;
+                  const format = mediaMetadata.format || '';
+                  const mediaDataUrl = value.startsWith('data:')
+                    ? value
+                    : `data:${mediaType}/${format};base64,${value}`;
+
+                  let mediaElement = null;
+
+                  if (mediaType === 'audio') {
+                    mediaElement = (
+                      <audio controls style={{ maxWidth: '100%' }}>
+                        <source src={mediaDataUrl} />
+                        Your browser does not support the audio element.
+                      </audio>
+                    );
+                  } else if (mediaType === 'video') {
+                    mediaElement = (
+                      <video controls style={{ maxWidth: '100%', maxHeight: '200px' }}>
+                        <source src={mediaDataUrl} />
+                        Your browser does not support the video element.
+                      </video>
+                    );
+                  } else if (mediaType === 'image') {
+                    mediaElement = (
+                      <img
+                        src={mediaDataUrl}
+                        alt="Input image"
+                        style={{ maxWidth: '100%', maxHeight: '200px' }}
+                        onClick={() => toggleLightbox?.(mediaDataUrl)}
+                      />
+                    );
+                  }
+
+                  if (mediaElement) {
+                    return (
+                      <div className="cell">
+                        <div style={{ marginBottom: '8px' }}>{mediaElement}</div>
+                        <Tooltip title="Original file path">
+                          <span style={{ fontSize: '0.8em', color: '#666' }}>
+                            {mediaMetadata.path} ({mediaType}/{format})
+                          </span>
+                        </Tooltip>
+                      </div>
+                    );
+                  }
+                }
+
                 if (typeof value === 'object') {
                   value = JSON.stringify(value, null, 2);
                   if (renderMarkdown) {
