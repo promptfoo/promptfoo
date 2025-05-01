@@ -128,6 +128,7 @@ describe('RedteamIterativeProvider', () => {
         options: {},
         prompt: { raw: 'test', label: 'test' },
         redteamProvider: mockRedteamProvider,
+        gradingProvider: mockRedteamProvider,
         targetProvider: mockTargetProvider,
         vars: { test: 'goal' },
         usePromptfooCloudAttacker: false,
