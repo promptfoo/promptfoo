@@ -1018,6 +1018,7 @@
                       {
                         "type": "string",
                         "enum": [
+                          "agentic:memory-poisoning",
                           "ascii-smuggling",
                           "beavertails",
                           "bfla",
@@ -1100,6 +1101,7 @@
                           "nist:ai:measure:4.2",
                           "nist:ai:measure:4.3",
                           "overreliance",
+                          "owasp:agentic:t01",
                           "owasp:api",
                           "owasp:api:01",
                           "owasp:api:02",
@@ -1167,6 +1169,7 @@
                           {
                             "type": "string",
                             "enum": [
+                              "agentic:memory-poisoning",
                               "ascii-smuggling",
                               "beavertails",
                               "bfla",
@@ -1249,6 +1252,7 @@
                               "nist:ai:measure:4.2",
                               "nist:ai:measure:4.3",
                               "overreliance",
+                              "owasp:agentic:t01",
                               "owasp:api",
                               "owasp:api:01",
                               "owasp:api:02",
