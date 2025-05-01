@@ -11,6 +11,7 @@ import type {
 import invariant from '../../../util/invariant';
 import { REDTEAM_MEMORY_POISONING_PLUGIN_ID } from '../../plugins/agentic/constants';
 import { getRemoteGenerationUrl } from '../../remoteGeneration';
+import { messagesToRedteamHistory } from '../shared';
 
 export class MemoryPoisoningProvider implements ApiProvider {
   constructor(readonly config: ProviderOptions) {}
@@ -73,27 +74,22 @@ export class MemoryPoisoningProvider implements ApiProvider {
       // Send the follow up question to the provider.
       const response = await targetProvider.callApi(scenario.followUp, context);
 
-      // Log the conversation onto the vars object; all references to vars will have access
-      // to the conversation object.
-      context.vars._conversation = [
-        {
-          input: scenario.memory,
-          output: memoryResponse.output,
-          type: 'memory',
-        },
-        {
-          input: prompt,
-          output: testResponse.output,
-          type: 'test',
-        },
-        {
-          input: scenario.followUp,
-          output: response.output,
-          type: 'followup',
-        },
+      const messages = [
+        { content: scenario.memory, role: 'user' as const },
+        { content: memoryResponse.output, role: 'assistant' as const },
+        { content: prompt, role: 'user' as const },
+        { content: testResponse.output, role: 'assistant' as const },
+        { content: scenario.followUp, role: 'user' as const },
+        { content: response.output, role: 'assistant' as const },
       ];
 
-      return { output: response.output };
+      return {
+        output: response.output,
+        metadata: {
+          messages,
+          redteamHistory: messagesToRedteamHistory(messages),
+        },
+      };
     } catch (error) {
       const _logger = context?.logger ?? logger;
       _logger.error(`Error in MemoryPoisoningProvider: ${error}`);
