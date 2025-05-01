@@ -91,8 +91,7 @@ export class MemoryPoisoningProvider implements ApiProvider {
         },
       };
     } catch (error) {
-      const _logger = context?.logger ?? logger;
-      _logger.error(`Error in MemoryPoisoningProvider: ${error}`);
+      logger.error(`Error in MemoryPoisoningProvider: ${error}`);
       throw error;
     }
   }
