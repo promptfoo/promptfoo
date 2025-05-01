@@ -107,7 +107,7 @@ export abstract class RedteamPluginBase {
   async generateTests(
     n: number,
     delayMs: number = 0,
-    templateGetter: () => Promise<string> = this.getTemplate,
+    templateGetter: () => Promise<string> = this.getTemplate.bind(this),
   ): Promise<TestCase[]> {
     logger.debug(`Generating ${n} test cases`);
     const batchSize = 20;
