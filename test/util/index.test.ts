@@ -2,7 +2,6 @@ import dotenv from 'dotenv';
 import * as fs from 'fs';
 import { globSync } from 'glob';
 import * as path from 'path';
-import cliState from '../../src/cliState';
 import { getDb } from '../../src/database';
 import * as googleSheets from '../../src/googleSheets';
 import Eval from '../../src/models/eval';
@@ -13,7 +12,6 @@ import {
   type TestCase,
 } from '../../src/types';
 import {
-  maybeLoadFromExternalFile,
   parsePathOrGlob,
   providerToIdentifier,
   readFilters,
@@ -54,7 +52,6 @@ jest.mock('../../src/esm');
 jest.mock('../../src/googleSheets', () => ({
   writeCsvToGoogleSheet: jest.fn(),
 }));
-
 
 describe('maybeLoadToolsFromExternalFile', () => {
   const mockFileContent = '{"name": "calculator", "parameters": {"type": "object"}}';

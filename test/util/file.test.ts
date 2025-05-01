@@ -1,5 +1,5 @@
-import path from 'path';
 import * as fs from 'fs';
+import path from 'path';
 import cliState from '../../src/cliState';
 import {
   isJavascriptFile,

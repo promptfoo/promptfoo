@@ -1,9 +1,9 @@
 import { parse as csvParse } from 'csv-parse/sync';
-import yaml from 'js-yaml';
 import * as fs from 'fs';
+import yaml from 'js-yaml';
 import * as path from 'path';
-import { getNunjucksEngine } from './templates';
 import cliState from '../cliState';
+import { getNunjucksEngine } from './templates';
 
 /**
  * Array of supported JavaScript and TypeScript file extensions
