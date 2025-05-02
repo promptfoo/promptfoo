@@ -27,7 +27,7 @@ import type {
   TokenUsage,
   UnifiedConfig,
 } from '../types';
-import { isApiProvider, OutputFileExtension, TestSuiteSchema } from '../types';
+import { OutputFileExtension, TestSuiteSchema } from '../types';
 import { CommandLineOptionsSchema } from '../types';
 import { isApiProvider } from '../types/providers';
 import { isRunningUnderNpx } from '../util';
