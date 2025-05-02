@@ -1,9 +1,6 @@
 import { getEnvString } from '../../../src/envars';
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
-import {
-  addVideoToBase64,
-  textToVideo,
-} from '../../../src/redteam/strategies/simpleVideo';
+import { addVideoToBase64, textToVideo } from '../../../src/redteam/strategies/simpleVideo';
 import type { TestCase } from '../../../src/types';
 
 // Mock the dependencies
@@ -17,13 +14,13 @@ jest.mock('fluent-ffmpeg', () => {
 describe('simpleVideo', () => {
   beforeEach(() => {
     // Always run tests in test environment to avoid ffmpeg calls
-    jest.mocked(getEnvString).mockImplementation((key: string) => {
+    jest.mocked(getEnvString).mockImplementation((key: string, defaultValue?: string) => {
       if (key === 'NODE_ENV') {
         return 'test';
       } else if (key === 'JEST_WORKER_ID') {
         return '1';
       }
-      return undefined;
+      return defaultValue ?? '';
     });
     jest.mocked(neverGenerateRemote).mockReturnValue(true);
   });

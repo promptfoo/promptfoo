@@ -1070,7 +1070,6 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'tool-discovery': Severity.Low,
   unsafebench: Severity.Medium,
   xstest: Severity.Low,
-  video: Severity.Medium,
 };
 
 export const riskCategories: Record<string, Plugin[]> = {
@@ -1250,7 +1249,6 @@ export const categoryAliases: Record<Plugin, string> = {
   'system-prompt-override': 'System Prompt Override',
   unsafebench: 'UnsafeBench',
   xstest: 'XSTest',
-  video: 'Video Content',
 };
 
 export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
@@ -1343,7 +1341,6 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests handling of unsafe image content through multi-modal model evaluation and safety filters',
   xstest:
     'Tests how models handle ambiguous terms related to potentially harmful topics like violence and drugs',
-  video: 'Tests handling of video content',
 };
 
 export const strategyDescriptions: Record<Strategy, string> = {
