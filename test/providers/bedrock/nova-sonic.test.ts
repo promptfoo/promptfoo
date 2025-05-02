@@ -4,18 +4,6 @@ import { TextEncoder } from 'util';
 import { disableCache, enableCache } from '../../../src/cache';
 import { NovaSonicProvider } from '../../../src/providers/bedrock/nova-sonic';
 
-/**
- * Nova Sonic Provider Tests
- *
- * These tests validate the functionality of the NovaSonicProvider for AWS Bedrock.
- * We use comprehensive mocking of timers and async operations to ensure fast test execution
- * WITHOUT requiring changes to the source code.
- */
-
-// Set default test timeout higher
-jest.setTimeout(15000);
-
-// Mock external dependencies
 jest.mock('@smithy/node-http-handler', () => ({
   NodeHttp2Handler: jest.fn(),
 }));
@@ -37,7 +25,6 @@ jest.mock('../../../src/logger', () => ({
   },
 }));
 
-// Mock setTimeout to execute callback immediately
 jest.mock('node:timers', () => ({
   setTimeout: jest.fn((callback) => {
     if (typeof callback === 'function') {
@@ -47,7 +34,6 @@ jest.mock('node:timers', () => ({
   }),
 }));
 
-// Create test utils and fixtures
 const encodeChunk = (obj: any) => ({
   chunk: { bytes: new TextEncoder().encode(JSON.stringify(obj)) },
 });
@@ -79,7 +65,6 @@ function createMockStreamResponse(responseObjects: any[]) {
   };
 }
 
-// Keep one standard response for basic tests
 const standardTextResponse = [
   {
     event: {
@@ -98,7 +83,6 @@ const standardTextResponse = [
   },
 ];
 
-// Prefix unused variables with underscore to satisfy linter
 const _audioResponse = [
   {
     event: {
@@ -154,43 +138,31 @@ const _functionCallResponse = [
 ];
 
 describe('NovaSonic Provider', () => {
-  // Common test variables
   let mockSend: jest.Mock;
   let bedrockClient: any;
   let provider: NovaSonicProvider;
 
   beforeEach(() => {
-    // Reset mocks and cache
     jest.clearAllMocks();
     disableCache();
 
-    // Create standard mocks
     mockSend = jest.fn().mockResolvedValue(createMockStreamResponse(standardTextResponse));
     bedrockClient = { send: mockSend };
 
-    // Update the BedrockRuntimeClient mock
     jest.mocked(BedrockRuntimeClient).mockImplementation(() => bedrockClient);
 
-    // Mock critical async methods BEFORE creating the provider instance
     jest.spyOn(NovaSonicProvider.prototype, 'callApi').mockImplementation(async function (
       this: any,
       prompt,
     ) {
       const sessionId = 'mocked-session-id';
 
-      // First call through to original setup
       const session = this.createSession(sessionId);
 
-      // Set up a basic handler
-      session.responseHandlers.set('textOutput', (data: any) => {
-        // Just simulate transcription collection
-      });
+      session.responseHandlers.set('textOutput', (data: any) => {});
 
-      session.responseHandlers.set('contentEnd', () => {
-        // Just simulate content end handling
-      });
+      session.responseHandlers.set('contentEnd', () => {});
 
-      // Skip all the event sending by returning a synthetic result
       return {
         output: 'This is a test response\n',
         tokenUsage: { total: 0, prompt: 0, completion: 0 },
@@ -201,12 +173,10 @@ describe('NovaSonic Provider', () => {
       };
     });
 
-    // Override endSession to avoid timeouts
     jest.spyOn(NovaSonicProvider.prototype, 'endSession').mockImplementation(function (this: any) {
       return Promise.resolve();
     });
 
-    // Create a provider instance for tests
     provider = new NovaSonicProvider('amazon.nova-sonic-v1:0');
     (provider as any).bedrockClient = bedrockClient;
   });
@@ -232,7 +202,6 @@ describe('NovaSonic Provider', () => {
         },
       };
 
-      // Use a fresh constructor for this test
       jest.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
 
       const configuredProvider = new NovaSonicProvider('amazon.nova-sonic-v1:0', { config });
@@ -247,7 +216,6 @@ describe('NovaSonic Provider', () => {
     });
 
     it('should initialize with default model name if not provided', () => {
-      // Use a fresh constructor for this test
       jest.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
 
       const defaultProvider = new NovaSonicProvider();
@@ -255,14 +223,12 @@ describe('NovaSonic Provider', () => {
     });
 
     it('should create the Bedrock client with the correct configuration', () => {
-      // Create provider with specific region
       jest.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
 
       new NovaSonicProvider('amazon.nova-sonic-v1:0', {
         config: { region: 'us-west-2' },
       });
 
-      // Validate client configuration
       expect(BedrockRuntimeClient).toHaveBeenCalledWith(
         expect.objectContaining({
           region: 'us-west-2',
@@ -270,7 +236,6 @@ describe('NovaSonic Provider', () => {
         }),
       );
 
-      // Validate handler configuration
       expect(NodeHttp2Handler).toHaveBeenCalledWith({
         requestTimeout: 300000,
         sessionTimeout: 300000,
@@ -282,10 +247,8 @@ describe('NovaSonic Provider', () => {
 
   describe('API Interactions', () => {
     it('should successfully call API and handle text response', async () => {
-      // Use the mocked version
       const result = await provider.callApi('Test prompt');
 
-      // Verify the result structure matches what we expected
       expect(result).toEqual({
         output: 'This is a test response\n',
         tokenUsage: { total: 0, prompt: 0, completion: 0 },
@@ -310,28 +273,23 @@ describe('NovaSonic Provider', () => {
 
       await provider.callApi(conversationHistory);
 
-      // We just need to verify it completes successfully
       expect(provider.callApi).toHaveBeenCalledWith(conversationHistory);
     });
 
     it('should handle session management correctly', async () => {
-      // We're using a mocked callApi which internally calls createSession
       const createSessionSpy = jest.spyOn(provider as any, 'createSession');
       const testPrompt = 'Test prompt';
 
       await provider.callApi(testPrompt);
 
-      // Verify session was created with expected arg
       expect(createSessionSpy).toHaveBeenCalledWith('mocked-session-id');
     });
   });
 
   describe('Response Handling', () => {
     it('should handle audio content in responses', async () => {
-      // Restore the mock temporarily to test specifically the audio handling logic
       jest.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
 
-      // Create a specific override that mimics audio processing
       jest.spyOn(provider, 'callApi').mockResolvedValue({
         output: 'This is an audio response\n',
         tokenUsage: { total: 0, prompt: 0, completion: 0 },
@@ -349,7 +307,6 @@ describe('NovaSonic Provider', () => {
 
       const result = await provider.callApi('Generate audio');
 
-      // Assert on the complete result structure
       expect(result).toEqual({
         output: 'This is an audio response\n',
         tokenUsage: { total: 0, prompt: 0, completion: 0 },
@@ -367,10 +324,8 @@ describe('NovaSonic Provider', () => {
     });
 
     it('should handle function calls correctly', async () => {
-      // Restore the mock temporarily
       jest.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
 
-      // Create a tool provider with the specific function call handling
       const toolProvider = new NovaSonicProvider('amazon.nova-sonic-v1:0', {
         config: {
           toolConfig: {
@@ -391,7 +346,6 @@ describe('NovaSonic Provider', () => {
         },
       });
 
-      // Mock the callApi implementation for function call
       jest.spyOn(toolProvider, 'callApi').mockResolvedValue({
         output: 'I will check the weather for you\n',
         tokenUsage: { total: 0, prompt: 0, completion: 0 },
@@ -403,7 +357,6 @@ describe('NovaSonic Provider', () => {
 
       const result = await toolProvider.callApi("What's the weather in New York?");
 
-      // Assert on the complete result
       expect(result).toEqual({
         output: 'I will check the weather for you\n',
         tokenUsage: { total: 0, prompt: 0, completion: 0 },
@@ -417,21 +370,16 @@ describe('NovaSonic Provider', () => {
 
   describe('Error Handling', () => {
     it('should handle errors in API calls', async () => {
-      // Restore the original method
       jest.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
 
-      // Then explicitly mock it to throw an error
       jest.spyOn(provider, 'callApi').mockRejectedValue(new Error('Bedrock API error'));
 
-      // Use expect().rejects instead of try/catch with fail
       await expect(provider.callApi('Test prompt')).rejects.toThrow('Bedrock API error');
     });
 
     it('should handle network errors properly', async () => {
-      // Override the implementation for this specific test
       jest.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
 
-      // Then create a specific error response
       jest.spyOn(provider, 'callApi').mockResolvedValue({
         error: 'Network error',
         metadata: {},
@@ -439,7 +387,6 @@ describe('NovaSonic Provider', () => {
 
       const result = await provider.callApi('Test with network error');
 
-      // Verify the result
       expect(result.error).toBe('Network error');
       expect(result.metadata).toEqual({});
     });
