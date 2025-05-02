@@ -539,6 +539,7 @@ export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[
     .from(evalsTable)
     .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
     .where(datasetId ? eq(evalsToDatasetsTable.datasetId, datasetId) : undefined)
+    .orderBy(desc(evalsTable.createdAt))
     .all();
 
   /**

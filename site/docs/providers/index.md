@@ -29,6 +29,7 @@ providers:
 | [AWS Bedrock](./aws-bedrock.md)                     | AWS-hosted models from various providers          | `bedrock:us.meta.llama3-2-90b-instruct-v1:0`       |
 | [Amazon SageMaker](./sagemaker.md)                  | Models deployed on SageMaker endpoints            | `sagemaker:my-endpoint-name`                       |
 | [Azure OpenAI](./azure.md)                          | Azure-hosted OpenAI models                        | `azureopenai:gpt-4o-custom-deployment-name`        |
+| [Cerebras](./cerebras.md)                           | High-performance inference API for Llama models   | `cerebras:llama-4-scout-17b-16e-instruct`          |
 | [Adaline Gateway](./adaline.md)                     | Unified interface for multiple providers          | Compatible with OpenAI syntax                      |
 | [Cloudflare AI](./cloudflare-ai.md)                 | Cloudflare's AI platform                          | `cloudflare-ai:@cf/meta/llama-3-8b-instruct`       |
 | [Cohere](./cohere.md)                               | Cohere's language models                          | `cohere:command`                                   |
@@ -222,3 +223,44 @@ providers:
       presence_penalty: 0.5
       stop: ["\n", 'Human:', 'AI:']
 ```
+
+## Model Context Protocol (MCP)
+
+Promptfoo supports the Model Context Protocol (MCP) for enabling advanced tool use and agentic capabilities in LLM providers. MCP allows you to connect providers to external MCP servers to enable tool orchestration, memory, and more.
+
+### Basic MCP Configuration
+
+Enable MCP for a provider by adding the `mcp` block to your provider's configuration:
+
+```yaml
+providers:
+  - id: openai:gpt-4.1-mini
+    config:
+      temperature: 0.7
+      mcp:
+        enabled: true
+        server:
+          command: npx
+          args: ['-y', '@modelcontextprotocol/server-memory']
+          name: memory
+```
+
+### Multiple MCP Servers
+
+You can connect a single provider to multiple MCP servers:
+
+```yaml
+providers:
+  - id: openai:gpt-4.1-mini
+    config:
+      mcp:
+        enabled: true
+        servers:
+          - command: npx
+            args: ['-y', '@modelcontextprotocol/server-memory']
+            name: server_a
+          - url: http://localhost:8001
+            name: server_b
+```
+
+For detailed MCP documentation and advanced configurations, see the [MCP Integration Guide](../integrations/mcp.md).

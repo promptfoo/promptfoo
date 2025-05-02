@@ -29,10 +29,12 @@ import type {
 } from '../types';
 import { isApiProvider, OutputFileExtension, TestSuiteSchema } from '../types';
 import { CommandLineOptionsSchema } from '../types';
-import { isRunningUnderNpx, maybeLoadFromExternalFile } from '../util';
+import { isApiProvider } from '../types/providers';
+import { isRunningUnderNpx } from '../util';
 import { printBorder, setupEnv, writeMultipleOutputs } from '../util';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
+import { maybeLoadFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
 import { filterProviders } from './eval/filterProviders';
 import type { FilterOptions } from './eval/filterTests';
@@ -114,7 +116,6 @@ export async function doEval(
       // Only set when redteam is enabled for sure, because we don't know if config is loaded yet
       ...(Boolean(config?.redteam) && { isRedteam: true }),
     });
-    await telemetry.send();
 
     if (cmdObj.write) {
       await runDbMigrations();
@@ -453,7 +454,6 @@ export async function doEval(
       duration: Math.round((Date.now() - startTime) / 1000),
       isRedteam,
     });
-    await telemetry.send();
 
     if (cmdObj.watch) {
       if (initialization) {
@@ -544,14 +544,19 @@ export async function doEval(
     if (testSuite.redteam) {
       showRedteamProviderLabelMissingWarning(testSuite);
     }
-    for (const provider of testSuite.providers) {
-      if (isApiProvider(provider)) {
-        const cleanup = provider?.cleanup?.();
-        if (cleanup instanceof Promise) {
-          await cleanup;
+
+    // Clean up any WebSocket connections
+    if (testSuite.providers.length > 0) {
+      for (const provider of testSuite.providers) {
+        if (isApiProvider(provider)) {
+          const cleanup = provider?.cleanup?.();
+          if (cleanup instanceof Promise) {
+            await cleanup;
+          }
         }
       }
     }
+
     return ret;
   };
 

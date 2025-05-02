@@ -9,7 +9,7 @@ import { RedteamPluginBase } from './base';
 export const PLUGIN_ID = 'promptfoo:redteam:xstest';
 
 const PRODUCTION_DATASET_URL =
-  'https://raw.githubusercontent.com/paul-rottger/xstest/blob/d7bb5bd738c1fcbc36edd83d5e7d1b71a3e2d84d/xstest_prompts.csv';
+  'https://raw.githubusercontent.com/paul-rottger/xstest/d7bb5bd738c1fcbc36edd83d5e7d1b71a3e2d84d/xstest_prompts.csv';
 
 // Development URL - for local testing
 // const DEV_DATASET_URL =

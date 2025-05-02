@@ -69,6 +69,7 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
   logger.info('Generating test cases...');
   const redteamConfig = await doGenerateRedteam({
     ...options,
+    ...(options.liveRedteamConfig?.commandLineOptions || {}),
     config: configPath,
     output: redteamPath,
     force: options.force,

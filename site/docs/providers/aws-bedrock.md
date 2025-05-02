@@ -188,6 +188,42 @@ Nova models use a slightly different configuration structure compared to other B
 
 :::
 
+### Amazon Nova Sonic Model
+
+The Amazon Nova Sonic model (`amazon.nova-sonic-v1:0`) is a multimodal model that supports audio input and text/audio output with tool-using capabilities. It has a different configuration structure compared to other Nova models:
+
+```yaml
+providers:
+  - id: bedrock:amazon.nova-sonic-v1:0
+    config:
+      inferenceConfiguration:
+        maxTokens: 1024 # Maximum number of tokens to generate
+        temperature: 0.7 # Controls randomness (0.0 to 1.0)
+        topP: 0.95 # Nucleus sampling parameter
+      textOutputConfiguration:
+        mediaType: text/plain
+      toolConfiguration: # Optional tool configuration
+        tools:
+          - toolSpec:
+              name: 'getDateTool'
+              description: 'Get information about the current date'
+              inputSchema:
+                json: '{"$schema":"http://json-schema.org/draft-07/schema#","type":"object","properties":{},"required":[]}'
+      toolUseOutputConfiguration:
+        mediaType: application/json
+      # Optional audio output configuration
+      audioOutputConfiguration:
+        mediaType: audio/lpcm
+        sampleRateHertz: 24000
+        sampleSizeBits: 16
+        channelCount: 1
+        voiceId: matthew
+        encoding: base64
+        audioType: SPEECH
+```
+
+Note: Nova Sonic has advanced multimodal capabilities including audio input/output, but audio input requires base64 encoded data which may be better handled through the API directly rather than in the configuration file.
+
 ### AI21 Models
 
 For AI21 models (e.g., `ai21.jamba-1-5-mini-v1:0`, `ai21.jamba-1-5-large-v1:0`), you can use the following configuration options:
@@ -252,7 +288,7 @@ config:
 
 ### Llama
 
-For Llama models (e.g., `meta.llama3-1-70b-instruct-v1:0`, `meta.llama3-2-90b-instruct-v1:0`, `meta.llama3-3-70b-instruct-v1:0`), you can use the following configuration options:
+For Llama models (e.g., `meta.llama3-1-70b-instruct-v1:0`, `meta.llama3-2-90b-instruct-v1:0`, `meta.llama3-3-70b-instruct-v1:0`, `meta.llama4-scout-17b-instruct-v1:0`, `meta.llama4-maverick-17b-instruct-v1:0`), you can use the following configuration options:
 
 ```yaml
 config:
@@ -310,7 +346,7 @@ This allows you to access the model's reasoning process during generation while 
 
 ## Model-graded tests
 
-You can use Bedrock models to grade outputs. By default, model-graded tests use gpt-4.1-2025-04-14 and require the `OPENAI_API_KEY` environment variable to be set. However, when using AWS Bedrock, you have the option of overriding the grader for [model-graded assertions](/docs/configuration/expected-outputs/model-graded/) to point to AWS Bedrock or other providers.
+You can use Bedrock models to grade outputs. By default, model-graded tests use `gpt-4.1-2025-04-14` and require the `OPENAI_API_KEY` environment variable to be set. However, when using AWS Bedrock, you have the option of overriding the grader for [model-graded assertions](/docs/configuration/expected-outputs/model-graded/) to point to AWS Bedrock or other providers.
 
 :::warning
 

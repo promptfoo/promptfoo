@@ -535,6 +535,7 @@
                                               "latency",
                                               "levenshtein",
                                               "llm-rubric",
+                                              "meteor",
                                               "model-graded-closedqa",
                                               "model-graded-factuality",
                                               "moderation",
@@ -1020,6 +1021,7 @@
                       {
                         "type": "string",
                         "enum": [
+                          "agentic:memory-poisoning",
                           "ascii-smuggling",
                           "beavertails",
                           "bfla",
@@ -1102,6 +1104,7 @@
                           "nist:ai:measure:4.2",
                           "nist:ai:measure:4.3",
                           "overreliance",
+                          "owasp:agentic:t01",
                           "owasp:api",
                           "owasp:api:01",
                           "owasp:api:02",
@@ -1169,6 +1172,7 @@
                           {
                             "type": "string",
                             "enum": [
+                              "agentic:memory-poisoning",
                               "ascii-smuggling",
                               "beavertails",
                               "bfla",
@@ -1251,6 +1255,7 @@
                               "nist:ai:measure:4.2",
                               "nist:ai:measure:4.3",
                               "overreliance",
+                              "owasp:agentic:t01",
                               "owasp:api",
                               "owasp:api:01",
                               "owasp:api:02",
@@ -1353,6 +1358,7 @@
                           "gcg",
                           "goat",
                           "hex",
+                          "homoglyph",
                           "image",
                           "jailbreak",
                           "jailbreak:composite",
@@ -1360,8 +1366,11 @@
                           "jailbreak:tree",
                           "leetspeak",
                           "math-prompt",
+                          "morse",
                           "multilingual",
+                          "other-encodings",
                           "pandamonium",
+                          "piglatin",
                           "prompt-injection",
                           "retry",
                           "rot13"
@@ -1392,7 +1401,7 @@
                   }
                 ]
               },
-              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports audio, base64, basic, best-of-n, citation, crescendo, default, gcg, goat, hex, image, jailbreak, jailbreak:composite, jailbreak:likert, jailbreak:tree, leetspeak, math-prompt, multilingual, pandamonium, prompt-injection, retry, rot13",
+              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports audio, base64, basic, best-of-n, citation, crescendo, default, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak:composite, jailbreak:likert, jailbreak:tree, leetspeak, math-prompt, morse, multilingual, other-encodings, pandamonium, piglatin, prompt-injection, retry, rot13",
               "default": [
                 "default"
               ]
@@ -1406,6 +1415,10 @@
               "type": "integer",
               "minimum": 0,
               "description": "Delay in milliseconds between plugin API calls"
+            },
+            "excludeTargetOutputFromAgenticAttackGeneration": {
+              "type": "boolean",
+              "description": "Whether to exclude target output from the agentific attack generation process"
             }
           },
           "additionalProperties": false
