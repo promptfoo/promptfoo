@@ -274,9 +274,12 @@ describe('evaluator', () => {
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
-    expect(processConfigFileReferences).toHaveBeenCalledWith({
-      var1: 'file://test/fixtures/test_file.txt',
-    });
+    expect(processConfigFileReferences).toHaveBeenCalledWith(
+      {
+        var1: 'file://test/fixtures/test_file.txt',
+      },
+      '',
+    );
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(mockApiProvider.callApi).toHaveBeenCalledWith(
       'Test prompt <h1>Sample Report</h1><p>This is a test report with some data for the year 2023.</p>',

@@ -666,7 +666,7 @@ class Evaluator {
       testCase.vars = { ...testSuite.defaultTest?.vars, ...testCase?.vars };
 
       if (testCase.vars) {
-        testCase.vars = await processConfigFileReferences(testCase.vars);
+        testCase.vars = await processConfigFileReferences(testCase.vars, cliState.basePath || '');
         const varWithSpecialColsRemoved: Vars = {};
         const inputTransformForIndividualTest = testCase.options?.transformVars;
         const inputTransform = inputTransformForIndividualTest || inputTransformDefault;
