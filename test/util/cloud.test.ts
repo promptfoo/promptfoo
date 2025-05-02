@@ -271,7 +271,7 @@ describe('cloud utils', () => {
       );
     });
 
-    it('should fetch unified config with target', async () => {
+    it('should fetch unified config with target provider', async () => {
       const mockUnifiedConfig = {
         description: 'Test Config',
         providers: ['test-provider'],
@@ -284,11 +284,36 @@ describe('cloud utils', () => {
         ok: true,
       } as Response);
 
-      const result = await getConfigFromCloud('test-config', 'test-provider');
+      const result = await getConfigFromCloud('test-config', 'target-provider');
 
       expect(result).toEqual(mockUnifiedConfig);
       expect(mockFetchWithProxy).toHaveBeenCalledWith(
-        'https://api.example.com/api/redteam/configs/test-config/unified?providerId=test-provider',
+        'https://api.example.com/api/redteam/configs/test-config/unified?providerId=target-provider',
+        {
+          method: 'GET',
+          headers: { Authorization: 'Bearer test-api-key' },
+        },
+      );
+    });
+
+    it('should handle undefined target parameter', async () => {
+      const mockUnifiedConfig = {
+        description: 'Test Config',
+        providers: ['test-provider'],
+        prompts: ['test prompt'],
+        tests: [{ vars: { input: 'test' } }],
+      };
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        json: () => Promise.resolve(mockUnifiedConfig),
+        ok: true,
+      } as Response);
+
+      const result = await getConfigFromCloud('test-config', undefined);
+
+      expect(result).toEqual(mockUnifiedConfig);
+      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+        'https://api.example.com/api/redteam/configs/test-config/unified',
         {
           method: 'GET',
           headers: { Authorization: 'Bearer test-api-key' },
