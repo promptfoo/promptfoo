@@ -1261,6 +1261,9 @@ describe('evaluator', () => {
 
     // Check that both test metadata and response metadata are present in the result
     expect(results[0].metadata).toEqual({
+      config: {
+        evaluateOptions: {},
+      },
       testKey: 'testValue',
       responseKey: 'responseValue',
     });
