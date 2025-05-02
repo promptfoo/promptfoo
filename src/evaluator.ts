@@ -688,11 +688,10 @@ class Evaluator {
           );
           testCase.vars = { ...testCase.vars, ...transformedVars };
         }
-        if (testCase.vars) {
-          for (const varName of Object.keys(testCase.vars)) {
-            varNames.add(varName);
-            varWithSpecialColsRemoved[varName] = testCase.vars[varName];
-          }
+        invariant(testCase.vars, 'testCase.vars is undefined');
+        for (const varName of Object.keys(testCase.vars)) {
+          varNames.add(varName);
+          varWithSpecialColsRemoved[varName] = testCase.vars[varName];
         }
         varsWithSpecialColsRemoved.push(varWithSpecialColsRemoved);
       }
