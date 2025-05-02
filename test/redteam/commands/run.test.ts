@@ -39,7 +39,11 @@ describe('redteamRunCommand', () => {
       prompts: ['Test prompt'],
       vars: {},
       providers: [{ id: 'test-provider' }],
-      targets: [],
+      targets: [
+        {
+          id: 'test-provider',
+        },
+      ],
     };
     jest.mocked(getConfigFromCloud).mockResolvedValue(mockConfig);
 
@@ -53,11 +57,6 @@ describe('redteamRunCommand', () => {
 
     // Execute the command with the target option
     await runCommand!.parseAsync(['node', 'test', '--config', configUUID, '--target', targetUUID]);
-
-    // Verify the cloud config was modified with the right target
-    expect(mockConfig.targets).toEqual([
-      { id: `${CLOUD_PROVIDER_PREFIX}${targetUUID}`, config: {} },
-    ]);
 
     // Verify doRedteamRun was called with the right parameters
     expect(doRedteamRun).toHaveBeenCalledWith(

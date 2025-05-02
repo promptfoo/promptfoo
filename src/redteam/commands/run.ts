@@ -3,7 +3,6 @@ import type { Command } from 'commander';
 import dedent from 'dedent';
 import { z } from 'zod';
 import cliState from '../../cliState';
-import { CLOUD_PROVIDER_PREFIX } from '../../constants';
 import logger, { setLogLevel } from '../../logger';
 import telemetry from '../../telemetry';
 import { setupEnv } from '../../util';
