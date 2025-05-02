@@ -2,6 +2,8 @@ import dedent from 'dedent';
 import path from 'path';
 import { importModule } from '../esm';
 import logger from '../logger';
+import { MEMORY_POISONING_PLUGIN_ID } from '../redteam/plugins/agentic/constants';
+import { MemoryPoisoningProvider } from '../redteam/providers/agentic/memoryPoisoning';
 import RedteamBestOfNProvider from '../redteam/providers/bestOfN';
 import RedteamCrescendoProvider from '../redteam/providers/crescendo';
 import RedteamGoatProvider from '../redteam/providers/goat';
@@ -99,6 +101,16 @@ export const providerMap: ProviderFactory[] = [
   createScriptBasedProviderFactory('exec', null, ScriptCompletionProvider),
   createScriptBasedProviderFactory('golang', 'go', GolangProvider),
   createScriptBasedProviderFactory('python', 'py', PythonProvider),
+  {
+    test: (providerPath: string) => providerPath === MEMORY_POISONING_PLUGIN_ID,
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return new MemoryPoisoningProvider(providerOptions);
+    },
+  },
   {
     test: (providerPath: string) => providerPath.startsWith('adaline:'),
     create: async (
