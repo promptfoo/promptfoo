@@ -4,11 +4,8 @@ import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
-import {
-  maybeLoadFromExternalFile,
-  maybeLoadToolsFromExternalFile,
-  renderVarsInObject,
-} from '../../util';
+import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util';
+import { maybeLoadFromExternalFile } from '../../util/file';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from '../shared';

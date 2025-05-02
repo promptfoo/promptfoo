@@ -10,7 +10,7 @@ import type {
 import type { EnvOverrides } from '../types/env';
 import { ProviderEnvOverridesSchema } from '../types/env';
 import { TokenUsageSchema } from '../types/shared';
-import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/file';
+import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/fileExtensions';
 import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
 import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
 import { RedteamConfigSchema } from '../validators/redteam';
@@ -123,7 +123,7 @@ export type OutputConfig = z.infer<typeof OutputConfigSchema>;
 
 export type EvalConversations = Record<
   string,
-  { prompt: string | object; input: string; output: string | object }[]
+  { prompt: string | object; input: string; output: string | object; metadata?: object }[]
 >;
 
 export type EvalRegisters = Record<string, string | object>;

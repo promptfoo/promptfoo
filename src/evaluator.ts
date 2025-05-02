@@ -168,7 +168,7 @@ export async function runEval({
   evaluateOptions,
   testIdx,
   promptIdx,
-  conversations, //
+  conversations,
   registers,
   isRedteam,
   allTests,
@@ -281,6 +281,7 @@ export async function runEval({
         prompt: renderedJson || renderedPrompt,
         input: conversationLastInput || renderedJson || renderedPrompt,
         output: response.output || '',
+        metadata: response.metadata,
       });
     }
 

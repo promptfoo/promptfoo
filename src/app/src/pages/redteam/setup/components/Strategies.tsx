@@ -223,7 +223,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
 
       const preset = STRATEGY_PRESETS[selectedPreset as PresetId];
 
-      const multiTurnStrategies = preset.options?.multiTurn?.strategies;
+      const multiTurnStrategies = preset?.options?.multiTurn?.strategies;
       if (!multiTurnStrategies) {
         return;
       }
@@ -250,7 +250,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         updateConfig('strategies', filtered);
       }
     },
-    [config.strategies, updateConfig, isStatefulValue],
+    [config.strategies, updateConfig, isStatefulValue, selectedPreset],
   );
 
   const handleStatefulChange = useCallback(
@@ -320,7 +320,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   );
 
   const hasSessionParser = Boolean(
-    config.target.config.sessionParser || config.target.config.sessionSource === 'client',
+    config.target.config?.sessionParser || config.target.config?.sessionSource === 'client',
   );
 
   // ----------------------------------------------
@@ -418,12 +418,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
           variant="contained"
           onClick={onNext}
           endIcon={<KeyboardArrowRightIcon />}
-          sx={{
-            backgroundColor: theme.palette.primary.main,
-            '&:hover': { backgroundColor: theme.palette.primary.dark },
-            px: 4,
-            py: 1,
-          }}
+          sx={{ px: 4, py: 1 }}
         >
           Next
         </Button>
