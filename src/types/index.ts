@@ -150,7 +150,7 @@ export interface RunEvalOptions {
   concurrency?: number;
 }
 
-const EvaluateOptionsSchema = z.object({
+export const EvaluateOptionsSchema = z.object({
   cache: z.boolean().optional(),
   delay: z.number().optional(),
   eventSource: z.string().optional(),
@@ -990,12 +990,3 @@ export interface LoadApiProviderContext {
   basePath?: string;
   env?: EnvOverrides;
 }
-
-export {
-  GradingConfigSchema,
-  EvaluateOptionsSchema,
-  PromptMetricsSchema,
-  AssertionSetSchema,
-  ProviderPromptMapSchema,
-  MetadataSchema,
-};
