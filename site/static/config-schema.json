@@ -1449,6 +1449,12 @@
             },
             "showProgressBar": {
               "type": "boolean"
+            },
+            "outputVars": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           "additionalProperties": false
