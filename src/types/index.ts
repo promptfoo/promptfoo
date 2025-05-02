@@ -176,6 +176,11 @@ const EvaluateOptionsSchema = z.object({
     .optional(),
   repeat: z.number().optional(),
   showProgressBar: z.boolean().optional(),
+  /**
+   * Specify which variables to include in the output and in what order.
+   * When not provided, all variables are included in alphabetical order.
+   */
+  outputVars: z.array(z.string()).optional(),
 });
 export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & { abortSignal?: AbortSignal };
 

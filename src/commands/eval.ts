@@ -172,10 +172,28 @@ export async function doEval(
 
     // Ensure evaluateOptions from the config file are applied
     if (config.evaluateOptions) {
+      console.log(
+        `DEBUG doEval configOutputVars before merge:`,
+        JSON.stringify(config.evaluateOptions.outputVars, null, 2),
+      );
+      console.log(
+        `DEBUG doEval existing evaluateOptions before merge:`,
+        JSON.stringify(evaluateOptions, null, 2),
+      );
+
       evaluateOptions = {
         ...config.evaluateOptions,
         ...evaluateOptions,
       };
+
+      console.log(
+        `DEBUG doEval evaluateOptions after merge:`,
+        JSON.stringify(evaluateOptions, null, 2),
+      );
+      console.log(
+        `DEBUG doEval outputVars after merge:`,
+        JSON.stringify(evaluateOptions.outputVars, null, 2),
+      );
     }
 
     let maxConcurrency = cmdObj.maxConcurrency;
@@ -261,6 +279,22 @@ export async function doEval(
     const evalRecord = cmdObj.write
       ? await Eval.create(config, testSuite.prompts)
       : new Eval(config);
+
+    // Log final options before evaluation
+    logger.debug(
+      `DEBUG Final options before evaluate(): ${JSON.stringify(
+        {
+          ...options,
+          eventSource: 'cli',
+          abortSignal: evaluateOptions.abortSignal ? 'present' : 'not present',
+        },
+        null,
+        2,
+      )}`,
+    );
+    logger.debug(
+      `DEBUG Final outputVars before evaluate(): ${JSON.stringify(options.outputVars, null, 2)}`,
+    );
 
     // Run the evaluation!!!!!!
     const ret = await evaluate(testSuite, evalRecord, {

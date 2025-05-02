@@ -287,7 +287,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     }
   }
   if (extensions.length > 1 && configs.length > 1) {
-    console.warn(
+    logger.warn(
       'Warning: Multiple configurations and extensions detected. Currently, all extensions are run across all configs and do not respect their original promptfooconfig. Please file an issue on our GitHub repository if you need support for this use case.',
     );
   }
@@ -638,5 +638,6 @@ export async function resolveConfigs(
   }
 
   cliState.config = config;
+
   return { config, testSuite, basePath };
 }

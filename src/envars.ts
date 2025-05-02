@@ -44,6 +44,7 @@ export type EnvVars = {
   PROMPTFOO_STRIP_PROMPT_TEXT?: boolean;
   PROMPTFOO_STRIP_RESPONSE_OUTPUT?: boolean;
   PROMPTFOO_STRIP_TEST_VARS?: boolean;
+  PROMPTFOO_OUTPUT_VARS?: string;
   PROMPTFOO_TELEMETRY_DEBUG?: boolean;
 
   //=========================================================================

@@ -296,6 +296,9 @@ export async function runEval({
       logger.debug(`Skipping delay because response is cached`);
     }
 
+    // Log evaluateOptions before setting metadata
+    logger.debug(`DEBUG evaluateOptions for result: ${JSON.stringify(evaluateOptions, null, 2)}`);
+
     const ret: EvaluateResult = {
       ...setup,
       response,
@@ -308,6 +311,10 @@ export async function runEval({
       metadata: {
         ...test.metadata,
         ...response.metadata,
+        config: {
+          evaluateOptions: evaluateOptions,
+        },
+        debug_outputVars: evaluateOptions?.outputVars,
       },
       promptIdx,
       testIdx,
@@ -478,6 +485,11 @@ class Evaluator {
   constructor(testSuite: TestSuite, evalRecord: Eval, options: EvaluateOptions) {
     this.testSuite = testSuite;
     this.evalRecord = evalRecord;
+
+    // Log the initial options before they're assigned
+    logger.debug(`DEBUG Initial EvaluateOptions: ${JSON.stringify(options, null, 2)}`);
+    logger.debug(`DEBUG evalRecord.config: ${JSON.stringify(evalRecord.config, null, 2)}`);
+
     this.options = options;
     this.stats = {
       successes: 0,
@@ -495,6 +507,11 @@ class Evaluator {
         : [];
 
     this.fileWriters = jsonlFiles.map((p) => new JsonlFileWriter(p));
+
+    // Log the options after initialization
+    logger.debug(
+      `DEBUG Evaluator initialized with outputVars: ${JSON.stringify(options.outputVars, null, 2)}`,
+    );
   }
 
   async evaluate(): Promise<Eval> {
@@ -1239,6 +1256,9 @@ export function evaluate(
   evalRecord: Eval,
   options: EvaluateOptions,
 ): Promise<Eval> {
+  console.log(`DEBUG evaluate function called with options:`, JSON.stringify(options, null, 2));
+  console.log(`DEBUG outputVars from options:`, JSON.stringify(options.outputVars, null, 2));
+
   const ev = new Evaluator(testSuite, evalRecord, options);
   return ev.evaluate();
 }

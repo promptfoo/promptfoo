@@ -21,3 +21,7 @@ tests:
   - vars:
       language: Pirate
       body: I'm hungry
+
+evaluateOptions:
+  outputVars:
+    - language

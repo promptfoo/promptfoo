@@ -276,6 +276,7 @@ export default class Eval {
     this.createdAt = createdAt.getTime();
     this.id = opts?.id || createEvalId(createdAt);
     this.author = opts?.author;
+
     this.config = config;
     this.results = [];
     this.resultsCount = 0;
@@ -346,7 +347,11 @@ export default class Eval {
     if (this.useOldResults()) {
       return this.oldResults?.table || { head: { prompts: [], vars: [] }, body: [] };
     }
-    return convertResultsToTable(await this.toResultsFile());
+    const resultsFile = await this.toResultsFile();
+
+    // Explicitly pass the outputVars from the config if available
+    const outputVars = this.config?.evaluateOptions?.outputVars;
+    return convertResultsToTable(resultsFile, { outputVars });
   }
 
   async addResult(result: EvaluateResult) {

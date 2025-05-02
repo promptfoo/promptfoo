@@ -47,7 +47,12 @@ export class PromptMetrics {
   }
 }
 
-export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
+export function convertResultsToTable(
+  eval_: ResultsFile,
+  options?: {
+    outputVars?: string[];
+  },
+): EvaluateTable {
   invariant(
     eval_.prompts,
     `Prompts are required in this version of the results file, this needs to be results file version >= 4, version: ${eval_.version}`,
@@ -171,15 +176,23 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
       eval_.prompts[result.promptIdx]?.metrics?.namedScoresCount || {};
   }
   const rows = Object.values(rowMap);
-  const sortedVars = [...varsForHeader].sort();
+
+  // Determine which variables to include and in what order
+  let orderedVarNames: string[] = Array.from(varsForHeader);
+
+  // Allow filtering to specific output vars if specified in options
+  if (options?.outputVars && options.outputVars.length > 0) {
+    orderedVarNames = options.outputVars.filter((varName) => varsForHeader.has(varName));
+  }
+
   for (const row of rows) {
-    row.vars = sortedVars.map((varName) => varValuesForRow.get(row.testIdx)?.[varName] || '');
+    row.vars = orderedVarNames.map((varName) => varValuesForRow.get(row.testIdx)?.[varName] || '');
   }
 
   return {
     head: {
       prompts: completedPrompts,
-      vars: [...varsForHeader].sort(),
+      vars: orderedVarNames,
     },
     body: rows,
   };
