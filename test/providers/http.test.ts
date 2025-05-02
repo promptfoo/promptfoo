@@ -17,7 +17,7 @@ import {
   processTextBody,
 } from '../../src/providers/http';
 import { REQUEST_TIMEOUT_MS } from '../../src/providers/shared';
-import { maybeLoadFromExternalFile } from '../../src/util';
+import { maybeLoadFromExternalFile } from '../../src/util/file';
 
 jest.mock('../../src/cache', () => ({
   ...jest.requireActual('../../src/cache'),
@@ -30,8 +30,8 @@ jest.mock('../../src/fetch', () => ({
   fetchWithTimeout: jest.fn(),
 }));
 
-jest.mock('../../src/util', () => ({
-  ...jest.requireActual('../../src/util'),
+jest.mock('../../src/util/file', () => ({
+  ...jest.requireActual('../../src/util/file'),
   maybeLoadFromExternalFile: jest.fn((input) => input),
 }));
 
@@ -503,6 +503,7 @@ describe('HttpProvider', () => {
         undefined,
       );
     });
+
     it('should use HTTPS when useHttps option is enabled', async () => {
       const rawRequest = dedent`
         GET /api/data HTTP/1.1
@@ -747,6 +748,36 @@ describe('HttpProvider', () => {
         undefined,
       );
       expect(result).toBe('PARSED');
+    });
+
+    it('parser returns object', async () => {
+      provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: { key: '{{ prompt }}' },
+          transformResponse: (data: any) => {
+            return {
+              output: data.result,
+              metadata: { something: 1 },
+              tokenUsage: { prompt: 2, completion: 3, total: 4 },
+            };
+          },
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ result: 'response text' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test prompt');
+      expect(result.output).toBe('response text');
+      expect(result.metadata).toStrictEqual({ something: 1 });
+      expect(result.tokenUsage).toStrictEqual({ prompt: 2, completion: 3, total: 4 });
     });
 
     it('should throw error for unsupported parser type', async () => {

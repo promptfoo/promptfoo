@@ -1,3 +1,5 @@
+import { MEMORY_POISONING_PLUGIN_ID } from './plugins/agentic/constants';
+
 export const DEFAULT_NUM_TESTS_PER_PLUGIN = 5;
 
 export const REDTEAM_MODEL = 'openai:chat:gpt-4o';
@@ -63,6 +65,9 @@ export const FOUNDATION_PLUGINS = [
   'politics',
   'religion',
 ] as const;
+
+export const AGENTIC_PLUGINS = [MEMORY_POISONING_PLUGIN_ID] as const;
+export type AgenticPlugin = (typeof AGENTIC_PLUGINS)[number];
 
 export const COLLECTIONS = ['default', 'foundation', 'harmful', 'pii'] as const;
 export type Collection = (typeof COLLECTIONS)[number];
@@ -186,14 +191,20 @@ export type Plugin =
   | Collection
   | ConfigRequiredPlugin
   | HarmPlugin
-  | PIIPlugin;
+  | PIIPlugin
+  | AgenticPlugin;
 
 export const DEFAULT_PLUGINS: ReadonlySet<Plugin> = new Set([
   ...[...BASE_PLUGINS, ...(Object.keys(HARM_PLUGINS) as HarmPlugin[]), ...PII_PLUGINS].sort(),
 ] as const satisfies readonly Plugin[]);
 
 export const ALL_PLUGINS: readonly Plugin[] = [
-  ...new Set([...DEFAULT_PLUGINS, ...ADDITIONAL_PLUGINS, ...CONFIG_REQUIRED_PLUGINS]),
+  ...new Set([
+    ...DEFAULT_PLUGINS,
+    ...ADDITIONAL_PLUGINS,
+    ...CONFIG_REQUIRED_PLUGINS,
+    ...AGENTIC_PLUGINS,
+  ]),
 ].sort() as Plugin[];
 
 export const FRAMEWORK_NAMES: Record<string, string> = {
@@ -201,6 +212,7 @@ export const FRAMEWORK_NAMES: Record<string, string> = {
   'nist:ai:measure': 'NIST AI RMF',
   'owasp:api': 'OWASP API Top 10',
   'owasp:llm': 'OWASP LLM Top 10',
+  'owasp:agentic': 'OWASP Agentic v1.0',
 };
 
 export const OWASP_LLM_TOP_10_NAMES = [
@@ -228,6 +240,8 @@ export const OWASP_API_TOP_10_NAMES = [
   'Improper Inventory Management',
   'Unsafe Consumption of APIs',
 ];
+
+export const OWASP_AGENTIC_NAMES = ['T1: Memory Poisoning'];
 
 export const OWASP_LLM_TOP_10_MAPPING: Record<
   string,
@@ -373,6 +387,19 @@ export const OWASP_API_TOP_10_MAPPING: Record<
 };
 
 /**
+ * OWASP Agentic AI - Threats and Mitigations v1.0 (February 2025)
+ */
+export const OWASP_AGENTIC_REDTEAM_MAPPING: Record<
+  string,
+  { plugins: Plugin[]; strategies: Strategy[] }
+> = {
+  'owasp:agentic:t01': {
+    plugins: [MEMORY_POISONING_PLUGIN_ID],
+    strategies: [],
+  },
+};
+
+/**
  * Maps each major phase of the OWASP GenAI Red Teaming Blueprint
  * to relevant Promptfoo plugins and strategies for automated testing.
  */
@@ -423,6 +450,8 @@ export const OWASP_LLM_RED_TEAM_MAPPING: Record<
       'base64',
       'homoglyph',
       'leetspeak',
+      'morse',
+      'piglatin',
       'rot13',
     ],
   },
@@ -623,6 +652,7 @@ export const ALIASED_PLUGINS = [
   ...Object.keys(NIST_AI_RMF_MAPPING),
   ...Object.keys(OWASP_API_TOP_10_MAPPING),
   ...Object.keys(OWASP_LLM_TOP_10_MAPPING),
+  ...Object.keys(OWASP_AGENTIC_REDTEAM_MAPPING),
 ] as const;
 
 export const ALIASED_PLUGIN_MAPPINGS: Record<
@@ -634,6 +664,7 @@ export const ALIASED_PLUGIN_MAPPINGS: Record<
   'owasp:api': OWASP_API_TOP_10_MAPPING,
   'owasp:llm': OWASP_LLM_TOP_10_MAPPING,
   'owasp:llm:redteam': OWASP_LLM_RED_TEAM_MAPPING,
+  'owasp:agentic:redteam': OWASP_AGENTIC_REDTEAM_MAPPING,
   toxicity: {
     toxicity: {
       plugins: [
@@ -722,11 +753,15 @@ export const ADDITIONAL_STRATEGIES = [
   'jailbreak:tree',
   'leetspeak',
   'math-prompt',
+  'morse',
   'multilingual',
+  'other-encodings',
   'pandamonium',
+  'piglatin',
   'prompt-injection',
   'retry',
   'rot13',
+  'video',
 ] as const;
 export type AdditionalStrategy = (typeof ADDITIONAL_STRATEGIES)[number];
 
@@ -735,12 +770,11 @@ export const ALL_STRATEGIES = [..._ALL_STRATEGIES].sort();
 export type Strategy = (typeof ALL_STRATEGIES)[number];
 
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
+  [MEMORY_POISONING_PLUGIN_ID]: 'Tests whether an agent is vulnerable to memory poisoning attacks',
   'ascii-smuggling': 'Tests vulnerability to Unicode tag-based instruction smuggling attacks',
   audio: 'Tests handling of audio content',
   base64: 'Tests handling of Base64-encoded malicious payloads',
   basic: 'Original plugin tests without any additional strategies or optimizations',
-  homoglyph:
-    'Tests handling of homoglyph (visually similar Unicode characters) encoding to bypass filters',
   beavertails: 'Tests handling of malicious prompts from the BeaverTails dataset',
   'best-of-n': 'Jailbreak technique published by Anthropic and Stanford',
   bfla: 'Tests for broken function-level authorization vulnerabilities (OWASP API 5)',
@@ -752,11 +786,11 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   crescendo: 'Multi-turn attack strategy that gradually escalates malicious intent',
   'cross-session-leak': 'Tests for information leakage between user sessions',
   cyberseceval: "Tests prompt injection attacks from Meta's CyberSecEval dataset",
-  donotanswer: 'Tests for vulnerabilities to Do Not Answer attacks',
   'debug-access': 'Tests for exposed debugging interfaces and commands',
   default: 'Standard security testing plugins',
   'divergent-repetition':
     'Tests for training data leaks through repetitive pattern exploitation that causes model divergence',
+  donotanswer: 'Tests for vulnerabilities to Do Not Answer attacks',
   'excessive-agency': 'Tests for unauthorized actions beyond defined system boundaries',
   foundation: 'Tests a collection of plugins designed to run against foundation models',
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
@@ -792,6 +826,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'harmful:weapons:ied': 'Tests handling of Improvised Explosive Devices',
   hex: 'Tests handling of hex-encoded malicious payloads',
   hijacking: 'Tests for unauthorized resource usage and purpose deviation',
+  homoglyph:
+    'Tests handling of homoglyph (visually similar Unicode characters) encoding to bypass filters',
   image: 'Tests handling of image content',
   imitation: 'Tests for unauthorized impersonation of entities',
   'indirect-prompt-injection': 'Tests for injection vulnerabilities via untrusted variables',
@@ -802,7 +838,10 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'jailbreak:tree': 'Tree-based search for optimal safety bypass vectors',
   leetspeak: 'Tests handling of leetspeak-encoded malicious content',
   'math-prompt': 'Tests handling of mathematical notation-based attacks',
+  morse: 'Tests handling of content encoded in Morse code to potentially bypass filters',
   multilingual: 'Tests handling of attacks across multiple languages',
+  'other-encodings':
+    'Tests handling of content encoded with various encodings to potentially bypass filters',
   overreliance: 'Tests for overreliance on system assumptions',
   pandamonium:
     "[Experimental] Promptfoo's blackbox jailbreak. The latest and greatest jailbreak techniques, expertly tuned and crafted by Promptfoo's AI team.",
@@ -811,6 +850,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'pii:direct': 'Tests for direct PII exposure vulnerabilities',
   'pii:session': 'Tests for PII exposure in session data',
   'pii:social': 'Tests for PII exposure via social engineering',
+  piglatin: 'Tests handling of content translated to Pig Latin to potentially bypass filters',
   pliny: 'Tests handling of Pliny prompt injections',
   policy: 'Tests compliance with custom security policies',
   politics: 'Tests handling of political content and bias',
@@ -834,15 +874,16 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Uses conversational approach to discover available tools, functions, and capabilities through multi-step interactions',
   unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
   xstest: 'Tests for XSTest attacks',
+  video: 'Tests handling of video content',
 };
 
 // These names are displayed in risk cards and in the table
 export const displayNameOverrides: Record<Plugin | Strategy, string> = {
+  [MEMORY_POISONING_PLUGIN_ID]: 'Agentic Memory Poisoning',
   'ascii-smuggling': 'ASCII Smuggling',
   audio: 'Audio Content',
   base64: 'Base64 Payload Encoding',
   basic: 'Baseline Testing',
-  homoglyph: 'Homoglyph Encoding',
   beavertails: 'BeaverTails Dataset',
   'best-of-n': 'Best-of-N',
   bfla: 'Function-Level Authorization Bypass',
@@ -854,13 +895,11 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   crescendo: 'Multi-Turn Crescendo',
   'cross-session-leak': 'Cross-Session Data Leakage',
   cyberseceval: 'CyberSecEval Dataset',
-  donotanswer: 'Do Not Answer Dataset',
   'debug-access': 'Debug Interface Exposure',
   default: 'Standard Security Suite',
   'divergent-repetition': 'Divergent Repetition',
+  donotanswer: 'Do Not Answer Dataset',
   'excessive-agency': 'Excessive Agency',
-  'tool-discovery': 'Tool Discovery',
-  'tool-discovery:multi-turn': 'Multi-turn Tool Discovery',
   foundation: 'Foundation Model Plugin Collection',
   gcg: 'Greedy Coordinate Gradient',
   goat: 'Generative Offensive Agent Tester',
@@ -895,6 +934,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'harmful:weapons:ied': 'Improvised Explosive Devices',
   hex: 'Hex Encoding',
   hijacking: 'Resource Hijacking',
+  homoglyph: 'Homoglyph Encoding',
   image: 'Image Content',
   imitation: 'Entity Impersonation',
   'indirect-prompt-injection': 'Indirect Prompt Injection',
@@ -905,9 +945,12 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'jailbreak:tree': 'Tree-Based Attack Search',
   leetspeak: 'Leetspeak Payload Encoding',
   'math-prompt': 'Mathematical Notation Attack',
+  morse: 'Morse Code Encoding',
   multilingual: 'Cross-Language Attack',
+  'other-encodings': 'Alternative Encodings',
   overreliance: 'Overreliance',
   pandamonium: '[Experimental] Pandamonium',
+  piglatin: 'Pig Latin Encoding',
   pii: 'PII Protection Suite',
   'pii:api-db': 'PII via API/Database',
   'pii:direct': 'PII via Direct Exposure',
@@ -929,8 +972,11 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'sql-injection': 'SQL Injection',
   ssrf: 'SSRF Vulnerability',
   'system-prompt-override': 'System Prompt Override',
+  'tool-discovery': 'Tool Discovery',
+  'tool-discovery:multi-turn': 'Multi-turn Tool Discovery',
   unsafebench: 'UnsafeBench Dataset',
   xstest: 'XSTest Dataset',
+  video: 'Video Content',
 };
 
 export enum Severity {
@@ -952,6 +998,7 @@ export const severityDisplayNames: Record<Severity, string> = {
  * Use getRiskCategorySeverityMap() whenever possible to respect the user's severity settings.
  */
 export const riskCategorySeverityMap: Record<Plugin, Severity> = {
+  [MEMORY_POISONING_PLUGIN_ID]: Severity.High,
   'ascii-smuggling': Severity.Low,
   beavertails: Severity.Low,
   bfla: Severity.High,
@@ -1023,6 +1070,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'tool-discovery': Severity.Low,
   unsafebench: Severity.Medium,
   xstest: Severity.Low,
+  video: Severity.Medium,
 };
 
 export const riskCategories: Record<string, Plugin[]> = {
@@ -1129,6 +1177,7 @@ export const categoryLabels = Object.keys(categoryMapReverse);
 
 // Map from plugin name to metric name or harm category
 export const categoryAliases: Record<Plugin, string> = {
+  [MEMORY_POISONING_PLUGIN_ID]: 'AgenticMemoryPoisoning',
   'ascii-smuggling': 'AsciiSmuggling',
   beavertails: 'BeaverTails',
   bfla: 'BFLAEnforcement',
@@ -1201,6 +1250,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'system-prompt-override': 'System Prompt Override',
   unsafebench: 'UnsafeBench',
   xstest: 'XSTest',
+  video: 'Video Content',
 };
 
 export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
@@ -1212,6 +1262,7 @@ export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
 );
 
 export const pluginDescriptions: Record<Plugin, string> = {
+  [MEMORY_POISONING_PLUGIN_ID]: 'Tests whether an agent is vulnerable to memory poisoning attacks',
   'ascii-smuggling': 'Tests for ASCII-based prompt smuggling vulnerabilities',
   beavertails: 'Tests handling of malicious prompts from the BeaverTails dataset',
   bfla: 'Evaluates function-level authorization controls to identify privilege escalation vulnerabilities (OWASP API Security Top 10 #5)',
@@ -1292,6 +1343,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests handling of unsafe image content through multi-modal model evaluation and safety filters',
   xstest:
     'Tests how models handle ambiguous terms related to potentially harmful topics like violence and drugs',
+  video: 'Tests handling of video content',
 };
 
 export const strategyDescriptions: Record<Strategy, string> = {
@@ -1300,13 +1352,13 @@ export const strategyDescriptions: Record<Strategy, string> = {
   basic: 'Equivalent to no strategy. Always included. Can be disabled in configuration.',
   'best-of-n': 'Jailbreak technique published by Anthropic and Stanford',
   citation: 'Exploits academic authority bias to circumvent content filtering mechanisms',
-  homoglyph:
-    'Tests detection and handling of text with homoglyphs (visually similar Unicode characters)',
   crescendo: 'Executes progressive multi-turn attacks with escalating malicious intent',
   default: 'Applies standard security testing methodology',
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
   goat: 'Deploys dynamic attack generation using advanced adversarial techniques',
   hex: 'Tests detection and handling of hex-encoded malicious payloads',
+  homoglyph:
+    'Tests detection and handling of text with homoglyphs (visually similar Unicode characters)',
   image: 'Tests detection and handling of image-based malicious payloads',
   jailbreak: 'Optimizes single-turn attacks to bypass security controls',
   'jailbreak:composite': 'Chains multiple attack vectors for enhanced effectiveness',
@@ -1314,12 +1366,16 @@ export const strategyDescriptions: Record<Strategy, string> = {
   'jailbreak:tree': 'Implements tree-based search for optimal attack paths',
   leetspeak: 'Assesses handling of leetspeak-encoded malicious content',
   'math-prompt': 'Tests resilience against mathematical notation-based attacks',
+  morse: 'Tests detection and handling of text encoded in Morse code',
   multilingual: 'Evaluates cross-language attack vector handling',
+  'other-encodings': 'Tests detection and handling of various alternative text encodings',
   pandamonium:
     "Promptfoo's exclusive dynamic jailbreak strategy currently in development. Note: This is an expensive jailbreak strategy with no limit on probes.",
+  piglatin: 'Tests detection and handling of text transformed into Pig Latin',
   'prompt-injection': 'Tests direct prompt injection vulnerability detection',
   retry: 'Automatically incorporates previously failed test cases to prevent regression',
   rot13: 'Assesses handling of ROT13-encoded malicious payloads',
+  video: 'Tests detection and handling of video-based malicious payloads',
 };
 
 export const strategyDisplayNames: Record<Strategy, string> = {
@@ -1328,12 +1384,12 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   basic: 'Basic',
   'best-of-n': 'Best-of-N',
   citation: 'Authority Bias',
-  homoglyph: 'Homoglyph Encoding',
   crescendo: 'Multi-turn Crescendo',
   default: 'Basic',
   gcg: 'Greedy Coordinate Gradient',
   goat: 'Generative Offensive Agent Tester',
   hex: 'Hex Encoding',
+  homoglyph: 'Homoglyph Encoding',
   image: 'Image',
   jailbreak: 'Single-shot Optimization',
   'jailbreak:composite': 'Composite Jailbreaks',
@@ -1341,11 +1397,15 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   'jailbreak:tree': 'Tree-based Optimization',
   leetspeak: 'Leetspeak Encoding',
   'math-prompt': 'Mathematical Encoding',
+  morse: 'Morse Code',
   multilingual: 'Multilingual Encoding',
+  'other-encodings': 'Alternative Encodings',
   pandamonium: 'Pandamonium',
+  piglatin: 'Pig Latin',
   'prompt-injection': 'Prompt Injection',
   retry: 'Regression Testing',
   rot13: 'ROT13 Encoding',
+  video: 'Video',
 };
 
 export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {

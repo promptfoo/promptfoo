@@ -99,20 +99,24 @@ npm i fluent-ffmpeg
 You'll also need to have FFmpeg installed on your system:
 
 **On macOS:**
+
 ```
 brew install ffmpeg
 ```
 
 **On Ubuntu/Debian:**
+
 ```
 apt-get install ffmpeg
 ```
 
 **On Windows:**
 Download from [ffmpeg.org](https://ffmpeg.org/download.html) or use package managers like Chocolatey:
+
 ```
 choco install ffmpeg
 ```
+
 :::
 
 ## Importance

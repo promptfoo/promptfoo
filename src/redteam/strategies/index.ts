@@ -5,7 +5,7 @@ import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import type { RedteamStrategyObject, TestCase, TestCaseWithPlugin } from '../../types';
-import { isJavascriptFile } from '../../util/file';
+import { isJavascriptFile } from '../../util/fileExtensions';
 import { addBase64Encoding } from './base64';
 import { addBestOfNTestCases } from './bestOfN';
 import { addCitationTestCases } from './citation';
@@ -19,6 +19,7 @@ import { addLeetspeak } from './leetspeak';
 import { addLikertTestCases } from './likert';
 import { addMathPrompt } from './mathPrompt';
 import { addMultilingual } from './multilingual';
+import { addOtherEncodings, EncodingType } from './otherEncodings';
 import { addPandamonium } from './pandamonium';
 import { addInjections } from './promptInjections';
 import { addRetryTestCases } from './retry';
@@ -241,6 +242,24 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding ROT13 encoding to ${testCases.length} test cases`);
       const newTestCases = addRot13(testCases, injectVar);
       logger.debug(`Added ${newTestCases.length} ROT13 encoded test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'morse',
+    action: async (testCases, injectVar) => {
+      logger.debug(`Adding Morse code encoding to ${testCases.length} test cases`);
+      const newTestCases = addOtherEncodings(testCases, injectVar, EncodingType.MORSE);
+      logger.debug(`Added ${newTestCases.length} Morse code encoded test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'piglatin',
+    action: async (testCases, injectVar) => {
+      logger.debug(`Adding Pig Latin encoding to ${testCases.length} test cases`);
+      const newTestCases = addOtherEncodings(testCases, injectVar, EncodingType.PIG_LATIN);
+      logger.debug(`Added ${newTestCases.length} Pig Latin encoded test cases`);
       return newTestCases;
     },
   },

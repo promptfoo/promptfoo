@@ -20,6 +20,8 @@ describe('validateStrategies', () => {
       { id: 'basic' },
       { id: 'base64' },
       { id: 'video' },
+      { id: 'morse' },
+      { id: 'piglatin' },
     ];
     await expect(validateStrategies(validStrategies)).resolves.toBeUndefined();
   });
@@ -84,6 +86,18 @@ describe('loadStrategy', () => {
 
     expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Adding video encoding'));
     expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Added'));
+  });
+
+  it('should load morse strategy', async () => {
+    const strategy = await loadStrategy('morse');
+    expect(strategy).toBeDefined();
+    expect(strategy.id).toBe('morse');
+  });
+
+  it('should load piglatin strategy', async () => {
+    const strategy = await loadStrategy('piglatin');
+    expect(strategy).toBeDefined();
+    expect(strategy.id).toBe('piglatin');
   });
 
   it('should throw error for non-existent strategy', async () => {
