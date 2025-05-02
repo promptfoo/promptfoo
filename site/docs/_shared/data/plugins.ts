@@ -85,6 +85,21 @@ type AssertArrayIsSorted<T extends readonly { pluginId: string }[]> = T extends 
 export const PLUGINS = [
   {
     category: 'Security and Access Control',
+    description: 'Tests whether an agent is vulnerable to memory poisoning attacks',
+    label: 'security',
+    link: '/docs/red-team/plugins/memory-poisoning/',
+    name: 'Memory Poisoning',
+    pluginId: 'agentic:memory-poisoning',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
     description: 'Attempts to obfuscate malicious content using ASCII smuggling',
     label: 'technical',
     link: '/docs/red-team/plugins/ascii-smuggling/',
