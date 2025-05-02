@@ -1,5 +1,4 @@
 import { Command } from 'commander';
-import { CLOUD_PROVIDER_PREFIX } from '../../../src/constants';
 import { redteamRunCommand } from '../../../src/redteam/commands/run';
 import { doRedteamRun } from '../../../src/redteam/shared';
 import { getConfigFromCloud } from '../../../src/util/cloud';

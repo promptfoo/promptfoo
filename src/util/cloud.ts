@@ -63,7 +63,7 @@ export async function getProviderFromCloud(id: string): Promise<ProviderOptions 
   }
 }
 
-export async function getConfigFromCloud(id: string, target?: string): Promise<UnifiedConfig> {
+export async function getConfigFromCloud(id: string, providerId?: string): Promise<UnifiedConfig> {
   if (!cloudConfig.isEnabled()) {
     throw new Error(
       `Could not fetch Config ${id} from cloud. Cloud config is not enabled. Please run \`promptfoo auth login\` to login.`,
@@ -71,7 +71,7 @@ export async function getConfigFromCloud(id: string, target?: string): Promise<U
   }
   try {
     const response = await makeRequest(
-      `api/redteam/configs/${id}/unified${target ? `?providerId=${target}` : ''}`,
+      `api/redteam/configs/${id}/unified${providerId ? `?providerId=${providerId}` : ''}`,
       'GET',
     );
     if (!response.ok) {
