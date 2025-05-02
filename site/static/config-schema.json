@@ -1404,9 +1404,9 @@
               "minimum": 0,
               "description": "Delay in milliseconds between plugin API calls"
             },
-            "usePromptfooCloudAttacker": {
+            "excludeTargetOutputFromAgenticAttackGeneration": {
               "type": "boolean",
-              "description": "Whether to use Promptfoo Cloud attacker model instead of the default"
+              "description": "Whether to exclude target output from the agentific attack generation process"
             }
           },
           "additionalProperties": false

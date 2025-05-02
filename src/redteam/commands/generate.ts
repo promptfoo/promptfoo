@@ -186,7 +186,8 @@ export async function doGenerateRedteam(
     strategies: strategyObjs,
     delay: redteamConfig?.delay || options.delay,
     sharing: redteamConfig?.sharing || options.sharing,
-    usePromptfooCloudAttacker: redteamConfig?.usePromptfooCloudAttacker,
+    excludeTargetOutputFromAgenticAttackGeneration:
+      redteamConfig?.excludeTargetOutputFromAgenticAttackGeneration,
   };
   const parsedConfig = RedteamConfigSchema.safeParse(config);
   if (!parsedConfig.success) {

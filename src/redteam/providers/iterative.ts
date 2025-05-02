@@ -63,7 +63,7 @@ export async function runRedteamConversation({
   targetProvider,
   test,
   vars,
-  usePromptfooCloudAttacker,
+  excludeTargetOutputFromAgenticAttackGeneration,
 }: {
   context?: CallApiContextParams;
   filters: NunjucksFilterMap | undefined;
@@ -76,7 +76,7 @@ export async function runRedteamConversation({
   targetProvider: ApiProvider;
   test?: AtomicTestCase;
   vars: Record<string, string | object>;
-  usePromptfooCloudAttacker: boolean;
+  excludeTargetOutputFromAgenticAttackGeneration: boolean;
 }): Promise<{
   output: string;
   metadata: IterativeMetadata;
@@ -85,7 +85,7 @@ export async function runRedteamConversation({
   const nunjucks = getNunjucksEngine();
   const goal = vars[injectVar];
 
-  const redteamSystemPrompt = usePromptfooCloudAttacker
+  const redteamSystemPrompt = excludeTargetOutputFromAgenticAttackGeneration
     ? nunjucks.renderString(CLOUD_ATTACKER_SYSTEM_PROMPT, { goal })
     : nunjucks.renderString(ATTACKER_SYSTEM_PROMPT, { goal });
 
@@ -351,7 +351,7 @@ export async function runRedteamConversation({
       // Update the user message to include both scores
       redteamHistory.push({
         role: 'user',
-        content: usePromptfooCloudAttacker
+        content: excludeTargetOutputFromAgenticAttackGeneration
           ? dedent`
           OBJECTIVE: ${goal}
 
@@ -457,7 +457,7 @@ class RedteamIterativeProvider implements ApiProvider {
   private readonly redteamProvider: RedteamFileConfig['provider'];
   private readonly injectVar: string;
   private readonly numIterations: number;
-  private readonly usePromptfooCloudAttacker: boolean;
+  private readonly excludeTargetOutputFromAgenticAttackGeneration: boolean;
   private readonly gradingProvider: RedteamFileConfig['provider'];
   constructor(readonly config: Record<string, string | object>) {
     logger.debug(`[Iterative] Constructor config: ${JSON.stringify(config)}`);
@@ -465,7 +465,9 @@ class RedteamIterativeProvider implements ApiProvider {
     this.injectVar = config.injectVar;
 
     this.numIterations = getEnvInt('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', 4);
-    this.usePromptfooCloudAttacker = Boolean(config.usePromptfooCloudAttacker);
+    this.excludeTargetOutputFromAgenticAttackGeneration = Boolean(
+      config.excludeTargetOutputFromAgenticAttackGeneration,
+    );
 
     // Redteam provider can be set from the config.
 
@@ -520,7 +522,8 @@ class RedteamIterativeProvider implements ApiProvider {
       context,
       options,
       test: context.test,
-      usePromptfooCloudAttacker: this.usePromptfooCloudAttacker,
+      excludeTargetOutputFromAgenticAttackGeneration:
+        this.excludeTargetOutputFromAgenticAttackGeneration,
     });
   }
 }

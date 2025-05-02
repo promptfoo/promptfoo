@@ -131,7 +131,7 @@ describe('RedteamIterativeProvider', () => {
         gradingProvider: mockRedteamProvider,
         targetProvider: mockTargetProvider,
         vars: { test: 'goal' },
-        usePromptfooCloudAttacker: false,
+        excludeTargetOutputFromAgenticAttackGeneration: false,
       });
 
       expect(result.metadata.finalIteration).toBe(1);

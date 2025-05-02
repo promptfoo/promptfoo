@@ -206,10 +206,10 @@ export const RedteamConfigSchema = z
       .nonnegative()
       .optional()
       .describe('Delay in milliseconds between plugin API calls'),
-    usePromptfooCloudAttacker: z
+    excludeTargetOutputFromAgenticAttackGeneration: z
       .boolean()
       .optional()
-      .describe('Whether to use Promptfoo Cloud attacker model instead of the default'),
+      .describe('Whether to exclude target output from the agentific attack generation process'),
   })
   .transform((data): RedteamFileConfig => {
     const pluginMap = new Map<string, RedteamPluginObject>();
@@ -338,8 +338,11 @@ export const RedteamConfigSchema = z
       ...(data.language ? { language: data.language } : {}),
       ...(data.provider ? { provider: data.provider } : {}),
       ...(data.purpose ? { purpose: data.purpose } : {}),
-      ...(data.usePromptfooCloudAttacker
-        ? { usePromptfooCloudAttacker: data.usePromptfooCloudAttacker }
+      ...(data.excludeTargetOutputFromAgenticAttackGeneration
+        ? {
+            excludeTargetOutputFromAgenticAttackGeneration:
+              data.excludeTargetOutputFromAgenticAttackGeneration,
+          }
         : {}),
     };
   });

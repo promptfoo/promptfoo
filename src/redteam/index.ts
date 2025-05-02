@@ -200,7 +200,7 @@ async function applyStrategies(
   testCases: TestCaseWithPlugin[],
   strategies: RedteamStrategyObject[],
   injectVar: string,
-  usePromptfooCloudAttacker?: boolean,
+  excludeTargetOutputFromAgenticAttackGeneration?: boolean,
 ): Promise<{
   testCases: TestCaseWithPlugin[];
   strategyResults: Record<string, { requested: number; generated: number }>;
@@ -231,7 +231,7 @@ async function applyStrategies(
 
     const strategyTestCases: TestCase[] = await strategyAction(applicableTestCases, injectVar, {
       ...(strategy.config || {}),
-      usePromptfooCloudAttacker,
+      excludeTargetOutputFromAgenticAttackGeneration,
     });
 
     newTestCases.push(
@@ -386,7 +386,7 @@ export async function synthesize({
   strategies,
   targetLabels,
   showProgressBar: showProgressBarOverride,
-  usePromptfooCloudAttacker,
+  excludeTargetOutputFromAgenticAttackGeneration,
 }: SynthesizeOptions): Promise<{
   purpose: string;
   entities: string[];
@@ -704,7 +704,7 @@ export async function synthesize({
       pluginTestCases,
       strategies.filter((s) => !['basic', 'multilingual', 'retry'].includes(s.id)),
       injectVar,
-      usePromptfooCloudAttacker,
+      excludeTargetOutputFromAgenticAttackGeneration,
     );
 
   Object.assign(strategyResults, otherStrategyResults);
