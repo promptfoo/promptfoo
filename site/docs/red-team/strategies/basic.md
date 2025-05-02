@@ -50,6 +50,6 @@ When the basic strategy is disabled (`enabled: false`), only the strategy-genera
 
 - [Red Team Plugins](/docs/red-team/plugins/) - Generate test cases for basic strategy
 - [Red Team Strategies](/docs/red-team/strategies/) - Other strategies to apply to test cases
-- [Configuration Guide](/docs/guides/custom-evaluation/) - More advanced configuration options
+- [Configuration Guide](/docs/configuration/guide/) - More advanced configuration options
 
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
