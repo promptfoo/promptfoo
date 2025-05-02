@@ -29,7 +29,7 @@ Self-hosting enables you to:
 
 The self-hosted app is an Express server serving the web UI and API.
 
-:::note
+:::warning
 **Self-hosting is not recommended for production use cases.**
 
 - Uses SQLite as the database backend, which requires manual persistence management
