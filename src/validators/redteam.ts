@@ -18,7 +18,7 @@ import {
   FOUNDATION_PLUGINS,
 } from '../redteam/constants';
 import type { RedteamFileConfig, RedteamPluginObject, RedteamStrategy } from '../redteam/types';
-import { isJavascriptFile } from '../util/file';
+import { isJavascriptFile } from '../util/fileExtensions';
 import { ProviderSchema } from '../validators/providers';
 
 export const pluginOptions: string[] = [

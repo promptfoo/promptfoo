@@ -1,59 +1,36 @@
 import { parse as csvParse } from 'csv-parse/sync';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
+import nunjucks from 'nunjucks';
 import * as path from 'path';
 import cliState from '../cliState';
-import { getNunjucksEngine } from './templates';
+import {
+  JAVASCRIPT_EXTENSIONS,
+  isJavascriptFile,
+  isImageFile,
+  isVideoFile,
+  isAudioFile,
+} from './fileExtensions';
+
+// Re-export all from fileExtensions
+export { JAVASCRIPT_EXTENSIONS, isJavascriptFile, isImageFile, isVideoFile, isAudioFile };
 
 /**
- * Array of supported JavaScript and TypeScript file extensions
+ * Simple Nunjucks engine specifically for file paths
+ * This function is separate from the main getNunjucksEngine to avoid circular dependencies
  */
-export const JAVASCRIPT_EXTENSIONS = ['js', 'cjs', 'mjs', 'ts', 'cts', 'mts'];
+export function getNunjucksEngineForFilePath(): nunjucks.Environment {
+  const env = nunjucks.configure({
+    autoescape: false,
+  });
 
-/**
- * Checks if a file is a JavaScript or TypeScript file based on its extension.
- *
- * @param filePath - The path of the file to check.
- * @returns True if the file has a JavaScript or TypeScript extension, false otherwise.
- */
-export function isJavascriptFile(filePath: string): boolean {
-  return new RegExp(`\\.(${JAVASCRIPT_EXTENSIONS.join('|')})$`).test(filePath);
-}
+  // Add environment variables as template globals
+  env.addGlobal('env', {
+    ...process.env,
+    ...cliState.config?.env,
+  });
 
-/**
- * Checks if a file is an image file based on its extension. Non-exhaustive list.
- *
- * @param filePath - The path of the file to check.
- * @returns True if the file has an image extension, false otherwise.
- */
-export function isImageFile(filePath: string): boolean {
-  const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg'];
-  const fileExtension = filePath.split('.').pop()?.toLowerCase() || '';
-  return imageExtensions.includes(fileExtension);
-}
-
-/**
- * Checks if a file is a video file based on its extension. Non-exhaustive list.
- *
- * @param filePath - The path of the file to check.
- * @returns True if the file has a video extension, false otherwise.
- */
-export function isVideoFile(filePath: string): boolean {
-  const videoExtensions = ['mp4', 'webm', 'ogg', 'mov', 'avi', 'wmv', 'mkv', 'm4v'];
-  const fileExtension = filePath.split('.').pop()?.toLowerCase() || '';
-  return videoExtensions.includes(fileExtension);
-}
-
-/**
- * Checks if a file is an audio file based on its extension. Non-exhaustive list.
- *
- * @param filePath - The path of the file to check.
- * @returns True if the file has an audio extension, false otherwise.
- */
-export function isAudioFile(filePath: string): boolean {
-  const audioExtensions = ['wav', 'mp3', 'ogg', 'aac', 'm4a', 'flac', 'wma', 'aiff', 'opus'];
-  const fileExtension = filePath.split('.').pop()?.toLowerCase() || '';
-  return audioExtensions.includes(fileExtension);
+  return env;
 }
 
 /**
@@ -84,7 +61,7 @@ export function maybeLoadFromExternalFile(filePath: string | object | Function |
   }
 
   // Render the file path using Nunjucks
-  const renderedFilePath = getNunjucksEngine().renderString(filePath, {});
+  const renderedFilePath = getNunjucksEngineForFilePath().renderString(filePath, {});
 
   const finalPath = path.resolve(cliState.basePath || '', renderedFilePath.slice('file://'.length));
   if (!fs.existsSync(finalPath)) {
