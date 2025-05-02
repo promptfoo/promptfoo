@@ -107,7 +107,6 @@ npm i sharp
 ## Related Concepts
 
 - [Audio Jailbreaking](audio.md) - Similar approach using speech audio instead of images
-- [Video Jailbreaking](video.md) - Similar approach using video content with text
 - [Base64 Encoding](base64.md) - Similar encoding technique using text-to-base64 conversion
 - [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) - Comprehensive overview of vulnerabilities
 
