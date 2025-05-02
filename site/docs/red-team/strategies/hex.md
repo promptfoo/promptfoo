@@ -1,5 +1,7 @@
 ---
 sidebar_label: Hex Encoding
+title: Hex Encoding Strategy
+description: Test how AI systems handle hexadecimal-encoded text that may bypass content filters
 ---
 
 # Hex Encoding Strategy
@@ -13,11 +15,11 @@ The Hex Encoding strategy tests an AI system's ability to resist ASCII hex-encod
 - More capable models may be able to decode hex values, potentially bypassing safety filters
 - Safety training may not scale proportionally with model capabilities for encoded inputs
 
-## Configuration
+## Implementation
 
 Use it in your `promptfooconfig.yaml`:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 strategies:
   - hex
 ```
