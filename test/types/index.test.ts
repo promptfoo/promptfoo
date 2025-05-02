@@ -14,6 +14,7 @@ import {
   TestSuiteConfigSchema,
   UnifiedConfigSchema,
   TestSuiteSchema,
+  EvaluateOptionsSchema,
 } from '../../src/types';
 
 describe('AssertionSchema', () => {
@@ -750,5 +751,50 @@ describe('TestSuiteSchema', () => {
       const result = TestSuiteSchema.safeParse({ ...baseTestSuite, extensions: [] });
       expect(result.success).toBe(true);
     });
+  });
+});
+
+describe('EvaluateOptionsSchema', () => {
+  it('should validate with valid outputVars array', () => {
+    const options = {
+      outputVars: ['var1', 'var2', 'var3'],
+    };
+    expect(EvaluateOptionsSchema.safeParse(options).success).toBe(true);
+  });
+
+  it('should validate with empty outputVars array', () => {
+    const options = {
+      outputVars: [],
+    };
+    expect(EvaluateOptionsSchema.safeParse(options).success).toBe(true);
+  });
+
+  it('should validate without outputVars field', () => {
+    const options = {
+      cache: true,
+      delay: 1000,
+    };
+    expect(EvaluateOptionsSchema.safeParse(options).success).toBe(true);
+  });
+
+  it('should reject non-string array for outputVars', () => {
+    const options = {
+      outputVars: [1, 2, 3],
+    };
+    expect(EvaluateOptionsSchema.safeParse(options).success).toBe(false);
+  });
+
+  it('should reject non-array value for outputVars', () => {
+    const options = {
+      outputVars: 'var1,var2,var3',
+    };
+    expect(EvaluateOptionsSchema.safeParse(options).success).toBe(false);
+  });
+
+  it('should reject array with mixed types for outputVars', () => {
+    const options = {
+      outputVars: ['var1', 2, 'var3'],
+    };
+    expect(EvaluateOptionsSchema.safeParse(options).success).toBe(false);
   });
 });
