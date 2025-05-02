@@ -30,6 +30,7 @@ The Memory Poisoning plugin:
 ## OWASP Mapping
 
 This plugin maps to the OWASP Agentic AI Top 10 Threats:
+
 - T1: Memory Poisoning
 
 ## Configuration
@@ -83,8 +84,9 @@ redteam:
 ## Working With Results
 
 The test results will show:
+
 - The original memory-establishing message
-- The poisoned message 
+- The poisoned message
 - The follow-up question
 - The agent's responses to each message
 
@@ -105,4 +107,4 @@ To protect against memory poisoning attacks:
 - [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types)
 - [Tool Discovery](/docs/red-team/plugins/tool-discovery)
 - [Excessive Agency](/docs/red-team/plugins/excessive-agency)
-- [Hijacking](/docs/red-team/plugins/hijacking) 
+- [Hijacking](/docs/red-team/plugins/hijacking)
