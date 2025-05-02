@@ -1,5 +1,4 @@
 import { Command } from 'commander';
-import { CLOUD_PROVIDER_PREFIX } from '../../../src/constants';
 import { redteamRunCommand } from '../../../src/redteam/commands/run';
 import { doRedteamRun } from '../../../src/redteam/shared';
 import { getConfigFromCloud } from '../../../src/util/cloud';
@@ -39,7 +38,11 @@ describe('redteamRunCommand', () => {
       prompts: ['Test prompt'],
       vars: {},
       providers: [{ id: 'test-provider' }],
-      targets: [],
+      targets: [
+        {
+          id: 'test-provider',
+        },
+      ],
     };
     jest.mocked(getConfigFromCloud).mockResolvedValue(mockConfig);
 
@@ -53,11 +56,6 @@ describe('redteamRunCommand', () => {
 
     // Execute the command with the target option
     await runCommand!.parseAsync(['node', 'test', '--config', configUUID, '--target', targetUUID]);
-
-    // Verify the cloud config was modified with the right target
-    expect(mockConfig.targets).toEqual([
-      { id: `${CLOUD_PROVIDER_PREFIX}${targetUUID}`, config: {} },
-    ]);
 
     // Verify doRedteamRun was called with the right parameters
     expect(doRedteamRun).toHaveBeenCalledWith(
@@ -93,16 +91,7 @@ describe('redteamRunCommand', () => {
     );
   });
 
-  it('should not modify targets when target is not a UUID', async () => {
-    // Mock the getConfigFromCloud function
-    const mockConfig = {
-      prompts: ['Test prompt'],
-      vars: {},
-      providers: [{ id: 'test-provider' }],
-      targets: [],
-    };
-    jest.mocked(getConfigFromCloud).mockResolvedValue(mockConfig);
-
+  it('should throw error when target is not a UUID', async () => {
     // UUID format for config but not for target
     const configUUID = '12345678-1234-1234-1234-123456789012';
     const invalidTarget = 'not-a-uuid';
@@ -111,26 +100,51 @@ describe('redteamRunCommand', () => {
     const runCommand = program.commands.find((cmd) => cmd.name() === 'run');
     expect(runCommand).toBeDefined();
 
+    // Execute the command with the target option and expect it to throw
+    await expect(
+      runCommand!.parseAsync(['node', 'test', '--config', configUUID, '--target', invalidTarget]),
+    ).rejects.toThrow('Invalid target ID, it must be a valid UUID');
+
+    // Verify getConfigFromCloud was not called
+    expect(getConfigFromCloud).not.toHaveBeenCalled();
+  });
+
+  it('should handle backwards compatibility with empty targets and a valid target UUID', async () => {
+    // Mock the getConfigFromCloud function to return config without targets
+    const mockConfig = {
+      prompts: ['Test prompt'],
+      vars: {},
+      providers: [{ id: 'test-provider' }],
+      targets: [], // Empty targets
+    };
+    jest.mocked(getConfigFromCloud).mockResolvedValue(mockConfig);
+
+    // UUID format for config and target
+    const configUUID = '12345678-1234-1234-1234-123456789012';
+    const targetUUID = '87654321-4321-4321-4321-210987654321';
+
+    // Find the run command
+    const runCommand = program.commands.find((cmd) => cmd.name() === 'run');
+    expect(runCommand).toBeDefined();
+
     // Execute the command with the target option
-    await runCommand!.parseAsync([
-      'node',
-      'test',
-      '--config',
-      configUUID,
-      '--target',
-      invalidTarget,
+    await runCommand!.parseAsync(['node', 'test', '--config', configUUID, '--target', targetUUID]);
+
+    // Verify that a target was added to the config with the CLOUD_PROVIDER_PREFIX
+    expect(mockConfig.targets).toEqual([
+      {
+        id: `promptfoo://provider/${targetUUID}`,
+        config: {},
+      },
     ]);
 
-    // Verify the cloud config was not modified
-    expect(mockConfig.targets).toEqual([]);
-
-    // Verify doRedteamRun was called with the right parameters
+    // Verify doRedteamRun was called with the updated config
     expect(doRedteamRun).toHaveBeenCalledWith(
       expect.objectContaining({
         liveRedteamConfig: mockConfig,
         config: undefined,
         loadedFromCloud: true,
-        target: invalidTarget,
+        target: targetUUID,
       }),
     );
   });
