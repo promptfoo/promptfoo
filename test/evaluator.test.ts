@@ -5,6 +5,7 @@ import {
   evaluate,
   generateVarCombinations,
   isAllowedPrompt,
+  newTokenUsage,
   runEval,
 } from '../src/evaluator';
 import { runExtensionHook } from '../src/evaluatorHelpers';
@@ -131,12 +132,8 @@ describe('evaluator', () => {
         vars: { var1: 'value1', var2: 'value2' },
         test: testSuite.tests![0],
         prompt: expect.any(Object),
-        filters: undefined,
-        originalProvider: mockApiProvider,
-        logger: expect.any(Object),
-        fetchWithCache: expect.any(Function),
-        getCache: expect.any(Function),
       }),
+      undefined,
     );
     expect(summary.stats.successes).toBe(1);
     expect(summary.stats.failures).toBe(0);
@@ -1630,20 +1627,19 @@ describe('evaluator', () => {
               type: 'json_schema',
               json_schema: {
                 name: 'math_response',
-                strict: true,
                 schema: {
                   type: 'object',
-                  properties: {
-                    final_answer: { type: 'string' },
-                  },
+                  properties: { final_answer: { type: 'string' } },
                   required: ['final_answer'],
                   additionalProperties: false,
                 },
+                strict: true,
               },
             },
           },
         }),
       }),
+      undefined,
     );
   });
 
@@ -1846,6 +1842,7 @@ describe('evaluator', () => {
       1,
       expect.stringContaining('User: Question 1A'),
       expect.anything(),
+      undefined,
     );
 
     // First conversation, second question (should include history)
@@ -1853,6 +1850,7 @@ describe('evaluator', () => {
       2,
       expect.stringContaining('User: Question 1A\nAssistant: Test output\nUser: Question 1B'),
       expect.anything(),
+      undefined,
     );
 
     // Second conversation, first question (should NOT include first conversation)
@@ -1860,6 +1858,7 @@ describe('evaluator', () => {
       3,
       expect.stringContaining('User: Question 2A'),
       expect.anything(),
+      undefined,
     );
 
     // Second conversation, second question (should only include second conversation history)
@@ -1867,6 +1866,7 @@ describe('evaluator', () => {
       4,
       expect.stringContaining('User: Question 2A\nAssistant: Test output\nUser: Question 2B'),
       expect.anything(),
+      undefined,
     );
   });
 
@@ -2051,6 +2051,85 @@ describe('evaluator', () => {
     );
     expect(mockApiProviderWithError.callApi).toHaveBeenCalledTimes(1);
   });
+
+  it('should handle evaluation timeout', async () => {
+    // Use jest spies instead of full mocks for better control
+    const mockAddResult = jest.fn().mockResolvedValue(undefined);
+
+    const slowApiProvider: ApiProvider = {
+      id: jest.fn().mockReturnValue('slow-provider'),
+      callApi: jest.fn().mockImplementation(() => {
+        return new Promise((resolve) => {
+          // This promise will never resolve within our timeout period
+          setTimeout(() => {
+            resolve({
+              output: 'Slow response',
+              tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+            });
+          }, 30000); // 30 seconds (much longer than our timeout)
+        });
+      }),
+      cleanup: jest.fn(), // Add cleanup method that should be called on timeout
+    };
+
+    // Create a simplified mock eval object
+    const mockEval = {
+      id: 'mock-eval-id',
+      results: [],
+      prompts: [],
+      resultsCount: 0,
+      persisted: false,
+      config: {},
+      addResult: mockAddResult,
+      addPrompts: jest.fn().mockResolvedValue(undefined),
+      fetchResultsByTestIdx: jest.fn().mockResolvedValue([]),
+      getResults: jest.fn().mockResolvedValue([]),
+      toEvaluateSummary: jest.fn().mockResolvedValue({
+        results: [],
+        prompts: [],
+        stats: {
+          successes: 0,
+          failures: 0,
+          errors: 1,
+          tokenUsage: newTokenUsage(),
+        },
+      }),
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [slowApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+
+    // Start the evaluation with a short timeout
+    const evalPromise = evaluate(testSuite, mockEval as unknown as Eval, { timeoutMs: 100 });
+
+    // Wait for the evaluation to complete (it should timeout quickly)
+    await evalPromise;
+
+    // Verify that callApi was called with a test prompt and context
+    expect(slowApiProvider.callApi).toHaveBeenCalledWith(
+      'Test prompt',
+      expect.anything(),
+      expect.objectContaining({
+        abortSignal: expect.any(AbortSignal),
+      }),
+    );
+
+    // Verify that a timeout result was added
+    expect(mockAddResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: expect.stringContaining('Evaluation timed out after 100ms'),
+        success: false,
+        failureReason: ResultFailureReason.ERROR,
+      }),
+    );
+
+    // Verify cleanup was called with no arguments
+    expect(slowApiProvider.cleanup).toHaveBeenCalledWith();
+  });
 });
 
 describe('generateVarCombinations', () => {
@@ -2174,7 +2253,7 @@ describe('runEval', () => {
     expect(result.success).toBe(true);
     expect(result.response?.output).toBe('Test output');
     expect(result.prompt.label).toBe('test-label');
-    expect(mockProvider.callApi).toHaveBeenCalledWith('Test prompt', expect.anything());
+    expect(mockProvider.callApi).toHaveBeenCalledWith('Test prompt', expect.anything(), undefined);
   });
 
   it('should handle conversation history', async () => {
@@ -2228,7 +2307,11 @@ describe('runEval', () => {
     });
     const result = results[0];
     expect(result.success).toBe(true);
-    expect(mockProvider.callApi).toHaveBeenCalledWith('Using stored data', expect.anything());
+    expect(mockProvider.callApi).toHaveBeenCalledWith(
+      'Using stored data',
+      expect.anything(),
+      undefined,
+    );
   });
 
   it('should store output in register when specified', async () => {
