@@ -313,7 +313,7 @@ export async function runEval({
         ...test.metadata,
         ...response.metadata,
         config: {
-          evaluateOptions: evaluateOptions,
+          evaluateOptions,
         },
         debug_outputVars: evaluateOptions?.outputVars,
       },
