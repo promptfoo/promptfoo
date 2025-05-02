@@ -3,6 +3,7 @@ import type { Command } from 'commander';
 import dedent from 'dedent';
 import { z } from 'zod';
 import cliState from '../../cliState';
+import { CLOUD_PROVIDER_PREFIX } from '../../constants';
 import logger, { setLogLevel } from '../../logger';
 import telemetry from '../../telemetry';
 import { setupEnv } from '../../util';
@@ -64,6 +65,14 @@ export function redteamRunCommand(program: Command) {
           throw new Error('Invalid target ID, it must be a valid UUID');
         }
         const configObj = await getConfigFromCloud(opts.config, opts.target);
+        // backwards compatible for old cloud servers
+        if (
+          opts.target &&
+          UUID_REGEX.test(opts.target) &&
+          (!configObj.targets || configObj.targets?.length === 0)
+        ) {
+          configObj.targets = [{ id: `${CLOUD_PROVIDER_PREFIX}${opts.target}`, config: {} }];
+        }
         opts.liveRedteamConfig = configObj;
         opts.config = undefined;
 
