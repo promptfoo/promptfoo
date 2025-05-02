@@ -61,14 +61,19 @@ export function redteamRunCommand(program: Command) {
       }
 
       if (opts.config && UUID_REGEX.test(opts.config)) {
-        const configObj = await getConfigFromCloud(opts.config);
-
-        if (opts.target && UUID_REGEX.test(opts.target)) {
+        if (opts.target && !UUID_REGEX.test(opts.target)) {
+          throw new Error('Invalid target ID, it must be a valid UUID');
+        }
+        const configObj = await getConfigFromCloud(opts.config, opts.target);
+        // backwards compatible for old cloud servers
+        if (
+          opts.target &&
+          UUID_REGEX.test(opts.target) &&
+          (!configObj.targets || configObj.targets?.length === 0)
+        ) {
           configObj.targets = [{ id: `${CLOUD_PROVIDER_PREFIX}${opts.target}`, config: {} }];
         }
-
         opts.liveRedteamConfig = configObj;
-
         opts.config = undefined;
 
         opts.loadedFromCloud = true;
