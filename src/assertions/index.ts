@@ -35,7 +35,7 @@ import {
   type AtomicTestCase,
   type GradingResult,
 } from '../types';
-import { isJavascriptFile } from '../util/file';
+import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { transform } from '../util/transform';

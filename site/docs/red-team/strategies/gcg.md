@@ -1,5 +1,7 @@
 ---
 sidebar_label: GCG
+title: Greedy Coordinate Gradient Strategy
+description: Use gradient-based optimization to find adversarial prompts that can bypass AI safety mechanisms
 ---
 
 # Greedy Coordinate Gradient (GCG)
@@ -14,11 +16,11 @@ While effective in research settings, this strategy requires significant computa
 Due to these intensive requirements, GCG is better suited for dedicated research rather than routine red team testing.
 :::
 
-## Configuration
+## Implementation
 
 Add it to your `promptfooconfig.yaml`:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 strategies:
   - id: gcg
     config:
@@ -73,6 +75,13 @@ According to the original paper, GCG achieves:
 - Better performance than previous methods like AutoPrompt, PEZ, and GBDA
 
 The caveat is that many trials are required to find an effective suffix.
+
+## Related Concepts
+
+- [Iterative Jailbreaks](iterative.md) - Alternative jailbreaking approach without gradients
+- [Composite Jailbreaks](composite-jailbreaks.md) - Combined techniques for jailbreaking
+- [Tree-based Jailbreaks](tree.md) - Systematic approach using tree structures
+- [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Comprehensive overview of vulnerabilities
 
 ## References
 

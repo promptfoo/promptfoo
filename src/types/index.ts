@@ -10,7 +10,7 @@ import type {
 import type { EnvOverrides } from '../types/env';
 import { ProviderEnvOverridesSchema } from '../types/env';
 import { TokenUsageSchema } from '../types/shared';
-import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/file';
+import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/fileExtensions';
 import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
 import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
 import { RedteamConfigSchema } from '../validators/redteam';
