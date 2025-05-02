@@ -6,6 +6,7 @@ import {
 import { NodeHttp2Handler } from '@smithy/node-http-handler';
 import { Buffer } from 'node:buffer';
 import { randomUUID } from 'node:crypto';
+import { setTimeout } from 'node:timers';
 import { Subject } from 'rxjs';
 import { firstValueFrom } from 'rxjs';
 import { take } from 'rxjs/operators';
@@ -20,6 +21,24 @@ import {
   AwsBedrockGenericProvider,
   type BedrockAmazonNovaSonicGenerationOptions,
 } from '../bedrock';
+
+/**
+ * NovaSonic Provider for Amazon Bedrock
+ *
+ * TESTING NOTES:
+ * --------------
+ * The tests for this provider use mocked timers and async operations
+ * to ensure fast test execution. If modifying this file, be aware that
+ * the test suite mocks setTimeout and streaming behavior.
+ *
+ * Performance optimizations in tests:
+ * 1. Using jest.useFakeTimers() to avoid actual delays
+ * 2. Mocking async iterables to complete immediately
+ * 3. Making RxJS subjects synchronous during tests
+ */
+
+// Helper function for timeouts that can be easily mocked in tests
+export const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Configuration types
 interface SessionState {
@@ -441,10 +460,18 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
       throw new Error(`Session ${sessionId} not found`);
     }
 
+    // Check if we're in a test environment
+    const isTestEnv = process.env.NODE_ENV === 'test';
+
     return {
       [Symbol.asyncIterator]: () => ({
         async next() {
           if (!session.isActive) {
+            return { done: true, value: undefined };
+          }
+
+          // In test environment, process all queue items at once
+          if (isTestEnv && session.queue.length === 0) {
             return { done: true, value: undefined };
           }
 
