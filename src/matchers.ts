@@ -37,8 +37,8 @@ import type {
   ProviderTypeMap,
   TokenUsage,
 } from './types';
-import { maybeLoadFromExternalFile } from './util';
-import { isJavascriptFile } from './util/file';
+import { maybeLoadFromExternalFile } from './util/file';
+import { isJavascriptFile } from './util/fileExtensions';
 import invariant from './util/invariant';
 import { extractJsonObjects, extractFirstJsonObject } from './util/json';
 import { getNunjucksEngine } from './util/templates';

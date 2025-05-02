@@ -2,7 +2,7 @@
 import logger from './logger';
 import type { Assertion, AssertionType, CsvRow, TestCase, BaseAssertionTypes } from './types';
 import { BaseAssertionTypesSchema } from './types';
-import { isJavascriptFile } from './util/file';
+import { isJavascriptFile } from './util/fileExtensions';
 import invariant from './util/invariant';
 
 const DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD = 0.8;
