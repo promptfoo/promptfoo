@@ -99,8 +99,9 @@ Some specific security benefits of testing with these encodings:
 - Evaluates guardrail effectiveness against simple transformation techniques
 - Helps develop more robust safety mechanisms for public-facing AI applications
 
-## See Also
+## Related Concepts
 
 - [ROT13 Encoding](rot13.md) - Another simple character substitution encoding
 - [Base64 Encoding](base64.md) - Binary-to-text encoding strategy
 - [Leetspeak Encoding](leetspeak.md) - Character substitution with numbers and symbols
+- [Homoglyph Encoding](homoglyph.md) - Visual character substitution technique

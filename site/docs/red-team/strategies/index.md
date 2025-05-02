@@ -1,5 +1,7 @@
 ---
 sidebar_label: Overview
+title: Red Team Strategies
+description: Attack techniques that systematically probe LLM applications for vulnerabilities and maximize success rates
 ---
 
 import StrategyTable from '@site/docs/\_shared/StrategyTable';
@@ -69,7 +71,7 @@ Single-turn applications process each request independently, creating distinct s
 
 **Recommended Strategies:**
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 redteam:
   strategies:
     - jailbreak
@@ -91,7 +93,7 @@ Multi-turn applications maintain conversation state, introducing additional atta
 
 **Recommended Strategies:**
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 redteam:
   strategies:
     - goat
@@ -102,7 +104,7 @@ redteam:
 
 ### Basic Configuration
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 redteam:
   strategies:
     - jailbreak # string syntax
@@ -113,7 +115,7 @@ redteam:
 
 Some strategies allow you to specify options in the configuration object. For example, the `multilingual` strategy allows you to specify the languages to use.
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 redteam:
   strategies:
     - id: multilingual
@@ -126,7 +128,7 @@ redteam:
 
 Strategies can be applied to specific plugins or the entire test suite. By default, strategies are applied to all plugins. You can override this by specifying the `plugins` option in the strategy which will only apply the strategy to the specified plugins.
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 redteam:
   strategies:
     - id: jailbreak:tree
@@ -138,6 +140,12 @@ redteam:
 ### Custom Strategies
 
 For advanced use cases, you can create custom strategies. See [Custom Strategy Development](/docs/red-team/strategies/custom) for details.
+
+## Related Concepts
+
+- [LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Understand the types of vulnerabilities strategies can test
+- [Red Team Plugins](/docs/red-team/plugins/) - Learn about the plugins that generate the base test cases
+- [Custom Strategies](/docs/red-team/strategies/custom) - Create your own strategies
 
 ## Next Steps
 

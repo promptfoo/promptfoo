@@ -7,13 +7,13 @@ import {
 } from '../../../src/redteam/plugins/base';
 import type { ApiProvider, Assertion } from '../../../src/types';
 import type { AtomicTestCase, GradingResult } from '../../../src/types';
-import { maybeLoadFromExternalFile } from '../../../src/util';
+import { maybeLoadFromExternalFile } from '../../../src/util/file';
 
 jest.mock('../../../src/matchers', () => ({
   matchesLlmRubric: jest.fn(),
 }));
 
-jest.mock('../../../src/util', () => ({
+jest.mock('../../../src/util/file', () => ({
   maybeLoadFromExternalFile: jest.fn(),
   maybeLoadToolsFromExternalFile: jest.fn().mockImplementation((tools) => {
     if (tools === 'file://tools.json') {

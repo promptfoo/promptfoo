@@ -18,6 +18,7 @@ import {
   shouldGenerateRemote,
 } from '../remoteGeneration';
 import { getShortPluginId } from '../util';
+import { MEMORY_POISONING_PLUGIN_ID } from './agentic/constants';
 import { type RedteamPluginBase } from './base';
 import { BeavertailsPlugin } from './beavertails';
 import { ContractPlugin } from './contracts';
@@ -263,6 +264,7 @@ function createRemotePlugin<T extends PluginConfig>(
   };
 }
 const remotePlugins: PluginFactory[] = [
+  MEMORY_POISONING_PLUGIN_ID,
   'ascii-smuggling',
   'bfla',
   'bola',

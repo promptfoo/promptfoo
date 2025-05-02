@@ -8,37 +8,28 @@ import { isCI } from '../../../src/envars';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
 import { type UnifiedConfig } from '../../../src/types';
-import { maybeLoadFromExternalFile } from '../../../src/util';
 import { isRunningUnderNpx } from '../../../src/util';
 import {
+  combineConfigs,
   dereferenceConfig,
   readConfig,
   resolveConfigs,
-  combineConfigs,
 } from '../../../src/util/config/load';
+import { maybeLoadFromExternalFile } from '../../../src/util/file';
 import { readTests } from '../../../src/util/testCaseReader';
 
 jest.mock('../../../src/database', () => ({
   getDb: jest.fn(),
 }));
 
-jest.mock('proxy-agent', () => ({
-  ProxyAgent: jest.fn().mockImplementation(() => ({})),
-}));
+jest.mock('fs');
 
 jest.mock('glob', () => ({
   globSync: jest.fn(),
 }));
 
-jest.mock('fs');
-
-jest.mock('../../../src/esm', () => ({
-  importModule: jest.fn(),
-}));
-
-jest.mock('../../../src/util/testCaseReader', () => ({
-  readTest: jest.fn(),
-  readTests: jest.fn(),
+jest.mock('proxy-agent', () => ({
+  ProxyAgent: jest.fn().mockImplementation(() => ({})),
 }));
 
 jest.mock('../../../src/envars', () => {
@@ -50,21 +41,34 @@ jest.mock('../../../src/envars', () => {
   };
 });
 
-jest.mock('../../../src/util', () => {
-  const originalModule = jest.requireActual('../../../src/util');
+jest.mock('../../../src/esm', () => ({
+  importModule: jest.fn(),
+}));
+
+jest.mock('../../../src/logger', () => ({
+  debug: jest.fn(),
+  error: jest.fn(),
+  info: jest.fn(),
+  warn: jest.fn(),
+}));
+
+jest.mock('../../../src/util', () => ({
+  ...jest.requireActual('../../../src/util'),
+  isRunningUnderNpx: jest.fn(),
+}));
+
+jest.mock('../../../src/util/file', () => {
+  const originalModule = jest.requireActual('../../../src/util/file');
   return {
     ...originalModule,
-    isRunningUnderNpx: jest.fn(),
     maybeLoadFromExternalFile: jest.fn(originalModule.maybeLoadFromExternalFile),
     readFilters: jest.fn(),
   };
 });
 
-jest.mock('../../../src/logger', () => ({
-  error: jest.fn(),
-  warn: jest.fn(),
-  info: jest.fn(),
-  debug: jest.fn(),
+jest.mock('../../../src/util/testCaseReader', () => ({
+  readTest: jest.fn(),
+  readTests: jest.fn(),
 }));
 
 describe('combineConfigs', () => {

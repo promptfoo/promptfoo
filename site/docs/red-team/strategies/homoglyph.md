@@ -28,15 +28,23 @@ The Homoglyph Encoding strategy tests an AI system's ability to resist inputs th
 
 Homoglyph attacks exploit the visual similarity between different Unicode characters to create text that appears normal to humans but may be processed differently by AI systems.
 
-## Configuration
+## Implementation
 
 Use it in your `promptfooconfig.yaml`:
 
-```yaml
-redteam:
-  strategies:
-    - homoglyph
+```yaml title="promptfooconfig.yaml"
+strategies:
+  - homoglyph
 ```
+
+## How It Works
+
+The homoglyph strategy works by:
+
+1. Taking the original text from your test case
+2. Replacing standard characters with visually similar Unicode homoglyphs
+3. Creating text that looks visually similar but has different character codes
+4. Testing whether the model processes homoglyph-encoded text differently than standard text
 
 ## Example Scenarios
 

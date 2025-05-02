@@ -2,17 +2,17 @@ import React from 'react';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import HelpIcon from '@mui/icons-material/Help';
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Box,
-  TextField,
   IconButton,
+  TextField,
   Tooltip,
   Typography,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
 } from '@mui/material';
 import Link from '@mui/material/Link';
-import { isJavascriptFile } from '@promptfoo/util/file';
+import { isJavascriptFile } from '@promptfoo/util/fileExtensions';
 
 interface ValidationError {
   message: string;

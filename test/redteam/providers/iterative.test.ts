@@ -128,8 +128,10 @@ describe('RedteamIterativeProvider', () => {
         options: {},
         prompt: { raw: 'test', label: 'test' },
         redteamProvider: mockRedteamProvider,
+        gradingProvider: mockRedteamProvider,
         targetProvider: mockTargetProvider,
         vars: { test: 'goal' },
+        excludeTargetOutputFromAgenticAttackGeneration: false,
       });
 
       expect(result.metadata.finalIteration).toBe(1);

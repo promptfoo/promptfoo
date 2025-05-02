@@ -10,7 +10,7 @@ import type {
   EvaluateTestSuite,
 } from '../types';
 import { parsePathOrGlob } from '../util';
-import { isJavascriptFile } from '../util/file';
+import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { PromptSchema } from '../validators/prompts';
 import { processCsvPrompts } from './processors/csv';

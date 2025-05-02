@@ -29,8 +29,9 @@ import {
   type TestSuite,
   type UnifiedConfig,
 } from '../../types';
-import { isRunningUnderNpx, maybeLoadFromExternalFile, readFilters } from '../../util';
-import { isJavascriptFile } from '../../util/file';
+import { isRunningUnderNpx, readFilters } from '../../util';
+import { maybeLoadFromExternalFile } from '../../util/file';
+import { isJavascriptFile } from '../../util/fileExtensions';
 import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
 import { readTest, readTests } from '../testCaseReader';

@@ -1,16 +1,18 @@
 ---
 sidebar_label: Iterative Jailbreaks
+title: Iterative Jailbreaks Strategy
+description: Systematically probe and bypass AI system constraints by repeatedly refining prompts through multiple iterations
 ---
 
 # Iterative Jailbreaks Strategy
 
 The Iterative Jailbreaks strategy is a technique designed to systematically probe and potentially bypass an AI system's constraints by repeatedly refining a single-shot prompt through multiple iterations. This approach is inspired by research on automated jailbreaking techniques like the Tree of Attacks method [^1].
 
-## Configuration
+## Implementation
 
 Add it to your `promptfooconfig.yaml`:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 strategies:
   # Basic usage
   - jailbreak

@@ -22,6 +22,7 @@ import { alpha } from '@mui/material/styles';
 import {
   ALL_PLUGINS,
   DEFAULT_PLUGINS,
+  DATASET_PLUGINS,
   FOUNDATION_PLUGINS,
   HARM_PLUGINS,
   MITRE_ATLAS_MAPPING,
@@ -637,6 +638,152 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
           {Object.entries(riskCategories).map(([category, plugins]) =>
             renderPluginCategory(category, plugins),
           )}
+
+          {/* Dataset Plugins Section */}
+          <Accordion
+            expanded={expandedCategories.has('Dataset Plugins')}
+            onChange={(event, expanded) => {
+              setExpandedCategories((prev) => {
+                const newSet = new Set(prev);
+                if (expanded) {
+                  newSet.add('Dataset Plugins');
+                } else {
+                  newSet.delete('Dataset Plugins');
+                }
+                return newSet;
+              });
+            }}
+          >
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Typography variant="h6" sx={{ fontWeight: 'medium' }}>
+                Datasets (
+                {
+                  DATASET_PLUGINS.filter(
+                    (plugin) =>
+                      filteredPlugins.includes(plugin as Plugin) &&
+                      selectedPlugins.has(plugin as Plugin),
+                  ).length
+                }
+                /
+                {
+                  DATASET_PLUGINS.filter((plugin) => filteredPlugins.includes(plugin as Plugin))
+                    .length
+                }
+                )
+              </Typography>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Grid container spacing={2}>
+                {DATASET_PLUGINS.filter((plugin) => filteredPlugins.includes(plugin as Plugin)).map(
+                  (plugin) => (
+                    <Grid item xs={12} sm={6} md={4} key={plugin}>
+                      <Paper
+                        elevation={1}
+                        sx={{
+                          p: 2,
+                          height: '100%',
+                          border: (theme) => {
+                            if (selectedPlugins.has(plugin as Plugin)) {
+                              if (
+                                PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
+                                !isPluginConfigured(plugin as Plugin)
+                              ) {
+                                return `1px solid ${theme.palette.error.main}`;
+                              }
+                              return `1px solid ${theme.palette.primary.main}`;
+                            }
+                            return undefined;
+                          },
+                          backgroundColor: (theme) =>
+                            selectedPlugins.has(plugin as Plugin)
+                              ? alpha(theme.palette.primary.main, 0.04)
+                              : 'background.paper',
+                          transition: 'all 0.2s ease-in-out',
+                          '&:hover': {
+                            backgroundColor: (theme) =>
+                              selectedPlugins.has(plugin as Plugin)
+                                ? alpha(theme.palette.primary.main, 0.08)
+                                : alpha(theme.palette.action.hover, 0.04),
+                          },
+                        }}
+                      >
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            height: '100%',
+                            position: 'relative',
+                          }}
+                        >
+                          <FormControlLabel
+                            sx={{ flex: 1 }}
+                            control={
+                              <Checkbox
+                                checked={selectedPlugins.has(plugin as Plugin)}
+                                onChange={() => handlePluginToggle(plugin as Plugin)}
+                                color="primary"
+                              />
+                            }
+                            label={
+                              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                  {displayNameOverrides[
+                                    plugin as keyof typeof displayNameOverrides
+                                  ] ||
+                                    categoryAliases[plugin as keyof typeof categoryAliases] ||
+                                    plugin}
+                                </Box>
+                                <Typography variant="body2" color="text.secondary">
+                                  {
+                                    subCategoryDescriptions[
+                                      plugin as keyof typeof subCategoryDescriptions
+                                    ]
+                                  }
+                                </Typography>
+                              </Box>
+                            }
+                          />
+                          {selectedPlugins.has(plugin as Plugin) &&
+                            PLUGINS_SUPPORTING_CONFIG.includes(plugin as any) && (
+                              <IconButton
+                                size="small"
+                                title={
+                                  isPluginConfigured(plugin as Plugin)
+                                    ? 'Edit Configuration'
+                                    : 'Configuration Required'
+                                }
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleConfigClick(plugin as Plugin);
+                                }}
+                                sx={{
+                                  position: 'absolute',
+                                  top: 8,
+                                  right: 8,
+                                  opacity: 0.6,
+                                  '&:hover': {
+                                    opacity: 1,
+                                    backgroundColor: (theme) =>
+                                      alpha(theme.palette.primary.main, 0.08),
+                                  },
+                                  ...(PLUGINS_REQUIRING_CONFIG.includes(plugin as any) &&
+                                    !isPluginConfigured(plugin as Plugin) && {
+                                      color: 'error.main',
+                                      opacity: 1,
+                                    }),
+                                }}
+                              >
+                                <SettingsOutlinedIcon fontSize="small" />
+                              </IconButton>
+                            )}
+                        </Box>
+                      </Paper>
+                    </Grid>
+                  ),
+                )}
+              </Grid>
+            </AccordionDetails>
+          </Accordion>
 
           <Accordion
             expanded={expandedCategories.has('Custom Prompts')}
