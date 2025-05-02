@@ -95,6 +95,7 @@ describe('Strategy IDs', () => {
       'prompt-injection': 'promptInjections/index.ts',
       retry: 'retry.ts',
       rot13: 'rot13.ts',
+      video: 'simpleVideo.ts',
     };
 
     // Check all defined strategies

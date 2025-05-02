@@ -772,6 +772,7 @@ export const ADDITIONAL_STRATEGIES = [
   'prompt-injection',
   'retry',
   'rot13',
+  'video',
 ] as const;
 export type AdditionalStrategy = (typeof ADDITIONAL_STRATEGIES)[number];
 
@@ -884,6 +885,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Uses conversational approach to discover available tools, functions, and capabilities through multi-step interactions',
   unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
   xstest: 'Tests for XSTest attacks',
+  video: 'Tests handling of video content',
 };
 
 // These names are displayed in risk cards and in the table
@@ -985,6 +987,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'tool-discovery:multi-turn': 'Multi-turn Tool Discovery',
   unsafebench: 'UnsafeBench Dataset',
   xstest: 'XSTest Dataset',
+  video: 'Video Content',
 };
 
 export enum Severity {
@@ -1385,6 +1388,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
   'prompt-injection': 'Tests direct prompt injection vulnerability detection',
   retry: 'Automatically incorporates previously failed test cases to prevent regression',
   rot13: 'Assesses handling of ROT13-encoded malicious payloads',
+  video: 'Tests detection and handling of video-based malicious payloads',
 };
 
 export const strategyDisplayNames: Record<Strategy, string> = {
@@ -1414,6 +1418,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   'prompt-injection': 'Prompt Injection',
   retry: 'Regression Testing',
   rot13: 'ROT13 Encoding',
+  video: 'Video',
 };
 
 export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
