@@ -8,31 +8,33 @@ description: Test how AI systems handle video-encoded text inputs that may bypas
 
 The Video strategy converts prompt text into a video with text overlay and then encodes that video as a base64 string. This allows for testing how AI systems handle video-encoded text, which may potentially bypass text-based content filters or lead to different behaviors than when processing plain text.
 
-## Use Case
+## Why Use This Strategy
 
-This strategy is useful for:
+This strategy helps security researchers and AI developers:
 
-1. Testing if models can extract and process text from base64-encoded videos
-2. Evaluating if video-encoded text can bypass content filters that typically scan plain text
-3. Assessing model behavior when handling multi-modal inputs with video format
-
-Use it like so in your promptfooconfig.yaml:
-
-```yaml title="promptfooconfig.yaml"
-strategies:
-  - video
-```
+1. **Test model capabilities**: Assess if models can extract and process text from base64-encoded videos
+2. **Evaluate security measures**: Determine if video-encoded text can bypass content filters that typically scan plain text
+3. **Assess multi-modal behavior**: Identify differences in how models respond to the same content in different formats
+4. **Discover inconsistencies**: Reveal potential vulnerabilities by comparing text-based and video-based processing pathways
 
 ## How It Works
 
 The strategy performs the following operations:
 
 1. Takes the original text from your test case
-2. Creates a simple video with the text displayed on a white background
+2. Creates a simple video with the text displayed on a white background for 5 seconds
 3. Converts the video to a base64 string
 4. Replaces the original text in your test case with the base64-encoded video
 
 The resulting test case contains the same semantic content as the original but in a different format that may be processed differently by AI systems.
+
+## Example Transformation
+
+For instance, a harmful prompt that might normally be filtered is converted into a video with the text overlaid, then encoded as base64. The encoded video would start like:
+
+```
+AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAAAu1tZGF0...
+```
 
 ## Implementation
 
@@ -89,10 +91,11 @@ You should update the prompt.json to match the prompt format of your LLM provide
 The `{{video}}` syntax in the examples is a Nunjucks template variable. When promptfoo processes your prompt, it replaces `{{video}}` with the base64-encoded video data.
 :::
 
-:::tip
-This strategy requires you to install the `fluent-ffmpeg` package for video creation.
+## Requirements
 
-```
+This strategy requires you to install the `fluent-ffmpeg` package for video creation:
+
+```bash
 npm i fluent-ffmpeg
 ```
 
@@ -100,23 +103,33 @@ You'll also need to have FFmpeg installed on your system:
 
 **On macOS:**
 
-```
+```bash
 brew install ffmpeg
 ```
 
 **On Ubuntu/Debian:**
 
-```
+```bash
 apt-get install ffmpeg
 ```
 
 **On Windows:**
 Download from [ffmpeg.org](https://ffmpeg.org/download.html) or use package managers like Chocolatey:
 
-```
+```bash
 choco install ffmpeg
 ```
 
+## Technical Details
+
+- **Video Format**: The strategy creates MP4 videos with H.264 encoding
+- **Duration**: Videos are 5 seconds long by default
+- **Resolution**: 640x480 pixels
+- **Text Rendering**: The text is centered on a white background using a standard font
+- **Processing**: All video creation is done locally using FFmpeg
+
+:::warning
+This strategy requires more processing resources than other encoding strategies due to video generation. It may take longer to run, especially on large test sets.
 :::
 
 ## Importance
@@ -131,7 +144,7 @@ This strategy is worth implementing because:
 
 ## Related Concepts
 
-- [Audio Jailbreaking](/docs/red-team/strategies/audio.md) - Similar approach using speech audio
-- [Image Jailbreaking](/docs/red-team/strategies/image.md) - Similar approach using images
+- [Audio Jailbreaking](/docs/red-team/strategies/audio) - Similar approach using speech audio
+- [Image Jailbreaking](/docs/red-team/strategies/image) - Similar approach using images
 
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.

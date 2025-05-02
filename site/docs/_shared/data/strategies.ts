@@ -137,6 +137,17 @@ export const strategies: Strategy[] = [
   },
   {
     category: 'Static (Single-Turn)',
+    strategy: 'video',
+    displayName: 'Video Encoding',
+    description: 'Text-to-video encoding bypass',
+    longDescription:
+      'Tests handling of text embedded in videos and encoded as base64 to potentially bypass text-based content filters',
+    cost: 'Low',
+    asrIncrease: '20-30%',
+    link: '/docs/red-team/strategies/video/',
+  },
+  {
+    category: 'Static (Single-Turn)',
     strategy: 'image',
     displayName: 'Image Encoding',
     description: 'Text-to-image encoding bypass',
