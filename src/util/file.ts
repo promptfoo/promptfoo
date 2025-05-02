@@ -4,16 +4,6 @@ import yaml from 'js-yaml';
 import nunjucks from 'nunjucks';
 import * as path from 'path';
 import cliState from '../cliState';
-import {
-  JAVASCRIPT_EXTENSIONS,
-  isJavascriptFile,
-  isImageFile,
-  isVideoFile,
-  isAudioFile,
-} from './fileExtensions';
-
-// Re-export all from fileExtensions
-export { JAVASCRIPT_EXTENSIONS, isJavascriptFile, isImageFile, isVideoFile, isAudioFile };
 
 /**
  * Simple Nunjucks engine specifically for file paths
