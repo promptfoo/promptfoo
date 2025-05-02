@@ -17,6 +17,7 @@ import {
   Severity,
   severityDisplayNames,
   PLUGIN_PRESET_DESCRIPTIONS,
+  AGENTIC_PLUGINS,
 } from '../../src/redteam/constants';
 
 describe('constants', () => {
@@ -89,7 +90,14 @@ describe('constants', () => {
 
   it('ALL_PLUGINS should contain all plugins sorted', () => {
     expect(ALL_PLUGINS).toEqual(
-      [...new Set([...DEFAULT_PLUGINS, ...ADDITIONAL_PLUGINS, ...CONFIG_REQUIRED_PLUGINS])].sort(),
+      [
+        ...new Set([
+          ...DEFAULT_PLUGINS,
+          ...ADDITIONAL_PLUGINS,
+          ...CONFIG_REQUIRED_PLUGINS,
+          ...AGENTIC_PLUGINS,
+        ]),
+      ].sort(),
     );
   });
 

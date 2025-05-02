@@ -487,7 +487,7 @@ function ResultsTable({
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>{truncatedValue}</ReactMarkdown>
                       </MarkdownErrorBoundary>
                     ) : (
-                      <>{value}</>
+                      <TruncatedText text={value} maxLength={maxTextLength} />
                     )}
                   </div>
                 );
