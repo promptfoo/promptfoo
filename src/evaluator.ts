@@ -1,6 +1,7 @@
 import async from 'async';
 import chalk from 'chalk';
 import type { MultiBar, SingleBar } from 'cli-progress';
+import cliProgress from 'cli-progress';
 import { randomUUID } from 'crypto';
 import { globSync } from 'glob';
 import * as path from 'path';
@@ -424,6 +425,23 @@ export async function runEval({
       },
     ];
   }
+}
+
+/**
+ * Calculates the number of threads allocated to a specific progress bar.
+ * @param concurrency Total number of concurrent threads
+ * @param numProgressBars Total number of progress bars
+ * @param barIndex Index of the progress bar (0-based)
+ * @returns Number of threads allocated to this progress bar
+ */
+export function calculateThreadsPerBar(
+  concurrency: number,
+  numProgressBars: number,
+  barIndex: number,
+): number {
+  const minThreadsPerBar = Math.floor(concurrency / numProgressBars);
+  const extraThreads = concurrency % numProgressBars;
+  return barIndex < extraThreads ? minThreadsPerBar + 1 : minThreadsPerBar;
 }
 
 export function generateVarCombinations(
@@ -984,8 +1002,19 @@ class Evaluator {
           .replace(/\n/g, ' ');
         logger.info(`[${numComplete}/${total}] Running ${provider} with vars: ${vars}`);
       } else if (multibar && evalStep) {
-        const threadIndex = index % concurrency;
-        const progressbar = multiProgressBars[threadIndex];
+        const numProgressBars = Math.min(concurrency, 20);
+
+        // Calculate which progress bar to use
+        const progressBarIndex = index % numProgressBars;
+        const progressbar = multiProgressBars[progressBarIndex];
+
+        // Calculate how many threads are assigned to this progress bar
+        const threadsForThisBar = calculateThreadsPerBar(
+          concurrency,
+          numProgressBars,
+          progressBarIndex,
+        );
+
         progressbar.increment({
           provider: evalStep.provider.label || evalStep.provider.id(),
           prompt: evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ' '),
@@ -994,6 +1023,7 @@ class Evaluator {
             .join(' ')
             .slice(0, 10)
             .replace(/\n/g, ' '),
+          activeThreads: threadsForThisBar,
         });
       } else {
         logger.debug(`Eval #${index + 1} complete (${numComplete} of ${runEvalOptions.length})`);
@@ -1006,25 +1036,41 @@ class Evaluator {
         return;
       }
 
-      const cliProgress = await import('cli-progress');
+      const numProgressBars = Math.min(concurrency, 20);
+
+      const showThreadCounts = concurrency > numProgressBars;
+
       multibar = new cliProgress.MultiBar(
         {
-          format:
-            '[{bar}] {percentage}% | ETA: {eta}s | {value}/{total} | {provider} "{prompt}" {vars}',
+          format: showThreadCounts
+            ? 'Group {groupId} [{bar}] {percentage}% | {value}/{total} | {activeThreads}/{maxThreads} threads | {provider} "{prompt}" {vars}'
+            : 'Group {groupId} [{bar}] {percentage}% | {value}/{total} | {provider} "{prompt}" {vars}',
           hideCursor: true,
         },
         cliProgress.Presets.shades_classic,
       );
-      const stepsPerThread = Math.floor(evalOptions.length / concurrency);
-      const remainingSteps = evalOptions.length % concurrency;
+
+      if (!multibar) {
+        return;
+      }
+
+      const stepsPerProgressBar = Math.floor(evalOptions.length / numProgressBars);
+      const remainingSteps = evalOptions.length % numProgressBars;
       multiProgressBars = [];
-      for (let i = 0; i < concurrency; i++) {
-        const totalSteps = i < remainingSteps ? stepsPerThread + 1 : stepsPerThread;
+
+      for (let i = 0; i < numProgressBars; i++) {
+        const totalSteps = i < remainingSteps ? stepsPerProgressBar + 1 : stepsPerProgressBar;
         if (totalSteps > 0) {
+          // Calculate how many threads are assigned to this progress bar
+          const threadsForThisBar = calculateThreadsPerBar(concurrency, numProgressBars, i);
+
           const progressbar = multibar.create(totalSteps, 0, {
+            groupId: `${i + 1}/${numProgressBars}`,
             provider: '',
             prompt: '',
             vars: '',
+            activeThreads: 0,
+            maxThreads: threadsForThisBar,
           });
           multiProgressBars.push(progressbar);
         }
