@@ -18,6 +18,7 @@ import {
   severityDisplayNames,
   PLUGIN_PRESET_DESCRIPTIONS,
   AGENTIC_PLUGINS,
+  riskCategories,
 } from '../../src/redteam/constants';
 
 describe('constants', () => {
@@ -145,5 +146,14 @@ describe('constants', () => {
     expect(PLUGIN_PRESET_DESCRIPTIONS['Minimal Test']).toBe(
       'Minimal set of plugins to validate your setup',
     );
+    expect(PLUGIN_PRESET_DESCRIPTIONS['OWASP Agentic AI Top 10']).toBe(
+      'OWASP Agentic AI Top 10 Threats and Mitigations',
+    );
+  });
+
+  it('riskCategories should contain MEMORY_POISONING_PLUGIN_ID in Agentic category', () => {
+    expect(riskCategories.Agentic).toBeDefined();
+    expect(riskCategories.Agentic).toContain('agentic:memory-poisoning');
+    expect(riskCategories.Agentic).toHaveLength(1);
   });
 });
