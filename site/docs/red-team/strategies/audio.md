@@ -64,8 +64,9 @@ This strategy is worth implementing because:
 3. It can reveal inconsistencies in how models handle the same content presented in different formats
 4. Audio modalities may have different thresholds or processing pipelines for harmful content
 
-## See Also
+## Related Concepts
 
-- [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types)
-- [Red Teaming Strategies](/docs/red-team/strategies)
+- [Image Jailbreaking](/docs/red-team/strategies/image.md) - Similar approach using images instead of audio
+- [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) - Comprehensive overview of vulnerabilities
+- [Red Teaming Strategies](/docs/red-team/strategies) - Other red teaming approaches
 - [Multi-Modal Red Teaming Guide](/docs/guides/multimodal-red-team)

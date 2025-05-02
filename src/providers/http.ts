@@ -14,8 +14,9 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types';
-import { maybeLoadFromExternalFile, renderVarsInObject } from '../util';
-import { isJavascriptFile } from '../util/file';
+import { renderVarsInObject } from '../util';
+import { maybeLoadFromExternalFile } from '../util/file';
+import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';

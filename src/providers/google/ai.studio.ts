@@ -8,7 +8,8 @@ import type {
   GuardrailResponse,
 } from '../../types';
 import type { EnvOverrides } from '../../types/env';
-import { maybeLoadFromExternalFile, renderVarsInObject } from '../../util';
+import { renderVarsInObject } from '../../util';
+import { maybeLoadFromExternalFile } from '../../util/file';
 import { getNunjucksEngine } from '../../util/templates';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToGoogle } from '../mcp/transform';

@@ -738,6 +738,17 @@ export const AGENTIC_STRATEGIES = [
 ] as const;
 export type AgenticStrategy = (typeof AGENTIC_STRATEGIES)[number];
 
+export const DATASET_PLUGINS = [
+  'beavertails',
+  'cyberseceval',
+  'donotanswer',
+  'harmbench',
+  'pliny',
+  'unsafebench',
+  'xstest',
+] as const;
+export type DatasetPlugin = (typeof DATASET_PLUGINS)[number];
+
 export const ADDITIONAL_STRATEGIES = [
   'audio',
   'base64',
@@ -1115,14 +1126,9 @@ export const riskCategories: Record<string, Plugin[]> = {
     'harmful:unsafe-practices',
     'harmful:violent-crime',
     'harmful:weapons:ied',
-    'unsafebench',
   ],
 
   'Trust & Safety': [
-    'beavertails',
-    'cyberseceval',
-    'donotanswer',
-    'harmbench',
     'harmful:child-exploitation',
     'harmful:graphic-content',
     'harmful:harassment-bullying',
@@ -1132,7 +1138,15 @@ export const riskCategories: Record<string, Plugin[]> = {
     'harmful:radicalization',
     'harmful:self-harm',
     'harmful:sexual-content',
+  ],
+
+  Dataset: [
+    'beavertails',
+    'cyberseceval',
+    'donotanswer',
+    'harmbench',
     'pliny',
+    'unsafebench',
     'xstest',
   ],
 
@@ -1156,6 +1170,8 @@ export const categoryDescriptions = {
   'Content Safety & Moderation': 'Harmful, inappropriate, or offensive content generation risks.',
   'Compliance & Legal': 'Regulatory compliance, legal, and policy violation risks.',
   'Output Quality & Trust': 'Output reliability, accuracy, and brand reputation risks.',
+  Dataset:
+    'Pre-compiled collections of test cases from research datasets designed to evaluate model safety, robustness, and alignment.',
 };
 
 export type TopLevelCategory = keyof typeof riskCategories;

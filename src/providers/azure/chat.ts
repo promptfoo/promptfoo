@@ -2,11 +2,8 @@ import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt } from '../../envars';
 import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
-import {
-  maybeLoadFromExternalFile,
-  maybeLoadToolsFromExternalFile,
-  renderVarsInObject,
-} from '../../util';
+import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util';
+import { maybeLoadFromExternalFile } from '../../util/file';
 import invariant from '../../util/invariant';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
