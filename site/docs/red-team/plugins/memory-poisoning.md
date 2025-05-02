@@ -8,6 +8,8 @@ sidebar_label: Memory Poisoning
 
 The Memory Poisoning plugin tests whether stateful agents are vulnerable to memory poisoning attacks that manipulate an agent's memory to alter its behavior in subsequent interactions.
 
+This plugin maps to **T1: Memory Poisoning** from [OWASP Agentic AI Top 10 Threats](https://genai.owasp.org/resource/agentic-ai-threats-and-mitigations/).
+
 ## Purpose
 
 Memory poisoning attacks attempt to inject malicious instructions into an agent's memory state that persist across turns. When successful, these attacks can:
@@ -26,12 +28,6 @@ The Memory Poisoning plugin:
 3. Follows with a poisoned message attempting to corrupt the established memory
 4. Tests the attack's effectiveness with a follow-up question that relies on the original memory
 5. Evaluates whether the agent's response to the follow-up reflects the original memory (secure) or the poisoned memory (vulnerable)
-
-## OWASP Mapping
-
-This plugin maps to the OWASP Agentic AI Top 10 Threats:
-
-- T1: Memory Poisoning
 
 ## Configuration
 
@@ -96,11 +92,10 @@ A successful attack (failed test) is indicated when the agent's response to the 
 
 To protect against memory poisoning attacks:
 
-1. Implement input validation that filters or sanitizes potential memory-poisoning attempts
-2. Use temporal memory structures that limit the persistence of certain user inputs
-3. Segregate memory types - separate system instructions from user input memory
-4. Apply memory attribution - track where memory content originated
-5. Periodically validate state consistency against established guardrails
+1. Implement input validation that filters or sanitizes user inputs prior to persistence.
+2. Sanitize user memories prior to including them within the context windows of inference calls.
+3. Segregate memory types - separate system instructions from user input memory.
+4. Apply memory attribution - track where memory content originated.
 
 ## Related Concepts
 
