@@ -1,23 +1,9 @@
 import type { AssertionParams, GradingResult } from 'src/types';
 import type { handleMeteorAssertion as originalHandleMeteorAssertion } from '../../src/assertions/meteor';
 
-/**
- * PERFORMANCE OPTIMIZATIONS:
- *
- * Instead of trying to mock internal functions in meteor.ts, we'll just create a complete mock
- * of the handleMeteorAssertion function to make testing much faster.
- *
- * This approach is better because:
- * 1. We avoid all the complex dependencies like WordNet
- * 2. Tests run extremely fast (under 100ms)
- * 3. We're testing the function's behavior/contract rather than its implementation
- */
-
-// Mock the handleMeteorAssertion function
 const mockHandleMeteorAssertion = async (params: AssertionParams): Promise<GradingResult> => {
   const { assertion, renderedValue, outputString, inverse } = params;
 
-  // Validate inputs - throw for empty references/outputs similar to real implementation
   if (
     !outputString ||
     (Array.isArray(renderedValue) && renderedValue.length === 0) ||
@@ -26,14 +12,11 @@ const mockHandleMeteorAssertion = async (params: AssertionParams): Promise<Gradi
     throw new Error('Invalid inputs');
   }
 
-  // Get meteor assertion parameters
   const threshold = (assertion as any).threshold ?? 0.5;
 
-  // Compute a mock METEOR score based on test cases
   let score = 0;
   const references = Array.isArray(renderedValue) ? renderedValue : [renderedValue];
 
-  // Special case for nltk example
   if (
     outputString.includes(
       'It is a guide to action that ensures the military will forever heed Party commands',
@@ -52,7 +35,6 @@ const mockHandleMeteorAssertion = async (params: AssertionParams): Promise<Gradi
     };
   }
 
-  // Special case for custom parameters test
   if (
     (assertion as any).alpha === 0.85 &&
     (assertion as any).beta === 2.0 &&
@@ -68,7 +50,6 @@ const mockHandleMeteorAssertion = async (params: AssertionParams): Promise<Gradi
     };
   }
 
-  // Handle exact matches (with or without periods)
   for (const reference of references) {
     if (
       reference === outputString ||
@@ -80,7 +61,6 @@ const mockHandleMeteorAssertion = async (params: AssertionParams): Promise<Gradi
     }
   }
 
-  // Handle case insensitivity
   if (score === 0) {
     for (const reference of references) {
       if (
@@ -94,13 +74,12 @@ const mockHandleMeteorAssertion = async (params: AssertionParams): Promise<Gradi
     }
   }
 
-  // Special cases from test scenarios
   if (
     outputString === 'The cat is sitting on the mat' &&
     (renderedValue === 'The cat sat on the mat' ||
       (Array.isArray(renderedValue) && renderedValue.includes('The cat sat on the mat')))
   ) {
-    score = 0.7; // This is for the "custom parameters" test
+    score = 0.7;
   }
 
   if (
@@ -108,7 +87,7 @@ const mockHandleMeteorAssertion = async (params: AssertionParams): Promise<Gradi
     (renderedValue === 'The cats are sitting on the mats' ||
       (Array.isArray(renderedValue) && renderedValue.includes('The cats are sitting on the mats')))
   ) {
-    score = 0.6; // This is for the "stemming variations" test
+    score = 0.6;
   }
 
   if (
@@ -116,12 +95,10 @@ const mockHandleMeteorAssertion = async (params: AssertionParams): Promise<Gradi
     (renderedValue === 'The feline sat on the rug' ||
       (Array.isArray(renderedValue) && renderedValue.includes('The feline sat on the rug')))
   ) {
-    score = 0.71; // This is for the "synonyms" test
+    score = 0.71;
   }
 
-  // Handle similar sentences
   if (score === 0) {
-    // Test specific strings
     const similarPairs = [
       [
         'It is a guide to action that ensures that the military will forever heed Party commands',
@@ -152,7 +129,6 @@ const mockHandleMeteorAssertion = async (params: AssertionParams): Promise<Gradi
     }
   }
 
-  // Handle the multiple references case - checking array structure
   if (
     score === 0 &&
     Array.isArray(renderedValue) &&
@@ -160,15 +136,13 @@ const mockHandleMeteorAssertion = async (params: AssertionParams): Promise<Gradi
     outputString.includes('military') &&
     outputString.includes('commands of the party')
   ) {
-    score = 0.7; // This is for the "multiple references" test
+    score = 0.7;
   }
 
-  // Handle "completely different" case
   if (score === 0 && outputString.includes('dog ran in the park')) {
     score = 0.3;
   }
 
-  // Calculate pass/fail based on threshold and inverse flag
   const pass = inverse ? score < threshold : score >= threshold;
 
   return {
@@ -181,16 +155,12 @@ const mockHandleMeteorAssertion = async (params: AssertionParams): Promise<Gradi
   };
 };
 
-// Explicitly mock the module
 jest.mock('../../src/assertions/meteor', () => ({
   handleMeteorAssertion: mockHandleMeteorAssertion,
 }));
 
-// Use the TypeScript import type syntax for better compatibility with ESLint
-// Rather than using require(), cast the mocked function to the correct type
 const handleMeteorAssertion = mockHandleMeteorAssertion as typeof originalHandleMeteorAssertion;
 
-// Define a type for our assertion parameters to avoid TypeScript errors
 interface MeteorAssertion {
   type: string;
   value?: string | string[];
@@ -200,7 +170,6 @@ interface MeteorAssertion {
   gamma?: number;
 }
 
-// Helper type for test params
 interface TestParams {
   assertion: MeteorAssertion;
   renderedValue: string | string[];
@@ -412,8 +381,6 @@ describe('METEOR score calculation', () => {
 
   describe('tokenization and sentence processing', () => {
     it('should handle empty references correctly', async () => {
-      // The function expects arrays with at least one element,
-      // causing it to throw an error when the array is empty
       const params: TestParams = {
         assertion: { type: 'meteor', value: 'Empty output' },
         renderedValue: [],
@@ -425,7 +392,6 @@ describe('METEOR score calculation', () => {
     });
 
     it('should ignore punctuation in string comparison', async () => {
-      // This test just verifies that commas between words don't drastically change the score
       const params1: TestParams = {
         assertion: { type: 'meteor', value: 'one two three' },
         renderedValue: 'one two three',
@@ -443,7 +409,6 @@ describe('METEOR score calculation', () => {
       const result1 = await handleMeteorAssertion(params1 as any);
       const result2 = await handleMeteorAssertion(params2 as any);
 
-      // The scores should both be high as the core words are identical
       expect(result1.score).toBeGreaterThan(0.95);
       expect(result2.score).toBeGreaterThan(0.95);
     });
@@ -468,7 +433,6 @@ describe('METEOR score calculation', () => {
         assertion: {
           type: 'meteor',
           value: 'The cats are sitting on the mats',
-          // Use a lower threshold to make the test pass with our simplified stemmer
           threshold: 0.5,
         },
         renderedValue: 'The cats are sitting on the mats',
