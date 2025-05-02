@@ -61,14 +61,8 @@ export function redteamRunCommand(program: Command) {
       }
 
       if (opts.config && UUID_REGEX.test(opts.config)) {
-        const configObj = await getConfigFromCloud(opts.config);
-
-        if (opts.target && UUID_REGEX.test(opts.target)) {
-          configObj.targets = [{ id: `${CLOUD_PROVIDER_PREFIX}${opts.target}`, config: {} }];
-        }
-
+        const configObj = await getConfigFromCloud(opts.config, opts.target);
         opts.liveRedteamConfig = configObj;
-
         opts.config = undefined;
 
         opts.loadedFromCloud = true;
