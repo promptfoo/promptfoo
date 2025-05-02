@@ -19,7 +19,7 @@ strategies:
   - jailbreak:likert
 ```
 
-By default, `jailbreak:likert` will generate one additional testcase for each strategy-less plugin testcase.
+By default, `jailbreak:likert` will generate one additional test case for each strategy-less plugin test case.
 
 ## How It Works
 
