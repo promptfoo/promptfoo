@@ -70,12 +70,6 @@ export const useStore = create<TableState>()((set, get) => ({
   table: null,
   setTable: (table: EvaluateTable | null) => set(() => ({ table })),
   setTableFromResultsFile: (resultsFile: ResultsFile) => {
-    console.log('DEBUG setTableFromResultsFile:', {
-      resultsFileVersion: resultsFile.version,
-      hasOutputVars: !!resultsFile.config?.evaluateOptions?.outputVars,
-      outputVars: resultsFile.config?.evaluateOptions?.outputVars,
-    });
-
     if (resultsFile.version && resultsFile.version >= 4) {
       set(() => ({ table: convertResultsToTable(resultsFile), version: resultsFile.version }));
     } else {

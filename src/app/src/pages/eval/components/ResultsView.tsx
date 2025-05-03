@@ -269,25 +269,10 @@ export default function ResultsView({
         cache: 'no-store',
       });
       const body = await response.json();
-
-      console.log('DEBUG comparison eval data:', {
-        compareEvalId,
-        bodyDataVersion: body.data.version,
-        hasOutputVars: !!body.data.config?.evaluateOptions?.outputVars,
-        outputVars: body.data.config?.evaluateOptions?.outputVars,
-        hasTableVars: !!table?.head?.vars?.length,
-        tableVars: table?.head?.vars,
-      });
-
       const comparisonTable =
         body.data.version < 4
           ? (body.data.results.table as EvaluateTable)
           : convertResultsToTable(body.data);
-
-      console.log('DEBUG comparison tables:', {
-        currentTableVars: table.head.vars,
-        comparisonTableVars: comparisonTable.head.vars,
-      });
 
       // Combine the comparison table with the current table
       const combinedTable: EvaluateTable = {
@@ -309,11 +294,6 @@ export default function ResultsView({
           outputs: [...row.outputs, ...(comparisonTable.body[index]?.outputs || [])],
         })),
       };
-
-      console.log('DEBUG combined table:', {
-        combinedTableVars: combinedTable.head.vars,
-      });
-
       // Update the state with the combined table
       setTable(combinedTable);
 
