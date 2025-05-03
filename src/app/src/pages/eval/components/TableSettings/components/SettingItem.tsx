@@ -6,7 +6,6 @@ import {
   Checkbox,
   Switch,
   Typography,
-  Box,
   Stack,
   IconButton,
   Tooltip,

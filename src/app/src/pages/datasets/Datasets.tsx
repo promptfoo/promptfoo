@@ -1,15 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import React from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
-import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
-import { alpha, useTheme } from '@mui/material/styles';
+import { useTheme } from '@mui/material/styles';
 import {
-  DataGrid,
-  type GridColDef,
-  type GridRenderCellParams,
   GridToolbarContainer,
   GridToolbarColumnsButton,
   GridToolbarFilterButton,
@@ -17,8 +12,7 @@ import {
   GridToolbarExport,
   GridToolbarQuickFilter,
 } from '@mui/x-data-grid';
-import type { TestCase, TestCasesWithMetadata } from '@promptfoo/types';
-import DatasetDialog from './DatasetDialog';
+import type { TestCasesWithMetadata } from '@promptfoo/types';
 
 // augment the props for the toolbar slot
 declare module '@mui/x-data-grid' {
@@ -74,9 +68,7 @@ export default function Datasets({
       ) : error ? (
         <Alert severity="error">{error}</Alert>
       ) : (
-        <Typography variant="body1">
-          {data.length} datasets available
-        </Typography>
+        <Typography variant="body1">{data.length} datasets available</Typography>
       )}
     </Box>
   );

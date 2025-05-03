@@ -111,12 +111,12 @@ export default function EvalsDataGrid({
   // Creates object in the format expected by GridRowSelectionModel
   const createSelectionModel = (ids: string[]): GridRowSelectionModel => ({
     type: 'include',
-    ids: new Set(ids)
+    ids: new Set(ids),
   });
 
   // State for row selection
   const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>(
-    createSelectionModel([])
+    createSelectionModel([]),
   );
 
   useEffect(() => {

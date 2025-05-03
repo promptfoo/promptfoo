@@ -247,7 +247,9 @@ export function LogViewer({ logs }: LogViewerProps) {
                 bottom: 16,
                 zIndex: 1,
               }}
-              onClick={() => scrollToBottom(fullscreenLogsContainerRef as React.RefObject<HTMLDivElement>)}
+              onClick={() =>
+                scrollToBottom(fullscreenLogsContainerRef as React.RefObject<HTMLDivElement>)
+              }
             >
               <KeyboardDoubleArrowDownIcon />
             </Fab>

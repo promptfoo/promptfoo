@@ -1,9 +1,9 @@
 import { render, screen, fireEvent } from '@testing-library/react';
+import React from 'react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import CommentDialog from './TableCommentDialog';
-import React from 'react';
 
 describe('CommentDialog', () => {
   beforeEach(() => {
@@ -24,7 +24,7 @@ describe('CommentDialog', () => {
     return render(
       <ThemeProvider theme={theme}>
         <span>{component}</span>
-      </ThemeProvider>
+      </ThemeProvider>,
     );
   };
 

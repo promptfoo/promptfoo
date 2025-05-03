@@ -65,7 +65,7 @@ const RiskCard: React.FC<{
     <Card>
       <CardContent className="risk-card-container">
         <Grid container spacing={3}>
-          <Grid 
+          <Grid
             size={{ xs: 12, md: 6 }}
             style={{
               display: 'flex',

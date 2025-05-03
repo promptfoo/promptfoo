@@ -306,14 +306,18 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
             }}
           >
             <Grid component="div" container spacing={3}>
- <Grid size={{ xs: 4 }} component="div">                 <Typography variant="h6" align="center">
+              <Grid size={{ xs: 4 }} component="div">
+                {' '}
+                <Typography variant="h6" align="center">
                   {selectedStrategy && strategyStats[selectedStrategy]?.total}
                 </Typography>
                 <Typography variant="body2" align="center" color="text.secondary">
                   Total Attempts
                 </Typography>
               </Grid>
- <Grid size={{ xs: 4 }} component="div">                 <Typography variant="h6" align="center" color="error.main">
+              <Grid size={{ xs: 4 }} component="div">
+                {' '}
+                <Typography variant="h6" align="center" color="error.main">
                   {selectedStrategy &&
                     strategyStats[selectedStrategy].total - strategyStats[selectedStrategy].pass}
                 </Typography>
@@ -321,7 +325,9 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
                   Flagged Attempts
                 </Typography>
               </Grid>
- <Grid size={{ xs: 4 }} component="div">                 <Typography variant="h6" align="center">
+              <Grid size={{ xs: 4 }} component="div">
+                {' '}
+                <Typography variant="h6" align="center">
                   {selectedStrategy &&
                     `${(
                       ((strategyStats[selectedStrategy].total -

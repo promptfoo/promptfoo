@@ -58,9 +58,10 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({
                 justifyContent: 'center',
                 minWidth: '24px',
                 marginRight: '8px',
-                color: theme.palette.mode === 'dark'
-                  ? theme.palette.primary.light
-                  : theme.palette.primary.main,
+                color:
+                  theme.palette.mode === 'dark'
+                    ? theme.palette.primary.light
+                    : theme.palette.primary.main,
               }}
             >
               {icon}
@@ -104,9 +105,7 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({
         }}
         role="list"
       >
-        <div>
-          {children}
-        </div>
+        <div>{children}</div>
       </div>
     </Box>
   );

@@ -394,11 +394,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
         <AccordionDetails>
           <Grid component="div" container spacing={2}>
             {pluginsToShow.map((plugin) => (
-              <Grid
-                size={{ xs: 12, sm: 6, md: 4, lg: 3 }}
-                key={plugin}
-                component="div"
-              >
+              <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={plugin} component="div">
                 <Paper
                   elevation={1}
                   sx={{
@@ -676,11 +672,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
               <Grid component="div" container spacing={2}>
                 {DATASET_PLUGINS.filter((plugin) => filteredPlugins.includes(plugin as Plugin)).map(
                   (plugin) => (
-                    <Grid
-                      size={{ xs: 12, sm: 6, md: 4, lg: 3 }}
-                      key={plugin}
-                      component="div"
-                    >
+                    <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={plugin} component="div">
                       <Paper
                         elevation={1}
                         sx={{

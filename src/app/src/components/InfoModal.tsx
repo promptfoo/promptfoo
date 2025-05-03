@@ -96,9 +96,7 @@ export default function InfoModal<T extends { open: boolean; onClose: () => void
                 },
               }}
             >
-              <span style={{ display: 'flex', alignItems: 'center' }}>
-                {item.icon}
-              </span>
+              <span style={{ display: 'flex', alignItems: 'center' }}>{item.icon}</span>
               <Link
                 underline="none"
                 target="_blank"

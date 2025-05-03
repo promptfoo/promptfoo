@@ -139,7 +139,7 @@ const EnhancedRangeSlider: React.FC<EnhancedRangeSliderProps> = ({
         mb={tokens.spacing.margin.element}
       >
         {Boolean(icon) && (
-          <span 
+          <span
             style={{
               display: 'flex',
               alignItems: 'center',
