@@ -3,7 +3,6 @@ import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import Typography from '@mui/material/Typography';
-import { useTheme } from '@mui/material/styles';
 import {
   GridToolbarContainer,
   GridToolbarColumnsButton,
@@ -23,7 +22,6 @@ declare module '@mui/x-data-grid' {
 
 // Create a custom QuickFilter component
 const CustomQuickFilter = (props: any) => {
-  const theme = useTheme();
   return (
     <div>
       <GridToolbarQuickFilter {...props} />
@@ -32,24 +30,6 @@ const CustomQuickFilter = (props: any) => {
 };
 
 CustomQuickFilter.displayName = 'CustomQuickFilter';
-
-function CustomToolbar({ showUtilityButtons }: { showUtilityButtons: boolean }) {
-  const theme = useTheme();
-  return (
-    <GridToolbarContainer sx={{ p: 1, borderBottom: `1px solid ${theme.palette.divider}` }}>
-      {showUtilityButtons && (
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <GridToolbarColumnsButton />
-          <GridToolbarFilterButton />
-          <GridToolbarDensitySelector />
-          <GridToolbarExport />
-        </Box>
-      )}
-      <Box sx={{ flexGrow: 1 }} />
-      <CustomQuickFilter />
-    </GridToolbarContainer>
-  );
-}
 
 export default function Datasets({
   data,

@@ -29,7 +29,6 @@ declare module '@mui/x-data-grid' {
 
 // Create a custom QuickFilter component
 const CustomQuickFilter = (props: any) => {
-  const theme = useTheme();
   return (
     <div>
       <GridToolbarQuickFilter {...props} />
