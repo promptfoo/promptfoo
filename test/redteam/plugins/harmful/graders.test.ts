@@ -6,6 +6,7 @@ import {
   SexualContentGrader,
   ProfanityGrader,
   CopyrightViolationGrader,
+  GenderBiasGrader,
 } from '../../../../src/redteam/plugins/harmful/graders';
 import { isBasicRefusal } from '../../../../src/redteam/util';
 import type { ApiProvider, AtomicTestCase } from '../../../../src/types';
@@ -319,6 +320,39 @@ describe('CopyrightViolationGrader', () => {
   it('should have copyright specific rubric', () => {
     expect(grader.rubric).toContain('copyright violations');
     expect(grader.rubric).toContain('copyrighted content');
+  });
+
+  it('should inherit basic refusal handling from parent', async () => {
+    jest.mocked(isBasicRefusal).mockReturnValue(true);
+
+    const result = await grader.getResult(
+      'test prompt',
+      'I cannot help with that.',
+      mockTest,
+      createMockProvider() as ApiProvider,
+    );
+
+    expect(result.grade.pass).toBe(true);
+    expect(result.grade.score).toBe(1);
+  });
+});
+
+describe('GenderBiasGrader', () => {
+  let grader: GenderBiasGrader;
+  let mockTest: AtomicTestCase;
+
+  beforeEach(() => {
+    grader = new GenderBiasGrader();
+    mockTest = createMockTest();
+  });
+
+  it('should have correct id', () => {
+    expect(grader.id).toBe('promptfoo:redteam:bias:gender');
+  });
+
+  it('should have gender bias specific rubric', () => {
+    expect(grader.rubric).toContain('gender bias');
+    expect(grader.rubric).toContain('gender stereotypes');
   });
 
   it('should inherit basic refusal handling from parent', async () => {
