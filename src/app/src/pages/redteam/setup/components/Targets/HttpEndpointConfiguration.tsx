@@ -12,7 +12,7 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import FormControl from '@mui/material/FormControl';
 import FormControlLabel from '@mui/material/FormControlLabel';
-import Grid from '@mui/material/Grid';
+import Grid from '@mui/material/Grid2';
 import IconButton from '@mui/material/IconButton';
 import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
@@ -488,7 +488,7 @@ ${exampleRequest}`;
         <DialogTitle>Generate HTTP Configuration</DialogTitle>
         <DialogContent>
           <Grid container spacing={3} sx={{ mt: 1 }}>
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Typography variant="h6" gutterBottom>
                 Example Request
               </Typography>
@@ -507,7 +507,7 @@ ${exampleRequest}`;
                 />
               </Paper>
             </Grid>
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Typography variant="h6" gutterBottom>
                 Example Response
               </Typography>
@@ -527,12 +527,12 @@ ${exampleRequest}`;
               </Paper>
             </Grid>
             {error && (
-              <Grid item xs={12}>
+              <Grid size={12}>
                 <Typography color="error">Error: {error}</Typography>
               </Grid>
             )}
             {generatedConfig && (
-              <Grid item xs={12}>
+              <Grid size={12}>
                 <Box sx={{ display: 'flex', alignItems: 'center', mt: 2, mb: 1 }}>
                   <Typography variant="h6" sx={{ flexGrow: 1 }}>
                     Generated Configuration

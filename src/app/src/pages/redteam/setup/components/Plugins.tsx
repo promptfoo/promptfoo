@@ -13,7 +13,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
-import Grid from '@mui/material/Grid';
+import Grid from '@mui/material/Grid2';
 import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
 import TextField from '@mui/material/TextField';
@@ -394,7 +394,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
         <AccordionDetails>
           <Grid container spacing={2}>
             {pluginsToShow.map((plugin) => (
-              <Grid item xs={12} sm={6} md={4} key={plugin}>
+              <Grid size={{ xs: 12, sm: 6, md: 4 }} key={plugin}>
                 <Paper
                   elevation={1}
                   sx={{
@@ -553,11 +553,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                     : preset.name === currentlySelectedPreset?.name;
                 return (
                   <Grid
-                    item
-                    xs={12}
-                    sm={6}
-                    md={4}
-                    lg={3}
+                    size={{ xs: 12, sm: 6, md: 4, lg: 3 }}
                     key={preset.name}
                     sx={{
                       minWidth: { xs: '280px', sm: '320px' },
@@ -676,7 +672,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
               <Grid container spacing={2}>
                 {DATASET_PLUGINS.filter((plugin) => filteredPlugins.includes(plugin as Plugin)).map(
                   (plugin) => (
-                    <Grid item xs={12} sm={6} md={4} key={plugin}>
+                    <Grid size={{ xs: 12, sm: 6, md: 4 }} key={plugin}>
                       <Paper
                         elevation={1}
                         sx={{

@@ -6,7 +6,7 @@ import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
-import Grid from '@mui/material/Grid';
+import Grid from '@mui/material/Grid2';
 import IconButton from '@mui/material/IconButton';
 import Link from '@mui/material/Link';
 import Typography from '@mui/material/Typography';
@@ -64,7 +64,7 @@ export default function Setup({ open, onClose }: SetupProps) {
             including techniques like jailbreaking and prompt injection.
           </li>
         </ul>
-        <Grid item xs={12}>
+        <Grid size={12}>
           <Box
             sx={{
               display: 'flex',

@@ -2,7 +2,7 @@ import React from 'react';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
-import Grid from '@mui/material/Grid';
+import Grid from '@mui/material/Grid2';
 import LinearProgress from '@mui/material/LinearProgress';
 import Typography from '@mui/material/Typography';
 import {
@@ -229,7 +229,7 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
               const frameworkSeverity = getFrameworkSeverity(framework);
 
               return (
-                <Grid item xs={12} sm={6} md={3} key={framework}>
+                <Grid size={{ xs: 12, sm: 6, md: 3 }} key={framework}>
                   <FrameworkCard
                     framework={framework}
                     isCompliant={isCompliant}
