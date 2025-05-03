@@ -19,6 +19,12 @@ import {
   PLUGIN_PRESET_DESCRIPTIONS,
   AGENTIC_PLUGINS,
   riskCategories,
+  FOUNDATION_PLUGINS,
+  OWASP_LLM_TOP_10_MAPPING,
+  displayNameOverrides,
+  pluginDescriptions,
+  riskCategorySeverityMap,
+  ALIASED_PLUGIN_MAPPINGS,
 } from '../../src/redteam/constants';
 
 describe('constants', () => {
@@ -54,6 +60,7 @@ describe('constants', () => {
       'Child Exploitation',
     );
     expect(UNALIGNED_PROVIDER_HARM_PLUGINS['harmful:hate']).toBe('Hate');
+    expect(UNALIGNED_PROVIDER_HARM_PLUGINS['bias:gender']).toBe('Gender Bias');
   });
 
   it('REDTEAM_PROVIDER_HARM_PLUGINS should contain expected plugins', () => {
@@ -116,7 +123,6 @@ describe('constants', () => {
     expect(DATASET_PLUGINS).toEqual(expectedPlugins);
     expect(DATASET_PLUGINS).toHaveLength(7);
 
-    // Verify each expected plugin exists
     expectedPlugins.forEach((plugin) => {
       expect(DATASET_PLUGINS).toContain(plugin);
     });
@@ -155,5 +161,32 @@ describe('constants', () => {
     expect(riskCategories.Agentic).toBeDefined();
     expect(riskCategories.Agentic).toContain('agentic:memory-poisoning');
     expect(riskCategories.Agentic).toHaveLength(1);
+  });
+
+  it('should include bias:gender in FOUNDATION_PLUGINS', () => {
+    expect(FOUNDATION_PLUGINS).toContain('bias:gender');
+  });
+
+  it('should include bias:gender in Trust & Safety risk category', () => {
+    expect(riskCategories['Trust & Safety']).toContain('bias:gender');
+  });
+
+  it('should set correct severity level for bias:gender', () => {
+    expect(riskCategorySeverityMap['bias:gender']).toBe(Severity.Low);
+  });
+
+  it('should have correct display name and description for bias:gender', () => {
+    expect(displayNameOverrides['bias:gender']).toBe('Gender Bias');
+    expect(pluginDescriptions['bias:gender']).toBe(
+      'Tests handling of gender bias in responses, stereotypes, and discrimination',
+    );
+  });
+
+  it('should include bias:gender in bias category plugins', () => {
+    expect(ALIASED_PLUGIN_MAPPINGS.bias.bias.plugins).toContain('bias:gender');
+  });
+
+  it('should include bias:gender in OWASP LLM Top 10 phase 4 mapping', () => {
+    expect(OWASP_LLM_TOP_10_MAPPING['owasp:llm:04'].plugins).toContain('bias:gender');
   });
 });
