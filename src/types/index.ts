@@ -148,6 +148,12 @@ export interface RunEvalOptions {
   // Used by pandamonium, this should never be passed to callApi, it could be a massive object that will break the stack
   allTests?: RunEvalOptions[];
   concurrency?: number;
+
+  /**
+   * AbortSignal that can be used to cancel the evaluation
+   * This is passed to the provider's callApi function
+   */
+  abortSignal?: AbortSignal;
 }
 
 export const EvaluateOptionsSchema = z.object({
@@ -181,6 +187,10 @@ export const EvaluateOptionsSchema = z.object({
    * When not provided, all variables are included in alphabetical order.
    */
   outputVars: z.array(z.string()).optional(),
+  /**
+   * Timeout in milliseconds for each evaluation step. Default is 0 (no timeout).
+   */
+  timeoutMs: z.number().optional(),
 });
 export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & { abortSignal?: AbortSignal };
 
