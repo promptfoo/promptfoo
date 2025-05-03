@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import CrispChat from '@app/components/CrispChat';
 import { useTelemetry } from '@app/hooks/useTelemetry';
@@ -121,13 +121,14 @@ function CustomTabPanel(props: TabPanelProps) {
 
   return (
     <TabPanel
-      role="tabpanel"
       hidden={value !== index}
       id={`vertical-tabpanel-${index}`}
       aria-labelledby={`vertical-tab-${index}`}
       {...other}
     >
-      {value === index && children}
+      {value === index ? (
+        <>{children}</>
+      ) : null}
     </TabPanel>
   );
 }

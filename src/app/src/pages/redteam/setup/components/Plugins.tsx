@@ -392,9 +392,13 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
           </Box>
         </AccordionSummary>
         <AccordionDetails>
-          <Grid container spacing={2}>
+          <Grid component="div" container spacing={2}>
             {pluginsToShow.map((plugin) => (
-              <Grid item xs={12} sm={6} md={4} key={plugin}>
+              <Grid
+                size={{ xs: 12, sm: 6, md: 4, lg: 3 }}
+                key={plugin}
+                component="div"
+              >
                 <Paper
                   elevation={1}
                   sx={{
@@ -553,11 +557,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                     : preset.name === currentlySelectedPreset?.name;
                 return (
                   <Grid
-                    item
-                    xs={12}
-                    sm={6}
-                    md={4}
-                    lg={3}
+                    size={{ xs: 12, sm: 6, md: 4, lg: 3 }}
                     key={preset.name}
                     sx={{
                       minWidth: { xs: '280px', sm: '320px' },
@@ -673,10 +673,14 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
               </Typography>
             </AccordionSummary>
             <AccordionDetails>
-              <Grid container spacing={2}>
+              <Grid component="div" container spacing={2}>
                 {DATASET_PLUGINS.filter((plugin) => filteredPlugins.includes(plugin as Plugin)).map(
                   (plugin) => (
-                    <Grid item xs={12} sm={6} md={4} key={plugin}>
+                    <Grid
+                      size={{ xs: 12, sm: 6, md: 4, lg: 3 }}
+                      key={plugin}
+                      component="div"
+                    >
                       <Paper
                         elevation={1}
                         sx={{

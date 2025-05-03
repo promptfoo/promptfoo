@@ -18,81 +18,71 @@ import {
   GridCsvExportMenuItem,
   GridPrintExportMenuItem,
   GridToolbarQuickFilter,
-  type GridExportMenuItemProps,
   useGridApiContext,
   gridFilteredSortedRowIdsSelector,
   gridVisibleColumnFieldsSelector,
 } from '@mui/x-data-grid';
 import type { StandaloneEval } from '@promptfoo/util';
 
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-function JsonExportMenuItem(props: GridExportMenuItemProps<{}>) {
+const CustomPrintExportMenuItem = (props: any) => {
   const apiRef = useGridApiContext();
 
-  const json = useMemo(() => {
-    // Select rows and columns
+  const handleClick = () => {
     const filteredSortedRowIds = gridFilteredSortedRowIdsSelector(apiRef);
     const visibleColumnsField = gridVisibleColumnFieldsSelector(apiRef);
 
-    // Format the data. Here we only keep the value
-    const data = filteredSortedRowIds.map((id) => {
-      const row: Record<string, any> = {};
-      visibleColumnsField.forEach((field) => {
-        row[field] = apiRef.current.getCellParams(id, field).value;
-      });
-      return row;
+    apiRef.current.exportDataAsPrint({
+      fields: visibleColumnsField,
+      getRowsToExport: () => filteredSortedRowIds,
     });
-
-    // Stringify with some indentation
-    return JSON.stringify(data, null, 2);
-  }, [apiRef]);
-
-  const handleClick = () => {
-    const blob = new Blob([json], { type: 'text/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'promptfoo-eval-history.json';
-    a.click();
-
-    setTimeout(() => {
-      URL.revokeObjectURL(url);
-    });
-
-    // Hide the export menu after the export
-    props.hideMenu?.();
   };
 
-  return <MenuItem onClick={handleClick}>Export JSON</MenuItem>;
-}
+  return <GridPrintExportMenuItem onClick={handleClick} {...props} />;
+};
 
-const GridToolbarExport = () => (
-  <GridToolbarExportContainer>
-    <GridCsvExportMenuItem />
-    <JsonExportMenuItem />
-    <GridPrintExportMenuItem />
-  </GridToolbarExportContainer>
-);
+// Create a custom QuickFilter component
+const CustomQuickFilter = ({ ...props }) => {
+  const theme = useTheme();
+  return (
+    <div>
+      <GridToolbarQuickFilter {...props} />
+    </div>
+  );
+};
 
-function CustomToolbar() {
+CustomQuickFilter.displayName = 'CustomQuickFilter';
+
+function CustomToolbar({ showUtilityButtons }: { showUtilityButtons: boolean }) {
   const theme = useTheme();
   return (
     <GridToolbarContainer sx={{ p: 1, borderBottom: `1px solid ${theme.palette.divider}` }}>
-      <Box sx={{ display: 'flex', gap: 1 }}>
-        <GridToolbarColumnsButton />
-        <GridToolbarFilterButton />
-        <GridToolbarDensitySelector />
-        <GridToolbarExport />
-      </Box>
+      {showUtilityButtons && (
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <GridToolbarColumnsButton />
+          <GridToolbarFilterButton />
+          <GridToolbarDensitySelector />
+          <GridToolbarExportContainer>
+            <GridCsvExportMenuItem />
+            <CustomPrintExportMenuItem />
+            <MenuItem divider />
+            <MenuItem>
+              <Link
+                to="/prompts"
+                style={{
+                  textDecoration: 'none',
+                  color: 'inherit',
+                  display: 'flex',
+                  width: '100%',
+                }}
+              >
+                View All Prompts
+              </Link>
+            </MenuItem>
+          </GridToolbarExportContainer>
+        </Box>
+      )}
       <Box sx={{ flexGrow: 1 }} />
-      <GridToolbarQuickFilter
-        sx={{
-          '& .MuiInputBase-root': {
-            borderRadius: 2,
-            backgroundColor: theme.palette.background.paper,
-          },
-        }}
-      />
+      <CustomQuickFilter />
     </GridToolbarContainer>
   );
 }
@@ -305,6 +295,7 @@ export default function History({
               </Box>
             ),
           }}
+          slotProps={{ toolbar: { showUtilityButtons: true } }}
           sx={{
             border: 'none',
             '& .MuiDataGrid-row': {

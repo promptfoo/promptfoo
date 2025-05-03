@@ -50,17 +50,21 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({
             py: tokens.spacing.padding.tiny,
           }}
         >
-          {icon && (
-            <Box
-              sx={{
-                color: theme.palette.primary.main,
+          {Boolean(icon) && (
+            <span
+              style={{
                 display: 'flex',
                 alignItems: 'center',
-                fontSize: '1.25rem',
+                justifyContent: 'center',
+                minWidth: '24px',
+                marginRight: '8px',
+                color: theme.palette.mode === 'dark'
+                  ? theme.palette.primary.light
+                  : theme.palette.primary.main,
               }}
             >
               {icon}
-            </Box>
+            </span>
           )}
           <Typography
             variant="subtitle1"
@@ -94,14 +98,16 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({
         </Typography>
       )}
 
-      <Box
-        sx={{
-          ml: tokens.spacing.indent.tiny,
-          role: 'list',
+      <div
+        style={{
+          marginLeft: tokens.spacing.indent.tiny,
         }}
+        role="list"
       >
-        {children}
-      </Box>
+        <div>
+          {children}
+        </div>
+      </div>
     </Box>
   );
 };

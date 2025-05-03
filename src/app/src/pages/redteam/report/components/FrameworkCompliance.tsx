@@ -222,15 +222,14 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
               },
             }}
           />
-          <Grid container spacing={3} className="framework-grid">
+          <Grid component="div" container spacing={3} className="framework-grid">
             {FRAMEWORK_COMPLIANCE_IDS.map((framework) => {
               const nonCompliantPlugins = getNonCompliantPlugins(framework);
               const isCompliant = frameworkCompliance[framework];
               const frameworkSeverity = getFrameworkSeverity(framework);
 
               return (
-                <Grid item xs={12} sm={6} md={3} key={framework}>
-                  <FrameworkCard
+ <Grid size={{ xs: 12, sm: 6, md: 3 }} component="div" key={framework}>                   <FrameworkCard
                     framework={framework}
                     isCompliant={isCompliant}
                     frameworkSeverity={frameworkSeverity}

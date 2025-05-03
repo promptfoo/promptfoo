@@ -310,9 +310,8 @@ export default function Review() {
         Configuration Summary
       </Typography>
 
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={6}>
-          <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
+      <Grid component="div" container spacing={3}>
+ <Grid size={{ xs: 12, md: 6 }} component="div">           <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
             <Typography variant="h6" gutterBottom>
               Plugins ({pluginSummary.length})
             </Typography>
@@ -341,8 +340,7 @@ export default function Review() {
           </Paper>
         </Grid>
 
-        <Grid item xs={12} md={6}>
-          <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
+ <Grid size={{ xs: 12, md: 6 }} component="div">           <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
             <Typography variant="h6" gutterBottom>
               Strategies ({strategySummary.length})
             </Typography>
@@ -372,8 +370,7 @@ export default function Review() {
         </Grid>
 
         {customPolicies.length > 0 && (
-          <Grid item xs={12} md={6}>
-            <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
+ <Grid size={{ xs: 12, md: 6 }} component="div">             <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
               <Typography variant="h6" gutterBottom>
                 Custom Policies ({customPolicies.length})
               </Typography>
@@ -431,8 +428,7 @@ export default function Review() {
         )}
 
         {intents.length > 0 && (
-          <Grid item xs={12} md={6}>
-            <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
+ <Grid size={{ xs: 12, md: 6 }} component="div">             <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
               <Typography variant="h6" gutterBottom>
                 Intents ({intents.length})
               </Typography>
@@ -507,14 +503,12 @@ export default function Review() {
           </Grid>
         )}
 
-        <Grid item xs={12}>
-          <Paper elevation={2} sx={{ p: 3 }}>
+ <Grid size={{ xs: 12 }} component="div">           <Paper elevation={2} sx={{ p: 3 }}>
             <Typography variant="h6" gutterBottom>
               Additional Details
             </Typography>
-            <Grid container spacing={2}>
-              <Grid item xs={12} sm={12}>
-                <Typography variant="subtitle2">Purpose</Typography>
+            <Grid component="div" container spacing={2}>
+ <Grid size={{ xs: 12, sm: 12 }} component="div">                 <Typography variant="subtitle2">Purpose</Typography>
                 <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
                   {config.purpose || 'Not specified'}
                 </Typography>

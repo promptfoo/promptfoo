@@ -487,9 +487,8 @@ ${exampleRequest}`;
       >
         <DialogTitle>Generate HTTP Configuration</DialogTitle>
         <DialogContent>
-          <Grid container spacing={3} sx={{ mt: 1 }}>
-            <Grid item xs={12} md={6}>
-              <Typography variant="h6" gutterBottom>
+          <Grid component="div" container spacing={3} sx={{ mt: 1 }}>
+ <Grid size={{ xs: 12, md: 6 }} component="div">               <Typography variant="h6" gutterBottom>
                 Example Request
               </Typography>
               <Paper elevation={3} sx={{ height: '300px', overflow: 'auto' }}>
@@ -507,8 +506,7 @@ ${exampleRequest}`;
                 />
               </Paper>
             </Grid>
-            <Grid item xs={12} md={6}>
-              <Typography variant="h6" gutterBottom>
+ <Grid size={{ xs: 12, md: 6 }} component="div">               <Typography variant="h6" gutterBottom>
                 Example Response
               </Typography>
               <Paper elevation={3} sx={{ height: '300px', overflow: 'auto' }}>
@@ -527,13 +525,11 @@ ${exampleRequest}`;
               </Paper>
             </Grid>
             {error && (
-              <Grid item xs={12}>
-                <Typography color="error">Error: {error}</Typography>
+ <Grid size={{ xs: 12 }} component="div">                 <Typography color="error">Error: {error}</Typography>
               </Grid>
             )}
             {generatedConfig && (
-              <Grid item xs={12}>
-                <Box sx={{ display: 'flex', alignItems: 'center', mt: 2, mb: 1 }}>
+ <Grid size={{ xs: 12 }} component="div">                 <Box sx={{ display: 'flex', alignItems: 'center', mt: 2, mb: 1 }}>
                   <Typography variant="h6" sx={{ flexGrow: 1 }}>
                     Generated Configuration
                   </Typography>

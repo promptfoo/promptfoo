@@ -64,8 +64,7 @@ export default function Setup({ open, onClose }: SetupProps) {
             including techniques like jailbreaking and prompt injection.
           </li>
         </ul>
-        <Grid item xs={12}>
-          <Box
+ <Grid size={{ xs: 12 }} component="div">           <Box
             sx={{
               display: 'flex',
               justifyContent: 'space-between',

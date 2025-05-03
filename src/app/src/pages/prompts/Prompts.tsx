@@ -27,6 +27,18 @@ declare module '@mui/x-data-grid' {
   }
 }
 
+// Create a custom QuickFilter component
+const CustomQuickFilter = (props: any) => {
+  const theme = useTheme();
+  return (
+    <div>
+      <GridToolbarQuickFilter {...props} />
+    </div>
+  );
+};
+
+CustomQuickFilter.displayName = 'CustomQuickFilter';
+
 function CustomToolbar({ showUtilityButtons }: { showUtilityButtons: boolean }) {
   const theme = useTheme();
   return (
@@ -40,14 +52,7 @@ function CustomToolbar({ showUtilityButtons }: { showUtilityButtons: boolean }) 
         </Box>
       )}
       <Box sx={{ flexGrow: 1 }} />
-      <GridToolbarQuickFilter
-        sx={{
-          '& .MuiInputBase-root': {
-            borderRadius: 2,
-            backgroundColor: theme.palette.background.paper,
-          },
-        }}
-      />
+      <CustomQuickFilter />
     </GridToolbarContainer>
   );
 }

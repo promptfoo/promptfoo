@@ -3,6 +3,7 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import CommentDialog from './TableCommentDialog';
+import React from 'react';
 
 describe('CommentDialog', () => {
   beforeEach(() => {
@@ -19,10 +20,12 @@ describe('CommentDialog', () => {
   };
 
   const renderWithTheme = (component: React.ReactElement) => {
-    const theme = createTheme({
-      palette: { mode: 'light' },
-    });
-    return render(<ThemeProvider theme={theme}>{component}</ThemeProvider>);
+    const theme = createTheme();
+    return render(
+      <ThemeProvider theme={theme}>
+        <span>{component}</span>
+      </ThemeProvider>
+    );
   };
 
   it('renders correctly when open', () => {

@@ -318,8 +318,7 @@ export default function Purpose({ onNext }: PromptsProps) {
         </Box>
       )}
 
-      <Grid item xs={12}>
-        <Box
+ <Grid size={{ xs: 12 }} component="div">         <Box
           sx={{
             display: 'flex',
             justifyContent: 'flex-end',

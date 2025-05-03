@@ -125,21 +125,19 @@ const SettingItem: React.FC<SettingItemProps> = ({
               width: '100%',
             }}
           >
-            {icon && (
-              <Box
-                sx={{
-                  color: theme.palette.primary.main,
+            {Boolean(icon) && (
+              <span
+                style={{
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  lineHeight: 0,
-                  fontSize: '1.1rem',
-                  minWidth: 20,
-                  marginRight: tokens.spacing.margin.tiny,
+                  minWidth: '24px',
+                  marginRight: '8px',
+                  color: theme.palette.text.secondary,
                 }}
               >
                 {icon}
-              </Box>
+              </span>
             )}
             <Typography
               variant="body2"

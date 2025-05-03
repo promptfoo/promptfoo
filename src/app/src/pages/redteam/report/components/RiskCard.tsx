@@ -65,10 +65,8 @@ const RiskCard: React.FC<{
     <Card>
       <CardContent className="risk-card-container">
         <Grid container spacing={3}>
-          <Grid
-            item
-            xs={12}
-            md={6}
+          <Grid 
+            size={{ xs: 12, md: 6 }}
             style={{
               display: 'flex',
               flexDirection: 'column',
@@ -94,14 +92,7 @@ const RiskCard: React.FC<{
             >
               <Gauge
                 value={progressValue}
-                // @ts-ignore
                 max={100}
-                thickness={10}
-                arc={{
-                  startAngle: -90,
-                  endAngle: 90,
-                  color: 'primary.main',
-                }}
                 text={Number.isNaN(progressValue) ? '-' : `${Math.round(progressValue)}%`}
                 sx={{
                   width: '100%',
@@ -125,7 +116,7 @@ const RiskCard: React.FC<{
               {numTestsPassed}/{numTestsPassed + numTestsFailed} passed
             </Typography>
           </Grid>
-          <Grid item xs={6} md={4}>
+          <Grid size={{ xs: 12, md: 6 }}>
             <List dense>
               {filteredTestTypes.map((test, index) => {
                 const percentage = test.numPassed / (test.numPassed + test.numFailed);

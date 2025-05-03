@@ -138,17 +138,18 @@ const EnhancedRangeSlider: React.FC<EnhancedRangeSliderProps> = ({
         spacing={tokens.spacing.stack.medium}
         mb={tokens.spacing.margin.element}
       >
-        {icon && (
-          <Box
-            sx={{
-              color: theme.palette.primary.main,
+        {Boolean(icon) && (
+          <span 
+            style={{
               display: 'flex',
               alignItems: 'center',
-              fontSize: '1.1rem',
+              justifyContent: 'center',
+              minWidth: '24px',
+              marginRight: '8px',
             }}
           >
             {icon}
-          </Box>
+          </span>
         )}
         <Typography
           variant="body1"

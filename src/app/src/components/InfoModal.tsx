@@ -14,7 +14,7 @@ import Link from '@mui/material/Link';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 
-const links: { icon: React.ReactNode; text: string; href: string }[] = [
+const links: { icon: React.ReactElement; text: string; href: string }[] = [
   {
     icon: <MenuBookIcon fontSize="small" />,
     text: 'Documentation',
@@ -96,7 +96,9 @@ export default function InfoModal<T extends { open: boolean; onClose: () => void
                 },
               }}
             >
-              {item.icon}
+              <span style={{ display: 'flex', alignItems: 'center' }}>
+                {item.icon}
+              </span>
               <Link
                 underline="none"
                 target="_blank"

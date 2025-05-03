@@ -54,7 +54,7 @@ function NavLink({ href, label }: { href: string; label: string }) {
   const isActive = location.pathname.startsWith(href);
 
   return (
-    <NavButton component={Link} to={href} className={isActive ? 'active' : ''}>
+    <NavButton component={Link as any} to={href} className={isActive ? 'active' : ''}>
       {label}
     </NavButton>
   );
@@ -99,10 +99,10 @@ function CreateDropdown() {
           },
         }}
       >
-        <MenuItem onClick={handleClose} component={Link} to="/setup">
+        <MenuItem onClick={handleClose} component={Link as any} to="/setup">
           Eval
         </MenuItem>
-        <MenuItem onClick={handleClose} component={Link} to="/redteam/setup">
+        <MenuItem onClick={handleClose} component={Link as any} to="/redteam/setup">
           Red team
         </MenuItem>
       </Menu>
@@ -135,10 +135,10 @@ function EvalsDropdown() {
         Evals
       </NavButton>
       <Menu anchorEl={anchorEl} open={open} onClose={handleClose}>
-        <MenuItem onClick={handleClose} component={Link} to="/eval">
+        <MenuItem onClick={handleClose} component={Link as any} to="/eval">
           Latest Eval
         </MenuItem>
-        <MenuItem onClick={handleClose} component={Link} to="/evals">
+        <MenuItem onClick={handleClose} component={Link as any} to="/evals">
           All Evals
         </MenuItem>
       </Menu>

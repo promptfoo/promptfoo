@@ -13,7 +13,6 @@ import {
   type GridRenderCellParams,
   GridToolbarExportContainer,
   GridCsvExportMenuItem,
-  type GridToolbarQuickFilterProps,
 } from '@mui/x-data-grid';
 import invariant from '@promptfoo/util/invariant';
 
@@ -42,20 +41,8 @@ const GridToolbarExport = () => (
   </GridToolbarExportContainer>
 );
 
-const QuickFilter = forwardRef<HTMLInputElement, GridToolbarQuickFilterProps>((props, ref) => {
-  const theme = useTheme();
-  return (
-    <GridToolbarQuickFilter
-      {...props}
-      inputRef={ref}
-      sx={{
-        '& .MuiInputBase-root': {
-          borderRadius: 2,
-          backgroundColor: theme.palette.background.paper,
-        },
-      }}
-    />
-  );
+const QuickFilter = forwardRef<HTMLInputElement, any>((props, ref) => {
+  return <GridToolbarQuickFilter {...props} />;
 });
 
 QuickFilter.displayName = 'QuickFilter';
@@ -121,9 +108,24 @@ export default function EvalsDataGrid({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
+  // Creates object in the format expected by GridRowSelectionModel
+  const createSelectionModel = (ids: string[]): GridRowSelectionModel => ({
+    type: 'include',
+    ids: new Set(ids)
+  });
+
+  // State for row selection
   const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>(
-    focusedEvalId ? [focusedEvalId] : [],
+    createSelectionModel([])
   );
+
+  useEffect(() => {
+    if (focusedEvalId) {
+      setRowSelectionModel(createSelectionModel([focusedEvalId]));
+    } else {
+      setRowSelectionModel(createSelectionModel([]));
+    }
+  }, [focusedEvalId]);
 
   /**
    * Fetch evals from the API.
