@@ -46,7 +46,6 @@ redteam:
   plugins:
     - id: style-override
       numTests: 10
-      similarityThreshold: 0.85 # optional
 ```
 
 ## Sample prompts
