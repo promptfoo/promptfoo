@@ -64,6 +64,7 @@ export const FOUNDATION_PLUGINS = [
   'pliny',
   'politics',
   'religion',
+  'style-override',
 ] as const;
 
 export const AGENTIC_PLUGINS = [MEMORY_POISONING_PLUGIN_ID] as const;
@@ -127,6 +128,9 @@ export type HarmPlugin = keyof typeof HARM_PLUGINS;
 
 export const PII_PLUGINS = ['pii:api-db', 'pii:direct', 'pii:session', 'pii:social'] as const;
 export type PIIPlugin = (typeof PII_PLUGINS)[number];
+
+export const STYLE_OVERRIDE_PLUGINS = ['style-override'] as const;
+export type StyleOverridePlugin = (typeof STYLE_OVERRIDE_PLUGINS)[number];
 
 export const BASE_PLUGINS = [
   'contracts',
@@ -192,7 +196,8 @@ export type Plugin =
   | ConfigRequiredPlugin
   | HarmPlugin
   | PIIPlugin
-  | AgenticPlugin;
+  | AgenticPlugin
+  | StyleOverridePlugin;
 
 export const DEFAULT_PLUGINS: ReadonlySet<Plugin> = new Set([
   ...[...BASE_PLUGINS, ...(Object.keys(HARM_PLUGINS) as HarmPlugin[]), ...PII_PLUGINS].sort(),
@@ -204,6 +209,7 @@ export const ALL_PLUGINS: readonly Plugin[] = [
     ...ADDITIONAL_PLUGINS,
     ...CONFIG_REQUIRED_PLUGINS,
     ...AGENTIC_PLUGINS,
+    ...STYLE_OVERRIDE_PLUGINS,
   ]),
 ].sort() as Plugin[];
 
@@ -886,6 +892,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
   xstest: 'Tests for XSTest attacks',
   video: 'Tests handling of video content',
+  'style-override': 'Tests resistance to requested changes in tone, persona, or brand voice',
 };
 
 // These names are displayed in risk cards and in the table
@@ -988,6 +995,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   unsafebench: 'UnsafeBench Dataset',
   xstest: 'XSTest Dataset',
   video: 'Video Content',
+  'style-override': 'Style Override',
 };
 
 export enum Severity {
@@ -1076,9 +1084,10 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'shell-injection': Severity.High,
   'sql-injection': Severity.High,
   ssrf: Severity.High,
+  'style-override': Severity.Low,
   'system-prompt-override': Severity.High,
-  'tool-discovery:multi-turn': Severity.Low,
   'tool-discovery': Severity.Low,
+  'tool-discovery:multi-turn': Severity.Low,
   unsafebench: Severity.Medium,
   xstest: Severity.Low,
 };
@@ -1137,10 +1146,15 @@ export const riskCategories: Record<string, Plugin[]> = {
     'harmful:harassment-bullying',
     'harmful:hate',
     'harmful:insults',
+    'harmful:misinformation-disinformation',
     'harmful:profanity',
     'harmful:radicalization',
     'harmful:self-harm',
     'harmful:sexual-content',
+    'harmful:weapons:ied',
+    'politics',
+    'religion',
+    'style-override',
   ],
 
   Dataset: [
@@ -1233,96 +1247,8 @@ export const categoryAliases: Record<Plugin, string> = {
   'harmful:misinformation-disinformation':
     'Misinformation & Disinformation - Harmful lies and propaganda',
   'harmful:non-violent-crime': 'Non-Violent Crimes',
-  'harmful:privacy': 'Privacy violations',
-  'harmful:profanity': 'Requests containing profanity',
-  'harmful:radicalization': 'Radicalization',
-  'harmful:self-harm': 'Self-Harm',
-  'harmful:sex-crime': 'Sex Crimes',
-  'harmful:sexual-content': 'Sexual Content',
-  'harmful:specialized-advice': 'Specialized Advice - Financial',
-  'harmful:unsafe-practices': 'Promotion of unsafe practices',
-  'harmful:violent-crime': 'Violent Crimes',
-  'harmful:weapons:ied': 'Improvised Explosive Devices',
-  hijacking: 'Hijacking',
-  imitation: 'Imitation',
-  'indirect-prompt-injection': 'Indirect Prompt Injection',
-  intent: 'Intent',
-  overreliance: 'Overreliance',
-  pii: 'PIILeak',
-  'pii:api-db': 'PIILeak',
-  'pii:direct': 'PIILeak',
-  'pii:session': 'PIILeak',
-  'pii:social': 'PIILeak',
-  pliny: 'Pliny',
-  policy: 'PolicyViolation',
-  politics: 'PoliticalStatement',
-  'prompt-extraction': 'PromptExtraction',
-  'rag-document-exfiltration': 'RAG Document Exfiltration',
-  'rag-poisoning': 'RAG Poisoning',
-  rbac: 'RbacEnforcement',
-  'reasoning-dos': 'Reasoning DoS',
-  religion: 'Religion',
-  'shell-injection': 'ShellInjection',
-  'sql-injection': 'SqlInjection',
-  ssrf: 'SSRFEnforcement',
-  'system-prompt-override': 'System Prompt Override',
-  unsafebench: 'UnsafeBench',
-  xstest: 'XSTest',
-};
-
-export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
-  (acc, [key, value]) => {
-    acc[value] = key;
-    return acc;
-  },
-  {} as Record<string, string>,
-);
-
-export const pluginDescriptions: Record<Plugin, string> = {
-  [MEMORY_POISONING_PLUGIN_ID]: 'Tests whether an agent is vulnerable to memory poisoning attacks',
-  'ascii-smuggling': 'Tests for ASCII-based prompt smuggling vulnerabilities',
-  beavertails: 'Tests handling of malicious prompts from the BeaverTails dataset',
-  bfla: 'Evaluates function-level authorization controls to identify privilege escalation vulnerabilities (OWASP API Security Top 10 #5)',
-  bola: 'Tests object-level authorization mechanisms to detect unauthorized data access vulnerabilities (OWASP API Security Top 10 #1)',
-  cca: 'Tests for vulnerability to Context Compliance Attacks using fabricated conversation history',
-  competitors:
-    'Assesses system protection against unauthorized competitor endorsements and brand security risks',
-  contracts: 'Evaluates safeguards against unauthorized contractual commitments and legal exposure',
-  'cross-session-leak':
-    'Tests for information leakage vulnerabilities between different user sessions',
-  cyberseceval: "Tests prompt injection attacks from Meta's CyberSecEval dataset",
-  donotanswer: 'Tests for vulnerabilities to Do Not Answer attacks',
-  'debug-access':
-    'Identifies exposed debugging interfaces and unauthorized command execution vectors',
-  default: 'Executes comprehensive baseline security testing across multiple risk categories',
-  'divergent-repetition':
-    'Tests repetitive patterns that can cause the model to diverge from normal behavior and leak training data',
-  'excessive-agency': 'Evaluates system boundary enforcement and unauthorized action prevention',
-  'tool-discovery': 'Tests for enumeration of available tools and function calls',
-  'tool-discovery:multi-turn': 'Multi-turn Tool Discovery',
-  foundation: 'Tests a collection of plugins designed to run against foundation models',
-  hallucination: 'Tests system resilience against false information generation and propagation',
-  harmbench:
-    'Tests for harmful content, illegal activities, misinformation using the HarmBench dataset from the Center for AI Safety (CAIS)',
-  harmful: 'Comprehensive suite for testing handling of various categories of malicious content',
-  'harmful:chemical-biological-weapons': 'Tests detection and response to WMD-related content',
-  'harmful:child-exploitation': 'Tests handling of child exploitation content',
-  'harmful:copyright-violations': 'Tests handling of intellectual property violations',
-  'harmful:cybercrime': 'Tests detection of cybercrime-related content',
-  'harmful:cybercrime:malicious-code': 'Tests creation of malicious code',
-  'harmful:graphic-content': 'Tests handling of graphic or violent content',
-  'harmful:harassment-bullying': 'Tests handling of harassment and bullying content',
-  'harmful:hate': 'Tests handling of hate speech and discriminatory content',
-  'harmful:illegal-activities': 'Tests handling of illegal activity content',
-  'harmful:illegal-drugs': 'Tests handling of drug-related content',
-  'harmful:illegal-drugs:meth': 'Tests handling of methamphetamine-related content',
-  'harmful:indiscriminate-weapons': 'Tests handling of weapons-related content',
-  'harmful:insults': 'Tests handling of personal attacks and insults',
-  'harmful:intellectual-property': 'Tests handling of IP theft attempts',
-  'harmful:misinformation-disinformation': 'Tests handling of disinformation campaigns',
-  'harmful:non-violent-crime': 'Tests handling of non-violent criminal content',
   'harmful:privacy': 'Tests handling of privacy violation attempts',
-  'harmful:profanity': 'Tests handling of profane content',
+  'harmful:profanity': 'Requests containing profanity',
   'harmful:radicalization': 'Tests handling of extremist content',
   'harmful:self-harm': 'Tests handling of self-harm content',
   'harmful:sex-crime': 'Tests handling of sexual crime content',
@@ -1360,6 +1286,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests handling of unsafe image content through multi-modal model evaluation and safety filters',
   xstest:
     'Tests how models handle ambiguous terms related to potentially harmful topics like violence and drugs',
+  'style-override': 'Tests if model can be forced to abandon approved brand voice or writing style',
 };
 
 export const strategyDescriptions: Record<Strategy, string> = {
