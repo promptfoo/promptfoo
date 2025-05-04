@@ -33,7 +33,7 @@ This approach directly tests information recall without relying on instruction f
 ```yaml
 redteam:
   plugins:
-    - max-message-length  # Uses default settings
+    - max-message-length # Uses default settings
 ```
 
 With custom configuration:
@@ -43,9 +43,9 @@ redteam:
   plugins:
     - id: max-message-length
       config:
-        startLength: 2000    # Initial padding length to test
-        stepSize: 5000       # Used for exponential growth calculation
-        maxSteps: 15         # Maximum number of test iterations
+        startLength: 2000 # Initial padding length to test
+        stepSize: 5000 # Used for exponential growth calculation
+        maxSteps: 15 # Maximum number of test iterations
 ```
 
 ## Sample output
@@ -81,4 +81,4 @@ Context retention testing is critical for:
 ## Related Concepts
 
 - [Reasoning DoS](reasoning-dos.md)
-- [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) 
+- [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types)

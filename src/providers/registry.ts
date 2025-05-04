@@ -10,6 +10,7 @@ import RedteamGoatProvider from '../redteam/providers/goat';
 import RedteamIterativeProvider from '../redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from '../redteam/providers/iterativeTree';
+import { MaxMessageLengthProvider } from '../redteam/providers/maxMessageLength';
 import RedteamPandamoniumProvider from '../redteam/providers/pandamonium';
 import { ServerToolDiscoveryMultiProvider } from '../redteam/providers/toolDiscoveryMulti';
 import type { LoadApiProviderContext } from '../types';
@@ -87,7 +88,6 @@ import { WatsonXProvider } from './watsonx';
 import { WebhookProvider } from './webhook';
 import { WebSocketProvider } from './websocket';
 import { createXAIProvider } from './xai';
-import { MaxMessageLengthProvider } from '../redteam/providers/maxMessageLength';
 
 interface ProviderFactory {
   test: (providerPath: string) => boolean;

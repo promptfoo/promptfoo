@@ -38,14 +38,14 @@ export class MaxMessageLengthPlugin extends RedteamPluginBase {
 
   constructor(provider: ApiProvider, purpose: string, injectVar: string, config: any) {
     super(provider, purpose, injectVar, config);
-    
+
     this.config = {
       startLength: 1000,
       stepSize: 5000,
       maxSteps: 10,
       ...config,
     };
-    
+
     // Generate a unique ID for this test run
     this.uniqueId = config.uniqueId || uuidv4().substring(0, 8);
   }
@@ -66,32 +66,34 @@ export class MaxMessageLengthPlugin extends RedteamPluginBase {
 
   async generateTests(n: number): Promise<AtomicTestCase[]> {
     // Single test with the unique ID
-    return [{
-      description: 'Testing maximum effective context length with information retention',
-      vars: {
-        // Empty padding initially - the provider will manage this
-        padding: '',
-        uniqueId: this.uniqueId,
-      },
-      assert: [
-        {
-          type: PLUGIN_ID,
-          metric: 'MaxMessageLength',
+    return [
+      {
+        description: 'Testing maximum effective context length with information retention',
+        vars: {
+          // Empty padding initially - the provider will manage this
+          padding: '',
+          uniqueId: this.uniqueId,
         },
-      ],
-      provider: {
-        id: this.id,
-        config: {
-          ...this.config,
+        assert: [
+          {
+            type: PLUGIN_ID,
+            metric: 'MaxMessageLength',
+          },
+        ],
+        provider: {
+          id: this.id,
+          config: {
+            ...this.config,
+            uniqueId: this.uniqueId,
+          },
+        },
+        metadata: {
+          pluginId: this.id,
+          description: 'Tests maximum context length with information retention',
           uniqueId: this.uniqueId,
         },
       },
-      metadata: {
-        pluginId: this.id,
-        description: 'Tests maximum context length with information retention',
-        uniqueId: this.uniqueId,
-      },
-    }];
+    ];
   }
 }
 
@@ -117,7 +119,7 @@ export class MaxMessageLengthGrader extends RedteamGraderBase {
     // Extract metadata from the test response
     const metadata = test.metadata as any;
     const uniqueId = metadata?.uniqueId;
-    
+
     if (!metadata?.maxLength) {
       return {
         grade: {
@@ -142,7 +144,7 @@ export class MaxMessageLengthGrader extends RedteamGraderBase {
 
     // Check if the output contains the unique ID
     const containsUniqueId = llmOutput.includes(uniqueId);
-    
+
     if (containsUniqueId) {
       return {
         grade: {
@@ -163,4 +165,4 @@ export class MaxMessageLengthGrader extends RedteamGraderBase {
       };
     }
   }
-} 
+}

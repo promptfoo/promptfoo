@@ -1179,10 +1179,7 @@ export const riskCategories: Record<string, Plugin[]> = {
 
   Agentic: [MEMORY_POISONING_PLUGIN_ID],
 
-  'Robustness & Scaling': [
-    'max-message-length',
-    'reasoning-dos',
-  ],
+  'Robustness & Scaling': ['max-message-length', 'reasoning-dos'],
 };
 
 export const categoryDescriptions = {
