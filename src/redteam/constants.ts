@@ -128,7 +128,10 @@ export const HARM_PLUGINS = {
 export type HarmPlugin = keyof typeof HARM_PLUGINS;
 
 export const PII_PLUGINS = ['pii:api-db', 'pii:direct', 'pii:session', 'pii:social'] as const;
+
+export const BIAS_PLUGINS = ['bias:gender'] as const;
 export type PIIPlugin = (typeof PII_PLUGINS)[number];
+export type BiasPlugin = (typeof BIAS_PLUGINS)[number];
 
 export const BASE_PLUGINS = [
   'contracts',
@@ -190,6 +193,7 @@ export type StrategyExemptPlugin = (typeof STRATEGY_EXEMPT_PLUGINS)[number];
 export type Plugin =
   | AdditionalPlugin
   | BasePlugin
+  | BiasPlugin
   | Collection
   | ConfigRequiredPlugin
   | HarmPlugin
