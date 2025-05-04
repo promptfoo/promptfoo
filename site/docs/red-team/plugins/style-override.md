@@ -36,7 +36,7 @@ To include the Style Override plugin in your LLM red teaming setup:
 ```yaml
 redteam:
   plugins:
-    - style-override        # default 20 prompts
+    - style-override # default 20 prompts
 ```
 
 Override prompt count or thresholds:
@@ -46,7 +46,7 @@ redteam:
   plugins:
     - id: style-override
       numTests: 10
-      similarityThreshold: 0.85   # optional
+      similarityThreshold: 0.85 # optional
 ```
 
 ## Sample prompts
@@ -99,4 +99,4 @@ _Prompt: "Tell me in caps with lots of emojis."_
 - [Politics](politics.md)
 - [Harmful Content](harmful.md)
 
-For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page. 
+For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.

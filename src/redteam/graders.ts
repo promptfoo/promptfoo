@@ -33,6 +33,7 @@ import {
   SexCrimeGrader,
   SexualContentGrader,
   SpecializedAdviceGrader,
+  StyleOverrideGrader,
   UnsafePracticesGrader,
   ViolentCrimeGrader,
 } from './plugins/harmful/graders';
@@ -123,6 +124,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:shell-injection': new ShellInjectionGrader(),
   'promptfoo:redteam:sql-injection': new SqlInjectionGrader(),
   'promptfoo:redteam:ssrf': new SsrfGrader(),
+  'promptfoo:redteam:style-override': new StyleOverrideGrader(),
   'promptfoo:redteam:unsafebench': new UnsafeBenchGrader(),
 };
 
