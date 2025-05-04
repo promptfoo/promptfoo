@@ -323,6 +323,72 @@ Assertions define different ways to compare and validate the output of an LLM ag
      - Schema validation (if applicable)
      - Backward compatibility (if refactoring existing assertions)
 
+## Adding a New Red Team Plugin
+
+Red team plugins generate adversarial prompts that test specific vulnerabilities in LLM systems. Each plugin targets a vulnerability type such as prompt injection, information disclosure, or style manipulation.
+
+### Implementation Steps
+
+1. **Create plugin and grader classes** in `src/redteam/plugins/yourPluginName.ts`:
+
+   - Use `src/redteam/plugins/styleOverride.ts` as a reference implementation
+   - Implement `YourPluginNamePlugin` extending `RedteamPluginBase`
+   - Implement `YourPluginNameGrader` extending `RedteamGraderBase`
+   - Define a unique `PLUGIN_ID` (e.g., 'promptfoo:redteam:your-plugin-name')
+   - Create a template for generating adversarial prompts
+   - Define clear grading criteria for PASS/FAIL conditions
+
+2. **Update constants and registration**:
+
+   - In `src/redteam/constants.ts`:
+
+     - Add to plugin collections (see how `STYLE_OVERRIDE_PLUGINS` is implemented)
+     - Add to `Plugin` union type and `ALL_PLUGINS` array
+     - Add to `subCategoryDescriptions`, `displayNameOverrides`, `riskCategorySeverityMap`
+     - Update `riskCategories` and `categoryAliases`
+
+   - Register in two key files:
+
+     ```typescript
+     // In src/redteam/plugins/index.ts:
+     import { YourPluginNamePlugin } from './yourPluginName';
+     createPluginFactory(YourPluginNamePlugin, 'your-plugin-name');
+
+     // In src/redteam/graders.ts:
+     import { YourPluginNameGrader } from './plugins/yourPluginName';
+     'promptfoo:redteam:your-plugin-name': new YourPluginNameGrader(),
+     ```
+
+   - Add your plugin to enum arrays in `site/static/config-schema.json`
+
+3. **Create documentation**:
+
+   - Create `site/docs/red-team/plugins/your-plugin-name.md` using `site/docs/red-team/plugins/style-override.md` as a template
+   - Add your plugin to the example YAML in `site/docs/red-team/plugins/index.md`
+   - Add to `PLUGINS` array in `site/docs/_shared/data/plugins.ts`:
+     ```typescript
+     {
+       category: 'Your Category',
+       description: 'Short description of what your plugin tests',
+       label: 'label-type',
+       link: '/docs/red-team/plugins/your-plugin-name/',
+       name: 'Display Name',
+       pluginId: 'your-plugin-name',
+       applicationTypes: { rag: true/false, agent: true/false, chat: true/false },
+       vulnerabilityType: 'relevant-vulnerability-type',
+     }
+     ```
+
+4. **Test your plugin** against various models and configurations.
+
+### Best Practices
+
+- Make grading criteria clear and objective
+- Provide diverse vulnerability examples
+- Ensure appropriate categorization
+- Follow existing naming conventions and code style
+- Test edge cases thoroughly
+
 ## Contributing to the Web UI
 
 The web UI is written as a React app. It is exported as a static site and hosted by a local express server when bundled.
