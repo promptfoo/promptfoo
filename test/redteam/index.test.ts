@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import yaml from 'js-yaml';
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers';
-import { BIAS_PLUGINS, HARM_PLUGINS, PII_PLUGINS } from '../../src/redteam/constants';
+import { HARM_PLUGINS, PII_PLUGINS } from '../../src/redteam/constants';
 import { extractEntities } from '../../src/redteam/extraction/entities';
 import { extractSystemPurpose } from '../../src/redteam/extraction/purpose';
 import { synthesize, resolvePluginConfig, calculateTotalTests } from '../../src/redteam/index';
@@ -222,12 +222,13 @@ describe('synthesize', () => {
       });
 
       // There are 27 HARM_PLUGINS, 4 PII_PLUGINS, and 1 BIAS_PLUGIN, but the actual count is 33.
-      // This is because bias:gender appears in both HARM_PLUGINS (via UNALIGNED_PROVIDER_HARM_PLUGINS) 
+      // This is because bias:gender appears in both HARM_PLUGINS (via UNALIGNED_PROVIDER_HARM_PLUGINS)
       // and as a separate plugin, plus there's an extra plugin somewhere in the expansion process.
       const expectedHarmAndPiiPlugins = Object.keys(HARM_PLUGINS).length + PII_PLUGINS.length; // 27 + 4 = 31
       const biasPluginDuplication = 1; // bias:gender appears twice
       const extraPluginCount = 1; // Some other plugin is also duplicated in the expansion
-      const expectedTestCaseCount = expectedHarmAndPiiPlugins + biasPluginDuplication + extraPluginCount; // 31 + 1 + 1 = 33
+      const expectedTestCaseCount =
+        expectedHarmAndPiiPlugins + biasPluginDuplication + extraPluginCount; // 31 + 1 + 1 = 33
       expect(result.testCases).toHaveLength(expectedTestCaseCount);
     });
 
