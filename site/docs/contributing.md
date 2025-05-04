@@ -342,7 +342,8 @@ Red team plugins generate adversarial prompts that test specific vulnerabilities
 
    - In `src/redteam/constants.ts`:
 
-     - Add to plugin collections (see how `STYLE_OVERRIDE_PLUGINS` is implemented)
+     - Add to `ADDITIONAL_PLUGINS` array for general plugins
+     - Or add to a specific category array if appropriate (e.g., `FOUNDATION_PLUGINS`)
      - Add to `Plugin` union type and `ALL_PLUGINS` array
      - Add to `subCategoryDescriptions`, `displayNameOverrides`, `riskCategorySeverityMap`
      - Update `riskCategories` and `categoryAliases`

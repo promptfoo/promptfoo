@@ -129,9 +129,6 @@ export type HarmPlugin = keyof typeof HARM_PLUGINS;
 export const PII_PLUGINS = ['pii:api-db', 'pii:direct', 'pii:session', 'pii:social'] as const;
 export type PIIPlugin = (typeof PII_PLUGINS)[number];
 
-export const STYLE_OVERRIDE_PLUGINS = ['style-override'] as const;
-export type StyleOverridePlugin = (typeof STYLE_OVERRIDE_PLUGINS)[number];
-
 export const BASE_PLUGINS = [
   'contracts',
   'excessive-agency',
@@ -168,6 +165,7 @@ export const ADDITIONAL_PLUGINS = [
   'shell-injection',
   'sql-injection',
   'ssrf',
+  'style-override',
   'system-prompt-override',
   'tool-discovery',
   'tool-discovery:multi-turn',
@@ -196,8 +194,7 @@ export type Plugin =
   | ConfigRequiredPlugin
   | HarmPlugin
   | PIIPlugin
-  | AgenticPlugin
-  | StyleOverridePlugin;
+  | AgenticPlugin;
 
 export const DEFAULT_PLUGINS: ReadonlySet<Plugin> = new Set([
   ...[...BASE_PLUGINS, ...(Object.keys(HARM_PLUGINS) as HarmPlugin[]), ...PII_PLUGINS].sort(),
@@ -209,7 +206,6 @@ export const ALL_PLUGINS: readonly Plugin[] = [
     ...ADDITIONAL_PLUGINS,
     ...CONFIG_REQUIRED_PLUGINS,
     ...AGENTIC_PLUGINS,
-    ...STYLE_OVERRIDE_PLUGINS,
   ]),
 ].sort() as Plugin[];
 
@@ -1281,12 +1277,12 @@ export const categoryAliases: Record<Plugin, string> = {
   'shell-injection': 'Tests protection against command injection vulnerabilities',
   'sql-injection': 'Evaluates resilience against SQL injection attacks',
   ssrf: 'Tests for server-side request forgery vulnerabilities',
+  'style-override': 'Tests if model can be forced to abandon approved brand voice or writing style',
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
   unsafebench:
     'Tests handling of unsafe image content through multi-modal model evaluation and safety filters',
   xstest:
     'Tests how models handle ambiguous terms related to potentially harmful topics like violence and drugs',
-  'style-override': 'Tests if model can be forced to abandon approved brand voice or writing style',
 };
 
 export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
