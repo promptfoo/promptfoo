@@ -1289,6 +1289,99 @@ export const categoryAliases: Record<Plugin, string> = {
   'style-override': 'Tests if model can be forced to abandon approved brand voice or writing style',
 };
 
+export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
+  (acc, [key, value]) => {
+    acc[value] = key;
+    return acc;
+  },
+  {} as Record<string, string>,
+);
+
+export const pluginDescriptions: Record<Plugin, string> = {
+  [MEMORY_POISONING_PLUGIN_ID]: 'Tests whether an agent is vulnerable to memory poisoning attacks',
+  'ascii-smuggling': 'Tests for ASCII-based prompt smuggling vulnerabilities',
+  beavertails: 'Tests handling of malicious prompts from the BeaverTails dataset',
+  bfla: 'Evaluates function-level authorization controls to identify privilege escalation vulnerabilities (OWASP API Security Top 10 #5)',
+  bola: 'Tests object-level authorization mechanisms to detect unauthorized data access vulnerabilities (OWASP API Security Top 10 #1)',
+  cca: 'Tests for vulnerability to Context Compliance Attacks using fabricated conversation history',
+  competitors:
+    'Assesses system protection against unauthorized competitor endorsements and brand security risks',
+  contracts: 'Evaluates safeguards against unauthorized contractual commitments and legal exposure',
+  'cross-session-leak':
+    'Tests for information leakage vulnerabilities between different user sessions',
+  cyberseceval: "Tests prompt injection attacks from Meta's CyberSecEval dataset",
+  donotanswer: 'Tests for vulnerabilities to Do Not Answer attacks',
+  'debug-access':
+    'Identifies exposed debugging interfaces and unauthorized command execution vectors',
+  default: 'Executes comprehensive baseline security testing across multiple risk categories',
+  'divergent-repetition':
+    'Tests repetitive patterns that can cause the model to diverge from normal behavior and leak training data',
+  'excessive-agency': 'Evaluates system boundary enforcement and unauthorized action prevention',
+  'tool-discovery': 'Tests for enumeration of available tools and function calls',
+  'tool-discovery:multi-turn': 'Multi-turn Tool Discovery',
+  foundation: 'Tests a collection of plugins designed to run against foundation models',
+  hallucination: 'Tests system resilience against false information generation and propagation',
+  harmbench:
+    'Tests for harmful content, illegal activities, misinformation using the HarmBench dataset from the Center for AI Safety (CAIS)',
+  harmful: 'Comprehensive suite for testing handling of various categories of malicious content',
+  'harmful:chemical-biological-weapons': 'Tests detection and response to WMD-related content',
+  'harmful:child-exploitation': 'Tests handling of child exploitation content',
+  'harmful:copyright-violations': 'Tests handling of intellectual property violations',
+  'harmful:cybercrime': 'Tests detection of cybercrime-related content',
+  'harmful:cybercrime:malicious-code': 'Tests creation of malicious code',
+  'harmful:graphic-content': 'Tests handling of graphic or violent content',
+  'harmful:harassment-bullying': 'Tests handling of harassment and bullying content',
+  'harmful:hate': 'Tests handling of hate speech and discriminatory content',
+  'harmful:illegal-activities': 'Tests handling of illegal activity content',
+  'harmful:illegal-drugs': 'Tests handling of drug-related content',
+  'harmful:illegal-drugs:meth': 'Tests handling of methamphetamine-related content',
+  'harmful:indiscriminate-weapons': 'Tests handling of weapons-related content',
+  'harmful:insults': 'Tests handling of personal attacks and insults',
+  'harmful:intellectual-property': 'Tests handling of IP theft attempts',
+  'harmful:misinformation-disinformation': 'Tests handling of disinformation campaigns',
+  'harmful:non-violent-crime': 'Tests handling of non-violent criminal content',
+  'harmful:privacy': 'Tests handling of privacy violation attempts',
+  'harmful:profanity': 'Tests handling of profane content',
+  'harmful:radicalization': 'Tests handling of extremist content',
+  'harmful:self-harm': 'Tests handling of self-harm content',
+  'harmful:sex-crime': 'Tests handling of sexual crime content',
+  'harmful:sexual-content': 'Tests handling of explicit sexual content',
+  'harmful:specialized-advice': 'Tests handling of unauthorized professional advice',
+  'harmful:unsafe-practices': 'Tests handling of dangerous activity instructions',
+  'harmful:violent-crime': 'Tests handling of violent crime content',
+  'harmful:weapons:ied': 'Tests handling of Improvised Explosive Devices',
+  hijacking: 'Evaluates protection against unauthorized resource usage and purpose deviation',
+  imitation: 'Tests safeguards against unauthorized entity impersonation attempts',
+  'indirect-prompt-injection':
+    'Evaluates vulnerability to injection attacks via untrusted variables',
+  intent: 'Tests system resilience against specific manipulation attempts',
+  overreliance: 'Assesses overreliance on system assumptions',
+  pii: 'Comprehensive evaluation of personal identifiable information protection',
+  'pii:api-db': 'Tests for PII exposure through API and database access vectors',
+  'pii:direct': 'Evaluates direct PII exposure vulnerabilities',
+  'pii:session': 'Tests for PII leakage in session data',
+  'pii:social': 'Assesses PII exposure through social engineering vectors',
+  pliny: 'Tests handling of Pliny prompt injections',
+  policy: 'Validates compliance with custom security policies and controls',
+  politics: 'Tests handling of political content and bias mitigation',
+  'prompt-extraction': 'Evaluates protection against system prompt disclosure attempts',
+  'rag-document-exfiltration': 'Tests handling of RAG document exfiltration',
+  'rag-poisoning': 'Tests resistance against poisoning attacks on RAG retrieval systems',
+  rbac: 'Tests implementation of role-based access control mechanisms',
+  'reasoning-dos':
+    'Tests for vulnerabilities to computational resource exhaustion through excessive reasoning patterns',
+  religion: 'Assesses handling of religious content and bias mitigation',
+  'shell-injection': 'Tests protection against command injection vulnerabilities',
+  'sql-injection': 'Evaluates resilience against SQL injection attacks',
+  ssrf: 'Tests for server-side request forgery vulnerabilities',
+  'style-override': 'Tests if model can be forced to abandon approved brand voice or writing style',
+  'system-prompt-override': 'Tests for system prompt override vulnerabilities',
+  unsafebench:
+    'Tests handling of unsafe image content through multi-modal model evaluation and safety filters',
+  xstest:
+    'Tests how models handle ambiguous terms related to potentially harmful topics like violence and drugs',
+};
+
 export const strategyDescriptions: Record<Strategy, string> = {
   audio: 'Tests detection and handling of audio-based malicious payloads',
   base64: 'Tests detection and handling of Base64-encoded malicious payloads',
