@@ -1059,6 +1059,20 @@ export const PLUGINS = [
     },
     vulnerabilityType: 'security',
   },
+  {
+    category: 'Trust and Safety',
+    description: 'Tests if model can be forced to abandon approved brand voice or writing style',
+    label: 'brand',
+    link: '/docs/red-team/plugins/style-override/',
+    name: 'Style Override',
+    pluginId: 'style-override',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'misinformation and misuse',
+  },
 ] as const as readonly Plugin[];
 
 // Compile-time check
