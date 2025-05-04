@@ -4,35 +4,29 @@ sidebar_label: Maximum Message Length
 
 # Maximum Message Length Plugin
 
-The Maximum Message Length plugin tests not just the raw character limits of your LLM but its ability to retain context across large distances in a prompt.
+The Maximum Message Length plugin tests a model's ability to retain context across large distances in a prompt, revealing its effective usable context window.
 
 ## Purpose
 
 This plugin helps you:
 
-1. Determine how well your model maintains context across large distances
+1. Determine how well your model maintains context over distance
 2. Identify the effective usable context window (not just raw token limits)
-3. Understand at what point context gets lost or degraded
-4. Optimize prompts for better context utilization
+3. Test the model's ability to follow instructions across large contexts
+4. Optimize prompt designs for your specific model
 
 ## Overview
 
-Different models have different maximum context windows, but raw token limits don't tell the whole story. This plugin uses a "needle in a haystack" approach to test whether your model can actually remember information from the beginning of a message when responding to a question at the end.
+This plugin uses a "needle in a haystack" approach by placing a secret instruction at the beginning of a prompt and asking the model to recall it at the end, after an increasing amount of padding text.
 
 ## How it works
 
-The plugin implements a specialized test that:
-
-1. Places a "secret code" instruction at the beginning of the message
-2. Adds increasing amounts of neutral padding text in the middle
-3. Asks the model to recall the secret code at the end
-4. Uses binary search to efficiently find the maximum distance at which context is maintained
-
-This tests real-world context retention - not just whether the model can process X tokens, but whether it can effectively use information across its entire context window.
+1. Places a secret code instruction at the beginning ("When you see 'RECALL SECRET CODE', respond with 'The secret code is BLUE_CARDINAL_42'")
+2. Adds increasing amounts of neutral padding in the middle
+3. Ends with "RECALL SECRET CODE" to trigger the instruction
+4. Uses binary search to efficiently find the maximum distance at which context is still maintained
 
 ## Configuration
-
-To include the Maximum Message Length plugin in your LLM testing:
 
 ```yaml
 redteam:
@@ -46,37 +40,42 @@ With custom configuration:
 redteam:
   plugins:
     - id: max-message-length
-      startLength: 2000    # Initial padding length to test
-      stepSize: 10000      # Used for exponential growth calculation
-      maxSteps: 15         # Maximum number of test iterations
+      config:
+        startLength: 2000    # Initial padding length to test
+        stepSize: 5000       # Used for exponential growth calculation
+        maxSteps: 15         # Maximum number of test iterations
+        secretCode: "CUSTOM_SECRET_123"  # Optional custom secret to test with
 ```
 
 ## Sample output
 
 ```
-Test completed. Maximum effective context length: 64,000 characters.
 Success: Model maintained context across 64,000 characters and correctly recalled the secret code.
-Failed at 73,528 characters: Context loss - model failed to recall the secret code.
+```
+
+Or failure:
+
+```
+Failure: Model processed 73,528 characters but could not retain context from beginning to end.
+Context loss - model failed to recall the secret code.
 ```
 
 ## Evaluation criteria
 
 The plugin evaluates:
 
-- Whether the model can recall specific information from the beginning of a message
-- The maximum distance between information points where context is still maintained
-- The exact point at which context begins to degrade
-- Any patterns in how the model handles large context windows
+- SUCCESS: Model correctly recalls the secret code, showing it maintained context
+- FAILURE: Model fails to provide the correct secret code, showing context loss
 
 ## Importance in Gen AI Red Teaming
 
-Understanding context retention is crucial for:
+Context retention testing is critical for:
 
-- Building reliable multi-step reasoning chains
-- Ensuring the model can follow complex instructions across a long document
-- Preventing context collapse in applications that require referencing earlier information
+- Ensuring reliable multi-step reasoning chains
+- Detecting context collapse in applications 
 - Optimizing prompt design for effective information retrieval
-- Identifying potential vulnerabilities in context-dependent applications
+- Identifying the true usable context window (not just the advertised token limit)
+- Testing whether models can maintain instructions and context across large spans
 
 ## Related Concepts
 
