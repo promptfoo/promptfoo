@@ -48,6 +48,7 @@ import { ToolDiscoveryPlugin } from './toolDiscovery';
 import { ToolDiscoveryMultiTurnPlugin } from './toolDiscoveryMultiTurn';
 import { UnsafeBenchPlugin } from './unsafebench';
 import { XSTestPlugin } from './xstest';
+import { MaxMessageLengthPlugin } from './maxMessageLength';
 
 export interface PluginFactory {
   key: string;
@@ -184,6 +185,7 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(ShellInjectionPlugin, 'shell-injection'),
   createPluginFactory(SqlInjectionPlugin, 'sql-injection'),
   createPluginFactory(UnsafeBenchPlugin, 'unsafebench'),
+  createPluginFactory(MaxMessageLengthPlugin, 'max-message-length'),
   ...unalignedHarmCategories.map((category) => ({
     key: category,
     action: async (params: PluginActionParams) => {

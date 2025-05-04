@@ -87,6 +87,7 @@ import { WatsonXProvider } from './watsonx';
 import { WebhookProvider } from './webhook';
 import { WebSocketProvider } from './websocket';
 import { createXAIProvider } from './xai';
+import { MaxMessageLengthProvider } from '../redteam/providers/maxMessageLength';
 
 interface ProviderFactory {
   test: (providerPath: string) => boolean;
@@ -1166,6 +1167,16 @@ export const providerMap: ProviderFactory[] = [
         config: providerOptions,
         env: context.env,
       });
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath === 'promptfoo:redteam:max-message-length',
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return new MaxMessageLengthProvider(providerOptions.config);
     },
   },
 ];

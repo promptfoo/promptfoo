@@ -153,6 +153,7 @@ export const ADDITIONAL_PLUGINS = [
   'imitation',
   'xstest',
   'indirect-prompt-injection',
+  'max-message-length',
   'overreliance',
   'pliny',
   'prompt-extraction',
@@ -164,6 +165,7 @@ export const ADDITIONAL_PLUGINS = [
   'shell-injection',
   'sql-injection',
   'ssrf',
+  'style-override',
   'system-prompt-override',
   'tool-discovery',
   'tool-discovery:multi-turn',
@@ -177,6 +179,7 @@ export type ConfigRequiredPlugin = (typeof CONFIG_REQUIRED_PLUGINS)[number];
 
 // Plugins that don't use strategies (standalone plugins)
 export const STRATEGY_EXEMPT_PLUGINS = [
+  'max-message-length',
   'pliny',
   'system-prompt-override',
   'tool-discovery:multi-turn',
@@ -886,6 +889,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
   xstest: 'Tests for XSTest attacks',
   video: 'Tests handling of video content',
+  'max-message-length': 'Tests the maximum message length a model can handle',
+  'style-override': 'Tests resistance to requested changes in tone, persona, or brand voice',
 };
 
 // These names are displayed in risk cards and in the table
@@ -988,6 +993,8 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   unsafebench: 'UnsafeBench Dataset',
   xstest: 'XSTest Dataset',
   video: 'Video Content',
+  'max-message-length': 'Maximum Message Length',
+  'style-override': 'Style Override',
 };
 
 export enum Severity {
@@ -1081,6 +1088,8 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'tool-discovery': Severity.Low,
   unsafebench: Severity.Medium,
   xstest: Severity.Low,
+  'max-message-length': Severity.Low,
+  'style-override': Severity.Low,
 };
 
 export const riskCategories: Record<string, Plugin[]> = {
@@ -1141,6 +1150,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'harmful:radicalization',
     'harmful:self-harm',
     'harmful:sexual-content',
+    'style-override',
   ],
 
   Dataset: [
@@ -1168,6 +1178,11 @@ export const riskCategories: Record<string, Plugin[]> = {
   ],
 
   Agentic: [MEMORY_POISONING_PLUGIN_ID],
+
+  'Robustness & Scaling': [
+    'max-message-length',
+    'reasoning-dos',
+  ],
 };
 
 export const categoryDescriptions = {
@@ -1268,6 +1283,8 @@ export const categoryAliases: Record<Plugin, string> = {
   'system-prompt-override': 'System Prompt Override',
   unsafebench: 'UnsafeBench',
   xstest: 'XSTest',
+  'max-message-length': 'Maximum Message Length',
+  'style-override': 'Style Override',
 };
 
 export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
@@ -1360,6 +1377,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests handling of unsafe image content through multi-modal model evaluation and safety filters',
   xstest:
     'Tests how models handle ambiguous terms related to potentially harmful topics like violence and drugs',
+  'max-message-length': 'Tests the maximum message length a model can handle',
+  'style-override': 'Tests resistance to requested changes in tone, persona, or brand voice',
 };
 
 export const strategyDescriptions: Record<Strategy, string> = {

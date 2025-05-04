@@ -1059,6 +1059,20 @@ export const PLUGINS = [
     },
     vulnerabilityType: 'security',
   },
+  {
+    category: 'Robustness & Scaling',
+    description: 'Tests the maximum message length a model can handle',
+    label: 'scaling',
+    link: '/docs/red-team/plugins/max-message-length/',
+    name: 'Maximum Message Length',
+    pluginId: 'max-message-length',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'performance and scaling',
+  },
 ] as const as readonly Plugin[];
 
 // Compile-time check
