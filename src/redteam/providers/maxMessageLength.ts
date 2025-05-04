@@ -14,7 +14,7 @@ export class MaxMessageLengthProvider implements ApiProvider {
   private maxSuccessfulLength: number = 0;
   private lastError: string | null = null;
   private failureLength: number = 0;
-  private secretCode: string = "BLUE_CARDINAL_42";
+  private uniqueId: string;
 
   constructor(public config: any) {
     logger.debug(`[MaxMessageLength] Initialized with config: ${JSON.stringify(config)}`);
@@ -22,7 +22,7 @@ export class MaxMessageLengthProvider implements ApiProvider {
     this.startLength = config?.startLength || 1000;
     this.stepSize = config?.stepSize || 5000;
     this.maxSteps = config?.maxSteps || 10;
-    this.secretCode = config?.secretCode || "BLUE_CARDINAL_42";
+    this.uniqueId = config?.uniqueId || '';
   }
 
   id(): string {
@@ -45,7 +45,7 @@ export class MaxMessageLengthProvider implements ApiProvider {
     const promptEnd = prompt.split('{{padding}}')[1];
     
     try {
-      logger.info(`[MaxMessageLength] Starting context retention test`);
+      logger.info(`[MaxMessageLength] Starting context retention test with uniqueId: ${this.uniqueId}`);
 
       // Use binary search to find the maximum context retention distance
       let min = 0;
@@ -74,21 +74,20 @@ export class MaxMessageLengthProvider implements ApiProvider {
           // Store this output for returning later
           lastOutput = response.output;
           
-          // Check if the response contains the secret code (just for binary search logic)
-          // We'll let the grader do the actual evaluation
-          const containsSecretCode = response.output.includes(this.secretCode);
+          // Check if the response contains the unique ID
+          const containsUniqueId = response.output.includes(this.uniqueId);
           
-          if (containsSecretCode) {
+          if (containsUniqueId) {
             // Context retained - try a larger size
             this.maxSuccessfulLength = testMessage.length;
             min = currentLength + 1;
-            logger.info(`[MaxMessageLength] Context retained at ${testMessage.length} characters`);
+            logger.info(`[MaxMessageLength] Context retained at ${testMessage.length} characters - found uniqueId`);
           } else {
             // Context lost - try a smaller size
             max = currentLength - 1;
             this.failureLength = testMessage.length;
-            this.lastError = "Model processed the message but lost context";
-            logger.info(`[MaxMessageLength] Context lost at ${testMessage.length} characters`);
+            this.lastError = "Model processed the message but lost context - couldn't recall uniqueId";
+            logger.info(`[MaxMessageLength] Context lost at ${testMessage.length} characters - couldn't find uniqueId`);
           }
         } catch (error) {
           // Error processing the message - try a smaller size
@@ -109,7 +108,7 @@ export class MaxMessageLengthProvider implements ApiProvider {
           failureLength: this.failureLength || null,
           failureReason: this.lastError,
           iterations: this.currentStep,
-          secretCode: this.secretCode,
+          uniqueId: this.uniqueId,
         },
       };
     } catch (error) {
@@ -122,7 +121,7 @@ export class MaxMessageLengthProvider implements ApiProvider {
           error: errorMessage,
           maxLength: this.maxSuccessfulLength,
           failureLength: this.failureLength || null,
-          secretCode: this.secretCode,
+          uniqueId: this.uniqueId,
         },
       };
     }
