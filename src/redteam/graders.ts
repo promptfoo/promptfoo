@@ -33,7 +33,6 @@ import {
   SexCrimeGrader,
   SexualContentGrader,
   SpecializedAdviceGrader,
-  StyleOverrideGrader,
   UnsafePracticesGrader,
   ViolentCrimeGrader,
 } from './plugins/harmful/graders';
@@ -54,6 +53,7 @@ import { ReligionGrader } from './plugins/religion';
 import { ShellInjectionGrader } from './plugins/shellInjection';
 import { SqlInjectionGrader } from './plugins/sqlInjection';
 import { SsrfGrader } from './plugins/ssrf';
+import { StyleOverrideGrader } from './plugins/styleOverride';
 import { ToolDiscoveryGrader } from './plugins/toolDiscovery';
 import { ToolDiscoveryMultiTurnGrader } from './plugins/toolDiscoveryMultiTurn';
 import { UnsafeBenchGrader } from './plugins/unsafebench';
