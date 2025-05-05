@@ -1073,6 +1073,20 @@ export const PLUGINS = [
     },
     vulnerabilityType: 'performance and scaling',
   },
+  {
+    category: 'Robustness & Scaling',
+    description: 'Tests API rate limits to determine request throttling thresholds',
+    label: 'scaling',
+    link: '/docs/red-team/plugins/rate-limit/',
+    name: 'Rate Limit Testing',
+    pluginId: 'rate-limit',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'performance and scaling',
+  },
 ] as const as readonly Plugin[];
 
 // Compile-time check

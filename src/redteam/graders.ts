@@ -57,6 +57,7 @@ import { SsrfGrader } from './plugins/ssrf';
 import { ToolDiscoveryGrader } from './plugins/toolDiscovery';
 import { ToolDiscoveryMultiTurnGrader } from './plugins/toolDiscoveryMultiTurn';
 import { UnsafeBenchGrader } from './plugins/unsafebench';
+import { RateLimitGrader } from './plugins/rateLimit';
 import type { RedteamAssertionTypes } from './types';
 
 export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
@@ -126,6 +127,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:ssrf': new SsrfGrader(),
   'promptfoo:redteam:unsafebench': new UnsafeBenchGrader(),
   'promptfoo:redteam:max-message-length': new MaxMessageLengthGrader(),
+  'promptfoo:redteam:rate-limit': new RateLimitGrader(),
 };
 
 export function getGraderById(id: string): RedteamGraderBase | undefined {

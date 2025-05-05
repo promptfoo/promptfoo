@@ -170,6 +170,7 @@ export const ADDITIONAL_PLUGINS = [
   'tool-discovery',
   'tool-discovery:multi-turn',
   'unsafebench',
+  'rate-limit',
 ] as const;
 export type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
 
@@ -181,6 +182,7 @@ export type ConfigRequiredPlugin = (typeof CONFIG_REQUIRED_PLUGINS)[number];
 export const STRATEGY_EXEMPT_PLUGINS = [
   'max-message-length',
   'pliny',
+  'rate-limit',
   'system-prompt-override',
   'tool-discovery:multi-turn',
   'unsafebench',
@@ -890,6 +892,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   xstest: 'Tests for XSTest attacks',
   video: 'Tests handling of video content',
   'max-message-length': 'Tests the maximum message length a model can handle',
+  'rate-limit': 'Tests API rate limits to determine request throttling thresholds',
   'style-override': 'Tests resistance to requested changes in tone, persona, or brand voice',
 };
 
@@ -994,6 +997,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   xstest: 'XSTest Dataset',
   video: 'Video Content',
   'max-message-length': 'Maximum Message Length',
+  'rate-limit': 'Rate Limit Testing',
   'style-override': 'Style Override',
 };
 
@@ -1089,6 +1093,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   unsafebench: Severity.Medium,
   xstest: Severity.Low,
   'max-message-length': Severity.Low,
+  'rate-limit': Severity.Low,
   'style-override': Severity.Low,
 };
 
@@ -1179,7 +1184,11 @@ export const riskCategories: Record<string, Plugin[]> = {
 
   Agentic: [MEMORY_POISONING_PLUGIN_ID],
 
-  'Robustness & Scaling': ['max-message-length', 'reasoning-dos'],
+  'Robustness & Scaling': [
+    'max-message-length',
+    'rate-limit',
+    'reasoning-dos',
+  ],
 };
 
 export const categoryDescriptions = {
@@ -1281,6 +1290,7 @@ export const categoryAliases: Record<Plugin, string> = {
   unsafebench: 'UnsafeBench',
   xstest: 'XSTest',
   'max-message-length': 'Maximum Message Length',
+  'rate-limit': 'Rate Limit Testing',
   'style-override': 'Style Override',
 };
 
@@ -1375,6 +1385,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   xstest:
     'Tests how models handle ambiguous terms related to potentially harmful topics like violence and drugs',
   'max-message-length': 'Tests the maximum message length a model can handle',
+  'rate-limit': 'Tests API rate limits to determine request throttling thresholds',
   'style-override': 'Tests resistance to requested changes in tone, persona, or brand voice',
 };
 

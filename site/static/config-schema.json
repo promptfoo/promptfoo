@@ -1155,7 +1155,8 @@
                           "tool-discovery:multi-turn",
                           "toxicity",
                           "unsafebench",
-                          "xstest"
+                          "xstest",
+                          "rate-limit"
                         ]
                       },
                       {
@@ -1307,7 +1308,8 @@
                               "tool-discovery:multi-turn",
                               "toxicity",
                               "unsafebench",
-                              "xstest"
+                              "xstest",
+                              "rate-limit"
                             ]
                           },
                           {

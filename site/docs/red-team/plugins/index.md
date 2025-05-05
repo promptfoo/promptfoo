@@ -301,6 +301,7 @@ For testing the resilience and performance boundaries of your LLM system:
 ```yaml
 plugins:
   - 'max-message-length' # Tests maximum message length a model can handle
+  - 'rate-limit' # Tests API rate limits to determine request throttling thresholds
   - 'reasoning-dos' # Tests for computational resource exhaustion vulnerabilities
 ```
 

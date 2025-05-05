@@ -11,6 +11,7 @@ import RedteamIterativeProvider from '../redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from '../redteam/providers/iterativeTree';
 import { MaxMessageLengthProvider } from '../redteam/providers/maxMessageLength';
+import { RateLimitProvider } from '../redteam/providers/rateLimit';
 import RedteamPandamoniumProvider from '../redteam/providers/pandamonium';
 import { ServerToolDiscoveryMultiProvider } from '../redteam/providers/toolDiscoveryMulti';
 import type { LoadApiProviderContext } from '../types';
@@ -1177,6 +1178,16 @@ export const providerMap: ProviderFactory[] = [
       context: LoadApiProviderContext,
     ) => {
       return new MaxMessageLengthProvider(providerOptions.config);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath === 'promptfoo:redteam:rate-limit',
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return new RateLimitProvider(providerOptions.config);
     },
   },
 ];
