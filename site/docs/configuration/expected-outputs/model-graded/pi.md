@@ -42,6 +42,13 @@ assert:
     threshold: 0.8 # Requires a score of 0.8 or higher to pass
 ```
 
+## Metrics Brainstorming
+
+You can optionally use the [Pi Labs Copilot](https://build.withpi.ai) to interactively brainstorm
+representative metrics for your application. Additionally, it can help
+you test your Pi metrics out on generated examples before integrating into your stack.
+
+
 ## Further reading
 
 See [Pi Documentation](https://docs.withpi.ai) for more options, scorer configuration, and calibration.
