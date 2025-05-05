@@ -98,23 +98,30 @@ function getResultSize(result: any): number {
   return Buffer.byteLength(JSON.stringify(result), 'utf8');
 }
 
-function calculateMedianResultSize(results: any[], sampleSize: number = 25): number {
+function findLargestResultSize(results: any[], sampleSize: number = 1000): number {
   // Get the result size of the first sampleSize results
   const sampleSizes = results.slice(0, Math.min(sampleSize, results.length)).map(getResultSize);
-  // Return the median result size
-  return sampleSizes.sort((a, b) => a - b)[Math.floor(sampleSizes.length / 2)];
+  // find the largest result size
+  const maxSize = Math.max(...sampleSizes);
+  // return the largest result size
+  return maxSize;
 }
 
-function createChunks(results: any[], targetChunkSize: number): any[][] {
-  const medianSize = calculateMedianResultSize(results);
+function createChunks(results: any[]): any[][] {
+  if (results.length === 0) {
+    return [];
+  }
+  const largestResult = findLargestResultSize(results);
+  // Constants
+  const TARGET_CHUNK_SIZE = 10 * 1024 * 1024; // 10MB in bytes
   // PROMPTFOO_SHARE_CHUNK_SIZE lets you directly specify how many results to include in each chunk.
   // The value represents the number of results per chunk, not a byte size.
   const estimatedResultsPerChunk =
     getEnvInt('PROMPTFOO_SHARE_CHUNK_SIZE') ??
-    Math.max(1, Math.floor(targetChunkSize / medianSize));
+    Math.max(1, Math.floor(TARGET_CHUNK_SIZE / largestResult));
 
   logger.debug(
-    `Median result size: ${medianSize} bytes, estimated results per chunk: ${estimatedResultsPerChunk}`,
+    `Largest result size: ${largestResult} bytes, estimated results per chunk: ${estimatedResultsPerChunk}`,
   );
 
   const chunks: any[][] = [];
@@ -149,10 +156,11 @@ async function sendChunkOfResults(
 ) {
   const targetUrl = `${url}/${evalId}/results`;
   logger.debug(`Sending chunk of ${chunk.length} results to ${targetUrl}`);
+  const stringifiedChunk = JSON.stringify(chunk);
   const response = await fetchWithProxy(targetUrl, {
     method: 'POST',
     headers,
-    body: JSON.stringify(chunk),
+    body: stringifiedChunk,
   });
 
   if (!response.ok) {
@@ -160,6 +168,11 @@ async function sendChunkOfResults(
     logger.error(
       `Failed to send results chunk to ${targetUrl}: status code: ${response.status}, status text: ${response.statusText}, body: ${responseBody}`,
     );
+    if (response.status === 413) {
+      throw new Error(
+        `Results chunk too large. It contained ${stringifiedChunk.length} bytes. Please reduce the number of results per chunk using the environment variable PROMPTFOO_SHARE_CHUNK_SIZE. Example: PROMPTFOO_SHARE_CHUNK_SIZE=100 promptfoo share`,
+      );
+    }
     throw new Error(`Failed to send results chunk`);
   }
 }
@@ -187,15 +200,12 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
   const allResults = evalRecord.results;
   logger.debug(`Loaded ${allResults.length} results`);
 
-  // Constants
-  const TARGET_CHUNK_SIZE = 2 * 1024 * 1024; // 2MB in bytes
-
   // Calculate chunk sizes
-  const medianSize = calculateMedianResultSize(allResults);
+  const medianSize = findLargestResultSize(allResults);
   logger.debug(`Median result size: ${medianSize} bytes`);
 
   // Create chunks
-  const chunks = createChunks(allResults, TARGET_CHUNK_SIZE);
+  const chunks = createChunks(allResults);
 
   // Prepare headers
   const headers: Record<string, string> = {
@@ -436,6 +446,12 @@ export async function createShareableUrl(
     return null;
   }
   logger.debug(`New eval ID on remote instance: ${evalId}`);
+
+  // Note: Eval ID will differ on self-hosted instance because self-hosted doesn't implement
+  // sharing idempotency.
+  if (evalId !== evalRecord.id) {
+    evalRecord.id = evalId;
+  }
 
   return getShareableUrl(evalRecord, showAuth);
 }

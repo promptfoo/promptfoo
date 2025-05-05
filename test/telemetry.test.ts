@@ -1,5 +1,4 @@
 import { PostHog } from 'posthog-node';
-import type { EnvVarKey } from '../src/envars';
 import { fetchWithTimeout } from '../src/fetch';
 import { Telemetry } from '../src/telemetry';
 
@@ -47,8 +46,11 @@ jest.mock('../src/envars', () => ({
     return false;
   }),
   getEnvString: jest.fn().mockImplementation((key) => {
-    if (key === 'POSTHOG_KEY') {
-      return process.env.POSTHOG_KEY || undefined;
+    if (key === 'PROMPTFOO_POSTHOG_KEY') {
+      return process.env.PROMPTFOO_POSTHOG_KEY || undefined;
+    }
+    if (key === 'PROMPTFOO_POSTHOG_HOST') {
+      return process.env.PROMPTFOO_POSTHOG_HOST || undefined;
     }
     if (key === 'NODE_ENV') {
       return process.env.NODE_ENV || undefined;
@@ -65,7 +67,7 @@ describe('Telemetry', () => {
   beforeEach(() => {
     originalEnv = process.env;
     process.env = { ...originalEnv };
-    process.env.POSTHOG_KEY = 'test-key';
+    process.env.PROMPTFOO_POSTHOG_KEY = 'test-key';
 
     // Setup fetch mock
     mockFetch = jest.fn().mockResolvedValue({ ok: true });
@@ -134,37 +136,5 @@ describe('Telemetry', () => {
       }),
       expect.any(Number),
     );
-  });
-
-  it('should use POSTHOG_KEY from getEnvString', () => {
-    // Reset the mocks
-    jest.mocked(PostHog).mockClear();
-
-    // Set up the environment
-    process.env.POSTHOG_KEY = undefined;
-
-    // Mock getEnvString to return a key as if it came from cliState.config.env
-    const { getEnvString } = jest.requireMock('../src/envars');
-    jest.mocked(getEnvString).mockImplementation((key: EnvVarKey) => {
-      if (key === 'POSTHOG_KEY') {
-        return 'config-posthog-key';
-      }
-      if (key === 'NODE_ENV') {
-        return process.env.NODE_ENV || undefined;
-      }
-      return undefined;
-    });
-
-    // Re-import to trigger the initialization code
-    jest.isolateModules(() => {
-      jest.doMock('../src/constants', () => ({
-        VERSION: '1.0.0',
-      }));
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      require('../src/telemetry');
-    });
-
-    // Verify PostHog was initialized with the key from getEnvString
-    expect(PostHog).toHaveBeenCalledWith('config-posthog-key', expect.any(Object));
   });
 });

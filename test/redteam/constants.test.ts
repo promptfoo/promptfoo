@@ -13,9 +13,12 @@ import {
   CONFIG_REQUIRED_PLUGINS,
   DEFAULT_PLUGINS,
   ALL_PLUGINS,
+  DATASET_PLUGINS,
   Severity,
   severityDisplayNames,
   PLUGIN_PRESET_DESCRIPTIONS,
+  AGENTIC_PLUGINS,
+  riskCategories,
 } from '../../src/redteam/constants';
 
 describe('constants', () => {
@@ -88,8 +91,35 @@ describe('constants', () => {
 
   it('ALL_PLUGINS should contain all plugins sorted', () => {
     expect(ALL_PLUGINS).toEqual(
-      [...new Set([...DEFAULT_PLUGINS, ...ADDITIONAL_PLUGINS, ...CONFIG_REQUIRED_PLUGINS])].sort(),
+      [
+        ...new Set([
+          ...DEFAULT_PLUGINS,
+          ...ADDITIONAL_PLUGINS,
+          ...CONFIG_REQUIRED_PLUGINS,
+          ...AGENTIC_PLUGINS,
+        ]),
+      ].sort(),
     );
+  });
+
+  it('DATASET_PLUGINS should contain expected plugins', () => {
+    const expectedPlugins = [
+      'beavertails',
+      'cyberseceval',
+      'donotanswer',
+      'harmbench',
+      'pliny',
+      'unsafebench',
+      'xstest',
+    ];
+
+    expect(DATASET_PLUGINS).toEqual(expectedPlugins);
+    expect(DATASET_PLUGINS).toHaveLength(7);
+
+    // Verify each expected plugin exists
+    expectedPlugins.forEach((plugin) => {
+      expect(DATASET_PLUGINS).toContain(plugin);
+    });
   });
 
   it('Severity enum should have expected values', () => {
@@ -116,5 +146,14 @@ describe('constants', () => {
     expect(PLUGIN_PRESET_DESCRIPTIONS['Minimal Test']).toBe(
       'Minimal set of plugins to validate your setup',
     );
+    expect(PLUGIN_PRESET_DESCRIPTIONS['OWASP Agentic AI Top 10']).toBe(
+      'OWASP Agentic AI Top 10 Threats and Mitigations',
+    );
+  });
+
+  it('riskCategories should contain MEMORY_POISONING_PLUGIN_ID in Agentic category', () => {
+    expect(riskCategories.Agentic).toBeDefined();
+    expect(riskCategories.Agentic).toContain('agentic:memory-poisoning');
+    expect(riskCategories.Agentic).toHaveLength(1);
   });
 });

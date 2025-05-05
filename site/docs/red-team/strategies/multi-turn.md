@@ -1,23 +1,27 @@
 ---
 sidebar_label: Multi-turn Jailbreaks
+title: Multi-turn Jailbreaks Strategy
+description: Gradually escalate prompt harm over multiple conversation turns to identify vulnerabilities in AI systems
 ---
 
-# Multi-turn Jailbreaks
+# Multi-turn Jailbreaks Strategy
 
 The Crescendo strategy is a multi-turn jailbreak technique that gradually escalates the potential harm of prompts, exploiting the fuzzy boundary between acceptable and unacceptable responses.
 
 Because it is multi-turn, it can surface vulnerabilities that only emerge after multiple interactions.
 
+## Implementation
+
 You can use it with the following configuration:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 strategies:
   - crescendo
 ```
 
 Or tune it with the following parameters:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 strategies:
   - id: crescendo
     config:
@@ -68,8 +72,9 @@ The backtracking automation also saves an enormous amount of time compared to ma
 
 ## Related Concepts
 
-- [Prompt Injections](prompt-injection.md)
-- [Iterative Jailbreaks](iterative.md)
+- [GOAT Strategy](goat.md) - Another multi-turn jailbreaking approach
+- [Iterative Jailbreaks](iterative.md) - Single-turn version of this approach
+- [Tree-based Jailbreaks](tree.md) - Alternative approach to jailbreaking
 - [The Crescendo Attack](https://crescendo-the-multiturn-jailbreak.github.io//) from Microsoft Research
 
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.

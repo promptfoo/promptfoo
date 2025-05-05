@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import cliState from './cliState';
 import type { EnvOverrides } from './types/env';
 
@@ -33,6 +34,7 @@ export type EnvVars = {
   PROMPTFOO_DISABLE_UPDATE?: boolean;
   PROMPTFOO_DISABLE_VAR_EXPANSION?: boolean;
   PROMPTFOO_ENABLE_DATABASE_LOGS?: boolean;
+  PROMPTFOO_EVAL_TIMEOUT_MS?: number;
   PROMPTFOO_EXPERIMENTAL?: boolean;
   PROMPTFOO_NO_TESTCASE_ASSERT_WARNING?: boolean;
   PROMPTFOO_RETRY_5XX?: boolean;
@@ -102,10 +104,13 @@ export type EnvVars = {
   JEST_WORKER_ID?: string;
   NODE_EXTRA_CA_CERTS?: string;
   NODE_TLS_REJECT_UNAUTHORIZED?: string;
-  POSTHOG_KEY?: string;
   REQUEST_TIMEOUT_MS?: number;
   RESULT_HISTORY_LENGTH?: number;
   WEBHOOK_TIMEOUT?: number;
+
+  // Posthog
+  PROMPTFOO_POSTHOG_KEY?: string;
+  PROMPTFOO_POSTHOG_HOST?: string;
 
   //=========================================================================
   // UI configuration
@@ -164,6 +169,7 @@ export type EnvVars = {
   AWS_BEDROCK_STOP?: string;
   AWS_BEDROCK_TEMPERATURE?: number;
   AWS_BEDROCK_TOP_P?: string;
+  CEREBRAS_API_KEY?: string;
 
   // Azure OpenAI auth params
   AZURE_AUTHORITY_HOST?: string;
@@ -368,6 +374,15 @@ export function getEnvFloat(key: EnvVarKey, defaultValue?: number): number | und
     }
   }
   return defaultValue;
+}
+
+/**
+ * Get the evaluation timeout in milliseconds.
+ * @param defaultValue Optional default value if the environment variable is not set. Defaults to 0 (no timeout).
+ * @returns The timeout value in milliseconds, or the default value if not set.
+ */
+export function getEvalTimeoutMs(defaultValue: number = 0): number {
+  return getEnvInt('PROMPTFOO_EVAL_TIMEOUT_MS', defaultValue);
 }
 
 /**

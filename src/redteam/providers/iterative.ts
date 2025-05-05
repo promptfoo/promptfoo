@@ -18,7 +18,12 @@ import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { shouldGenerateRemote } from '../remoteGeneration';
-import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } from './prompts';
+import {
+  ATTACKER_SYSTEM_PROMPT,
+  CLOUD_ATTACKER_SYSTEM_PROMPT,
+  JUDGE_SYSTEM_PROMPT,
+  ON_TOPIC_SYSTEM_PROMPT,
+} from './prompts';
 import type { TargetResponse } from './shared';
 import { checkPenalizedPhrases, getTargetResponse, redteamProviderManager } from './shared';
 
@@ -54,9 +59,11 @@ export async function runRedteamConversation({
   options,
   prompt,
   redteamProvider,
+  gradingProvider,
   targetProvider,
   test,
   vars,
+  excludeTargetOutputFromAgenticAttackGeneration,
 }: {
   context?: CallApiContextParams;
   filters: NunjucksFilterMap | undefined;
@@ -65,9 +72,11 @@ export async function runRedteamConversation({
   options?: CallApiOptionsParams;
   prompt: Prompt;
   redteamProvider: ApiProvider;
+  gradingProvider: ApiProvider;
   targetProvider: ApiProvider;
   test?: AtomicTestCase;
   vars: Record<string, string | object>;
+  excludeTargetOutputFromAgenticAttackGeneration: boolean;
 }): Promise<{
   output: string;
   metadata: IterativeMetadata;
@@ -76,7 +85,9 @@ export async function runRedteamConversation({
   const nunjucks = getNunjucksEngine();
   const goal = vars[injectVar];
 
-  const redteamSystemPrompt = nunjucks.renderString(ATTACKER_SYSTEM_PROMPT, { goal });
+  const redteamSystemPrompt = excludeTargetOutputFromAgenticAttackGeneration
+    ? nunjucks.renderString(CLOUD_ATTACKER_SYSTEM_PROMPT, { goal })
+    : nunjucks.renderString(ATTACKER_SYSTEM_PROMPT, { goal });
 
   const onTopicSystemPrompt = nunjucks.renderString(ON_TOPIC_SYSTEM_PROMPT, { goal });
 
@@ -187,16 +198,16 @@ export async function runRedteamConversation({
         content: targetPrompt,
       },
     ]);
-    const isOnTopicResp = await redteamProvider.callApi(isOnTopicBody, {
+    const isOnTopicResp = await gradingProvider.callApi(isOnTopicBody, {
       prompt: {
         raw: isOnTopicBody,
         label: 'on-topic',
       },
       vars: {},
     });
-    if (redteamProvider.delay) {
-      logger.debug(`[Iterative] Sleeping for ${redteamProvider.delay}ms`);
-      await sleep(redteamProvider.delay);
+    if (gradingProvider.delay) {
+      logger.debug(`[Iterative] Sleeping for ${gradingProvider.delay}ms`);
+      await sleep(gradingProvider.delay);
     }
     logger.debug(`[Iterative] Raw onTopic response: ${JSON.stringify(isOnTopicResp)}`);
 
@@ -256,7 +267,7 @@ export async function runRedteamConversation({
           goal as string,
           targetResponse.output,
           test,
-          redteamProvider,
+          gradingProvider,
           assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
         );
         graderPassed = grade.pass;
@@ -287,16 +298,16 @@ export async function runRedteamConversation({
         `,
       },
     ]);
-    const judgeResp = await redteamProvider.callApi(judgeBody, {
+    const judgeResp = await gradingProvider.callApi(judgeBody, {
       prompt: {
         raw: judgeBody,
         label: 'judge',
       },
       vars: {},
     });
-    if (redteamProvider.delay) {
-      logger.debug(`[Iterative] Sleeping for ${redteamProvider.delay}ms`);
-      await sleep(redteamProvider.delay);
+    if (gradingProvider.delay) {
+      logger.debug(`[Iterative] Sleeping for ${gradingProvider.delay}ms`);
+      await sleep(gradingProvider.delay);
     }
     logger.debug(`[Iterative] Raw judge response: ${JSON.stringify(judgeResp)}`);
     if (judgeResp.error) {
@@ -340,7 +351,17 @@ export async function runRedteamConversation({
       // Update the user message to include both scores
       redteamHistory.push({
         role: 'user',
-        content: dedent`
+        content: excludeTargetOutputFromAgenticAttackGeneration
+          ? dedent`
+          OBJECTIVE: ${goal}
+
+          CURRENT SCORE: ${currentScore} ${isOnTopic ? '' : '(your prompt was off-topic)'}${
+            containsPenalizedPhrase ? ' (contains penalized phrase)' : ''
+          }
+          PREVIOUS BEST SCORE: ${previousScore}
+          EXPLANATION: ${parsed.currentResponse.explanation}
+        `
+          : dedent`
           LANGUAGE MODEL OUTPUT: ${targetResponse.output}
 
           OBJECTIVE: ${goal}
@@ -436,16 +457,26 @@ class RedteamIterativeProvider implements ApiProvider {
   private readonly redteamProvider: RedteamFileConfig['provider'];
   private readonly injectVar: string;
   private readonly numIterations: number;
+  private readonly excludeTargetOutputFromAgenticAttackGeneration: boolean;
+  private readonly gradingProvider: RedteamFileConfig['provider'];
   constructor(readonly config: Record<string, string | object>) {
     logger.debug(`[Iterative] Constructor config: ${JSON.stringify(config)}`);
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;
 
     this.numIterations = getEnvInt('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', 4);
+    this.excludeTargetOutputFromAgenticAttackGeneration = Boolean(
+      config.excludeTargetOutputFromAgenticAttackGeneration,
+    );
 
     // Redteam provider can be set from the config.
 
     if (shouldGenerateRemote()) {
+      this.gradingProvider = new PromptfooChatCompletionProvider({
+        task: 'judge',
+        jsonOnly: true,
+        preferSmallModel: false,
+      });
       this.redteamProvider = new PromptfooChatCompletionProvider({
         task: 'iterative',
         jsonOnly: true,
@@ -481,12 +512,18 @@ class RedteamIterativeProvider implements ApiProvider {
         provider: this.redteamProvider,
         jsonOnly: true,
       }),
+      gradingProvider: await redteamProviderManager.getProvider({
+        provider: this.gradingProvider,
+        jsonOnly: true,
+      }),
       targetProvider: context.originalProvider,
       injectVar: this.injectVar,
       numIterations: this.numIterations,
       context,
       options,
       test: context.test,
+      excludeTargetOutputFromAgenticAttackGeneration:
+        this.excludeTargetOutputFromAgenticAttackGeneration,
     });
   }
 }

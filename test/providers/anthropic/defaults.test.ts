@@ -19,7 +19,6 @@ describe('Anthropic Default Providers', () => {
     it('should return all provider implementations', () => {
       const providers = getAnthropicProviders();
 
-      expect(providers.datasetGenerationProvider).toBeInstanceOf(AnthropicMessagesProvider);
       expect(providers.gradingJsonProvider).toBeInstanceOf(AnthropicMessagesProvider);
       expect(providers.gradingProvider).toBeInstanceOf(AnthropicMessagesProvider);
       expect(providers.llmRubricProvider).toBeInstanceOf(AnthropicLlmRubricProvider);

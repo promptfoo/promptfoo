@@ -84,6 +84,7 @@ export const ProviderEnvOverridesSchema = z.object({
   AWS_SAGEMAKER_TEMPERATURE: z.string().optional(),
   AWS_SAGEMAKER_TOP_P: z.string().optional(),
   AWS_SAGEMAKER_MAX_RETRIES: z.string().optional(),
+  PROMPTFOO_EVAL_TIMEOUT_MS: z.string().optional(),
 });
 
 export type EnvOverrides = z.infer<typeof ProviderEnvOverridesSchema>;

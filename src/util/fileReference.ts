@@ -4,7 +4,7 @@ import path from 'path';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
-import { isJavascriptFile } from './file';
+import { isJavascriptFile } from './fileExtensions';
 
 /**
  * Loads the content from a file reference

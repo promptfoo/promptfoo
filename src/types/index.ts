@@ -10,7 +10,7 @@ import type {
 import type { EnvOverrides } from '../types/env';
 import { ProviderEnvOverridesSchema } from '../types/env';
 import { TokenUsageSchema } from '../types/shared';
-import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/file';
+import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/fileExtensions';
 import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
 import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
 import { RedteamConfigSchema } from '../validators/redteam';
@@ -123,7 +123,7 @@ export type OutputConfig = z.infer<typeof OutputConfigSchema>;
 
 export type EvalConversations = Record<
   string,
-  { prompt: string | object; input: string; output: string | object }[]
+  { prompt: string | object; input: string; output: string | object; metadata?: object }[]
 >;
 
 export type EvalRegisters = Record<string, string | object>;
@@ -148,6 +148,12 @@ export interface RunEvalOptions {
   // Used by pandamonium, this should never be passed to callApi, it could be a massive object that will break the stack
   allTests?: RunEvalOptions[];
   concurrency?: number;
+
+  /**
+   * AbortSignal that can be used to cancel the evaluation
+   * This is passed to the provider's callApi function
+   */
+  abortSignal?: AbortSignal;
 }
 
 const EvaluateOptionsSchema = z.object({
@@ -176,6 +182,10 @@ const EvaluateOptionsSchema = z.object({
     .optional(),
   repeat: z.number().optional(),
   showProgressBar: z.boolean().optional(),
+  /**
+   * Timeout in milliseconds for each evaluation step. Default is 0 (no timeout).
+   */
+  timeoutMs: z.number().optional(),
 });
 export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & { abortSignal?: AbortSignal };
 
@@ -418,6 +428,7 @@ export const BaseAssertionTypesSchema = z.enum([
   'levenshtein',
   'llm-rubric',
   'pi',
+  'meteor',
   'model-graded-closedqa',
   'model-graded-factuality',
   'moderation',
