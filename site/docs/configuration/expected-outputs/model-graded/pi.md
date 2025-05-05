@@ -48,7 +48,6 @@ You can optionally use the [Pi Labs Copilot](https://build.withpi.ai) to interac
 representative metrics for your application. Additionally, it can help
 you test your Pi metrics out on generated examples before integrating into your stack.
 
-
 ## Further reading
 
 See [Pi Documentation](https://docs.withpi.ai) for more options, scorer configuration, and calibration.
