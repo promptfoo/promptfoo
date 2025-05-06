@@ -291,4 +291,4 @@ This makes it easy to:
 - Test agentic workflows across providers
 - Benchmark tool usage patterns
 
-Ready to dive deeper? Check out our [complete MCP guide](/docs/providers/mcp/) for detailed configuration options, troubleshooting tips, and advanced features.
+Ready to dive deeper? Check out our [complete MCP guide](/docs/integrations/mcp/) for detailed configuration options, troubleshooting tips, and advanced features.
