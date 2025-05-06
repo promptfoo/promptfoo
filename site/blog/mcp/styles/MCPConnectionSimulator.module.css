@@ -1,7 +1,7 @@
 .container {
   background-color: var(--ifm-card-background-color);
   border-radius: 16px;
-  padding: 2rem;
+  padding: 2rem 2rem 1.5rem;
   margin: 2rem 0;
   box-shadow:
     0 4px 6px rgba(0, 0, 0, 0.05),
@@ -207,15 +207,15 @@
 
 .client-to-server {
   align-self: flex-start;
-  background-color: #ebf4ff;
-  border: 1px solid #c3dafe;
+  background-color: #f8faff;
+  border: 1px solid #e1e8ff;
   transform-origin: left center;
 }
 
 .server-to-client {
   align-self: flex-end;
-  background-color: #f0fff4;
-  border: 1px solid #c6f6d5;
+  background-color: #f8fff9;
+  border: 1px solid #e1f5e4;
   transform-origin: right center;
 }
 
@@ -240,7 +240,11 @@
   opacity: 0;
   animation: typeWriter 0.5s ease-out forwards;
   line-height: 1.5;
-  color: #2d3748;
+  color: var(--ifm-color-emphasis-900);
+  background: white;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  border: 1px solid var(--ifm-color-emphasis-200);
 }
 
 .request .messageType {
@@ -353,17 +357,19 @@ html[data-theme='dark'] .componentHeader {
 }
 
 html[data-theme='dark'] .client-to-server {
-  background-color: rgba(74, 144, 226, 0.1);
-  border-color: rgba(74, 144, 226, 0.2);
+  background-color: rgba(74, 144, 226, 0.05);
+  border-color: rgba(74, 144, 226, 0.15);
 }
 
 html[data-theme='dark'] .server-to-client {
-  background-color: rgba(72, 187, 120, 0.1);
-  border-color: rgba(72, 187, 120, 0.2);
+  background-color: rgba(72, 187, 120, 0.05);
+  border-color: rgba(72, 187, 120, 0.15);
 }
 
 html[data-theme='dark'] .messageText {
-  color: #e2e8f0;
+  background-color: var(--ifm-background-surface-color);
+  color: var(--ifm-color-emphasis-900);
+  border-color: var(--ifm-color-emphasis-300);
 }
 
 html[data-theme='dark'] .tooltip {
@@ -377,7 +383,7 @@ html[data-theme='dark'] .tooltip::after {
 /* Responsive design */
 @media (max-width: 768px) {
   .container {
-    padding: 1.5rem;
+    padding: 1rem;
   }
 
   .simulator {
@@ -411,4 +417,18 @@ html[data-theme='dark'] .tooltip::after {
   .title {
     font-size: 1.5rem;
   }
+
+  .footer {
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+  }
+}
+
+.footer {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--ifm-color-emphasis-200);
 }

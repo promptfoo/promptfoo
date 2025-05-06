@@ -223,40 +223,20 @@ const MCPConnectionSimulator: React.FC = () => {
     <div className={styles.container}>
       <div className={styles.header}>
         <h3 className={styles.title}>MCP Connection Simulator</h3>
-        <div className={styles.controls}>
-          {isConnected ? (
-            <>
-              <button
-                className={styles.button}
-                onClick={handleNextStep}
-                disabled={currentStep >= simulationSteps.length}
-              >
-                Next Step
-              </button>
-              <button className={styles.resetButton} onClick={handleReset}>
-                Reset
-              </button>
-            </>
-          ) : (
-            <button className={styles.button} onClick={handleConnect}>
-              Initialize Connection
-            </button>
-          )}
-        </div>
       </div>
 
       <div className={styles.simulator}>
-        <div
-          className={`${styles.client} ${styles[clientStatus.status]}`}
-          onMouseEnter={() => setShowTooltip('client')}
-          onMouseLeave={() => setShowTooltip(null)}
-        >
+        <div className={`${styles.client} ${styles[clientStatus.status]}`}>
           <div className={styles.componentHeader}>
             Client (IDE)
-            <span className={styles.statusIcon}>{getStatusIcon(clientStatus.status)}</span>
+            <span className={styles.statusIcon}>●</span>
           </div>
           <div className={styles.componentBody}>
-            <div className={styles.status}>
+            <div
+              className={styles.status}
+              onMouseEnter={() => setShowTooltip('client')}
+              onMouseLeave={() => setShowTooltip(null)}
+            >
               Status: {clientStatus.status}
               {showTooltip === 'client' && (
                 <div className={styles.tooltip}>{clientStatus.tooltip}</div>
@@ -267,31 +247,31 @@ const MCPConnectionSimulator: React.FC = () => {
 
         <div className={styles.messageFlow}>
           <div className={`${styles.connectionLine} ${isConnected ? styles.active : ''}`} />
-          {messages.map((message) => (
+          {messages.map((msg) => (
             <div
-              key={message.id}
-              className={`${styles.message} ${styles[message.direction]} ${styles[message.type]}`}
-              data-phase={message.phase}
+              key={msg.id}
+              className={`${styles.message} ${styles[msg.direction]} ${styles[msg.type]}`}
+              data-phase={msg.phase}
             >
               <div className={styles.messageContent}>
-                <span className={styles.messageType}>{message.type}</span>
-                <span className={styles.messageText}>{message.content}</span>
+                <span className={styles.messageType}>{msg.type}</span>
+                <code className={styles.messageText}>{msg.content}</code>
               </div>
             </div>
           ))}
         </div>
 
-        <div
-          className={`${styles.server} ${styles[serverStatus.status]}`}
-          onMouseEnter={() => setShowTooltip('server')}
-          onMouseLeave={() => setShowTooltip(null)}
-        >
+        <div className={`${styles.server} ${styles[serverStatus.status]}`}>
           <div className={styles.componentHeader}>
             Server (Tools)
-            <span className={styles.statusIcon}>{getStatusIcon(serverStatus.status)}</span>
+            <span className={styles.statusIcon}>●</span>
           </div>
           <div className={styles.componentBody}>
-            <div className={styles.status}>
+            <div
+              className={styles.status}
+              onMouseEnter={() => setShowTooltip('server')}
+              onMouseLeave={() => setShowTooltip(null)}
+            >
               Status: {serverStatus.status}
               {showTooltip === 'server' && (
                 <div className={styles.tooltip}>{serverStatus.tooltip}</div>
@@ -299,6 +279,27 @@ const MCPConnectionSimulator: React.FC = () => {
             </div>
           </div>
         </div>
+      </div>
+
+      <div className={styles.footer}>
+        {isConnected ? (
+          <>
+            <button
+              className={styles.button}
+              onClick={handleNextStep}
+              disabled={currentStep >= simulationSteps.length}
+            >
+              Next Step
+            </button>
+            <button className={styles.resetButton} onClick={handleReset}>
+              Reset
+            </button>
+          </>
+        ) : (
+          <button className={styles.button} onClick={handleConnect}>
+            Initialize Connection
+          </button>
+        )}
       </div>
     </div>
   );
