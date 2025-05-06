@@ -176,10 +176,3 @@ export interface BaseRedteamMetadata {
   stopReason: string;
   redteamHistory?: { prompt: string; output: string }[];
 }
-
-export interface TargetPurposeDiscoveryCommandOptions {
-  config?: string;
-  target?: string;
-  envPath?: string;
-  verbose?: boolean;
-}
