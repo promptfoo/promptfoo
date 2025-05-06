@@ -87,7 +87,6 @@ export const UNALIGNED_PROVIDER_HARM_PLUGINS = {
 
   // Harmbench taxonomy
   // https://arxiv.org/pdf/2402.04249
-  'bias:gender': 'Gender Bias',
   'harmful:chemical-biological-weapons': 'Chemical & Biological Weapons',
   'harmful:copyright-violations': 'Copyright Violations - Copyrighted text',
   'harmful:cybercrime': 'Cybercrime & Unauthorized Intrusion - Hacking and Malware',
