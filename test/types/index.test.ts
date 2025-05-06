@@ -3,7 +3,7 @@ import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import path from 'path';
 import { z } from 'zod';
-import type { TestSuite } from '../../src/types';
+import type { TestSuite, ResultsFile } from '../../src/types';
 import {
   AssertionSchema,
   BaseAssertionTypesSchema,
@@ -412,6 +412,35 @@ describe('TestSuiteConfigSchema', () => {
     expect(configFiles.length).toBeGreaterThan(0);
   });
 
+  for (const file of configFiles) {
+    it(`should validate ${path.relative(rootDir, file)}`, async () => {
+      const configContent = fs.readFileSync(file, 'utf8');
+      const config = yaml.load(configContent) as Record<string, unknown>;
+      const extendedSchema = TestSuiteConfigSchema.extend({
+        targets: z.union([TestSuiteConfigSchema.shape.providers, z.undefined()]),
+        providers: z.union([TestSuiteConfigSchema.shape.providers, z.undefined()]),
+        ...(typeof config.redteam !== 'undefined' && {
+          prompts: z.optional(TestSuiteConfigSchema.shape.prompts),
+        }),
+      }).refine(
+        (data) => {
+          const hasTargets = Boolean(data.targets);
+          const hasProviders = Boolean(data.providers);
+          return (hasTargets && !hasProviders) || (!hasTargets && hasProviders);
+        },
+        {
+          message: "Exactly one of 'targets' or 'providers' must be provided, but not both",
+        },
+      );
+
+      const result = extendedSchema.safeParse(config);
+      if (!result.success) {
+        console.error(`Validation failed for ${file}:`, result.error);
+      }
+      expect(result.success).toBe(true);
+    });
+  }
+
   describe('env property', () => {
     it('should validate config with string env values', () => {
       const config = {
@@ -583,35 +612,6 @@ describe('TestSuiteConfigSchema', () => {
       );
     });
   });
-
-  for (const file of configFiles) {
-    it(`should validate ${path.relative(rootDir, file)}`, async () => {
-      const configContent = fs.readFileSync(file, 'utf8');
-      const config = yaml.load(configContent) as Record<string, unknown>;
-      const extendedSchema = TestSuiteConfigSchema.extend({
-        targets: z.union([TestSuiteConfigSchema.shape.providers, z.undefined()]),
-        providers: z.union([TestSuiteConfigSchema.shape.providers, z.undefined()]),
-        ...(typeof config.redteam !== 'undefined' && {
-          prompts: z.optional(TestSuiteConfigSchema.shape.prompts),
-        }),
-      }).refine(
-        (data) => {
-          const hasTargets = Boolean(data.targets);
-          const hasProviders = Boolean(data.providers);
-          return (hasTargets && !hasProviders) || (!hasTargets && hasProviders);
-        },
-        {
-          message: "Exactly one of 'targets' or 'providers' must be provided, but not both",
-        },
-      );
-
-      const result = extendedSchema.safeParse(config);
-      if (!result.success) {
-        console.error(`Validation failed for ${file}:`, result.error);
-      }
-      expect(result.success).toBe(true);
-    });
-  }
 });
 
 describe('UnifiedConfigSchema extensions handling', () => {
@@ -750,5 +750,114 @@ describe('TestSuiteSchema', () => {
       const result = TestSuiteSchema.safeParse({ ...baseTestSuite, extensions: [] });
       expect(result.success).toBe(true);
     });
+  });
+});
+
+describe('ResultsFile', () => {
+  const baseResultsFile: ResultsFile = {
+    version: 1,
+    createdAt: '2024-01-01T00:00:00Z',
+    results: {
+      version: 3,
+      timestamp: '2024-01-01T00:00:00Z',
+      results: [],
+      prompts: [],
+      stats: {
+        successes: 0,
+        failures: 0,
+        errors: 0,
+        tokenUsage: {
+          prompt: 0,
+          completion: 0,
+          total: 0,
+          cached: 0,
+          numRequests: 0,
+          completionDetails: {
+            reasoning: 0,
+            acceptedPrediction: 0,
+            rejectedPrediction: 0,
+          },
+          assertions: {
+            prompt: 0,
+            completion: 0,
+            cached: 0,
+            total: 0,
+            numRequests: 0,
+            completionDetails: {
+              reasoning: 0,
+              acceptedPrediction: 0,
+              rejectedPrediction: 0,
+            },
+          },
+        },
+      },
+    },
+    config: {
+      providers: ['provider1'],
+      prompts: ['prompt1'],
+    },
+    author: null,
+  };
+
+  it('should validate results file with id field', () => {
+    const resultsFile = {
+      ...baseResultsFile,
+      id: 'test-id-123',
+    };
+    const result = UnifiedConfigSchema.safeParse(resultsFile.config);
+    expect(result.success).toBe(true);
+  });
+
+  it('should validate results file without id field', () => {
+    const resultsFile = {
+      ...baseResultsFile,
+    };
+    const result = UnifiedConfigSchema.safeParse(resultsFile.config);
+    expect(result.success).toBe(true);
+  });
+
+  it('should validate results file with undefined id', () => {
+    const resultsFile = {
+      ...baseResultsFile,
+      id: undefined,
+    };
+    const result = UnifiedConfigSchema.safeParse(resultsFile.config);
+    expect(result.success).toBe(true);
+  });
+
+  it('should validate results file with null id', () => {
+    const resultsFile = {
+      ...baseResultsFile,
+      id: null,
+    };
+    const result = UnifiedConfigSchema.safeParse(resultsFile.config);
+    expect(result.success).toBe(true);
+  });
+
+  it('should validate results file with empty string id', () => {
+    const resultsFile = {
+      ...baseResultsFile,
+      id: '',
+    };
+    const result = UnifiedConfigSchema.safeParse(resultsFile.config);
+    expect(result.success).toBe(true);
+  });
+
+  it('should validate results file with numeric string id', () => {
+    const resultsFile = {
+      ...baseResultsFile,
+      id: '12345',
+    };
+    const result = UnifiedConfigSchema.safeParse(resultsFile.config);
+    expect(result.success).toBe(true);
+  });
+
+  it('should validate results file with special characters in id', () => {
+    const resultsFile = {
+      ...baseResultsFile,
+      id: 'test-id_123@example.com',
+    };
+    const result = UnifiedConfigSchema.safeParse(resultsFile.config);
+    expect(result.success).toBe(true);
   });
 });
