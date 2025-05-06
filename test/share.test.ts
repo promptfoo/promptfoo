@@ -523,6 +523,28 @@ describe('createShareableUrl', () => {
 
     expect(result).toBe(`${customDomain}/eval/?evalId=${mockEval.id}`);
   });
+
+  it('interpolates environment variables in `config.sharing.appBaseUrl`', async () => {
+    // Cloud config must be disabled to test interpolation
+    jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+
+    // Mock the environment variables
+    const mockEval: Partial<Eval> = {
+      author: 'test@example.com',
+      useOldResults: jest.fn().mockReturnValue(false),
+      loadResults: jest.fn().mockResolvedValue(undefined),
+      results: [{ id: '1' }, { id: '2' }] as EvalResult[],
+      save: jest.fn().mockResolvedValue(undefined),
+      toEvaluateSummary: jest.fn().mockResolvedValue({}),
+      getTable: jest.fn().mockResolvedValue([]),
+      config: { sharing: { appBaseUrl: 'https://{{env.DUMMY_VALUE}}.test.com' } },
+      id: randomUUID(),
+    };
+
+    const result = await createShareableUrl(mockEval as Eval);
+
+    expect(result).toBe(`https://baz.test.com/eval/${mockEval.id}`);
+  });
 });
 
 describe('hasEvalBeenShared', () => {

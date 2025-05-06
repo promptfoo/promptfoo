@@ -420,7 +420,7 @@ export async function createShareableUrl(
   evalRecord: Eval,
   showAuth: boolean = false,
 ): Promise<string | null> {
-  // 1. Handle email collection
+  // Handle email collection
   await handleEmailCollection(evalRecord);
 
   // 2. Get API configuration
@@ -445,7 +445,17 @@ export async function createShareableUrl(
     }
   }
 
-  // 4. Process and send results
+  // Get API configuration
+  const { apiBaseUrl, url, sendInChunks } = await getApiConfig(evalRecord);
+
+  // Determine if we can use new results format
+  const canUseNewResults =
+    cloudConfig.isEnabled() || (await targetHostCanUseNewResults(apiBaseUrl));
+  logger.debug(
+    `Sharing with ${url} canUseNewResults: ${canUseNewResults} Use old results: ${evalRecord.useOldResults()}`,
+  );
+
+  //  Process and send results
   let evalId: string | null;
   if (!canUseNewResults || evalRecord.useOldResults()) {
     evalId = await handleLegacyResults(evalRecord, url);
