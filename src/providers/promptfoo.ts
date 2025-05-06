@@ -80,10 +80,9 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
       const data = await response.json();
       logger.debug(`[HarmfulCompletionProvider] API call response: ${JSON.stringify(data)}`);
 
-      // Filter out any null or undefined values in the output array
-      const outputArray = Array.isArray(data.output) ? data.output : [data.output];
-
-      const validOutputs: string[] = outputArray.filter(
+      const validOutputs: string[] = (
+        Array.isArray(data.output) ? data.output : [data.output]
+      ).filter(
         (item: string | null | undefined): item is string =>
           typeof item === 'string' && item.length > 0,
       );
