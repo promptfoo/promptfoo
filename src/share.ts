@@ -11,6 +11,7 @@ import logger from './logger';
 import type Eval from './models/eval';
 import type { SharedResults } from './types';
 import { cloudCanAcceptChunkedResults, makeRequest as makeCloudRequest } from './util/cloud';
+import { extractVariablesFromTemplate, getNunjucksEngine } from './util/templates';
 
 export interface ShareDomainResult {
   domain: string;
@@ -431,6 +432,18 @@ export async function createShareableUrl(
   logger.debug(
     `Sharing with ${url} canUseNewResults: ${canUseNewResults} Use old results: ${evalRecord.useOldResults()}`,
   );
+
+  // Interpolate environment variables in the sharing config
+  // e.g. 'https://{{env.PROMPTFOO_USER}}:{{env.PROMPTFOO_PASSWORD}}@self-hosted-promptfoo.com' -> 'https://user:password@self-hosted-promptfoo.com'
+  const nunjucks = getNunjucksEngine();
+  if (typeof evalRecord.config.sharing === 'object') {
+    for (const [key, value] of Object.entries(evalRecord.config.sharing)) {
+      if (typeof value === 'string' && extractVariablesFromTemplate(value).length > 0) {
+        evalRecord.config.sharing![key as keyof typeof evalRecord.config.sharing] =
+          nunjucks.renderString(value, {});
+      }
+    }
+  }
 
   // 4. Process and send results
   let evalId: string | null;
