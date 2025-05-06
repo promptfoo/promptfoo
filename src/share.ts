@@ -423,16 +423,6 @@ export async function createShareableUrl(
   // Handle email collection
   await handleEmailCollection(evalRecord);
 
-  // 2. Get API configuration
-  const { apiBaseUrl, url, sendInChunks } = await getApiConfig(evalRecord);
-
-  // 3. Determine if we can use new results format
-  const canUseNewResults =
-    cloudConfig.isEnabled() || (await targetHostCanUseNewResults(apiBaseUrl));
-  logger.debug(
-    `Sharing with ${url} canUseNewResults: ${canUseNewResults} Use old results: ${evalRecord.useOldResults()}`,
-  );
-
   // Interpolate environment variables in the sharing config
   // e.g. 'https://{{env.PROMPTFOO_USER}}:{{env.PROMPTFOO_PASSWORD}}@self-hosted-promptfoo.com' -> 'https://user:password@self-hosted-promptfoo.com'
   const nunjucks = getNunjucksEngine();
