@@ -30,8 +30,9 @@ jest.mock('../src/util/cloud', () => ({
   makeRequest: jest.fn(),
 }));
 
+const mockGetEnvBool = jest.fn();
 jest.mock('../src/envars', () => ({
-  getEnvBool: jest.fn(),
+  getEnvBool: (...args: any[]) => mockGetEnvBool(...args),
   getEnvInt: jest.fn(),
   getEnvString: jest.fn().mockReturnValue(''),
   isCI: jest.fn(),
@@ -48,9 +49,27 @@ jest.mock('../src/constants', () => {
 });
 
 describe('stripAuthFromUrl', () => {
-  it('removes username and password from URL', () => {
+  beforeEach(() => {
+    mockGetEnvBool.mockReset();
+  });
+
+  it('removes username and password from URL when PROMPTFOO_DISABLE_SHARE_AUTH_STRIPPING is false', () => {
+    mockGetEnvBool.mockReturnValue(false);
     const input = 'https://user:pass@example.com/path?query=value#hash';
     const expected = 'https://example.com/path?query=value#hash';
+    expect(stripAuthFromUrl(input)).toBe(expected);
+  });
+
+  it('keeps username and password in URL when PROMPTFOO_DISABLE_SHARE_AUTH_STRIPPING is true', () => {
+    mockGetEnvBool.mockReturnValue(true);
+    const input = 'https://user:pass@example.com/path?query=value#hash';
+    expect(stripAuthFromUrl(input)).toBe(input);
+  });
+
+  it('removes auth info when PROMPTFOO_DISABLE_SHARE_AUTH_STRIPPING is not set', () => {
+    mockGetEnvBool.mockReturnValue(undefined);
+    const input = 'https://user:pass@example.com/path';
+    const expected = 'https://example.com/path';
     expect(stripAuthFromUrl(input)).toBe(expected);
   });
 
@@ -60,12 +79,14 @@ describe('stripAuthFromUrl', () => {
   });
 
   it('handles URLs with only username', () => {
+    mockGetEnvBool.mockReturnValue(false);
     const input = 'https://user@example.com/path';
     const expected = 'https://example.com/path';
     expect(stripAuthFromUrl(input)).toBe(expected);
   });
 
   it('handles URLs with special characters in auth', () => {
+    mockGetEnvBool.mockReturnValue(false);
     const input = 'https://user%40:p@ss@example.com/path';
     const expected = 'https://example.com/path';
     expect(stripAuthFromUrl(input)).toBe(expected);
@@ -77,18 +98,10 @@ describe('stripAuthFromUrl', () => {
   });
 
   it('handles URLs with IP addresses', () => {
+    mockGetEnvBool.mockReturnValue(false);
     const input = 'http://user:pass@192.168.1.1:8080/path';
     const expected = 'http://192.168.1.1:8080/path';
     expect(stripAuthFromUrl(input)).toBe(expected);
-  });
-
-  it('can be disabled by PROMPTFOO_DISABLE_SHARE_AUTH_STRIPPING', () => {
-    jest.requireMock('../src/envars').getEnvBool.mockImplementation((key: string) => {
-      return key === 'PROMPTFOO_DISABLE_SHARE_AUTH_STRIPPING' ? true : false;
-    });
-
-    const input = 'https://user:pass@example.com/path';
-    expect(stripAuthFromUrl(input)).toBe(input);
   });
 });
 
