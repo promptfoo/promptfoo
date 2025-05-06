@@ -944,6 +944,7 @@ export interface SharedResults {
 
 // promptfoo's internal results format
 export interface ResultsFile {
+  id?: string;
   version: number;
   createdAt: string;
   results: EvaluateSummaryV3 | EvaluateSummaryV2;
