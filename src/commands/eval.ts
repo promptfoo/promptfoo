@@ -30,10 +30,11 @@ import type {
 import { OutputFileExtension, TestSuiteSchema } from '../types';
 import { CommandLineOptionsSchema } from '../types';
 import { isApiProvider } from '../types/providers';
-import { isRunningUnderNpx, maybeLoadFromExternalFile } from '../util';
+import { isRunningUnderNpx } from '../util';
 import { printBorder, setupEnv, writeMultipleOutputs } from '../util';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
+import { maybeLoadFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
 import { filterProviders } from './eval/filterProviders';
 import type { FilterOptions } from './eval/filterTests';
@@ -548,7 +549,10 @@ export async function doEval(
     if (testSuite.providers.length > 0) {
       for (const provider of testSuite.providers) {
         if (isApiProvider(provider)) {
-          provider?.cleanup?.();
+          const cleanup = provider?.cleanup?.();
+          if (cleanup instanceof Promise) {
+            await cleanup;
+          }
         }
       }
     }

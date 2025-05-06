@@ -44,7 +44,6 @@ describe('Anthropic modules', () => {
     expect(providers.gradingJsonProvider).toBeDefined();
     expect(providers.llmRubricProvider).toBeDefined();
     expect(providers.suggestionsProvider).toBeDefined();
-    expect(providers.datasetGenerationProvider).toBeDefined();
     expect(providers.synthesizeProvider).toBeDefined();
   });
 });

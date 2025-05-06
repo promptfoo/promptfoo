@@ -1,25 +1,27 @@
 ---
 sidebar_label: Single Turn Composite
+title: Composite Jailbreaks Strategy
+description: Combine multiple jailbreak techniques from research papers to create more sophisticated attacks
 ---
 
-# Jailbreak composition
+# Composite Jailbreaks Strategy
 
-The Single Turn Composite strategy combines multiple jailbreak techniques from top research papers to create more sophisticated attacks.
+The Composite Jailbreaks strategy combines multiple jailbreak techniques from top research papers to create more sophisticated attacks.
 
 It works by chaining together individual techniques in different combinations to find effective bypasses.
 
-## Configuration
+## Implementation
 
 Add it to your `promptfooconfig.yaml`:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 strategies:
   - jailbreak:composite
 ```
 
 You can customize the behavior with these options:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 strategies:
   - id: jailbreak:composite
     config:
@@ -43,7 +45,7 @@ For example, it might:
 - Add emotional manipulation
 - Combine techniques in different orders
 
-## Example
+## Example Scenarios
 
 Original prompt:
 
@@ -83,11 +85,9 @@ The composite approach is often more effective than single techniques because:
 - Different combinations work better for different models
 - The variety of approaches increases chances of success
 
-## Other Resources
+## Related Concepts
 
-For more information about LLM vulnerabilities and red teaming strategies, see:
-
-- [Jailbreak Iterative](/docs/red-team/strategies/iterative/)
-- [Jailbreak Tree Strategy](/docs/red-team/strategies/tree/)
-
-For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
+- [Iterative Jailbreaks](iterative.md) - Sequential approach to jailbreaking
+- [Tree-based Jailbreaks](tree.md) - Branching approach to jailbreaking
+- [Citation Strategy](citation.md) - Academic framing technique used within composite approach
+- [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) - Comprehensive overview of vulnerabilities

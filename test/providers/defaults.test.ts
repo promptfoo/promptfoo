@@ -44,7 +44,6 @@ describe('Provider override tests', () => {
 
     const providers = await getDefaultProviders();
 
-    expect(providers.datasetGenerationProvider.id()).toBe('test-completion-provider');
     expect(providers.gradingJsonProvider.id()).toBe('test-completion-provider');
     expect(providers.gradingProvider.id()).toBe('test-completion-provider');
     expect(providers.suggestionsProvider.id()).toBe('test-completion-provider');
@@ -61,7 +60,6 @@ describe('Provider override tests', () => {
 
     expect(providers.embeddingProvider.id()).toBe('test-embedding-provider');
 
-    expect(providers.datasetGenerationProvider.id()).not.toBe('test-embedding-provider');
     expect(providers.gradingJsonProvider.id()).not.toBe('test-embedding-provider');
     expect(providers.gradingProvider.id()).not.toBe('test-embedding-provider');
     expect(providers.suggestionsProvider.id()).not.toBe('test-embedding-provider');
@@ -77,7 +75,6 @@ describe('Provider override tests', () => {
 
     const providers = await getDefaultProviders();
 
-    expect(providers.datasetGenerationProvider.id()).toBe('test-completion-provider');
     expect(providers.gradingJsonProvider.id()).toBe('test-completion-provider');
     expect(providers.gradingProvider.id()).toBe('test-completion-provider');
     expect(providers.suggestionsProvider.id()).toBe('test-completion-provider');

@@ -1,5 +1,6 @@
 import type { AssistantCreationOptions, FunctionDefinition } from '@azure/openai-assistants';
 import type { EnvOverrides } from '../../types/env';
+import type { MCPConfig } from '../mcp/types';
 
 /**
  * Options for configuring retry behavior
@@ -83,6 +84,7 @@ export interface AzureCompletionOptions {
   reasoning_effort?: 'low' | 'medium' | 'high';
 
   passthrough?: object;
+  mcp?: MCPConfig;
 }
 
 export interface AzureModelCost {

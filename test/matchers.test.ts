@@ -1768,7 +1768,7 @@ describe('matchesContextRelevance', () => {
 
     const mockCallApi = jest.fn().mockImplementation(() => {
       return Promise.resolve({
-        output: 'foo\nbar\nbaz Insufficient Information',
+        output: 'foo\nbar\nbaz Insufficient Information\n',
         tokenUsage: { total: 10, prompt: 5, completion: 5 },
       });
     });
@@ -1837,7 +1837,7 @@ describe('matchesContextFaithfulness', () => {
       .fn()
       .mockImplementationOnce(() => {
         return Promise.resolve({
-          output: 'Statement 1\nStatement 2\nStatement 3',
+          output: 'Statement 1\nStatement 2\nStatement 3\n',
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
         });
       })
@@ -1918,7 +1918,7 @@ describe('matchesContextRecall', () => {
 
     const mockCallApi = jest.fn().mockImplementation(() => {
       return Promise.resolve({
-        output: 'foo [Attributed]\nbar [Not attributed]\nbaz [Attributed]',
+        output: 'foo [Attributed]\nbar [Not attributed]\nbaz [Attributed]\n',
         tokenUsage: { total: 10, prompt: 5, completion: 5 },
       });
     });

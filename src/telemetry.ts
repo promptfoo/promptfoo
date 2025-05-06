@@ -24,18 +24,18 @@ export type TelemetryEvent = z.infer<typeof TelemetryEventSchema>;
 export type TelemetryEventTypes = TelemetryEvent['event'];
 export type EventProperties = TelemetryEvent['properties'];
 
+export const POSTHOG_KEY = getEnvString('PROMPTFOO_POSTHOG_KEY');
 const CONSENT_ENDPOINT = 'https://api.promptfoo.dev/consent';
 const EVENTS_ENDPOINT = 'https://a.promptfoo.app';
 const KA_ENDPOINT = 'https://ka.promptfoo.app/';
 
 let posthogClient: PostHog | null = null;
 try {
-  const posthogKey = getEnvString('POSTHOG_KEY');
-  if (posthogKey) {
-    posthogClient = new PostHog(posthogKey, {
-      host: EVENTS_ENDPOINT,
-    });
-  }
+  posthogClient = POSTHOG_KEY
+    ? new PostHog(POSTHOG_KEY, {
+        host: getEnvString('PROMPTFOO_POSTHOG_HOST', EVENTS_ENDPOINT),
+      })
+    : null;
 } catch {
   posthogClient = null;
 }
@@ -48,6 +48,8 @@ export class Telemetry {
   private email: string | undefined;
 
   constructor() {
+    logger.debug(`Telemetry enabled: ${!this.disabled}`);
+
     const globalConfig = readGlobalConfig();
     this.id = globalConfig?.id;
     this.email = globalConfig?.account?.email;
@@ -91,15 +93,13 @@ export class Telemetry {
     if (this.disabled) {
       this.recordTelemetryDisabled();
     } else {
+      logger.debug(`Record event: ${eventName} ${JSON.stringify(properties)}`);
       this.sendEvent(eventName, properties);
     }
   }
 
   private sendEvent(eventName: TelemetryEventTypes, properties: EventProperties): void {
-    if (getEnvString('NODE_ENV') === 'test') {
-      return;
-    }
-    if (posthogClient) {
+    if (posthogClient && !getEnvBool('IS_TESTING')) {
       const globalConfig = readGlobalConfig();
       posthogClient.capture({
         distinctId: globalConfig.id,

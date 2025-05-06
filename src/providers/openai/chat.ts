@@ -4,11 +4,10 @@ import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
-import {
-  maybeLoadFromExternalFile,
-  maybeLoadToolsFromExternalFile,
-  renderVarsInObject,
-} from '../../util';
+import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util';
+import { maybeLoadFromExternalFile } from '../../util/file';
+import { MCPClient } from '../mcp/client';
+import { transformMCPToolsToOpenAi } from '../mcp/transform';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from '../shared';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
 import { calculateOpenAICost } from './util';
@@ -20,6 +19,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   static OPENAI_CHAT_MODEL_NAMES = OPENAI_CHAT_MODELS.map((model) => model.id);
 
   config: OpenAiCompletionOptions;
+  private mcpClient: MCPClient | null = null;
+  private initializationPromise: Promise<void> | null = null;
 
   constructor(
     modelName: string,
@@ -30,6 +31,21 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
     super(modelName, options);
     this.config = options.config || {};
+
+    if (this.config.mcp?.enabled) {
+      this.initializationPromise = this.initializeMCP();
+    }
+  }
+
+  private async initializeMCP(): Promise<void> {
+    this.mcpClient = new MCPClient(this.config.mcp!);
+    await this.mcpClient.initialize();
+  }
+  async cleanup(): Promise<void> {
+    if (this.mcpClient) {
+      await this.mcpClient.cleanup();
+      this.mcpClient = null;
+    }
   }
 
   protected isReasoningModel(): boolean {
@@ -74,6 +90,14 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
       : undefined;
 
+    // --- MCP tool injection logic ---
+    const mcpTools = this.mcpClient ? transformMCPToolsToOpenAi(this.mcpClient.getAllTools()) : [];
+    const fileTools = config.tools
+      ? maybeLoadToolsFromExternalFile(config.tools, context?.vars) || []
+      : [];
+    const allTools = [...mcpTools, ...fileTools];
+    // --- End MCP tool injection logic ---
+
     const body = {
       model: this.modelName,
       messages,
@@ -104,9 +128,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           }
         : {}),
       ...(config.function_call ? { function_call: config.function_call } : {}),
-      ...(config.tools
-        ? { tools: maybeLoadToolsFromExternalFile(config.tools, context?.vars) }
-        : {}),
+      ...(allTools.length > 0 ? { tools: allTools } : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.tool_resources ? { tool_resources: config.tool_resources } : {}),
       ...(config.response_format
@@ -135,6 +157,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    if (this.initializationPromise) {
+      await this.initializationPromise;
+    }
     if (this.requiresApiKey() && !this.getApiKey()) {
       throw new Error(
         'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',

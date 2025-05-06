@@ -37,8 +37,8 @@ import type {
   ProviderTypeMap,
   TokenUsage,
 } from './types';
-import { maybeLoadFromExternalFile } from './util';
-import { isJavascriptFile } from './util/file';
+import { maybeLoadFromExternalFile } from './util/file';
+import { isJavascriptFile } from './util/fileExtensions';
 import invariant from './util/invariant';
 import { extractJsonObjects, extractFirstJsonObject } from './util/json';
 import { getNunjucksEngine } from './util/templates';
@@ -378,6 +378,10 @@ function tryParse(content: string) {
     return JSON.parse(content);
   } catch {}
   return content;
+}
+
+function splitIntoSentences(text: string) {
+  return text.split('\n').filter((sentence) => sentence.trim() !== '');
 }
 
 export async function renderLlmRubricPrompt(
@@ -958,7 +962,7 @@ export async function matchesContextRecall(
   }
 
   invariant(typeof resp.output === 'string', 'context-recall produced malformed response');
-  const sentences = resp.output.split('\n');
+  const sentences = splitIntoSentences(resp.output);
   const numerator = sentences.reduce(
     (acc, sentence) => acc + (sentence.includes(CONTEXT_RECALL_ATTRIBUTED_TOKEN) ? 1 : 0),
     0,
@@ -1010,7 +1014,7 @@ export async function matchesContextRelevance(
   }
 
   invariant(typeof resp.output === 'string', 'context-relevance produced malformed response');
-  const sentences = resp.output.split('\n');
+  const sentences = splitIntoSentences(resp.output);
   const numerator = sentences.reduce(
     (acc, sentence) => acc + (sentence.includes(CONTEXT_RELEVANCE_BAD) ? 0 : 1),
     0,
@@ -1077,7 +1081,7 @@ export async function matchesContextFaithfulness(
 
   invariant(typeof resp.output === 'string', 'context-faithfulness produced malformed response');
 
-  const statements = resp.output.split('\n');
+  const statements = splitIntoSentences(resp.output);
   promptText = await renderLlmRubricPrompt(nliPrompt, {
     context,
     statements,

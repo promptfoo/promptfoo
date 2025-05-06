@@ -6,6 +6,8 @@ import logger from '../../logger';
 import type { ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
 import { maybeLoadToolsFromExternalFile } from '../../util';
+import { MCPClient } from '../mcp/client';
+import { transformMCPToolsToAnthropic } from '../mcp/transform';
 import { AnthropicGenericProvider } from './generic';
 import type { AnthropicMessageOptions } from './types';
 import {
@@ -18,6 +20,8 @@ import {
 
 export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   declare config: AnthropicMessageOptions;
+  private mcpClient: MCPClient | null = null;
+  private initializationPromise: Promise<void> | null = null;
 
   static ANTHROPIC_MODELS = ANTHROPIC_MODELS;
 
@@ -33,6 +37,23 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     super(modelName, options);
     const { id } = options;
     this.id = id ? () => id : this.id;
+
+    // Start initialization if MCP is enabled
+    if (this.config.mcp?.enabled) {
+      this.initializationPromise = this.initializeMCP();
+    }
+  }
+
+  private async initializeMCP(): Promise<void> {
+    this.mcpClient = new MCPClient(this.config.mcp!);
+    await this.mcpClient.initialize();
+  }
+
+  async cleanup(): Promise<void> {
+    if (this.mcpClient) {
+      await this.mcpClient.cleanup();
+      this.mcpClient = null;
+    }
   }
 
   toString(): string {
@@ -43,6 +64,11 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {
+    // Wait for MCP initialization if it's in progress
+    if (this.initializationPromise) {
+      await this.initializationPromise;
+    }
+
     if (!this.apiKey) {
       throw new Error(
         'Anthropic API key is not set. Set the ANTHROPIC_API_KEY environment variable or add `apiKey` to the provider config.',
@@ -54,6 +80,14 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     }
 
     const { system, extractedMessages, thinking } = parseMessages(prompt);
+
+    // Get MCP tools if client is initialized
+    let mcpTools: Anthropic.Tool[] = [];
+    if (this.mcpClient) {
+      mcpTools = transformMCPToolsToAnthropic(this.mcpClient.getAllTools());
+    }
+    const fileTools = maybeLoadToolsFromExternalFile(this.config.tools) || [];
+    const allTools = [...mcpTools, ...fileTools];
 
     const params: Anthropic.MessageCreateParams = {
       model: this.modelName,
@@ -67,7 +101,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         this.config.thinking || thinking
           ? this.config.temperature
           : this.config.temperature || getEnvFloat('ANTHROPIC_TEMPERATURE', 0),
-      ...(this.config.tools ? { tools: maybeLoadToolsFromExternalFile(this.config.tools) } : {}),
+      ...(allTools.length > 0 ? { tools: allTools } : {}),
       ...(this.config.tool_choice ? { tool_choice: this.config.tool_choice } : {}),
       ...(this.config.thinking || thinking ? { thinking: this.config.thinking || thinking } : {}),
       ...(typeof this.config?.extra_body === 'object' && this.config.extra_body

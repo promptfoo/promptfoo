@@ -20,7 +20,6 @@ import {
 } from './openai/defaults';
 
 const COMPLETION_PROVIDERS: (keyof DefaultProviders)[] = [
-  'datasetGenerationProvider',
   'gradingJsonProvider',
   'gradingProvider',
   'llmRubricProvider',
@@ -91,7 +90,6 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     });
 
     providers = {
-      datasetGenerationProvider: azureProvider,
       embeddingProvider: azureEmbeddingProvider,
       gradingJsonProvider: azureProvider,
       gradingProvider: azureProvider,
@@ -103,7 +101,6 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     logger.debug('Using Anthropic default providers');
     const anthropicProviders = getAnthropicProviders(env);
     providers = {
-      datasetGenerationProvider: anthropicProviders.datasetGenerationProvider,
       embeddingProvider: OpenAiEmbeddingProvider, // TODO(ian): Voyager instead?
       gradingJsonProvider: anthropicProviders.gradingJsonProvider,
       gradingProvider: anthropicProviders.gradingProvider,
@@ -119,7 +116,6 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
   ) {
     logger.debug('Using Google default providers');
     providers = {
-      datasetGenerationProvider: GeminiGradingProvider,
       embeddingProvider: GeminiEmbeddingProvider,
       gradingJsonProvider: GeminiGradingProvider,
       gradingProvider: GeminiGradingProvider,
@@ -130,7 +126,6 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
   } else {
     logger.debug('Using OpenAI default providers');
     providers = {
-      datasetGenerationProvider: OpenAiGradingProvider,
       embeddingProvider: OpenAiEmbeddingProvider,
       gradingJsonProvider: OpenAiGradingJsonProvider,
       gradingProvider: OpenAiGradingProvider,

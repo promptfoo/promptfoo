@@ -9,9 +9,9 @@ import {
 } from '../redteam/remoteGeneration';
 import type {
   ApiProvider,
-  ProviderResponse,
   CallApiContextParams,
   CallApiOptionsParams,
+  ProviderResponse,
   TokenUsage,
 } from '../types';
 import type { EnvOverrides } from '../types/env';
@@ -96,7 +96,7 @@ interface PromptfooChatCompletionOptions {
   id?: string;
   jsonOnly: boolean;
   preferSmallModel: boolean;
-  task: 'crescendo' | 'goat' | 'iterative' | 'iterative:image' | 'iterative:tree';
+  task: 'crescendo' | 'goat' | 'iterative' | 'iterative:image' | 'iterative:tree' | 'judge';
 }
 
 export class PromptfooChatCompletionProvider implements ApiProvider {
