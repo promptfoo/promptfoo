@@ -24,14 +24,14 @@ const toolExecutionFlow: FlowStep[] = [
     from: 'host',
     to: 'client',
     message: 'tools/call create_ticket',
-    description: 'Host initiates ticket creation request',
+    description: 'Client initiates ticket creation request',
   },
   {
     id: 'tool-request-2',
     from: 'client',
     to: 'server',
     message: '{ "method": "tools/call", "params": { "name": "create_ticket" } }',
-    description: 'Client forwards request to server',
+    description: 'Server executes ticket creation tool',
   },
   {
     id: 'tool-response-1',
@@ -45,7 +45,7 @@ const toolExecutionFlow: FlowStep[] = [
     from: 'client',
     to: 'host',
     message: 'Ticket #123 created successfully',
-    description: 'Client returns result to host',
+    description: 'Server Returns result to client',
   },
 ];
 
@@ -239,18 +239,16 @@ const MCPArchitectureVisualizer: React.FC = () => {
                     }
 
                     const isFromThisCard = step.from === key;
-                    const isToThisCard = step.to === key;
-                    const isRelevant = isFromThisCard || isToThisCard;
-
-                    if (!isRelevant) {
+                    // Only show the message on the "from" card
+                    if (!isFromThisCard) {
                       return null;
                     }
 
                     return (
                       <motion.div
                         key={step.id}
-                        className={`${styles.flowMessage} ${isFromThisCard ? styles.right : styles.left}`}
-                        initial={{ opacity: 0, y: isFromThisCard ? -20 : 20 }}
+                        className={`${styles.flowMessage} ${styles.right}`}
+                        initial={{ opacity: 0, y: -20 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.3 }}
