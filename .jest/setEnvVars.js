@@ -7,5 +7,6 @@ process.env.HF_API_TOKEN = 'foo';
 process.env.IS_TESTING = 'true';
 process.env.OPENAI_API_KEY = 'foo';
 process.env.PROMPTFOO_CONFIG_DIR = TEST_CONFIG_DIR;
+process.env.DUMMY_VALUE = 'baz';
 
 delete process.env.PROMPTFOO_REMOTE_GENERATION_URL;
