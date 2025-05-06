@@ -43,6 +43,13 @@ import invariant from './util/invariant';
 import { extractJsonObjects, extractFirstJsonObject } from './util/json';
 import { getNunjucksEngine } from './util/templates';
 
+class LlmRubricProviderError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'LlmRubricProviderError';
+  }
+}
+
 const nunjucks = getNunjucksEngine(undefined, false, true);
 
 function cosineSimilarity(vecA: number[], vecB: number[]) {
@@ -410,6 +417,9 @@ export async function matchesLlmRubric(
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
   assertion?: Assertion | null,
+  options?: {
+    throwOnError?: boolean;
+  },
 ): Promise<GradingResult> {
   if (!grading) {
     throw new Error(
@@ -447,6 +457,9 @@ export async function matchesLlmRubric(
   );
   const resp = await finalProvider.callApi(prompt);
   if (resp.error || !resp.output) {
+    if (options?.throwOnError) {
+      throw new LlmRubricProviderError(resp.error || 'No output');
+    }
     return fail(resp.error || 'No output', resp.tokenUsage);
   }
 
