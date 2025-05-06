@@ -748,7 +748,7 @@ describe('redteamConfigSchema', () => {
 
     it('should not duplicate plugins when using multiple aliased names', () => {
       const input = {
-        plugins: ['owasp:llm:01', 'owasp:llm:02'],
+        plugins: ['owasp:llm:01', 'owasp:llm:02', 'owasp:llm:04'],
         numTests: 3,
       };
       const result = RedteamConfigSchema.safeParse(input);
