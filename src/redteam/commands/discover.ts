@@ -1,16 +1,19 @@
 import chalk from 'chalk';
 import type { Command } from 'commander';
+import { produce, type Draft } from 'immer';
+import type { UnifiedConfig } from 'src/types';
 import { z } from 'zod';
 import cliState from '../../cliState';
 import { VERSION } from '../../constants';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger, { setLogLevel } from '../../logger';
 import telemetry from '../../telemetry';
-import type { ProviderOptions } from '../../types/providers';
 import { setupEnv } from '../../util';
 import { getProviderFromCloud } from '../../util/cloud';
 import { readConfig } from '../../util/config/load';
+import { writePromptfooConfig } from '../../util/config/manage';
 import invariant from '../../util/invariant';
+import { type Provider } from '../../validators/providers';
 import { getRemoteGenerationUrl } from '../remoteGeneration';
 
 const ArgsSchema = z.object({
@@ -23,16 +26,14 @@ const ArgsSchema = z.object({
 
 type Args = z.infer<typeof ArgsSchema>;
 
-type TargetConfig = ProviderOptions & { id: string };
-
 /**
- * Performs target purpose discovery.
+ * Sends the target purpose discover task request to the cloud server.
  */
-async function doTargetPurposeDiscovery(config: TargetConfig): Promise<string> {
+async function doTargetPurposeDiscovery(target: Provider): Promise<string> {
   const res = await fetch(getRemoteGenerationUrl(), {
     body: JSON.stringify({
       task: 'target-purpose-discovery',
-      target: config,
+      target,
       version: VERSION,
       email: getUserEmail(),
     }),
@@ -96,55 +97,83 @@ export function discoverCommand(program: Command) {
         return;
       }
 
-      let targetConfig: TargetConfig | undefined;
+      let config: UnifiedConfig | null = null;
+      let targets: Provider[] = [];
+      let targetConfigKey: 'targets' | 'providers';
 
-      // Handle config:
+      // If user provides a config, read all targets from it:
       if (args.config) {
-        const config = await readConfig(args.config);
+        config = await readConfig(args.config);
+        invariant(config, 'An error occurred loading the config');
 
-        // Use the first target:
+        // Determine whether to read from the 'providers' or 'targets' key:
         if (config.targets && Array.isArray(config.targets) && config.targets.length > 0) {
-          targetConfig = config.targets[0] as TargetConfig;
-        }
-        // Fallback to the first provider:
-        else if (
+          targets = config.targets;
+          targetConfigKey = 'targets';
+        } else if (
           config.providers &&
           Array.isArray(config.providers) &&
           config.providers.length > 0
         ) {
-          targetConfig = config.providers[0] as TargetConfig;
+          targets = config.providers;
+          targetConfigKey = 'providers';
+        } else {
+          // Sanity check:
+          invariant(false, 'Config is missing both "targets" and "providers" keys');
         }
-        // No targets or providers found:
-        else {
-          logger.error('No targets or providers found in the config');
+      }
+
+      // Handle target: load it from Cloud.
+      if (args.target) {
+        targets.push(await getProviderFromCloud(args.target));
+      }
+
+      invariant(targets.length === 0, 'An error occurred loading the target config');
+
+      let targetIdx = 0;
+      const purposes: Record<number, string> = {};
+
+      for await (const target of targets) {
+        // TODO(will): Fix these!
+        const targetLabel = target.label ?? target.id;
+        logger.info(`Discovering purpose for ${targetLabel}`);
+
+        let purpose: string | null = null;
+
+        try {
+          purpose = await doTargetPurposeDiscovery(target);
+        } catch (error) {
+          logger.error(
+            `An unexpected error occurred during target discovery: ${error instanceof Error ? error.message : String(error)}\n${
+              error instanceof Error ? error.stack : ''
+            }`,
+          );
           process.exitCode = 1;
           return;
         }
-      }
 
-      // Handle target:
-      if (args.target) {
-        targetConfig = await getProviderFromCloud(args.target);
-      }
-
-      invariant(targetConfig, 'An error occurred loading the target config');
-
-      try {
-        const purpose = await doTargetPurposeDiscovery(targetConfig!);
-
+        // If preview is enabled, print the purpose to the console:
         if (args.preview) {
-          logger.info(`${chalk.cyan.bold('Application Purpose:')}\n\n${purpose}`);
+          logger.info(`${chalk.bold(`Application ${targetLabel} Purpose:`)}\n\n${purpose}`);
         } else {
-          // TODO(will): Implement this.
-          throw new Error('Not implemented');
+          // Otherwise, save the purpose to the purposes object:
+          purposes[targetIdx] = purpose;
         }
-      } catch (error) {
-        logger.error(
-          `An unexpected error occurred during target discovery: ${error instanceof Error ? error.message : String(error)}\n${
-            error instanceof Error ? error.stack : ''
-          }`,
-        );
-        process.exitCode = 1;
+
+        targetIdx++;
+      }
+
+      // Persist the purposes:
+      if (args.target) {
+        // TODO(Will): Save to the database
+        throw new Error('Saving purpose to database is not yet implemented');
+      } else {
+        const updatedConfig = produce(config, (draft: Draft<UnifiedConfig>) => {
+          //@ts-expect-error:
+          draft[targetConfigKey][targetIdx].purpose = purpose;
+        });
+        //@ts-expect-error:
+        writePromptfooConfig(updatedConfig, args.config!);
       }
     });
 }
