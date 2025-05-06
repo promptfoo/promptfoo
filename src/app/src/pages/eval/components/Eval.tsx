@@ -145,12 +145,6 @@ export default function Eval({ fetchId }: EvalOptions) {
           setLoaded(true);
           setDefaultEvalId(defaultEvalId);
           setEvalId(defaultEvalId);
-        } else {
-          return (
-            <div className="notice">
-              No evals yet. Share some evals to this server and they will appear here.
-            </div>
-          );
         }
       };
       run();
