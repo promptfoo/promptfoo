@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
+
 import { version } from '../package.json';
 import { checkNodeVersion } from './checkNodeVersion';
 import { authCommand } from './commands/auth';
@@ -20,6 +21,7 @@ import { showCommand } from './commands/show';
 import { viewCommand } from './commands/view';
 import logger from './logger';
 import { runDbMigrations } from './migrate';
+import { redteamDiscoverCommand } from './redteam/commands/discover';
 import { redteamGenerateCommand } from './redteam/commands/generate';
 import { initCommand as redteamInitCommand } from './redteam/commands/init';
 import { pluginsCommand as redteamPluginsCommand } from './redteam/commands/plugins';
@@ -80,6 +82,7 @@ async function main() {
     redteamConfigPath ?? defaultConfigPath,
   );
   redteamGenerateCommand(redteamBaseCommand, 'generate', defaultConfig, defaultConfigPath);
+  redteamDiscoverCommand(redteamBaseCommand);
   redteamRunCommand(redteamBaseCommand);
   redteamReportCommand(redteamBaseCommand);
   redteamSetupCommand(redteamBaseCommand);

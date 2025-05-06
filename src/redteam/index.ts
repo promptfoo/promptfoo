@@ -4,10 +4,15 @@ import cliProgress from 'cli-progress';
 import Table from 'cli-table3';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
+
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import logger, { getLogLevel } from '../logger';
-import { isProviderOptions, type TestCase, type TestCaseWithPlugin } from '../types';
+import {
+  isProviderOptions,
+  type TestCase,
+  type TestCaseWithPlugin,
+} from '../types';
 import { checkRemoteHealth } from '../util/apiHealth';
 import invariant from '../util/invariant';
 import { extractVariablesFromTemplates } from '../util/templates';
@@ -26,10 +31,20 @@ import { extractSystemPurpose } from './extraction/purpose';
 import { Plugins } from './plugins';
 import { CustomPlugin } from './plugins/custom';
 import { redteamProviderManager } from './providers/shared';
-import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
-import { loadStrategy, Strategies, validateStrategies } from './strategies';
+import {
+  getRemoteHealthUrl,
+  shouldGenerateRemote,
+} from './remoteGeneration';
+import {
+  loadStrategy,
+  Strategies,
+  validateStrategies,
+} from './strategies';
 import { DEFAULT_LANGUAGES } from './strategies/multilingual';
-import type { RedteamStrategyObject, SynthesizeOptions } from './types';
+import type {
+  RedteamStrategyObject,
+  SynthesizeOptions,
+} from './types';
 import { getShortPluginId } from './util';
 
 /**
@@ -387,6 +402,7 @@ export async function synthesize({
   targetLabels,
   showProgressBar: showProgressBarOverride,
   excludeTargetOutputFromAgenticAttackGeneration,
+  targetDiscoveryOutput,
 }: SynthesizeOptions): Promise<{
   purpose: string;
   entities: string[];
@@ -578,7 +594,25 @@ export async function synthesize({
   } else {
     logger.info('Extracting system purpose...');
   }
-  const purpose = purposeOverride || (await extractSystemPurpose(redteamProvider, prompts));
+
+  // If we have target discovery output, use it to enhance the extraction process
+  if (targetDiscoveryOutput) {
+    logger.debug('Using target discovery output to enhance extraction');
+    
+    // If we don't have a purpose override but we do have an enhanced purpose from discovery, use it
+    if (!purposeOverride && targetDiscoveryOutput.enhancedPurpose) {
+      logger.debug('Using enhanced purpose from target discovery');
+      purposeOverride = targetDiscoveryOutput.enhancedPurpose;
+    }
+    
+    // Log that we're using discovery data
+    if (targetDiscoveryOutput.discoveredPurpose || targetDiscoveryOutput.enhancedPurpose) {
+      logger.debug('Target discovery data available for synthesis');
+    }
+  }
+
+  // Extract purpose if not provided
+  const purpose = purposeOverride || await extractSystemPurpose(redteamProvider, prompts);
 
   if (showProgressBar) {
     progressBar?.increment(1, { task: 'Extracting entities' });

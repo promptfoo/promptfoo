@@ -1,5 +1,11 @@
-import type { ApiProvider, ProviderOptions } from '../types/providers';
-import type { Plugin, Severity } from './constants';
+import type {
+  ApiProvider,
+  ProviderOptions,
+} from '../types/providers';
+import type {
+  Plugin,
+  Severity,
+} from './constants';
 
 // Base types
 export type RedteamObjectConfig = Record<string, unknown>;
@@ -96,6 +102,13 @@ export interface RedteamFileConfig extends CommonOptions {
   entities?: string[];
   severity?: Record<Plugin, Severity>;
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
+  targetDiscoveryOutput?: {
+    discoveredPurpose?: string;
+    enhancedPurpose?: string;
+    existingPurpose?: string;
+    status?: string;
+    [key: string]: any;
+  };
 }
 
 export interface SynthesizeOptions extends CommonOptions {
@@ -109,6 +122,13 @@ export interface SynthesizeOptions extends CommonOptions {
   strategies: RedteamStrategyObject[];
   targetLabels: string[];
   showProgressBar?: boolean;
+  targetDiscoveryOutput?: {
+    discoveredPurpose?: string;
+    enhancedPurpose?: string;
+    existingPurpose?: string;
+    status?: string;
+    [key: string]: any;
+  };
 }
 
 export type RedteamAssertionTypes = `promptfoo:redteam:${string}`;

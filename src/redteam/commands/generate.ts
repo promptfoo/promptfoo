@@ -7,18 +7,30 @@ import yaml from 'js-yaml';
 import path from 'path';
 import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
+
 import { synthesize } from '../';
 import { disableCache } from '../../cache';
 import cliState from '../../cliState';
 import { VERSION } from '../../constants';
 import logger, { setLogLevel } from '../../logger';
 import telemetry from '../../telemetry';
-import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types';
-import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
+import type {
+  ApiProvider,
+  TestSuite,
+  UnifiedConfig,
+} from '../../types';
+import {
+  isRunningUnderNpx,
+  printBorder,
+  setupEnv,
+} from '../../util';
 import { resolveConfigs } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/manage';
 import invariant from '../../util/invariant';
-import { RedteamConfigSchema, RedteamGenerateOptionsSchema } from '../../validators/redteam';
+import {
+  RedteamConfigSchema,
+  RedteamGenerateOptionsSchema,
+} from '../../validators/redteam';
 import {
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
   ADDITIONAL_STRATEGIES,
@@ -188,7 +200,29 @@ export async function doGenerateRedteam(
     sharing: redteamConfig?.sharing || options.sharing,
     excludeTargetOutputFromAgenticAttackGeneration:
       redteamConfig?.excludeTargetOutputFromAgenticAttackGeneration,
+    targetDiscoveryOutput: redteamConfig?.targetDiscoveryOutput,
   };
+
+  // Add logging for discovery output if available
+  if (redteamConfig?.targetDiscoveryOutput) {
+    logger.debug('Using target discovery information from config file');
+    if (options.verbose) {
+      logger.info(
+        chalk.cyan('\nTarget Discovery Information:') +
+        `\n- Discovered Purpose: ${redteamConfig.targetDiscoveryOutput.discoveredPurpose?.substring(0, 100)}...` +
+        `\n- Enhanced Purpose: ${redteamConfig.targetDiscoveryOutput.enhancedPurpose?.substring(0, 100)}...`
+      );
+    }
+
+    // If there's no purpose but there's enhanced purpose from discovery, use that
+    if (!config.purpose && redteamConfig.targetDiscoveryOutput.enhancedPurpose) {
+      logger.info(
+        chalk.green('\nUsing enhanced purpose from target discovery since no purpose was provided.')
+      );
+      config.purpose = redteamConfig.targetDiscoveryOutput.enhancedPurpose;
+    }
+  }
+
   const parsedConfig = RedteamConfigSchema.safeParse(config);
   if (!parsedConfig.success) {
     logger.error('Invalid redteam configuration:');
@@ -215,6 +249,7 @@ export async function doGenerateRedteam(
     abortSignal: options.abortSignal,
     targetLabels,
     showProgressBar: options.progressBar !== false,
+    targetDiscoveryOutput: config.targetDiscoveryOutput,
   } as SynthesizeOptions);
 
   if (redteamTests.length === 0) {
