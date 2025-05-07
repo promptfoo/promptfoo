@@ -275,7 +275,6 @@ const remotePlugins: PluginFactory[] = [
   'hijacking',
   'rag-document-exfiltration',
   'rag-poisoning',
-  'rate-limit',
   'reasoning-dos',
   'religion',
   'ssrf',

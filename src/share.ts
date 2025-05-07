@@ -489,12 +489,16 @@ export async function hasEvalBeenShared(eval_: Eval): Promise<boolean> {
 
 /**
  * Checks whether idempotency is supported for sharing in the current environment.
- * Idempotency is supported when using cloud or custom URLs, but not in vanilla self-hosted mode.
+ * Idempotency is supported when:
+ * 1. Using cloud mode (cloudConfig.isEnabled)
+ * 2. Using the default promptfoo.app service
+ * 
+ * Idempotency is NOT supported when using custom self-hosted URLs.
  */
 export function isIdempotencySupported(): boolean {
   return (
     cloudConfig.isEnabled() ||
-    getShareViewBaseUrl() !== getDefaultShareViewBaseUrl() ||
-    getShareApiBaseUrl() !== 'https://api.promptfoo.app'
+    (getShareViewBaseUrl() === getDefaultShareViewBaseUrl() &&
+    getShareApiBaseUrl() === 'https://api.promptfoo.app')
   );
 }
