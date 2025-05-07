@@ -307,19 +307,13 @@ describe('OpenAiImageProvider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      // Should return formatted JSON with truncated base64 data
+      // Should format the response as markdown with embedded base64 image
       expect(result).toEqual({
-        output: expect.stringContaining('"type": "image"'),
+        output: expect.stringMatching(/^!\[test prompt\]\(data:image\/png;base64,base64EncodedImageData\)$/),
         cached: false,
-        format: 'formatted_json',
+        format: 'markdown',
         cost: expect.any(Number),
       });
-      
-      // Verify the JSON structure
-      const parsedOutput = JSON.parse(result.output);
-      expect(parsedOutput).toHaveProperty('type', 'image');
-      expect(parsedOutput).toHaveProperty('prompt', 'test prompt');
-      expect(parsedOutput).toHaveProperty('data', 'base64EncodedImageData...');
     });
   });
 

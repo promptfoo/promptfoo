@@ -326,7 +326,7 @@ providers:
       operation: 'generation'
 ```
 
-> **Important:** Unlike DALL-E models, the GPT Image model always returns base64-encoded image data. To make this more readable in the promptfoo UI, the library formats the response as a clean JSON object with essential information and a truncated preview of the base64 data.
+> **Important:** Unlike DALL-E models, the GPT Image model always returns base64-encoded image data. To make this properly display in the promptfoo UI, the library converts this to a markdown image with embedded base64 data, which renders the same way as DALL-E images when "Render markdown" is enabled.
 
 #### GPT Image Features and Limitations
 
