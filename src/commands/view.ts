@@ -2,9 +2,9 @@ import type { Command } from 'commander';
 import { getDefaultPort } from '../constants';
 import { startServer } from '../server/server';
 import telemetry from '../telemetry';
-import { BrowserBehavior } from '../util/server';
 import { setupEnv } from '../util';
 import { setConfigDirectoryPath } from '../util/config/manage';
+import { BrowserBehavior } from '../util/server';
 
 export function viewCommand(program: Command) {
   program
