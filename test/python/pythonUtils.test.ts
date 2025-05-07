@@ -65,14 +65,14 @@ describe('pythonUtils', () => {
       jest.useFakeTimers();
       jest.mocked(execAsync).mockImplementation(() => {
         const promise = new Promise((resolve) => {
-          setTimeout(() => resolve({ stdout: 'Python 3.8.10\n', stderr: '' }), 500);
+          setTimeout(() => resolve({ stdout: 'Python 3.8.10\n', stderr: '' }), 3000);
         }) as any;
         promise.child = { kill: jest.fn() };
         return promise;
       });
 
       const resultPromise = pythonUtils.tryPath('/usr/bin/python3');
-      jest.advanceTimersByTime(251);
+      jest.advanceTimersByTime(2501);
       const result = await resultPromise;
 
       expect(result).toBeNull();
