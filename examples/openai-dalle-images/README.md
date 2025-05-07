@@ -58,7 +58,7 @@ promptfoo view
 - Better with real-world knowledge and detailed compositions
 - Supports advanced editing capabilities including inpainting (editing with masks)
 - Token usage and cost varies significantly based on quality settings
-- **Note:** Unlike DALL-E models, GPT Image always returns base64-encoded image data rather than URLs
+- **Note:** Unlike DALL-E models, GPT Image always returns base64-encoded image data rather than URLs, but promptfoo automatically converts this to an embedded image in markdown format for easy viewing
 
 ## Documentation
 

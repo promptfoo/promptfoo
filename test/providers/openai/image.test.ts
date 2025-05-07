@@ -301,12 +301,11 @@ describe('OpenAiImageProvider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      // Should treat response as base64 even though we didn't explicitly request it
+      // Should format the response as markdown with embedded base64 image
       expect(result).toEqual({
-        output: JSON.stringify(mockBase64Response.data),
+        output: expect.stringMatching(/^!\[test prompt\]\(data:image\/png;base64,base64EncodedImageData\)$/),
         cached: false,
-        isBase64: true,
-        format: 'json',
+        format: 'markdown_with_embedded_image',
         cost: expect.any(Number),
       });
     });

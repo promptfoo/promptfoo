@@ -138,6 +138,18 @@ export function formatOutput(
       return { error: `No base64 image data found in response: ${JSON.stringify(data)}` };
     }
 
+    // For gpt-image-1 model, create a markdown image tag with embedded base64 data
+    if (model === 'gpt-image-1') {
+      const format = data.data[0]?.format || 'png'; // Default to png if format not specified
+      const sanitizedPrompt = prompt
+        .replace(/\r?\n|\r/g, ' ')
+        .replace(/\[/g, '(')
+        .replace(/\]/g, ')');
+      const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
+      
+      return `![${ellipsizedPrompt}](data:image/${format};base64,${b64Json})`;
+    }
+
     return JSON.stringify(data);
   } else {
     const url = data.data[0].url;
@@ -278,11 +290,25 @@ export async function processApiResponse(
 
     const cost = cached ? 0 : calculateImageCost(model, size, quality, n);
 
+    // Different metadata based on model and format
+    const responseMetadata = (() => {
+      // For gpt-image-1, we're embedding the base64 image in a markdown format
+      if (model === 'gpt-image-1') {
+        return { format: 'markdown_with_embedded_image' };
+      } 
+      // For regular base64 response
+      else if (responseFormat === 'b64_json') {
+        return { isBase64: true, format: 'json' };
+      }
+      // Default (URL response)
+      return {};
+    })();
+
     return {
       output: formattedOutput,
       cached,
       cost,
-      ...(responseFormat === 'b64_json' || model === 'gpt-image-1' ? { isBase64: true, format: 'json' } : {}),
+      ...responseMetadata,
     };
   } catch (err) {
     await data?.deleteFromCache?.();
