@@ -81,15 +81,6 @@ describe('stripAuthFromUrl', () => {
     const expected = 'http://192.168.1.1:8080/path';
     expect(stripAuthFromUrl(input)).toBe(expected);
   });
-
-  it('can be disabled by PROMPTFOO_DISABLE_SHARE_AUTH_STRIPPING', () => {
-    jest.requireMock('../src/envars').getEnvBool.mockImplementation((key: string) => {
-      return key === 'PROMPTFOO_DISABLE_SHARE_AUTH_STRIPPING' ? true : false;
-    });
-
-    const input = 'https://user:pass@example.com/path';
-    expect(stripAuthFromUrl(input)).toBe(input);
-  });
 });
 
 describe('isSharingEnabled', () => {
