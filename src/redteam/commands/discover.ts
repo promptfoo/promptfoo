@@ -60,7 +60,7 @@ export async function doTargetPurposeDiscovery(target: ApiProvider): Promise<str
 
     // Call the target with the question:
     const response = await target.callApi(question as string);
-    console.log({ question, output: response.output });
+    logger.debug(JSON.stringify({ question, output: response.output }, null, 2));
     conversationHistory.push({ type: 'target', content: response.output });
   }
 }
