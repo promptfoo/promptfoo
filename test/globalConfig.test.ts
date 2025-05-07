@@ -58,9 +58,6 @@ describe('Global Config', () => {
 
       it('should read and parse the existing config file', () => {
         const result = globalConfig.readGlobalConfig();
-
-        expect(fs.existsSync).toHaveBeenCalledTimes(1);
-        expect(fs.readFileSync).toHaveBeenCalledTimes(1);
         expect(fs.readFileSync).toHaveBeenCalledWith(
           expect.stringContaining('promptfoo.yaml'),
           'utf-8',

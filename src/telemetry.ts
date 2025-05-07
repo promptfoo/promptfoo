@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import { PostHog } from 'posthog-node';
 import { z } from 'zod';
 import { VERSION } from './constants';
-import { getEnvBool } from './envars';
+import { getEnvBool, getEnvString } from './envars';
 import { fetchWithTimeout } from './fetch';
 import { readGlobalConfig } from './globalConfig/globalConfig';
 import logger from './logger';
@@ -24,7 +24,7 @@ export type TelemetryEvent = z.infer<typeof TelemetryEventSchema>;
 export type TelemetryEventTypes = TelemetryEvent['event'];
 export type EventProperties = TelemetryEvent['properties'];
 
-export const POSTHOG_KEY = process.env.PROMPTFOO_POSTHOG_KEY;
+export const POSTHOG_KEY = getEnvString('PROMPTFOO_POSTHOG_KEY');
 const CONSENT_ENDPOINT = 'https://api.promptfoo.dev/consent';
 const EVENTS_ENDPOINT = 'https://a.promptfoo.app';
 const KA_ENDPOINT = 'https://ka.promptfoo.app/';
@@ -33,7 +33,7 @@ let posthogClient: PostHog | null = null;
 try {
   posthogClient = POSTHOG_KEY
     ? new PostHog(POSTHOG_KEY, {
-        host: EVENTS_ENDPOINT,
+        host: getEnvString('PROMPTFOO_POSTHOG_HOST', EVENTS_ENDPOINT),
       })
     : null;
 } catch {
@@ -48,6 +48,8 @@ export class Telemetry {
   private email: string | undefined;
 
   constructor() {
+    logger.debug(`Telemetry enabled: ${!this.disabled}`);
+
     const globalConfig = readGlobalConfig();
     this.id = globalConfig?.id;
     this.email = globalConfig?.account?.email;
@@ -91,6 +93,7 @@ export class Telemetry {
     if (this.disabled) {
       this.recordTelemetryDisabled();
     } else {
+      logger.debug(`Record event: ${eventName} ${JSON.stringify(properties)}`);
       this.sendEvent(eventName, properties);
     }
   }

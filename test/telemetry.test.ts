@@ -46,8 +46,11 @@ jest.mock('../src/envars', () => ({
     return false;
   }),
   getEnvString: jest.fn().mockImplementation((key) => {
-    if (key === 'POSTHOG_KEY') {
-      return process.env.POSTHOG_KEY || undefined;
+    if (key === 'PROMPTFOO_POSTHOG_KEY') {
+      return process.env.PROMPTFOO_POSTHOG_KEY || undefined;
+    }
+    if (key === 'PROMPTFOO_POSTHOG_HOST') {
+      return process.env.PROMPTFOO_POSTHOG_HOST || undefined;
     }
     if (key === 'NODE_ENV') {
       return process.env.NODE_ENV || undefined;
@@ -64,7 +67,7 @@ describe('Telemetry', () => {
   beforeEach(() => {
     originalEnv = process.env;
     process.env = { ...originalEnv };
-    process.env.POSTHOG_KEY = 'test-key';
+    process.env.PROMPTFOO_POSTHOG_KEY = 'test-key';
 
     // Setup fetch mock
     mockFetch = jest.fn().mockResolvedValue({ ok: true });

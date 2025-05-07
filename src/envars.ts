@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import cliState from './cliState';
 import type { EnvOverrides } from './types/env';
 
@@ -24,6 +25,7 @@ export type EnvVars = {
   PROMPTFOO_DISABLE_REDTEAM_MODERATION?: boolean;
   PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION?: boolean;
   PROMPTFOO_DISABLE_REF_PARSER?: boolean;
+  PROMPTFOO_DISABLE_SHARE_AUTH_STRIPPING?: boolean;
   PROMPTFOO_DISABLE_SHARE_EMAIL_REQUEST?: boolean;
   PROMPTFOO_DISABLE_SHARE_WARNING?: boolean;
   PROMPTFOO_DISABLE_SHARING?: boolean;
@@ -103,10 +105,13 @@ export type EnvVars = {
   JEST_WORKER_ID?: string;
   NODE_EXTRA_CA_CERTS?: string;
   NODE_TLS_REJECT_UNAUTHORIZED?: string;
-  POSTHOG_KEY?: string;
   REQUEST_TIMEOUT_MS?: number;
   RESULT_HISTORY_LENGTH?: number;
   WEBHOOK_TIMEOUT?: number;
+
+  // Posthog
+  PROMPTFOO_POSTHOG_KEY?: string;
+  PROMPTFOO_POSTHOG_HOST?: string;
 
   //=========================================================================
   // UI configuration
