@@ -119,7 +119,7 @@ describe('pythonUtils', () => {
       });
 
       const resultPromise = pythonUtils.tryPath('/usr/bin/python3');
-      jest.advanceTimersByTime(2500);
+      jest.advanceTimersByTime(2501);
       const result = await resultPromise;
 
       expect(result).toBeNull();
