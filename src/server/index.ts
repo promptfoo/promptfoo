@@ -1,5 +1,5 @@
 import { getDefaultPort } from '../constants';
-import { BrowserBehavior } from '../types/browser';
+import { BrowserBehavior } from '../util/server';
 import { startServer } from './server';
 
 // start server

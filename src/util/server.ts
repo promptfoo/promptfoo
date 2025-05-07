@@ -2,7 +2,6 @@ import opener from 'opener';
 import readline from 'readline';
 import { VERSION, getDefaultPort } from '../constants';
 import logger from '../logger';
-import { BrowserBehavior } from '../types/browser';
 
 export enum BrowserBehavior {
   ASK = 0,
@@ -59,8 +58,7 @@ export async function checkServerRunning(port = getDefaultPort()): Promise<boole
 
 export async function openBrowser(
   browserBehavior: BrowserBehavior = BrowserBehavior.ASK,
-  port = getDefaultPort(),
-  route: string = '',
+  port = getDefaultPort()
 ): Promise<void> {
   const baseUrl = `http://localhost:${port}`;
   let url = baseUrl;
