@@ -315,6 +315,47 @@ describe('OpenAiImageProvider', () => {
       expect(result.error).toContain('Invalid size "1792x1024" for DALL-E 2');
     });
 
+    it('should validate size for GPT Image', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-1', {
+        config: { apiKey: 'test-key', size: '512x512' },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toHaveProperty('error');
+      expect(result.error).toContain('Invalid size "512x512" for GPT Image');
+    });
+
+    it('should validate quality for GPT Image', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-1', {
+        config: { 
+          apiKey: 'test-key', 
+          quality: 'invalid-quality' as any 
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toHaveProperty('error');
+      expect(result.error).toContain('Invalid quality "invalid-quality" for GPT Image');
+    });
+
+    it('should accept valid quality values for GPT Image', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-1', {
+        config: { apiKey: 'test-key', quality: 'high' },
+      });
+
+      await provider.callApi('test prompt');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"quality":"high"'),
+        }),
+        expect.any(Number),
+      );
+    });
+
     it('should use correct size defaults based on model', async () => {
       const provider = new OpenAiImageProvider('dall-e-3', {
         config: { apiKey: 'test-key' },
@@ -334,7 +375,7 @@ describe('OpenAiImageProvider', () => {
   });
 
   describe('Operation handling', () => {
-    it('should reject non-generation operations', async () => {
+    it('should reject unsupported operations', async () => {
       const provider = new OpenAiImageProvider('dall-e-3', {
         config: {
           apiKey: 'test-key',
@@ -346,7 +387,38 @@ describe('OpenAiImageProvider', () => {
 
       expect(result).toHaveProperty('error');
       expect(result.error).toContain(
-        "Only 'generation' operations are currently supported. 'variation' operations are not implemented.",
+        "Only 'generation' and 'edit' operations are currently supported. 'variation' operations are not implemented.",
+      );
+    });
+
+    it('should reject edit operation for DALL-E 3', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: {
+          apiKey: 'test-key',
+          operation: 'edit',
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toHaveProperty('error');
+      expect(result.error).toContain("The 'edit' operation is not supported for DALL-E 3.");
+    });
+
+    it('should support edit operation for GPT Image', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-1', {
+        config: {
+          apiKey: 'test-key',
+          operation: 'edit',
+        },
+      });
+
+      await provider.callApi('test prompt');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.stringContaining('/images/edits'),
+        expect.any(Object),
+        expect.any(Number),
       );
     });
   });
@@ -378,6 +450,96 @@ describe('OpenAiImageProvider', () => {
         }),
         expect.any(Number),
       );
+    });
+
+    it('should handle GPT Image specific options', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-1', {
+        config: {
+          apiKey: 'test-key',
+          quality: 'high',
+          background: 'transparent',
+          output_format: 'webp',
+          output_compression: 75,
+          moderation: 'low',
+        },
+      });
+
+      await provider.callApi('test prompt');
+
+      // Check all the gpt-image-1 specific parameters are included in the request
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"quality":"high"'),
+        }),
+        expect.any(Number),
+      );
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"background":"transparent"'),
+        }),
+        expect.any(Number),
+      );
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"output_format":"webp"'),
+        }),
+        expect.any(Number),
+      );
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"output_compression":75'),
+        }),
+        expect.any(Number),
+      );
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"moderation":"low"'),
+        }),
+        expect.any(Number),
+      );
+    });
+
+    it('should properly calculate costs for GPT Image with different qualities', async () => {
+      // Test low quality
+      let provider = new OpenAiImageProvider('gpt-image-1', {
+        config: { apiKey: 'test-key', quality: 'low', size: '1024x1024' },
+      });
+
+      let result = await provider.callApi('test prompt');
+      expect(result.cost).toBeCloseTo(0.002 * 272, 4); // Low quality 1024x1024 cost
+
+      // Test medium quality
+      provider = new OpenAiImageProvider('gpt-image-1', {
+        config: { apiKey: 'test-key', quality: 'medium', size: '1024x1536' },
+      });
+
+      result = await provider.callApi('test prompt');
+      expect(result.cost).toBeCloseTo(0.002 * 1584, 4); // Medium quality 1024x1536 cost
+
+      // Test high quality
+      provider = new OpenAiImageProvider('gpt-image-1', {
+        config: { apiKey: 'test-key', quality: 'high', size: '1536x1024' },
+      });
+
+      result = await provider.callApi('test prompt');
+      expect(result.cost).toBeCloseTo(0.002 * 6208, 4); // High quality 1536x1024 cost
+
+      // Test auto quality (should default to medium for cost calculation)
+      provider = new OpenAiImageProvider('gpt-image-1', {
+        config: { apiKey: 'test-key', quality: 'auto', size: '1024x1024' },
+      });
+
+      result = await provider.callApi('test prompt');
+      expect(result.cost).toBeCloseTo(0.002 * 1056, 4); // Medium quality 1024x1024 cost
     });
 
     it('should include organization ID in headers when provided', async () => {
@@ -467,6 +629,30 @@ describe('OpenAiImageProvider', () => {
         expect.any(Object),
         expect.any(Number),
       );
+    });
+
+    it('should not include response_format for GPT Image model', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-1', {
+        config: {
+          apiKey: 'test-key',
+          quality: 'high',
+          background: 'transparent',
+          output_format: 'webp',
+        },
+      });
+
+      await provider.callApi('test prompt');
+
+      // Verify response_format is NOT included in the request
+      const requestBody = JSON.parse(
+        (jest.mocked(fetchWithCache).mock.calls[0][1] as RequestInit).body as string
+      );
+      expect(requestBody).not.toHaveProperty('response_format');
+      
+      // Verify other parameters are included correctly
+      expect(requestBody).toHaveProperty('quality', 'high');
+      expect(requestBody).toHaveProperty('background', 'transparent');
+      expect(requestBody).toHaveProperty('output_format', 'webp');
     });
   });
 });

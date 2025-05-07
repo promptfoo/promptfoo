@@ -260,7 +260,12 @@ See the [OpenAI vision example](https://github.com/promptfoo/promptfoo/tree/main
 
 ### Generating images
 
-OpenAI supports Dall-E generations via `openai:image:dall-e-3`. See the [OpenAI Dall-E example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-dalle-images).
+OpenAI supports image generations via the following models:
+- `openai:image:dall-e-2` - The second generation DALL-E model
+- `openai:image:dall-e-3` - The third generation DALL-E model
+- `openai:image:gpt-image-1` - GPT-based image generation model with superior instruction following
+
+See the [OpenAI Dall-E example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-dalle-images).
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -276,6 +281,47 @@ tests:
       subject: bananas
   - vars:
       subject: new york city
+```
+
+#### Model-specific configuration
+
+Each model supports different parameters:
+
+##### DALL-E 3
+```yaml
+providers:
+  - id: openai:image:dall-e-3
+    config:
+      size: '1024x1024' # Also supports '1792x1024' and '1024x1792'
+      quality: 'standard' # Or 'hd'
+      style: 'natural' # Or 'vivid'
+      response_format: 'url' # Or 'b64_json'
+```
+
+##### DALL-E 2
+```yaml
+providers:
+  - id: openai:image:dall-e-2
+    config:
+      size: '1024x1024' # Also supports '512x512' and '256x256'
+      response_format: 'url' # Or 'b64_json'
+      # Supports 'generation', 'variation', and 'edit' operations
+      operation: 'generation'
+```
+
+##### GPT Image
+```yaml
+providers:
+  - id: openai:image:gpt-image-1
+    config:
+      size: '1024x1024' # Also supports '1536x1024', '1024x1536', and 'auto'
+      quality: 'medium' # 'low', 'medium', 'high', or 'auto'
+      background: 'opaque' # 'transparent', 'opaque', or 'auto'
+      output_format: 'png' # 'png', 'jpeg', or 'webp'
+      output_compression: 75 # 0-100 for jpeg and webp
+      moderation: 'auto' # 'auto' or 'low'
+      # Supports 'generation' and 'edit' operations
+      operation: 'generation'
 ```
 
 To display images in the web viewer, wrap vars or outputs in markdown image tags like so:

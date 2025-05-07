@@ -8,14 +8,19 @@ import { REQUEST_TIMEOUT_MS } from '../shared';
 import type { OpenAiSharedOptions } from './types';
 import { formatOpenAiError } from './util';
 
-export type OpenAiImageModel = 'dall-e-2' | 'dall-e-3';
+export type OpenAiImageModel = 'dall-e-2' | 'dall-e-3' | 'gpt-image-1';
 export type OpenAiImageOperation = 'generation' | 'variation' | 'edit';
 export type DallE2Size = '256x256' | '512x512' | '1024x1024';
 export type DallE3Size = '1024x1024' | '1792x1024' | '1024x1792';
+export type GptImageSize = '1024x1024' | '1536x1024' | '1024x1536' | 'auto';
+export type GptImageQuality = 'low' | 'medium' | 'high' | 'auto';
 
 export const DALLE2_VALID_SIZES: DallE2Size[] = ['256x256', '512x512', '1024x1024'];
 export const DALLE3_VALID_SIZES: DallE3Size[] = ['1024x1024', '1792x1024', '1024x1792'];
+export const GPT_IMAGE_VALID_SIZES: GptImageSize[] = ['1024x1024', '1536x1024', '1024x1536', 'auto'];
+export const GPT_IMAGE_VALID_QUALITIES: GptImageQuality[] = ['low', 'medium', 'high', 'auto'];
 export const DEFAULT_SIZE = '1024x1024';
+export const DEFAULT_QUALITY = 'auto';
 
 export const DALLE2_COSTS: Record<DallE2Size, number> = {
   '256x256': 0.016,
@@ -32,9 +37,31 @@ export const DALLE3_COSTS: Record<string, number> = {
   hd_1792x1024: 0.12,
 };
 
+export const GPT_IMAGE_COSTS: Record<string, number> = {
+  low_1024x1024: 0.002 * 272,    // 272 tokens
+  low_1024x1536: 0.002 * 408,    // 408 tokens
+  low_1536x1024: 0.002 * 400,    // 400 tokens
+  medium_1024x1024: 0.002 * 1056, // 1056 tokens
+  medium_1024x1536: 0.002 * 1584, // 1584 tokens
+  medium_1536x1024: 0.002 * 1568, // 1568 tokens
+  high_1024x1024: 0.002 * 4160,  // 4160 tokens
+  high_1024x1536: 0.002 * 6240,  // 6240 tokens
+  high_1536x1024: 0.002 * 6208,  // 6208 tokens
+};
+
 type CommonImageOptions = {
   n?: number;
   response_format?: 'url' | 'b64_json';
+};
+
+type GptImageOptions = CommonImageOptions & {
+  size?: GptImageSize;
+  quality?: GptImageQuality;
+  background?: 'transparent' | 'opaque' | 'auto';
+  output_format?: 'png' | 'jpeg' | 'webp';
+  output_compression?: number;
+  mask?: string; // Base64-encoded mask image
+  moderation?: 'auto' | 'low';
 };
 
 type DallE3Options = CommonImageOptions & {
@@ -52,7 +79,7 @@ type DallE2Options = CommonImageOptions & {
 
 type OpenAiImageOptions = OpenAiSharedOptions & {
   model?: OpenAiImageModel;
-} & (DallE2Options | DallE3Options);
+} & (DallE2Options | DallE3Options | GptImageOptions);
 
 export function validateSizeForModel(
   size: string,
@@ -69,6 +96,27 @@ export function validateSizeForModel(
     return {
       valid: false,
       message: `Invalid size "${size}" for DALL-E 2. Valid sizes are: ${DALLE2_VALID_SIZES.join(', ')}`,
+    };
+  }
+  
+  if (model === 'gpt-image-1' && !GPT_IMAGE_VALID_SIZES.includes(size as GptImageSize)) {
+    return {
+      valid: false,
+      message: `Invalid size "${size}" for GPT Image. Valid sizes are: ${GPT_IMAGE_VALID_SIZES.join(', ')}`,
+    };
+  }
+
+  return { valid: true };
+}
+
+export function validateQualityForModel(
+  quality: string,
+  model: string,
+): { valid: boolean; message?: string } {
+  if (model === 'gpt-image-1' && quality && !GPT_IMAGE_VALID_QUALITIES.includes(quality as GptImageQuality)) {
+    return {
+      valid: false,
+      message: `Invalid quality "${quality}" for GPT Image. Valid qualities are: ${GPT_IMAGE_VALID_QUALITIES.join(', ')}`,
     };
   }
 
@@ -115,8 +163,12 @@ export function prepareRequestBody(
     prompt,
     n: config.n || 1,
     size,
-    response_format: responseFormat,
   };
+  
+  // Only add response_format for DALL-E models, not for gpt-image-1
+  if (model !== 'gpt-image-1') {
+    body.response_format = responseFormat;
+  }
 
   if (model === 'dall-e-3') {
     if ('quality' in config && config.quality) {
@@ -125,6 +177,26 @@ export function prepareRequestBody(
 
     if ('style' in config && config.style) {
       body.style = config.style;
+    }
+  } else if (model === 'gpt-image-1') {
+    if ('quality' in config && config.quality) {
+      body.quality = config.quality;
+    }
+    
+    if ('background' in config && config.background) {
+      body.background = config.background;
+    }
+    
+    if ('output_format' in config && config.output_format) {
+      body.output_format = config.output_format;
+    }
+    
+    if ('output_compression' in config && config.output_compression !== undefined) {
+      body.output_compression = config.output_compression;
+    }
+    
+    if ('moderation' in config && config.moderation) {
+      body.moderation = config.moderation;
     }
   }
 
@@ -137,7 +209,7 @@ export function calculateImageCost(
   quality?: string,
   n: number = 1,
 ): number {
-  const imageQuality = quality || 'standard';
+  const imageQuality = quality || (model === 'gpt-image-1' ? DEFAULT_QUALITY : 'standard');
 
   if (model === 'dall-e-3') {
     const costKey = `${imageQuality}_${size}`;
@@ -145,6 +217,15 @@ export function calculateImageCost(
     return costPerImage * n;
   } else if (model === 'dall-e-2') {
     const costPerImage = DALLE2_COSTS[size as DallE2Size] || DALLE2_COSTS['1024x1024'];
+    return costPerImage * n;
+  } else if (model === 'gpt-image-1') {
+    // For 'auto' quality, default to medium for cost calculation
+    const effectiveQuality = imageQuality === 'auto' ? 'medium' : imageQuality;
+    // For 'auto' size, default to 1024x1024 for cost calculation
+    const effectiveSize = size === 'auto' ? '1024x1024' : size;
+    
+    const costKey = `${effectiveQuality}_${effectiveSize}`;
+    const costPerImage = GPT_IMAGE_COSTS[costKey] || GPT_IMAGE_COSTS['medium_1024x1024'];
     return costPerImage * n;
   }
 
@@ -238,18 +319,36 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
     const operation = ('operation' in config && config.operation) || 'generation';
     const responseFormat = config.response_format || 'url';
 
-    if (operation !== 'generation') {
+    if (operation !== 'generation' && operation !== 'edit') {
       return {
-        error: `Only 'generation' operations are currently supported. '${operation}' operations are not implemented.`,
+        error: `Only 'generation' and 'edit' operations are currently supported. '${operation}' operations are not implemented.`,
       };
     }
 
-    const endpoint = '/images/generations';
+    let endpoint = '/images/generations';
+    
+    if (operation === 'edit') {
+      if (model === 'dall-e-3') {
+        return {
+          error: `The 'edit' operation is not supported for DALL-E 3.`,
+        };
+      }
+      endpoint = '/images/edits';
+    }
+    
     const size = config.size || DEFAULT_SIZE;
+    const quality = ('quality' in config) ? config.quality : undefined;
 
     const sizeValidation = validateSizeForModel(size as string, model);
     if (!sizeValidation.valid) {
       return { error: sizeValidation.message };
+    }
+    
+    if (quality) {
+      const qualityValidation = validateQualityForModel(quality as string, model);
+      if (!qualityValidation.valid) {
+        return { error: qualityValidation.message };
+      }
     }
 
     const body = prepareRequestBody(model, prompt, size as string, responseFormat, config);
@@ -295,8 +394,9 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
       cached,
       model,
       size,
-      config.quality,
+      quality,
       config.n || 1,
     );
   }
 }
+

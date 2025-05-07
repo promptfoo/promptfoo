@@ -1,0 +1,41 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: OpenAI GPT Image model evaluation
+prompts:
+  - 'Create a detailed {{style}} illustration of {{subject}}'
+
+providers:
+  - id: openai:image:gpt-image-1
+    config:
+      size: '1024x1024'      # Default square format
+      quality: 'medium'      # Balanced quality and cost
+      background: 'opaque'   # Standard background
+      output_format: 'png'   # Default format
+      
+  - id: openai:image:gpt-image-1
+    config:
+      size: '1536x1024'      # Landscape format
+      quality: 'high'        # High quality rendering
+      background: 'transparent' # Transparent background
+      output_format: 'webp'  # Web-optimized format
+      output_compression: 80 # Compression level for WebP
+      moderation: 'low'      # Less restrictive filtering
+
+tests:
+  - vars:
+      style: photorealistic
+      subject: a cat wearing sunglasses on a beach
+  - vars:
+      style: pixel art
+      subject: a spaceship landing on an alien planet
+  - vars:
+      style: watercolor painting
+      subject: a cityscape with flying cars
+  - vars:
+      style: 3D rendered
+      subject: a futuristic kitchen with smart appliances
+  - vars:
+      style: detailed technical diagram
+      subject: a self-driving car with labels for key components
+  - vars:
+      style: comic book
+      subject: a superhero with fire powers 
