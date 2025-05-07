@@ -222,7 +222,7 @@ export function createApp() {
 
 export async function startServer(
   port = getDefaultPort(),
-  browserBehavior: BrowserBehavior = BrowserBehavior.OPEN,
+  browserBehavior: BrowserBehavior = BrowserBehavior.ASK,
   filterDescription?: string,
 ) {
   const app = createApp();
