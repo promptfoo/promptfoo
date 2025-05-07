@@ -12,7 +12,7 @@ import { ProviderEnvOverridesSchema } from '../types/env';
 import { TokenUsageSchema } from '../types/shared';
 import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/fileExtensions';
 import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
-import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
+import { ApiProviderSchema, ProviderOptionsSchema, ProviderSchema } from '../validators/providers';
 import { RedteamConfigSchema } from '../validators/redteam';
 import { NunjucksFilterMapSchema } from '../validators/shared';
 import type { Prompt, PromptFunction } from './prompts';
@@ -806,7 +806,7 @@ export const TestSuiteConfigSchema = z.object({
   description: z.string().optional(),
 
   // One or more LLM APIs to use, for example: openai:gpt-4o-mini, openai:gpt-4o, localai:chat:vicuna
-  providers: ProvidersSchema,
+  providers: ProviderSchema,
 
   // One or more prompt files to load
   prompts: z.union([
@@ -887,8 +887,8 @@ export type TestSuiteConfig = z.infer<typeof TestSuiteConfigSchema>;
 export const UnifiedConfigSchema = TestSuiteConfigSchema.extend({
   evaluateOptions: EvaluateOptionsSchema.optional(),
   commandLineOptions: CommandLineOptionsSchema.partial().optional(),
-  providers: ProvidersSchema.optional(),
-  targets: ProvidersSchema.optional(),
+  providers: ProviderSchema.optional(),
+  targets: ProviderSchema.optional(),
 })
   .refine(
     (data) => {

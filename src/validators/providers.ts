@@ -102,7 +102,7 @@ export const ProviderClassificationResponseSchema = z.object({
   classification: z.record(z.number()).optional(),
 });
 
-export const ProvidersSchema = z.union([
+export const ProviderSchema = z.union([
   z.string(),
   CallApiFunctionSchema,
   z.array(
@@ -114,8 +114,6 @@ export const ProvidersSchema = z.union([
     ]),
   ),
 ]);
-
-export const ProviderSchema = z.union([z.string(), ProviderOptionsSchema, ApiProviderSchema]);
 
 // Ensure that schemas match their corresponding types
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
