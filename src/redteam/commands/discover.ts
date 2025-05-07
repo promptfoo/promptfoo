@@ -1,6 +1,5 @@
 import chalk from 'chalk';
 import type { Command } from 'commander';
-import { produce, type Draft } from 'immer';
 import type { UnifiedConfig } from 'src/types';
 import { z } from 'zod';
 import cliState from '../../cliState';
@@ -55,7 +54,7 @@ export function discoverCommand(program: Command) {
       "Automatically discover a target application's purpose, enhancing attack probe efficacy.",
     )
     .option(
-      '-c, --config [path]',
+      '-c, --config <path>',
       'Path to configuration file or cloud config UUID. Defaults to promptfooconfig.yaml',
     )
     .option('-t, --target <id>', 'Cloud provider target ID to run the scan on')
@@ -92,56 +91,45 @@ export function discoverCommand(program: Command) {
 
       // A config or a target must be provided:
       if (!args.config && !args.target) {
-        logger.error('Either a config or a target must be provided');
+        logger.error(
+          'A config (-c, --config <path>) or a target (-t, --target <id>) must be provided!\n',
+        );
         process.exitCode = 1;
         return;
       }
 
       let config: UnifiedConfig | null = null;
       let targets: Provider[] = [];
-      let targetConfigKey: 'targets' | 'providers';
 
       // If user provides a config, read all targets from it:
       if (args.config) {
         config = await readConfig(args.config);
         invariant(config, 'An error occurred loading the config');
-
-        // Determine whether to read from the 'providers' or 'targets' key:
-        if (config.targets && Array.isArray(config.targets) && config.targets.length > 0) {
-          targets = config.targets;
-          targetConfigKey = 'targets';
-        } else if (
-          config.providers &&
-          Array.isArray(config.providers) &&
-          config.providers.length > 0
-        ) {
-          targets = config.providers;
-          targetConfigKey = 'providers';
-        } else {
-          // Sanity check:
-          invariant(false, 'Config is missing both "targets" and "providers" keys');
-        }
+        invariant(config.providers, 'Config must contain targets or providers');
+        targets = Array.isArray(config.providers) ? config.providers : [config.providers];
+      }
+      // If the target flag is provided, load it from Cloud:
+      else if (args.target) {
+        targets = [
+          // Let the internal error handling bubble up:
+          await getProviderFromCloud(args.target),
+        ];
       }
 
-      // Handle target: load it from Cloud.
-      if (args.target) {
-        targets.push(await getProviderFromCloud(args.target));
-      }
+      // TODO: Verify that providers are not scripts?
 
-      invariant(targets.length === 0, 'An error occurred loading the target config');
+      // At this point, we should have at least one target:
+      invariant(targets.length > 0, 'An error occurred loading the target config');
 
+      // Iterate through the targets and discover the purpose for each:
       let targetIdx = 0;
       const purposes: Record<number, string> = {};
 
       for await (const target of targets) {
-        // TODO(will): Fix these!
-        const targetLabel = target.label ?? target.id;
-        logger.info(`Discovering purpose for ${targetLabel}`);
-
-        let purpose: string | null = null;
-
+        const targetLabel = typeof target === 'string' ? target : (target.label ?? target.id);
+        logger.info(`Discovering purpose for ${chalk.yellow(targetLabel)}`);
         try {
-          purpose = await doTargetPurposeDiscovery(target);
+          purposes[targetIdx] = await doTargetPurposeDiscovery(target);
         } catch (error) {
           logger.error(
             `An unexpected error occurred during target discovery: ${error instanceof Error ? error.message : String(error)}\n${
@@ -150,30 +138,48 @@ export function discoverCommand(program: Command) {
           );
           process.exitCode = 1;
           return;
+        } finally {
+          targetIdx++;
         }
-
-        // If preview is enabled, print the purpose to the console:
-        if (args.preview) {
-          logger.info(`${chalk.bold(`Application ${targetLabel} Purpose:`)}\n\n${purpose}`);
-        } else {
-          // Otherwise, save the purpose to the purposes object:
-          purposes[targetIdx] = purpose;
-        }
-
-        targetIdx++;
       }
 
-      // Persist the purposes:
-      if (args.target) {
-        // TODO(Will): Save to the database
-        throw new Error('Saving purpose to database is not yet implemented');
+      // Then, handle the response:
+      // If preview is enabled, print the purpose to the console:
+      if (args.preview) {
+        for (const [targetIdx, purpose] of Object.entries(purposes)) {
+          const target = targets[Number(targetIdx)];
+          const targetLabel = typeof target === 'string' ? target : (target.label ?? target.id);
+          logger.info(`\nPurpose of ${chalk.yellow(targetLabel)}:\n\n${purpose}\n`);
+        }
       } else {
-        const updatedConfig = produce(config, (draft: Draft<UnifiedConfig>) => {
+        // Persist the purposes:
+        if (args.target) {
+          // TODO(Will): Save to the database
+          throw new Error('Saving purpose to database is not yet implemented');
+        } else {
+          // Map each purpose to its target:
+          for (const [targetIdx, purpose] of Object.entries(purposes)) {
+            const idxNum = Number(targetIdx);
+            if (typeof targets[idxNum] === 'string') {
+              targets[idxNum] = {
+                id: targets[idxNum] as string,
+                purpose,
+              } as Provider;
+            } else {
+              targets[idxNum].purpose = purpose;
+            }
+          }
+
+          // TODO(Will): Fix this type error
           //@ts-expect-error:
-          draft[targetConfigKey][targetIdx].purpose = purpose;
-        });
-        //@ts-expect-error:
-        writePromptfooConfig(updatedConfig, args.config!);
+          config.providers = targets;
+          writePromptfooConfig(config as UnifiedConfig, args.config!);
+          logger.info(
+            chalk.green(
+              `\nPurpose discovery complete!\nResults have been written to ${args.config}`,
+            ),
+          );
+        }
       }
     });
 }
