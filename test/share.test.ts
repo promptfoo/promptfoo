@@ -41,9 +41,9 @@ jest.mock('../src/constants', () => {
   const actual = jest.requireActual('../src/constants');
   return {
     ...actual,
-    SHARE_API_BASE_URL: 'https://api.promptfoo.app',
-    DEFAULT_SHARE_VIEW_BASE_URL: 'https://promptfoo.app',
-    SHARE_VIEW_BASE_URL: 'https://promptfoo.app',
+    getShareApiBaseUrl: jest.fn().mockReturnValue('https://api.promptfoo.app'),
+    getDefaultShareViewBaseUrl: jest.fn().mockReturnValue('https://promptfoo.app'),
+    getShareViewBaseUrl: jest.fn().mockReturnValue('https://promptfoo.app'),
   };
 });
 
@@ -96,8 +96,10 @@ describe('isSharingEnabled', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
-    const constants = jest.requireMock('../src/constants');
-    constants.SHARE_API_BASE_URL = 'https://api.promptfoo.app';
+    // Reset the mock to default value for each test
+    jest
+      .requireMock('../src/constants')
+      .getShareApiBaseUrl.mockReturnValue('https://api.promptfoo.app');
   });
 
   it('returns true when sharing config is set in eval record', () => {
@@ -113,8 +115,9 @@ describe('isSharingEnabled', () => {
   });
 
   it('returns true when sharing env URL is set and not api.promptfoo.app', () => {
-    const constants = jest.requireMock('../src/constants');
-    constants.SHARE_API_BASE_URL = 'https://custom-api.example.com';
+    jest
+      .requireMock('../src/constants')
+      .getShareApiBaseUrl.mockReturnValue('https://custom-api.example.com');
 
     const mockEval: Partial<Eval> = {
       config: {},
@@ -135,10 +138,11 @@ describe('isSharingEnabled', () => {
   });
 
   it('returns false when no sharing options are enabled', () => {
-    jest.mock('../src/constants', () => ({
-      ...jest.requireActual('../src/constants'),
-      SHARE_API_BASE_URL: 'https://api.promptfoo.app',
-    }));
+    // Explicitly ensure we're using the default mock return value
+    jest
+      .requireMock('../src/constants')
+      .getShareApiBaseUrl.mockReturnValue('https://api.promptfoo.app');
+    jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
 
     const mockEval: Partial<Eval> = {
       config: {},
@@ -148,6 +152,12 @@ describe('isSharingEnabled', () => {
   });
 
   it('returns false when sharing config is not an object', () => {
+    // Explicitly ensure we're using the default mock return value
+    jest
+      .requireMock('../src/constants')
+      .getShareApiBaseUrl.mockReturnValue('https://api.promptfoo.app');
+    jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+
     const mockEval: Partial<Eval> = {
       config: {
         sharing: true,

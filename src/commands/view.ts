@@ -1,16 +1,16 @@
 import type { Command } from 'commander';
-import { DEFAULT_PORT } from '../constants';
+import { getDefaultPort } from '../constants';
 import { startServer } from '../server/server';
 import telemetry from '../telemetry';
+import { BrowserBehavior } from '../types/browser';
 import { setupEnv } from '../util';
 import { setConfigDirectoryPath } from '../util/config/manage';
-import { BrowserBehavior } from '../util/server';
 
 export function viewCommand(program: Command) {
   program
     .command('view [directory]')
     .description('Start browser UI')
-    .option('-p, --port <number>', 'Port number', DEFAULT_PORT.toString())
+    .option('-p, --port <number>', 'Port number', getDefaultPort().toString())
     .option('-y, --yes', 'Skip confirmation and auto-open the URL')
     .option('-n, --no', 'Skip confirmation and do not open the URL')
     .option('--filter-description <pattern>', 'Filter evals by description using a regex pattern')

@@ -41,7 +41,6 @@ import { PlinyPlugin } from './pliny';
 import { PolicyPlugin } from './policy';
 import { PoliticsPlugin } from './politics';
 import { PromptExtractionPlugin } from './promptExtraction';
-import { RateLimitPlugin } from './rateLimit';
 import { RbacPlugin } from './rbac';
 import { ShellInjectionPlugin } from './shellInjection';
 import { SqlInjectionPlugin } from './sqlInjection';

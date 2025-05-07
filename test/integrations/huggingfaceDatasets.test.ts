@@ -11,7 +11,7 @@ jest.mock('../../src/fetch', () => ({
 describe('huggingfaceDatasets', () => {
   // Save original environment variables
   const originalEnv = { ...process.env };
-  
+
   beforeEach(() => {
     jest.clearAllMocks();
     // Clear any HuggingFace tokens for tests that expect no auth
@@ -19,7 +19,7 @@ describe('huggingfaceDatasets', () => {
     delete process.env.HF_API_TOKEN;
     delete process.env.HUGGING_FACE_HUB_TOKEN;
   });
-  
+
   afterAll(() => {
     // Restore original environment
     process.env = originalEnv;
