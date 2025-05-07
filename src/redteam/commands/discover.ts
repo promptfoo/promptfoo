@@ -99,84 +99,90 @@ export function discoverCommand(program: Command) {
       }
 
       let config: UnifiedConfig | null = null;
-      let targets: Provider[] = [];
 
-      // If user provides a config, read all targets from it:
+      // Although the providers/targets property supports multiple values, Redteaming only supports
+      // a single target at a time.
+      let target: any | undefined = undefined;
+
+      // If user provides a config, read the target from it:
       if (args.config) {
         config = await readConfig(args.config);
         invariant(config, 'An error occurred loading the config');
         invariant(config.providers, 'Config must contain targets or providers');
-        targets = Array.isArray(config.providers) ? config.providers : [config.providers];
+        target = Array.isArray(config.providers) ? config.providers[0] : config.providers;
       }
       // If the target flag is provided, load it from Cloud:
       else if (args.target) {
-        targets = [
-          // Let the internal error handling bubble up:
-          await getProviderFromCloud(args.target),
-        ];
+        // Let the internal error handling bubble up:
+        target = await getProviderFromCloud(args.target);
       }
-
-      // TODO: Verify that providers are not scripts?
 
       // At this point, we should have at least one target:
-      invariant(targets.length > 0, 'An error occurred loading the target config');
+      invariant(target != undefined, 'An error occurred loading the target config');
 
-      // Iterate through the targets and discover the purpose for each:
-      let targetIdx = 0;
-      const purposes: Record<number, string> = {};
-
-      for await (const target of targets) {
-        const targetLabel = typeof target === 'string' ? target : (target.label ?? target.id);
-        logger.info(`Discovering purpose for ${chalk.yellow(targetLabel)}`);
-        try {
-          purposes[targetIdx] = await doTargetPurposeDiscovery(target);
-        } catch (error) {
-          logger.error(
-            `An unexpected error occurred during target discovery: ${error instanceof Error ? error.message : String(error)}\n${
-              error instanceof Error ? error.stack : ''
-            }`,
-          );
-          process.exitCode = 1;
-          return;
-        } finally {
-          targetIdx++;
-        }
+      // Discover the purpose for the target:
+      logger.info('Discovering purpose...');
+      let purpose: string | undefined = undefined;
+      try {
+        purpose = await doTargetPurposeDiscovery(target);
+      } catch (error) {
+        logger.error(
+          `An unexpected error occurred during target discovery: ${error instanceof Error ? error.message : String(error)}\n${
+            error instanceof Error ? error.stack : ''
+          }`,
+        );
+        process.exitCode = 1;
+        return;
       }
+
+      logger.info(`\nPurpose:\n\n${chalk.green(purpose)}\n`);
 
       // Then, handle the response:
       // If preview is enabled, print the purpose to the console:
-      if (args.preview) {
-        for (const [targetIdx, purpose] of Object.entries(purposes)) {
-          const target = targets[Number(targetIdx)];
-          const targetLabel = typeof target === 'string' ? target : (target.label ?? target.id);
-          logger.info(`\nPurpose of ${chalk.yellow(targetLabel)}:\n\n${purpose}\n`);
-        }
-      } else {
+      if (!args.preview) {
         // Persist the purposes:
         if (args.target) {
           // TODO(Will): Save to the database
           throw new Error('Saving purpose to database is not yet implemented');
         } else {
-          // Map each purpose to its target:
-          for (const [targetIdx, purpose] of Object.entries(purposes)) {
-            const idxNum = Number(targetIdx);
-            if (typeof targets[idxNum] === 'string') {
-              targets[idxNum] = {
-                id: targets[idxNum] as string,
-                // TODO: Nest this under `redteam.discoveredPurpose`?
-                purpose,
-              } as Provider;
-            } else {
-              targets[idxNum].purpose = purpose;
+          invariant(config, 'Config is required');
+
+          // Set the `purpose` property on the provider:
+          if (typeof config.providers === 'string') {
+            // If providers is a string, convert to ProviderOptions object
+            config.providers = { id: config.providers, purpose } as any;
+          } else if (Array.isArray(config.providers)) {
+            // If providers is an array
+            if (config.providers.length > 0) {
+              const first = config.providers[0];
+              if (typeof first === 'string') {
+                // Replace first element with ProviderOptions
+                config.providers[0] = { id: first, purpose } as any;
+              } else if (typeof first === 'object' && first !== null && !Array.isArray(first)) {
+                // Could be ProviderOptions or record<string, ProviderOptions>
+                if ('id' in first || 'purpose' in first) {
+                  // Looks like ProviderOptions
+                  (first as any).purpose = purpose;
+                } else {
+                  // Looks like record<string, ProviderOptions>
+                  const keys = Object.keys(first);
+                  if (keys.length > 0) {
+                    (first as any)[keys[0]].purpose = purpose;
+                  }
+                }
+              }
+            }
+          } else if (typeof config.providers === 'object' && config.providers !== null) {
+            // If providers is a record<string, ProviderOptions>
+            const keys = Object.keys(config.providers);
+            if (keys.length > 0) {
+              (config.providers as any)[keys[0]].purpose = purpose;
             }
           }
 
-          // TODO(Will): Fix this type error
-          //@ts-expect-error:
-          config.providers = targets;
           writePromptfooConfig(config as UnifiedConfig, args.config!);
           logger.info(
-            `${chalk.green('\nDiscovery succeeded:')}\nResults have been written to ${chalk.italic(args.config)}`,
+            `Purpose written to ${chalk.italic(args.config)} under key ${chalk.magenta('\`providers[0].purpose\`')}.`,
           );
         }
       }

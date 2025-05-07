@@ -117,9 +117,10 @@ export const ProvidersSchema = z.union([
   ),
 ]);
 
-export const ProviderSchema = z.union([z.string(), ProviderOptionsSchema, ApiProviderSchema]);
+// Note: why is ProvidersSchema used instead of ProviderSchema? For consistency with UnifiedConfig.
+export type Provider = z.infer<typeof ProvidersSchema>;
 
-export type Provider = z.infer<typeof ProviderSchema>;
+export const ProviderSchema = z.union([z.string(), ProviderOptionsSchema, ApiProviderSchema]);
 
 // Ensure that schemas match their corresponding types
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
