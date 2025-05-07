@@ -29,7 +29,9 @@ type Args = z.infer<typeof ArgsSchema>;
  * Queries Cloud for the purpose-discovery logic, sends each logic to the target,
  * and summarizes the results.
  */
-async function doTargetPurposeDiscovery(target: ApiProvider): Promise<string> {
+export async function doTargetPurposeDiscovery(target: ApiProvider): Promise<string> {
+  logger.info('Discovering purpose...');
+
   const conversationHistory: { type: 'promptfoo' | 'target'; content: string }[] = [];
 
   // TODO: Impose some runtime limits.
@@ -52,6 +54,7 @@ async function doTargetPurposeDiscovery(target: ApiProvider): Promise<string> {
     };
 
     if (done) {
+      logger.info(`\nPurpose:\n\n${chalk.green(purpose)}\n`);
       return purpose as string;
     }
 
@@ -139,7 +142,6 @@ export function discoverCommand(program: Command) {
       invariant(target != undefined, 'An error occurred loading the target config');
 
       // Discover the purpose for the target:
-      logger.info('Discovering purpose...');
       let purpose: string | undefined = undefined;
       try {
         purpose = await doTargetPurposeDiscovery(target);
@@ -152,8 +154,6 @@ export function discoverCommand(program: Command) {
         process.exitCode = 1;
         return;
       }
-
-      logger.info(`\nPurpose:\n\n${chalk.green(purpose)}\n`);
 
       // Then, handle the response:
       // If preview is enabled, print the purpose to the console:

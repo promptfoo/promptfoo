@@ -12,6 +12,7 @@ import { disableCache } from '../../cache';
 import cliState from '../../cliState';
 import { VERSION } from '../../constants';
 import logger, { setLogLevel } from '../../logger';
+import { loadApiProviders } from '../../providers';
 import telemetry from '../../telemetry';
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types';
 import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
@@ -33,6 +34,7 @@ import type {
   RedteamStrategyObject,
   SynthesizeOptions,
 } from '../types';
+import { doTargetPurposeDiscovery } from './discover';
 
 function getConfigHash(configPath: string): string {
   const content = fs.readFileSync(configPath, 'utf8');
@@ -50,6 +52,7 @@ export async function doGenerateRedteam(
 
   let testSuite: TestSuite;
   let redteamConfig: RedteamFileConfig | undefined;
+  let targetPurpose: string | undefined;
   const configPath = options.config || options.defaultConfigPath;
   const outputPath = options.output || 'redteam.yaml';
 
@@ -85,6 +88,24 @@ export async function doGenerateRedteam(
     );
     testSuite = resolved.testSuite;
     redteamConfig = resolved.config.redteam;
+
+    // Provider Purpose:
+    // - TODO: If the purpose is already defined on the provider, it will persist; this behavior
+    // should be consistent i.e. the purpose should be written to the new provider entry in the
+    // `redteam.yaml` file.
+    // - Currently is persisted as `redteam.purpose` which is good enough for now.
+    if (
+      resolved.config.providers &&
+      Array.isArray(resolved.config.providers) &&
+      typeof resolved.config.providers[0] === 'object' &&
+      'purpose' in resolved.config.providers[0] &&
+      typeof resolved.config.providers[0].purpose === 'string'
+    ) {
+      targetPurpose = resolved.config.providers[0].purpose;
+    } else if (resolved.config.providers && Array.isArray(resolved.config.providers)) {
+      const providers = await loadApiProviders(resolved.config.providers);
+      targetPurpose = await doTargetPurposeDiscovery(providers[0]);
+    }
   } else if (options.purpose) {
     // There is a purpose, so we can just have a dummy test suite for standalone invocation
     testSuite = {
@@ -215,6 +236,7 @@ export async function doGenerateRedteam(
     abortSignal: options.abortSignal,
     targetLabels,
     showProgressBar: options.progressBar !== false,
+    purpose: targetPurpose,
   } as SynthesizeOptions);
 
   if (redteamTests.length === 0) {
