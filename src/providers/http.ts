@@ -233,7 +233,9 @@ export async function createTransformResponse(
           return { output: result };
         }
       } catch (err) {
-        logger.error(`Error in response transform function: ${String(err)}`);
+        logger.error(
+          `[Http Provider] Error in response transform function: ${String(err)}. Data: ${safeJsonStringify(data)}. Text: ${text}. Context: ${safeJsonStringify(context)}.`,
+        );
         throw err;
       }
     };
@@ -283,7 +285,9 @@ export async function createTransformResponse(
         }
         return resp;
       } catch (err) {
-        logger.error(`Error in response transform: ${String(err)}`);
+        logger.error(
+          `[Http Provider] Error in response transform: ${String(err)}. Data: ${safeJsonStringify(data)}. Text: ${text}. Context: ${safeJsonStringify(context)}.`,
+        );
         throw new Error(`Failed to transform response: ${String(err)}`);
       }
     };
