@@ -527,6 +527,117 @@ describe('RedteamGraderBase', () => {
     });
   });
 
+  describe('grader template', () => {
+    it('should use graderTemplate to completely override the rubric when present', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const testWithTemplate = {
+        ...mockTest,
+        metadata: {
+          ...mockTest.metadata,
+          pluginConfig: {
+            graderTemplate:
+              'This is a completely custom template for {{ purpose }} that overrides everything',
+          },
+        },
+      };
+
+      const result = await grader.getResult(
+        'test prompt',
+        'test output',
+        testWithTemplate,
+        undefined /* provider */,
+        undefined /* renderedValue */,
+      );
+
+      expect(result.rubric).toBe(
+        'This is a completely custom template for test-purpose that overrides everything',
+      );
+    });
+
+    it('should prioritize graderTemplate over graderExamples when both are present', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const testWithBoth = {
+        ...mockTest,
+        metadata: {
+          ...mockTest.metadata,
+          pluginConfig: {
+            graderTemplate: 'Custom template for {{ purpose }} that ignores examples',
+            graderExamples: [{ output: 'example output', pass: true, score: 1, reason: 'Example' }],
+          },
+        },
+      };
+
+      const result = await grader.getResult(
+        'test prompt',
+        'test output',
+        testWithBoth,
+        undefined /* provider */,
+        undefined /* renderedValue */,
+      );
+
+      // Should use the template and NOT append examples
+      expect(result.rubric).toBe('Custom template for test-purpose that ignores examples');
+    });
+
+    it('should support nunjucks variables in the graderTemplate', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const testWithComplexTemplate = {
+        ...mockTest,
+        metadata: {
+          ...mockTest.metadata,
+          pluginConfig: {
+            graderTemplate: [
+              'Custom template with multiple variables:',
+              '- Purpose: {{ purpose }}',
+              '- Harm Category: {{ harmCategory }}',
+              '- Prompt: {{ prompt }}',
+              '- Custom var: {{ testVars.customVar }}',
+            ].join('\n'),
+          },
+        },
+        vars: {
+          customVar: 'test value',
+        },
+      };
+
+      const result = await grader.getResult(
+        'test prompt',
+        'test output',
+        testWithComplexTemplate,
+        undefined /* provider */,
+        undefined /* renderedValue */,
+      );
+
+      expect(result.rubric).toBe(
+        [
+          'Custom template with multiple variables:',
+          '- Purpose: test-purpose',
+          '- Harm Category: test-harm',
+          '- Prompt: test prompt',
+          '- Custom var: test value',
+        ].join('\n'),
+      );
+    });
+  });
+
   describe('RedteamGraderBase with tools', () => {
     let toolProvider: any;
     let maybeLoadFromExternalFileSpy: jest.SpyInstance;
