@@ -685,7 +685,7 @@ describe('OpenAiImageProvider', () => {
       jest.mocked(fetchWithCache).mockImplementationOnce((url, init) => {
         // Just parse to validate the body is valid JSON
         JSON.parse((init as RequestInit).body as string);
-        
+
         // Return a successful response
         return Promise.resolve({
           data: {
@@ -702,13 +702,13 @@ describe('OpenAiImageProvider', () => {
       // Get the call arguments from the mock
       const mockCalls = jest.mocked(fetchWithCache).mock.calls;
       expect(mockCalls).toHaveLength(1);
-      
+
       // Parse the request body from the first call
       const requestBody = JSON.parse((mockCalls[0][1] as RequestInit).body as string);
-      
+
       // Verify response_format is NOT included in the request
       expect(requestBody).not.toHaveProperty('response_format');
-      
+
       // Verify other parameters are included correctly
       expect(requestBody).toHaveProperty('quality', 'high');
       expect(requestBody).toHaveProperty('background', 'transparent');

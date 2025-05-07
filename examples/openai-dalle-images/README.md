@@ -42,12 +42,14 @@ promptfoo view
 ## Model Configurations
 
 ### DALL-E Models (`promptfooconfig.yaml`)
+
 - Each DALL-E model supports different sizes:
   - DALL-E 3: 1024x1024, 1792x1024, 1024x1792
   - DALL-E 2: 256x256, 512x512, 1024x1024
 - `response_format: b64_json` returns raw JSON with base64-encoded image data. Image links with the default format `url` expire after ~ 2 hours.
 
 ### GPT Image Model (`promptfooconfig.gpt-image-1.yaml`)
+
 - Supports more configuration options:
   - Sizes: 1024x1024, 1536x1024, 1024x1536, auto
   - Quality levels: low, medium, high, auto

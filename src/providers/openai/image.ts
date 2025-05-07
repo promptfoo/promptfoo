@@ -17,7 +17,12 @@ export type GptImageQuality = 'low' | 'medium' | 'high' | 'auto';
 
 export const DALLE2_VALID_SIZES: DallE2Size[] = ['256x256', '512x512', '1024x1024'];
 export const DALLE3_VALID_SIZES: DallE3Size[] = ['1024x1024', '1792x1024', '1024x1792'];
-export const GPT_IMAGE_VALID_SIZES: GptImageSize[] = ['1024x1024', '1536x1024', '1024x1536', 'auto'];
+export const GPT_IMAGE_VALID_SIZES: GptImageSize[] = [
+  '1024x1024',
+  '1536x1024',
+  '1024x1536',
+  'auto',
+];
 export const GPT_IMAGE_VALID_QUALITIES: GptImageQuality[] = ['low', 'medium', 'high', 'auto'];
 export const DEFAULT_SIZE = '1024x1024';
 export const DEFAULT_QUALITY = 'auto';
@@ -38,15 +43,15 @@ export const DALLE3_COSTS: Record<string, number> = {
 };
 
 export const GPT_IMAGE_COSTS: Record<string, number> = {
-  low_1024x1024: 0.002 * 272,    // 272 tokens
-  low_1024x1536: 0.002 * 408,    // 408 tokens
-  low_1536x1024: 0.002 * 400,    // 400 tokens
+  low_1024x1024: 0.002 * 272, // 272 tokens
+  low_1024x1536: 0.002 * 408, // 408 tokens
+  low_1536x1024: 0.002 * 400, // 400 tokens
   medium_1024x1024: 0.002 * 1056, // 1056 tokens
   medium_1024x1536: 0.002 * 1584, // 1584 tokens
   medium_1536x1024: 0.002 * 1568, // 1568 tokens
-  high_1024x1024: 0.002 * 4160,  // 4160 tokens
-  high_1024x1536: 0.002 * 6240,  // 6240 tokens
-  high_1536x1024: 0.002 * 6208,  // 6208 tokens
+  high_1024x1024: 0.002 * 4160, // 4160 tokens
+  high_1024x1536: 0.002 * 6240, // 6240 tokens
+  high_1536x1024: 0.002 * 6208, // 6208 tokens
 };
 
 type CommonImageOptions = {
@@ -98,7 +103,7 @@ export function validateSizeForModel(
       message: `Invalid size "${size}" for DALL-E 2. Valid sizes are: ${DALLE2_VALID_SIZES.join(', ')}`,
     };
   }
-  
+
   if (model === 'gpt-image-1' && !GPT_IMAGE_VALID_SIZES.includes(size as GptImageSize)) {
     return {
       valid: false,
@@ -113,7 +118,11 @@ export function validateQualityForModel(
   quality: string,
   model: string,
 ): { valid: boolean; message?: string } {
-  if (model === 'gpt-image-1' && quality && !GPT_IMAGE_VALID_QUALITIES.includes(quality as GptImageQuality)) {
+  if (
+    model === 'gpt-image-1' &&
+    quality &&
+    !GPT_IMAGE_VALID_QUALITIES.includes(quality as GptImageQuality)
+  ) {
     return {
       valid: false,
       message: `Invalid quality "${quality}" for GPT Image. Valid qualities are: ${GPT_IMAGE_VALID_QUALITIES.join(', ')}`,
@@ -131,7 +140,7 @@ export function formatOutput(
 ): string | { error: string } {
   // GPT Image always returns b64_json, regardless of response_format setting
   const usesBase64 = responseFormat === 'b64_json' || model === 'gpt-image-1';
-  
+
   if (usesBase64) {
     const b64Json = data.data[0].b64_json;
     if (!b64Json) {
@@ -146,7 +155,7 @@ export function formatOutput(
         .replace(/\[/g, '(')
         .replace(/\]/g, ')');
       const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
-      
+
       return `![${ellipsizedPrompt}](data:image/${format};base64,${b64Json})`;
     }
 
@@ -180,7 +189,7 @@ export function prepareRequestBody(
     n: config.n || 1,
     size,
   };
-  
+
   // Only add response_format for DALL-E models, not for gpt-image-1
   if (model !== 'gpt-image-1') {
     body.response_format = responseFormat;
@@ -198,19 +207,19 @@ export function prepareRequestBody(
     if ('quality' in config && config.quality) {
       body.quality = config.quality;
     }
-    
+
     if ('background' in config && config.background) {
       body.background = config.background;
     }
-    
+
     if ('output_format' in config && config.output_format) {
       body.output_format = config.output_format;
     }
-    
+
     if ('output_compression' in config && config.output_compression !== undefined) {
       body.output_compression = config.output_compression;
     }
-    
+
     if ('moderation' in config && config.moderation) {
       body.moderation = config.moderation;
     }
@@ -239,7 +248,7 @@ export function calculateImageCost(
     const effectiveQuality = imageQuality === 'auto' ? 'medium' : imageQuality;
     // For 'auto' size, default to 1024x1024 for cost calculation
     const effectiveSize = size === 'auto' ? '1024x1024' : size;
-    
+
     const costKey = `${effectiveQuality}_${effectiveSize}`;
     const costPerImage = GPT_IMAGE_COSTS[costKey] || GPT_IMAGE_COSTS['medium_1024x1024'];
     return costPerImage * n;
@@ -295,7 +304,7 @@ export async function processApiResponse(
       // For gpt-image-1, it's a markdown image with embedded base64 data
       if (model === 'gpt-image-1') {
         return { format: 'markdown' };
-      } 
+      }
       // For regular base64 response
       else if (responseFormat === 'b64_json') {
         return { isBase64: true, format: 'json' };
@@ -356,7 +365,7 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
     }
 
     let endpoint = '/images/generations';
-    
+
     if (operation === 'edit') {
       if (model === 'dall-e-3') {
         return {
@@ -365,15 +374,15 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
       }
       endpoint = '/images/edits';
     }
-    
+
     const size = config.size || DEFAULT_SIZE;
-    const quality = ('quality' in config) ? config.quality : undefined;
+    const quality = 'quality' in config ? config.quality : undefined;
 
     const sizeValidation = validateSizeForModel(size as string, model);
     if (!sizeValidation.valid) {
       return { error: sizeValidation.message };
     }
-    
+
     if (quality) {
       const qualityValidation = validateQualityForModel(quality as string, model);
       if (!qualityValidation.valid) {
@@ -429,4 +438,3 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
     );
   }
 }
-

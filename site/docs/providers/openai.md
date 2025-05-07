@@ -261,6 +261,7 @@ See the [OpenAI vision example](https://github.com/promptfoo/promptfoo/tree/main
 ### Generating images
 
 OpenAI supports image generations via the following models:
+
 - `openai:image:dall-e-2` - The second generation DALL-E model
 - `openai:image:dall-e-3` - The third generation DALL-E model
 - `openai:image:gpt-image-1` - GPT-based image generation model with superior instruction following
@@ -290,6 +291,7 @@ tests:
 Each model supports different parameters:
 
 ##### DALL-E 3
+
 ```yaml
 providers:
   - id: openai:image:dall-e-3
@@ -301,6 +303,7 @@ providers:
 ```
 
 ##### DALL-E 2
+
 ```yaml
 providers:
   - id: openai:image:dall-e-2
@@ -312,6 +315,7 @@ providers:
 ```
 
 ##### GPT Image
+
 ```yaml
 providers:
   - id: openai:image:gpt-image-1
@@ -331,12 +335,14 @@ providers:
 #### GPT Image Features and Limitations
 
 The `gpt-image-1` model offers several advantages over DALL-E models:
+
 - Superior instruction following and text rendering
 - Better with real-world knowledge and detailed compositions
 - Support for transparent backgrounds (with PNG or WebP formats)
 - Advanced editing capabilities including inpainting (editing with masks)
 
 However, it has some limitations to be aware of:
+
 - Complex prompts may take up to 2 minutes to process
 - Image token usage varies significantly based on quality settings:
 
