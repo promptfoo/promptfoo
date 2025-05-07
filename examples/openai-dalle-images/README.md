@@ -58,7 +58,30 @@ promptfoo view
 - Better with real-world knowledge and detailed compositions
 - Supports advanced editing capabilities including inpainting (editing with masks)
 - Token usage and cost varies significantly based on quality settings
-- **Note:** Unlike DALL-E models, GPT Image always returns base64-encoded image data rather than URLs, but promptfoo automatically converts this to an embedded image in markdown format for easy viewing
+- **Note:** Unlike DALL-E models, GPT Image always returns base64-encoded image data rather than URLs. The library formats this as a clean JSON object with essential information and a truncated preview of the base64 data for better readability.
+
+### Working with GPT Image Responses
+
+To save a GPT Image response as an actual image file, you can:
+
+1. Copy the full base64 data from the response (not shown in the UI preview)
+2. Use a tool like this [Base64 to Image converter](https://codebeautify.org/base64-to-image-converter)
+3. Or save programmatically:
+
+```javascript
+// Node.js example
+const fs = require('fs');
+const imageData = response.data; // The full base64 string
+const buffer = Buffer.from(imageData, 'base64');
+fs.writeFileSync('image.png', buffer);
+```
+
+```python
+# Python example
+import base64
+with open('image.png', 'wb') as f:
+    f.write(base64.b64decode(response['data']))
+```
 
 ## Documentation
 

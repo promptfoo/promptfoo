@@ -297,17 +297,29 @@ describe('OpenAiImageProvider', () => {
       });
       
       // Mock the response with b64_json (which is what gpt-image-1 always returns)
-      jest.mocked(fetchWithCache).mockResolvedValue(mockBase64Response);
+      jest.mocked(fetchWithCache).mockResolvedValue({
+        ...mockBase64Response,
+        data: {
+          created: 1234567890,
+          data: [{ b64_json: 'base64EncodedImageData' }]
+        }
+      });
 
       const result = await provider.callApi('test prompt');
 
-      // Should format the response as markdown with embedded base64 image
+      // Should return formatted JSON with truncated base64 data
       expect(result).toEqual({
-        output: expect.stringMatching(/^!\[test prompt\]\(data:image\/png;base64,base64EncodedImageData\)$/),
+        output: expect.stringContaining('"type": "image"'),
         cached: false,
-        format: 'markdown_with_embedded_image',
+        format: 'formatted_json',
         cost: expect.any(Number),
       });
+      
+      // Verify the JSON structure
+      const parsedOutput = JSON.parse(result.output);
+      expect(parsedOutput).toHaveProperty('type', 'image');
+      expect(parsedOutput).toHaveProperty('prompt', 'test prompt');
+      expect(parsedOutput).toHaveProperty('data', 'base64EncodedImageData...');
     });
   });
 

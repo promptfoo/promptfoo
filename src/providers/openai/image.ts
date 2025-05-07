@@ -138,16 +138,20 @@ export function formatOutput(
       return { error: `No base64 image data found in response: ${JSON.stringify(data)}` };
     }
 
-    // For gpt-image-1 model, create a markdown image tag with embedded base64 data
+    // For gpt-image-1, return a cleaner JSON format that's easier to work with
     if (model === 'gpt-image-1') {
       const format = data.data[0]?.format || 'png'; // Default to png if format not specified
-      const sanitizedPrompt = prompt
-        .replace(/\r?\n|\r/g, ' ')
-        .replace(/\[/g, '(')
-        .replace(/\]/g, ')');
-      const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
       
-      return `![${ellipsizedPrompt}](data:image/${format};base64,${b64Json})`;
+      // Return a simplified JSON structure with essential info
+      const result = {
+        type: 'image',
+        format,
+        prompt,
+        created: data.created,
+        data: b64Json.substring(0, 50) + '...' // Show just the start of base64 data
+      };
+      
+      return JSON.stringify(result, null, 2);
     }
 
     return JSON.stringify(data);
@@ -292,9 +296,9 @@ export async function processApiResponse(
 
     // Different metadata based on model and format
     const responseMetadata = (() => {
-      // For gpt-image-1, we're embedding the base64 image in a markdown format
+      // For gpt-image-1, we're returning a simplified JSON with truncated base64 data
       if (model === 'gpt-image-1') {
-        return { format: 'markdown_with_embedded_image' };
+        return { format: 'formatted_json' };
       } 
       // For regular base64 response
       else if (responseFormat === 'b64_json') {
