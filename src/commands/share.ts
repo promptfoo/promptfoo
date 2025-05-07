@@ -122,7 +122,7 @@ export function shareCommand(program: Command) {
         }
 
         if (
-          // Idempotency is not implemented in vanilla self-hosted mode
+          // Idempotency is not implemented in self-hosted mode.
           isIdempotencySupported() &&
           (await hasEvalBeenShared(eval_))
         ) {
