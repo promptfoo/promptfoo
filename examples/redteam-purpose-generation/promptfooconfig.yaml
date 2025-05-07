@@ -25,3 +25,9 @@ providers:
       seeking efficient support for job-related tasks within company-approved
       informational topics; the system is not suitable for the public or for
       tasks requiring access to sensitive or unapproved data.
+
+redteam:
+  plugins:
+    - politics
+  strategies:
+    - prompt-injection
