@@ -295,21 +295,23 @@ describe('OpenAiImageProvider', () => {
       const provider = new OpenAiImageProvider('gpt-image-1', {
         config: { apiKey: 'test-key' },
       });
-      
+
       // Mock the response with b64_json (which is what gpt-image-1 always returns)
       jest.mocked(fetchWithCache).mockResolvedValue({
         ...mockBase64Response,
         data: {
           created: 1234567890,
-          data: [{ b64_json: 'base64EncodedImageData' }]
-        }
+          data: [{ b64_json: 'base64EncodedImageData' }],
+        },
       });
 
       const result = await provider.callApi('test prompt');
 
       // Should format the response as markdown with embedded base64 image
       expect(result).toEqual({
-        output: expect.stringMatching(/^!\[test prompt\]\(data:image\/png;base64,base64EncodedImageData\)$/),
+        output: expect.stringMatching(
+          /^!\[test prompt\]\(data:image\/png;base64,base64EncodedImageData\)$/,
+        ),
         cached: false,
         format: 'markdown',
         cost: expect.any(Number),
@@ -353,9 +355,9 @@ describe('OpenAiImageProvider', () => {
 
     it('should validate quality for GPT Image', async () => {
       const provider = new OpenAiImageProvider('gpt-image-1', {
-        config: { 
-          apiKey: 'test-key', 
-          quality: 'invalid-quality' as any 
+        config: {
+          apiKey: 'test-key',
+          quality: 'invalid-quality' as any,
         },
       });
 
@@ -534,11 +536,22 @@ describe('OpenAiImageProvider', () => {
     });
 
     it('should properly calculate costs for GPT Image with different qualities', async () => {
+      // Create a standard success response
+      const createSuccessResponse = () => ({
+        data: {
+          data: [{ b64_json: 'base64EncodedImageData' }],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
       // Test low quality
       let provider = new OpenAiImageProvider('gpt-image-1', {
         config: { apiKey: 'test-key', quality: 'low', size: '1024x1024' },
       });
 
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(createSuccessResponse());
       let result = await provider.callApi('test prompt');
       expect(result.cost).toBeCloseTo(0.002 * 272, 4); // Low quality 1024x1024 cost
 
@@ -547,6 +560,7 @@ describe('OpenAiImageProvider', () => {
         config: { apiKey: 'test-key', quality: 'medium', size: '1024x1536' },
       });
 
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(createSuccessResponse());
       result = await provider.callApi('test prompt');
       expect(result.cost).toBeCloseTo(0.002 * 1584, 4); // Medium quality 1024x1536 cost
 
@@ -555,6 +569,7 @@ describe('OpenAiImageProvider', () => {
         config: { apiKey: 'test-key', quality: 'high', size: '1536x1024' },
       });
 
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(createSuccessResponse());
       result = await provider.callApi('test prompt');
       expect(result.cost).toBeCloseTo(0.002 * 6208, 4); // High quality 1536x1024 cost
 
@@ -563,6 +578,7 @@ describe('OpenAiImageProvider', () => {
         config: { apiKey: 'test-key', quality: 'auto', size: '1024x1024' },
       });
 
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(createSuccessResponse());
       result = await provider.callApi('test prompt');
       expect(result.cost).toBeCloseTo(0.002 * 1056, 4); // Medium quality 1024x1024 cost
     });
@@ -666,12 +682,31 @@ describe('OpenAiImageProvider', () => {
         },
       });
 
+      jest.mocked(fetchWithCache).mockImplementationOnce((url, init) => {
+        // Just parse to validate the body is valid JSON
+        JSON.parse((init as RequestInit).body as string);
+        
+        // Return a successful response
+        return Promise.resolve({
+          data: {
+            data: [{ b64_json: 'base64EncodedImageData' }],
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+      });
+
       await provider.callApi('test prompt');
 
+      // Get the call arguments from the mock
+      const mockCalls = jest.mocked(fetchWithCache).mock.calls;
+      expect(mockCalls).toHaveLength(1);
+      
+      // Parse the request body from the first call
+      const requestBody = JSON.parse((mockCalls[0][1] as RequestInit).body as string);
+      
       // Verify response_format is NOT included in the request
-      const requestBody = JSON.parse(
-        (jest.mocked(fetchWithCache).mock.calls[0][1] as RequestInit).body as string
-      );
       expect(requestBody).not.toHaveProperty('response_format');
       
       // Verify other parameters are included correctly
