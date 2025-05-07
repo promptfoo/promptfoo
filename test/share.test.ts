@@ -578,18 +578,24 @@ describe('hasEvalBeenShared', () => {
 describe('isIdempotencySupported', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    
+
     // Reset all mocks to their default values
-    jest.requireMock('../src/constants').getShareApiBaseUrl.mockReturnValue('https://api.promptfoo.app');
-    jest.requireMock('../src/constants').getShareViewBaseUrl.mockReturnValue('https://promptfoo.app');
-    jest.requireMock('../src/constants').getDefaultShareViewBaseUrl.mockReturnValue('https://promptfoo.app');
+    jest
+      .requireMock('../src/constants')
+      .getShareApiBaseUrl.mockReturnValue('https://api.promptfoo.app');
+    jest
+      .requireMock('../src/constants')
+      .getShareViewBaseUrl.mockReturnValue('https://promptfoo.app');
+    jest
+      .requireMock('../src/constants')
+      .getDefaultShareViewBaseUrl.mockReturnValue('https://promptfoo.app');
     jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
   });
 
   it('returns true when using cloud mode', () => {
     // Setup cloud config to be enabled
     jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
-    
+
     expect(isIdempotencySupported()).toBe(true);
   });
 
@@ -599,23 +605,31 @@ describe('isIdempotencySupported', () => {
 
   it('returns false when using custom view base URL', () => {
     // Setup a custom view URL
-    jest.requireMock('../src/constants').getShareViewBaseUrl.mockReturnValue('https://custom.example.com');
-    
+    jest
+      .requireMock('../src/constants')
+      .getShareViewBaseUrl.mockReturnValue('https://custom.example.com');
+
     expect(isIdempotencySupported()).toBe(false);
   });
 
   it('returns false when using custom API base URL', () => {
     // Setup a custom API URL
-    jest.requireMock('../src/constants').getShareApiBaseUrl.mockReturnValue('https://api.custom.example.com');
-    
+    jest
+      .requireMock('../src/constants')
+      .getShareApiBaseUrl.mockReturnValue('https://api.custom.example.com');
+
     expect(isIdempotencySupported()).toBe(false);
   });
 
   it('returns false when using both custom view and API URLs', () => {
     // Setup custom URLs
-    jest.requireMock('../src/constants').getShareViewBaseUrl.mockReturnValue('https://custom.example.com');
-    jest.requireMock('../src/constants').getShareApiBaseUrl.mockReturnValue('https://api.custom.example.com');
-    
+    jest
+      .requireMock('../src/constants')
+      .getShareViewBaseUrl.mockReturnValue('https://custom.example.com');
+    jest
+      .requireMock('../src/constants')
+      .getShareApiBaseUrl.mockReturnValue('https://api.custom.example.com');
+
     expect(isIdempotencySupported()).toBe(false);
   });
 });
