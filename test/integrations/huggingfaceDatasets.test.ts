@@ -9,20 +9,20 @@ jest.mock('../../src/fetch', () => ({
 }));
 
 describe('huggingfaceDatasets', () => {
-  let originalHfApiToken: string | undefined;
-
+  // Save original environment variables
+  const originalEnv = { ...process.env };
+  
   beforeEach(() => {
-    jest.mocked(fetchWithProxy).mockClear();
-    originalHfApiToken = process.env.HF_API_TOKEN;
+    jest.clearAllMocks();
+    // Clear any HuggingFace tokens for tests that expect no auth
+    delete process.env.HF_TOKEN;
     delete process.env.HF_API_TOKEN;
+    delete process.env.HUGGING_FACE_HUB_TOKEN;
   });
-
-  afterEach(() => {
-    if (originalHfApiToken) {
-      process.env.HF_API_TOKEN = originalHfApiToken;
-    } else {
-      delete process.env.HF_API_TOKEN;
-    }
+  
+  afterAll(() => {
+    // Restore original environment
+    process.env = originalEnv;
   });
 
   describe('parseDatasetPath', () => {

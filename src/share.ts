@@ -2,7 +2,7 @@ import input from '@inquirer/input';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { URL } from 'url';
-import { DEFAULT_SHARE_VIEW_BASE_URL, SHARE_API_BASE_URL, SHARE_VIEW_BASE_URL } from './constants';
+import { getShareApiBaseUrl, getDefaultShareViewBaseUrl, getShareViewBaseUrl } from './constants';
 import { getEnvBool, getEnvInt, isCI, getEnvString } from './envars';
 import { fetchWithProxy } from './fetch';
 import { getAuthor, getUserEmail, setUserEmail } from './globalConfig/accounts';
@@ -20,7 +20,7 @@ export interface ShareDomainResult {
 export function isSharingEnabled(evalRecord: Eval): boolean {
   const sharingConfigOnEval =
     typeof evalRecord.config.sharing === 'object' ? evalRecord.config.sharing.apiBaseUrl : null;
-  const sharingEnvUrl = SHARE_API_BASE_URL;
+  const sharingEnvUrl = getShareApiBaseUrl();
 
   const cloudSharingUrl = cloudConfig.isEnabled() ? cloudConfig.getApiHost() : null;
 
@@ -51,12 +51,12 @@ export function determineShareDomain(eval_: Eval): ShareDomainResult {
   const envAppBaseUrl = getEnvString('PROMPTFOO_REMOTE_APP_BASE_URL');
 
   const domain = isPublicShare
-    ? envAppBaseUrl || DEFAULT_SHARE_VIEW_BASE_URL
+    ? envAppBaseUrl || getDefaultShareViewBaseUrl()
     : cloudConfig.isEnabled()
       ? cloudConfig.getAppUrl()
       : typeof sharing === 'object' && sharing.appBaseUrl
         ? sharing.appBaseUrl
-        : envAppBaseUrl || DEFAULT_SHARE_VIEW_BASE_URL;
+        : envAppBaseUrl || getDefaultShareViewBaseUrl();
 
   logger.debug(`Share domain determined: domain=${domain}, isPublic=${isPublicShare}`);
   return { domain, isPublicShare };
@@ -334,8 +334,8 @@ async function getApiConfig(evalRecord: Eval): Promise<{
 
   const apiBaseUrl =
     typeof evalRecord.config.sharing === 'object'
-      ? evalRecord.config.sharing.apiBaseUrl || SHARE_API_BASE_URL
-      : SHARE_API_BASE_URL;
+      ? evalRecord.config.sharing.apiBaseUrl || getShareApiBaseUrl()
+      : getShareApiBaseUrl();
 
   return {
     apiBaseUrl,
@@ -406,7 +406,7 @@ export async function getShareableUrl(
 
   const fullUrl = cloudConfig.isEnabled()
     ? `${finalDomain}/eval/${eval_.id}`
-    : SHARE_VIEW_BASE_URL === DEFAULT_SHARE_VIEW_BASE_URL && !customDomain
+    : getShareViewBaseUrl() === getDefaultShareViewBaseUrl() && !customDomain
       ? `${finalDomain}/eval/${eval_.id}`
       : `${finalDomain}/eval/?evalId=${eval_.id}`;
 
@@ -485,4 +485,16 @@ export async function hasEvalBeenShared(eval_: Eval): Promise<boolean> {
     logger.error(`[hasEvalBeenShared]: error checking if eval has been shared: ${e}`);
     return false;
   }
+}
+
+/**
+ * Checks whether idempotency is supported for sharing in the current environment.
+ * Idempotency is supported when using cloud or custom URLs, but not in vanilla self-hosted mode.
+ */
+export function isIdempotencySupported(): boolean {
+  return (
+    cloudConfig.isEnabled() ||
+    getShareViewBaseUrl() !== getDefaultShareViewBaseUrl() ||
+    getShareApiBaseUrl() !== 'https://api.promptfoo.app'
+  );
 }

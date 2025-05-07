@@ -2,17 +2,22 @@ import confirm from '@inquirer/confirm';
 import chalk from 'chalk';
 import type { Command } from 'commander';
 import dedent from 'dedent';
-import { DEFAULT_SHARE_VIEW_BASE_URL } from '../constants';
-import { getEnvBool } from '../envars';
+import { getDefaultShareViewBaseUrl } from '../constants';
 import logger from '../logger';
 import Eval from '../models/eval';
-import { createShareableUrl, hasEvalBeenShared, isSharingEnabled, getShareableUrl } from '../share';
+import {
+  createShareableUrl,
+  hasEvalBeenShared,
+  isSharingEnabled,
+  getShareableUrl,
+  isIdempotencySupported,
+} from '../share';
 import telemetry from '../telemetry';
 import { setupEnv } from '../util';
 import { loadDefaultConfig } from '../util/config/default';
 
 export function notCloudEnabledShareInstructions(): void {
-  const cloudUrl = DEFAULT_SHARE_VIEW_BASE_URL;
+  const cloudUrl = getDefaultShareViewBaseUrl();
   const welcomeUrl = `${cloudUrl}/welcome`;
 
   logger.info(dedent`
@@ -117,8 +122,8 @@ export function shareCommand(program: Command) {
         }
 
         if (
-          // Idempotency is not implemented in self-hosted mode.
-          !getEnvBool('PROMPTFOO_SELF_HOSTED', false) &&
+          // Idempotency is not implemented in vanilla self-hosted mode
+          isIdempotencySupported() &&
           (await hasEvalBeenShared(eval_))
         ) {
           const url = await getShareableUrl(eval_, cmdObj.showAuth);

@@ -158,6 +158,7 @@ export const ADDITIONAL_PLUGINS = [
   'prompt-extraction',
   'rag-document-exfiltration',
   'rag-poisoning',
+  'rate-limit',
   'rbac',
   'reasoning-dos',
   'religion',
@@ -885,6 +886,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Uses conversational approach to discover available tools, functions, and capabilities through multi-step interactions',
   unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
   xstest: 'Tests for XSTest attacks',
+  'rate-limit': 'Tests API rate limits to determine request throttling thresholds',
   video: 'Tests handling of video content',
 };
 
@@ -976,7 +978,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'rag-poisoning': 'RAG Poisoning',
   rbac: 'RBAC Implementation',
   'reasoning-dos': 'Reasoning DoS',
-  religion: 'Religious Bias',
+  religion: 'Religion',
   retry: 'Regression Testing',
   rot13: 'ROT13 Payload Encoding',
   'shell-injection': 'Command Injection',
@@ -987,6 +989,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'tool-discovery:multi-turn': 'Multi-turn Tool Discovery',
   unsafebench: 'UnsafeBench Dataset',
   xstest: 'XSTest Dataset',
+  'rate-limit': 'API Rate Limits',
   video: 'Video Content',
 };
 
@@ -1070,6 +1073,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'prompt-extraction': Severity.Medium,
   'rag-document-exfiltration': Severity.Medium,
   'rag-poisoning': Severity.Medium,
+  'rate-limit': Severity.Medium,
   rbac: Severity.High,
   'reasoning-dos': Severity.Low,
   religion: Severity.Low,
@@ -1259,6 +1263,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'prompt-extraction': 'PromptExtraction',
   'rag-document-exfiltration': 'RAG Document Exfiltration',
   'rag-poisoning': 'RAG Poisoning',
+  'rate-limit': 'RateLimit',
   rbac: 'RbacEnforcement',
   'reasoning-dos': 'Reasoning DoS',
   religion: 'Religion',
@@ -1348,6 +1353,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'prompt-extraction': 'Evaluates protection against system prompt disclosure attempts',
   'rag-document-exfiltration': 'Tests handling of RAG document exfiltration',
   'rag-poisoning': 'Tests resistance against poisoning attacks on RAG retrieval systems',
+  'rate-limit': 'Tests API rate limits to determine request throttling thresholds',
   rbac: 'Tests implementation of role-based access control mechanisms',
   'reasoning-dos':
     'Tests for vulnerabilities to computational resource exhaustion through excessive reasoning patterns',
