@@ -117,9 +117,6 @@ export const ProvidersSchema = z.union([
   ),
 ]);
 
-// Note: why is ProvidersSchema used instead of ProviderSchema? For consistency with UnifiedConfig.
-export type Provider = z.infer<typeof ProvidersSchema>;
-
 export const ProviderSchema = z.union([z.string(), ProviderOptionsSchema, ApiProviderSchema]);
 
 // Ensure that schemas match their corresponding types
