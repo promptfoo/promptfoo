@@ -127,8 +127,12 @@ export function formatOutput(
   data: any,
   prompt: string,
   responseFormat?: string,
+  model?: string,
 ): string | { error: string } {
-  if (responseFormat === 'b64_json') {
+  // GPT Image always returns b64_json, regardless of response_format setting
+  const usesBase64 = responseFormat === 'b64_json' || model === 'gpt-image-1';
+  
+  if (usesBase64) {
     const b64Json = data.data[0].b64_json;
     if (!b64Json) {
       return { error: `No base64 image data found in response: ${JSON.stringify(data)}` };
@@ -267,7 +271,7 @@ export async function processApiResponse(
   }
 
   try {
-    const formattedOutput = formatOutput(data, prompt, responseFormat);
+    const formattedOutput = formatOutput(data, prompt, responseFormat, model);
     if (typeof formattedOutput === 'object') {
       return formattedOutput;
     }
@@ -278,7 +282,7 @@ export async function processApiResponse(
       output: formattedOutput,
       cached,
       cost,
-      ...(responseFormat === 'b64_json' ? { isBase64: true, format: 'json' } : {}),
+      ...(responseFormat === 'b64_json' || model === 'gpt-image-1' ? { isBase64: true, format: 'json' } : {}),
     };
   } catch (err) {
     await data?.deleteFromCache?.();

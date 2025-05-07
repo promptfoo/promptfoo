@@ -265,6 +265,8 @@ OpenAI supports image generations via the following models:
 - `openai:image:dall-e-3` - The third generation DALL-E model
 - `openai:image:gpt-image-1` - GPT-based image generation model with superior instruction following
 
+> **Important:** To use the `gpt-image-1` model, you may need to complete the [API Organization Verification](https://help.openai.com/en/articles/10910291-api-organization-verification) from your [developer console](https://platform.openai.com/settings/organization/general).
+
 See the [OpenAI Dall-E example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-dalle-images).
 
 ```yaml title="promptfooconfig.yaml"
@@ -323,6 +325,26 @@ providers:
       # Supports 'generation' and 'edit' operations
       operation: 'generation'
 ```
+
+> **Important:** Unlike DALL-E models, the GPT Image model always returns base64-encoded image data, even if you don't explicitly set `response_format: 'b64_json'`. The library handles this automatically.
+
+#### GPT Image Features and Limitations
+
+The `gpt-image-1` model offers several advantages over DALL-E models:
+- Superior instruction following and text rendering
+- Better with real-world knowledge and detailed compositions
+- Support for transparent backgrounds (with PNG or WebP formats)
+- Advanced editing capabilities including inpainting (editing with masks)
+
+However, it has some limitations to be aware of:
+- Complex prompts may take up to 2 minutes to process
+- Image token usage varies significantly based on quality settings:
+
+| Quality | Square (1024×1024) | Portrait (1024×1536) | Landscape (1536×1024) |
+| ------- | ------------------ | -------------------- | --------------------- |
+| Low     | 272 tokens         | 408 tokens           | 400 tokens            |
+| Medium  | 1056 tokens        | 1584 tokens          | 1568 tokens           |
+| High    | 4160 tokens        | 6240 tokens          | 6208 tokens           |
 
 To display images in the web viewer, wrap vars or outputs in markdown image tags like so:
 

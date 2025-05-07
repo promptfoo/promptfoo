@@ -290,6 +290,26 @@ describe('OpenAiImageProvider', () => {
       expect(result).toHaveProperty('error');
       expect(result.error).toContain('No base64 image data found in response');
     });
+
+    it('should handle gpt-image-1 model which always returns b64_json', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-1', {
+        config: { apiKey: 'test-key' },
+      });
+      
+      // Mock the response with b64_json (which is what gpt-image-1 always returns)
+      jest.mocked(fetchWithCache).mockResolvedValue(mockBase64Response);
+
+      const result = await provider.callApi('test prompt');
+
+      // Should treat response as base64 even though we didn't explicitly request it
+      expect(result).toEqual({
+        output: JSON.stringify(mockBase64Response.data),
+        cached: false,
+        isBase64: true,
+        format: 'json',
+        cost: expect.any(Number),
+      });
+    });
   });
 
   describe('Parameter validation', () => {

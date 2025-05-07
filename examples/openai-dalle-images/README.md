@@ -34,6 +34,11 @@ promptfoo view
 - Configures different image sizes, qualities, and formats
 - Tests with a variety of subjects
 
+## Prerequisites
+
+- An OpenAI API key with access to image generation models
+- For the GPT Image model (`gpt-image-1`), you may need to complete [API Organization Verification](https://help.openai.com/en/articles/10910291-api-organization-verification) in your OpenAI account
+
 ## Model Configurations
 
 ### DALL-E Models (`promptfooconfig.yaml`)
@@ -51,6 +56,9 @@ promptfoo view
   - Moderation: standard (auto) or less restrictive (low)
 - Superior at instruction following and text rendering
 - Better with real-world knowledge and detailed compositions
+- Supports advanced editing capabilities including inpainting (editing with masks)
+- Token usage and cost varies significantly based on quality settings
+- **Note:** Unlike DALL-E models, GPT Image always returns base64-encoded image data rather than URLs
 
 ## Documentation
 
