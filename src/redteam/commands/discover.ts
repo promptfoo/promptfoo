@@ -163,6 +163,7 @@ export function discoverCommand(program: Command) {
             if (typeof targets[idxNum] === 'string') {
               targets[idxNum] = {
                 id: targets[idxNum] as string,
+                // TODO: Nest this under `redteam.discoveredPurpose`?
                 purpose,
               } as Provider;
             } else {
@@ -175,9 +176,7 @@ export function discoverCommand(program: Command) {
           config.providers = targets;
           writePromptfooConfig(config as UnifiedConfig, args.config!);
           logger.info(
-            chalk.green(
-              `\nPurpose discovery complete!\nResults have been written to ${args.config}`,
-            ),
+            `${chalk.green('\nDiscovery succeeded:')}\nResults have been written to ${chalk.italic(args.config)}`,
           );
         }
       }
