@@ -241,10 +241,10 @@ describe('evaluator', () => {
   });
 
   describe('toResultsFile', () => {
-    it('should return results file with correct id', async () => {
+    it('should return results file with correct version', async () => {
       const eval1 = await EvalFactory.create();
       const results = await eval1.toResultsFile();
-      expect(results.id).toBe(eval1.id);
+      expect(results.version).toBe(eval1.version());
     });
 
     it('should return results file with all required fields', async () => {
@@ -252,7 +252,6 @@ describe('evaluator', () => {
       const results = await eval1.toResultsFile();
 
       expect(results).toEqual({
-        id: eval1.id,
         version: eval1.version(),
         createdAt: new Date(eval1.createdAt).toISOString(),
         config: eval1.config,
