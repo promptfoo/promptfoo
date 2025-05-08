@@ -143,6 +143,7 @@ describe('evaluator', () => {
       completion: 5,
       cached: 0,
       numRequests: 1,
+      webSearchRequests: 0,
       completionDetails: {
         reasoning: 0,
         acceptedPrediction: 0,
@@ -183,6 +184,7 @@ describe('evaluator', () => {
       completion: 5,
       cached: 0,
       numRequests: 1,
+      webSearchRequests: 0,
       completionDetails: {
         reasoning: 0,
         acceptedPrediction: 0,
@@ -223,6 +225,7 @@ describe('evaluator', () => {
       completion: 5,
       cached: 0,
       numRequests: 1,
+      webSearchRequests: 0,
       completionDetails: {
         reasoning: 0,
         acceptedPrediction: 0,
@@ -263,6 +266,7 @@ describe('evaluator', () => {
       completion: 5,
       cached: 0,
       numRequests: 1,
+      webSearchRequests: 0,
       completionDetails: {
         reasoning: 0,
         acceptedPrediction: 0,
@@ -303,6 +307,7 @@ describe('evaluator', () => {
       completion: 20,
       cached: 0,
       numRequests: 4,
+      webSearchRequests: 0,
       completionDetails: {
         reasoning: 0,
         acceptedPrediction: 0,
@@ -343,6 +348,7 @@ describe('evaluator', () => {
       completion: 10,
       cached: 0,
       numRequests: 2,
+      webSearchRequests: 0,
       completionDetails: {
         reasoning: 0,
         acceptedPrediction: 0,
@@ -378,6 +384,7 @@ describe('evaluator', () => {
       completion: 5,
       cached: 0,
       numRequests: 1,
+      webSearchRequests: 0,
       completionDetails: {
         reasoning: 0,
         acceptedPrediction: 0,
@@ -413,6 +420,7 @@ describe('evaluator', () => {
       completion: 15,
       cached: 0,
       numRequests: 3,
+      webSearchRequests: 0,
       completionDetails: {
         reasoning: 0,
         acceptedPrediction: 0,
@@ -448,6 +456,7 @@ describe('evaluator', () => {
       completion: 12,
       cached: 0,
       numRequests: 1,
+      webSearchRequests: 0,
       completionDetails: {
         reasoning: 11,
         acceptedPrediction: 12,
@@ -951,6 +960,7 @@ describe('evaluator', () => {
       completion: 5,
       cached: 0,
       numRequests: 1,
+      webSearchRequests: 0,
       completionDetails: {
         reasoning: 0,
         acceptedPrediction: 0,
@@ -2447,6 +2457,7 @@ describe('runEval', () => {
       completion: 10, // 5 from provider + 5 from assertion
       cached: 0,
       numRequests: 2, // 1 for provider + 1 for assertion
+      webSearchRequests: 0,
       completionDetails: {
         reasoning: 0,
         acceptedPrediction: 0,
@@ -2457,6 +2468,7 @@ describe('runEval', () => {
         prompt: 0,
         completion: 0,
         cached: 0,
+        webSearchRequests: 0,
         completionDetails: {
           acceptedPrediction: 0,
           reasoning: 0,

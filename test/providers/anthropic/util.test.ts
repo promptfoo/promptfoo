@@ -6,6 +6,19 @@ import {
   parseMessages,
 } from '../../../src/providers/anthropic/util';
 
+// Mock for Anthropic types to fix test
+type MockUsage = {
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_input_tokens: number;
+  cache_read_input_tokens: number;
+  server_tool_use?: { web_search_requests?: number } | null;
+};
+
+type MockMessage = Omit<Anthropic.Messages.Message, 'usage'> & {
+  usage: MockUsage;
+};
+
 describe('Anthropic utilities', () => {
   describe('calculateAnthropicCost', () => {
     it('should calculate cost for valid input and output tokens', () => {
@@ -38,7 +51,7 @@ describe('Anthropic utilities', () => {
 
   describe('outputFromMessage', () => {
     it('should return an empty string for empty content array', () => {
-      const message: Anthropic.Messages.Message = {
+      const message: MockMessage = {
         content: [],
         id: '',
         model: '',
@@ -51,15 +64,16 @@ describe('Anthropic utilities', () => {
           output_tokens: 0,
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
+          server_tool_use: null,
         },
       };
 
-      const result = outputFromMessage(message, false);
+      const result = outputFromMessage(message as any, false);
       expect(result).toBe('');
     });
 
     it('should return text from a single text block', () => {
-      const message: Anthropic.Messages.Message = {
+      const message: MockMessage = {
         content: [{ type: 'text', text: 'Hello', citations: [] }],
         id: '',
         model: '',
@@ -72,15 +86,16 @@ describe('Anthropic utilities', () => {
           output_tokens: 0,
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
+          server_tool_use: null,
         },
       };
 
-      const result = outputFromMessage(message, false);
+      const result = outputFromMessage(message as any, false);
       expect(result).toBe('Hello');
     });
 
     it('should concatenate text blocks without tool_use blocks', () => {
-      const message: Anthropic.Messages.Message = {
+      const message: MockMessage = {
         content: [
           { type: 'text', text: 'Hello', citations: [] },
           { type: 'text', text: 'World', citations: [] },
@@ -96,15 +111,16 @@ describe('Anthropic utilities', () => {
           output_tokens: 0,
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
+          server_tool_use: null,
         },
       };
 
-      const result = outputFromMessage(message, false);
+      const result = outputFromMessage(message as any, false);
       expect(result).toBe('Hello\n\nWorld');
     });
 
     it('should handle content with tool_use blocks', () => {
-      const message: Anthropic.Messages.Message = {
+      const message: MockMessage = {
         content: [
           {
             type: 'tool_use',
@@ -130,17 +146,18 @@ describe('Anthropic utilities', () => {
           output_tokens: 0,
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
+          server_tool_use: null,
         },
       };
 
-      const result = outputFromMessage(message, false);
+      const result = outputFromMessage(message as any, false);
       expect(result).toBe(
         '{"type":"tool_use","id":"tool1","name":"get_weather","input":{"location":"San Francisco, CA"}}\n\n{"type":"tool_use","id":"tool2","name":"get_time","input":{"location":"New York, NY"}}',
       );
     });
 
     it('should concatenate text and tool_use blocks as JSON strings', () => {
-      const message: Anthropic.Messages.Message = {
+      const message: MockMessage = {
         content: [
           { type: 'text', text: 'Hello', citations: [] },
           {
@@ -162,17 +179,18 @@ describe('Anthropic utilities', () => {
           output_tokens: 0,
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
+          server_tool_use: null,
         },
       };
 
-      const result = outputFromMessage(message, false);
+      const result = outputFromMessage(message as any, false);
       expect(result).toBe(
         'Hello\n\n{"type":"tool_use","id":"tool1","name":"get_weather","input":{"location":"San Francisco, CA"}}\n\nWorld',
       );
     });
 
     it('should handle text blocks with citations', () => {
-      const message: Anthropic.Messages.Message = {
+      const message: MockMessage = {
         content: [
           {
             type: 'text',
@@ -200,15 +218,16 @@ describe('Anthropic utilities', () => {
           output_tokens: 0,
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
+          server_tool_use: null,
         },
       };
 
-      const result = outputFromMessage(message, false);
+      const result = outputFromMessage(message as any, false);
       expect(result).toBe('The sky is blue');
     });
 
     it('should include thinking blocks when showThinking is true', () => {
-      const message: Anthropic.Messages.Message = {
+      const message: MockMessage = {
         content: [
           { type: 'text', text: 'Hello', citations: [] },
           {
@@ -229,17 +248,18 @@ describe('Anthropic utilities', () => {
           output_tokens: 0,
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
+          server_tool_use: null,
         },
       };
 
-      const result = outputFromMessage(message, true);
+      const result = outputFromMessage(message as any, true);
       expect(result).toBe(
         'Hello\n\nThinking: I need to consider the weather\nSignature: abc123\n\nWorld',
       );
     });
 
     it('should exclude thinking blocks when showThinking is false', () => {
-      const message: Anthropic.Messages.Message = {
+      const message: MockMessage = {
         content: [
           { type: 'text', text: 'Hello', citations: [] },
           {
@@ -260,15 +280,16 @@ describe('Anthropic utilities', () => {
           output_tokens: 0,
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
+          server_tool_use: null,
         },
       };
 
-      const result = outputFromMessage(message, false);
+      const result = outputFromMessage(message as any, false);
       expect(result).toBe('Hello\n\nWorld');
     });
 
     it('should include redacted_thinking blocks when showThinking is true', () => {
-      const message: Anthropic.Messages.Message = {
+      const message: MockMessage = {
         content: [
           { type: 'text', text: 'Hello', citations: [] },
           {
@@ -288,15 +309,16 @@ describe('Anthropic utilities', () => {
           output_tokens: 0,
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
+          server_tool_use: null,
         },
       };
 
-      const result = outputFromMessage(message, true);
+      const result = outputFromMessage(message as any, true);
       expect(result).toBe('Hello\n\nRedacted Thinking: Some redacted thinking data\n\nWorld');
     });
 
     it('should exclude redacted_thinking blocks when showThinking is false', () => {
-      const message: Anthropic.Messages.Message = {
+      const message: MockMessage = {
         content: [
           { type: 'text', text: 'Hello', citations: [] },
           {
@@ -316,10 +338,11 @@ describe('Anthropic utilities', () => {
           output_tokens: 0,
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
+          server_tool_use: null,
         },
       };
 
-      const result = outputFromMessage(message, false);
+      const result = outputFromMessage(message as any, false);
       expect(result).toBe('Hello\n\nWorld');
     });
   });
