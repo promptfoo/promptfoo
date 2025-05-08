@@ -1,5 +1,19 @@
 ---
 sidebar_position: 2
+description: Learn how to use Anthropic Claude models with promptfoo, including web search, tool use, extended thinking, and vision capabilities
+keywords:
+  [
+    anthropic,
+    claude,
+    claude-3,
+    claude-3.5,
+    claude-3.7,
+    vision,
+    web search,
+    tool use,
+    citations,
+    extended thinking,
+  ]
 ---
 
 # Anthropic
@@ -88,6 +102,8 @@ Currently, only type `text` is supported.
 
 The `system_message` and `question` are example variables that can be set with the `var` directive.
 
+You can create multi-turn conversations by adding multiple user and assistant messages. For a practical example of multi-turn conversations, see [anthropic/promptfooconfig.conversation.yaml](https://github.com/promptfoo/promptfoo/tree/main/examples/anthropic).
+
 ### Options
 
 The Anthropic provider supports several options to customize the behavior of the model. These include:
@@ -113,6 +129,8 @@ providers:
 prompts:
   - file://prompt.json
 ```
+
+For a simple practical example with various Claude models, see [anthropic/promptfooconfig.basic.yaml](https://github.com/promptfoo/promptfoo/tree/main/examples/anthropic).
 
 ### Tool Use
 
@@ -173,13 +191,13 @@ providers:
         # type: "none"
 ```
 
-See the [Anthropic Tool Use Guide](https://docs.anthropic.com/en/docs/tool-use) for more information on how to define tools and the tool use example [here](https://github.com/promptfoo/promptfoo/tree/main/examples/tool-use).
+See the [Anthropic Tool Use Guide](https://docs.anthropic.com/en/docs/tool-use) for more information on how to define tools and the tool use example [here](https://github.com/promptfoo/promptfoo/tree/main/examples/tool-use). For an example of tool choice configuration options, see the [anthropic/promptfooconfig.tool-choice.yaml](https://github.com/promptfoo/promptfoo/tree/main/examples/anthropic) example.
 
 ### Images / Vision
 
 You can include images in the prompts in Claude 3 models.
 
-See the [Claude vision example](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-vision).
+See the [Claude vision example](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-vision) or the [anthropic/promptfooconfig.vision.yaml](https://github.com/promptfoo/promptfoo/tree/main/examples/anthropic) example.
 
 One important note: The Claude API only supports base64 representations of images.
 This is different from how OpenAI's vision works, as it supports grabbing images from a URL. As a result, if you are trying to compare Claude 3 and OpenAI vision capabilities, you will need to have separate prompts for each.
@@ -248,7 +266,7 @@ prompts:
       text: 'Your question here'
 ```
 
-See [Anthropic's Citations Guide](https://docs.anthropic.com/en/docs/build-with-claude/citations) for more details.
+See [Anthropic's Citations Guide](https://docs.anthropic.com/en/docs/build-with-claude/citations) for more details or check out our practical example in [anthropic/promptfooconfig.citations.yaml](https://github.com/promptfoo/promptfoo/tree/main/examples/anthropic).
 
 ### Extended Thinking
 
@@ -263,6 +281,8 @@ providers:
         type: 'enabled'
         budget_tokens: 16000 # Must be ≥1024 and less than max_tokens
 ```
+
+For a complete example, see [anthropic/promptfooconfig.thinking.yaml](https://github.com/promptfoo/promptfoo/tree/main/examples/anthropic).
 
 The thinking configuration has two possible values:
 
@@ -409,6 +429,11 @@ prompts:
   - file://prompts.yaml
 ```
 
+For practical examples of basic and advanced web search configurations, see:
+
+- [anthropic/promptfooconfig.web-search.yaml](https://github.com/promptfoo/promptfoo/tree/main/examples/anthropic) - Basic web search
+- [anthropic/promptfooconfig.web-search-advanced.yaml](https://github.com/promptfoo/promptfoo/tree/main/examples/anthropic) - Advanced options with domain filtering and location targeting
+
 ### Advanced Web Search Configuration
 
 ```yaml title="promptfooconfig.yaml"
@@ -494,6 +519,17 @@ tests:
 ### Examples
 
 We provide several example implementations demonstrating Claude's capabilities:
+
+#### Core Claude Examples
+
+- [Anthropic Examples](https://github.com/promptfoo/promptfoo/tree/main/examples/anthropic) - A comprehensive collection of Claude examples including:
+  - Basic completions with various models
+  - Web search capability (basic and advanced)
+  - Tool choice options
+  - Extended thinking
+  - Multi-turn conversations
+  - Citations
+  - Vision capabilities
 
 #### Core Features
 
