@@ -126,75 +126,61 @@ export async function addVideoToBase64(
   injectVar: string,
 ): Promise<TestCase[]> {
   const videoTestCases: TestCase[] = [];
+
   let progressBar: SingleBar | undefined;
+  if (logger.level !== 'debug') {
+    progressBar = new SingleBar(
+      {
+        format: 'Converting to Videos {bar} {percentage}% | ETA: {eta}s | {value}/{total}',
+        hideCursor: true,
+      },
+      Presets.shades_classic,
+    );
+    progressBar.start(testCases.length, 0);
+  }
 
-  // Special handling for test environment
-  const isTestEnvironment = getEnvString('NODE_ENV') === 'test' || getEnvString('JEST_WORKER_ID');
-  
-  try {
-    // Only create progress bar in non-test environments or if logger level is not debug
-    if (!isTestEnvironment && logger.level !== 'debug') {
-      progressBar = new SingleBar(
-        {
-          format: 'Converting to Videos {bar} {percentage}% | ETA: {eta}s | {value}/{total}',
-          hideCursor: true,
-        },
-        Presets.shades_classic,
-      );
-      progressBar.start(testCases.length, 0);
-    }
+  for (const testCase of testCases) {
+    invariant(
+      testCase.vars,
+      `Video encoding: testCase.vars is required, but got ${JSON.stringify(testCase)}`,
+    );
 
-    for (const testCase of testCases) {
-      invariant(
-        testCase.vars,
-        `Video encoding: testCase.vars is required, but got ${JSON.stringify(testCase)}`,
-      );
+    const originalText = String(testCase.vars[injectVar]);
 
-      const originalText = String(testCase.vars[injectVar]);
+    // Convert text to video and then to base64
+    const base64Video = await textToVideo(originalText);
 
-      // Convert text to video and then to base64
-      const base64Video = await textToVideo(originalText);
+    videoTestCases.push({
+      ...testCase,
+      assert: testCase.assert?.map((assertion) => ({
+        ...assertion,
+        metric: assertion.type?.startsWith('promptfoo:redteam:')
+          ? `${assertion.type?.split(':').pop() || assertion.metric}/Video-Encoded`
+          : assertion.metric,
+      })),
+      vars: {
+        ...testCase.vars,
+        [injectVar]: base64Video,
+        video_text: originalText, // Store the original text for reference
+      },
+      metadata: {
+        ...testCase.metadata,
+        strategyId: 'video',
+      },
+    });
 
-      videoTestCases.push({
-        ...testCase,
-        assert: testCase.assert?.map((assertion) => ({
-          ...assertion,
-          metric: assertion.type?.startsWith('promptfoo:redteam:')
-            ? `${assertion.type?.split(':').pop() || assertion.metric}/Video-Encoded`
-            : assertion.metric,
-        })),
-        vars: {
-          ...testCase.vars,
-          [injectVar]: base64Video,
-          video_text: originalText, // Store the original text for reference
-        },
-        metadata: {
-          ...testCase.metadata,
-          strategyId: 'video',
-        },
-      });
-
-      if (progressBar) {
-        progressBar.increment(1);
-      } else {
-        logger.debug(`Processed ${videoTestCases.length} of ${testCases.length}`);
-      }
-    }
-    
-    return videoTestCases;
-  } catch (error) {
-    logger.error(`Error in video encoding: ${error}`);
-    throw error;
-  } finally {
-    // Always clean up the progress bar
     if (progressBar) {
-      try {
-        progressBar.stop();
-      } catch (e) {
-        logger.debug(`Error stopping progress bar: ${e}`);
-      }
+      progressBar.increment(1);
+    } else {
+      logger.debug(`Processed ${videoTestCases.length} of ${testCases.length}`);
     }
   }
+
+  if (progressBar) {
+    progressBar.stop();
+  }
+
+  return videoTestCases;
 }
 
 // Main function for direct testing via: npx tsx simpleVideo.ts "Text to convert to video"
