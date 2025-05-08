@@ -86,6 +86,10 @@ function formatTokenUsage(type: string, usage: Partial<TokenUsage>): string {
     parts.push(`Cached tokens: ${usage.cached.toLocaleString()}`);
   }
 
+  if (usage.webSearchRequests !== undefined && usage.webSearchRequests > 0) {
+    parts.push(`Web searches: ${usage.webSearchRequests.toLocaleString()}`);
+  }
+
   if (usage.completionDetails?.reasoning !== undefined) {
     parts.push(`Reasoning tokens: ${usage.completionDetails.reasoning.toLocaleString()}`);
   }

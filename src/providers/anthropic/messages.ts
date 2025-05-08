@@ -89,6 +89,11 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     const fileTools = maybeLoadToolsFromExternalFile(this.config.tools) || [];
     const allTools = [...mcpTools, ...fileTools];
 
+    // Add web search tool if configured
+    const toolsToUse = this.config.web_search
+      ? [...allTools, this.config.web_search as unknown as Anthropic.Tool]
+      : allTools;
+
     const params: Anthropic.MessageCreateParams = {
       model: this.modelName,
       ...(system ? { system } : {}),
@@ -101,7 +106,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         this.config.thinking || thinking
           ? this.config.temperature
           : this.config.temperature || getEnvFloat('ANTHROPIC_TEMPERATURE', 0),
-      ...(allTools.length > 0 ? { tools: allTools } : {}),
+      ...(toolsToUse.length > 0 ? { tools: toolsToUse } : {}),
       ...(this.config.tool_choice ? { tool_choice: this.config.tool_choice } : {}),
       ...(this.config.thinking || thinking ? { thinking: this.config.thinking || thinking } : {}),
       ...(typeof this.config?.extra_body === 'object' && this.config.extra_body
@@ -138,6 +143,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
               this.config,
               parsedCachedResponse.usage?.input_tokens,
               parsedCachedResponse.usage?.output_tokens,
+              parsedCachedResponse.usage?.server_tool_use?.web_search_requests,
             ),
           };
         } catch {
@@ -180,6 +186,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
           this.config,
           response.usage?.input_tokens,
           response.usage?.output_tokens,
+          response.usage?.server_tool_use?.web_search_requests,
         ),
       };
     } catch (err) {

@@ -122,6 +122,7 @@ export function newTokenUsage(): Required<TokenUsage> {
     completion: 0,
     cached: 0,
     numRequests: 0,
+    webSearchRequests: 0,
     completionDetails: {
       reasoning: 0,
       acceptedPrediction: 0,
@@ -132,6 +133,7 @@ export function newTokenUsage(): Required<TokenUsage> {
       prompt: 0,
       completion: 0,
       cached: 0,
+      webSearchRequests: 0,
       completionDetails: {
         reasoning: 0,
         acceptedPrediction: 0,

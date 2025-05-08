@@ -177,22 +177,38 @@ export function calculateAnthropicCost(
   config: any,
   promptTokens?: number,
   completionTokens?: number,
+  webSearchRequests?: number,
 ): number | undefined {
-  return calculateCostBase(modelName, config, promptTokens, completionTokens, ANTHROPIC_MODELS);
+  let cost = calculateCostBase(modelName, config, promptTokens, completionTokens, ANTHROPIC_MODELS);
+
+  // Add web search costs if applicable - $10 per 1,000 searches
+  if (webSearchRequests && webSearchRequests > 0) {
+    cost = (cost || 0) + (webSearchRequests * 10) / 1000;
+  }
+
+  return cost;
 }
 
 export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
   if (data.usage) {
     const total_tokens = data.usage.input_tokens + data.usage.output_tokens;
+    const result: Partial<TokenUsage> = {};
+
     if (cached) {
-      return { cached: total_tokens, total: total_tokens };
+      result.cached = total_tokens;
+      result.total = total_tokens;
     } else {
-      return {
-        total: total_tokens,
-        prompt: data.usage.input_tokens || 0,
-        completion: data.usage.output_tokens || 0,
-      };
+      result.total = total_tokens;
+      result.prompt = data.usage.input_tokens || 0;
+      result.completion = data.usage.output_tokens || 0;
     }
+
+    // Add web search request tracking
+    if (data.usage.server_tool_use?.web_search_requests) {
+      result.webSearchRequests = data.usage.server_tool_use.web_search_requests;
+    }
+
+    return result;
   }
   return {};
 }

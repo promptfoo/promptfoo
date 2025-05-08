@@ -588,5 +588,177 @@ describe('AnthropicMessagesProvider', () => {
         },
       });
     });
+
+    it('should include web search tool when configured', async () => {
+      const provider = new AnthropicMessagesProvider('claude-3-7-sonnet-20250219', {
+        config: {
+          web_search: {
+            type: 'web_search_20250305',
+            name: 'web_search',
+            max_uses: 5,
+            allowed_domains: ['example.com', 'trusteddomain.org'],
+            user_location: {
+              type: 'approximate',
+              city: 'San Francisco',
+              region: 'California',
+              country: 'US',
+              timezone: 'America/Los_Angeles',
+            },
+          },
+        },
+      });
+
+      jest
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockImplementation()
+        .mockResolvedValue({
+          content: [{ type: 'text', text: 'Search results response' }],
+        } as Anthropic.Messages.Message);
+
+      await provider.callApi('What is the latest news about quantum computing?');
+
+      expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(1);
+      expect(provider.anthropic.messages.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: 'claude-3-7-sonnet-20250219',
+          tools: [
+            {
+              type: 'web_search_20250305',
+              name: 'web_search',
+              max_uses: 5,
+              allowed_domains: ['example.com', 'trusteddomain.org'],
+              user_location: {
+                type: 'approximate',
+                city: 'San Francisco',
+                region: 'California',
+                country: 'US',
+                timezone: 'America/Los_Angeles',
+              },
+            },
+          ],
+        }),
+        {},
+      );
+    });
+
+    it('should handle web search tool results in response', async () => {
+      const provider = new AnthropicMessagesProvider('claude-3-7-sonnet-20250219', {
+        config: {
+          web_search: {
+            type: 'web_search_20250305',
+            name: 'web_search',
+          },
+        },
+      });
+
+      jest
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockImplementation()
+        .mockResolvedValue({
+          content: [
+            { type: 'text', text: "I'll search for information about quantum computing." },
+            {
+              type: 'server_tool_use',
+              id: 'srvtoolu_01WYG3ziw53XMcoyKL4XcZmE',
+              name: 'web_search',
+              input: {
+                query: 'latest quantum computing breakthroughs 2025',
+              },
+            },
+            {
+              type: 'web_search_tool_result',
+              tool_use_id: 'srvtoolu_01WYG3ziw53XMcoyKL4XcZmE',
+              content: [
+                {
+                  type: 'web_search_result',
+                  url: 'https://example.com/quantum-computing',
+                  title: 'Quantum Computing Breakthroughs 2025',
+                  encrypted_content:
+                    'EqgfCioIARgBIiQ3YTAwMjY1Mi1mZjM5LTQ1NGUtODgxNC1kNjNjNTk1ZWI3Y...',
+                  page_age: 'May 2, 2025',
+                },
+              ],
+            },
+            {
+              type: 'text',
+              text: 'Based on the search results, there have been significant breakthroughs in quantum computing in 2025.',
+              citations: [
+                {
+                  type: 'web_search_result_location',
+                  url: 'https://example.com/quantum-computing',
+                  title: 'Quantum Computing Breakthroughs 2025',
+                  encrypted_index: 'Eo8BCioIAhgBIiQyYjQ0OWJmZi1lNm..',
+                  cited_text:
+                    'Researchers achieved a new record in quantum coherence time, maintaining qubit stability for over 10 minutes, a crucial advancement for practical quantum computing.',
+                },
+              ],
+            },
+          ],
+          usage: {
+            input_tokens: 25,
+            output_tokens: 150,
+            server_tool_use: {
+              web_search_requests: 1,
+            },
+          },
+        } as unknown as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('What are the latest quantum computing breakthroughs?');
+
+      expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(1);
+      expect(result.output).toContain(
+        'Based on the search results, there have been significant breakthroughs in quantum computing in 2025.',
+      );
+      expect(result.output).toContain("I'll search for information about quantum computing.");
+      expect(result.output).toContain('https://example.com/quantum-computing');
+    });
+
+    it('should handle web search via tools array configuration', async () => {
+      const provider = new AnthropicMessagesProvider('claude-3-7-sonnet-20250219', {
+        config: {
+          tools: [
+            {
+              type: 'web_search_20250305' as any, // Using type assertion to bypass type checking
+              name: 'web_search',
+              max_uses: 5,
+            },
+          ],
+        },
+      });
+
+      jest
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockImplementation()
+        .mockResolvedValue({
+          content: [{ type: 'text', text: 'Search results response' }],
+          usage: {
+            input_tokens: 25,
+            output_tokens: 50,
+            server_tool_use: {
+              web_search_requests: 1,
+            },
+          },
+        } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('What is the latest news about quantum computing?');
+
+      expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(1);
+      expect(provider.anthropic.messages.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: 'claude-3-7-sonnet-20250219',
+          tools: [
+            {
+              type: 'web_search_20250305',
+              name: 'web_search',
+              max_uses: 5,
+            },
+          ],
+        }),
+        {},
+      );
+
+      // Check that web search request is counted in token usage
+      expect(result.tokenUsage?.webSearchRequests).toBe(1);
+    });
   });
 });

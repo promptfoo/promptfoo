@@ -61,6 +61,7 @@ Claude models are available across multiple platforms. Here's how the model name
 | tool_choice     | -                     | An object specifying the tool to call                             |
 | thinking        | -                     | Configuration for enabling Claude's extended thinking capability  |
 | showThinking    | -                     | Whether to include thinking content in the output (default: true) |
+| web_search      | -                     | Configuration for enabling Claude's web search capability         |
 | headers         | -                     | Additional headers to be sent with the API request                |
 | extra_body      | -                     | Additional parameters to be included in the API request body      |
 
@@ -334,6 +335,76 @@ When using extended output:
 - The model may not use the entire allocated thinking budget
 
 See [Anthropic's Extended Thinking Guide](https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking) for more details on requirements and best practices.
+
+### Web Search
+
+Claude can access current information from the web using the web search tool. This allows Claude to provide up-to-date answers with cited sources.
+
+Currently supported on:
+
+- Claude 3.7 Sonnet (claude-3-7-sonnet-20250219)
+- Claude 3.5 Sonnet (claude-3-5-sonnet-latest)
+- Claude 3.5 Haiku (claude-3-5-haiku-latest)
+
+You can configure web search in two ways:
+
+#### Method 1: Using the dedicated web_search property
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: anthropic:messages:claude-3-7-sonnet-20250219
+    config:
+      web_search:
+        type: 'web_search_20250305'
+        name: 'web_search'
+        max_uses: 5
+prompts:
+  - file://prompts.yaml
+```
+
+#### Method 2: Using the tools array (recommended)
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: anthropic:messages:claude-3-7-sonnet-20250219
+    config:
+      tools:
+        - type: 'web_search_20250305'
+          name: 'web_search'
+          max_uses: 5
+prompts:
+  - file://prompts.yaml
+```
+
+### Advanced Web Search Configuration
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: anthropic:messages:claude-3-7-sonnet-20250219
+    config:
+      tools:
+        - type: 'web_search_20250305'
+          name: 'web_search'
+          max_uses: 5 # Limit the number of searches per request
+          allowed_domains: ['example.com'] # Only include results from these domains
+          # blocked_domains: ["untrustedsource.com"] # Never include results from these domains (can't use with allowed_domains)
+          user_location: # Localize search results
+            type: 'approximate'
+            city: 'San Francisco'
+            region: 'California'
+            country: 'US'
+            timezone: 'America/Los_Angeles'
+```
+
+The web search tool will appear in the provider response with special block types:
+
+- `server_tool_use` - Claude's search query
+- `web_search_tool_result` - The search results
+- Text blocks with citations to the sources
+
+Web search is billed at $10 per 1,000 searches plus standard token costs. Each web search counts as one use, regardless of the number of results returned.
+
+See [Anthropic's Web Search Guide](https://docs.anthropic.com/en/docs/server-tools/web-search-tool) for more details on requirements and best practices.
 
 ## Model-Graded Tests
 

@@ -22,6 +22,9 @@ export const BaseTokenUsageSchema = z.object({
   // Request metadata
   numRequests: z.number().optional(),
 
+  // Tool usage
+  webSearchRequests: z.number().optional(),
+
   // Detailed completion information
   completionDetails: CompletionTokenDetailsSchema.optional(),
 });
