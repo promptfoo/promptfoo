@@ -25,7 +25,6 @@ export type EnvVars = {
   PROMPTFOO_DISABLE_REDTEAM_MODERATION?: boolean;
   PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION?: boolean;
   PROMPTFOO_DISABLE_REF_PARSER?: boolean;
-  PROMPTFOO_DISABLE_SHARE_AUTH_STRIPPING?: boolean;
   PROMPTFOO_DISABLE_SHARE_EMAIL_REQUEST?: boolean;
   PROMPTFOO_DISABLE_SHARE_WARNING?: boolean;
   PROMPTFOO_DISABLE_SHARING?: boolean;
@@ -282,6 +281,9 @@ export type EnvVars = {
   WATSONX_AI_AUTH_TYPE?: string;
   WATSONX_AI_BEARER_TOKEN?: string;
   WATSONX_AI_PROJECT_ID?: string;
+
+  // Pi Labs
+  WITHPI_API_KEY?: string;
 } & EnvOverrides;
 
 // Allow string access to any key for environment variables not explicitly listed

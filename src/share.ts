@@ -285,10 +285,6 @@ async function sendEvalResults(evalRecord: Eval, url: string): Promise<string | 
  *          If URL parsing fails, it returns the original string.
  */
 export function stripAuthFromUrl(urlString: string): string {
-  if (getEnvBool('PROMPTFOO_DISABLE_SHARE_AUTH_STRIPPING')) {
-    return urlString;
-  }
-
   try {
     const url = new URL(urlString);
     url.username = '';
