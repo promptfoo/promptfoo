@@ -76,9 +76,12 @@ describe('combineConfigs', () => {
     jest.clearAllMocks();
     jest.spyOn(process, 'cwd').mockReturnValue('/mock/cwd');
     jest.mocked(globSync).mockImplementation((pathOrGlob) => {
-      const filePart = typeof pathOrGlob === 'string' 
-        ? path.basename(pathOrGlob)
-        : Array.isArray(pathOrGlob) ? path.basename(pathOrGlob[0]) : pathOrGlob;
+      const filePart =
+        typeof pathOrGlob === 'string'
+          ? path.basename(pathOrGlob)
+          : Array.isArray(pathOrGlob)
+            ? path.basename(pathOrGlob[0])
+            : pathOrGlob;
       return [filePart];
     });
   });
@@ -298,25 +301,32 @@ describe('combineConfigs', () => {
     });
 
     const result = await combineConfigs(['config.json']);
-    expect(globSync).toHaveBeenCalledWith(path.resolve('/mock/cwd', 'config.json'), expect.anything());
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config.json'),
+      expect.anything(),
+    );
 
     // Check that the prompts have the right structure but don't verify exact path format
     expect(result.prompts).toHaveLength(2);
-    
+
     // Use type assertions to handle the array elements
     const prompts = result.prompts as Array<{ id?: string; label: string }>;
-    
-    expect(prompts[0]).toEqual(expect.objectContaining({
-      label: 'My first prompt',
-    }));
+
+    expect(prompts[0]).toEqual(
+      expect.objectContaining({
+        label: 'My first prompt',
+      }),
+    );
     expect(typeof prompts[0].id).toBe('string');
     // Check the file:// URL format
     expect(prompts[0].id).toMatch(/^file:\/\//);
     expect(prompts[0].id).toMatch(/prompt1\.txt$/);
 
-    expect(prompts[1]).toEqual(expect.objectContaining({
-      label: 'My second prompt',
-    }));
+    expect(prompts[1]).toEqual(
+      expect.objectContaining({
+        label: 'My second prompt',
+      }),
+    );
     expect(typeof prompts[1].id).toBe('string');
     // Check the file:// URL format
     expect(prompts[1].id).toMatch(/^file:\/\//);
@@ -374,26 +384,32 @@ describe('combineConfigs', () => {
 
     const configPaths = ['config1.json', 'config2.json'];
     const result = await combineConfigs(configPaths);
-    expect(globSync).toHaveBeenCalledWith(path.resolve('/mock/cwd', 'config1.json'), expect.anything());
-    expect(globSync).toHaveBeenCalledWith(path.resolve('/mock/cwd', 'config2.json'), expect.anything());
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config1.json'),
+      expect.anything(),
+    );
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config2.json'),
+      expect.anything(),
+    );
 
     // Check that we have the expected number of prompts
     expect(result.prompts).toHaveLength(4);
-    
+
     // Validate that each prompt has the expected format
     const prompts = result.prompts as string[];
-    
+
     // Check first prompt - should be a file:// URL ending with prompt1.txt
     expect(prompts[0]).toMatch(/^file:\/\//);
     expect(prompts[0]).toMatch(/prompt1\.txt$/);
-    
+
     // Check second prompt - should be plain string
     expect(prompts[1]).toBe('prompt2');
-    
+
     // Check third prompt - should be a file:// URL ending with prompt3.txt
     expect(prompts[2]).toMatch(/^file:\/\//);
     expect(prompts[2]).toMatch(/prompt3\.txt$/);
-    
+
     // Check fourth prompt - should be plain string
     expect(prompts[3]).toBe('prompt4');
   });
@@ -424,22 +440,28 @@ describe('combineConfigs', () => {
 
     const configPaths = ['config1.json', 'config2.json'];
     const result = await combineConfigs(configPaths);
-    expect(globSync).toHaveBeenCalledWith(path.resolve('/mock/cwd', 'config1.json'), expect.anything());
-    expect(globSync).toHaveBeenCalledWith(path.resolve('/mock/cwd', 'config2.json'), expect.anything());
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config1.json'),
+      expect.anything(),
+    );
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config2.json'),
+      expect.anything(),
+    );
 
     // Check that we have the expected number of prompts
     expect(result.prompts).toHaveLength(4);
-    
+
     // Validate that each prompt has the expected format
     const prompts = result.prompts as string[];
-    
+
     // Check prompts
     expect(prompts[0]).toBe('prompt1');
-    
+
     // Check the file:// URL
     expect(prompts[1]).toMatch(/^file:\/\//);
     expect(prompts[1]).toMatch(/prompt2\.txt$/);
-    
+
     expect(prompts[2]).toBe('prompt3');
     expect(prompts[3]).toBe('prompt4');
   });
