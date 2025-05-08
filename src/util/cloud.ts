@@ -111,3 +111,5 @@ export async function cloudCanAcceptChunkedResults(): Promise<boolean> {
   const buildDate = await targetApiBuildDate();
   return buildDate != null && buildDate > CHUNKED_RESULTS_BUILD_DATE;
 }
+
+export { CHUNKED_RESULTS_BUILD_DATE };
