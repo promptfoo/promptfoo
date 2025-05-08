@@ -161,12 +161,9 @@ export default class Eval {
     const author = opts?.author || getUserEmail();
     const db = getDb();
 
-    // Prepare data outside the transaction
     const datasetId = sha256(JSON.stringify(config.tests || []));
 
-    // Use synchronous transaction API
     db.transaction(() => {
-      // Insert eval
       db.insert(evalsTable)
         .values({
           id: evalId,
@@ -178,7 +175,6 @@ export default class Eval {
         })
         .run();
 
-      // Insert prompts and relationships
       for (const prompt of renderedPrompts) {
         const label = prompt.label || prompt.display || prompt.raw;
         const promptId = hashPrompt(prompt);
@@ -202,7 +198,6 @@ export default class Eval {
         logger.debug(`Inserting prompt ${promptId}`);
       }
 
-      // Insert results if provided
       if (opts?.results && opts.results.length > 0) {
         const res = db
           .insert(evalResultsTable)
@@ -211,7 +206,6 @@ export default class Eval {
         logger.debug(`Inserted ${res.changes} eval results`);
       }
 
-      // Insert dataset
       db.insert(datasetsTable)
         .values({
           id: datasetId,
@@ -230,7 +224,6 @@ export default class Eval {
 
       logger.debug(`Inserting dataset ${datasetId}`);
 
-      // Insert tags
       if (config.tags) {
         for (const [tagKey, tagValue] of Object.entries(config.tags)) {
           const tagId = sha256(`${tagKey}:${tagValue}`);
