@@ -80,6 +80,14 @@ export PROMPTFOO_REMOTE_APP_BASE_URL=http://your-server:3000
 promptfoo share
 ```
 
+If you need to use HTTP Basic Authentication with your self-hosted server:
+
+```sh
+# Configure sharing with basic auth credentials in URL
+export PROMPTFOO_REMOTE_API_BASE_URL=http://username:password@your-server:3000
+export PROMPTFOO_REMOTE_APP_BASE_URL=http://username:password@your-server:3000
+```
+
 You can also add these settings to your `promptfooconfig.yaml`:
 
 ```yaml title="promptfooconfig.yaml"
