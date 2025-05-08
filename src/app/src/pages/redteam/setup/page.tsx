@@ -111,7 +111,7 @@ const TabPanel = styled(Box)(({ theme }) => ({
 }));
 
 interface TabPanelProps {
-  children?: React.ReactNode;
+  children?: React.JSX.Element | React.JSX.Element[];
   index: number;
   value: number;
 }

@@ -201,7 +201,7 @@ export function LogViewer({ logs }: LogViewerProps) {
               bottom: 16,
               zIndex: 1,
             }}
-            onClick={() => scrollToBottom(logsContainerRef)}
+            onClick={() => scrollToBottom(logsContainerRef as React.RefObject<HTMLDivElement>)}
           >
             <KeyboardDoubleArrowDownIcon />
           </Fab>
@@ -247,7 +247,9 @@ export function LogViewer({ logs }: LogViewerProps) {
                 bottom: 16,
                 zIndex: 1,
               }}
-              onClick={() => scrollToBottom(fullscreenLogsContainerRef)}
+              onClick={() =>
+                scrollToBottom(fullscreenLogsContainerRef as React.RefObject<HTMLDivElement>)
+              }
             >
               <KeyboardDoubleArrowDownIcon />
             </Fab>
