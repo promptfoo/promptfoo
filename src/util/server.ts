@@ -57,7 +57,7 @@ export async function checkServerRunning(port = getDefaultPort()): Promise<boole
 }
 
 export async function openBrowser(
-  browserBehavior: BrowserBehavior = BrowserBehavior.ASK,
+  browserBehavior: BrowserBehavior,
   port = getDefaultPort(),
 ): Promise<void> {
   const baseUrl = `http://localhost:${port}`;

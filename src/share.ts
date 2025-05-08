@@ -2,11 +2,7 @@ import input from '@inquirer/input';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { URL } from 'url';
-import {
-  getShareApiBaseUrl,
-  getDefaultShareViewBaseUrl,
-  getShareViewBaseUrl,
-} from './constants';
+import { getShareApiBaseUrl, getDefaultShareViewBaseUrl, getShareViewBaseUrl } from './constants';
 import { getEnvBool, getEnvInt, isCI, getEnvString } from './envars';
 import { fetchWithProxy } from './fetch';
 import { getAuthor, getUserEmail, setUserEmail } from './globalConfig/accounts';
