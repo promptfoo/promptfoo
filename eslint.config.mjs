@@ -9,7 +9,7 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default [
-  ...tseslint.config(eslint.configs.recommended, ...tseslint.configs.recommended),
+  ...tseslint.config(eslint.configs.recommended, ...tseslint.configs.recommendedTypeChecked),
   {
     ...jest.configs['flat/recommended'],
     rules: {
@@ -36,6 +36,10 @@ export default [
       ecmaVersion: 2022,
       globals: globals.node,
       sourceType: 'module',
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
     },
     plugins: {
       'react-hooks': reactHooks,
