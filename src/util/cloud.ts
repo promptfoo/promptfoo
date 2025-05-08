@@ -12,11 +12,21 @@ export function makeRequest(path: string, method: string, body?: any): Promise<R
   const apiHost = cloudConfig.getApiHost();
   const apiKey = cloudConfig.getApiKey();
   const url = `${apiHost}/${path}`;
-  return fetchWithProxy(url, {
-    method,
-    body: JSON.stringify(body),
-    headers: { Authorization: `Bearer ${apiKey}` },
-  });
+  try {
+    return fetchWithProxy(url, {
+      method,
+      body: JSON.stringify(body),
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+  } catch (e) {
+    logger.error(`[Cloud] Failed to make request to ${url}: ${e}`);
+    // @ts-ignore
+    if (e.cause) {
+      // @ts-ignore
+      logger.error(`Cause: ${e.cause}`);
+    }
+    throw e;
+  }
 }
 
 export async function targetApiBuildDate(): Promise<Date | null> {
@@ -46,6 +56,10 @@ export async function getProviderFromCloud(id: string): Promise<ProviderOptions 
     const response = await makeRequest(`api/providers/${id}`, 'GET');
 
     if (!response.ok) {
+      const errorMessage = await response.text();
+      logger.error(
+        `[Cloud] Failed to fetch provider from cloud: ${errorMessage}. HTTP Status: ${response.status} -- ${response.statusText}.`,
+      );
       throw new Error(`Failed to fetch provider from cloud: ${response.statusText}`);
     }
     const body = await response.json();
@@ -59,6 +73,7 @@ export async function getProviderFromCloud(id: string): Promise<ProviderOptions 
   } catch (e) {
     logger.error(`Failed to fetch provider from cloud: ${id}.`);
     logger.error(String(e));
+
     throw new Error(`Failed to fetch provider from cloud: ${id}.`);
   }
 }
@@ -75,6 +90,10 @@ export async function getConfigFromCloud(id: string, providerId?: string): Promi
       'GET',
     );
     if (!response.ok) {
+      const errorMessage = await response.text();
+      logger.error(
+        `[Cloud] Failed to fetch config from cloud: ${errorMessage}. HTTP Status: ${response.status} -- ${response.statusText}.`,
+      );
       throw new Error(`Failed to fetch config from cloud: ${response.statusText}`);
     }
     const body = await response.json();
