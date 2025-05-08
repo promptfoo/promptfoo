@@ -380,7 +380,7 @@ parser:
       url: 'https://example.com/generate_with_tokens',
       transformResponse: (json, text) => {
         // Custom parsing logic that returns object
-        {
+        return {
           output: json.output,
           tokenUsage: {
             prompt: json.usage.input_tokens,
