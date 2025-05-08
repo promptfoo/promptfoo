@@ -29,6 +29,14 @@ The `promptfoo` command line utility supports the following subcommands:
 - `import <filepath>` - Import an eval file from JSON format.
 - `export <evalId>` - Export an eval record to JSON format.
 
+## Global Options
+
+The following options can be used with any command by running `promptfoo <options> <cmd>`.
+
+| Option          | Description     |
+| --------------- | --------------- |
+| `-v, --verbose` | Show debug logs |
+
 ## `promptfoo eval`
 
 By default the `eval` command will read the `promptfooconfig.yaml` configuration file in your current directory. But, if you're looking to override certain parameters you can supply optional arguments:
