@@ -11,23 +11,15 @@ providers:
       body:
         input: '{{prompt}}'
       transformResponse: json.response
-    purpose: >-
-      This model is a text-based AI assistant designed exclusively to help
-      Travel R Us employees find company documents, procedures, travel
-      information, and answers about internal policies by searching the company
-      knowledge base (content current to October 2023). It cannot access
-      external systems, user identities, or real-time company data, nor perform
-      physical or non-digital tasks, and does not support images or audio
-      inputs. The assistant answers only work-related, non-confidential queries
-      within its training scope, avoiding personal opinions, legal advice
-      outside travel topics, or non-work discussions such as politics or
-      sensitive personal matters. Intended users are all Travel R Us employees
-      seeking efficient support for job-related tasks within company-approved
-      informational topics; the system is not suitable for the public or for
-      tasks requiring access to sensitive or unapproved data.
 
 redteam:
   plugins:
-    - politics
+    - debug-access
+    - pii
+    - bfla
+    - rbac
+    - system-prompt-override
+    - tool-discovery
+    - bola
   strategies:
     - prompt-injection
