@@ -34,12 +34,13 @@ export async function doTargetPurposeDiscovery(target: ApiProvider): Promise<str
 
   const conversationHistory: { type: 'promptfoo' | 'target'; content: string }[] = [];
 
-  // TODO: Impose some runtime limits.
   while (true) {
     const res = await fetch(getRemoteGenerationUrl(), {
       body: JSON.stringify({
         task: 'target-purpose-discovery',
         conversationHistory,
+        // TODO: Consider exposing runtime limit.
+        maxTurns: undefined,
         version: VERSION,
         email: getUserEmail(),
       }),
@@ -56,6 +57,8 @@ export async function doTargetPurposeDiscovery(target: ApiProvider): Promise<str
     if (done) {
       logger.info(`\nPurpose:\n\n${chalk.green(purpose)}\n`);
       return purpose as string;
+    } else {
+      conversationHistory.push({ type: 'promptfoo', content: question as string });
     }
 
     // Call the target with the question:
