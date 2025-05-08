@@ -107,7 +107,7 @@ export abstract class SageMakerGenericProvider {
   /**
    * Get AWS credentials from config or environment
    */
-  async getCredentials() {
+  async getCredentials(): Promise<any> {
     if (this.config.accessKeyId && this.config.secretAccessKey) {
       logger.debug('Using explicit credentials from config');
       return {
