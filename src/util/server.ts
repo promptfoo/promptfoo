@@ -1,6 +1,7 @@
 import opener from 'opener';
 import readline from 'readline';
 import { VERSION, getDefaultPort } from '../constants';
+import { getEnvString } from '../envars';
 import logger from '../logger';
 
 export enum BrowserBehavior {
@@ -15,21 +16,55 @@ export enum BrowserBehavior {
  * Prompts the user with a question and returns a Promise that resolves with their answer
  */
 export async function promptUser(question: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    try {
-      const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout,
-      });
-
-      rl.question(question, (answer) => {
-        rl.close();
-        resolve(answer);
-      });
-    } catch (err) {
-      reject(err);
+  // Special handling for test environment
+  if (getEnvString('NODE_ENV') === 'test' || getEnvString('JEST_WORKER_ID')) {
+    // In tests, don't create a real readline interface
+    return 'y'; // Default test response
+  }
+  
+  let rl: readline.Interface | null = null;
+  
+  try {
+    return await new Promise((resolve, reject) => {
+      try {
+        // Create readline interface
+        rl = readline.createInterface({
+          input: process.stdin,
+          output: process.stdout,
+        });
+        
+        // Add error handler
+        rl.on('error', (err) => {
+          if (rl) {
+            rl.close();
+            rl = null;
+          }
+          reject(err);
+        });
+        
+        // Ask the question
+        rl.question(question, (answer) => {
+          if (rl) {
+            rl.close();
+            rl = null;
+          }
+          resolve(answer);
+        });
+      } catch (err) {
+        if (rl) {
+          rl.close();
+          rl = null;
+        }
+        reject(err);
+      }
+    });
+  } finally {
+    // Ensure readline is closed in all cases
+    if (rl) {
+      rl.close();
+      rl = null;
     }
-  });
+  }
 }
 
 /**

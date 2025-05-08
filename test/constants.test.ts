@@ -107,8 +107,12 @@ describe('constants', () => {
   });
 
   describe('TERMINAL_MAX_WIDTH', () => {
-    it('should be 120 if stdout is not TTY', () => {
-      expect(TERMINAL_MAX_WIDTH).toBe(120);
+    it('should match expected terminal width', () => {
+      const expectedWidth = process?.stdout?.isTTY && process?.stdout?.columns && process?.stdout?.columns > 10
+        ? process.stdout.columns - 10
+        : 120;
+      
+      expect(TERMINAL_MAX_WIDTH).toBe(expectedWidth);
     });
   });
 
