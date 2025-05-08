@@ -342,7 +342,7 @@ describe('AnthropicMessagesProvider', () => {
         .mockImplementation()
         .mockResolvedValue({
           content: [{ type: 'text', text: 'Test output' }],
-          usage: { input_tokens: 50, output_tokens: 50 },
+          usage: { input_tokens: 50, output_tokens: 50, server_tool_use: null },
         } as Anthropic.Messages.Message);
 
       const result = await provider.callApi('What is the forecast in San Francisco?');
