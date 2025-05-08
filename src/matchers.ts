@@ -23,6 +23,7 @@ import { getDefaultProviders } from './providers/defaults';
 import { LLAMA_GUARD_REPLICATE_PROVIDER } from './redteam/constants';
 import { shouldGenerateRemote } from './redteam/remoteGeneration';
 import { doRemoteGrading } from './remoteGrading';
+import { doRemoteScoringWithPi } from './remoteScoring';
 import type {
   ApiClassificationProvider,
   ApiEmbeddingProvider,
@@ -523,6 +524,29 @@ export async function matchesLlmRubric(
         rejectedPrediction: 0,
       },
     },
+  };
+}
+
+export async function matchesPiScore(
+  renderedValue: string,
+  llmInput: string,
+  llmOutput: string,
+  assertion?: Assertion | null,
+): Promise<GradingResult> {
+  return {
+    ...(await doRemoteScoringWithPi(
+      {
+        llm_input: llmInput,
+        llm_output: llmOutput,
+        scoring_spec: [
+          {
+            question: renderedValue,
+          },
+        ],
+      },
+      assertion?.threshold,
+    )),
+    assertion,
   };
 }
 
