@@ -20,7 +20,6 @@ import {
 } from '../matchers';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
-import telemetry from '../telemetry';
 import type {
   AssertionParams,
   AssertionValueFunctionContext,
@@ -71,6 +70,7 @@ import { handleModelGradedClosedQa } from './modelGradedClosedQa';
 import { handleModeration } from './moderation';
 import { handleIsValidOpenAiToolsCall } from './openai';
 import { handlePerplexity, handlePerplexityScore } from './perplexity';
+import { handlePiScorer } from './pi';
 import { handlePython } from './python';
 import { handleRedteam } from './redteam';
 import { handleIsRefusal } from './refusal';
@@ -124,10 +124,6 @@ export async function runAssertion({
   const baseType = inverse
     ? (assertion.type.slice(4) as AssertionType)
     : (assertion.type as AssertionType);
-
-  telemetry.record('assertion_used', {
-    type: baseType,
-  });
 
   if (assertion.transform) {
     output = await transform(assertion.transform, output, {
@@ -296,6 +292,7 @@ export async function runAssertion({
     similar: handleSimilar,
     'starts-with': handleStartsWith,
     webhook: handleWebhook,
+    pi: handlePiScorer,
   };
 
   const handler = assertionHandlers[baseType as keyof typeof assertionHandlers];

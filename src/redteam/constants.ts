@@ -1086,6 +1086,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
 export const riskCategories: Record<string, Plugin[]> = {
   'Security & Access Control': [
     // System security
+    'agentic:memory-poisoning',
     'ascii-smuggling',
     'bfla',
     'bola',
@@ -1165,6 +1166,8 @@ export const riskCategories: Record<string, Plugin[]> = {
     'politics',
     'religion',
   ],
+
+  Agentic: [MEMORY_POISONING_PLUGIN_ID],
 };
 
 export const categoryDescriptions = {
@@ -1430,6 +1433,7 @@ export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
   'OWASP API Top 10': 'OWASP API security vulnerabilities framework',
   'OWASP LLM Top 10': 'OWASP LLM security vulnerabilities framework',
   'OWASP Gen AI Red Team': 'OWASP Gen AI Red Teaming Best Practices',
+  'OWASP Agentic AI Top 10': 'OWASP Agentic AI Top 10 Threats and Mitigations',
   RAG: 'Recommended plugins plus additional tests for RAG specific scenarios like access control',
   Recommended: 'A broad set of plugins recommended by Promptfoo',
 } as const;

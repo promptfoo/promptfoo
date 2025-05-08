@@ -18,7 +18,7 @@ import { modelScanCommand } from './commands/modelScan';
 import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
 import { viewCommand } from './commands/view';
-import logger from './logger';
+import logger, { setLogLevel } from './logger';
 import { runDbMigrations } from './migrate';
 import { redteamGenerateCommand } from './redteam/commands/generate';
 import { initCommand as redteamInitCommand } from './redteam/commands/init';
@@ -45,6 +45,8 @@ async function main() {
       program.help();
       process.exitCode = 1;
     });
+
+  program.option('-v, --verbose', 'Show debug logs', false);
 
   // Main commands
   evalCommand(program, defaultConfig, defaultConfigPath);
@@ -86,6 +88,11 @@ async function main() {
   redteamPluginsCommand(redteamBaseCommand);
 
   program.parse();
+
+  const globalOpts = program.opts();
+  if (globalOpts.verbose) {
+    setLogLevel('debug');
+  }
 }
 
 if (require.main === module) {

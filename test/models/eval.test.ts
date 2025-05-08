@@ -239,4 +239,42 @@ describe('evaluator', () => {
       });
     });
   });
+
+  describe('toResultsFile', () => {
+    it('should return results file with correct version', async () => {
+      const eval1 = await EvalFactory.create();
+      const results = await eval1.toResultsFile();
+      expect(results.version).toBe(eval1.version());
+    });
+
+    it('should return results file with all required fields', async () => {
+      const eval1 = await EvalFactory.create();
+      const results = await eval1.toResultsFile();
+
+      expect(results).toEqual({
+        version: eval1.version(),
+        createdAt: new Date(eval1.createdAt).toISOString(),
+        config: eval1.config,
+        author: null,
+        prompts: eval1.getPrompts(),
+        datasetId: null,
+        results: await eval1.toEvaluateSummary(),
+      });
+    });
+
+    it('should handle null author and datasetId', async () => {
+      const eval1 = new Eval({});
+      const results = await eval1.toResultsFile();
+
+      expect(results.author).toBeNull();
+      expect(results.datasetId).toBeNull();
+    });
+
+    it('should include correct results summary', async () => {
+      const eval1 = await EvalFactory.create();
+      const results = await eval1.toResultsFile();
+
+      expect(results.results).toEqual(await eval1.toEvaluateSummary());
+    });
+  });
 });

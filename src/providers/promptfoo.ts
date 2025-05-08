@@ -79,8 +79,16 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
 
       const data = await response.json();
       logger.debug(`[HarmfulCompletionProvider] API call response: ${JSON.stringify(data)}`);
+
+      const validOutputs: string[] = (
+        Array.isArray(data.output) ? data.output : [data.output]
+      ).filter(
+        (item: string | null | undefined): item is string =>
+          typeof item === 'string' && item.length > 0,
+      );
+
       return {
-        output: [data.output].flat(),
+        output: validOutputs,
       };
     } catch (err) {
       logger.info(`[HarmfulCompletionProvider] ${err}`);

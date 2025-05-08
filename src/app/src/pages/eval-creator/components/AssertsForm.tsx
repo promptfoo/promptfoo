@@ -32,6 +32,7 @@ const assertTypes: AssertionType[] = [
   //'python',
   'similar',
   'llm-rubric',
+  'pi',
   'model-graded-closedqa',
   'factuality',
   'webhook',
