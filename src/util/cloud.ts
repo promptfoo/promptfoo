@@ -20,10 +20,8 @@ export function makeRequest(path: string, method: string, body?: any): Promise<R
     });
   } catch (e) {
     logger.error(`[Cloud] Failed to make request to ${url}: ${e}`);
-    // @ts-ignore
-    if (e.cause) {
-      // @ts-ignore
-      logger.error(`Cause: ${e.cause}`);
+    if ((e as any).cause) {
+      logger.error(`Cause: ${(e as any).cause}`);
     }
     throw e;
   }

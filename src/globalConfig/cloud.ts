@@ -95,7 +95,7 @@ export class CloudConfig {
     apiHost: string,
   ): Promise<{ user: CloudUser; organization: CloudOrganization; app: CloudApp }> {
     try {
-      const response = await fetchWithProxy(`${apiHost}/api/v1/users/me`, {
+      const response = await fetchWithProxy(`${apiHost}/users/me`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -128,10 +128,8 @@ export class CloudConfig {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error(`[Cloud] Failed to validate API token with host ${apiHost}: ${errorMessage}`);
-      // @ts-ignore
-      if (error.cause) {
-        // @ts-ignore
-        logger.error(`Cause: ${error.cause}`);
+      if ((error as any).cause) {
+        logger.error(`Cause: ${(error as any).cause}`);
       }
       throw error;
     }
