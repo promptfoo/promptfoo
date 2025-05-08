@@ -1,3 +1,4 @@
+import { getEnvString } from '../../src/envars';
 import { fetchWithProxy } from '../../src/fetch';
 import {
   fetchHuggingFaceDataset,
@@ -8,21 +9,18 @@ jest.mock('../../src/fetch', () => ({
   fetchWithProxy: jest.fn(),
 }));
 
-describe('huggingfaceDatasets', () => {
-  // Save original environment variables
-  const originalEnv = { ...process.env };
+jest.mock('../../src/envars', () => ({
+  getEnvString: jest.fn().mockReturnValue(''),
+}));
 
+describe('huggingfaceDatasets', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    // Clear any HuggingFace tokens for tests that expect no auth
-    delete process.env.HF_TOKEN;
-    delete process.env.HF_API_TOKEN;
-    delete process.env.HUGGING_FACE_HUB_TOKEN;
+    jest.mocked(fetchWithProxy).mockClear();
+    jest.mocked(getEnvString).mockReturnValue('');
   });
 
-  afterAll(() => {
-    // Restore original environment
-    process.env = originalEnv;
+  afterEach(() => {
+    jest.resetAllMocks();
   });
 
   describe('parseDatasetPath', () => {
@@ -102,7 +100,12 @@ describe('huggingfaceDatasets', () => {
   });
 
   it('should include auth token when HF_TOKEN is set', async () => {
-    process.env.HF_TOKEN = 'test-token';
+    jest.mocked(getEnvString).mockImplementation((key) => {
+      if (key === 'HF_TOKEN') {
+        return 'test-token';
+      }
+      return '';
+    });
 
     jest.mocked(fetchWithProxy).mockResolvedValueOnce({
       ok: true,
@@ -126,8 +129,6 @@ describe('huggingfaceDatasets', () => {
         },
       }),
     );
-
-    delete process.env.HF_TOKEN;
   });
 
   it('should handle custom query parameters', async () => {
