@@ -11,6 +11,11 @@ export type PluginConfig = RedteamObjectConfig & {
     score: number;
     reason: string;
   }[];
+  /**
+   * A template string that completely overrides the default grader prompt.
+   * This template still supports nunjucks {{variables}} for template substitution.
+   */
+  graderTemplate?: string;
   severity?: Severity;
 };
 export type StrategyConfig = RedteamObjectConfig;
