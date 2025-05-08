@@ -281,6 +281,9 @@ export type EnvVars = {
   WATSONX_AI_AUTH_TYPE?: string;
   WATSONX_AI_BEARER_TOKEN?: string;
   WATSONX_AI_PROJECT_ID?: string;
+
+  // Pi Labs
+  WITHPI_API_KEY?: string;
 } & EnvOverrides;
 
 // Allow string access to any key for environment variables not explicitly listed
