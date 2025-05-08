@@ -90,25 +90,22 @@ export default class Eval {
   static async findById(id: string) {
     const db = getDb();
 
-    // Use synchronous API with transaction
-    let evalData, datasetResults;
-    db.transaction(() => {
-      evalData = db.select().from(evalsTable).where(eq(evalsTable.id, id)).all();
-      datasetResults = db
-        .select({
-          datasetId: evalsToDatasetsTable.datasetId,
-        })
-        .from(evalsToDatasetsTable)
-        .where(eq(evalsToDatasetsTable.evalId, id))
-        .limit(1)
-        .all();
-    });
+    const evalData = db.select().from(evalsTable).where(eq(evalsTable.id, id)).all();
 
     if (evalData.length === 0) {
       return undefined;
     }
-    const eval_ = evalData[0];
 
+    const datasetResults = db
+      .select({
+        datasetId: evalsToDatasetsTable.datasetId,
+      })
+      .from(evalsToDatasetsTable)
+      .where(eq(evalsToDatasetsTable.evalId, id))
+      .limit(1)
+      .all();
+
+    const eval_ = evalData[0];
     const datasetId = datasetResults[0]?.datasetId;
 
     const evalInstance = new Eval(eval_.config, {
