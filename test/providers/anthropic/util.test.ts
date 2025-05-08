@@ -2,8 +2,10 @@ import type Anthropic from '@anthropic-ai/sdk';
 import dedent from 'dedent';
 import {
   calculateAnthropicCost,
+  getTokenUsage,
   outputFromMessage,
   parseMessages,
+  extractWebSearchMetadata,
 } from '../../../src/providers/anthropic/util';
 
 // Mock for Anthropic types to fix test
@@ -621,6 +623,71 @@ describe('Anthropic utilities', () => {
           content: [{ type: 'text', text: 'Hello!' }],
         },
       ]);
+    });
+  });
+
+  describe('extractWebSearchMetadata', () => {
+    it('should extract web search queries and results from Anthropic response', () => {
+      const mockResponse = {
+        content: [
+          { type: 'text', text: "I'll search for information about quantum computing." },
+          {
+            type: 'server_tool_use',
+            id: 'srvtoolu_123',
+            name: 'web_search',
+            input: {
+              query: 'latest quantum computing breakthroughs 2025',
+            },
+          },
+          {
+            type: 'web_search_tool_result',
+            tool_use_id: 'srvtoolu_123',
+            content: [
+              {
+                type: 'web_search_result',
+                url: 'https://example.com/quantum-computing',
+                title: 'Quantum Computing Breakthroughs 2025',
+                page_age: 'May 2, 2025',
+              },
+              {
+                type: 'web_search_result',
+                url: 'https://example.org/quantum-news',
+                title: 'Latest News in Quantum Computing',
+                page_age: 'April 15, 2025',
+              },
+            ],
+          },
+          {
+            type: 'text',
+            text: 'Based on the search results, there have been significant breakthroughs in quantum computing in 2025.',
+          },
+        ],
+      };
+
+      const metadata = extractWebSearchMetadata(mockResponse);
+      
+      expect(metadata).toHaveProperty('webSearchQueries');
+      expect(metadata).toHaveProperty('webSearchResults');
+      
+      expect(metadata.webSearchQueries).toHaveLength(1);
+      expect(metadata.webSearchQueries[0].query).toBe('latest quantum computing breakthroughs 2025');
+      
+      expect(metadata.webSearchResults).toHaveLength(1);
+      expect(metadata.webSearchResults[0].results).toHaveLength(2);
+      expect(metadata.webSearchResults[0].results[0].url).toBe('https://example.com/quantum-computing');
+      expect(metadata.webSearchResults[0].results[0].title).toBe('Quantum Computing Breakthroughs 2025');
+    });
+
+    it('should return empty metadata for response without web search content', () => {
+      const mockResponse = {
+        content: [
+          { type: 'text', text: 'This is a response without web search content.' },
+        ],
+      };
+
+      const metadata = extractWebSearchMetadata(mockResponse);
+      
+      expect(metadata).toEqual({});
     });
   });
 });

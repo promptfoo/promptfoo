@@ -212,3 +212,55 @@ export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
   }
   return {};
 }
+
+/**
+ * Extract web search information from Anthropic response for metadata
+ */
+export function extractWebSearchMetadata(response: any): Record<string, any> {
+  const metadata: Record<string, any> = {};
+  
+  if (!response?.content) {
+    return metadata;
+  }
+  
+  const searchQueries: any[] = [];
+  const searchResults: any[] = [];
+  
+  response.content.forEach((block: any, index: number) => {
+    // Extract search queries
+    if (block.type === 'server_tool_use' && block.name === 'web_search') {
+      searchQueries.push({
+        id: block.id,
+        query: block.input?.query,
+        index
+      });
+    }
+    
+    // Extract search results
+    if (block.type === 'web_search_tool_result') {
+      const results = block.content
+        ?.filter((item: any) => item.type === 'web_search_result')
+        ?.map((item: any) => ({
+          url: item.url,
+          title: item.title,
+          pageAge: item.page_age
+        })) || [];
+      
+      searchResults.push({
+        toolUseId: block.tool_use_id,
+        results,
+        index
+      });
+    }
+  });
+  
+  if (searchQueries.length > 0) {
+    metadata.webSearchQueries = searchQueries;
+  }
+  
+  if (searchResults.length > 0) {
+    metadata.webSearchResults = searchResults;
+  }
+  
+  return metadata;
+}

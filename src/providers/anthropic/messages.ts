@@ -15,6 +15,7 @@ import {
   parseMessages,
   calculateAnthropicCost,
   getTokenUsage,
+  extractWebSearchMetadata,
   ANTHROPIC_MODELS,
 } from './util';
 
@@ -134,9 +135,14 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       if (cachedResponse) {
         logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
         try {
-          const parsedCachedResponse = JSON.parse(cachedResponse) as Anthropic.Messages.Message;
+          const parsedCachedResponse = JSON.parse(cachedResponse);
           return {
+            cached: true,
             output: outputFromMessage(parsedCachedResponse, this.config.showThinking ?? true),
+            metadata: {
+              ...extractWebSearchMetadata(parsedCachedResponse),
+              ...this.extractThinkingMetadata(parsedCachedResponse),
+            },
             tokenUsage: getTokenUsage(parsedCachedResponse, true),
             cost: calculateAnthropicCost(
               this.modelName,
@@ -178,9 +184,19 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         };
       }
 
+      const output = outputFromMessage(response, this.config.showThinking !== false);
+
       return {
-        output: outputFromMessage(response, this.config.showThinking ?? true),
-        tokenUsage: getTokenUsage(response, false),
+        output,
+        cached: false,
+        error: undefined,
+        metadata: {
+          ...extractWebSearchMetadata(response),
+          ...this.extractThinkingMetadata(response),
+        },
+        tokenUsage: getTokenUsage({
+          usage: response.usage,
+        }, false),
         cost: calculateAnthropicCost(
           this.modelName,
           this.config,
@@ -203,5 +219,42 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         error: `API call error: ${err instanceof Error ? err.message : String(err)}`,
       };
     }
+  }
+
+  postProcessResponse(response: any): any {
+    return response;
+  }
+  
+  /**
+   * Extract thinking information from Anthropic response for metadata
+   */
+  private extractThinkingMetadata(response: any): Record<string, any> {
+    const metadata: Record<string, any> = {};
+    
+    if (!response?.content) {
+      return metadata;
+    }
+    
+    const thinking: any[] = [];
+    
+    response.content.forEach((block: any, index: number) => {
+      if (block.type === 'thinking') {
+        thinking.push({
+          content: block.thinking,
+          index
+        });
+      } else if (block.type === 'redacted_thinking') {
+        thinking.push({
+          content: 'REDACTED',
+          index
+        });
+      }
+    });
+    
+    if (thinking.length > 0) {
+      metadata.thinking = thinking;
+    }
+    
+    return metadata;
   }
 }

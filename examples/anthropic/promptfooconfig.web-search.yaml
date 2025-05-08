@@ -40,6 +40,35 @@ providers:
 tests:
   - vars:
       topic: recent developments in quantum computing (last 3 months)
+    assert:
+      - type: javascript
+        value: |
+          // Check if web search was performed
+          const webSearchQueries = context.metadata?.webSearchQueries || [];
+          const webSearchResults = context.metadata?.webSearchResults || [];
+          
+          // Verify search happened with appropriate query terms
+          const queryHasCorrectTerms = webSearchQueries.some(q => 
+            q.query && q.query.toLowerCase().includes("quantum") && 
+            q.query.toLowerCase().includes("computing")
+          );
+          
+          // Count total sources found
+          const totalSources = webSearchResults.reduce(
+            (count, result) => count + (result.results?.length || 0), 
+            0
+          );
+          
+          // Get a list of all URLs (for logging purposes)
+          const allUrls = webSearchResults.flatMap(result => 
+            (result.results || []).map(r => r.url)
+          );
+          
+          return { 
+            pass: queryHasCorrectTerms && totalSources >= 2, 
+            score: totalSources >= 3 ? 1.0 : 0.8,
+            reason: `Found ${totalSources} sources. URLs: ${allUrls.join(", ")}` 
+          };
   - vars:
       topic: latest NASA mars mission updates
   - vars:

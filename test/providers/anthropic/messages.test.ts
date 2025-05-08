@@ -834,5 +834,69 @@ describe('AnthropicMessagesProvider', () => {
         {},
       );
     });
+
+    it('should extract web search metadata from response', async () => {
+      const provider = new AnthropicMessagesProvider('claude-3-7-sonnet-20250219', {
+        config: {
+          web_search: {
+            type: 'web_search_20250305',
+            name: 'web_search',
+          },
+        },
+      });
+
+      const mockResponse = {
+        content: [
+          { type: 'text', text: "I'll search for information about quantum computing." },
+          {
+            type: 'server_tool_use',
+            id: 'srvtoolu_123',
+            name: 'web_search',
+            input: {
+              query: 'latest quantum computing breakthroughs 2025',
+            },
+          },
+          {
+            type: 'web_search_tool_result',
+            tool_use_id: 'srvtoolu_123',
+            content: [
+              {
+                type: 'web_search_result',
+                url: 'https://example.com/quantum-computing',
+                title: 'Quantum Computing Breakthroughs 2025',
+                page_age: 'May 2, 2025',
+              },
+            ],
+          },
+          {
+            type: 'text',
+            text: 'Based on the search results, there have been significant breakthroughs in quantum computing in 2025.',
+          },
+        ],
+        usage: {
+          input_tokens: 25,
+          output_tokens: 50,
+          server_tool_use: {
+            web_search_requests: 1,
+          },
+        },
+      };
+
+      jest
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockImplementation()
+        .mockResolvedValue(mockResponse as unknown as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('What are the latest quantum computing breakthroughs?');
+
+      expect(result.metadata).toBeDefined();
+      expect(result.metadata).toHaveProperty('webSearchQueries');
+      expect(result.metadata).toHaveProperty('webSearchResults');
+      expect(result.metadata?.webSearchQueries[0].query).toBe('latest quantum computing breakthroughs 2025');
+      expect(result.metadata?.webSearchResults[0].results[0].url).toBe('https://example.com/quantum-computing');
+      
+      // Web search request should be counted in token usage
+      expect(result.tokenUsage?.webSearchRequests).toBe(1);
+    });
   });
 });

@@ -25,6 +25,13 @@ You can set this in a `.env` file or directly in your environment:
 export ANTHROPIC_API_KEY=your_api_key_here
 ```
 
+or specify it in your promptfooconfig files 
+
+```yaml
+env:
+  ANTHROPIC_API_KEY: your_api_key_here
+```
+
 ## Examples Included
 
 ### Basic Prompt Completions
@@ -54,6 +61,21 @@ Tool choice options for web search (auto, forced, disabled):
 ```bash
 npx promptfoo@latest evaluate -c examples/anthropic/promptfooconfig.tool-choice.yaml
 ```
+
+### Web Search Metadata Analytics
+
+Claude's web search responses include valuable metadata that can be analyzed:
+
+```bash
+npx promptfoo@latest evaluate -c examples/anthropic/promptfooconfig.web-search.yaml
+```
+
+This example shows how to:
+- Access search queries performed by Claude
+- Count the number of search results returned
+- Extract URLs and titles from search results
+- Verify Claude is searching for appropriate terms
+- Use metadata for test assertions
 
 ### Extended Thinking
 

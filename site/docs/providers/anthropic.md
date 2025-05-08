@@ -464,6 +464,47 @@ Web search is billed at $10 per 1,000 searches plus standard token costs. Each w
 
 See [Anthropic's Web Search Guide](https://docs.anthropic.com/en/docs/server-tools/web-search-tool) for more details on requirements and best practices.
 
+### Accessing Web Search Details in Results
+
+When using web search, promptfoo captures the search queries and results in the metadata. You can access this information in test assertions or when analyzing results:
+
+```yaml title="promptfooconfig.yaml"
+tests:
+  - vars:
+      query: "latest research on quantum computing"
+    assert:
+      - type: javascript
+        value: |
+          // Access web search metadata
+          const webSearchQueries = context.metadata?.webSearchQueries || [];
+          const webSearchResults = context.metadata?.webSearchResults || [];
+          
+          // Verify that a web search was performed
+          if (webSearchQueries.length === 0) {
+            return { pass: false, reason: "No web search was performed" };
+          }
+          
+          // Check if the search query contained the correct terms
+          const queryContainsTerms = webSearchQueries.some(q => 
+            q.query.includes("quantum") && q.query.includes("research")
+          );
+          
+          // Count the number of search results
+          const totalResults = webSearchResults.reduce(
+            (count, result) => count + (result.results?.length || 0), 
+            0
+          );
+          
+          return { 
+            pass: queryContainsTerms && totalResults > 0, 
+            reason: `Found ${totalResults} search results with appropriate query terms: ${queryContainsTerms}` 
+          };
+```
+
+The metadata includes:
+- `webSearchQueries`: Array of search queries Claude performed
+- `webSearchResults`: Array of search results, including URLs, titles, and page age information
+
 ## Model-Graded Tests
 
 [Model-graded assertions](/docs/configuration/expected-outputs/model-graded/) such as `factuality` or `llm-rubric` will automatically use Anthropic as the grading provider if `ANTHROPIC_API_KEY` is set and `OPENAI_API_KEY` is not set.
