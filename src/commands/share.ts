@@ -3,15 +3,10 @@ import chalk from 'chalk';
 import type { Command } from 'commander';
 import dedent from 'dedent';
 import { getDefaultShareViewBaseUrl } from '../constants';
+import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import Eval from '../models/eval';
-import {
-  createShareableUrl,
-  hasEvalBeenShared,
-  isSharingEnabled,
-  getShareableUrl,
-  isIdempotencySupported,
-} from '../share';
+import { createShareableUrl, hasEvalBeenShared, isSharingEnabled, getShareableUrl } from '../share';
 import telemetry from '../telemetry';
 import { setupEnv } from '../util';
 import { loadDefaultConfig } from '../util/config/default';
@@ -123,7 +118,7 @@ export function shareCommand(program: Command) {
 
         if (
           // Idempotency is not implemented in self-hosted mode.
-          isIdempotencySupported() &&
+          cloudConfig.isEnabled() &&
           (await hasEvalBeenShared(eval_))
         ) {
           const url = await getShareableUrl(eval_, cmdObj.showAuth);

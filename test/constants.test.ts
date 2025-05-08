@@ -2,6 +2,7 @@ import { jest } from '@jest/globals';
 import {
   VERSION,
   DEFAULT_QUERY_LIMIT,
+  DEFAULT_API_BASE_URL,
   getShareApiBaseUrl,
   getDefaultShareViewBaseUrl,
   getShareViewBaseUrl,
@@ -24,9 +25,13 @@ describe('constants', () => {
     expect(DEFAULT_QUERY_LIMIT).toBe(100);
   });
 
+  it('should have DEFAULT_API_BASE_URL set to api.promptfoo.app', () => {
+    expect(DEFAULT_API_BASE_URL).toBe('https://api.promptfoo.app');
+  });
+
   describe('getShareApiBaseUrl', () => {
-    it('should return api.promptfoo.app by default', () => {
-      expect(getShareApiBaseUrl()).toBe('https://api.promptfoo.app');
+    it('should return DEFAULT_API_BASE_URL by default', () => {
+      expect(getShareApiBaseUrl()).toBe(DEFAULT_API_BASE_URL);
     });
 
     it('should return NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL if set', () => {

@@ -2,7 +2,11 @@ import input from '@inquirer/input';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { URL } from 'url';
-import { getShareApiBaseUrl, getDefaultShareViewBaseUrl, getShareViewBaseUrl } from './constants';
+import {
+  getShareApiBaseUrl,
+  getDefaultShareViewBaseUrl,
+  getShareViewBaseUrl,
+} from './constants';
 import { getEnvBool, getEnvInt, isCI, getEnvString } from './envars';
 import { fetchWithProxy } from './fetch';
 import { getAuthor, getUserEmail, setUserEmail } from './globalConfig/accounts';
@@ -481,20 +485,4 @@ export async function hasEvalBeenShared(eval_: Eval): Promise<boolean> {
     logger.error(`[hasEvalBeenShared]: error checking if eval has been shared: ${e}`);
     return false;
   }
-}
-
-/**
- * Checks whether idempotency is supported for sharing in the current environment.
- * Idempotency is supported when:
- * 1. Using cloud mode (cloudConfig.isEnabled)
- * 2. Using the default promptfoo.app service
- *
- * Idempotency is NOT supported when using custom self-hosted URLs.
- */
-export function isIdempotencySupported(): boolean {
-  return (
-    cloudConfig.isEnabled() ||
-    (getShareViewBaseUrl() === getDefaultShareViewBaseUrl() &&
-      getShareApiBaseUrl() === 'https://api.promptfoo.app')
-  );
 }

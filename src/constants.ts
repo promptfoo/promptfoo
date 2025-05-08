@@ -5,6 +5,9 @@ export const VERSION = packageJson.version;
 
 export const DEFAULT_QUERY_LIMIT = 100;
 
+// Default API base URL used for sharing and other API operations
+export const DEFAULT_API_BASE_URL = 'https://api.promptfoo.app';
+
 // This is used for sharing evals.
 export function getShareApiBaseUrl(): string {
   return (
@@ -12,7 +15,7 @@ export function getShareApiBaseUrl(): string {
     getEnvString('NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL') ||
     getEnvString('NEXT_PUBLIC_PROMPTFOO_BASE_URL') ||
     getEnvString('PROMPTFOO_REMOTE_API_BASE_URL') ||
-    `https://api.promptfoo.app`
+    DEFAULT_API_BASE_URL
   );
 }
 
