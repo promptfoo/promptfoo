@@ -1,8 +1,8 @@
 import { fetchWithCache } from './cache';
-import { SHARE_API_BASE_URL } from './constants';
+import { getShareApiBaseUrl } from './constants';
 import logger from './logger';
 
-const API_BASE_URL = `${SHARE_API_BASE_URL}/v1`;
+const API_BASE_URL = `${getShareApiBaseUrl()}/v1`;
 
 export interface GuardResult {
   model: string;
