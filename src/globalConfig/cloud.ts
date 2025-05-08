@@ -95,7 +95,7 @@ export class CloudConfig {
     apiHost: string,
   ): Promise<{ user: CloudUser; organization: CloudOrganization; app: CloudApp }> {
     try {
-      const response = await fetchWithProxy(`${apiHost}/users/me`, {
+      const response = await fetchWithProxy(`${apiHost}/api/v1/users/me`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
