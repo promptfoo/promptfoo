@@ -29,7 +29,7 @@ The `promptfoo` command line utility supports the following subcommands:
 - `import <filepath>` - Import an eval file from JSON format.
 - `export <evalId>` - Export an eval record to JSON format.
 
-## Global Fl
+## Global Options
 
 The following options can be used with any command by running `promptfoo <options> <cmd>`.
 
