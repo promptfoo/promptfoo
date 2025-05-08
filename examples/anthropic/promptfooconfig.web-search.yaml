@@ -1,0 +1,52 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Web Search with Anthropic Claude Models
+prompts:
+  - 'Find me current information about {{topic}} from the web. Include details from at least 2-3 different sources and cite your sources clearly.'
+
+providers:
+  # Claude 3.7 Sonnet with web search enabled
+  - id: anthropic:messages:claude-3-7-sonnet-20250219
+    label: 'Claude 3.7 Sonnet with Web Search'
+    config:
+      temperature: 0.7
+      max_tokens: 2048
+      tools:
+        - type: 'web_search_20250305'
+          name: 'web_search'
+          max_uses: 5
+
+  # Claude 3.5 Sonnet with web search
+  - id: anthropic:messages:claude-3-5-sonnet-latest
+    label: 'Claude 3.5 Sonnet with Web Search'
+    config:
+      temperature: 0.7
+      max_tokens: 2048
+      tools:
+        - type: 'web_search_20250305'
+          name: 'web_search'
+          max_uses: 5
+
+  # Claude 3.5 Haiku with web search
+  - id: anthropic:messages:claude-3-5-haiku-latest
+    label: 'Claude 3.5 Haiku with Web Search'
+    config:
+      temperature: 0.7
+      max_tokens: 2048
+      tools:
+        - type: 'web_search_20250305'
+          name: 'web_search'
+          max_uses: 5
+
+tests:
+  - vars:
+      topic: recent developments in quantum computing (last 3 months)
+  - vars:
+      topic: latest NASA mars mission updates
+  - vars:
+      topic: breakthrough climate change mitigation technologies of 2025
+  - vars:
+      topic: current artificial intelligence regulation policies in the EU
+  - vars:
+      topic: newest advances in renewable energy storage solutions
+  - vars:
+      topic: latest developments in CRISPR gene editing technology

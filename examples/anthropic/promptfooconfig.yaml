@@ -1,0 +1,70 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Anthropic Claude Examples
+prompts:
+  - 'Write a short, quirky tweet about {{topic}} that would go viral.'
+  - 'Explain {{topic}} as if I were a 5-year-old child.'
+  - 'Create a concise definition of {{topic}} for a technical glossary.'
+  - 'Find me current information about {{topic}} from the web. Include details from at least 2-3 different sources and cite your sources clearly.'
+  - file://chat-prompt.json
+
+providers:
+  # Basic Claude 3.7 Sonnet
+  - id: anthropic:messages:claude-3-7-sonnet-20250219
+    label: 'Claude 3.7 Sonnet'
+    config:
+      temperature: 0.7
+      max_tokens: 1024
+
+  # Claude 3.7 Sonnet with web search
+  - id: anthropic:messages:claude-3-7-sonnet-20250219
+    label: 'Claude 3.7 with Web Search'
+    config:
+      temperature: 0.7
+      max_tokens: 2048
+      tools:
+        - type: 'web_search_20250305'
+          name: 'web_search'
+          max_uses: 5
+
+  # Claude 3.7 Sonnet with thinking
+  - id: anthropic:messages:claude-3-7-sonnet-20250219
+    label: 'Claude 3.7 with Thinking'
+    config:
+      temperature: 0.0
+      max_tokens: 2048
+      thinking:
+        type: 'enabled'
+        budget_tokens: 1024
+      showThinking: true
+
+  # Claude 3.5 Haiku
+  - id: anthropic:messages:claude-3-5-haiku-latest
+    label: 'Claude 3.5 Haiku'
+    config:
+      temperature: 0.7
+      max_tokens: 1024
+
+tests:
+  # Basic questions
+  - vars:
+      topic: quantum computing
+  - vars:
+      topic: artificial intelligence
+  - vars:
+      topic: climate change
+
+  # Web search queries
+  - vars:
+      topic: recent breakthroughs in fusion energy
+  - vars:
+      topic: latest developments in quantum computing
+
+  # Conversations
+  - vars:
+      messages:
+        - role: user
+          content: 'Hi Claude! Can you tell me about the benefits of meditation?'
+        - role: assistant
+          content: 'Hello! Meditation offers numerous benefits for both mental and physical health. Some key benefits include stress reduction, improved focus and concentration, better emotional regulation, reduced anxiety and depression, enhanced self-awareness, improved sleep quality, and increased patience and tolerance. Regular meditation practice has also been linked to positive changes in brain structure and function, particularly in areas associated with attention, emotion regulation, and self-awareness. Would you like me to elaborate on any specific benefit or provide guidance on how to start a meditation practice?'
+        - role: user
+          content: 'Could you recommend some beginner-friendly meditation techniques?'

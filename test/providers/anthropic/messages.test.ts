@@ -760,5 +760,49 @@ describe('AnthropicMessagesProvider', () => {
       // Check that web search request is counted in token usage
       expect(result.tokenUsage?.webSearchRequests).toBe(1);
     });
+
+    it('should support disabling tool calls with tool_choice: none', async () => {
+      const provider = new AnthropicMessagesProvider('claude-3-7-sonnet-20250219', {
+        config: {
+          tools: [
+            {
+              type: 'custom' as Anthropic.Tool['type'],
+              name: 'get_weather',
+              description: 'Get weather information',
+              input_schema: {
+                type: 'object',
+                properties: {
+                  location: { type: 'string' },
+                },
+                required: ['location'],
+              },
+            },
+          ],
+          tool_choice: {
+            type: 'none',
+          } as Anthropic.Messages.ToolChoice,
+        },
+      });
+
+      jest
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockImplementation()
+        .mockResolvedValue({
+          content: [{ type: 'text', text: 'I will describe the weather instead of using tools.' }],
+        } as Anthropic.Messages.Message);
+
+      await provider.callApi('What is the weather in San Francisco?');
+
+      expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(1);
+      expect(provider.anthropic.messages.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: 'claude-3-7-sonnet-20250219',
+          tool_choice: {
+            type: 'none',
+          },
+        }),
+        {},
+      );
+    });
   });
 });

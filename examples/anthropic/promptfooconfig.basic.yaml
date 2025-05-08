@@ -1,0 +1,40 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Basic Claude Completion Example
+prompts:
+  - 'Write a short, quirky tweet about {{topic}} that would go viral.'
+  - 'Explain {{topic}} as if I were a 5-year-old child.'
+  - 'Create a concise definition of {{topic}} for a technical glossary.'
+
+providers:
+  # Claude 3.7 Sonnet
+  - id: anthropic:messages:claude-3-7-sonnet-20250219
+    label: 'Claude 3.7 Sonnet'
+    config:
+      temperature: 0.7
+      max_tokens: 1024
+
+  # Claude 3.5 Sonnet
+  - id: anthropic:messages:claude-3-5-sonnet-latest
+    label: 'Claude 3.5 Sonnet'
+    config:
+      temperature: 0.7
+      max_tokens: 1024
+
+  # Claude 3.5 Haiku
+  - id: anthropic:messages:claude-3-5-haiku-latest
+    label: 'Claude 3.5 Haiku'
+    config:
+      temperature: 0.7
+      max_tokens: 1024
+
+tests:
+  - vars:
+      topic: quantum computing
+  - vars:
+      topic: artificial intelligence
+  - vars:
+      topic: space exploration
+  - vars:
+      topic: climate change
+  - vars:
+      topic: cryptocurrency

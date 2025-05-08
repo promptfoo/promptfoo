@@ -30,5 +30,6 @@ __pycache__
 
 # Examples-related
 examples/**/package-lock.json
+examples/anthropic/chat-prompt.json
 examples/huggingface-dataset-factuality/.cache
 examples/redteam-dalle/images

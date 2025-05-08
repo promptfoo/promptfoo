@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Claude Vision Capabilities
+prompts:
+  - file://vision-prompt.json
+
+providers:
+  # Claude 3.7 Sonnet with vision
+  - id: anthropic:messages:claude-3-7-sonnet-20250219
+    label: 'Claude 3.7 Sonnet'
+    config:
+      temperature: 0.2
+      max_tokens: 1024
+
+  # Claude 3.5 Sonnet with vision
+  - id: anthropic:messages:claude-3-5-sonnet-latest
+    label: 'Claude 3.5 Sonnet'
+    config:
+      temperature: 0.2
+      max_tokens: 1024
+
+tests:
+  - vars:
+      prompt: 'Describe what you see in this image.'
+      image_path: 'file://assets/cat.jpg'
+  - vars:
+      prompt: 'What objects can you identify in this image? Make a numbered list.'
+      image_path: 'file://assets/office.jpg'
+  - vars:
+      prompt: 'Analyze the composition and style of this image.'
+      image_path: 'file://assets/painting.jpg'
+  - vars:
+      prompt: 'Can you read and transcribe any text visible in this image?'
+      image_path: 'file://assets/document.jpg'
+  - vars:
+      prompt: 'Analyze the chart in this image and explain what it shows.'
+      image_path: 'file://assets/chart.jpg'

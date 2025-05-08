@@ -1,0 +1,58 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Demonstrating Tool Choice Options with Anthropic Claude
+prompts:
+  - 'Answer this question using your existing knowledge: {{question}}
+    If you need to search the web for more recent information, you can do so.'
+
+providers:
+  # Claude 3.7 Sonnet with auto tool choice (default)
+  - id: anthropic:messages:claude-3-7-sonnet-20250219
+    label: 'Claude with Auto Tool Choice'
+    config:
+      temperature: 0.7
+      max_tokens: 2048
+      tools:
+        - type: 'web_search_20250305'
+          name: 'web_search'
+          max_uses: 5
+      tool_choice:
+        type: 'auto'
+
+  # Claude 3.7 Sonnet with forced tool use
+  - id: anthropic:messages:claude-3-7-sonnet-20250219
+    label: 'Claude with Forced Tool Use'
+    config:
+      temperature: 0.7
+      max_tokens: 2048
+      tools:
+        - type: 'web_search_20250305'
+          name: 'web_search'
+          max_uses: 5
+      tool_choice:
+        type: 'tool'
+        name: 'web_search'
+
+  # Claude 3.7 Sonnet with disabled tool use
+  - id: anthropic:messages:claude-3-7-sonnet-20250219
+    label: 'Claude with Disabled Tool Use'
+    config:
+      temperature: 0.7
+      max_tokens: 2048
+      tools:
+        - type: 'web_search_20250305'
+          name: 'web_search'
+          max_uses: 5
+      tool_choice:
+        type: 'none'
+
+tests:
+  - vars:
+      question: What is the current population of Tokyo, Japan?
+  - vars:
+      question: Who won the most recent Super Bowl?
+  - vars:
+      question: What are the latest features in the new iPhone model?
+  - vars:
+      question: What was the outcome of the recent climate summit?
+  - vars:
+      question: What are the current top movies at the box office?

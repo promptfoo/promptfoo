@@ -1,0 +1,13 @@
+[
+    {% for message in messages %
+    }
+  {
+        "role": "{{ message.role }}",
+        "content": "{{ message.content }}"
+    }{% if not loop.last %
+    },
+    {% endif %
+    }
+{% endfor %
+    }
+]

@@ -1,0 +1,22 @@
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "document",
+        "source": {
+          "type": "text",
+          "media_type": "text/plain",
+          "data": "{{ document }}"
+        },
+        "citations": {
+          "enabled": true
+        }
+      },
+      {
+        "type": "text",
+        "text": "{{ question }}"
+      }
+    ]
+  }
+]

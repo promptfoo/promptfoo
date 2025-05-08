@@ -1,0 +1,52 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Claude Extended Thinking Capability
+prompts:
+  - 'Solve this complex problem step-by-step: {{problem}}'
+
+providers:
+  # Claude 3.7 Sonnet with thinking enabled
+  - id: anthropic:messages:claude-3-7-sonnet-20250219
+    label: 'Claude 3.7 with Thinking'
+    config:
+      temperature: 0.0
+      max_tokens: 4096
+      thinking:
+        type: 'enabled'
+        budget_tokens: 2048
+      showThinking: true
+
+  # Claude 3.7 Sonnet with thinking hidden
+  - id: anthropic:messages:claude-3-7-sonnet-20250219
+    label: 'Claude 3.7 (thinking hidden)'
+    config:
+      temperature: 0.0
+      max_tokens: 4096
+      thinking:
+        type: 'enabled'
+        budget_tokens: 2048
+      showThinking: false
+
+  # Claude 3.7 Sonnet without thinking
+  - id: anthropic:messages:claude-3-7-sonnet-20250219
+    label: 'Claude 3.7 (no thinking)'
+    config:
+      temperature: 0.0
+      max_tokens: 4096
+      thinking:
+        type: 'disabled'
+
+tests:
+  - vars:
+      problem: 'A train travels at 60 mph from City A to City B, which are 120 miles apart. At the same time, another train leaves City B traveling towards City A at 40 mph. A bird flies back and forth between the two trains at 80 mph until the trains meet. How far will the bird travel?'
+
+  - vars:
+      problem: 'Analyze whether this logical argument is valid: All cats have fur. Simba has fur. Therefore, Simba is a cat.'
+
+  - vars:
+      problem: 'You need to design an efficient algorithm to find the shortest path from node A to node B in a weighted graph. What approach would you use and why?'
+
+  - vars:
+      problem: 'Calculate the compound interest on an investment of $10,000 at an annual rate of 5% compounded monthly for 3 years.'
+
+  - vars:
+      problem: 'Evaluate the ethical implications of using AI systems for autonomous weapons. Consider multiple perspectives.'

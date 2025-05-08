@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Multi-turn Conversations with Claude
+prompts:
+  - file://chat-prompt.json
+
+providers:
+  - id: anthropic:messages:claude-3-7-sonnet-20250219
+    label: 'Claude 3.7 Sonnet'
+    config:
+      temperature: 0.7
+      max_tokens: 1024
+
+tests:
+  - vars:
+      messages:
+        - role: user
+          content: 'Hi Claude! Can you tell me about the benefits of meditation?'
+        - role: assistant
+          content: 'Hello! Meditation offers numerous benefits for both mental and physical health. Some key benefits include stress reduction, improved focus and concentration, better emotional regulation, reduced anxiety and depression, enhanced self-awareness, improved sleep quality, and increased patience and tolerance. Regular meditation practice has also been linked to positive changes in brain structure and function, particularly in areas associated with attention, emotion regulation, and self-awareness. Would you like me to elaborate on any specific benefit or provide guidance on how to start a meditation practice?'
+        - role: user
+          content: 'Could you recommend some beginner-friendly meditation techniques?'
+
+  - vars:
+      messages:
+        - role: user
+          content: 'Can you explain how photosynthesis works?'
+        - role: assistant
+          content: 'Photosynthesis is the process plants use to convert light energy into chemical energy. In simple terms, plants take in carbon dioxide from the air and water from the soil, and using energy from sunlight captured by chlorophyll (the green pigment in plants), they transform these ingredients into glucose (sugar) and oxygen. The glucose provides energy for the plant to grow, while oxygen is released into the atmosphere as a byproduct. This process occurs primarily in the chloroplasts of plant cells, especially in leaves. Photosynthesis is essential for life on Earth as it produces oxygen for animals to breathe and serves as the foundation of most food chains.'
+        - role: user
+          content: "What's the difference between C3 and C4 photosynthesis?"
+
+  - vars:
+      messages:
+        - role: user
+          content: 'I need a recipe for chocolate chip cookies.'
+        - role: assistant
+          content: "Here's a classic chocolate chip cookie recipe:\n\nIngredients:\n- 1 cup (2 sticks) unsalted butter, softened\n- 3/4 cup granulated sugar\n- 3/4 cup packed brown sugar\n- 2 large eggs\n- 2 teaspoons vanilla extract\n- 2 1/4 cups all-purpose flour\n- 1 teaspoon baking soda\n- 1/2 teaspoon salt\n- 2 cups semi-sweet chocolate chips\n- 1 cup chopped nuts (optional)\n\nInstructions:\n1. Preheat oven to 375°F (190°C).\n2. In a large bowl, cream together butter, granulated sugar, and brown sugar until smooth.\n3. Beat in eggs one at a time, then stir in vanilla.\n4. In a separate bowl, combine flour, baking soda, and salt. Gradually add to the wet ingredients and mix well.\n5. Fold in chocolate chips and nuts if using.\n6. Drop rounded tablespoons of dough onto ungreased baking sheets.\n7. Bake for 9-11 minutes or until golden brown.\n8. Allow cookies to cool on baking sheet for 2 minutes before removing to wire racks to cool completely.\n\nEnjoy your homemade chocolate chip cookies!"
+        - role: user
+          content: 'Can I make these without eggs? I have an allergy.'

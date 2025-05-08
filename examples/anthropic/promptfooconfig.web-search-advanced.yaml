@@ -1,0 +1,77 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Advanced Web Search Configuration with Anthropic Claude
+prompts:
+  - 'Find me current information about {{topic}} from the web. Focus on data from educational and scientific sources only. Include details from at least 2-3 different sources and cite your sources clearly.'
+
+providers:
+  # Claude 3.7 Sonnet with allowed domains filter
+  - id: anthropic:messages:claude-3-7-sonnet-20250219
+    label: 'Claude 3.7 with Domain Filtering'
+    config:
+      temperature: 0.7
+      max_tokens: 2048
+      tools:
+        - type: 'web_search_20250305'
+          name: 'web_search'
+          max_uses: 5
+          allowed_domains:
+            [
+              'edu',
+              'gov',
+              'nature.com',
+              'science.org',
+              'sciencedirect.com',
+              'scholar.google.com',
+              'researchgate.net',
+              'nih.gov',
+              'nasa.gov',
+            ]
+
+  # Claude 3.7 Sonnet with blocked domains filter
+  - id: anthropic:messages:claude-3-7-sonnet-20250219
+    label: 'Claude 3.7 with Blocked Domains'
+    config:
+      temperature: 0.7
+      max_tokens: 2048
+      tools:
+        - type: 'web_search_20250305'
+          name: 'web_search'
+          max_uses: 5
+          blocked_domains:
+            [
+              'wikipedia.org',
+              'reddit.com',
+              'twitter.com',
+              'facebook.com',
+              'instagram.com',
+              'youtube.com',
+            ]
+
+  # Claude 3.7 Sonnet with location targeting
+  - id: anthropic:messages:claude-3-7-sonnet-20250219
+    label: 'Claude 3.7 with Location Targeting'
+    config:
+      temperature: 0.7
+      max_tokens: 2048
+      tools:
+        - type: 'web_search_20250305'
+          name: 'web_search'
+          max_uses: 5
+          user_location:
+            type: 'approximate'
+            city: 'San Francisco'
+            region: 'California'
+            country: 'US'
+            timezone: 'America/Los_Angeles'
+
+tests:
+  - vars:
+      topic: latest research on quantum computing algorithms
+  - vars:
+      topic: recent advances in space telescope technology
+  - vars:
+      topic: new findings in climate science
+  - vars:
+      topic: current research on fusion energy
+  - vars:
+      topic: latest developments in brain-computer interfaces

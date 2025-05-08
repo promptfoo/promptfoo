@@ -140,6 +140,39 @@ providers:
               - location
 ```
 
+You can control Claude's tool usage behavior with the `tool_choice` parameter:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: anthropic:messages:claude-3-5-sonnet-20241022
+    config:
+      tools:
+        - name: get_weather
+          description: Get the current weather in a given location
+          input_schema:
+            type: object
+            properties:
+              location:
+                type: string
+                description: The city and state, e.g., San Francisco, CA
+            required:
+              - location
+      # Control how Claude uses tools
+      tool_choice:
+        # To let Claude decide when to use tools:
+        type: 'auto'
+
+        # To force Claude to use a specific tool:
+        # type: "tool"
+        # name: "get_weather"
+
+        # To allow Claude to use any available tool:
+        # type: "any"
+
+        # To prevent Claude from using tools even though they're defined:
+        # type: "none"
+```
+
 See the [Anthropic Tool Use Guide](https://docs.anthropic.com/en/docs/tool-use) for more information on how to define tools and the tool use example [here](https://github.com/promptfoo/promptfoo/tree/main/examples/tool-use).
 
 ### Images / Vision
