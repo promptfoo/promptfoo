@@ -74,12 +74,8 @@ jest.mock('../../../src/util/testCaseReader', () => ({
 describe('combineConfigs', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    // Mock process.cwd() to return a consistent path for testing
     jest.spyOn(process, 'cwd').mockReturnValue('/mock/cwd');
-
-    // Update the globSync mock to handle the resolved paths correctly
     jest.mocked(globSync).mockImplementation((pathOrGlob) => {
-      // Convert back from resolved path (/mock/cwd/config.json) to original path (config.json)
       const originalPath =
         typeof pathOrGlob === 'string'
           ? pathOrGlob.replace('/mock/cwd/', '')
