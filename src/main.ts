@@ -29,6 +29,32 @@ import { redteamSetupCommand } from './redteam/commands/setup';
 import { checkForUpdates } from './updates';
 import { loadDefaultConfig } from './util/config/default';
 
+/**
+ * Adds the verbose option to a command and all of its subcommands recursively
+ */
+function addVerboseOptionRecursively(command: Command) {
+  // Add verbose option to the command itself if it doesn't already have one
+  const hasVerboseOption = command.options.some(
+    (option) => option.short === '-v' || option.long === '--verbose',
+  );
+
+  if (!hasVerboseOption) {
+    command.option('-v, --verbose', 'Show debug logs', false);
+  }
+
+  // Add hook to handle the verbose flag
+  command.hook('preAction', (thisCommand) => {
+    if (thisCommand.opts().verbose) {
+      setLogLevel('debug');
+    }
+  });
+
+  // Recursively add to all subcommands
+  command.commands.forEach((subCommand) => {
+    addVerboseOptionRecursively(subCommand);
+  });
+}
+
 async function main() {
   await checkForUpdates();
   await runDbMigrations();
@@ -46,6 +72,7 @@ async function main() {
       process.exitCode = 1;
     });
 
+  // Add verbose option to root command
   program.option('-v, --verbose', 'Show debug logs', false);
 
   // Main commands
@@ -87,12 +114,11 @@ async function main() {
   redteamSetupCommand(redteamBaseCommand);
   redteamPluginsCommand(redteamBaseCommand);
 
-  program.parse();
+  // Add verbose option to all commands recursively
+  // This needs to be done after all commands are defined
+  addVerboseOptionRecursively(program);
 
-  const globalOpts = program.opts();
-  if (globalOpts.verbose) {
-    setLogLevel('debug');
-  }
+  program.parse();
 }
 
 if (require.main === module) {
