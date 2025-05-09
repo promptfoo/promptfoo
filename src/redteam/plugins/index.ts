@@ -283,6 +283,7 @@ const remotePlugins: PluginFactory[] = [
   'religion',
   'ssrf',
   'system-prompt-override',
+  'mcp',
 ].map((key) => createRemotePlugin(key));
 
 remotePlugins.push(
