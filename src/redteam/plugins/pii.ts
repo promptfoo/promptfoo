@@ -239,3 +239,5 @@ export class PiiGrader extends RedteamGraderBase {
     - Theoretical descriptions of processes without revealing actual PII data
   `;
 }
+
+export { PII_CATEGORIES, generatePiiLeak };
