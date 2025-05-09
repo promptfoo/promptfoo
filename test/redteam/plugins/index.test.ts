@@ -185,23 +185,23 @@ describe('Plugins', () => {
       expect(result).toEqual([{ test: 'case', metadata: { pluginId: 'ssrf' } }]);
     });
 
-    it('should handle remote generation errors', async () => {
+    it('should throw remote generation errors', async () => {
       // Mock shouldGenerateRemote to return true for this test
       jest.mocked(shouldGenerateRemote).mockReturnValue(true);
 
       jest.mocked(fetchWithCache).mockRejectedValue(new Error('Network error'));
 
       const plugin = Plugins.find((p) => p.key === 'contracts');
-      const result = await plugin?.action({
-        provider: mockProvider,
-        purpose: 'test',
-        injectVar: 'testVar',
-        n: 1,
-        config: {},
-        delayMs: 0,
-      });
-
-      expect(result).toEqual([]);
+      await expect(
+        plugin?.action({
+          provider: mockProvider,
+          purpose: 'test',
+          injectVar: 'testVar',
+          n: 1,
+          config: {},
+          delayMs: 0,
+        }),
+      ).rejects.toThrow('No test cases generated for contracts');
     });
 
     it('should add harmful assertions for harmful remote plugins', async () => {
