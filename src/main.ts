@@ -18,7 +18,7 @@ import { modelScanCommand } from './commands/modelScan';
 import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
 import { viewCommand } from './commands/view';
-import logger from './logger';
+import logger, { setLogLevel } from './logger';
 import { runDbMigrations } from './migrate';
 import { redteamGenerateCommand } from './redteam/commands/generate';
 import { initCommand as redteamInitCommand } from './redteam/commands/init';
