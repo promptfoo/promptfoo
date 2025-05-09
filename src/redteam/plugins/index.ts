@@ -96,8 +96,7 @@ async function fetchRemoteTestCases(
       REQUEST_TIMEOUT_MS,
     );
     if (status !== 200 || !data || !data.result || !Array.isArray(data.result)) {
-      const errorMessage = `Error generating test cases for ${key}: ${statusText} ${JSON.stringify(data)}`;
-      logger.error(errorMessage);
+      logger.error(`Error generating test cases for ${key}: ${statusText} ${JSON.stringify(data)}`);
       return [];
     }
     const ret = (data as { result: TestCase[] }).result;
