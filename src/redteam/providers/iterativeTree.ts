@@ -876,3 +876,14 @@ class RedteamIterativeTreeProvider implements ApiProvider {
 }
 
 export default RedteamIterativeTreeProvider;
+
+export {
+  MAX_ATTEMPTS,
+  TARGET_SCORE,
+  MAX_DEPTH,
+  MAX_NO_IMPROVEMENT,
+  BRANCHING_FACTOR,
+  pruneOffTopicNodes,
+  pruneToWidth,
+  RedteamIterativeTreeProvider,
+};
