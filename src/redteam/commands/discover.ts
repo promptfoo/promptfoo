@@ -1,13 +1,15 @@
 import chalk from 'chalk';
 import { type Command, Option } from 'commander';
-import type { ApiProvider, UnifiedConfig } from 'src/types';
 import { z } from 'zod';
 import cliState from '../../cliState';
 import { VERSION } from '../../constants';
+import { getEnvString } from '../../envars';
 import { getUserEmail } from '../../globalConfig/accounts';
+import { cloudConfig } from '../../globalConfig/cloud';
 import logger, { setLogLevel } from '../../logger';
 import { loadApiProvider, loadApiProviders } from '../../providers';
 import telemetry from '../../telemetry';
+import type { ApiProvider, UnifiedConfig } from '../../types';
 import { setupEnv } from '../../util';
 import { getProviderFromCloud } from '../../util/cloud';
 import { readConfig } from '../../util/config/load';
@@ -80,6 +82,47 @@ export async function doTargetPurposeDiscovery(
     }
 
     turnCounter++;
+  }
+}
+
+/**
+ * Saves the purpose to the database.
+ *
+ * @param targetId - The target ID.
+ * @param purpose - The purpose.
+ * @returns The response from the database.
+ */
+async function savePurpose(targetId: string, purpose: string) {
+  let apiDomain: string | undefined;
+  const apiBaseUrl = getEnvString('PROMPTFOO_REMOTE_API_BASE_URL');
+
+  if (apiBaseUrl) {
+    apiDomain = apiBaseUrl;
+  } else {
+    invariant(
+      cloudConfig.isEnabled(),
+      'Cloud config should have been enabled for a target to be provided',
+    );
+    apiDomain = cloudConfig.getApiHost();
+  }
+
+  const url = `${apiDomain!}/api/v1/providers/${targetId}`;
+
+  logger.debug(`Saving purpose to ${url}`);
+
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${cloudConfig.getApiKey()}`,
+    },
+    body: JSON.stringify({ applicationDescription: { purpose } }),
+  });
+
+  if (res.ok) {
+    logger.info('Purpose updated');
+  } else {
+    logger.error(`Failed to save purpose to database: ${res.statusText}`);
   }
 }
 
@@ -185,8 +228,7 @@ export function discoverCommand(program: Command) {
       if (!args.preview) {
         // Persist the purposes:
         if (args.target) {
-          // TODO(Will): Save to the database
-          throw new Error('Saving purpose to database is not yet implemented');
+          await savePurpose(args.target, purpose);
         } else {
           invariant(config, 'Config is required');
 
