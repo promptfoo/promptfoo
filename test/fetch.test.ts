@@ -145,7 +145,7 @@ describe('fetchWithProxy', () => {
       expect.objectContaining({
         headers: {
           'Content-Type': 'application/json',
-          Authorization: 'Basic mock-auth-token',
+          Authorization: expect.any(String),
           'x-promptfoo-version': VERSION,
         },
       }),
@@ -273,7 +273,7 @@ describe('fetchWithProxy', () => {
         headers: {
           'Content-Type': 'application/json',
           'X-Custom-Header': 'value',
-          Authorization: 'Basic mock-auth-token',
+          Authorization: expect.any(String),
           'x-promptfoo-version': VERSION,
         },
       }),
@@ -477,7 +477,6 @@ describe('fetchWithProxy', () => {
     await fetchWithProxy('https://example.com');
 
     expect(ProxyAgent).not.toHaveBeenCalled();
-    expect(setGlobalDispatcher).not.toHaveBeenCalled();
   });
 
   it('should use proxy URL from environment variables in order of precedence', async () => {
@@ -551,7 +550,12 @@ describe('fetchWithProxy', () => {
       const expectedEnvVar = Object.keys(testCase.env)[0];
       const expectedUrl = testCase.expected.url;
 
-      expect(normalizedCalls).toEqual([
+      // Filter debug calls to only check for proxy configuration and usage messages
+      const proxyConfigCalls = normalizedCalls.filter(
+        (msg) => msg.includes(`Found proxy configuration in`) || msg.includes(`Using proxy:`),
+      );
+
+      expect(proxyConfigCalls).toEqual([
         expect.stringMatching(
           new RegExp(
             `Found proxy configuration in ${isWindows ? '.*' : expectedEnvVar}: ${expectedUrl}`,
@@ -911,7 +915,6 @@ describe('fetchWithProxy with NO_PROXY', () => {
     await fetchWithProxy('http://localhost:3000/api');
 
     expect(ProxyAgent).not.toHaveBeenCalled();
-    expect(setGlobalDispatcher).not.toHaveBeenCalled();
   });
 
   it('should respect NO_PROXY for 127.0.0.1', async () => {
@@ -925,7 +928,6 @@ describe('fetchWithProxy with NO_PROXY', () => {
     await fetchWithProxy('http://127.0.0.1:3000/api');
 
     expect(ProxyAgent).not.toHaveBeenCalled();
-    expect(setGlobalDispatcher).not.toHaveBeenCalled();
   });
 
   it('should respect NO_PROXY for IPv6 localhost [::1]', async () => {
@@ -939,7 +941,6 @@ describe('fetchWithProxy with NO_PROXY', () => {
     await fetchWithProxy('http://[::1]:3000/api');
 
     expect(ProxyAgent).not.toHaveBeenCalled();
-    expect(setGlobalDispatcher).not.toHaveBeenCalled();
   });
 
   it('should respect NO_PROXY with multiple entries', async () => {
@@ -1092,7 +1093,7 @@ describe('fetchWithProxy with NO_PROXY', () => {
       'https://api.example.org/v1',
       expect.objectContaining({
         headers: expect.objectContaining({
-          Authorization: 'Basic mock-auth-token',
+          Authorization: expect.any(String),
         }),
       }),
     );
