@@ -33,8 +33,19 @@ jest.mock('undici', () => {
     return mockProxyAgentInstance;
   });
 
+  const mockAgentConstructor = jest.fn();
+  const mockAgentInstance = {
+    addRequest: jest.fn(),
+    destroy: jest.fn(),
+  };
+
+  mockAgentConstructor.mockImplementation(() => {
+    return mockAgentInstance;
+  });
+
   return {
     ProxyAgent: mockProxyAgentConstructor,
+    Agent: mockAgentConstructor,
     setGlobalDispatcher: jest.fn(),
   };
 });
@@ -134,7 +145,7 @@ describe('fetchWithProxy', () => {
       expect.objectContaining({
         headers: {
           'Content-Type': 'application/json',
-          Authorization: 'Basic dXNlcm5hbWU6cGFzc3dvcmQ=',
+          Authorization: 'Basic mock-auth-token',
           'x-promptfoo-version': VERSION,
         },
       }),
@@ -262,7 +273,7 @@ describe('fetchWithProxy', () => {
         headers: {
           'Content-Type': 'application/json',
           'X-Custom-Header': 'value',
-          Authorization: 'Basic dXNlcm5hbWU6cGFzc3dvcmQ=',
+          Authorization: 'Basic mock-auth-token',
           'x-promptfoo-version': VERSION,
         },
       }),
@@ -1081,7 +1092,7 @@ describe('fetchWithProxy with NO_PROXY', () => {
       'https://api.example.org/v1',
       expect.objectContaining({
         headers: expect.objectContaining({
-          Authorization: 'Basic dXNlcm5hbWU6cGFzc3dvcmQ=',
+          Authorization: 'Basic mock-auth-token',
         }),
       }),
     );

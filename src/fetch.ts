@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import type { ConnectionOptions } from 'tls';
-import { ProxyAgent, setGlobalDispatcher } from 'undici';
+import { Agent, ProxyAgent, setGlobalDispatcher } from 'undici';
 import cliState from './cliState';
 import { VERSION } from './constants';
 import type { EnvVarKey } from './envars';
@@ -211,6 +211,9 @@ export async function fetchWithProxy(
       proxyTls: tlsOptions,
       requestTls: tlsOptions,
     } as ProxyTlsOptions);
+    setGlobalDispatcher(agent);
+  } else {
+    const agent = new Agent();
     setGlobalDispatcher(agent);
   }
 
