@@ -84,7 +84,7 @@ async function fetchRemoteTestCases(
     email: getUserEmail(),
   });
   try {
-    const { data, status, statusText } = await fetchWithCache(
+    const { data } = await fetchWithCache(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
@@ -95,11 +95,6 @@ async function fetchRemoteTestCases(
       },
       REQUEST_TIMEOUT_MS,
     );
-    if (status !== 200 || !data || !data.result) {
-      const errorMessage = `Error generating test cases for ${key}: ${statusText} ${JSON.stringify(data)}`;
-      logger.error(errorMessage);
-      throw new Error(errorMessage);
-    }
     const ret = (data as { result: TestCase[] }).result;
     logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
     return ret;
@@ -123,9 +118,6 @@ function createPluginFactory<T extends PluginConfig>(
         return new PluginClass(provider, purpose, injectVar, config as T).generateTests(n, delayMs);
       }
       const testCases = await fetchRemoteTestCases(key, purpose, injectVar, n, config);
-      if (!testCases.length) {
-        throw new Error(`No test cases generated for ${key}`);
-      }
       return testCases.map((testCase) => ({
         ...testCase,
         metadata: {
@@ -200,9 +192,6 @@ const pluginFactories: PluginFactory[] = [
       }
 
       const testCases = await getHarmfulTests(params, category);
-      if (!testCases.length) {
-        throw new Error(`No test cases generated for ${category}`);
-      }
       return testCases.map((testCase) => ({
         ...testCase,
         metadata: {
@@ -224,9 +213,6 @@ const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
         params.injectVar,
         params.n,
       );
-      if (!testCases.length) {
-        throw new Error(`No test cases generated for ${category}`);
-      }
       return testCases.map((testCase) => ({
         ...testCase,
         metadata: {
@@ -237,9 +223,6 @@ const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
     }
     logger.debug(`Using local redteam generation for ${category}`);
     const testCases = await getPiiLeakTestsForCategory(params, category);
-    if (!testCases.length) {
-      throw new Error(`No test cases generated for ${category}`);
-    }
     return testCases.map((testCase) => ({
       ...testCase,
       metadata: {
@@ -262,9 +245,6 @@ function createRemotePlugin<T extends PluginConfig>(
         throw new Error(`${key} plugin requires remote generation to be enabled`);
       }
       const testCases: TestCase[] = await fetchRemoteTestCases(key, purpose, injectVar, n, config);
-      if (!testCases) {
-        throw new Error(`No test cases generated for ${key}`);
-      }
       const testsWithMetadata = testCases.map((testCase) => ({
         ...testCase,
         metadata: {
