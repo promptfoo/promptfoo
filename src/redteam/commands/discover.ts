@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import type { Command } from 'commander';
+import { type Command, Option } from 'commander';
 import type { ApiProvider, UnifiedConfig } from 'src/types';
 import { z } from 'zod';
 import cliState from '../../cliState';
@@ -21,6 +21,7 @@ const ArgsSchema = z.object({
   envPath: z.string().optional(),
   verbose: z.boolean().optional(),
   preview: z.boolean().optional(),
+  turns: z.number().optional(),
 });
 
 type Args = z.infer<typeof ArgsSchema>;
@@ -33,7 +34,10 @@ type Args = z.infer<typeof ArgsSchema>;
  * @param maxTurns - The maximum number of turns to run the discovery process.
  * @returns The purpose of the target.
  */
-export async function doTargetPurposeDiscovery(target: ApiProvider, maxTurns?: number): Promise<string> {
+export async function doTargetPurposeDiscovery(
+  target: ApiProvider,
+  maxTurns?: number,
+): Promise<string> {
   logger.info('Discovering purpose...');
 
   const conversationHistory: { type: 'promptfoo' | 'target'; content: string }[] = [];
@@ -94,6 +98,13 @@ export function discoverCommand(program: Command) {
     )
     .option('-t, --target <id>', 'Cloud provider target ID to run the scan on')
     .option('--preview', 'Preview discovery results without modifying the config file', false)
+    .addOption(
+      new Option(
+        '--turns <turns>',
+        'A maximum number of turns to run the discovery process. Lower is faster but less accurate.',
+      ).argParser(Number.parseInt),
+    )
+
     .option('--env-file, --env-path <path>', 'Path to a custom .env file')
     .option('-v, --verbose', 'Show debug logs')
     .action(async (opts: Args) => {
@@ -158,7 +169,7 @@ export function discoverCommand(program: Command) {
       // Discover the purpose for the target:
       let purpose: string | undefined = undefined;
       try {
-        purpose = await doTargetPurposeDiscovery(target);
+        purpose = await doTargetPurposeDiscovery(target, args.turns);
       } catch (error) {
         logger.error(
           `An unexpected error occurred during target discovery: ${error instanceof Error ? error.message : String(error)}\n${
