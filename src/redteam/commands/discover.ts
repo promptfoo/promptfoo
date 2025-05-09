@@ -28,19 +28,24 @@ type Args = z.infer<typeof ArgsSchema>;
 /**
  * Queries Cloud for the purpose-discovery logic, sends each logic to the target,
  * and summarizes the results.
+ *
+ * @param target - The target API provider.
+ * @param maxTurns - The maximum number of turns to run the discovery process.
+ * @returns The purpose of the target.
  */
-export async function doTargetPurposeDiscovery(target: ApiProvider): Promise<string> {
+export async function doTargetPurposeDiscovery(target: ApiProvider, maxTurns?: number): Promise<string> {
   logger.info('Discovering purpose...');
 
   const conversationHistory: { type: 'promptfoo' | 'target'; content: string }[] = [];
+
+  let turnCounter = 1;
 
   while (true) {
     const res = await fetch(getRemoteGenerationUrl(), {
       body: JSON.stringify({
         task: 'target-purpose-discovery',
         conversationHistory,
-        // TODO: Consider exposing runtime limit.
-        maxTurns: undefined,
+        maxTurns,
         version: VERSION,
         email: getUserEmail(),
       }),
@@ -65,6 +70,12 @@ export async function doTargetPurposeDiscovery(target: ApiProvider): Promise<str
     const response = await target.callApi(question as string);
     logger.debug(JSON.stringify({ question, output: response.output }, null, 2));
     conversationHistory.push({ type: 'target', content: response.output });
+
+    if (maxTurns && turnCounter === maxTurns) {
+      return purpose as string;
+    }
+
+    turnCounter++;
   }
 }
 
