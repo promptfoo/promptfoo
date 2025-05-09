@@ -61,7 +61,7 @@ export async function getProviderFromCloud(id: string): Promise<ProviderOptions 
       throw new Error(`Failed to fetch provider from cloud: ${response.statusText}`);
     }
     const body = await response.json();
-    logger.info(`Provider fetched from cloud: ${id}`);
+    logger.debug(`Provider fetched from cloud: ${id}`);
     logger.debug(`Provider from cloud: ${JSON.stringify(body, null, 2)}`);
 
     const provider = ProviderOptionsSchema.parse(body.config);
