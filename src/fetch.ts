@@ -48,7 +48,78 @@ export function sanitizeUrl(url: string): string {
   }
 }
 
-export function getProxyUrl(): string | undefined {
+/**
+ * Checks if a URL should be proxied based on NO_PROXY environment variables
+ */
+function shouldProxy(url: string): boolean {
+  const noProxyEnvVars: EnvVarKey[] = ['NO_PROXY', 'no_proxy'];
+  let noProxyList: string[] = [];
+
+  for (const envVar of noProxyEnvVars) {
+    const noProxyValue = getEnvString(envVar);
+    console.log(`noProxyValue: ${noProxyValue}`);
+    if (noProxyValue) {
+      noProxyList = noProxyValue.split(',').map((host) => host.trim().toLowerCase());
+      break;
+    }
+  }
+
+  if (noProxyList.length === 0) {
+    return true;
+  }
+
+  try {
+    const urlToParse = url.includes('://') ? url : `http://${url}`;
+    const parsedUrl = new URL(urlToParse);
+    const hostname = parsedUrl.hostname;
+    console.log(`hostname: ${hostname}`);
+    // Special case: check for localhost variants
+    if (
+      (hostname === 'localhost' ||
+        hostname === '127.0.0.1' ||
+        hostname === '[::1]' ||
+        hostname === '::1') &&
+      noProxyList.some(
+        (pattern) =>
+          pattern === 'localhost' ||
+          pattern === '127.0.0.1' ||
+          pattern === '[::1]' ||
+          pattern === '::1',
+      )
+    ) {
+      logger.debug(`Not proxying localhost URL: ${sanitizeUrl(url)}`);
+      return false;
+    }
+
+    for (const pattern of noProxyList) {
+      if (hostname === pattern) {
+        return false;
+      }
+
+      // Check for wildcard domain matches (*.example.com)
+      if (pattern.startsWith('*.') && hostname.endsWith(pattern.substring(1))) {
+        return false;
+      }
+
+      // Check for domain suffix matches (.example.com matches subdomain.example.com)
+      if (pattern.startsWith('.') && hostname.endsWith(pattern)) {
+        return false;
+      }
+    }
+
+    return true;
+  } catch (e) {
+    logger.debug(`URL parsing failed in shouldProxy: ${e}`);
+    return true;
+  }
+}
+
+export function getProxyUrl(urlString?: string): string | undefined {
+  if (urlString && !shouldProxy(urlString)) {
+    logger.debug(`Skipping proxy for ${sanitizeUrl(urlString)} due to NO_PROXY setting`);
+    return undefined;
+  }
+
   const proxyEnvVars: EnvVarKey[] = ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy'];
 
   for (const envVar of proxyEnvVars) {
@@ -66,6 +137,15 @@ export async function fetchWithProxy(
   options: PromptfooRequestInit = {},
 ): Promise<Response> {
   let finalUrl = url;
+  let finalUrlString: string | undefined;
+
+  if (typeof url === 'string') {
+    finalUrlString = url;
+  } else if (url instanceof URL) {
+    finalUrlString = url.toString();
+  } else if (url instanceof Request) {
+    finalUrlString = url.url;
+  }
 
   const finalOptions: PromptfooRequestInit = {
     ...options,
@@ -99,13 +179,14 @@ export async function fetchWithProxy(
         parsedUrl.username = '';
         parsedUrl.password = '';
         finalUrl = parsedUrl.toString();
+        finalUrlString = finalUrl.toString();
       }
     } catch (e) {
       logger.debug(`URL parsing failed in fetchWithProxy: ${e}`);
     }
   }
 
-  const proxyUrl = getProxyUrl();
+  const proxyUrl = getProxyUrl(finalUrlString);
 
   const tlsOptions: ConnectionOptions = {
     rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
@@ -164,7 +245,6 @@ export function fetchWithTimeout(
       });
   });
 }
-
 /**
  * Check if a response indicates rate limiting
  */

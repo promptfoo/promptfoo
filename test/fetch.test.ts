@@ -54,6 +54,12 @@ jest.mock('../src/envars', () => {
       if (key === 'http_proxy' && process.env.http_proxy) {
         return process.env.http_proxy;
       }
+      if (key === 'NO_PROXY' && process.env.NO_PROXY) {
+        return process.env.NO_PROXY;
+      }
+      if (key === 'no_proxy' && process.env.no_proxy) {
+        return process.env.no_proxy;
+      }
       if (key === 'PROMPTFOO_CA_CERT_PATH' && process.env.PROMPTFOO_CA_CERT_PATH) {
         return process.env.PROMPTFOO_CA_CERT_PATH;
       }
@@ -65,6 +71,9 @@ jest.mock('../src/envars', () => {
     getEnvBool: jest.fn().mockImplementation((key: string, defaultValue: boolean = false) => {
       if (key === 'PROMPTFOO_INSECURE_SSL') {
         return process.env.PROMPTFOO_INSECURE_SSL === 'true' || false;
+      }
+      if (key === 'PROMPTFOO_RETRY_5XX') {
+        return process.env.PROMPTFOO_RETRY_5XX === 'true' || false;
       }
       return defaultValue;
     }),
@@ -859,5 +868,308 @@ describe('sanitizeUrl', () => {
   it('should return original string for invalid URLs', () => {
     const invalidUrl = 'not-a-url';
     expect(sanitizeUrl(invalidUrl)).toBe(invalidUrl);
+  });
+});
+
+describe('fetchWithProxy with NO_PROXY', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.spyOn(global, 'fetch').mockImplementation();
+    jest.mocked(ProxyAgent).mockClear();
+    jest.mocked(setGlobalDispatcher).mockClear();
+    delete process.env.HTTPS_PROXY;
+    delete process.env.https_proxy;
+    delete process.env.HTTP_PROXY;
+    delete process.env.http_proxy;
+    delete process.env.NO_PROXY;
+    delete process.env.no_proxy;
+  });
+
+  afterEach(() => {
+    jest.resetAllMocks();
+  });
+
+  it('should respect NO_PROXY for localhost URLs', async () => {
+    const mockProxyUrl = 'http://proxy.example.com:8080';
+
+    // Explicitly mock the environment variables
+    jest.mocked(getEnvString).mockImplementation((key) => {
+      return key === 'HTTPS_PROXY' ? mockProxyUrl : key === 'NO_PROXY' ? 'localhost' : '';
+    });
+
+    await fetchWithProxy('http://localhost:3000/api');
+
+    expect(ProxyAgent).not.toHaveBeenCalled();
+    expect(setGlobalDispatcher).not.toHaveBeenCalled();
+  });
+
+  it('should respect NO_PROXY for 127.0.0.1', async () => {
+    const mockProxyUrl = 'http://proxy.example.com:8080';
+
+    // Explicitly mock the environment variables
+    jest.mocked(getEnvString).mockImplementation((key) => {
+      return key === 'HTTPS_PROXY' ? mockProxyUrl : key === 'NO_PROXY' ? 'localhost' : '';
+    });
+
+    await fetchWithProxy('http://127.0.0.1:3000/api');
+
+    expect(ProxyAgent).not.toHaveBeenCalled();
+    expect(setGlobalDispatcher).not.toHaveBeenCalled();
+  });
+
+  it('should respect NO_PROXY for IPv6 localhost [::1]', async () => {
+    const mockProxyUrl = 'http://proxy.example.com:8080';
+
+    // Explicitly mock the environment variables
+    jest.mocked(getEnvString).mockImplementation((key) => {
+      return key === 'HTTPS_PROXY' ? mockProxyUrl : key === 'NO_PROXY' ? 'localhost' : '';
+    });
+
+    await fetchWithProxy('http://[::1]:3000/api');
+
+    expect(ProxyAgent).not.toHaveBeenCalled();
+    expect(setGlobalDispatcher).not.toHaveBeenCalled();
+  });
+
+  it('should respect NO_PROXY with multiple entries', async () => {
+    const mockProxyUrl = 'http://proxy.example.com:8080';
+    const noProxyList = 'example.org,localhost,internal.example.com';
+
+    // Test localhost (no proxy)
+    jest.mocked(getEnvString).mockImplementation((key) => {
+      return key === 'HTTPS_PROXY' ? mockProxyUrl : key === 'NO_PROXY' ? noProxyList : '';
+    });
+
+    await fetchWithProxy('http://localhost:3000/api');
+    expect(ProxyAgent).not.toHaveBeenCalled();
+
+    // Test example.org (no proxy)
+    jest.clearAllMocks();
+    await fetchWithProxy('https://example.org/api');
+    expect(ProxyAgent).not.toHaveBeenCalled();
+
+    // Test internal.example.com (no proxy)
+    jest.clearAllMocks();
+    await fetchWithProxy('https://internal.example.com/api');
+    expect(ProxyAgent).not.toHaveBeenCalled();
+
+    // Test example.com (should use proxy)
+    jest.clearAllMocks();
+    await fetchWithProxy('https://example.com/api');
+    expect(ProxyAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        uri: mockProxyUrl,
+      }),
+    );
+    expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
+  });
+
+  it('should use proxy for domains not in NO_PROXY', async () => {
+    const mockProxyUrl = 'http://proxy.example.com:8080';
+
+    // Explicitly mock the environment variables
+    jest.mocked(getEnvString).mockImplementation((key) => {
+      return key === 'HTTPS_PROXY'
+        ? mockProxyUrl
+        : key === 'NO_PROXY'
+          ? 'localhost,internal.example.com'
+          : '';
+    });
+
+    await fetchWithProxy('https://api.example.com/v1');
+
+    expect(ProxyAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        uri: mockProxyUrl,
+      }),
+    );
+    expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
+  });
+
+  it('should handle wildcard patterns in NO_PROXY', async () => {
+    const mockProxyUrl = 'http://proxy.example.com:8080';
+
+    // Explicitly mock the environment variables
+    jest.mocked(getEnvString).mockImplementation((key) => {
+      return key === 'HTTPS_PROXY'
+        ? mockProxyUrl
+        : key === 'NO_PROXY'
+          ? '*.example.org,localhost'
+          : '';
+    });
+
+    await fetchWithProxy('https://api.example.org/v1');
+    expect(ProxyAgent).not.toHaveBeenCalled();
+
+    jest.clearAllMocks();
+    await fetchWithProxy('https://subdomain.api.example.org/v1');
+    expect(ProxyAgent).not.toHaveBeenCalled();
+
+    jest.clearAllMocks();
+    await fetchWithProxy('https://example.com/v1');
+    expect(ProxyAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        uri: mockProxyUrl,
+      }),
+    );
+  });
+
+  it('should handle domain suffix patterns in NO_PROXY', async () => {
+    const mockProxyUrl = 'http://proxy.example.com:8080';
+
+    // Explicitly mock the environment variables
+    jest.mocked(getEnvString).mockImplementation((key) => {
+      return key === 'HTTPS_PROXY'
+        ? mockProxyUrl
+        : key === 'NO_PROXY'
+          ? '.example.org,localhost'
+          : '';
+    });
+
+    await fetchWithProxy('https://api.example.org/v1');
+    expect(ProxyAgent).not.toHaveBeenCalled();
+
+    jest.clearAllMocks();
+    await fetchWithProxy('https://subdomain.api.example.org/v1');
+    expect(ProxyAgent).not.toHaveBeenCalled();
+
+    jest.clearAllMocks();
+    await fetchWithProxy('https://abc.example.org/v1');
+    expect(ProxyAgent).not.toHaveBeenCalled();
+
+    jest.clearAllMocks();
+    await fetchWithProxy('https://abc.example.com/v1');
+    expect(ProxyAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        uri: mockProxyUrl,
+      }),
+    );
+  });
+
+  it('should handle URLs without schemes', async () => {
+    const mockProxyUrl = 'http://proxy.example.com:8080';
+
+    // Explicitly mock the environment variables
+    jest.mocked(getEnvString).mockImplementation((key) => {
+      return key === 'HTTPS_PROXY'
+        ? mockProxyUrl
+        : key === 'NO_PROXY'
+          ? 'localhost,example.org'
+          : '';
+    });
+
+    await fetchWithProxy('localhost:3000');
+    expect(ProxyAgent).not.toHaveBeenCalled();
+
+    jest.clearAllMocks();
+    await fetchWithProxy('example.org');
+    expect(ProxyAgent).not.toHaveBeenCalled();
+  });
+
+  it('should properly parse URLs with credentials when checking against NO_PROXY', async () => {
+    const mockProxyUrl = 'http://proxy.example.com:8080';
+
+    // Explicitly mock the environment variables
+    jest.mocked(getEnvString).mockImplementation((key) => {
+      return key === 'HTTPS_PROXY' ? mockProxyUrl : key === 'NO_PROXY' ? 'api.example.org' : '';
+    });
+
+    await fetchWithProxy('https://username:password@api.example.org/v1');
+
+    expect(ProxyAgent).not.toHaveBeenCalled();
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://api.example.org/v1',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Basic dXNlcm5hbWU6cGFzc3dvcmQ=',
+        }),
+      }),
+    );
+  });
+
+  it('should handle bad URL inputs gracefully when checking NO_PROXY', async () => {
+    const mockProxyUrl = 'http://proxy.example.com:8080';
+
+    // Explicitly mock the environment variables
+    jest.mocked(getEnvString).mockImplementation((key) => {
+      return key === 'HTTPS_PROXY' ? mockProxyUrl : key === 'NO_PROXY' ? 'localhost' : '';
+    });
+
+    await fetchWithProxy(':::not-a-valid-url:::');
+
+    // Should default to using the proxy if URL parsing fails
+    expect(ProxyAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        uri: mockProxyUrl,
+      }),
+    );
+    expect(logger.debug).toHaveBeenCalledWith(
+      expect.stringContaining('URL parsing failed in shouldProxy'),
+    );
+  });
+
+  it('should use lowercase for NO_PROXY checks', async () => {
+    const mockProxyUrl = 'http://proxy.example.com:8080';
+
+    // Explicitly mock the environment variables
+    jest.mocked(getEnvString).mockImplementation((key) => {
+      return key === 'HTTPS_PROXY'
+        ? mockProxyUrl
+        : key === 'NO_PROXY'
+          ? 'LOCALHOST,API.EXAMPLE.ORG'
+          : '';
+    });
+
+    await fetchWithProxy('http://localhost:3000');
+    expect(ProxyAgent).not.toHaveBeenCalled();
+
+    jest.clearAllMocks();
+    await fetchWithProxy('https://api.example.org/v1');
+    expect(ProxyAgent).not.toHaveBeenCalled();
+  });
+
+  it('should handle URL objects and Request objects', async () => {
+    const mockProxyUrl = 'http://proxy.example.com:8080';
+
+    // Explicitly mock the environment variables
+    jest.mocked(getEnvString).mockImplementation((key) => {
+      return key === 'HTTPS_PROXY'
+        ? mockProxyUrl
+        : key === 'NO_PROXY'
+          ? 'localhost,example.org'
+          : '';
+    });
+
+    const urlObj = new URL('http://localhost:3000');
+    await fetchWithProxy(urlObj.toString());
+    expect(ProxyAgent).not.toHaveBeenCalled();
+
+    jest.clearAllMocks();
+    jest.mocked(getEnvString).mockImplementation((key) => {
+      return key === 'HTTPS_PROXY'
+        ? mockProxyUrl
+        : key === 'NO_PROXY'
+          ? 'localhost,example.org'
+          : '';
+    });
+    const request = new Request('https://example.org/api');
+    await fetchWithProxy(request);
+    expect(ProxyAgent).not.toHaveBeenCalled();
+
+    jest.clearAllMocks();
+    jest.mocked(getEnvString).mockImplementation((key) => {
+      return key === 'HTTPS_PROXY'
+        ? mockProxyUrl
+        : key === 'NO_PROXY'
+          ? 'localhost,example.org'
+          : '';
+    });
+    const otherRequest = new Request('https://example.com/api');
+    await fetchWithProxy(otherRequest);
+    expect(ProxyAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        uri: mockProxyUrl,
+      }),
+    );
   });
 });
