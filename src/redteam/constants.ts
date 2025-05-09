@@ -26,6 +26,7 @@ export const LLAMA_GUARD_ENABLED_CATEGORIES: string[] = [
 export const FOUNDATION_PLUGINS = [
   'ascii-smuggling',
   'beavertails',
+  'bias:gender',
   'contracts',
   'cyberseceval',
   'donotanswer',
@@ -126,7 +127,10 @@ export const HARM_PLUGINS = {
 export type HarmPlugin = keyof typeof HARM_PLUGINS;
 
 export const PII_PLUGINS = ['pii:api-db', 'pii:direct', 'pii:session', 'pii:social'] as const;
+
+export const BIAS_PLUGINS = ['bias:gender'] as const;
 export type PIIPlugin = (typeof PII_PLUGINS)[number];
+export type BiasPlugin = (typeof BIAS_PLUGINS)[number];
 
 export const BASE_PLUGINS = [
   'contracts',
@@ -188,6 +192,7 @@ export type StrategyExemptPlugin = (typeof STRATEGY_EXEMPT_PLUGINS)[number];
 export type Plugin =
   | AdditionalPlugin
   | BasePlugin
+  | BiasPlugin
   | Collection
   | ConfigRequiredPlugin
   | HarmPlugin
@@ -275,6 +280,7 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
     plugins: [
       'harmful:misinformation-disinformation',
       'harmful:hate',
+      'bias:gender',
       'harmful:radicalization',
       'harmful:specialized-advice',
     ],
@@ -680,7 +686,7 @@ export const ALIASED_PLUGIN_MAPPINGS: Record<
   },
   bias: {
     bias: {
-      plugins: ['politics', 'religion'],
+      plugins: ['politics', 'religion', 'bias:gender'],
       strategies: [],
     },
   },
@@ -789,6 +795,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   beavertails: 'Tests handling of malicious prompts from the BeaverTails dataset',
   'best-of-n': 'Jailbreak technique published by Anthropic and Stanford',
   bfla: 'Tests for broken function-level authorization vulnerabilities (OWASP API 5)',
+  'bias:gender': 'Tests handling of gender bias, stereotypes, and discrimination',
   bola: 'Tests for broken object-level authorization vulnerabilities (OWASP API 1)',
   cca: 'Tests for vulnerability to Context Compliance Attacks using fabricated conversation history',
   citation: 'Exploits academic authority bias to bypass content filters',
@@ -917,6 +924,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   hallucination: 'False Information (Hallucination)',
   harmbench: 'HarmBench Dataset',
   harmful: 'Malicious Content Suite',
+  'bias:gender': 'Gender Bias',
   'harmful:chemical-biological-weapons': 'WMD Content',
   'harmful:child-exploitation': 'Child Exploitation',
   'harmful:copyright-violations': 'IP Violations',
@@ -1028,6 +1036,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   hallucination: Severity.Medium,
   harmbench: Severity.Medium,
   harmful: Severity.Medium,
+  'bias:gender': Severity.Low,
   'harmful:chemical-biological-weapons': Severity.High,
   'harmful:child-exploitation': Severity.Critical,
   'harmful:copyright-violations': Severity.Low,
@@ -1132,6 +1141,7 @@ export const riskCategories: Record<string, Plugin[]> = {
   ],
 
   'Trust & Safety': [
+    'bias:gender',
     'harmful:child-exploitation',
     'harmful:graphic-content',
     'harmful:harassment-bullying',
@@ -1216,6 +1226,7 @@ export const categoryAliases: Record<Plugin, string> = {
   hallucination: 'Hallucination',
   harmbench: 'Harmbench',
   harmful: 'Harmful',
+  'bias:gender': 'Gender Bias',
   'harmful:chemical-biological-weapons': 'Chemical & Biological Weapons',
   'harmful:child-exploitation': 'Child Exploitation',
   'harmful:copyright-violations': 'Copyright Violations - Copyrighted text',
@@ -1305,6 +1316,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   harmbench:
     'Tests for harmful content, illegal activities, misinformation using the HarmBench dataset from the Center for AI Safety (CAIS)',
   harmful: 'Comprehensive suite for testing handling of various categories of malicious content',
+  'bias:gender': 'Tests handling of gender bias in responses, stereotypes, and discrimination',
   'harmful:chemical-biological-weapons': 'Tests detection and response to WMD-related content',
   'harmful:child-exploitation': 'Tests handling of child exploitation content',
   'harmful:copyright-violations': 'Tests handling of intellectual property violations',
