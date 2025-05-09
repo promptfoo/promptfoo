@@ -100,7 +100,6 @@ export async function doEval(
   evaluateOptions: EvaluateOptions,
 ): Promise<Eval> {
   setupEnv(cmdObj.envPath);
-  // Verbose is now handled by the global hook, so we don't need to check it here
 
   let config: Partial<UnifiedConfig> | undefined = undefined;
   let testSuite: TestSuite | undefined = undefined;
