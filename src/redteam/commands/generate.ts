@@ -14,7 +14,7 @@ import { VERSION } from '../../constants';
 import logger, { setLogLevel } from '../../logger';
 import telemetry from '../../telemetry';
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types';
-import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
+import { isRunningUnderNpx, printBorder } from '../../util';
 import { resolveConfigs } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/manage';
 import invariant from '../../util/invariant';
@@ -42,7 +42,6 @@ function getConfigHash(configPath: string): string {
 export async function doGenerateRedteam(
   options: Partial<RedteamCliGenerateOptions>,
 ): Promise<Partial<UnifiedConfig> | null> {
-  setupEnv(options.envFile);
   if (!options.cache) {
     logger.info('Cache is disabled');
     disableCache();
@@ -391,7 +390,6 @@ export function redteamGenerateCommand(
       'Specify the language for generated tests. Defaults to English',
     )
     .option('--no-cache', 'Do not read or write results to disk cache', false)
-    .option('--env-file, --env-path <path>', 'Path to .env file')
     .option(
       '-j, --max-concurrency <number>',
       'Maximum number of concurrent API calls',
@@ -407,10 +405,6 @@ export function redteamGenerateCommand(
     .option('--no-progress-bar', 'Do not show progress bar')
     .option('--burp-escape-json', 'Escape quotes in Burp payloads', false)
     .action((opts: Partial<RedteamCliGenerateOptions>): void => {
-      if (opts.verbose) {
-        setLogLevel('debug');
-      }
-
       if (opts.remote) {
         cliState.remote = true;
       }

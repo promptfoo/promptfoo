@@ -31,7 +31,7 @@ import { OutputFileExtension, TestSuiteSchema } from '../types';
 import { CommandLineOptionsSchema } from '../types';
 import { isApiProvider } from '../types/providers';
 import { isRunningUnderNpx } from '../util';
-import { printBorder, setupEnv, writeMultipleOutputs } from '../util';
+import { printBorder, writeMultipleOutputs } from '../util';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
 import { maybeLoadFromExternalFile } from '../util/file';
@@ -99,7 +99,6 @@ export async function doEval(
   defaultConfigPath: string | undefined,
   evaluateOptions: EvaluateOptions,
 ): Promise<Eval> {
-  setupEnv(cmdObj.envPath);
   if (cmdObj.verbose) {
     setLogLevel('debug');
   }
@@ -584,7 +583,6 @@ export function evalCommand(
       '-c, --config <paths...>',
       'Path to configuration file. Automatically loads promptfooconfig.yaml',
     )
-    .option('--env-file, --env-path <path>', 'Path to .env file')
 
     // Input sources
     .option('-a, --assertions <path>', 'Path to assertions file')

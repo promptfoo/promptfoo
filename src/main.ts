@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
+import * as fs from 'fs';
+import * as path from 'path';
 import { version } from '../package.json';
 import { checkNodeVersion } from './checkNodeVersion';
 import { authCommand } from './commands/auth';
@@ -18,7 +20,7 @@ import { modelScanCommand } from './commands/modelScan';
 import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
 import { viewCommand } from './commands/view';
-import logger from './logger';
+import logger, { setLogLevel } from './logger';
 import { runDbMigrations } from './migrate';
 import { redteamGenerateCommand } from './redteam/commands/generate';
 import { initCommand as redteamInitCommand } from './redteam/commands/init';
@@ -27,13 +29,81 @@ import { redteamReportCommand } from './redteam/commands/report';
 import { redteamRunCommand } from './redteam/commands/run';
 import { redteamSetupCommand } from './redteam/commands/setup';
 import { checkForUpdates } from './updates';
+import { setupEnv } from './util';
 import { loadDefaultConfig } from './util/config/default';
+import { getConfigDirectoryPath } from './util/config/manage';
+
+/**
+ * Creates the cache/output directory if it doesn't exist
+ */
+function ensureOutDir() {
+  const outputDir = path.join(getConfigDirectoryPath(), 'output');
+  if (!fs.existsSync(outputDir)) {
+    fs.mkdirSync(outputDir, { recursive: true });
+  }
+}
+
+/**
+ * Adds the verbose option to a command and all of its subcommands recursively
+ */
+function addVerboseOptionRecursively(command: Command) {
+  // Add verbose option to the command itself if it doesn't already have one
+  const hasVerboseOption = command.options.some(
+    (option) => option.short === '-v' || option.long === '--verbose',
+  );
+
+  if (!hasVerboseOption) {
+    command.option('-v, --verbose', 'Show debug logs', false);
+  }
+
+  // Add hook to handle the verbose flag
+  command.hook('preAction', (thisCommand) => {
+    if (thisCommand.opts().verbose) {
+      setLogLevel('debug');
+    }
+  });
+
+  // Recursively add to all subcommands
+  command.commands.forEach((subCommand) => {
+    addVerboseOptionRecursively(subCommand);
+  });
+}
+
+/**
+ * Adds the env-file option to a command and all of its subcommands recursively
+ */
+function addEnvFileOptionRecursively(command: Command) {
+  // Add env-file option to the command itself if it doesn't already have one
+  const hasEnvFileOption = command.options.some(
+    (option) => option.long === '--env-file' || option.long === '--env-path',
+  );
+
+  if (!hasEnvFileOption) {
+    command.option('--env-file, --env-path <path>', 'Path to .env file');
+  }
+
+  // Add hook to handle the env-file option
+  command.hook('preAction', (thisCommand) => {
+    const envPath = thisCommand.opts().envFile || thisCommand.opts().envPath;
+    if (envPath) {
+      setupEnv(envPath);
+    }
+  });
+
+  // Recursively add to all subcommands
+  command.commands.forEach((subCommand) => {
+    addEnvFileOptionRecursively(subCommand);
+  });
+}
 
 async function main() {
   await checkForUpdates();
   await runDbMigrations();
 
   const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
+
+  // Create cache/output dir if it doesn't exist
+  ensureOutDir();
 
   const program = new Command('promptfoo');
   program
@@ -84,6 +154,14 @@ async function main() {
   redteamReportCommand(redteamBaseCommand);
   redteamSetupCommand(redteamBaseCommand);
   redteamPluginsCommand(redteamBaseCommand);
+
+  // Add verbose option to all commands recursively
+  // This needs to be done after all commands are defined
+  addVerboseOptionRecursively(program);
+
+  // Add env-file option to all commands recursively
+  // This needs to be done after all commands are defined
+  addEnvFileOptionRecursively(program);
 
   program.parse();
 }
