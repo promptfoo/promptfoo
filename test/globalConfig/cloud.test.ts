@@ -115,6 +115,7 @@ describe('CloudConfig', () => {
       const mockFetchResponse = {
         ok: true,
         json: () => Promise.resolve(mockResponse),
+        text: () => Promise.resolve(JSON.stringify(mockResponse)),
       } as Response;
 
       jest.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
@@ -140,6 +141,7 @@ describe('CloudConfig', () => {
         ok: false,
         statusText: 'Unauthorized',
         json: () => Promise.reject(new Error('Unauthorized')),
+        text: () => Promise.resolve('Unauthorized'),
       } as Response;
 
       jest.mocked(fetchWithProxy).mockResolvedValue(mockErrorResponse);
