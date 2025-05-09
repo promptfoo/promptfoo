@@ -57,7 +57,7 @@ function shouldProxy(url: string): boolean {
 
   for (const envVar of noProxyEnvVars) {
     const noProxyValue = getEnvString(envVar);
-    console.log(`noProxyValue: ${noProxyValue}`);
+    logger.debug(`Found ${envVar}: ${noProxyValue}`);
     if (noProxyValue) {
       noProxyList = noProxyValue.split(',').map((host) => host.trim().toLowerCase());
       break;
@@ -72,7 +72,6 @@ function shouldProxy(url: string): boolean {
     const urlToParse = url.includes('://') ? url : `http://${url}`;
     const parsedUrl = new URL(urlToParse);
     const hostname = parsedUrl.hostname;
-    console.log(`hostname: ${hostname}`);
     // Special case: check for localhost variants
     if (
       (hostname === 'localhost' ||
