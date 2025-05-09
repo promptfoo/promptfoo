@@ -156,7 +156,7 @@ export interface RunEvalOptions {
   abortSignal?: AbortSignal;
 }
 
-const EvaluateOptionsSchema = z.object({
+export const EvaluateOptionsSchema = z.object({
   cache: z.boolean().optional(),
   delay: z.number().optional(),
   eventSource: z.string().optional(),
@@ -182,6 +182,11 @@ const EvaluateOptionsSchema = z.object({
     .optional(),
   repeat: z.number().optional(),
   showProgressBar: z.boolean().optional(),
+  /**
+   * Specify which variables to include in the output and in what order.
+   * When not provided, all variables are included in alphabetical order.
+   */
+  outputVars: z.array(z.string()).optional(),
   /**
    * Timeout in milliseconds for each evaluation step. Default is 0 (no timeout).
    */

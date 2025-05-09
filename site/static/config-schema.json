@@ -1455,6 +1455,12 @@
             "showProgressBar": {
               "type": "boolean"
             },
+            "outputVars": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
             "timeoutMs": {
               "type": "number"
             }

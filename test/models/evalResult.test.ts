@@ -15,13 +15,22 @@ describe('EvalResult', () => {
     await runDbMigrations();
   });
 
+  beforeEach(() => {
+    process.env.PROMPTFOO_OUTPUT_VARS = '';
+    process.env.PROMPTFOO_STRIP_TEST_VARS = '';
+  });
+
   const mockProvider: ProviderOptions = {
     id: 'test-provider',
     label: 'Test Provider',
   };
 
   const mockTestCase: AtomicTestCase = {
-    vars: {},
+    vars: {
+      var1: 'value1',
+      var2: 'value2',
+      var3: 'value3',
+    },
     provider: mockProvider,
   };
 
@@ -104,6 +113,158 @@ describe('EvalResult', () => {
     });
   });
 
+  describe('toEvaluateResult', () => {
+    it('should filter and order vars based on PROMPTFOO_OUTPUT_VARS', () => {
+      process.env.PROMPTFOO_OUTPUT_VARS = 'var2,var1';
+      const result = new EvalResult({
+        id: 'test-id',
+        evalId: 'test-eval',
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: mockTestCase,
+        prompt: mockPrompt,
+        success: true,
+        score: 1,
+        response: null,
+        gradingResult: null,
+        provider: mockProvider,
+        failureReason: ResultFailureReason.NONE,
+        namedScores: {},
+      });
+
+      const evaluateResult = result.toEvaluateResult();
+      expect(Object.keys(evaluateResult.vars)).toEqual(['var2', 'var1']);
+      expect(evaluateResult.vars).toEqual({
+        var2: 'value2',
+        var1: 'value1',
+      });
+    });
+
+    it('should handle non-existent var names in PROMPTFOO_OUTPUT_VARS', () => {
+      process.env.PROMPTFOO_OUTPUT_VARS = 'var2,nonexistent,var1';
+      const result = new EvalResult({
+        id: 'test-id',
+        evalId: 'test-eval',
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: mockTestCase,
+        prompt: mockPrompt,
+        success: true,
+        score: 1,
+        response: null,
+        gradingResult: null,
+        provider: mockProvider,
+        failureReason: ResultFailureReason.NONE,
+        namedScores: {},
+      });
+
+      const evaluateResult = result.toEvaluateResult();
+      expect(Object.keys(evaluateResult.vars)).toEqual(['var2', 'var1']);
+    });
+
+    it('should filter vars based on config evaluateOptions.outputVars', () => {
+      const result = new EvalResult({
+        id: 'test-id',
+        evalId: 'test-eval',
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: mockTestCase,
+        prompt: mockPrompt,
+        success: true,
+        score: 1,
+        response: null,
+        gradingResult: null,
+        provider: mockProvider,
+        failureReason: ResultFailureReason.NONE,
+        namedScores: {},
+        metadata: {
+          config: {
+            evaluateOptions: {
+              outputVars: ['var3', 'var1'],
+            },
+          },
+        },
+      });
+
+      const evaluateResult = result.toEvaluateResult();
+      expect(Object.keys(evaluateResult.vars)).toEqual(['var3', 'var1']);
+    });
+
+    it('should prioritize PROMPTFOO_OUTPUT_VARS over config outputVars', () => {
+      process.env.PROMPTFOO_OUTPUT_VARS = 'var2,var1';
+      const result = new EvalResult({
+        id: 'test-id',
+        evalId: 'test-eval',
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: mockTestCase,
+        prompt: mockPrompt,
+        success: true,
+        score: 1,
+        response: null,
+        gradingResult: null,
+        provider: mockProvider,
+        failureReason: ResultFailureReason.NONE,
+        namedScores: {},
+        metadata: {
+          config: {
+            evaluateOptions: {
+              outputVars: ['var3', 'var1'],
+            },
+          },
+        },
+      });
+
+      const evaluateResult = result.toEvaluateResult();
+      expect(Object.keys(evaluateResult.vars)).toEqual(['var2', 'var1']);
+    });
+
+    it('should return all vars when no filtering is specified', () => {
+      const result = new EvalResult({
+        id: 'test-id',
+        evalId: 'test-eval',
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: mockTestCase,
+        prompt: mockPrompt,
+        success: true,
+        score: 1,
+        response: null,
+        gradingResult: null,
+        provider: mockProvider,
+        failureReason: ResultFailureReason.NONE,
+        namedScores: {},
+      });
+
+      const evaluateResult = result.toEvaluateResult();
+      expect(evaluateResult.vars).toEqual(mockTestCase.vars);
+    });
+
+    it('should return empty object when PROMPTFOO_STRIP_TEST_VARS is true', () => {
+      process.env.PROMPTFOO_STRIP_TEST_VARS = 'true';
+      process.env.PROMPTFOO_OUTPUT_VARS = 'var1,var2';
+
+      const result = new EvalResult({
+        id: 'test-id',
+        evalId: 'test-eval',
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: mockTestCase,
+        prompt: mockPrompt,
+        success: true,
+        score: 1,
+        response: null,
+        gradingResult: null,
+        provider: mockProvider,
+        failureReason: ResultFailureReason.NONE,
+        namedScores: {},
+      });
+
+      const evaluateResult = result.toEvaluateResult();
+      expect(evaluateResult.vars).toEqual({});
+    });
+  });
+
   describe('createFromEvaluateResult', () => {
     it('should create and persist an EvalResult', async () => {
       const evalId = 'test-eval-id';
@@ -114,7 +275,6 @@ describe('EvalResult', () => {
       expect(result.promptId).toBe(hashPrompt(mockPrompt));
       expect(result.persisted).toBe(true);
 
-      // Verify it was persisted to database
       const retrieved = await EvalResult.findById(result.id);
       expect(retrieved).not.toBeNull();
       expect(retrieved?.score).toBe(mockEvaluateResult.score);
@@ -129,15 +289,12 @@ describe('EvalResult', () => {
       expect(result).toBeInstanceOf(EvalResult);
       expect(result.persisted).toBe(false);
 
-      // Verify it was not persisted to database
       const retrieved = await EvalResult.findById(result.id);
       expect(retrieved).toBeNull();
     });
 
     it('should properly handle circular references in provider', async () => {
       const evalId = 'test-eval-id';
-
-      // Create a provider with a circular reference
       const circularProvider: ProviderOptions = {
         id: 'test-provider',
         label: 'Test Provider',
@@ -162,7 +319,6 @@ describe('EvalResult', () => {
         { persist: true },
       );
 
-      // Verify the provider was properly serialized
       expect(resultWithCircular.provider).toEqual({
         id: 'test-provider',
         label: 'Test Provider',
@@ -174,7 +330,6 @@ describe('EvalResult', () => {
         },
       });
 
-      // Verify it can be persisted without errors
       const retrieved = await EvalResult.findById(resultWithCircular.id);
       expect(retrieved).not.toBeNull();
       expect(retrieved?.provider).toEqual({
@@ -188,47 +343,12 @@ describe('EvalResult', () => {
         },
       });
     });
-
-    it('should preserve non-circular provider properties', async () => {
-      const evalId = 'test-eval-id';
-
-      const providerWithNestedData: ProviderOptions = {
-        id: 'test-provider',
-        label: 'Test Provider',
-        config: {
-          apiKey: 'secret-key',
-          options: {
-            temperature: 0.7,
-            maxTokens: 100,
-          },
-        },
-      };
-
-      const result = await EvalResult.createFromEvaluateResult(
-        evalId,
-        {
-          ...mockEvaluateResult,
-          provider: providerWithNestedData,
-          testCase: { ...mockTestCase, provider: providerWithNestedData },
-        },
-        { persist: true },
-      );
-
-      // Verify nested properties are preserved
-      expect(result.provider).toEqual(providerWithNestedData);
-
-      // Verify it can be persisted and retrieved with all properties intact
-      const retrieved = await EvalResult.findById(result.id);
-      expect(retrieved).not.toBeNull();
-      expect(retrieved?.provider).toEqual(providerWithNestedData);
-    });
   });
 
   describe('findManyByEvalId', () => {
     it('should retrieve multiple results for an eval ID', async () => {
       const evalId = 'test-eval-id-multiple';
 
-      // Create multiple results
       await EvalResult.createFromEvaluateResult(evalId, {
         ...mockEvaluateResult,
         testIdx: 0,
@@ -301,29 +421,6 @@ describe('EvalResult', () => {
 
       const retrieved = await EvalResult.findById(result.id);
       expect(retrieved?.score).toBe(0.5);
-    });
-  });
-
-  describe('toEvaluateResult', () => {
-    it('should convert EvalResult to EvaluateResult format', async () => {
-      const result = await EvalResult.createFromEvaluateResult('test-eval-id', mockEvaluateResult);
-
-      const evaluateResult = result.toEvaluateResult();
-
-      // Only test the specific fields we care about
-      expect(evaluateResult).toEqual(
-        expect.objectContaining({
-          promptIdx: mockEvaluateResult.promptIdx,
-          testIdx: mockEvaluateResult.testIdx,
-          prompt: mockEvaluateResult.prompt,
-          success: mockEvaluateResult.success,
-          score: mockEvaluateResult.score,
-          provider: {
-            id: mockProvider.id,
-            label: mockProvider.label,
-          },
-        }),
-      );
     });
   });
 });

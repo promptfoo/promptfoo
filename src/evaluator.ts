@@ -302,6 +302,8 @@ export async function runEval({
       logger.debug(`Skipping delay because response is cached`);
     }
 
+    logger.debug(`evaluateOptions for result: ${JSON.stringify(evaluateOptions, null, 2)}`);
+
     const ret: EvaluateResult = {
       ...setup,
       response,
@@ -314,6 +316,9 @@ export async function runEval({
       metadata: {
         ...test.metadata,
         ...response.metadata,
+        config: {
+          evaluateOptions,
+        },
       },
       promptIdx,
       testIdx,
@@ -501,6 +506,7 @@ class Evaluator {
   constructor(testSuite: TestSuite, evalRecord: Eval, options: EvaluateOptions) {
     this.testSuite = testSuite;
     this.evalRecord = evalRecord;
+
     this.options = options;
     this.stats = {
       successes: 0,

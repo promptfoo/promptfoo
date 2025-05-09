@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import { and, eq, gte, lt } from 'drizzle-orm';
 import { getDb } from '../database';
 import { evalResultsTable } from '../database/tables';
-import { getEnvBool } from '../envars';
+import { getEnvBool, getEnvString } from '../envars';
 import { hashPrompt } from '../prompts/utils';
 import type {
   AtomicTestCase,
@@ -265,6 +265,8 @@ export default class EvalResult {
     const shouldStripTestVars = getEnvBool('PROMPTFOO_STRIP_TEST_VARS', false);
     const shouldStripGradingResult = getEnvBool('PROMPTFOO_STRIP_GRADING_RESULT', false);
     const shouldStripMetadata = getEnvBool('PROMPTFOO_STRIP_METADATA', false);
+    const outputVarsStr = getEnvString('PROMPTFOO_OUTPUT_VARS');
+    const outputVars = outputVarsStr ? outputVarsStr.split(',') : undefined;
 
     const response =
       shouldStripResponseOutput && this.response
@@ -288,6 +290,25 @@ export default class EvalResult {
         }
       : this.testCase;
 
+    // Process vars based on outputVars setting
+    let vars = shouldStripTestVars ? {} : this.testCase.vars || {};
+
+    // First check if there's any metadata with the config
+    const configOutputVars = this.metadata?.config?.evaluateOptions?.outputVars;
+
+    // If outputVars is defined (from env or config), filter and order the vars according to the specified list
+    const varsToUse = outputVars || configOutputVars;
+    if (!shouldStripTestVars && varsToUse && varsToUse.length > 0 && vars) {
+      const filteredVars: Record<string, string | object> = {};
+      // Add vars in specified order
+      for (const varName of varsToUse) {
+        if (Object.prototype.hasOwnProperty.call(vars, varName)) {
+          filteredVars[varName] = vars[varName];
+        }
+      }
+      vars = filteredVars;
+    }
+
     return {
       cost: this.cost,
       description: this.description || undefined,
@@ -305,7 +326,7 @@ export default class EvalResult {
       success: this.success,
       testCase,
       testIdx: this.testIdx,
-      vars: shouldStripTestVars ? {} : this.testCase.vars || {},
+      vars,
       metadata: shouldStripMetadata ? {} : this.metadata,
       failureReason: this.failureReason,
     };
