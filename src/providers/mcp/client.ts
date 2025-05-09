@@ -62,7 +62,7 @@ export class MCPClient {
         throw new Error('Either command+args or path must be specified for MCP server');
       }
 
-      const client = new Client({ name: 'promptfoo-anthropic', version: '1.0.0' });
+      const client = new Client({ name: 'promptfoo-MCP', version: '1.0.0' });
       client.connect(transport);
 
       // List available tools

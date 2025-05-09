@@ -41,8 +41,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     this.mcpClient = new MCPClient(this.config.mcp!);
     await this.mcpClient.initialize();
   }
+
   async cleanup(): Promise<void> {
     if (this.mcpClient) {
+      await this.initializationPromise;
       await this.mcpClient.cleanup();
       this.mcpClient = null;
     }
