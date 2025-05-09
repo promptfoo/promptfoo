@@ -38,7 +38,7 @@ This directory contains several example configurations for different Bedrock mod
 - [`promptfooconfig.claude.yaml`](promptfooconfig.claude.yaml) - Claude 3.7 Sonnet
 - [`promptfooconfig.llama.yaml`](promptfooconfig.llama.yaml) - Llama3
 - [`promptfooconfig.mistral.yaml`](promptfooconfig.mistral.yaml) - Mistral
-- [`promptfooconfig.nova.yaml`](promptfooconfig.nova.yaml) - Amazon's Nova models (including Premier)
+- [`promptfooconfig.nova.yaml`](promptfooconfig.nova.yaml) - Amazon's Nova models
 - [`promptfooconfig.nova.tool.yaml`](promptfooconfig.nova.tool.yaml) - Nova with tool usage examples
 - [`promptfooconfig.nova.multimodal.yaml`](promptfooconfig.nova.multimodal.yaml) - Nova with multimodal capabilities
 - [`promptfooconfig.titan-text.yaml`](promptfooconfig.titan-text.yaml) - Titan text generation examples
