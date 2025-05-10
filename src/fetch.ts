@@ -1,6 +1,5 @@
 import fs from 'fs';
 import path from 'path';
-// @ts-ignore I'm not able to install the types for this package
 import { getProxyForUrl } from 'proxy-from-env';
 import type { ConnectionOptions } from 'tls';
 import { Agent, ProxyAgent, setGlobalDispatcher } from 'undici';

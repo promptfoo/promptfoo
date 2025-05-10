@@ -140,6 +140,7 @@
     "@types/nunjucks": "^3.2.6",
     "@types/opener": "^1.4.3",
     "@types/pdf-parse": "^1.1.5",
+    "@types/proxy-from-env": "^1.0.4",
     "@types/semver": "^7.7.0",
     "@types/source-map-support": "^0.5.10",
     "@types/supertest": "^6.0.3",
