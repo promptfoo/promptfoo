@@ -11,9 +11,9 @@ import type {
   CallApiOptionsParams,
   NunjucksFilterMap,
   Prompt,
+  ProviderResponse,
   RedteamFileConfig,
   TokenUsage,
-  ProviderResponse,
 } from '../../../types';
 import invariant from '../../../util/invariant';
 import { extractFirstJsonObject, safeJsonStringify } from '../../../util/json';
@@ -523,7 +523,7 @@ export class CrescendoProvider implements ApiProvider {
 
     this.memory.addMessage(this.redTeamingChatConversationId, {
       role: 'assistant',
-      content: JSON.stringify(response.output),
+      content: typeof response.output === 'string' ? response.output : JSON.stringify(parsedOutput),
     });
 
     return {
