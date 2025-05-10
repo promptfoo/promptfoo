@@ -1110,6 +1110,8 @@ export const riskCategories: Record<string, Plugin[]> = {
     'pii:social',
     'pii',
     'prompt-extraction',
+
+    MEMORY_POISONING_PLUGIN_ID,
   ],
 
   'Compliance & Legal': [
@@ -1143,16 +1145,6 @@ export const riskCategories: Record<string, Plugin[]> = {
     'harmful:sexual-content',
   ],
 
-  Dataset: [
-    'beavertails',
-    'cyberseceval',
-    'donotanswer',
-    'harmbench',
-    'pliny',
-    'unsafebench',
-    'xstest',
-  ],
-
   Brand: [
     'competitors',
     'excessive-agency',
@@ -1167,16 +1159,23 @@ export const riskCategories: Record<string, Plugin[]> = {
     'religion',
   ],
 
-  Agentic: [MEMORY_POISONING_PLUGIN_ID],
+  Datasets: [
+    'beavertails',
+    'cyberseceval',
+    'donotanswer',
+    'harmbench',
+    'pliny',
+    'unsafebench',
+    'xstest',
+  ],
 };
 
 export const categoryDescriptions = {
   'Security & Access Control': 'Data protection, access control, and system security risks.',
-  'Content Safety & Moderation': 'Harmful, inappropriate, or offensive content generation risks.',
   'Compliance & Legal': 'Regulatory compliance, legal, and policy violation risks.',
-  'Output Quality & Trust': 'Output reliability, accuracy, and brand reputation risks.',
-  Dataset:
-    'Pre-compiled collections of test cases from research datasets designed to evaluate model safety, robustness, and alignment.',
+  'Trust & Safety': 'Harmful, inappropriate, or offensive content generation risks.',
+  Brand: 'Output reliability, accuracy, and brand reputation risks.',
+  Datasets: 'Pre-defined test cases from research datasets.',
 };
 
 export type TopLevelCategory = keyof typeof riskCategories;

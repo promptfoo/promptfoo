@@ -19,6 +19,7 @@ import {
   PLUGIN_PRESET_DESCRIPTIONS,
   AGENTIC_PLUGINS,
   riskCategories,
+  categoryDescriptions,
 } from '../../src/redteam/constants';
 
 describe('constants', () => {
@@ -116,7 +117,6 @@ describe('constants', () => {
     expect(DATASET_PLUGINS).toEqual(expectedPlugins);
     expect(DATASET_PLUGINS).toHaveLength(7);
 
-    // Verify each expected plugin exists
     expectedPlugins.forEach((plugin) => {
       expect(DATASET_PLUGINS).toContain(plugin);
     });
@@ -151,9 +151,16 @@ describe('constants', () => {
     );
   });
 
-  it('riskCategories should contain MEMORY_POISONING_PLUGIN_ID in Agentic category', () => {
-    expect(riskCategories.Agentic).toBeDefined();
-    expect(riskCategories.Agentic).toContain('agentic:memory-poisoning');
-    expect(riskCategories.Agentic).toHaveLength(1);
+  it('should have MEMORY_POISONING_PLUGIN_ID in Security & Access Control category', () => {
+    expect(riskCategories['Security & Access Control']).toBeDefined();
+    expect(riskCategories['Security & Access Control']).toContain('agentic:memory-poisoning');
+  });
+
+  it('should have descriptions for all risk categories', () => {
+    const categories = Object.keys(riskCategories) as (keyof typeof categoryDescriptions)[];
+    categories.forEach((category) => {
+      expect(categoryDescriptions[category]).toBeDefined();
+      expect(typeof categoryDescriptions[category]).toBe('string');
+    });
   });
 });
