@@ -8,7 +8,6 @@ import logger from '../logger';
 import Eval from '../models/eval';
 import { createShareableUrl, hasEvalBeenShared, isSharingEnabled, getShareableUrl } from '../share';
 import telemetry from '../telemetry';
-import { setupEnv } from '../util';
 import { loadDefaultConfig } from '../util/config/default';
 
 export function notCloudEnabledShareInstructions(): void {
@@ -55,14 +54,11 @@ export function shareCommand(program: Command) {
       'Flag does nothing (maintained for backwards compatibility only - shares are now private by default)',
       false,
     )
-    .option('--id <id>', 'Evaluation ID (default is latest)')
-    .option('--file <path>', 'Path to evaluation results file')
     .action(
       async (
         evalId: string | undefined,
         cmdObj: { yes: boolean; envPath?: string; showAuth: boolean } & Command,
       ) => {
-        setupEnv(cmdObj.envPath);
         telemetry.record('command_used', {
           name: 'share',
         });

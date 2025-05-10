@@ -9,7 +9,7 @@ import { VERSION } from '../constants';
 import logger from '../logger';
 import { initializeProject } from '../onboarding';
 import telemetry from '../telemetry';
-import { isRunningUnderNpx, setupEnv } from '../util';
+import { isRunningUnderNpx } from '../util';
 
 const GITHUB_API_BASE = 'https://api.github.com';
 
@@ -180,9 +180,6 @@ async function handleExampleDownload(
 interface InitCommandOptions {
   interactive: boolean;
   example: string | boolean | undefined;
-  envPath: string | undefined;
-  redteam: boolean;
-  custom: string;
 }
 
 export function initCommand(program: Command) {
@@ -191,14 +188,10 @@ export function initCommand(program: Command) {
     .description('Initialize project with dummy files or download an example')
     .option('--no-interactive', 'Do not run in interactive mode')
     .option('--example [name]', 'Download an example from the promptfoo repo')
-    .option('--redteam', 'Initialize a redteam configuration', false)
-    .option('--custom <module_or_url>', 'Use a custom starter template', '')
     .action(async (directory: string | null, cmdObj: InitCommandOptions) => {
       telemetry.record('command_used', {
         name: 'init - started',
       });
-      setupEnv(cmdObj.envPath);
-
       if (directory === 'redteam' && cmdObj.interactive) {
         const useRedteam = await confirm({
           message:
