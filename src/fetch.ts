@@ -1,10 +1,11 @@
 import fs from 'fs';
 import path from 'path';
+// @ts-ignore I'm not able to install the types for this package
+import { getProxyForUrl } from 'proxy-from-env';
 import type { ConnectionOptions } from 'tls';
 import { Agent, ProxyAgent, setGlobalDispatcher } from 'undici';
 import cliState from './cliState';
 import { VERSION } from './constants';
-import type { EnvVarKey } from './envars';
 import { getEnvBool, getEnvInt, getEnvString } from './envars';
 import logger from './logger';
 import invariant from './util/invariant';
@@ -46,89 +47,6 @@ export function sanitizeUrl(url: string): string {
   } catch {
     return url;
   }
-}
-
-/**
- * Checks if a URL should be proxied based on NO_PROXY environment variables
- */
-function shouldProxy(url: string): boolean {
-  const noProxyEnvVars: EnvVarKey[] = ['NO_PROXY', 'no_proxy'];
-  let noProxyList: string[] = [];
-
-  for (const envVar of noProxyEnvVars) {
-    const noProxyValue = getEnvString(envVar);
-    logger.debug(`Found ${envVar}: ${noProxyValue}`);
-    if (noProxyValue) {
-      noProxyList = noProxyValue.split(',').map((host) => host.trim().toLowerCase());
-      break;
-    }
-  }
-
-  if (noProxyList.length === 0) {
-    return true;
-  }
-
-  try {
-    const urlToParse = url.includes('://') ? url : `http://${url}`;
-    const parsedUrl = new URL(urlToParse);
-    const hostname = parsedUrl.hostname;
-    // Special case: check for localhost variants
-    if (
-      (hostname === 'localhost' ||
-        hostname === '127.0.0.1' ||
-        hostname === '[::1]' ||
-        hostname === '::1') &&
-      noProxyList.some(
-        (pattern) =>
-          pattern === 'localhost' ||
-          pattern === '127.0.0.1' ||
-          pattern === '[::1]' ||
-          pattern === '::1',
-      )
-    ) {
-      logger.debug(`Not proxying localhost URL: ${sanitizeUrl(url)}`);
-      return false;
-    }
-
-    for (const pattern of noProxyList) {
-      if (hostname === pattern) {
-        return false;
-      }
-
-      // Check for wildcard domain matches (*.example.com)
-      if (pattern.startsWith('*.') && hostname.endsWith(pattern.substring(1))) {
-        return false;
-      }
-
-      // Check for domain suffix matches (.example.com matches subdomain.example.com)
-      if (pattern.startsWith('.') && hostname.endsWith(pattern)) {
-        return false;
-      }
-    }
-
-    return true;
-  } catch (e) {
-    logger.debug(`URL parsing failed in shouldProxy: ${e}`);
-    return true;
-  }
-}
-
-export function getProxyUrl(urlString?: string): string | undefined {
-  if (urlString && !shouldProxy(urlString)) {
-    logger.debug(`Skipping proxy for ${sanitizeUrl(urlString)} due to NO_PROXY setting`);
-    return undefined;
-  }
-
-  const proxyEnvVars: EnvVarKey[] = ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy'];
-
-  for (const envVar of proxyEnvVars) {
-    const proxyUrl = getEnvString(envVar);
-    if (proxyUrl) {
-      logger.debug(`Found proxy configuration in ${envVar}: ${sanitizeUrl(proxyUrl)}`);
-      return proxyUrl;
-    }
-  }
-  return undefined;
 }
 
 export async function fetchWithProxy(
@@ -185,8 +103,6 @@ export async function fetchWithProxy(
     }
   }
 
-  const proxyUrl = getProxyUrl(finalUrlString);
-
   const tlsOptions: ConnectionOptions = {
     rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
   };
@@ -203,7 +119,12 @@ export async function fetchWithProxy(
       logger.warn(`Failed to read CA certificate from ${caCertPath}: ${e}`);
     }
   }
+  const proxyUrl = finalUrlString ? getProxyForUrl(finalUrlString) : '';
 
+  console.log('###################################');
+  console.log('finalUrlString', finalUrlString);
+  console.log('proxyUrl', proxyUrl);
+  console.log('###################################');
   if (proxyUrl) {
     logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);
     const agent = new ProxyAgent({
