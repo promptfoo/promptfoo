@@ -1211,6 +1211,50 @@ describe('evaluator', () => {
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
   });
 
+  it('evaluator should correctly count named scores based on contributing assertions', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt for namedScoresCount')],
+      tests: [
+        {
+          vars: { var1: 'value1' },
+          assert: [
+            {
+              type: 'equals',
+              value: 'Test output',
+              metric: 'Accuracy',
+            },
+            {
+              type: 'contains',
+              value: 'Test',
+              metric: 'Accuracy',
+            },
+            {
+              type: 'javascript',
+              value: 'output.length > 0',
+              metric: 'Completeness',
+            },
+          ],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.results.length).toBe(1);
+    const result = summary.results[0];
+    const promptMetrics = evalRecord.prompts.find(
+      (p) => p.provider === result.provider.id,
+    )?.metrics;
+
+    expect(promptMetrics).toBeDefined();
+    if (promptMetrics) {
+      expect(promptMetrics.namedScoresCount['Accuracy']).toBe(2);
+      expect(promptMetrics.namedScoresCount['Completeness']).toBe(1);
+    }
+  });
+
   it('merges metadata correctly for regular tests', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
