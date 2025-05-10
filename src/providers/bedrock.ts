@@ -302,7 +302,8 @@ export interface BedrockDeepseekGenerationOptions extends BedrockOptions {
   top_p?: number;
   stop?: string[];
 }
-interface IBedrockModel {
+
+export interface IBedrockModel {
   params: (config: BedrockOptions, prompt: string, stop: string[], modelName?: string) => any;
   output: (config: BedrockOptions, responseJson: any) => any;
   tokenUsage?: (responseJson: any, promptText: string) => TokenUsage;
