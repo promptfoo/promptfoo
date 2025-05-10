@@ -277,6 +277,19 @@ export async function doGenerateRedteam(
     const relativeOutputPath = path.relative(process.cwd(), options.output);
     logger.info(`Wrote ${redteamTests.length} test cases to ${relativeOutputPath}`);
     if (!options.inRedteamRun) {
+      // Provider cleanup step
+      try {
+        const provider = testSuite.providers[0] as ApiProvider;
+        if (provider && typeof provider.cleanup === 'function') {
+          const cleanupResult = provider.cleanup();
+          if (cleanupResult instanceof Promise) {
+            await cleanupResult;
+          }
+        }
+      } catch (cleanupErr) {
+        logger.warn(`Error during provider cleanup: ${cleanupErr}`);
+      }
+
       const commandPrefix = isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo';
       logger.info(
         '\n' +
