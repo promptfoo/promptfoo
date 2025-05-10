@@ -31,55 +31,38 @@ import { setupEnv } from './util';
 import { loadDefaultConfig } from './util/config/default';
 
 /**
- * Adds the verbose option to a command and all of its subcommands recursively
+ * Adds verbose and env-file options to all commands recursively
  */
-function addVerboseOptionRecursively(command: Command) {
-  // Add verbose option to the command itself if it doesn't already have one
+export function addCommonOptionsRecursively(command: Command) {
   const hasVerboseOption = command.options.some(
     (option) => option.short === '-v' || option.long === '--verbose',
   );
-
   if (!hasVerboseOption) {
     command.option('-v, --verbose', 'Show debug logs', false);
   }
 
-  // Add hook to handle the verbose flag
-  command.hook('preAction', (thisCommand) => {
-    if (thisCommand.opts().verbose) {
-      setLogLevel('debug');
-    }
-  });
-
-  // Recursively add to all subcommands
-  command.commands.forEach((subCommand) => {
-    addVerboseOptionRecursively(subCommand);
-  });
-}
-
-/**
- * Adds the env-file option to a command and all of its subcommands recursively
- */
-export function addEnvFileOptionRecursively(command: Command) {
-  // Add env-file option to the command itself if it doesn't already have one
   const hasEnvFileOption = command.options.some(
     (option) => option.long === '--env-file' || option.long === '--env-path',
   );
-
   if (!hasEnvFileOption) {
     command.option('--env-file, --env-path <path>', 'Path to .env file');
   }
 
-  // Add hook to handle the env-file flag
   command.hook('preAction', (thisCommand) => {
+    if (thisCommand.opts().verbose) {
+      setLogLevel('debug');
+      logger.debug('Verbose mode enabled via --verbose flag');
+    }
+
     const envPath = thisCommand.opts().envFile || thisCommand.opts().envPath;
     if (envPath) {
       setupEnv(envPath);
+      logger.debug(`Loading environment from ${envPath}`);
     }
   });
 
-  // Recursively add to all subcommands
   command.commands.forEach((subCommand) => {
-    addEnvFileOptionRecursively(subCommand);
+    addCommonOptionsRecursively(subCommand);
   });
 }
 
@@ -139,12 +122,8 @@ async function main() {
   redteamSetupCommand(redteamBaseCommand);
   redteamPluginsCommand(redteamBaseCommand);
 
-  // Add verbose option to all commands recursively
-  // This needs to be done after all commands are defined
-  addVerboseOptionRecursively(program);
-
-  // Add env-file option to all commands recursively
-  addEnvFileOptionRecursively(program);
+  // Add common options to all commands recursively
+  addCommonOptionsRecursively(program);
 
   program.parse();
 }
