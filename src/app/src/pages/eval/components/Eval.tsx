@@ -7,7 +7,7 @@ import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
-import type { SharedResults, ResultLightweightWithLabel, ResultsFile } from '@promptfoo/types';
+import type { ResultLightweightWithLabel, ResultsFile } from '@promptfoo/types';
 import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
@@ -16,17 +16,27 @@ import './Eval.css';
 
 interface EvalOptions {
   fetchId: string | null;
-  preloadedData?: SharedResults;
-  recentEvals?: ResultLightweightWithLabel[];
-  defaultEvalId?: string;
 }
 
-export default function Eval({
-  fetchId,
-  preloadedData,
-  recentEvals: recentEvalsProp,
-  defaultEvalId: defaultEvalIdProp,
-}: EvalOptions) {
+async function fetchRecentFileEvals() {
+  const resp = await callApi(`/results`, { cache: 'no-store' });
+  if (!resp.ok) {
+    return;
+  }
+  const body = (await resp.json()) as { data: ResultLightweightWithLabel[] };
+  return body.data;
+}
+
+async function fetchEvalById(id: string) {
+  const resp = await callApi(`/results/${id}`, { cache: 'no-store' });
+  if (!resp.ok) {
+    return;
+  }
+  const body = (await resp.json()) as { data: ResultsFile };
+  return body;
+}
+
+export default function Eval({ fetchId }: EvalOptions) {
   const navigate = useNavigate();
   const { apiBaseUrl } = useApiConfig();
 
@@ -45,38 +55,11 @@ export default function Eval({
 
   const [loaded, setLoaded] = React.useState(false);
   const [failed, setFailed] = React.useState(false);
-  const [recentEvals, setRecentEvals] = React.useState<ResultLightweightWithLabel[]>(
-    recentEvalsProp || [],
-  );
+  const [recentEvals, setRecentEvals] = React.useState<ResultLightweightWithLabel[]>([]);
 
-  const fetchRecentFileEvals = async () => {
-    const resp = await callApi(`/results`, { cache: 'no-store' });
-    if (!resp.ok) {
-      setFailed(true);
-      return;
-    }
-    const body = (await resp.json()) as { data: ResultLightweightWithLabel[] };
-    setRecentEvals(body.data);
-    return body.data;
-  };
-
-  const fetchEvalById = React.useCallback(
-    async (id: string) => {
-      const resp = await callApi(`/results/${id}`, { cache: 'no-store' });
-      if (!resp.ok) {
-        setFailed(true);
-        return;
-      }
-      const body = (await resp.json()) as { data: ResultsFile };
-
-      setTableFromResultsFile(body.data);
-      setConfig(body.data.config);
-      setAuthor(body.data.author);
-      setEvalId(id);
-    },
-    [setTable, setConfig, setEvalId, setAuthor],
-  );
   const [searchParams] = useSearchParams();
+
+  const [defaultEvalId, setDefaultEvalId] = React.useState<string>('');
 
   const handleRecentEvalSelection = useCallback(
     async (id: string) => {
@@ -88,104 +71,72 @@ export default function Eval({
     [searchParams, navigate],
   );
 
-  const [defaultEvalId, setDefaultEvalId] = React.useState<string>(
-    defaultEvalIdProp || recentEvals[0]?.evalId,
+  const setPageState = useCallback(
+    async (data: ResultsFile) => {
+      if (!data?.id) {
+        setFailed(true);
+        throw new Error('Eval ID is missing in the data');
+      }
+      setEvalId(data.id);
+      setDefaultEvalId(data.id);
+      setTableFromResultsFile(data);
+      setConfig(data?.config);
+      setAuthor(data?.author || null);
+    },
+    [setDefaultEvalId, setInComparisonMode, setTable, setConfig, setAuthor],
   );
 
   React.useEffect(() => {
     if (fetchId) {
       console.log('Eval init: Fetching eval by id', { fetchId });
-      const run = async () => {
-        await fetchEvalById(fetchId);
-        setLoaded(true);
-        setDefaultEvalId(fetchId);
-        // Load other recent eval runs
-        fetchRecentFileEvals();
-      };
-      run();
-    } else if (preloadedData) {
-      console.log('Eval init: Using preloaded data');
-      setTableFromResultsFile(preloadedData.data);
-      setConfig(preloadedData.data.config);
-      setAuthor(preloadedData.data.author || null);
-      setLoaded(true);
-    } else if (IS_RUNNING_LOCALLY) {
-      console.log('Eval init: Using local server websocket');
-
-      const socket = SocketIOClient(apiBaseUrl || '');
-
-      socket.on('init', (data) => {
-        console.log('Initialized socket connection', data);
-        setLoaded(true);
-        setTableFromResultsFile(data);
-        setConfig(data?.config);
-        setAuthor(data?.author || null);
-        fetchRecentFileEvals().then((newRecentEvals) => {
-          if (newRecentEvals && newRecentEvals.length > 0) {
-            setDefaultEvalId(newRecentEvals[0]?.evalId);
-            setEvalId(newRecentEvals[0]?.evalId);
-            console.log('setting default eval id', newRecentEvals[0]?.evalId);
-          }
-        });
+      fetchEvalById(fetchId).then(function (response) {
+        if (response) {
+          setPageState(response.data);
+        } else {
+          setFailed(true);
+        }
       });
+    }
 
-      socket.on('update', (data) => {
-        console.log('Received data update', data);
-        setTableFromResultsFile(data);
-        setConfig(data.config);
-        setAuthor(data.author || null);
-        fetchRecentFileEvals().then((newRecentEvals) => {
-          if (newRecentEvals && newRecentEvals.length > 0) {
-            const newId = newRecentEvals[0]?.evalId;
-            if (newId) {
-              setDefaultEvalId(newId);
-              setEvalId(newId);
+    fetchRecentFileEvals().then(async (evals) => {
+      if (evals) {
+        setRecentEvals(evals);
+      }
+      if (!fetchId) {
+        if (IS_RUNNING_LOCALLY) {
+          const socket = SocketIOClient(apiBaseUrl || '');
+          socket.on('update', (data) => {
+            console.log('Received data update', data);
+            setPageState(data);
+          });
+
+          socket.on('init', (data) => {
+            if (!fetchId) {
+              console.log('Received data update', data);
+              setPageState(data);
+              setLoaded(true);
+            }
+          });
+
+          return () => {
+            socket.disconnect();
+          };
+        } else {
+          if (evals && evals.length > 0) {
+            const resp = await callApi(`/results/${evals[0].evalId}`);
+            if (resp.ok) {
+              const body = await resp.json();
+              setPageState(body.data);
+              setLoaded(true);
+            } else {
+              setFailed(true);
             }
           }
-        });
-      });
-
-      return () => {
-        socket.disconnect();
-      };
-    } else {
-      console.log('Eval init: Fetching eval via recent');
-      // Fetch from server
-      const run = async () => {
-        const evals = await fetchRecentFileEvals();
-        if (evals && evals.length > 0) {
-          const defaultEvalId = evals[0].evalId;
-          const resp = await callApi(`/results/${defaultEvalId}`);
-          const body = await resp.json();
-          setTableFromResultsFile(body.data);
-          setConfig(body.data.config);
-          setAuthor(body.data.author || null);
-          setLoaded(true);
-          setDefaultEvalId(defaultEvalId);
-          setEvalId(defaultEvalId);
-        } else {
-          return (
-            <div className="notice">
-              No evals yet. Share some evals to this server and they will appear here.
-            </div>
-          );
         }
-      };
-      run();
-    }
+      }
+    });
     setInComparisonMode(false);
-  }, [
-    apiBaseUrl,
-    fetchId,
-    setTable,
-    setConfig,
-    setAuthor,
-    setEvalId,
-    fetchEvalById,
-    preloadedData,
-    setDefaultEvalId,
-    setInComparisonMode,
-  ]);
+  }, [apiBaseUrl, fetchId, setEvalId, fetchEvalById, setInComparisonMode, setPageState]);
 
   React.useEffect(() => {
     document.title = `${config?.description || evalId || 'Eval'} | promptfoo`;
