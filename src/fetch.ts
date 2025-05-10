@@ -120,10 +120,6 @@ export async function fetchWithProxy(
   }
   const proxyUrl = finalUrlString ? getProxyForUrl(finalUrlString) : '';
 
-  console.log('###################################');
-  console.log('finalUrlString', finalUrlString);
-  console.log('proxyUrl', proxyUrl);
-  console.log('###################################');
   if (proxyUrl) {
     logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);
     const agent = new ProxyAgent({
