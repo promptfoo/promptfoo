@@ -567,6 +567,12 @@ config:
   response_format: file://./path/to/response_format.json
 ```
 
+For a complete example, see the [OpenAI Structured Output example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-structured-output) or initialize it with:
+
+```bash
+npx promptfoo@latest init --example openai-structured-output
+```
+
 ## Supported environment variables
 
 These OpenAI-related environment variables are supported:
