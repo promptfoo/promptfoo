@@ -27,6 +27,7 @@ import { redteamReportCommand } from './redteam/commands/report';
 import { redteamRunCommand } from './redteam/commands/run';
 import { redteamSetupCommand } from './redteam/commands/setup';
 import { checkForUpdates } from './updates';
+import { setupEnv } from './util';
 import { loadDefaultConfig } from './util/config/default';
 
 /**
@@ -52,6 +53,33 @@ function addVerboseOptionRecursively(command: Command) {
   // Recursively add to all subcommands
   command.commands.forEach((subCommand) => {
     addVerboseOptionRecursively(subCommand);
+  });
+}
+
+/**
+ * Adds the env-file option to a command and all of its subcommands recursively
+ */
+export function addEnvFileOptionRecursively(command: Command) {
+  // Add env-file option to the command itself if it doesn't already have one
+  const hasEnvFileOption = command.options.some(
+    (option) => option.long === '--env-file' || option.long === '--env-path',
+  );
+
+  if (!hasEnvFileOption) {
+    command.option('--env-file, --env-path <path>', 'Path to .env file');
+  }
+
+  // Add hook to handle the env-file flag
+  command.hook('preAction', (thisCommand) => {
+    const envPath = thisCommand.opts().envFile || thisCommand.opts().envPath;
+    if (envPath) {
+      setupEnv(envPath);
+    }
+  });
+
+  // Recursively add to all subcommands
+  command.commands.forEach((subCommand) => {
+    addEnvFileOptionRecursively(subCommand);
   });
 }
 
@@ -114,6 +142,9 @@ async function main() {
   // Add verbose option to all commands recursively
   // This needs to be done after all commands are defined
   addVerboseOptionRecursively(program);
+
+  // Add env-file option to all commands recursively
+  addEnvFileOptionRecursively(program);
 
   program.parse();
 }

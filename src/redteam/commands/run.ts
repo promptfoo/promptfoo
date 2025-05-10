@@ -34,7 +34,6 @@ export function redteamRunCommand(program: Command) {
       'Path to output file for generated tests. Defaults to redteam.yaml in the same directory as the configuration file.',
     )
     .option('--no-cache', 'Do not read or write results to disk cache', false)
-    .option('--env-file, --env-path <path>', 'Path to .env file')
     .option('-j, --max-concurrency <number>', 'Maximum number of concurrent API calls', (val) =>
       Number.parseInt(val, 10),
     )

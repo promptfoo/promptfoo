@@ -181,6 +181,8 @@ interface InitCommandOptions {
   interactive: boolean;
   example: string | boolean | undefined;
   envPath: string | undefined;
+  redteam: boolean;
+  custom: string;
 }
 
 export function initCommand(program: Command) {
@@ -188,8 +190,9 @@ export function initCommand(program: Command) {
     .command('init [directory]')
     .description('Initialize project with dummy files or download an example')
     .option('--no-interactive', 'Do not run in interactive mode')
-    .option('--env-file, --env-path <path>', 'Path to .env file')
     .option('--example [name]', 'Download an example from the promptfoo repo')
+    .option('--redteam', 'Initialize a redteam configuration', false)
+    .option('--custom <module_or_url>', 'Use a custom starter template', '')
     .action(async (directory: string | null, cmdObj: InitCommandOptions) => {
       telemetry.record('command_used', {
         name: 'init - started',

@@ -44,7 +44,6 @@ export function shareCommand(program: Command) {
   program
     .command('share [evalId]')
     .description('Create a shareable URL of an eval (defaults to most recent)' + '\n\n')
-    .option('--env-file, --env-path <path>', 'Path to .env file')
     .option(
       '--show-auth',
       'Show username/password authentication information in the URL if exists',
@@ -56,6 +55,8 @@ export function shareCommand(program: Command) {
       'Flag does nothing (maintained for backwards compatibility only - shares are now private by default)',
       false,
     )
+    .option('--id <id>', 'Evaluation ID (default is latest)')
+    .option('--file <path>', 'Path to evaluation results file')
     .action(
       async (
         evalId: string | undefined,
