@@ -99,7 +99,6 @@ describe('Share Command', () => {
 
       const options = cmd?.options;
       expect(options?.find((o) => o.long === '--show-auth')).toBeDefined();
-      expect(options?.find((o) => o.long === '--env-path')).toBeDefined();
       expect(options?.find((o) => o.long === '--yes')).toBeDefined();
     });
 
