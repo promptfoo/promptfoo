@@ -12,7 +12,7 @@ import { getEnvFloat, getEnvInt } from '../envars';
 import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
 import { checkEmailStatusOrExit, promptForEmailUnverified } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
-import logger, { getLogLevel, setLogLevel } from '../logger';
+import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
 import { loadApiProvider } from '../providers';
@@ -100,9 +100,6 @@ export async function doEval(
   evaluateOptions: EvaluateOptions,
 ): Promise<Eval> {
   setupEnv(cmdObj.envPath);
-  if (cmdObj.verbose) {
-    setLogLevel('debug');
-  }
 
   let config: Partial<UnifiedConfig> | undefined = undefined;
   let testSuite: TestSuite | undefined = undefined;
@@ -707,7 +704,6 @@ export function evalCommand(
 
     // Miscellaneous
     .option('--description <description>', 'Description of the eval run')
-    .option('--verbose', 'Show debug logs', defaultConfig?.commandLineOptions?.verbose)
     .option('--no-progress-bar', 'Do not show progress bar')
     .action(async (opts: EvalCommandOptions, command: Command) => {
       let validatedOpts: z.infer<typeof EvalCommandSchema>;

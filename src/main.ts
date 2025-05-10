@@ -18,7 +18,7 @@ import { modelScanCommand } from './commands/modelScan';
 import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
 import { viewCommand } from './commands/view';
-import logger from './logger';
+import logger, { setLogLevel } from './logger';
 import { runDbMigrations } from './migrate';
 import { redteamGenerateCommand } from './redteam/commands/generate';
 import { initCommand as redteamInitCommand } from './redteam/commands/init';
@@ -28,6 +28,32 @@ import { redteamRunCommand } from './redteam/commands/run';
 import { redteamSetupCommand } from './redteam/commands/setup';
 import { checkForUpdates } from './updates';
 import { loadDefaultConfig } from './util/config/default';
+
+/**
+ * Adds the verbose option to a command and all of its subcommands recursively
+ */
+function addVerboseOptionRecursively(command: Command) {
+  // Add verbose option to the command itself if it doesn't already have one
+  const hasVerboseOption = command.options.some(
+    (option) => option.short === '-v' || option.long === '--verbose',
+  );
+
+  if (!hasVerboseOption) {
+    command.option('-v, --verbose', 'Show debug logs', false);
+  }
+
+  // Add hook to handle the verbose flag
+  command.hook('preAction', (thisCommand) => {
+    if (thisCommand.opts().verbose) {
+      setLogLevel('debug');
+    }
+  });
+
+  // Recursively add to all subcommands
+  command.commands.forEach((subCommand) => {
+    addVerboseOptionRecursively(subCommand);
+  });
+}
 
 async function main() {
   await checkForUpdates();
@@ -84,6 +110,10 @@ async function main() {
   redteamReportCommand(redteamBaseCommand);
   redteamSetupCommand(redteamBaseCommand);
   redteamPluginsCommand(redteamBaseCommand);
+
+  // Add verbose option to all commands recursively
+  // This needs to be done after all commands are defined
+  addVerboseOptionRecursively(program);
 
   program.parse();
 }
