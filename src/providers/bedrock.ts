@@ -11,6 +11,7 @@ import type { EnvOverrides } from '../types/env';
 import type {
   ApiEmbeddingProvider,
   ApiProvider,
+  CallApiContextParams,
   ProviderEmbeddingResponse,
   ProviderResponse,
 } from '../types/providers';
@@ -1472,7 +1473,7 @@ export abstract class AwsBedrockGenericProvider {
 export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider implements ApiProvider {
   static AWS_BEDROCK_COMPLETION_MODELS = Object.keys(AWS_BEDROCK_MODELS);
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     let stop: string[];
     try {
       stop = getEnvString('AWS_BEDROCK_STOP') ? JSON.parse(getEnvString('AWS_BEDROCK_STOP')!) : [];
@@ -1487,7 +1488,12 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       );
       model = BEDROCK_MODEL.CLAUDE_MESSAGES;
     }
-    const params = model.params(this.config, prompt, stop, this.modelName);
+    const params = model.params(
+      { ...this.config, ...context?.prompt.config },
+      prompt,
+      stop,
+      this.modelName,
+    );
 
     logger.debug(`Calling Amazon Bedrock API: ${JSON.stringify(params)}`);
 
