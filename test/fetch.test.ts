@@ -285,7 +285,6 @@ describe('fetchWithProxy', () => {
     const mockCertContent = 'mock-cert-content';
     const mockProxyUrl = 'http://proxy.example.com';
 
-    // Set environment variables directly
     process.env.HTTPS_PROXY = mockProxyUrl;
     process.env.PROMPTFOO_CA_CERT_PATH = mockCertPath;
 
@@ -335,7 +334,6 @@ describe('fetchWithProxy', () => {
     const mockCertPath = path.normalize('/path/to/nonexistent.pem');
     const mockProxyUrl = 'http://proxy.example.com';
 
-    // Set environment variables directly
     process.env.HTTPS_PROXY = mockProxyUrl;
     process.env.PROMPTFOO_CA_CERT_PATH = mockCertPath;
 
@@ -376,7 +374,6 @@ describe('fetchWithProxy', () => {
   it('should disable SSL verification when PROMPTFOO_INSECURE_SSL is true', async () => {
     const mockProxyUrl = 'http://proxy.example.com';
 
-    // Set environment variables directly
     process.env.HTTPS_PROXY = mockProxyUrl;
     process.env.PROMPTFOO_INSECURE_SSL = 'true';
 
@@ -416,7 +413,6 @@ describe('fetchWithProxy', () => {
     const mockCertContent = 'mock-cert-content';
     const mockProxyUrl = 'http://proxy.example.com';
 
-    // Set environment variables directly
     process.env.HTTPS_PROXY = mockProxyUrl;
     process.env.PROMPTFOO_CA_CERT_PATH = mockCertPath;
 
@@ -489,7 +485,6 @@ describe('fetchWithProxy', () => {
 
     const allProxyVars = ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy'];
 
-    // For HTTP URLs, the http_proxy variables should be used
     const httpTestCases = [
       {
         env: { HTTP_PROXY: mockProxyUrls.HTTP_PROXY },
@@ -501,7 +496,6 @@ describe('fetchWithProxy', () => {
       },
     ];
 
-    // For HTTPS URLs, the https_proxy variables should be used
     const httpsTestCases = [
       {
         env: { HTTPS_PROXY: mockProxyUrls.HTTPS_PROXY },
@@ -513,16 +507,13 @@ describe('fetchWithProxy', () => {
       },
     ];
 
-    // Test HTTP URL with HTTP proxy variables
     for (const testCase of httpTestCases) {
       jest.clearAllMocks();
 
-      // Clear all proxy environment variables
       allProxyVars.forEach((key) => {
         delete process.env[key];
       });
 
-      // Set the environment variable directly for this test case
       Object.entries(testCase.env).forEach(([key, value]) => {
         process.env[key] = value;
       });
@@ -543,27 +534,22 @@ describe('fetchWithProxy', () => {
       const debugCalls = jest.mocked(logger.debug).mock.calls;
       const normalizedCalls = debugCalls.map((call) => call[0].replace(/\/$/, ''));
 
-      // Since we're using proxy-from-env, we only expect the "Using proxy" message
       const proxyConfigCalls = normalizedCalls.filter((msg) => msg.includes(`Using proxy:`));
 
       expect(proxyConfigCalls).toEqual([`Using proxy: ${testCase.expected.url}`]);
 
-      // Clean up environment variables
       allProxyVars.forEach((key) => {
         delete process.env[key];
       });
     }
 
-    // Test HTTPS URL with HTTPS proxy variables
     for (const testCase of httpsTestCases) {
       jest.clearAllMocks();
 
-      // Clear all proxy environment variables
       allProxyVars.forEach((key) => {
         delete process.env[key];
       });
 
-      // Set the environment variable directly for this test case
       Object.entries(testCase.env).forEach(([key, value]) => {
         process.env[key] = value;
       });
@@ -584,12 +570,10 @@ describe('fetchWithProxy', () => {
       const debugCalls = jest.mocked(logger.debug).mock.calls;
       const normalizedCalls = debugCalls.map((call) => call[0].replace(/\/$/, ''));
 
-      // Since we're using proxy-from-env, we only expect the "Using proxy" message
       const proxyConfigCalls = normalizedCalls.filter((msg) => msg.includes(`Using proxy:`));
 
       expect(proxyConfigCalls).toEqual([`Using proxy: ${testCase.expected.url}`]);
 
-      // Clean up environment variables
       allProxyVars.forEach((key) => {
         delete process.env[key];
       });
@@ -599,7 +583,6 @@ describe('fetchWithProxy', () => {
   it('should use proxy for domains not in NO_PROXY', async () => {
     const mockProxyUrl = 'http://proxy.example.com:8080';
 
-    // Set environment variables directly
     process.env.HTTPS_PROXY = mockProxyUrl;
     process.env.NO_PROXY = 'localhost,internal.example.com';
 
@@ -934,7 +917,6 @@ describe('fetchWithProxy with NO_PROXY', () => {
     jest.spyOn(global, 'fetch').mockImplementation();
     jest.mocked(ProxyAgent).mockClear();
     jest.mocked(setGlobalDispatcher).mockClear();
-    // Clear all proxy-related environment variables
     delete process.env.HTTPS_PROXY;
     delete process.env.https_proxy;
     delete process.env.HTTP_PROXY;
@@ -944,7 +926,6 @@ describe('fetchWithProxy with NO_PROXY', () => {
   });
 
   afterEach(() => {
-    // Clean up environment variables after each test
     delete process.env.HTTPS_PROXY;
     delete process.env.https_proxy;
     delete process.env.HTTP_PROXY;
@@ -957,8 +938,7 @@ describe('fetchWithProxy with NO_PROXY', () => {
   it('should respect NO_PROXY for localhost URLs', async () => {
     const mockProxyUrl = 'http://proxy.example.com:8080';
 
-    // Set environment variables directly
-    process.env.HTTP_PROXY = mockProxyUrl; // Use HTTP_PROXY for HTTP URLs
+    process.env.HTTP_PROXY = mockProxyUrl;
     process.env.NO_PROXY = 'localhost';
 
     await fetchWithProxy('http://localhost:3000/api');
@@ -981,28 +961,24 @@ describe('fetchWithProxy with NO_PROXY', () => {
     const mockProxyUrl = 'http://proxy.example.com:8080';
     const noProxyList = 'example.org,localhost,internal.example.com';
 
-    // Test localhost (no proxy)
-    process.env.HTTP_PROXY = mockProxyUrl; // Use HTTP_PROXY for HTTP URLs
+    process.env.HTTP_PROXY = mockProxyUrl;
     process.env.NO_PROXY = noProxyList;
 
     await fetchWithProxy('http://localhost:3000/api');
     expect(ProxyAgent).not.toHaveBeenCalled();
 
-    // Test example.org (no proxy)
     jest.clearAllMocks();
-    process.env.HTTPS_PROXY = mockProxyUrl; // Use HTTPS_PROXY for HTTPS URLs
+    process.env.HTTPS_PROXY = mockProxyUrl;
     process.env.NO_PROXY = noProxyList;
     await fetchWithProxy('https://example.org/api');
     expect(ProxyAgent).not.toHaveBeenCalled();
 
-    // Test internal.example.com (no proxy)
     jest.clearAllMocks();
     process.env.HTTPS_PROXY = mockProxyUrl;
     process.env.NO_PROXY = noProxyList;
     await fetchWithProxy('https://internal.example.com/api');
     expect(ProxyAgent).not.toHaveBeenCalled();
 
-    // Test example.com (should use proxy)
     jest.clearAllMocks();
     process.env.HTTPS_PROXY = mockProxyUrl;
     process.env.NO_PROXY = noProxyList;
@@ -1018,7 +994,6 @@ describe('fetchWithProxy with NO_PROXY', () => {
   it('should use proxy for domains not in NO_PROXY', async () => {
     const mockProxyUrl = 'http://proxy.example.com:8080';
 
-    // Set environment variables directly
     process.env.HTTPS_PROXY = mockProxyUrl;
     process.env.NO_PROXY = 'localhost,internal.example.com';
 
@@ -1035,8 +1010,7 @@ describe('fetchWithProxy with NO_PROXY', () => {
   it('should handle wildcard patterns in NO_PROXY', async () => {
     const mockProxyUrl = 'http://proxy.example.com:8080';
 
-    // Set environment variables directly
-    process.env.HTTPS_PROXY = mockProxyUrl; // Use HTTPS_PROXY for HTTPS URLs
+    process.env.HTTPS_PROXY = mockProxyUrl;
     process.env.NO_PROXY = '*.example.org,localhost';
 
     await fetchWithProxy('https://api.example.org/v1');
@@ -1060,7 +1034,6 @@ describe('fetchWithProxy with NO_PROXY', () => {
   it('should handle domain suffix patterns in NO_PROXY', async () => {
     const mockProxyUrl = 'http://proxy.example.com:8080';
 
-    // Set environment variables directly
     process.env.HTTPS_PROXY = mockProxyUrl;
     process.env.NO_PROXY = '.example.org,localhost';
 
@@ -1135,7 +1108,6 @@ describe('fetchWithProxy with NO_PROXY', () => {
   it('should use lowercase for NO_PROXY checks', async () => {
     const mockProxyUrl = 'http://proxy.example.com:8080';
 
-    // Set environment variables directly
     process.env.HTTPS_PROXY = mockProxyUrl;
     process.env.NO_PROXY = 'LOCALHOST,API.EXAMPLE.ORG';
 
