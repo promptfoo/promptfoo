@@ -50,7 +50,7 @@ describe('error handling', () => {
     );
   });
 
-  it('does not throw an error when validateStatus is not set nor retry configued', async () => {
+  it('throws not throw an error when validateStatus is not set nor retry configued', async () => {
     const provider = new HttpProvider('http://test.com', {
       config: {
         method: 'POST',
@@ -60,7 +60,9 @@ describe('error handling', () => {
       },
     });
 
-    await expect(provider.callApi('test')).resolves.not.toThrow();
+    await expect(provider.callApi('test')).rejects.toThrow(
+      'HTTP call failed with status 500 Bad Request: {\"data\":\"Error message\"}',
+    );
   });
 
   it('throws an error when validateStatus is set nor retry configued', async () => {
