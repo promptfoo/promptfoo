@@ -1,4 +1,4 @@
-import assertions from './assertions';
+import assertions from './assertions/index.js';
 import * as cache from './cache';
 import { evaluate as doEvaluate } from './evaluator';
 import guardrails from './guardrails';

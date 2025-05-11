@@ -9,9 +9,21 @@ scratch
 .DS_Store
 node_modules
 dist
+dist-cjs
+dist-esm
 .aider*
 .vite
 *.tsbuildinfo
+
+# Compiled output
+src/**/*.js
+src/**/*.js.map
+src/**/*.d.ts
+src/**/*.d.ts.map
+test/**/*.js
+test/**/*.js.map
+test/**/*.d.ts
+test/**/*.d.ts.map
 
 # pnpm-specific
 .pnpm-store/

@@ -6,9 +6,15 @@ const config: Config = {
   coverageDirectory: '.coverage',
   coverageProvider: 'v8',
   extensionsToTreatAsEsm: ['.ts'],
+  moduleFileExtensions: ['js', 'cjs', 'mjs', 'ts'],
+  moduleNameMapper: {
+    // For tests, map imports to the CJS output
+    '^(\\.{1,2}/.*)\\.js$': '$1',
+  },
   modulePathIgnorePatterns: ['<rootDir>/dist', '<rootDir>/examples', '<rootDir>/node_modules'],
   setupFiles: ['<rootDir>/.jest/setEnvVars.js'],
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
+  testEnvironment: 'node',
   testPathIgnorePatterns: [
     '.*\\.test\\.tsx$',
     '.*\\.integration\\.test\\.ts$',

@@ -4,9 +4,7 @@
     "declarationMap": true,
     "esModuleInterop": true,
     "target": "es2020",
-    "module": "CommonJS",
     "moduleResolution": "node",
-    "outDir": "dist",
     "skipLibCheck": true,
     "sourceMap": true,
     "strict": true,
@@ -18,6 +16,15 @@
   "ts-node": {
     "swc": true
   },
-  "include": ["src/", "typings/**/*", "test/", "./package.json", "src/**/*.json", "test/**/*.json"],
+  "include": [
+    "src/",
+    "typings/**/*",
+    "test/",
+    "./package.json",
+    "src/**/*.json",
+    "test/**/*.json",
+    "jest.config.ts",
+    "jest.integration.config.ts"
+  ],
   "exclude": ["node_modules", "dist", "src/workers/**/*", "src/app/**/*"]
 }

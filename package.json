@@ -4,24 +4,25 @@
   "author": "Ian Webster",
   "version": "0.112.4",
   "license": "MIT",
-  "type": "commonjs",
+  "type": "module",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/promptfoo/promptfoo.git"
   },
-  "main": "dist/src/index.js",
+  "main": "dist/cjs/src/index.cjs",
+  "module": "dist/esm/src/index.js",
   "exports": {
     ".": {
-      "import": "./dist/src/index.js",
-      "require": "./dist/src/index.js"
+      "import": "./dist/esm/src/index.js",
+      "require": "./dist/cjs/src/index.cjs"
     }
   },
   "workspaces": [
     "src/app",
     "site"
   ],
-  "types": "dist/src/index.d.ts",
-  "typings": "dist/src/index.d.ts",
+  "types": "dist/esm/src/index.d.ts",
+  "typings": "dist/esm/src/index.d.ts",
   "files": [
     "dist",
     "!dist/test",
@@ -31,17 +32,19 @@
     "node": ">=18.0.0"
   },
   "bin": {
-    "promptfoo": "dist/src/main.js",
-    "pf": "dist/src/main.js"
+    "promptfoo": "dist/cjs/src/main.cjs",
+    "pf": "dist/cjs/src/main.cjs"
   },
   "scripts": {
     "audit:fix": "npm audit fix && npm audit fix --prefix src/app && npm audit fix --prefix site",
-    "bin": "dist/src/main.js",
+    "bin": "dist/cjs/src/main.cjs",
     "build:app": "npm run build --prefix src/app",
     "build:clean": "shx rm -rf dist",
-    "build:watch": "tsc --watch",
-    "build:replace-keys": "node scripts/replace-keys.js",
-    "build": "tsc && shx cp src/*.html dist/src && shx cp src/python/wrapper.py dist/src/python && shx mkdir -p dist/src/golang && shx cp src/golang/wrapper.go dist/src/golang && shx rm -rf dist/drizzle && shx cp -r drizzle dist/drizzle && npm run build:app && npm run build:replace-keys && shx chmod +x dist/src/main.js",
+    "build:watch": "tsc -p tsconfig.cjs.json --watch",
+    "build:replace-keys": "node scripts/replace-keys.cjs",
+    "build:cjs": "tsc -p tsconfig.cjs.json && shx cp src/*.html dist/cjs/src && shx cp src/python/wrapper.py dist/cjs/src/python && shx mkdir -p dist/cjs/src/golang && shx cp src/golang/wrapper.go dist/cjs/src/golang && shx rm -rf dist/cjs/drizzle && shx cp -r drizzle dist/cjs/drizzle && node scripts/rename-cjs-extensions.cjs && node scripts/fix-assertions-imports.cjs",
+    "build:esm": "tsc -p tsconfig.esm.json && shx cp src/*.html dist/esm/src && shx cp src/python/wrapper.py dist/esm/src/python && shx mkdir -p dist/esm/src/golang && shx cp src/golang/wrapper.go dist/esm/src/golang && shx rm -rf dist/esm/drizzle && shx cp -r drizzle dist/esm/drizzle && node scripts/setup-esm-package.cjs && node scripts/fix-assertions-imports-esm.cjs && node scripts/fix-esm-imports.cjs",
+    "build": "npm run build:clean && npm run build:cjs && npm run build:esm && npm run build:app && npm run build:replace-keys && shx chmod +x dist/cjs/src/main.cjs",
     "citation:generate": "ts-node scripts/generateCitation.ts",
     "db:generate": "npx drizzle-kit generate",
     "db:migrate": "npx tsx src/migrate.ts",
@@ -115,6 +118,7 @@
     "sharp": "^0.33.5"
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "^0.41.0",
     "@aws-sdk/client-bedrock-runtime": "^3.806.0",
     "@aws-sdk/credential-provider-sso": "^3.806.0",
     "@azure/identity": "^4.9.1",
@@ -171,7 +175,6 @@
     "zod-to-json-schema": "^3.24.5"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.41.0",
     "@apidevtools/json-schema-ref-parser": "^12.0.1",
     "@googleapis/sheets": "^9.7.0",
     "@modelcontextprotocol/sdk": "^1.11.1",
