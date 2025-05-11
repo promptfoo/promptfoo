@@ -40,6 +40,13 @@ async function getJavascriptTransformFunction(
 ): Promise<Function> {
   const requiredModule = await importModule(filePath);
 
+  // Check if module is undefined or null
+  if (requiredModule === undefined || requiredModule === null) {
+    throw new Error(
+      `Transform ${filePath} module is undefined or null. Check if the file exists and exports a function.`,
+    );
+  }
+
   if (functionName && typeof requiredModule[functionName] === 'function') {
     return requiredModule[functionName];
   } else if (typeof requiredModule === 'function') {

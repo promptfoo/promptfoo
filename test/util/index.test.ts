@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import { globSync } from 'glob';
 import * as path from 'path';
 import { getDb } from '../../src/database';
+import { importModule } from '../../src/esm';
 import * as googleSheets from '../../src/googleSheets';
 import Eval from '../../src/models/eval';
 import {
@@ -47,7 +48,19 @@ jest.mock('fs', () => ({
   mkdirSync: jest.fn(),
 }));
 
-jest.mock('../../src/esm');
+jest.mock('../../src/esm', () => {
+  const mockFilter = jest.fn(() => true);
+  return {
+    importModule: jest.fn().mockImplementation(async (filePath) => {
+      if (filePath.includes('filter.js')) {
+        return mockFilter;
+      }
+      return {};
+    }),
+    getDirectory: jest.fn().mockReturnValue('/test/dir'),
+    createCompatRequire: jest.fn().mockReturnValue(require),
+  };
+});
 
 jest.mock('../../src/googleSheets', () => ({
   writeCsvToGoogleSheet: jest.fn(),
@@ -267,14 +280,16 @@ describe('util', () => {
   });
 
   it('readFilters', async () => {
-    const mockFilter = jest.fn();
-    jest.doMock(path.resolve('filter.js'), () => mockFilter, { virtual: true });
-
     jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat());
-
+    
+    // Tell the test what we expect the outcome to be
+    const mockFilterFunc = jest.fn(() => true);
+    jest.mocked(importModule).mockResolvedValueOnce(mockFilterFunc);
+    
     const filters = await readFilters({ testFilter: 'filter.js' });
-
-    expect(filters.testFilter).toBe(mockFilter);
+    
+    expect(importModule).toHaveBeenCalledWith(expect.stringContaining('filter.js'));
+    expect(filters.testFilter).toBe(mockFilterFunc);
   });
 
   describe('providerToIdentifier', () => {

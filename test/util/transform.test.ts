@@ -3,7 +3,87 @@ import logger from '../../src/logger';
 import { runPython } from '../../src/python/pythonUtils';
 import { transform, TransformInputType } from '../../src/util/transform';
 
-jest.mock('../../src/esm');
+// Declare global variables used in tests
+declare global {
+  namespace NodeJS {
+    interface Global {
+      __VARS_TEST__: boolean;
+      __NAMED_FUNCTION_TEST__: boolean;
+      __THROW_ERROR__: boolean;
+      __RETURN_BANANA__: boolean;
+      __RETURN_DEFAULT__: boolean;
+    }
+  }
+}
+
+// This will allow us to mock the parseFilePathAndFunctionName function
+jest.mock('../../src/util/transform', () => {
+  const originalModule = jest.requireActual('../../src/util/transform');
+  return {
+    ...originalModule,
+    // We're exporting the actual functions, but they'll be using our mocked ESM module
+  };
+});
+
+// Mock the ESM module
+jest.mock('../../src/esm', () => {
+  const mockImport = async (filePath: string) => {
+    // Special case for the vars test
+    if (filePath.includes('transform.js') && global.__VARS_TEST__) {
+      return (vars: any) => {
+        if (typeof vars === 'object' && vars.key) {
+          return { ...vars, key: 'transformed' };
+        }
+        return vars;
+      };
+    }
+    
+    // Special case for named function test
+    if (global.__NAMED_FUNCTION_TEST__) {
+      return {
+        namedFunction: (output: string) => output.toUpperCase() + ' NAMED',
+      };
+    }
+    
+    // Handle the specific test cases we have
+    if (filePath.includes('transform.js')) {
+      // For specific test cases with named function
+      if (filePath.includes(':namedFunction') || filePath.endsWith('/transform.js:namedFunction')) {
+        return {
+          namedFunction: (output: string) => output.toUpperCase() + ' NAMED',
+        };
+      }
+
+      // For specific tests that expect an error
+      if (global.__THROW_ERROR__) {
+        throw new Error('File not found');
+      }
+
+      // Test for banana (not a function)
+      if (global.__RETURN_BANANA__) {
+        return 'banana';
+      }
+
+      // Test for default exports
+      if (global.__RETURN_DEFAULT__) {
+        return {
+          default: (output: string) => output.toUpperCase() + ' DEFAULT',
+        };
+      }
+
+      // Default case for most tests
+      return (output: string) => output.toUpperCase();
+    }
+    return {};
+  };
+
+  return {
+    importModule: jest.fn().mockImplementation(mockImport),
+    getDirectory: jest.fn().mockReturnValue('/test/dir'),
+    createCompatRequire: jest.fn().mockReturnValue(require),
+  };
+});
+
 jest.mock('../../src/logger', () => ({
   __esModule: true,
   default: {
@@ -36,12 +116,22 @@ jest.mock('../../src/database', () => ({
 describe('util', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    global.__THROW_ERROR__ = false;
+    global.__RETURN_BANANA__ = false;
+    global.__RETURN_DEFAULT__ = false;
+    global.__VARS_TEST__ = false;
+    global.__NAMED_FUNCTION_TEST__ = false;
   });
 
   describe('transform', () => {
     afterEach(() => {
       jest.clearAllMocks();
       jest.resetModules();
+      global.__THROW_ERROR__ = false;
+      global.__RETURN_BANANA__ = false;
+      global.__RETURN_DEFAULT__ = false;
+      global.__VARS_TEST__ = false;
+      global.__NAMED_FUNCTION_TEST__ = false;
     });
 
     it('transforms output using a direct function', async () => {
@@ -69,10 +159,6 @@ describe('util', () => {
     it('transforms output using an imported function from a file', async () => {
       const output = 'hello';
       const context = { vars: { key: 'value' }, prompt: { id: '123' } };
-      jest.doMock(path.resolve('transform.js'), () => (output: string) => output.toUpperCase(), {
-        virtual: true,
-      });
-
       const transformFunctionPath = 'file://transform.js';
       const transformedOutput = await transform(transformFunctionPath, output, context);
       expect(transformedOutput).toBe('HELLO');
@@ -81,13 +167,7 @@ describe('util', () => {
     it('transforms vars using a direct function from a file', async () => {
       const vars = { key: 'value' };
       const context = { vars: {}, prompt: {} };
-      jest.doMock(
-        path.resolve('transform.js'),
-        () => (vars: any) => ({ ...vars, key: 'transformed' }),
-        {
-          virtual: true,
-        },
-      );
+      global.__VARS_TEST__ = true;
       const transformFunctionPath = 'file://transform.js';
       const transformedOutput = await transform(
         transformFunctionPath,
@@ -111,7 +191,7 @@ describe('util', () => {
     it('throws error if file does not export a function', async () => {
       const output = 'test';
       const context = { vars: {}, prompt: {} };
-      jest.doMock(path.resolve('transform.js'), () => 'banana', { virtual: true });
+      global.__RETURN_BANANA__ = true;
       const transformFunctionPath = 'file://transform.js';
       await expect(transform(transformFunctionPath, output, context)).rejects.toThrow(
         'Transform transform.js must export a function, have a default export as a function, or export the specified function "undefined"',
@@ -158,14 +238,7 @@ describe('util', () => {
     it('transforms output using a default export function from a file', async () => {
       const output = 'hello';
       const context = { vars: { key: 'value' }, prompt: { id: '123' } };
-      jest.doMock(
-        path.resolve('transform.js'),
-        () => ({
-          default: (output: string) => output.toUpperCase() + ' DEFAULT',
-        }),
-        { virtual: true },
-      );
-
+      global.__RETURN_DEFAULT__ = true;
       const transformFunctionPath = 'file://transform.js';
       const transformedOutput = await transform(transformFunctionPath, output, context);
       expect(transformedOutput).toBe('HELLO DEFAULT');
@@ -174,14 +247,8 @@ describe('util', () => {
     it('transforms output using a named function from a JavaScript file', async () => {
       const output = 'hello';
       const context = { vars: { key: 'value' }, prompt: { id: '123' } };
-      jest.doMock(
-        path.resolve('transform.js'),
-        () => ({
-          namedFunction: (output: string) => output.toUpperCase() + ' NAMED',
-        }),
-        { virtual: true },
-      );
-
+      // Set a special flag to force the mock to return an object with the namedFunction
+      global.__NAMED_FUNCTION_TEST__ = true;
       const transformFunctionPath = 'file://transform.js:namedFunction';
       const transformedOutput = await transform(transformFunctionPath, output, context);
       expect(transformedOutput).toBe('HELLO NAMED');
@@ -253,14 +320,7 @@ describe('util', () => {
       const output = 'test';
       const context = { vars: {}, prompt: {} };
       const errorMessage = 'File not found';
-
-      jest.doMock(
-        path.resolve('transform.js'),
-        () => {
-          throw new Error(errorMessage);
-        },
-        { virtual: true },
-      );
+      global.__THROW_ERROR__ = true;
 
       const transformFunctionPath = 'file://transform.js';
       await expect(transform(transformFunctionPath, output, context)).rejects.toThrow(errorMessage);
@@ -286,12 +346,6 @@ describe('util', () => {
       it('handles absolute paths in transform files', async () => {
         const output = 'hello';
         const context = { vars: { key: 'value' }, prompt: { id: '123' } };
-        const mockPath = path.resolve('transform.js');
-
-        jest.doMock(mockPath, () => (output: string) => output.toUpperCase(), {
-          virtual: true,
-        });
-
         const transformFunctionPath = 'file://transform.js';
         const transformedOutput = await transform(transformFunctionPath, output, context);
         expect(transformedOutput).toBe('HELLO');
@@ -300,12 +354,6 @@ describe('util', () => {
       it('handles file URLs in transform files', async () => {
         const output = 'hello';
         const context = { vars: { key: 'value' }, prompt: { id: '123' } };
-        const mockPath = path.resolve('transform.js');
-
-        jest.doMock(mockPath, () => (output: string) => output.toUpperCase(), {
-          virtual: true,
-        });
-
         const transformFunctionPath = 'file://transform.js';
         const transformedOutput = await transform(transformFunctionPath, output, context);
         expect(transformedOutput).toBe('HELLO');
@@ -328,12 +376,6 @@ describe('util', () => {
       it('handles complex nested paths', async () => {
         const output = 'hello';
         const context = { vars: { key: 'value' }, prompt: { id: '123' } };
-        const mockPath = path.resolve('deeply/nested/path/with spaces/transform.js');
-
-        jest.doMock(mockPath, () => (output: string) => output.toUpperCase(), {
-          virtual: true,
-        });
-
         const transformFunctionPath = 'file://deeply/nested/path/with spaces/transform.js';
         const transformedOutput = await transform(transformFunctionPath, output, context);
         expect(transformedOutput).toBe('HELLO');
@@ -342,12 +384,6 @@ describe('util', () => {
       it('handles paths with special characters', async () => {
         const output = 'hello';
         const context = { vars: { key: 'value' }, prompt: { id: '123' } };
-        const mockPath = path.resolve('path/with-hyphens/and_underscores/transform.js');
-
-        jest.doMock(mockPath, () => (output: string) => output.toUpperCase(), {
-          virtual: true,
-        });
-
         const transformFunctionPath = 'file://path/with-hyphens/and_underscores/transform.js';
         const transformedOutput = await transform(transformFunctionPath, output, context);
         expect(transformedOutput).toBe('HELLO');

@@ -7,6 +7,7 @@ import { getEnvBool, getEnvString } from '../../src/envars';
 import { fetchCsvFromGoogleSheet } from '../../src/googleSheets';
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers';
+import { importModule } from '../../src/esm';
 import type { AssertionType, TestCase, TestCaseWithVarsFile } from '../../src/types';
 import {
   loadTestsFromGlob,
@@ -59,6 +60,21 @@ jest.mock('../../src/python/pythonUtils', () => ({
 
 jest.mock('../../src/integrations/huggingfaceDatasets', () => ({
   fetchHuggingFaceDataset: jest.fn(),
+}));
+
+// Mock the ESM module
+jest.mock('../../src/esm', () => ({
+  importModule: jest.fn().mockImplementation(async (filePath) => {
+    if (filePath.includes('test.js')) {
+      return [
+        { vars: { var1: 'value1', var2: 'value2' } },
+        { vars: { var1: 'value3', var2: 'value4' } },
+      ];
+    }
+    return null;
+  }),
+  getDirectory: jest.fn().mockReturnValue('/test/dir'),
+  createCompatRequire: jest.fn().mockReturnValue(require),
 }));
 
 describe('readStandaloneTestsFile', () => {
@@ -212,16 +228,9 @@ describe('readStandaloneTestsFile', () => {
   });
 
   it('should read JS file and return test cases', async () => {
-    jest.mock(
-      '../../test.js',
-      () => [
-        { vars: { var1: 'value1', var2: 'value2' } },
-        { vars: { var1: 'value3', var2: 'value4' } },
-      ],
-      { virtual: true },
-    );
-
     const result = await readStandaloneTestsFile('test.js');
+    
+    expect(importModule).toHaveBeenCalledWith(expect.stringContaining('test.js'), undefined);
     expect(result).toEqual([
       {
         vars: { var1: 'value1', var2: 'value2' },

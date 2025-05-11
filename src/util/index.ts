@@ -313,7 +313,8 @@ export async function readFilters(
     });
     for (const filePath of filePaths) {
       const finalPath = path.resolve(filePath);
-      ret[name] = await importModule(finalPath);
+      const module = await importModule(finalPath);
+      ret[name] = module;
     }
   }
   return ret;

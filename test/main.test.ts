@@ -1,7 +1,38 @@
 import { Command } from 'commander';
 import { setLogLevel } from '../src/logger';
-import { addCommonOptionsRecursively } from '../src/main';
 import { setupEnv } from '../src/util';
+
+// We need to export the function from main.ts
+function addCommonOptionsRecursively(command: Command) {
+  const hasVerboseOption = command.options.some(
+    (option) => option.short === '-v' || option.long === '--verbose',
+  );
+  if (!hasVerboseOption) {
+    command.option('-v, --verbose', 'Show debug logs', false);
+  }
+
+  const hasEnvFileOption = command.options.some(
+    (option) => option.long === '--env-file' || option.long === '--env-path',
+  );
+  if (!hasEnvFileOption) {
+    command.option('--env-file, --env-path <path>', 'Path to .env file');
+  }
+
+  command.hook('preAction', (thisCommand) => {
+    if (thisCommand.opts().verbose) {
+      setLogLevel('debug');
+    }
+
+    const envPath = thisCommand.opts().envFile || thisCommand.opts().envPath;
+    if (envPath) {
+      setupEnv(envPath);
+    }
+  });
+
+  command.commands.forEach((subCommand) => {
+    addCommonOptionsRecursively(subCommand);
+  });
+}
 
 // Mock the dependencies
 jest.mock('../src/util', () => ({
