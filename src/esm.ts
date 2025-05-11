@@ -54,7 +54,7 @@ export async function importModule(modulePath: string, functionName?: string) {
 
     const resolvedPath = pathToFileURL(safeResolve(modulePath));
     logger.debug(`Attempting ESM import from: ${resolvedPath.toString()}`);
-     
+
     // @ts-ignore
     const importedModule = await import(resolvedPath.toString());
     const mod = importedModule?.default?.default || importedModule?.default || importedModule;
