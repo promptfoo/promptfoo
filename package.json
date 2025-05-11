@@ -118,7 +118,6 @@
     "sharp": "^0.33.5"
   },
   "devDependencies": {
-    "@anthropic-ai/sdk": "^0.41.0",
     "@aws-sdk/client-bedrock-runtime": "^3.806.0",
     "@aws-sdk/credential-provider-sso": "^3.806.0",
     "@azure/identity": "^4.9.1",
@@ -175,6 +174,7 @@
     "zod-to-json-schema": "^3.24.5"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.50.3",
     "@apidevtools/json-schema-ref-parser": "^12.0.1",
     "@googleapis/sheets": "^9.7.0",
     "@modelcontextprotocol/sdk": "^1.11.1",
@@ -222,7 +222,7 @@
     "semver": "^7.7.1",
     "socket.io": "^4.8.1",
     "tsx": "^4.19.4",
-    "undici": "^7.8.0",
+    "undici": "^7.9.0",
     "uuid": "^11.1.0",
     "winston": "^3.17.0",
     "ws": "^8.18.2",
