@@ -98,7 +98,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should pass the tool choice if specified', async () => {
-      const toolChoice: Anthropic.MessageCreateParams.ToolChoiceTool = {
+      const toolChoice: Anthropic.MessageCreateParams['tool_choice'] = {
         name: 'get_weather',
         type: 'tool',
       };
