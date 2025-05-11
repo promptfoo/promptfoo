@@ -581,7 +581,6 @@ export function evalCommand(
       '-c, --config <paths...>',
       'Path to configuration file. Automatically loads promptfooconfig.yaml',
     )
-    .option('--env-file, --env-path <path>', 'Path to .env file')
 
     // Input sources
     .option('-a, --assertions <path>', 'Path to assertions file')
