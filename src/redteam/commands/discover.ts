@@ -42,14 +42,14 @@ type Args = z.infer<typeof ArgsSchema>;
  */
 export async function doTargetPurposeDiscovery(
   target: ApiProvider,
-  maxTurns?: number,
+  maxTurns: number = 100,
 ): Promise<string> {
   const conversationHistory: { type: 'promptfoo' | 'target'; content: string }[] = [];
 
   let turnCounter = 1;
 
   const pbar = new cliProgress.SingleBar({
-    format: `Discovering purpose {bar} {percentage}% | {value}/${maxTurns ? '{total}' : '∞'} turns`,
+    format: `Discovering purpose {bar} {percentage}% | {value}${maxTurns ? '/{total}' : ''} turns`,
     barCompleteChar: '\u2588',
     barIncompleteChar: '\u2591',
     hideCursor: true,
@@ -101,6 +101,7 @@ export async function doTargetPurposeDiscovery(
     conversationHistory.push({ type: 'target', content: response.output });
 
     if (maxTurns && turnCounter === maxTurns) {
+      // Purpose will always be defined because the generator task is max turn aware.
       return purpose as string;
     }
 
@@ -119,18 +120,20 @@ export async function doTargetPurposeDiscovery(
  * @returns The response from the database.
  */
 async function savePurpose(targetId: string, purpose: string) {
-  let apiDomain: string | undefined;
-  const apiBaseUrl = getEnvString('PROMPTFOO_REMOTE_API_BASE_URL');
-
-  if (apiBaseUrl) {
-    apiDomain = apiBaseUrl;
-  } else {
+  // First, attempt to load from the environment (self-hosted)
+  let apiDomain: string | undefined = getEnvString('PROMPTFOO_REMOTE_API_BASE_URL');
+  // Otherwise, must be using Cloud:
+  if (!apiDomain) {
     invariant(
       cloudConfig.isEnabled(),
+      // We should never be in this state: if args.target is provided, we've already confirmed with
+      // the API that it's a valid target (which requires Cloud).
       'Cloud config should have been enabled for a target to be provided',
     );
     apiDomain = cloudConfig.getApiHost();
   }
+
+  invariant(apiDomain, 'Error determining API domain');
 
   const url = `${apiDomain!}/api/v1/providers/${targetId}`;
 
@@ -175,7 +178,7 @@ export function discoverCommand(program: Command) {
       ).argParser(Number.parseInt),
     )
 
-    .option('--env-file, --env-path <path>', 'Path to a custom .env file')
+    .option('--env-path <path>', 'Path to a custom .env file')
     .option('-v, --verbose', 'Show debug logs')
     .action(async (rawArgs: Args) => {
       // Validate the arguments:
@@ -250,8 +253,7 @@ export function discoverCommand(program: Command) {
         return;
       }
 
-      // Then, handle the response:
-      // If preview is enabled, print the purpose to the console:
+      // If not previewing, persist the purposes:
       if (!args.preview) {
         // Persist the purposes:
         if (args.target) {

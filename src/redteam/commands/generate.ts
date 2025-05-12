@@ -105,6 +105,11 @@ export async function doGenerateRedteam(
 
     // Discover the purpose from the provider:
     if (resolved.config.providers && Array.isArray(resolved.config.providers)) {
+      // Validate that at least one provider is provided:
+      invariant(
+        resolved.config.providers.length > 0,
+        'At least one provider must be provided in the config file',
+      );
       const providers = await loadApiProviders(resolved.config.providers);
       targetPurpose = await doTargetPurposeDiscovery(providers[0]);
     }

@@ -1,6 +1,6 @@
-# Redteam: Target Application Purpose Auto-Discovery Example
+# Red Team: Target Application Purpose Auto-Discovery Example
 
-This example demonstrates how to automatically discover and generate a [Redteam Purpose](https://www.promptfoo.dev/docs/red-team/configuration/#purpose) for your target application.
+This example demonstrates how to automatically discover and generate a [Red Team Purpose](https://www.promptfoo.dev/docs/red-team/configuration/#purpose) for your target application.
 
 ## Quick Start
 
@@ -28,7 +28,7 @@ promptfoo redteam generate \
     -o examples/redteam-purpose-generation/redteam.yaml
 ```
 
-## Full Redteam Scan
+## Full Scan
 
 Run discover within the context of a full Redteam scan:
 
