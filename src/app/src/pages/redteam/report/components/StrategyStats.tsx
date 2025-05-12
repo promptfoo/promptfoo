@@ -120,7 +120,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
   const [error, setError] = React.useState<Error | null>(null);
 
   const strategies = Object.entries(strategyStats).sort(
-    (a, b) => (b[1].total - b[1].pass) / b[1].total - (a[1].total - a[1].pass) / a[1].total,
+    (a, b) => (a[1].total - a[1].pass) / a[1].total - (b[1].total - b[1].pass) / b[1].total,
   );
 
   const handleStrategyClick = async (strategy: string) => {
@@ -258,7 +258,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
               ...stats,
               failRate: (stats.passes / stats.total) * 100,
             }))
-            .sort((a, b) => b.failRate - a.failRate);
+            .sort((a, b) => a.failRate - b.failRate);
         },
         [failuresByPlugin, passesByPlugin],
       );

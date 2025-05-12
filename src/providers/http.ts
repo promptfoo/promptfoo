@@ -14,8 +14,9 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types';
-import { maybeLoadFromExternalFile, renderVarsInObject } from '../util';
-import { isJavascriptFile } from '../util/file';
+import { renderVarsInObject } from '../util';
+import { maybeLoadFromExternalFile } from '../util/file';
+import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
@@ -226,12 +227,15 @@ export async function createTransformResponse(
     return (data, text, context) => {
       try {
         const result = parser(data, text, context);
-        if (typeof result === 'string') {
+        if (typeof result === 'object') {
+          return result;
+        } else {
           return { output: result };
         }
-        return { output: result };
       } catch (err) {
-        logger.error(`Error in response transform function: ${String(err)}`);
+        logger.error(
+          `[Http Provider] Error in response transform function: ${String(err)}. Data: ${safeJsonStringify(data)}. Text: ${text}. Context: ${safeJsonStringify(context)}.`,
+        );
         throw err;
       }
     };
@@ -266,8 +270,8 @@ export async function createTransformResponse(
           'text',
           'context',
           isFunctionExpression
-            ? `try { return (${trimmedParser})(json, text, context); } catch(e) { throw new Error('Transform failed: ' + e.message); }`
-            : `try { return (${trimmedParser}); } catch(e) { throw new Error('Transform failed: ' + e.message); }`,
+            ? `try { return (${trimmedParser})(json, text, context); } catch(e) { throw new Error('Transform failed: ' + e.message + ' : ' + text + ' : ' + JSON.stringify(json) + ' : ' + JSON.stringify(context)); }`
+            : `try { return (${trimmedParser}); } catch(e) { throw new Error('Transform failed: ' + e.message + ' : ' + text + ' : ' + JSON.stringify(json) + ' : ' + JSON.stringify(context)); }`,
         );
         let resp: ProviderResponse | string;
         if (context) {
@@ -281,7 +285,9 @@ export async function createTransformResponse(
         }
         return resp;
       } catch (err) {
-        logger.error(`Error in response transform: ${String(err)}`);
+        logger.error(
+          `[Http Provider] Error in response transform: ${String(err)}. Data: ${safeJsonStringify(data)}. Text: ${text}. Context: ${safeJsonStringify(context)}.`,
+        );
         throw new Error(`Failed to transform response: ${String(err)}`);
       }
     };

@@ -10,7 +10,8 @@ import type { Command } from 'commander';
 import dedent from 'dedent';
 import fs from 'fs';
 import * as path from 'path';
-import { DEFAULT_PORT } from '../../constants';
+import { getDefaultPort } from '../../constants';
+import { getEnvString } from '../../envars';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../../globalConfig/globalConfig';
 import logger from '../../logger';
@@ -670,9 +671,11 @@ export function initCommand(program: Command) {
         setupEnv(opts.envPath);
         try {
           // Check if we're in a non-GUI environment
-          const hasDisplay =
-            process.env.DISPLAY || process.platform === 'win32' || process.platform === 'darwin';
-          const useGui = opts.gui && hasDisplay;
+          const isGUI =
+            getEnvString('DISPLAY') ||
+            process.platform === 'win32' ||
+            process.platform === 'darwin';
+          const useGui = opts.gui && isGUI;
 
           if (useGui) {
             const isRunning = await checkServerRunning();
@@ -680,7 +683,7 @@ export function initCommand(program: Command) {
             if (isRunning) {
               await openBrowser(BrowserBehavior.OPEN_TO_REDTEAM_CREATE);
             } else {
-              await startServer(DEFAULT_PORT, BrowserBehavior.OPEN_TO_REDTEAM_CREATE);
+              await startServer(getDefaultPort(), BrowserBehavior.OPEN_TO_REDTEAM_CREATE);
             }
           } else {
             await redteamInit(directory);

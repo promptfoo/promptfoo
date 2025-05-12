@@ -7,29 +7,32 @@ import yaml from 'js-yaml';
 import path from 'path';
 import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
-import { synthesize } from '..';
+import { synthesize } from '../';
 import { disableCache } from '../../cache';
 import cliState from '../../cliState';
 import { VERSION } from '../../constants';
-import logger, { setLogLevel } from '../../logger';
+import logger from '../../logger';
 import telemetry from '../../telemetry';
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types';
-import { printBorder, setupEnv } from '../../util';
-import { isRunningUnderNpx } from '../../util';
+import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
 import { resolveConfigs } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/manage';
 import invariant from '../../util/invariant';
-import { RedteamGenerateOptionsSchema, RedteamConfigSchema } from '../../validators/redteam';
+import { RedteamConfigSchema, RedteamGenerateOptionsSchema } from '../../validators/redteam';
 import {
-  REDTEAM_MODEL,
-  DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
-  DEFAULT_STRATEGIES,
   ADDITIONAL_STRATEGIES,
+  DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
+  DEFAULT_STRATEGIES,
+  REDTEAM_MODEL,
 } from '../constants';
 import { shouldGenerateRemote } from '../remoteGeneration';
-import type { RedteamStrategyObject, SynthesizeOptions } from '../types';
-import type { RedteamFileConfig, RedteamCliGenerateOptions } from '../types';
+import type {
+  RedteamCliGenerateOptions,
+  RedteamFileConfig,
+  RedteamStrategyObject,
+  SynthesizeOptions,
+} from '../types';
 
 function getConfigHash(configPath: string): string {
   const content = fs.readFileSync(configPath, 'utf8');
@@ -183,6 +186,8 @@ export async function doGenerateRedteam(
     strategies: strategyObjs,
     delay: redteamConfig?.delay || options.delay,
     sharing: redteamConfig?.sharing || options.sharing,
+    excludeTargetOutputFromAgenticAttackGeneration:
+      redteamConfig?.excludeTargetOutputFromAgenticAttackGeneration,
   };
   const parsedConfig = RedteamConfigSchema.safeParse(config);
   if (!parsedConfig.success) {
@@ -386,7 +391,6 @@ export function redteamGenerateCommand(
       'Specify the language for generated tests. Defaults to English',
     )
     .option('--no-cache', 'Do not read or write results to disk cache', false)
-    .option('--env-file, --env-path <path>', 'Path to .env file')
     .option(
       '-j, --max-concurrency <number>',
       'Maximum number of concurrent API calls',
@@ -398,14 +402,9 @@ export function redteamGenerateCommand(
     )
     .option('--remote', 'Force remote inference wherever possible', false)
     .option('--force', 'Force generation even if no changes are detected', false)
-    .option('--verbose', 'Show debug logs', defaultConfig?.commandLineOptions?.verbose)
     .option('--no-progress-bar', 'Do not show progress bar')
     .option('--burp-escape-json', 'Escape quotes in Burp payloads', false)
     .action((opts: Partial<RedteamCliGenerateOptions>): void => {
-      if (opts.verbose) {
-        setLogLevel('debug');
-      }
-
       if (opts.remote) {
         cliState.remote = true;
       }

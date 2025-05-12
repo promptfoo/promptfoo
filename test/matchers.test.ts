@@ -437,6 +437,48 @@ describe('matchesLlmRubric', () => {
     });
   });
 
+  it('should throw error when throwOnError is true and provider returns an error', async () => {
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    const grading: GradingConfig = {
+      rubricPrompt: 'Grading prompt',
+      provider: {
+        id: () => 'test-provider',
+        callApi: jest.fn().mockResolvedValue({
+          error: 'Provider error',
+          output: null,
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      },
+    };
+
+    // With throwOnError: true - should throw
+    await expect(
+      matchesLlmRubric(rubric, llmOutput, grading, {}, null, { throwOnError: true }),
+    ).rejects.toThrow('Provider error');
+  });
+
+  it('should throw error when throwOnError is true and provider returns no result', async () => {
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    const grading: GradingConfig = {
+      rubricPrompt: 'Grading prompt',
+      provider: {
+        id: () => 'test-provider',
+        callApi: jest.fn().mockResolvedValue({
+          error: null,
+          output: null,
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      },
+    };
+
+    // With throwOnError: true - should throw
+    await expect(
+      matchesLlmRubric(rubric, llmOutput, grading, {}, null, { throwOnError: true }),
+    ).rejects.toThrow('No output');
+  });
+
   it('should use the overridden llm rubric grading config', async () => {
     const expected = 'Expected output';
     const output = 'Sample output';
@@ -1768,7 +1810,7 @@ describe('matchesContextRelevance', () => {
 
     const mockCallApi = jest.fn().mockImplementation(() => {
       return Promise.resolve({
-        output: 'foo\nbar\nbaz Insufficient Information',
+        output: 'foo\nbar\nbaz Insufficient Information\n',
         tokenUsage: { total: 10, prompt: 5, completion: 5 },
       });
     });
@@ -1837,7 +1879,7 @@ describe('matchesContextFaithfulness', () => {
       .fn()
       .mockImplementationOnce(() => {
         return Promise.resolve({
-          output: 'Statement 1\nStatement 2\nStatement 3',
+          output: 'Statement 1\nStatement 2\nStatement 3\n',
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
         });
       })
@@ -1918,7 +1960,7 @@ describe('matchesContextRecall', () => {
 
     const mockCallApi = jest.fn().mockImplementation(() => {
       return Promise.resolve({
-        output: 'foo [Attributed]\nbar [Not attributed]\nbaz [Attributed]',
+        output: 'foo [Attributed]\nbar [Not attributed]\nbaz [Attributed]\n',
         tokenUsage: { total: 10, prompt: 5, completion: 5 },
       });
     });

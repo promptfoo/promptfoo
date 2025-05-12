@@ -29,7 +29,9 @@ describe('RedteamIterativeProvider', () => {
     it('should render system prompts correctly', () => {
       const goal = '{{goal}}';
       const result = renderSystemPrompts(getNunjucksEngine(), goal);
-      expect(result.redteamSystemPrompt).toBe(ATTACKER_SYSTEM_PROMPT);
+      const nunjucksEng = getNunjucksEngine();
+      const attackerPrompt = nunjucksEng.renderString(ATTACKER_SYSTEM_PROMPT, { goal });
+      expect(result.redteamSystemPrompt).toBe(attackerPrompt);
       expect(result.onTopicSystemPrompt).toBe(ON_TOPIC_SYSTEM_PROMPT);
       expect(result.judgeSystemPrompt).toBe(JUDGE_SYSTEM_PROMPT);
     });

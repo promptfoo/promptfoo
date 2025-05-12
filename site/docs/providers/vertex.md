@@ -482,3 +482,61 @@ When using thinking configuration:
 - The `thinkingBudget` must be at least 1024 tokens
 - The budget is counted towards your total token usage
 - The model will show its reasoning process in the response
+
+### Search Grounding
+
+Search grounding allows Gemini models to access the internet for up-to-date information, enhancing responses about recent events and real-time data.
+
+#### Basic Usage
+
+Use the object format to enable Search grounding:
+
+```yaml
+providers:
+  - id: vertex:gemini-2.0-pro
+    config:
+      tools:
+        - googleSearch: {}
+```
+
+#### Combining with Other Features
+
+You can combine Search grounding with thinking capabilities for better reasoning:
+
+```yaml
+providers:
+  - id: vertex:gemini-2.5-flash-preview-04-17
+    config:
+      generationConfig:
+        thinkingConfig:
+          thinkingBudget: 1024
+      tools:
+        - googleSearch: {}
+```
+
+#### Use Cases
+
+Search grounding is particularly valuable for:
+
+- Current events and news
+- Recent developments
+- Stock prices and market data
+- Sports results
+- Technical documentation updates
+
+#### Working with Response Metadata
+
+When using Search grounding, the API response includes additional metadata:
+
+- `groundingMetadata` - Contains information about search results used
+- `groundingChunks` - Web sources that informed the response
+- `webSearchQueries` - Queries used to retrieve information
+
+#### Requirements and Limitations
+
+- **Important**: Per Google's requirements, applications using Search grounding must display Google Search Suggestions included in the API response metadata
+- Search results may vary by region and time
+- Results may be subject to Google Search rate limits
+- Search will only be performed when the model determines it's necessary
+
+For more details, see the [Google documentation on Grounding with Google Search](https://ai.google.dev/docs/gemini_api/grounding).

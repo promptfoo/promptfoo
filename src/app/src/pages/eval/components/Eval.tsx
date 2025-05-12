@@ -1,9 +1,11 @@
 import React, { useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import EnterpriseBanner from '@app/components/EnterpriseBanner';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { ShiftKeyProvider } from '@app/contexts/ShiftKeyContext';
 import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
+import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import type { SharedResults, ResultLightweightWithLabel, ResultsFile } from '@promptfoo/types';
 import { io as SocketIOClient } from 'socket.io-client';
@@ -13,7 +15,7 @@ import { useResultsViewSettingsStore, useStore } from './store';
 import './Eval.css';
 
 interface EvalOptions {
-  fetchId?: string;
+  fetchId: string | null;
   preloadedData?: SharedResults;
   recentEvals?: ResultLightweightWithLabel[];
   defaultEvalId?: string;
@@ -75,7 +77,6 @@ export default function Eval({
     [setTable, setConfig, setEvalId, setAuthor],
   );
   const [searchParams] = useSearchParams();
-  const searchEvalId = searchParams.get('evalId');
 
   const handleRecentEvalSelection = useCallback(
     async (id: string) => {
@@ -92,13 +93,12 @@ export default function Eval({
   );
 
   React.useEffect(() => {
-    const evalId = searchEvalId || fetchId;
-    if (evalId) {
-      console.log('Eval init: Fetching eval by id', { searchEvalId, fetchId });
+    if (fetchId) {
+      console.log('Eval init: Fetching eval by id', { fetchId });
       const run = async () => {
-        await fetchEvalById(evalId);
+        await fetchEvalById(fetchId);
         setLoaded(true);
-        setDefaultEvalId(evalId);
+        setDefaultEvalId(fetchId);
         // Load other recent eval runs
         fetchRecentFileEvals();
       };
@@ -184,7 +184,6 @@ export default function Eval({
     fetchEvalById,
     preloadedData,
     setDefaultEvalId,
-    searchEvalId,
     setInComparisonMode,
   ]);
 
@@ -211,8 +210,16 @@ export default function Eval({
     );
   }
 
+  // Check if this is a redteam eval
+  const isRedteam = config?.redteam !== undefined;
+
   return (
     <ShiftKeyProvider>
+      {isRedteam && evalId && (
+        <Box sx={{ mb: 2, mt: 2, mx: 2 }}>
+          <EnterpriseBanner evalId={evalId} />
+        </Box>
+      )}
       <ResultsView
         defaultEvalId={defaultEvalId}
         recentEvals={recentEvals}

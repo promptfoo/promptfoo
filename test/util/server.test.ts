@@ -1,5 +1,5 @@
 import opener from 'opener';
-import { VERSION, DEFAULT_PORT } from '../../src/constants';
+import { VERSION, getDefaultPort } from '../../src/constants';
 import logger from '../../src/logger';
 // Import the module under test after mocks are set up
 import { BrowserBehavior, checkServerRunning, openBrowser } from '../../src/util/server';
@@ -48,7 +48,7 @@ describe('Server Utilities', () => {
 
       const result = await checkServerRunning();
 
-      expect(mockFetch).toHaveBeenCalledWith(`http://localhost:${DEFAULT_PORT}/health`);
+      expect(mockFetch).toHaveBeenCalledWith(`http://localhost:${getDefaultPort()}/health`);
       expect(result).toBe(true);
     });
 
@@ -99,20 +99,20 @@ describe('Server Utilities', () => {
     it('should open browser with default URL when BrowserBehavior.OPEN', async () => {
       await openBrowser(BrowserBehavior.OPEN);
 
-      expect(opener).toHaveBeenCalledWith(`http://localhost:${DEFAULT_PORT}`);
+      expect(opener).toHaveBeenCalledWith(`http://localhost:${getDefaultPort()}`);
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Press Ctrl+C'));
     });
 
     it('should open browser with report URL when BrowserBehavior.OPEN_TO_REPORT', async () => {
       await openBrowser(BrowserBehavior.OPEN_TO_REPORT);
 
-      expect(opener).toHaveBeenCalledWith(`http://localhost:${DEFAULT_PORT}/report`);
+      expect(opener).toHaveBeenCalledWith(`http://localhost:${getDefaultPort()}/report`);
     });
 
     it('should open browser with redteam setup URL when BrowserBehavior.OPEN_TO_REDTEAM_CREATE', async () => {
       await openBrowser(BrowserBehavior.OPEN_TO_REDTEAM_CREATE);
 
-      expect(opener).toHaveBeenCalledWith(`http://localhost:${DEFAULT_PORT}/redteam/setup`);
+      expect(opener).toHaveBeenCalledWith(`http://localhost:${getDefaultPort()}/redteam/setup`);
     });
 
     it('should not open browser when BrowserBehavior.SKIP', async () => {
@@ -143,7 +143,7 @@ describe('Server Utilities', () => {
         expect.any(Function),
       );
       expect(mockClose).toHaveBeenCalledWith();
-      expect(opener).toHaveBeenCalledWith(`http://localhost:${DEFAULT_PORT}`);
+      expect(opener).toHaveBeenCalledWith(`http://localhost:${getDefaultPort()}`);
     });
 
     it('should not open browser when user answers no to ASK prompt', async () => {

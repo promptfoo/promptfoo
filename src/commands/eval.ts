@@ -12,7 +12,7 @@ import { getEnvFloat, getEnvInt } from '../envars';
 import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
 import { checkEmailStatusOrExit, promptForEmailUnverified } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
-import logger, { getLogLevel, setLogLevel } from '../logger';
+import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
 import { loadApiProvider } from '../providers';
@@ -29,10 +29,12 @@ import type {
 } from '../types';
 import { OutputFileExtension, TestSuiteSchema } from '../types';
 import { CommandLineOptionsSchema } from '../types';
-import { isRunningUnderNpx, maybeLoadFromExternalFile } from '../util';
+import { isApiProvider } from '../types/providers';
+import { isRunningUnderNpx } from '../util';
 import { printBorder, setupEnv, writeMultipleOutputs } from '../util';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
+import { maybeLoadFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
 import { filterProviders } from './eval/filterProviders';
 import type { FilterOptions } from './eval/filterTests';
@@ -98,9 +100,6 @@ export async function doEval(
   evaluateOptions: EvaluateOptions,
 ): Promise<Eval> {
   setupEnv(cmdObj.envPath);
-  if (cmdObj.verbose) {
-    setLogLevel('debug');
-  }
 
   let config: Partial<UnifiedConfig> | undefined = undefined;
   let testSuite: TestSuite | undefined = undefined;
@@ -542,6 +541,19 @@ export async function doEval(
     if (testSuite.redteam) {
       showRedteamProviderLabelMissingWarning(testSuite);
     }
+
+    // Clean up any WebSocket connections
+    if (testSuite.providers.length > 0) {
+      for (const provider of testSuite.providers) {
+        if (isApiProvider(provider)) {
+          const cleanup = provider?.cleanup?.();
+          if (cleanup instanceof Promise) {
+            await cleanup;
+          }
+        }
+      }
+    }
+
     return ret;
   };
 
@@ -569,7 +581,6 @@ export function evalCommand(
       '-c, --config <paths...>',
       'Path to configuration file. Automatically loads promptfooconfig.yaml',
     )
-    .option('--env-file, --env-path <path>', 'Path to .env file')
 
     // Input sources
     .option('-a, --assertions <path>', 'Path to assertions file')
@@ -692,7 +703,6 @@ export function evalCommand(
 
     // Miscellaneous
     .option('--description <description>', 'Description of the eval run')
-    .option('--verbose', 'Show debug logs', defaultConfig?.commandLineOptions?.verbose)
     .option('--no-progress-bar', 'Do not show progress bar')
     .action(async (opts: EvalCommandOptions, command: Command) => {
       let validatedOpts: z.infer<typeof EvalCommandSchema>;

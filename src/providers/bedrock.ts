@@ -11,6 +11,7 @@ import type { EnvOverrides } from '../types/env';
 import type {
   ApiEmbeddingProvider,
   ApiProvider,
+  CallApiContextParams,
   ProviderEmbeddingResponse,
   ProviderResponse,
 } from '../types/providers';
@@ -235,13 +236,74 @@ export interface BedrockAmazonNovaGenerationOptions extends BedrockOptions {
     };
   };
 }
+
+export type ContentType = 'AUDIO' | 'TEXT' | 'TOOL';
+
+export type AudioMediaType = 'audio/wav' | 'audio/lpcm' | 'audio/mulaw' | 'audio/mpeg';
+export type TextMediaType = 'text/plain' | 'application/json';
+
+export interface AudioConfiguration {
+  readonly mediaType: AudioMediaType;
+  readonly sampleRateHertz: number;
+  readonly sampleSizeBits: number;
+  readonly channelCount: number;
+  readonly encoding: string;
+  readonly audioType: 'SPEECH';
+}
+
+export interface TextConfiguration {
+  readonly contentType: ContentType;
+  readonly mediaType: TextMediaType;
+}
+
+export interface BedrockAmazonNovaSonicGenerationOptions extends BedrockOptions {
+  interfaceConfig?: {
+    max_new_tokens?: number;
+    temperature?: number;
+    top_p?: number;
+    top_k?: number;
+    stopSequences?: string[];
+  };
+  audioInputConfiguration?: Omit<AudioConfiguration, 'voiceId'>;
+  audioOutputConfiguration?: Omit<AudioConfiguration, 'mediaType'> & {
+    mediaType: 'audio/lpcm';
+    voiceId?: 'matthew' | 'tiffany' | 'amy';
+  };
+  textInputConfiguration?: TextConfiguration;
+  textOutputConfiguration?: Omit<TextConfiguration, 'mediaType'> & {
+    mediaType: 'text/plain';
+  };
+  toolConfig?: {
+    tools?: {
+      toolSpec: {
+        name: string;
+        description?: string;
+        inputSchema: {
+          json: {
+            type: 'object';
+            properties: {
+              [propertyName: string]: {
+                description: string;
+                type: string;
+              };
+            };
+            required: string[];
+          };
+        };
+      };
+    }[];
+    toolChoice?: 'any' | 'auto' | string; // Tool name
+  };
+}
+
 export interface BedrockDeepseekGenerationOptions extends BedrockOptions {
   max_tokens?: number;
   temperature?: number;
   top_p?: number;
   stop?: string[];
 }
-interface IBedrockModel {
+
+export interface IBedrockModel {
   params: (config: BedrockOptions, prompt: string, stop: string[], modelName?: string) => any;
   output: (config: BedrockOptions, responseJson: any) => any;
   tokenUsage?: (responseJson: any, promptText: string) => TokenUsage;
@@ -276,6 +338,7 @@ export enum LlamaVersion {
   V3_1 = 3.1,
   V3_2 = 3.2,
   V3_3 = 3.3,
+  V4 = 4,
 }
 
 export interface LlamaMessage {
@@ -341,6 +404,21 @@ export const formatPromptLlama3Instruct = (messages: LlamaMessage[]): string => 
   return formattedPrompt;
 };
 
+// Llama 4 format uses different tags
+export const formatPromptLlama4 = (messages: LlamaMessage[]): string => {
+  let formattedPrompt = '<|begin_of_text|>';
+
+  for (const message of messages) {
+    formattedPrompt += dedent`<|header_start|>${message.role}<|header_end|>
+
+${message.content.trim()}<|eot|>`;
+  }
+
+  // Add assistant header for completion
+  formattedPrompt += '<|header_start|>assistant<|header_end|>';
+  return formattedPrompt;
+};
+
 export const getLlamaModelHandler = (version: LlamaVersion) => {
   if (
     ![
@@ -349,6 +427,7 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
       LlamaVersion.V3_1,
       LlamaVersion.V3_2,
       LlamaVersion.V3_3,
+      LlamaVersion.V4,
     ].includes(version)
   ) {
     throw new Error(`Unsupported LLAMA version: ${version}`);
@@ -373,6 +452,9 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
         case LlamaVersion.V3_2:
         case LlamaVersion.V3_3:
           finalPrompt = formatPromptLlama3Instruct(messages as LlamaMessage[]);
+          break;
+        case LlamaVersion.V4:
+          finalPrompt = formatPromptLlama4(messages as LlamaMessage[]);
           break;
         default:
           throw new Error(`Unsupported LLAMA version: ${version}`);
@@ -816,6 +898,7 @@ export const BEDROCK_MODEL = {
   LLAMA3_1: getLlamaModelHandler(LlamaVersion.V3_1),
   LLAMA3_2: getLlamaModelHandler(LlamaVersion.V3_2),
   LLAMA3_3: getLlamaModelHandler(LlamaVersion.V3_3),
+  LLAMA4: getLlamaModelHandler(LlamaVersion.V4),
   COHERE_COMMAND: {
     params: (
       config: BedrockCohereCommandGenerationOptions,
@@ -1148,6 +1231,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'amazon.nova-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'amazon.nova-micro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'amazon.nova-pro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
+  'amazon.nova-premier-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'amazon.titan-text-express-v1': BEDROCK_MODEL.TITAN_TEXT,
   'amazon.titan-text-lite-v1': BEDROCK_MODEL.TITAN_TEXT,
   'amazon.titan-text-premier-v1:0': BEDROCK_MODEL.TITAN_TEXT,
@@ -1175,6 +1259,8 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'meta.llama3-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
   'meta.llama3-8b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
+  'meta.llama4-scout-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
+  'meta.llama4-maverick-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
   'mistral.mistral-7b-instruct-v0:2': BEDROCK_MODEL.MISTRAL,
   'mistral.mistral-large-2402-v1:0': BEDROCK_MODEL.MISTRAL,
   'mistral.mistral-large-2407-v1:0': BEDROCK_MODEL.MISTRAL_LARGE_2407,
@@ -1185,19 +1271,25 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'apac.amazon.nova-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'apac.amazon.nova-micro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'apac.amazon.nova-pro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
+  'apac.amazon.nova-premier-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'apac.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'apac.meta.llama4-scout-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
+  'apac.meta.llama4-maverick-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
 
   // EU Models
   'eu.amazon.nova-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'eu.amazon.nova-micro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'eu.amazon.nova-pro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
+  'eu.amazon.nova-premier-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'eu.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.meta.llama3-2-1b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'eu.meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
+  'eu.meta.llama4-scout-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
+  'eu.meta.llama4-maverick-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
 
   // Gov Cloud Models
   'us-gov.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -1207,6 +1299,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.amazon.nova-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'us.amazon.nova-micro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'us.amazon.nova-pro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
+  'us.amazon.nova-premier-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'us.anthropic.claude-3-5-haiku-20241022-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-5-sonnet-20241022-v2:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -1223,6 +1316,8 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'us.meta.llama3-2-90b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'us.meta.llama3-3-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_3,
+  'us.meta.llama4-scout-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
+  'us.meta.llama4-maverick-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
 };
 
 // See https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
@@ -1251,6 +1346,9 @@ function getHandlerForModel(modelName: string) {
   }
   if (modelName.includes('meta.llama3-3')) {
     return BEDROCK_MODEL.LLAMA3_3;
+  }
+  if (modelName.includes('meta.llama4')) {
+    return BEDROCK_MODEL.LLAMA4;
   }
   if (modelName.includes('meta.llama3')) {
     return BEDROCK_MODEL.LLAMA3;
@@ -1327,7 +1425,7 @@ export abstract class AwsBedrockGenericProvider {
     if (!this.bedrock) {
       let handler;
       // set from https://www.npmjs.com/package/proxy-agent
-      if (process.env.HTTP_PROXY || process.env.HTTPS_PROXY) {
+      if (getEnvString('HTTP_PROXY') || getEnvString('HTTPS_PROXY')) {
         try {
           const { NodeHttpHandler } = await import('@smithy/node-http-handler');
           const { ProxyAgent } = await import('proxy-agent');
@@ -1346,7 +1444,7 @@ export abstract class AwsBedrockGenericProvider {
 
         const bedrock = new BedrockRuntime({
           region: this.getRegion(),
-          maxAttempts: Number(process.env.AWS_BEDROCK_MAX_RETRIES || '10'),
+          maxAttempts: getEnvInt('AWS_BEDROCK_MAX_RETRIES', 10),
           retryMode: 'adaptive',
           ...(credentials ? { credentials } : {}),
           ...(handler ? { requestHandler: handler } : {}),
@@ -1376,7 +1474,7 @@ export abstract class AwsBedrockGenericProvider {
 export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider implements ApiProvider {
   static AWS_BEDROCK_COMPLETION_MODELS = Object.keys(AWS_BEDROCK_MODELS);
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     let stop: string[];
     try {
       stop = getEnvString('AWS_BEDROCK_STOP') ? JSON.parse(getEnvString('AWS_BEDROCK_STOP')!) : [];
@@ -1391,7 +1489,12 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       );
       model = BEDROCK_MODEL.CLAUDE_MESSAGES;
     }
-    const params = model.params(this.config, prompt, stop, this.modelName);
+    const params = model.params(
+      { ...this.config, ...context?.prompt.config },
+      prompt,
+      stop,
+      this.modelName,
+    );
 
     logger.debug(`Calling Amazon Bedrock API: ${JSON.stringify(params)}`);
 

@@ -124,6 +124,7 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [gleu](/docs/configuration/expected-outputs/deterministic/#gleu)                                                   | GLEU score is above a given threshold (default 0.5)               |
 | [levenshtein](/docs/configuration/expected-outputs/deterministic/#levenshtein-distance)                            | Levenshtein distance is below a threshold                         |
 | [latency](/docs/configuration/expected-outputs/deterministic/#latency)                                             | Latency is below a threshold (milliseconds)                       |
+| [meteor](/docs/configuration/expected-outputs/deterministic/#meteor)                                               | METEOR score is above a given threshold (default 0.5)             |
 | [perplexity](/docs/configuration/expected-outputs/deterministic/#perplexity)                                       | Perplexity is below a threshold                                   |
 | [perplexity-score](/docs/configuration/expected-outputs/deterministic/#perplexity-score)                           | Normalized perplexity                                             |
 | [cost](/docs/configuration/expected-outputs/deterministic/#cost)                                                   | Cost is below a threshold (for models with cost info such as GPT) |
@@ -142,19 +143,20 @@ These metrics are model-assisted, and rely on LLMs or other machine learning mod
 
 See [Model-graded evals](/docs/configuration/expected-outputs/model-graded), [classification](/docs/configuration/expected-outputs/classifier), and [similarity](/docs/configuration/expected-outputs/similar) docs for more information.
 
-| Assertion Type                                                                        | Method                                                                          |
-| ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| [similar](/docs/configuration/expected-outputs/similar)                               | Embeddings and cosine similarity are above a threshold                          |
-| [classifier](/docs/configuration/expected-outputs/classifier)                         | Run LLM output through a classifier                                             |
-| [llm-rubric](/docs/configuration/expected-outputs/model-graded)                       | LLM output matches a given rubric, using a Language Model to grade output       |
-| [g-eval](/docs/configuration/expected-outputs/model-graded/g-eval)                    | Chain-of-thought evaluation based on custom criteria using the G-Eval framework |
-| [answer-relevance](/docs/configuration/expected-outputs/model-graded)                 | Ensure that LLM output is related to original query                             |
-| [context-faithfulness](/docs/configuration/expected-outputs/model-graded)             | Ensure that LLM output uses the context                                         |
-| [context-recall](/docs/configuration/expected-outputs/model-graded)                   | Ensure that ground truth appears in context                                     |
-| [context-relevance](/docs/configuration/expected-outputs/model-graded)                | Ensure that context is relevant to original query                               |
-| [factuality](/docs/configuration/expected-outputs/model-graded)                       | LLM output adheres to the given facts, using Factuality method from OpenAI eval |
-| [model-graded-closedqa](/docs/configuration/expected-outputs/model-graded)            | LLM output adheres to given criteria, using Closed QA method from OpenAI eval   |
-| [select-best](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded) | Compare multiple outputs for a test case and pick the best one                  |
+| Assertion Type                                                                        | Method                                                                           |
+| ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| [similar](/docs/configuration/expected-outputs/similar)                               | Embeddings and cosine similarity are above a threshold                           |
+| [classifier](/docs/configuration/expected-outputs/classifier)                         | Run LLM output through a classifier                                              |
+| [llm-rubric](/docs/configuration/expected-outputs/model-graded)                       | LLM output matches a given rubric, using a Language Model to grade output        |
+| [g-eval](/docs/configuration/expected-outputs/model-graded/g-eval)                    | Chain-of-thought evaluation based on custom criteria using the G-Eval framework  |
+| [answer-relevance](/docs/configuration/expected-outputs/model-graded)                 | Ensure that LLM output is related to original query                              |
+| [context-faithfulness](/docs/configuration/expected-outputs/model-graded)             | Ensure that LLM output uses the context                                          |
+| [context-recall](/docs/configuration/expected-outputs/model-graded)                   | Ensure that ground truth appears in context                                      |
+| [context-relevance](/docs/configuration/expected-outputs/model-graded)                | Ensure that context is relevant to original query                                |
+| [factuality](/docs/configuration/expected-outputs/model-graded)                       | LLM output adheres to the given facts, using Factuality method from OpenAI eval  |
+| [model-graded-closedqa](/docs/configuration/expected-outputs/model-graded)            | LLM output adheres to given criteria, using Closed QA method from OpenAI eval    |
+| [pi](/docs/configuration/expected-outputs/model-graded/pi)                            | Alternative scoring approach that uses a dedicated model for evaluating criteria |
+| [select-best](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded) | Compare multiple outputs for a test case and pick the best one                   |
 
 ## Weighted assertions
 

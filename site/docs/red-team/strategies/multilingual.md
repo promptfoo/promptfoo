@@ -4,7 +4,7 @@ description: Test AI systems across multiple languages to uncover safety vulnera
 sidebar_label: Multilingual
 ---
 
-# Multilingual jailbreaking
+# Multilingual Jailbreaking
 
 The Multilingual strategy tests an AI system's ability to handle and process inputs in multiple languages, potentially uncovering inconsistencies in behavior across different languages or bypassing language-specific content filters.
 
@@ -18,9 +18,11 @@ This allows you to test all strategies in multiple languages, though it increase
 
 :::
 
+## Implementation
+
 Use it in your promptfooconfig.yaml:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 strategies:
   - multilingual
 ```
@@ -33,7 +35,7 @@ By default, the strategy translates inputs into the following "low-resource" lan
 
 You can override this by specifying the `languages` option. We recommend using [ISO 639-1 Language Codes](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) or [IETF language tags](https://en.wikipedia.org/wiki/IETF_language_tag):
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 strategies:
   - id: multilingual
     config:
@@ -64,6 +66,15 @@ strategies:
 ```
 
 This configuration ensures test cases are generated only in Spanish, matching your application's language environment and providing more accurate insights into how your system will perform for real users.
+
+## How It Works
+
+The multilingual strategy works by:
+
+1. Taking the original text from your test cases
+2. Converting it to target languages using translation services
+3. Creating new test cases with the translated content
+4. Testing whether the model maintains consistent safety measures across all languages
 
 ## Background
 
@@ -98,8 +109,9 @@ This strategy is valuable because it:
 2. Tests the robustness of content filtering and safety mechanisms across multiple languages
 3. Reveals potential biases or inconsistencies in AI responses to different languages
 
-## See Also
+## Related Concepts
 
-- [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types)
-- [Red Team Strategies](/docs/red-team/strategies/)
-- [Red Team Plugins](/docs/red-team/plugins/)
+- [Basic Strategy](basic.md) - Helpful when disabling English test cases
+- [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) - Comprehensive overview of vulnerabilities
+- [Red Team Strategies](/docs/red-team/strategies/) - Other red teaming approaches
+- [Red Team Plugins](/docs/red-team/plugins/) - Generate test cases for translation

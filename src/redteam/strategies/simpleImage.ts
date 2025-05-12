@@ -1,4 +1,5 @@
 import { SingleBar, Presets } from 'cli-progress';
+import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import type { TestCase } from '../../types';
 import invariant from '../../util/invariant';
@@ -42,7 +43,7 @@ async function importSharp() {
  */
 export async function textToImage(text: string): Promise<string> {
   // Special case for test environment - avoids actually loading Sharp
-  if (process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID) {
+  if (getEnvString('NODE_ENV') === 'test' || getEnvString('JEST_WORKER_ID')) {
     return 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
   }
 

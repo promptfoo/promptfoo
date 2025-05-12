@@ -5,6 +5,7 @@ import Table from 'cli-table3';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import cliState from '../cliState';
+import { getEnvString } from '../envars';
 import logger, { getLogLevel } from '../logger';
 import { isProviderOptions, type TestCase, type TestCaseWithPlugin } from '../types';
 import { checkRemoteHealth } from '../util/apiHealth';
@@ -12,13 +13,13 @@ import invariant from '../util/invariant';
 import { extractVariablesFromTemplates } from '../util/templates';
 import type { StrategyExemptPlugin } from './constants';
 import {
+  ALIASED_PLUGIN_MAPPINGS,
+  FOUNDATION_PLUGINS,
   HARM_PLUGINS,
   PII_PLUGINS,
-  ALIASED_PLUGIN_MAPPINGS,
-  STRATEGY_EXEMPT_PLUGINS,
-  FOUNDATION_PLUGINS,
-  Severity,
   riskCategorySeverityMap,
+  Severity,
+  STRATEGY_EXEMPT_PLUGINS,
 } from './constants';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
@@ -199,6 +200,7 @@ async function applyStrategies(
   testCases: TestCaseWithPlugin[],
   strategies: RedteamStrategyObject[],
   injectVar: string,
+  excludeTargetOutputFromAgenticAttackGeneration?: boolean,
 ): Promise<{
   testCases: TestCaseWithPlugin[];
   strategyResults: Record<string, { requested: number; generated: number }>;
@@ -227,11 +229,10 @@ async function applyStrategies(
       pluginMatchesStrategyTargets(t, targetPlugins),
     );
 
-    const strategyTestCases: TestCase[] = await strategyAction(
-      applicableTestCases,
-      injectVar,
-      strategy.config || {},
-    );
+    const strategyTestCases: TestCase[] = await strategyAction(applicableTestCases, injectVar, {
+      ...(strategy.config || {}),
+      excludeTargetOutputFromAgenticAttackGeneration,
+    });
 
     newTestCases.push(
       ...strategyTestCases
@@ -385,6 +386,7 @@ export async function synthesize({
   strategies,
   targetLabels,
   showProgressBar: showProgressBarOverride,
+  excludeTargetOutputFromAgenticAttackGeneration,
 }: SynthesizeOptions): Promise<{
   purpose: string;
   entities: string[];
@@ -557,7 +559,7 @@ export async function synthesize({
 
   const showProgressBar =
     !isWebUI &&
-    process.env.LOG_LEVEL !== 'debug' &&
+    getEnvString('LOG_LEVEL') !== 'debug' &&
     getLogLevel() !== 'debug' &&
     showProgressBarOverride !== false;
   if (showProgressBar) {
@@ -702,6 +704,7 @@ export async function synthesize({
       pluginTestCases,
       strategies.filter((s) => !['basic', 'multilingual', 'retry'].includes(s.id)),
       injectVar,
+      excludeTargetOutputFromAgenticAttackGeneration,
     );
 
   Object.assign(strategyResults, otherStrategyResults);

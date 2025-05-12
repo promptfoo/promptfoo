@@ -39,13 +39,13 @@ If your target is an agent, you can provide additional context about the agent's
 
 You can create plugin collections to share among your team. These plugin collections allow you to create specific presets to run tests against your targets, including establishing custom policies and prompts.
 
-To create a plugin collection, navigate to the "Plugin Collections" tab under the "Redteam" navigation header and click "Create Plugin Collection".
+To create a plugin collection, navigate to the "Plugin Collections" tab under the "Red team" navigation header and click "Create Plugin Collection".
 
 ![Creating a new plugin collection](/img/enterprise-docs/create-plugin-collection.gif)
 
 ## Configuring Scans
 
-When you want to run a new red team scan, navigate to the "Redteam" navigation header and click on "Scan Configurations". You will see a list of all the scan configurations that your team has created. Click on "New Scan" to create a new scan.
+When you want to run a new red team scan, navigate to the "Red team" navigation header and click on "Scan Configurations". You will see a list of all the scan configurations that your team has created. Click on "New Scan" to create a new scan.
 
 ![Create Scan Configuration interface](/img/enterprise-docs/create-scan.png)
 

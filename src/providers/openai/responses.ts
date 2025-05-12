@@ -1,14 +1,11 @@
 import { OpenAiGenericProvider } from '.';
 import { fetchWithCache } from '../../cache';
-import { getEnvFloat, getEnvInt } from '../../envars';
+import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
-import {
-  maybeLoadFromExternalFile,
-  maybeLoadToolsFromExternalFile,
-  renderVarsInObject,
-} from '../../util';
+import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util';
+import { maybeLoadFromExternalFile } from '../../util/file';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
 import { calculateOpenAICost } from './util';
@@ -144,8 +141,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
       ...(temperature ? { temperature } : {}),
       ...(instructions ? { instructions } : {}),
-      ...(config.top_p !== undefined || process.env.OPENAI_TOP_P
-        ? { top_p: config.top_p ?? Number.parseFloat(process.env.OPENAI_TOP_P || '1') }
+      ...(config.top_p !== undefined || getEnvString('OPENAI_TOP_P')
+        ? { top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1) }
         : {}),
       ...(config.tools
         ? { tools: maybeLoadToolsFromExternalFile(config.tools, context?.vars) }

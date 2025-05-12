@@ -1,13 +1,13 @@
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import yaml from 'js-yaml';
-import { getEnvBool } from '../envars';
+import { getEnvBool, getEnvString } from '../envars';
 import invariant from '../util/invariant';
 
 let ajvInstance: Ajv | null = null;
 
 export function resetAjv(): void {
-  if (process.env.NODE_ENV !== 'test') {
+  if (getEnvString('NODE_ENV') !== 'test') {
     throw new Error('resetAjv can only be called in test environment');
   }
   ajvInstance = null;
