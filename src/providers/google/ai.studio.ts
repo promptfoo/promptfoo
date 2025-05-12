@@ -6,6 +6,7 @@ import type {
   ProviderResponse,
   CallApiContextParams,
   GuardrailResponse,
+  ProviderEmbeddingResponse,
 } from '../../types';
 import type { EnvOverrides } from '../../types/env';
 import { renderVarsInObject } from '../../util';
@@ -346,7 +347,18 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
   }
 }
 
-export class GoogleEmbeddingProvider extends GoogleGenericProvider {
+export class GoogleEmbeddingProvider extends AIStudioGenericProvider {
+  constructor(
+    modelName: string,
+    options: { config?: CompletionOptions; id?: string; env?: EnvOverrides } = {},
+  ) {
+    super(modelName, options);
+  }
+
+  async callApi(): Promise<ProviderResponse> {
+    throw new Error('Embedding provider does not support callApi. Use callEmbeddingApi instead.');
+  }
+
   async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
     if (!this.getApiKey()) {
       throw new Error('Google API key is not set for embedding');
