@@ -85,7 +85,7 @@ export async function doGenerateRedteam(
   }
 
   // Load the purpose from the output file if it exists
-  if (!targetPurpose) {
+  if (!targetPurpose && fs.existsSync(outputPath)) {
     const redteamContent = yaml.load(fs.readFileSync(outputPath, 'utf8')) as Partial<UnifiedConfig>;
     if (redteamContent.redteam?.purpose) {
       logger.info(`Using purpose from ${chalk.italic(outputPath)}`);
