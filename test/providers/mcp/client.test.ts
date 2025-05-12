@@ -175,6 +175,33 @@ describe('MCPClient', () => {
         { name: 'tool2', description: 'desc2', inputSchema: {} },
       ]);
     });
+
+    it('should initialize with correct client name', async () => {
+      const mockClient = {
+        _clientInfo: {},
+        _capabilities: {},
+        registerCapabilities: jest.fn(),
+        assertCapability: jest.fn(),
+        connect: jest.fn(),
+        listTools: jest.fn().mockResolvedValue({
+          tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+        }),
+        close: jest.fn(),
+      };
+      jest.mocked(Client).mockImplementation(() => mockClient as any);
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: {
+          command: 'npm',
+          args: ['start'],
+        },
+      });
+
+      await mcpClient.initialize();
+
+      expect(Client).toHaveBeenCalledWith({ name: 'promptfoo-MCP', version: '1.0.0' });
+    });
   });
 
   describe('callTool', () => {
