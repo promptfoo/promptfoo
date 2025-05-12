@@ -848,7 +848,11 @@ export const BEDROCK_MODEL = {
 
       // Get or calculate total tokens
       let totalTokens = usage.totalTokens || usage.total_tokens;
-      if ((totalTokens === null || totalTokens === undefined) && inputTokensNum !== undefined && outputTokensNum !== undefined) {
+      if (
+        (totalTokens === null || totalTokens === undefined) &&
+        inputTokensNum !== undefined &&
+        outputTokensNum !== undefined
+      ) {
         totalTokens = inputTokensNum + outputTokensNum;
       }
 
