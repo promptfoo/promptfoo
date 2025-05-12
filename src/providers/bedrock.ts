@@ -22,12 +22,8 @@ import { novaOutputFromMessage, novaParseMessages } from './bedrockUtil';
 import { parseChatPrompt } from './shared';
 
 // Utility function to coerce string values to numbers
-export function coerceStrToNum(value: string | number | undefined): number | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  return typeof value === 'string' ? Number(value) : value;
-}
+export const coerceStrToNum = (value: string | number | undefined): number | undefined =>
+  value === undefined ? undefined : typeof value === 'string' ? Number(value) : value;
 
 interface BedrockOptions {
   accessKeyId?: string;
@@ -490,7 +486,6 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
     },
     output: (config: BedrockOptions, responseJson: any) => responseJson?.generation,
     tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
-      // Check for standard usage format
       if (responseJson?.usage) {
         return {
           prompt: coerceStrToNum(responseJson.usage.prompt_tokens),
@@ -511,7 +506,7 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
         return {
           prompt: promptTokensNum,
           completion: completionTokensNum,
-          total: promptTokensNum + completionTokensNum,
+          total: (promptTokensNum ?? 0) + (completionTokensNum ?? 0),
           numRequests: 1,
         };
       }
@@ -971,7 +966,7 @@ export const BEDROCK_MODEL = {
         return {
           prompt: inputTokens,
           completion: outputTokens,
-          total: inputTokens + outputTokens,
+          total: (inputTokens ?? 0) + (outputTokens ?? 0),
           numRequests: 1,
         };
       }
@@ -1031,7 +1026,7 @@ export const BEDROCK_MODEL = {
         return {
           prompt: inputTokens,
           completion: outputTokens,
-          total: inputTokens + outputTokens,
+          total: (inputTokens ?? 0) + (outputTokens ?? 0),
           numRequests: 1,
         };
       }
@@ -1170,14 +1165,14 @@ ${prompt}
         const completionTokens = coerceStrToNum(responseJson.completion_tokens);
 
         let totalTokens = responseJson.total_tokens;
-        if (!totalTokens) {
+        if (!totalTokens && promptTokens !== undefined && completionTokens !== undefined) {
           totalTokens = promptTokens + completionTokens;
         }
 
         return {
           prompt: promptTokens,
           completion: completionTokens,
-          total: coerceStrToNum(totalTokens),
+          total: (promptTokens ?? 0) + (completionTokens ?? 0),
           numRequests: 1,
         };
       }
@@ -1236,7 +1231,7 @@ ${prompt}
         return {
           prompt: promptTokens,
           completion: completionTokens,
-          total: promptTokens + completionTokens,
+          total: (promptTokens ?? 0) + (completionTokens ?? 0),
           numRequests: 1,
         };
       }
@@ -1250,14 +1245,14 @@ ${prompt}
         const completionTokens = coerceStrToNum(responseJson.usage.completion_tokens);
 
         let totalTokens = responseJson.usage.total_tokens;
-        if (!totalTokens) {
+        if (!totalTokens && promptTokens !== undefined && completionTokens !== undefined) {
           totalTokens = promptTokens + completionTokens;
         }
 
         return {
           prompt: promptTokens,
           completion: completionTokens,
-          total: coerceStrToNum(totalTokens),
+          total: (promptTokens ?? 0) + (completionTokens ?? 0),
           numRequests: 1,
         };
       }
@@ -1613,39 +1608,34 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
         tokenUsage = model.tokenUsage(output, prompt);
         logger.debug(`Token usage from model handler: ${JSON.stringify(tokenUsage)}`);
       } else {
-        // Try to extract token usage from various API response formats
-        logger.debug(`Extracting token usage from API response for ${this.modelName}`);
-
+        // Get token counts, converting strings to numbers
         const promptTokens =
           output.usage?.inputTokens ??
-          output.usage?.prompt_tokens ??
           output.usage?.input_tokens ??
+          output.usage?.prompt_tokens ??
           output.prompt_tokens ??
           output.prompt_token_count;
-
         const completionTokens =
           output.usage?.outputTokens ??
-          output.usage?.completion_tokens ??
           output.usage?.output_tokens ??
+          output.usage?.completion_tokens ??
           output.completion_tokens ??
           output.generation_token_count;
 
-        // Convert to numbers if they are strings to prevent string concatenation
         const promptTokensNum = coerceStrToNum(promptTokens);
         const completionTokensNum = coerceStrToNum(completionTokens);
 
-        // Get or calculate total tokens
+        // Get total tokens from API or calculate it
         let totalTokens =
           output.usage?.totalTokens ?? output.usage?.total_tokens ?? output.total_tokens;
         if (!totalTokens && promptTokensNum !== undefined && completionTokensNum !== undefined) {
           totalTokens = promptTokensNum + completionTokensNum;
         }
 
-        // For models that don't provide token counts, we set numRequests to at least track usage
         tokenUsage = {
-          total: coerceStrToNum(totalTokens),
           prompt: promptTokensNum,
           completion: completionTokensNum,
+          total: (promptTokensNum ?? 0) + (completionTokensNum ?? 0),
           numRequests: 1,
         };
 
