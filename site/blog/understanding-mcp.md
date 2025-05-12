@@ -16,6 +16,8 @@ Modern AI models are incredibly powerful at understanding and generating text, c
 
 MCP is an open standard that creates a common language between AI systems and the tools they need to help you. It defines clear rules for how AI assistants can securely access and work with external resources, from local files to cloud services. Think of it as building bridges between AI models and the digital world around them.
 
+<!-- truncate -->
+
 :::tip Why MCP Matters
 
 MCP solves a critical problem in AI development: giving AI models secure, standardized access to the real-world data and tools they need to be truly useful. Whether you're building a coding assistant, a data analysis tool, or any AI-powered application, MCP provides the bridge between your AI and the resources it needs.
