@@ -27,7 +27,44 @@ import { redteamReportCommand } from './redteam/commands/report';
 import { redteamRunCommand } from './redteam/commands/run';
 import { redteamSetupCommand } from './redteam/commands/setup';
 import { checkForUpdates } from './updates';
+import { setupEnv } from './util';
 import { loadDefaultConfig } from './util/config/default';
+
+/**
+ * Adds verbose and env-file options to all commands recursively
+ */
+export function addCommonOptionsRecursively(command: Command) {
+  const hasVerboseOption = command.options.some(
+    (option) => option.short === '-v' || option.long === '--verbose',
+  );
+  if (!hasVerboseOption) {
+    command.option('-v, --verbose', 'Show debug logs', false);
+  }
+
+  const hasEnvFileOption = command.options.some(
+    (option) => option.long === '--env-file' || option.long === '--env-path',
+  );
+  if (!hasEnvFileOption) {
+    command.option('--env-file, --env-path <path>', 'Path to .env file');
+  }
+
+  command.hook('preAction', (thisCommand) => {
+    if (thisCommand.opts().verbose) {
+      setLogLevel('debug');
+      logger.debug('Verbose mode enabled via --verbose flag');
+    }
+
+    const envPath = thisCommand.opts().envFile || thisCommand.opts().envPath;
+    if (envPath) {
+      setupEnv(envPath);
+      logger.debug(`Loading environment from ${envPath}`);
+    }
+  });
+
+  command.commands.forEach((subCommand) => {
+    addCommonOptionsRecursively(subCommand);
+  });
+}
 
 async function main() {
   await checkForUpdates();
@@ -45,8 +82,6 @@ async function main() {
       program.help();
       process.exitCode = 1;
     });
-
-  program.option('-v, --verbose', 'Show debug logs', false);
 
   // Main commands
   evalCommand(program, defaultConfig, defaultConfigPath);
@@ -87,12 +122,10 @@ async function main() {
   redteamSetupCommand(redteamBaseCommand);
   redteamPluginsCommand(redteamBaseCommand);
 
-  program.parse();
+  // Add common options to all commands recursively
+  addCommonOptionsRecursively(program);
 
-  const globalOpts = program.opts();
-  if (globalOpts.verbose) {
-    setLogLevel('debug');
-  }
+  program.parse();
 }
 
 if (require.main === module) {

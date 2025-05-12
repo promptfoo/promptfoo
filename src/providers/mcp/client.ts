@@ -1,5 +1,6 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import logger from '../../logger';
 import type { MCPConfig, MCPServerConfig, MCPTool, MCPToolResult } from './types';
 
 export class MCPClient {
@@ -61,7 +62,7 @@ export class MCPClient {
         throw new Error('Either command+args or path must be specified for MCP server');
       }
 
-      const client = new Client({ name: 'promptfoo-anthropic', version: '1.0.0' });
+      const client = new Client({ name: 'promptfoo-MCP', version: '1.0.0' });
       client.connect(transport);
 
       // List available tools
@@ -96,7 +97,7 @@ export class MCPClient {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       if (this.config.debug) {
-        console.error(`Failed to connect to MCP server ${serverKey}:`, errorMessage);
+        logger.error(`Failed to connect to MCP server ${serverKey}: ${errorMessage}`);
       }
       throw new Error(`Failed to connect to MCP server ${serverKey}: ${errorMessage}`);
     }
@@ -134,7 +135,7 @@ export class MCPClient {
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
           if (this.config.debug) {
-            console.error(`Error calling tool ${name}:`, errorMessage);
+            logger.error(`Error calling tool ${name}: ${errorMessage}`);
           }
           return {
             content: '',
@@ -153,7 +154,9 @@ export class MCPClient {
         await client.close();
       } catch (error) {
         if (this.config.debug) {
-          console.error('Error during cleanup:', error);
+          logger.error(
+            `Error during cleanup: ${error instanceof Error ? error.message : String(error)}`,
+          );
         }
       }
     }

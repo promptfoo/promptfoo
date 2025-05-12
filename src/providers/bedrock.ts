@@ -11,6 +11,7 @@ import type { EnvOverrides } from '../types/env';
 import type {
   ApiEmbeddingProvider,
   ApiProvider,
+  CallApiContextParams,
   ProviderEmbeddingResponse,
   ProviderResponse,
 } from '../types/providers';
@@ -19,6 +20,10 @@ import { maybeLoadToolsFromExternalFile } from '../util';
 import { outputFromMessage, parseMessages } from './anthropic/util';
 import { novaOutputFromMessage, novaParseMessages } from './bedrockUtil';
 import { parseChatPrompt } from './shared';
+
+// Utility function to coerce string values to numbers
+export const coerceStrToNum = (value: string | number | undefined): number | undefined =>
+  value === undefined ? undefined : typeof value === 'string' ? Number(value) : value;
 
 interface BedrockOptions {
   accessKeyId?: string;
@@ -301,7 +306,8 @@ export interface BedrockDeepseekGenerationOptions extends BedrockOptions {
   top_p?: number;
   stop?: string[];
 }
-interface IBedrockModel {
+
+export interface IBedrockModel {
   params: (config: BedrockOptions, prompt: string, stop: string[], modelName?: string) => any;
   output: (config: BedrockOptions, responseJson: any) => any;
   tokenUsage?: (responseJson: any, promptText: string) => TokenUsage;
@@ -480,12 +486,11 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
     },
     output: (config: BedrockOptions, responseJson: any) => responseJson?.generation,
     tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
-      // Check for standard usage format
       if (responseJson?.usage) {
         return {
-          prompt: responseJson.usage.prompt_tokens,
-          completion: responseJson.usage.completion_tokens,
-          total: responseJson.usage.total_tokens,
+          prompt: coerceStrToNum(responseJson.usage.prompt_tokens),
+          completion: coerceStrToNum(responseJson.usage.completion_tokens),
+          total: coerceStrToNum(responseJson.usage.total_tokens),
           numRequests: 1,
         };
       }
@@ -495,10 +500,13 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
       const completionTokens = responseJson?.generation_token_count;
 
       if (promptTokens !== undefined && completionTokens !== undefined) {
+        const promptTokensNum = coerceStrToNum(promptTokens);
+        const completionTokensNum = coerceStrToNum(completionTokens);
+
         return {
-          prompt: promptTokens,
-          completion: completionTokens,
-          total: promptTokens + completionTokens,
+          prompt: promptTokensNum,
+          completion: completionTokensNum,
+          total: (promptTokensNum ?? 0) + (completionTokensNum ?? 0),
           numRequests: 1,
         };
       }
@@ -565,9 +573,9 @@ export const BEDROCK_MODEL = {
     tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
       if (responseJson?.usage) {
         return {
-          prompt: responseJson.usage.prompt_tokens,
-          completion: responseJson.usage.completion_tokens,
-          total: responseJson.usage.total_tokens,
+          prompt: coerceStrToNum(responseJson.usage.prompt_tokens),
+          completion: coerceStrToNum(responseJson.usage.completion_tokens),
+          total: coerceStrToNum(responseJson.usage.total_tokens),
           numRequests: 1,
         };
       }
@@ -657,9 +665,9 @@ export const BEDROCK_MODEL = {
       }
 
       return {
-        prompt: usage.inputTokens,
-        completion: usage.outputTokens,
-        total: usage.totalTokens,
+        prompt: coerceStrToNum(usage.inputTokens),
+        completion: coerceStrToNum(usage.outputTokens),
+        total: coerceStrToNum(usage.totalTokens),
         numRequests: 1,
       };
     },
@@ -704,14 +712,24 @@ export const BEDROCK_MODEL = {
 
       const usage = responseJson.usage;
 
+      // Get input tokens
+      const inputTokens = usage.input_tokens || usage.prompt_tokens;
+      const inputTokensNum = coerceStrToNum(inputTokens);
+
+      // Get output tokens
+      const outputTokens = usage.output_tokens || usage.completion_tokens;
+      const outputTokensNum = coerceStrToNum(outputTokens);
+
+      // Get or calculate total tokens
+      let totalTokens = usage.totalTokens || usage.total_tokens;
+      if (totalTokens == null && inputTokensNum !== undefined && outputTokensNum !== undefined) {
+        totalTokens = inputTokensNum + outputTokensNum;
+      }
+
       return {
-        prompt: usage.input_tokens || usage.prompt_tokens,
-        completion: usage.output_tokens || usage.completion_tokens,
-        total:
-          usage.totalTokens ||
-          usage.total_tokens ||
-          (usage.input_tokens || usage.prompt_tokens) +
-            (usage.output_tokens || usage.completion_tokens),
+        prompt: inputTokensNum,
+        completion: outputTokensNum,
+        total: coerceStrToNum(totalTokens),
         numRequests: 1,
       };
     },
@@ -820,14 +838,28 @@ export const BEDROCK_MODEL = {
 
       const usage = responseJson.usage;
 
+      // Get input tokens
+      const inputTokens = usage.input_tokens || usage.prompt_tokens;
+      const inputTokensNum = coerceStrToNum(inputTokens);
+
+      // Get output tokens
+      const outputTokens = usage.output_tokens || usage.completion_tokens;
+      const outputTokensNum = coerceStrToNum(outputTokens);
+
+      // Get or calculate total tokens
+      let totalTokens = usage.totalTokens || usage.total_tokens;
+      if (
+        (totalTokens === null || totalTokens === undefined) &&
+        inputTokensNum !== undefined &&
+        outputTokensNum !== undefined
+      ) {
+        totalTokens = inputTokensNum + outputTokensNum;
+      }
+
       return {
-        prompt: usage.input_tokens || usage.prompt_tokens,
-        completion: usage.output_tokens || usage.completion_tokens,
-        total:
-          usage.totalTokens ||
-          usage.total_tokens ||
-          (usage.input_tokens || usage.prompt_tokens) +
-            (usage.output_tokens || usage.completion_tokens),
+        prompt: inputTokensNum,
+        completion: outputTokensNum,
+        total: coerceStrToNum(totalTokens),
         numRequests: 1,
       };
     },
@@ -875,9 +907,9 @@ export const BEDROCK_MODEL = {
       // If token usage is provided by the API, use it
       if (responseJson?.usage) {
         return {
-          prompt: responseJson.usage.prompt_tokens,
-          completion: responseJson.usage.completion_tokens,
-          total: responseJson.usage.total_tokens,
+          prompt: coerceStrToNum(responseJson.usage.prompt_tokens),
+          completion: coerceStrToNum(responseJson.usage.completion_tokens),
+          total: coerceStrToNum(responseJson.usage.total_tokens),
           numRequests: 1,
         };
       }
@@ -932,12 +964,13 @@ export const BEDROCK_MODEL = {
     output: (config: BedrockOptions, responseJson: any) => responseJson?.generations[0]?.text,
     tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
       if (responseJson?.meta?.billed_units) {
+        const inputTokens = coerceStrToNum(responseJson.meta.billed_units.input_tokens);
+        const outputTokens = coerceStrToNum(responseJson.meta.billed_units.output_tokens);
+
         return {
-          prompt: responseJson.meta.billed_units.input_tokens,
-          completion: responseJson.meta.billed_units.output_tokens,
-          total:
-            responseJson.meta.billed_units.input_tokens +
-            responseJson.meta.billed_units.output_tokens,
+          prompt: inputTokens,
+          completion: outputTokens,
+          total: (inputTokens ?? 0) + (outputTokens ?? 0),
           numRequests: 1,
         };
       }
@@ -991,12 +1024,13 @@ export const BEDROCK_MODEL = {
     output: (config: BedrockOptions, responseJson: any) => responseJson?.text,
     tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
       if (responseJson?.meta?.billed_units) {
+        const inputTokens = coerceStrToNum(responseJson.meta.billed_units.input_tokens);
+        const outputTokens = coerceStrToNum(responseJson.meta.billed_units.output_tokens);
+
         return {
-          prompt: responseJson.meta.billed_units.input_tokens,
-          completion: responseJson.meta.billed_units.output_tokens,
-          total:
-            responseJson.meta.billed_units.input_tokens +
-            responseJson.meta.billed_units.output_tokens,
+          prompt: inputTokens,
+          completion: outputTokens,
+          total: (inputTokens ?? 0) + (outputTokens ?? 0),
           numRequests: 1,
         };
       }
@@ -1067,9 +1101,9 @@ ${prompt}
     tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
       if (responseJson?.usage) {
         return {
-          prompt: responseJson.usage.prompt_tokens,
-          completion: responseJson.usage.completion_tokens,
-          total: responseJson.usage.total_tokens,
+          prompt: coerceStrToNum(responseJson.usage.prompt_tokens),
+          completion: coerceStrToNum(responseJson.usage.completion_tokens),
+          total: coerceStrToNum(responseJson.usage.total_tokens),
           numRequests: 1,
         };
       }
@@ -1119,9 +1153,9 @@ ${prompt}
     tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
       if (responseJson?.usage) {
         return {
-          prompt: responseJson.usage.prompt_tokens,
-          completion: responseJson.usage.completion_tokens,
-          total: responseJson.usage.total_tokens,
+          prompt: coerceStrToNum(responseJson.usage.prompt_tokens),
+          completion: coerceStrToNum(responseJson.usage.completion_tokens),
+          total: coerceStrToNum(responseJson.usage.total_tokens),
           numRequests: 1,
         };
       }
@@ -1131,12 +1165,18 @@ ${prompt}
         responseJson?.prompt_tokens !== undefined &&
         responseJson?.completion_tokens !== undefined
       ) {
+        const promptTokens = coerceStrToNum(responseJson.prompt_tokens);
+        const completionTokens = coerceStrToNum(responseJson.completion_tokens);
+
+        let totalTokens = responseJson.total_tokens;
+        if (!totalTokens && promptTokens !== undefined && completionTokens !== undefined) {
+          totalTokens = promptTokens + completionTokens;
+        }
+
         return {
-          prompt: responseJson.prompt_tokens,
-          completion: responseJson.completion_tokens,
-          total:
-            responseJson.total_tokens ||
-            responseJson.prompt_tokens + responseJson.completion_tokens,
+          prompt: promptTokens,
+          completion: completionTokens,
+          total: (promptTokens ?? 0) + (completionTokens ?? 0),
           numRequests: 1,
         };
       }
@@ -1189,10 +1229,13 @@ ${prompt}
         responseJson?.prompt_tokens !== undefined &&
         responseJson?.completion_tokens !== undefined
       ) {
+        const promptTokens = coerceStrToNum(responseJson.prompt_tokens);
+        const completionTokens = coerceStrToNum(responseJson.completion_tokens);
+
         return {
-          prompt: responseJson.prompt_tokens,
-          completion: responseJson.completion_tokens,
-          total: responseJson.prompt_tokens + responseJson.completion_tokens,
+          prompt: promptTokens,
+          completion: completionTokens,
+          total: (promptTokens ?? 0) + (completionTokens ?? 0),
           numRequests: 1,
         };
       }
@@ -1202,12 +1245,18 @@ ${prompt}
         responseJson?.usage?.prompt_tokens !== undefined &&
         responseJson?.usage?.completion_tokens !== undefined
       ) {
+        const promptTokens = coerceStrToNum(responseJson.usage.prompt_tokens);
+        const completionTokens = coerceStrToNum(responseJson.usage.completion_tokens);
+
+        let totalTokens = responseJson.usage.total_tokens;
+        if (!totalTokens && promptTokens !== undefined && completionTokens !== undefined) {
+          totalTokens = promptTokens + completionTokens;
+        }
+
         return {
-          prompt: responseJson.usage.prompt_tokens,
-          completion: responseJson.usage.completion_tokens,
-          total:
-            responseJson.usage.total_tokens ||
-            responseJson.usage.prompt_tokens + responseJson.usage.completion_tokens,
+          prompt: promptTokens,
+          completion: completionTokens,
+          total: (promptTokens ?? 0) + (completionTokens ?? 0),
           numRequests: 1,
         };
       }
@@ -1229,6 +1278,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'amazon.nova-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'amazon.nova-micro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'amazon.nova-pro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
+  'amazon.nova-premier-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'amazon.titan-text-express-v1': BEDROCK_MODEL.TITAN_TEXT,
   'amazon.titan-text-lite-v1': BEDROCK_MODEL.TITAN_TEXT,
   'amazon.titan-text-premier-v1:0': BEDROCK_MODEL.TITAN_TEXT,
@@ -1268,6 +1318,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'apac.amazon.nova-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'apac.amazon.nova-micro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'apac.amazon.nova-pro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
+  'apac.amazon.nova-premier-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'apac.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -1278,6 +1329,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'eu.amazon.nova-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'eu.amazon.nova-micro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'eu.amazon.nova-pro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
+  'eu.amazon.nova-premier-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'eu.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -1294,6 +1346,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.amazon.nova-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'us.amazon.nova-micro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'us.amazon.nova-pro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
+  'us.amazon.nova-premier-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'us.anthropic.claude-3-5-haiku-20241022-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-5-sonnet-20241022-v2:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -1468,7 +1521,7 @@ export abstract class AwsBedrockGenericProvider {
 export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider implements ApiProvider {
   static AWS_BEDROCK_COMPLETION_MODELS = Object.keys(AWS_BEDROCK_MODELS);
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     let stop: string[];
     try {
       stop = getEnvString('AWS_BEDROCK_STOP') ? JSON.parse(getEnvString('AWS_BEDROCK_STOP')!) : [];
@@ -1483,7 +1536,12 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       );
       model = BEDROCK_MODEL.CLAUDE_MESSAGES;
     }
-    const params = model.params(this.config, prompt, stop, this.modelName);
+    const params = model.params(
+      { ...this.config, ...context?.prompt.config },
+      prompt,
+      stop,
+      this.modelName,
+    );
 
     logger.debug(`Calling Amazon Bedrock API: ${JSON.stringify(params)}`);
 
@@ -1554,36 +1612,34 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
         tokenUsage = model.tokenUsage(output, prompt);
         logger.debug(`Token usage from model handler: ${JSON.stringify(tokenUsage)}`);
       } else {
-        // Try to extract token usage from various API response formats
-        logger.debug(`Extracting token usage from API response for ${this.modelName}`);
-
+        // Get token counts, converting strings to numbers
         const promptTokens =
           output.usage?.inputTokens ??
-          output.usage?.prompt_tokens ??
           output.usage?.input_tokens ??
+          output.usage?.prompt_tokens ??
           output.prompt_tokens ??
           output.prompt_token_count;
-
         const completionTokens =
           output.usage?.outputTokens ??
-          output.usage?.completion_tokens ??
           output.usage?.output_tokens ??
+          output.usage?.completion_tokens ??
           output.completion_tokens ??
           output.generation_token_count;
 
-        const totalTokens =
-          output.usage?.totalTokens ??
-          output.usage?.total_tokens ??
-          output.total_tokens ??
-          (promptTokens !== undefined && completionTokens !== undefined
-            ? promptTokens + completionTokens
-            : undefined);
+        const promptTokensNum = coerceStrToNum(promptTokens);
+        const completionTokensNum = coerceStrToNum(completionTokens);
 
-        // For models that don't provide token counts, we set numRequests to at least track usage
+        // Get total tokens from API or calculate it
+        let totalTokens =
+          output.usage?.totalTokens ?? output.usage?.total_tokens ?? output.total_tokens;
+        if (!totalTokens && promptTokensNum !== undefined && completionTokensNum !== undefined) {
+          totalTokens = promptTokensNum + completionTokensNum;
+        }
+
         tokenUsage = {
-          total: totalTokens,
-          prompt: promptTokens,
-          completion: completionTokens,
+          prompt: promptTokensNum,
+          completion: completionTokensNum,
+          total: (promptTokensNum ?? 0) + (completionTokensNum ?? 0),
           numRequests: 1,
         };
 

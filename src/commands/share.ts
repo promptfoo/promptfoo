@@ -8,7 +8,6 @@ import logger from '../logger';
 import Eval from '../models/eval';
 import { createShareableUrl, hasEvalBeenShared, isSharingEnabled, getShareableUrl } from '../share';
 import telemetry from '../telemetry';
-import { setupEnv } from '../util';
 import { loadDefaultConfig } from '../util/config/default';
 
 export function notCloudEnabledShareInstructions(): void {
@@ -44,7 +43,6 @@ export function shareCommand(program: Command) {
   program
     .command('share [evalId]')
     .description('Create a shareable URL of an eval (defaults to most recent)' + '\n\n')
-    .option('--env-file, --env-path <path>', 'Path to .env file')
     .option(
       '--show-auth',
       'Show username/password authentication information in the URL if exists',
@@ -61,7 +59,6 @@ export function shareCommand(program: Command) {
         evalId: string | undefined,
         cmdObj: { yes: boolean; envPath?: string; showAuth: boolean } & Command,
       ) => {
-        setupEnv(cmdObj.envPath);
         telemetry.record('command_used', {
           name: 'share',
         });
