@@ -9,7 +9,7 @@ import { OpenAiChatCompletionProvider } from './openai/chat';
  *
  * Perplexity API follows OpenAI's API format and can be used as a wrapper around OpenAI chat completion.
  * All parameters are automatically passed through to the Perplexity API.
- * 
+ *
  * Supported models:
  * - sonar: Lightweight search model for quick factual queries
  * - sonar-pro: Advanced search offering for more complex queries (8k max output tokens)
@@ -38,12 +38,12 @@ export function createPerplexityProvider(
 ): ApiProvider {
   const splits = providerPath.split(':');
   const modelName = splits.slice(1).join(':');
-  
+
   const config = options.config?.config || {};
-  
+
   // Special case handling for response_format
   const responseFormat = config.response_format;
-  
+
   // Handle Perplexity-specific parameters
   const perplexityConfig = {
     ...options,
@@ -53,19 +53,35 @@ export function createPerplexityProvider(
       passthrough: {
         ...config,
         // Pass through Perplexity-specific parameters
-        ...(config.search_domain_filter && { search_domain_filter: config.search_domain_filter }),
-        ...(config.search_recency_filter && { search_recency_filter: config.search_recency_filter }),
-        ...(config.return_related_questions && { return_related_questions: config.return_related_questions }),
-        ...(config.return_images && { return_images: config.return_images }),
-        ...(config.search_after_date_filter && { search_after_date_filter: config.search_after_date_filter }),
-        ...(config.search_before_date_filter && { search_before_date_filter: config.search_before_date_filter }),
-        ...(config.web_search_options && { web_search_options: config.web_search_options }),
+        ...(config.search_domain_filter && { 
+          search_domain_filter: config.search_domain_filter 
+        }),
+        ...(config.search_recency_filter && {
+          search_recency_filter: config.search_recency_filter
+        }),
+        ...(config.return_related_questions && {
+          return_related_questions: config.return_related_questions
+        }),
+        ...(config.return_images && { 
+          return_images: config.return_images 
+        }),
+        ...(config.search_after_date_filter && {
+          search_after_date_filter: config.search_after_date_filter
+        }),
+        ...(config.search_before_date_filter && {
+          search_before_date_filter: config.search_before_date_filter
+        }),
+        ...(config.web_search_options && { 
+          web_search_options: config.web_search_options 
+        }),
         // Handle structured output
-        ...(responseFormat && { response_format: responseFormat }),
+        ...(responseFormat && { 
+          response_format: responseFormat 
+        }),
       },
     },
   };
 
   // All Perplexity models use the chat completions endpoint
   return new OpenAiChatCompletionProvider(modelName || 'sonar', perplexityConfig);
-} 
+}
