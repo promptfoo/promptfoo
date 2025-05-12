@@ -116,7 +116,7 @@ export function collectFileMetadata(vars: Record<string, string | object>): File
     }
   }
 
-  return Object.keys(fileMetadata).length > 0 ? fileMetadata : {};
+  return fileMetadata;
 }
 
 export async function renderPrompt(

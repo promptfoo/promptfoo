@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import glob from 'glob';
+import path from 'path';
 import {
   calculateThreadsPerBar,
   evaluate,
@@ -30,6 +31,15 @@ jest.mock('../src/evaluatorHelpers', () => ({
 jest.mock('../src/util/time', () => ({
   ...jest.requireActual('../src/util/time'),
   sleep: jest.fn(),
+}));
+
+jest.mock('../src/util/fileExtensions', () => ({
+  isImageFile: jest
+    .fn()
+    .mockImplementation((filePath) => filePath.endsWith('.jpg') || filePath.endsWith('.png')),
+  isVideoFile: jest.fn().mockImplementation((filePath) => filePath.endsWith('.mp4')),
+  isAudioFile: jest.fn().mockImplementation((filePath) => filePath.endsWith('.mp3')),
+  isJavascriptFile: jest.fn().mockReturnValue(false),
 }));
 
 jest.mock('../src/util/functions/loadFunction', () => ({
@@ -1242,17 +1252,20 @@ describe('evaluator', () => {
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
-    expect(summary.results.length).toBe(1);
+    expect(summary.results).toHaveLength(1);
     const result = summary.results[0];
     const promptMetrics = evalRecord.prompts.find(
       (p) => p.provider === result.provider.id,
     )?.metrics;
 
     expect(promptMetrics).toBeDefined();
-    if (promptMetrics) {
-      expect(promptMetrics.namedScoresCount['Accuracy']).toBe(2);
-      expect(promptMetrics.namedScoresCount['Completeness']).toBe(1);
+    // Only check metrics if they are defined
+    if (!promptMetrics) {
+      return;
     }
+
+    expect(promptMetrics.namedScoresCount['Accuracy']).toBe(2);
+    expect(promptMetrics.namedScoresCount['Completeness']).toBe(1);
   });
 
   it('merges metadata correctly for regular tests', async () => {
@@ -2173,6 +2186,65 @@ describe('evaluator', () => {
 
     // Verify cleanup was called with no arguments
     expect(slowApiProvider.cleanup).toHaveBeenCalledWith();
+  });
+
+  it('should add file metadata to results when vars include file references', async () => {
+    // Mock resolve for consistent behavior
+    const mockResolve = jest
+      .spyOn(path, 'resolve')
+      .mockImplementation((...args) => args[args.length - 1]);
+
+    jest.mocked(glob.globSync).mockImplementation((path) => (Array.isArray(path) ? path : [path]));
+
+    // Create test suite with file references in vars
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt with image {{ imageVar }} and audio {{ audioVar }}')],
+      tests: [
+        {
+          vars: {
+            imageVar: 'file:///path/to/image.jpg',
+            audioVar: 'file:///path/to/audio.mp3',
+            textVar: 'file:///path/to/document.txt',
+          },
+        },
+      ],
+    };
+
+    // Run the evaluation
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const results = await evalRecord.getResults();
+
+    // Verify file metadata is in results
+    expect(results).toHaveLength(1);
+    expect(results[0].metadata).toBeDefined();
+    const metadata = results[0].metadata || {};
+    expect(metadata).toEqual({
+      imageVar: {
+        path: 'file:///path/to/image.jpg',
+        type: 'image',
+        format: 'jpg',
+      },
+      audioVar: {
+        path: 'file:///path/to/audio.mp3',
+        type: 'audio',
+        format: 'mp3',
+      },
+    });
+
+    // Verify text files aren't included in metadata
+    expect(Object.keys(metadata)).not.toContain('textVar');
+
+    // Verify the API call used the correct prompt with resolved variables
+    expect(mockApiProvider.callApi).toHaveBeenCalledWith(
+      'Test prompt with image file:///path/to/image.jpg and audio file:///path/to/audio.mp3',
+      expect.anything(),
+      undefined,
+    );
+
+    // Clean up
+    mockResolve.mockRestore();
   });
 });
 
