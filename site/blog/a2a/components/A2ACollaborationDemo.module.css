@@ -1,0 +1,178 @@
+.container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
+}
+
+.scenarioSelector {
+  margin-bottom: 24px;
+}
+
+.scenarioSelector h4 {
+  margin: 0 0 12px;
+  font-size: 1.125rem;
+  color: #111827;
+}
+
+.scenarioButtons {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.scenarioButton {
+  padding: 8px 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: white;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.scenarioButton:hover:not(:disabled) {
+  border-color: #3b82f6;
+  background: #eff6ff;
+}
+
+.scenarioButton.active {
+  border-color: #3b82f6;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 500;
+}
+
+.scenarioButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.scenarioDescription {
+  margin: 0 0 16px;
+  font-size: 0.875rem;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+.playButton {
+  display: block;
+  width: 100%;
+  padding: 12px 24px;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.playButton:hover:not(:disabled) {
+  background: #2563eb;
+}
+
+.playButton:disabled {
+  background: #93c5fd;
+  cursor: not-allowed;
+}
+
+.chatContainer {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 20px;
+  height: 500px;
+  overflow-y: auto;
+}
+
+.messageList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.message {
+  padding: 12px;
+  border-radius: 8px;
+  max-width: 80%;
+}
+
+.message.client {
+  align-self: flex-end;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+}
+
+.message.remote {
+  align-self: flex-start;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+}
+
+.messageHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.messageFrom {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #4b5563;
+}
+
+.messageTime {
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+.messageContent {
+  color: #111827;
+  line-height: 1.5;
+}
+
+.messageAck {
+  margin-top: 8px;
+  font-size: 0.75rem;
+  color: #6b7280;
+  font-style: italic;
+}
+
+.message.request {
+  border-left: 3px solid #3b82f6;
+}
+
+.message.response {
+  border-left: 3px solid #10b981;
+}
+
+.message.context {
+  border-left: 3px solid #8b5cf6;
+}
+
+.message.status {
+  border-left: 3px solid #f59e0b;
+}
+
+.message.ack {
+  border-left: 3px solid #6b7280;
+}
+
+.message.info {
+  background: #f3f4f6;
+}
+
+.message.success {
+  background: #ecfdf5;
+}
+
+.message.warning {
+  background: #fffbeb;
+}

@@ -1,0 +1,320 @@
+.container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
+}
+
+.taskSelector {
+  margin-bottom: 24px;
+}
+
+.taskSelector h4 {
+  margin: 0 0 12px;
+  font-size: 1.125rem;
+  color: #111827;
+}
+
+.taskButtons {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.taskButton {
+  padding: 8px 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: white;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.taskButton:hover {
+  border-color: #3b82f6;
+  background: #eff6ff;
+}
+
+.taskButton.active {
+  border-color: #3b82f6;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 500;
+}
+
+.startButton {
+  display: block;
+  width: 100%;
+  padding: 12px 24px;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.startButton:hover:not(:disabled) {
+  background: #2563eb;
+}
+
+.startButton:disabled {
+  background: #93c5fd;
+  cursor: not-allowed;
+}
+
+.simulator {
+  display: grid;
+  gap: 24px;
+  padding: 24px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.stateVisualizer {
+  margin-bottom: 24px;
+}
+
+.stateVisualizer h5 {
+  margin: 0 0 16px;
+  font-size: 1rem;
+  color: #111827;
+}
+
+.states {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.state {
+  padding: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: white;
+  transition: all 0.2s;
+}
+
+.state.active {
+  border-color: var(--state-color);
+  background: color-mix(in srgb, var(--state-color) 10%, white);
+}
+
+.stateHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.stateDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--state-color);
+}
+
+.stateName {
+  font-weight: 500;
+  color: #111827;
+}
+
+.stateDescription {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #6b7280;
+  line-height: 1.4;
+}
+
+.controls {
+  margin-bottom: 24px;
+}
+
+.controls h5 {
+  margin: 0 0 16px;
+  font-size: 1rem;
+  color: #111827;
+}
+
+.transitionButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.transitionButton {
+  padding: 8px 16px;
+  border: 1px solid var(--state-color);
+  border-radius: 6px;
+  background: white;
+  color: var(--state-color);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.875rem;
+}
+
+.transitionButton:hover {
+  background: color-mix(in srgb, var(--state-color) 10%, white);
+}
+
+.transitionButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.taskDetails {
+  display: grid;
+  gap: 24px;
+}
+
+.section {
+  padding: 20px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.section h5 {
+  margin: 0 0 16px;
+  font-size: 1rem;
+  color: #111827;
+}
+
+.statusCard {
+  padding: 16px;
+  background: #f9fafb;
+  border-radius: 6px;
+}
+
+.statusHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.statusDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.statusState {
+  font-weight: 500;
+  color: #111827;
+}
+
+.statusMessage {
+  margin: 0 0 8px;
+  color: #4b5563;
+  font-size: 0.875rem;
+}
+
+.statusTime {
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+.history {
+  display: grid;
+  gap: 12px;
+}
+
+.historyEntry {
+  padding: 12px;
+  background: #f9fafb;
+  border-radius: 6px;
+}
+
+.historyHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.historyDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.historyState {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #374151;
+}
+
+.historyMessage {
+  margin: 0 0 4px;
+  font-size: 0.875rem;
+  color: #4b5563;
+}
+
+.historyTime {
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+.artifacts {
+  display: grid;
+  gap: 16px;
+}
+
+.artifact {
+  padding: 16px;
+  background: #f9fafb;
+  border-radius: 6px;
+}
+
+.artifactHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.artifactName {
+  font-weight: 500;
+  color: #111827;
+}
+
+.artifactIndex {
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+.artifactDescription {
+  margin: 0 0 12px;
+  font-size: 0.875rem;
+  color: #4b5563;
+}
+
+.artifactPart {
+  padding: 12px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+}
+
+.partType {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.75rem;
+  color: #6b7280;
+  font-family: monospace;
+}
+
+.partContent {
+  font-size: 0.875rem;
+  color: #111827;
+  line-height: 1.5;
+}

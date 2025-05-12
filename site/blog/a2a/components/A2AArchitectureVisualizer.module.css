@@ -1,0 +1,184 @@
+.container {
+  margin: 2rem 0;
+  padding: 2rem;
+  border-radius: 12px;
+  background: var(--ifm-card-background-color);
+  box-shadow: var(--ifm-global-shadow-lw);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.header h3 {
+  margin: 0;
+  color: var(--ifm-heading-color);
+}
+
+.playButton {
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  background: var(--ifm-color-primary);
+  color: white;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.playButton:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.playButton:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.agentContainer {
+  display: grid;
+  grid-template-columns: 1fr 2fr 1fr;
+  gap: 2rem;
+  align-items: start;
+}
+
+.agent {
+  padding: 1.5rem;
+  border-radius: 10px;
+  background: var(--ifm-background-surface-color);
+  border: 2px solid var(--ifm-color-emphasis-200);
+  text-align: center;
+}
+
+.agentIcon {
+  font-size: 2.5rem;
+  margin-bottom: 1rem;
+}
+
+.agent h4 {
+  margin: 0 0 1rem;
+  color: var(--ifm-heading-color);
+}
+
+.capabilities {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.capability {
+  padding: 0.5rem;
+  background: var(--ifm-color-emphasis-100);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  color: var(--ifm-color-emphasis-700);
+}
+
+.communicationArea {
+  padding: 2rem;
+  border-radius: 10px;
+  background: var(--ifm-background-surface-color);
+  border: 2px solid var(--ifm-color-primary);
+  min-height: 300px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.stepDisplay {
+  text-align: center;
+  width: 100%;
+}
+
+.stepNumber {
+  display: inline-block;
+  padding: 0.25rem 1rem;
+  background: var(--ifm-color-primary);
+  color: white;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+.stepDisplay h5 {
+  margin: 0 0 0.5rem;
+  color: var(--ifm-heading-color);
+  font-size: 1.2rem;
+}
+
+.stepDisplay p {
+  margin: 0 0 1.5rem;
+  color: var(--ifm-color-emphasis-700);
+}
+
+.animationArea {
+  height: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1rem;
+}
+
+.agentCard,
+.taskCreation,
+.processing,
+.result {
+  padding: 1rem 2rem;
+  background: var(--ifm-color-primary);
+  color: white;
+  border-radius: 8px;
+  font-weight: 500;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.processing {
+  padding: 1rem 2rem;
+  background: var(--ifm-color-primary);
+  color: white;
+  border-radius: 8px;
+  font-weight: 500;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.dots {
+  display: inline-block;
+  min-width: 1.5em;
+  text-align: left;
+}
+
+/* Dark mode adjustments */
+html[data-theme='dark'] .agent {
+  background: var(--ifm-background-surface-color);
+  border-color: var(--ifm-color-emphasis-300);
+}
+
+html[data-theme='dark'] .capability {
+  background: var(--ifm-color-emphasis-200);
+  color: var(--ifm-color-emphasis-900);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .agentContainer {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+
+  .communicationArea {
+    min-height: 250px;
+  }
+
+  .agent {
+    max-width: 300px;
+    margin: 0 auto;
+  }
+}
