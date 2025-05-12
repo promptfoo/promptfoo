@@ -16,8 +16,6 @@ The `vertex` provider enables integration with Google's [Vertex AI](https://clou
 - `vertex:gemini-1.5-pro` - Strong performance for text/chat with long-context understanding
 - `vertex:gemini-1.5-pro-latest` - Latest Gemini 1.5 Pro model with same capabilities as gemini-1.5-pro
 - `vertex:gemini-1.5-flash-8b` - Small model optimized for high-volume, lower complexity tasks
-- `vertex:gemini-1.0-pro` - Best performing model for text-only tasks (deprecated)
-- `vertex:gemini-1.0-pro-vision` - Best performing image and video understanding model (deprecated)
 
 ### Claude Models
 

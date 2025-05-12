@@ -18,7 +18,6 @@ You can use it by specifying one of the [available models](https://ai.google.dev
 - `google:gemini-1.5-flash` - Fast and versatile multimodal model
 - `google:gemini-1.5-flash-8b` - Small model optimized for high-volume, lower complexity tasks
 - `google:gemini-1.5-pro` - Best performing model for complex reasoning tasks
-- `google:gemini-1.0-pro` - Legacy model for text and code (Deprecated, use 1.5 Pro instead)
 - `google:gemini-pro` - General purpose text and chat
 - `google:gemini-pro-vision` - Multimodal understanding (text + vision)
 
