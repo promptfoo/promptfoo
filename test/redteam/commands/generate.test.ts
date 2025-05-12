@@ -3,6 +3,7 @@ import logger from '../../../src/logger';
 import { synthesize } from '../../../src/redteam';
 import { doGenerateRedteam } from '../../../src/redteam/commands/generate';
 import type { RedteamCliGenerateOptions, RedteamPluginObject } from '../../../src/redteam/types';
+import type { ApiProvider } from '../../../src/types';
 import * as configModule from '../../../src/util/config/load';
 import { writePromptfooConfig } from '../../../src/util/config/manage';
 
@@ -29,19 +30,25 @@ jest.mock('../../../src/redteam/remoteGeneration', () => ({
 jest.mock('../../../src/util/config/manage');
 
 describe('doGenerateRedteam', () => {
+  let mockProvider: jest.Mocked<ApiProvider>;
+
   beforeEach(() => {
     jest.clearAllMocks();
+    mockProvider = {
+      id: jest.fn().mockReturnValue('test-provider'),
+      callApi: jest.fn().mockResolvedValue({ output: 'test output' }),
+      cleanup: jest.fn().mockResolvedValue(undefined),
+    } as jest.Mocked<ApiProvider>;
+
     jest.mocked(configModule.resolveConfigs).mockResolvedValue({
       basePath: '/mock/path',
       testSuite: {
+        providers: [mockProvider],
         prompts: [],
-        providers: [],
+        tests: [],
       },
       config: {
-        redteam: {
-          plugins: [],
-          strategies: [],
-        },
+        redteam: {},
       },
     });
   });
@@ -486,5 +493,96 @@ describe('doGenerateRedteam', () => {
       }),
       'output.yaml',
     );
+  });
+
+  it('should cleanup provider after generation', async () => {
+    // Default mock implementation for synthesize
+    jest.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        {
+          vars: { input: 'Test input' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+          metadata: { pluginId: 'redteam' },
+        },
+      ],
+      purpose: 'Test purpose',
+      entities: ['Test entity'],
+      injectVar: 'input',
+    });
+
+    const options: RedteamCliGenerateOptions = {
+      output: 'test-output.json',
+      inRedteamRun: false,
+      cache: false,
+      defaultConfig: {},
+      write: false,
+      config: 'test-config.yaml',
+    };
+
+    await doGenerateRedteam(options);
+
+    expect(mockProvider.cleanup!).toHaveBeenCalledWith();
+  });
+
+  it('should handle provider cleanup errors gracefully', async () => {
+    // Default mock implementation for synthesize
+    jest.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        {
+          vars: { input: 'Test input' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+          metadata: { pluginId: 'redteam' },
+        },
+      ],
+      purpose: 'Test purpose',
+      entities: ['Test entity'],
+      injectVar: 'input',
+    });
+
+    const options: RedteamCliGenerateOptions = {
+      output: 'test-output.json',
+      inRedteamRun: false,
+      cache: false,
+      defaultConfig: {},
+      write: false,
+      config: 'test-config.yaml',
+    };
+
+    if (mockProvider.cleanup) {
+      jest.mocked(mockProvider.cleanup).mockRejectedValueOnce(new Error('Cleanup failed'));
+    }
+
+    await doGenerateRedteam(options);
+
+    // Should not throw error, just log warning
+    expect(mockProvider.cleanup).toHaveBeenCalledWith();
+  });
+
+  it('should not cleanup provider during redteam run', async () => {
+    // Default mock implementation for synthesize
+    jest.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        {
+          vars: { input: 'Test input' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+          metadata: { pluginId: 'redteam' },
+        },
+      ],
+      purpose: 'Test purpose',
+      entities: ['Test entity'],
+      injectVar: 'input',
+    });
+    const options: RedteamCliGenerateOptions = {
+      output: 'test-output.json',
+      inRedteamRun: true,
+      cache: false,
+      defaultConfig: {},
+      write: false,
+      config: 'test-config.yaml',
+    };
+
+    await doGenerateRedteam(options);
+
+    expect(mockProvider.cleanup).not.toHaveBeenCalled();
   });
 });
