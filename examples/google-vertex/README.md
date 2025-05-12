@@ -1,132 +1,84 @@
-# Google Vertex AI Examples
+# google-vertex (Google Vertex AI Examples)
 
-This directory contains example configurations for testing different Google Vertex AI models using promptfoo. The examples demonstrate various features and capabilities of Vertex AI models.
+Example configurations for testing Google Vertex AI models with promptfoo.
 
-## Configuration Files
+You can run this example with:
 
-- `promptfooconfig.gemini.yaml`: Examples using Gemini 2.0 models
+```bash
+npx promptfoo@latest init --example google-vertex
+```
 
-  - Function calling and tools
-  - System instructions
-  - Safety settings
-  - Context and examples
+## Purpose
 
-- `promptfooconfig.claude.yaml`: Examples using Claude models
-
-  - Code analysis tools
-  - Documentation search
-  - Technical writing tests
-  - Context customization
-
-- `promptfooconfig.llama.yaml`: Examples using Llama models
-
-  - Vision capabilities
-  - Safety with Llama Guard
-  - Complex reasoning tasks
-  - Text generation
-
-- `promptfooconfig.search.yaml`: Examples using Search grounding
-  - Google Search integration with Gemini models
-  - Real-time information retrieval
-  - Web-grounded responses
-  - Support for current events, financial data, and technical updates
+- Test Vertex AI's Gemini, Claude, and Llama models
+- Configure model-specific features and search grounding
+- Compare performance across different tasks
 
 ## Prerequisites
 
-1. Install the Google Auth Library:
+- Google Cloud account with Vertex AI API enabled
+- API credentials
+- Node.js 18+
+
+## Environment Variables
+
+- `VERTEX_PROJECT_ID` - Your Google Cloud project ID
+- `GOOGLE_APPLICATION_CREDENTIALS` - Path to service account credentials (optional)
+
+## Setup
+
+1. Install dependencies:
 
    ```sh
    npm install google-auth-library
    ```
 
-2. Enable the Vertex AI API in your Google Cloud project:
-
-   - Visit the [Google Cloud Console](https://console.cloud.google.com)
-   - Enable the Vertex AI API
-   - Set up authentication
-
-3. Configure authentication:
+2. Configure authentication:
 
    ```sh
-   # Option 1: User Account (recommended for development)
+   # User account (development)
    gcloud auth application-default login
 
-   # Option 2: Service Account
+   # Or service account
    export GOOGLE_APPLICATION_CREDENTIALS=/path/to/credentials.json
    ```
 
-## Running the Examples
-
-1. Set your Google Cloud project:
-
+3. Set your project ID:
    ```sh
-   gcloud config set project YOUR_PROJECT_ID
+   export VERTEX_PROJECT_ID=your-project-id
    ```
 
-2. Run specific model tests:
+## Configurations
 
-   ```sh
-   # Test Gemini models
-   promptfoo eval -c promptfooconfig.gemini.yaml
+This example includes:
 
-   # Test Claude models
-   promptfoo eval -c promptfooconfig.claude.yaml
+- `promptfooconfig.gemini.yaml`: Gemini models with function calling, system instructions, and safety settings
+- `promptfooconfig.claude.yaml`: Claude models for technical writing and code analysis
+- `promptfooconfig.llama.yaml`: Llama models with safety features and region configuration
+- `promptfooconfig.search.yaml`: Search grounding for real-time information
 
-   # Test Llama models
-   promptfoo eval -c promptfooconfig.llama.yaml
+## Running Examples
 
-   # Test Search grounding
-   promptfoo eval -c promptfooconfig.search.yaml
-   ```
+```sh
+# Basic example
+promptfoo eval -c promptfooconfig.yaml
 
-3. View results:
-   ```sh
-   promptfoo view
-   ```
+# Model-specific examples
+promptfoo eval -c promptfooconfig.gemini.yaml
+promptfoo eval -c promptfooconfig.claude.yaml
+promptfoo eval -c promptfooconfig.llama.yaml
+promptfoo eval -c promptfooconfig.search.yaml
 
-## Features Demonstrated
-
-- Model-specific configurations
-- Function calling and tools
-- System instructions
-- Safety settings
-- Context and examples
-- Vision capabilities
-- Complex reasoning tasks
-- Technical writing
-- Code analysis
-- Search grounding with real-time information
-
-## Using Search Grounding
-
-The search grounding feature allows Gemini models on Vertex AI to access up-to-date information from the web, making responses more accurate for:
-
-- Current events and news
-- Recent developments
-- Stock prices and market data
-- Sports results
-- Technical documentation updates
-
-You can enable Search grounding using this format:
-
-```yaml
-# Object format (matches Google's API)
-tools:
-  - googleSearch: {}
+# View results
+promptfoo view
 ```
 
-When using Search grounding, the response includes metadata with:
+## Expected Results
 
-- `groundingMetadata` - Information about search results
-- `groundingChunks` - Web sources used
-- `webSearchQueries` - Queries the model used
-- `searchEntryPoint` - HTML for displaying Google Search Suggestions
-
-**Note:** Google requires applications to display Search Suggestions when using search grounding in user-facing applications.
+Each configuration demonstrates different model capabilities, from function calling and tool use to safety features and real-time information retrieval.
 
 ## Learn More
 
 - [Vertex AI Provider Documentation](https://www.promptfoo.dev/docs/providers/vertex/)
 - [Google Cloud Vertex AI Documentation](https://cloud.google.com/vertex-ai/docs)
 - [Google documentation on Grounding with Google Search](https://ai.google.dev/docs/gemini_api/grounding)
-- [promptfoo Documentation](https://www.promptfoo.dev/docs/)
