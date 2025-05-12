@@ -237,7 +237,8 @@ export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig
 export async function combineConfigs(configPaths: string[]): Promise<UnifiedConfig> {
   const configs: UnifiedConfig[] = [];
   for (const configPath of configPaths) {
-    const globPaths = globSync(configPath, {
+    const resolvedPath = path.resolve(process.cwd(), configPath);
+    const globPaths = globSync(resolvedPath, {
       windowsPathsNoEscape: true,
     });
     if (globPaths.length === 0) {
