@@ -89,22 +89,16 @@ export async function doGenerateRedteam(
     testSuite = resolved.testSuite;
     redteamConfig = resolved.config.redteam;
 
-    // Provider Purpose:
-    // - TODO: If the purpose is already defined on the provider, it will persist; this behavior
-    // should be consistent i.e. the purpose should be written to the new provider entry in the
-    // `redteam.yaml` file.
-    // - Currently is persisted as `redteam.purpose` which is good enough for now.
-    if (
-      resolved.config.providers &&
-      Array.isArray(resolved.config.providers) &&
-      typeof resolved.config.providers[0] === 'object' &&
-      'purpose' in resolved.config.providers[0] &&
-      typeof resolved.config.providers[0].purpose === 'string'
-    ) {
-      targetPurpose = resolved.config.providers[0].purpose;
+    // Attempt to read the purpose from the output file:
+    const redteamContent = yaml.load(fs.readFileSync(outputPath, 'utf8')) as Partial<UnifiedConfig>;
+    if (redteamContent.redteam?.purpose) {
+      logger.info(`Using purpose from ${chalk.italic(outputPath)}`);
+      targetPurpose = redteamContent.redteam.purpose;
     } else if (resolved.config.providers && Array.isArray(resolved.config.providers)) {
       const providers = await loadApiProviders(resolved.config.providers);
       targetPurpose = await doTargetPurposeDiscovery(providers[0]);
+    } else {
+      logger.debug('No provider purpose found, skipping purpose discovery');
     }
   } else if (options.purpose) {
     // There is a purpose, so we can just have a dummy test suite for standalone invocation
@@ -364,7 +358,7 @@ export function redteamGenerateCommand(
     .command(command) // generate or redteam depending on if called from redteam or generate
     .description('Generate adversarial test cases')
     .option('-c, --config [path]', 'Path to configuration file. Defaults to promptfooconfig.yaml')
-    .option('-o, --output [path]', 'Path to output file')
+    .option('-o, --output [path]', 'Path to output file. Defaults to redteam.yaml')
     .option('-w, --write', 'Write results to promptfoo configuration file', false)
     .option(
       '--purpose <purpose>',

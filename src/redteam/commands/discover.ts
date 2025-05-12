@@ -1,6 +1,9 @@
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { type Command, Option } from 'commander';
+import * as fs from 'fs';
+import yaml from 'js-yaml';
+import path from 'path';
 import { z } from 'zod';
 import cliState from '../../cliState';
 import { VERSION } from '../../constants';
@@ -20,6 +23,7 @@ import { getRemoteGenerationUrl } from '../remoteGeneration';
 
 const ArgsSchema = z.object({
   config: z.string().optional(),
+  output: z.string().optional(),
   target: z.string().optional(),
   envPath: z.string().optional(),
   verbose: z.boolean().optional(),
@@ -28,7 +32,6 @@ const ArgsSchema = z.object({
 });
 
 type Args = z.infer<typeof ArgsSchema>;
-
 /**
  * Queries Cloud for the purpose-discovery logic, sends each logic to the target,
  * and summarizes the results.
@@ -41,23 +44,20 @@ export async function doTargetPurposeDiscovery(
   target: ApiProvider,
   maxTurns?: number,
 ): Promise<string> {
-  logger.info('Discovering purpose...');
-
   const conversationHistory: { type: 'promptfoo' | 'target'; content: string }[] = [];
 
   let turnCounter = 1;
 
   const pbar = new cliProgress.SingleBar({
-    format: `Discovering purpose {bar} {percentage}% | {value}/${maxTurns ? '{total}' : '∞'} turns'}`,
+    format: `Discovering purpose {bar} {percentage}% | {value}/${maxTurns ? '{total}' : '∞'} turns`,
     barCompleteChar: '\u2588',
     barIncompleteChar: '\u2591',
     hideCursor: true,
   });
 
   pbar.start(
-    maxTurns ??
-      // fallback: estimate of 25 turns
-      25,
+    // fallback: estimate of 25 turns
+    maxTurns ?? 25,
     0,
   );
 
@@ -165,6 +165,7 @@ export function discoverCommand(program: Command) {
       '-c, --config <path>',
       'Path to configuration file or cloud config UUID. Defaults to promptfooconfig.yaml',
     )
+    .option('-o, --output <path>', 'Path to output file. Defaults to redteam.yaml')
     .option('-t, --target <id>', 'Cloud provider target ID to run the scan on')
     .option('--preview', 'Preview discovery results without modifying the config file', false)
     .addOption(
@@ -176,12 +177,23 @@ export function discoverCommand(program: Command) {
 
     .option('--env-file, --env-path <path>', 'Path to a custom .env file')
     .option('-v, --verbose', 'Show debug logs')
-    .action(async (opts: Args) => {
+    .action(async (rawArgs: Args) => {
+      // Validate the arguments:
+      const { success, data: args, error } = ArgsSchema.safeParse(rawArgs);
+      if (!success) {
+        logger.error('Invalid options:');
+        error.issues.forEach((issue) => {
+          logger.error(`  ${issue.path.join('.')}: ${issue.message}`);
+        });
+        process.exitCode = 1;
+        return;
+      }
+
       // Set up the environment:
-      setupEnv(opts.envPath);
+      setupEnv(args.envPath);
 
       // Set up logging:
-      if (opts.verbose) {
+      if (args.verbose) {
         setLogLevel('debug');
       }
 
@@ -192,17 +204,6 @@ export function discoverCommand(program: Command) {
 
       // Always use remote for discovery
       cliState.remote = true;
-
-      // Validate the arguments:
-      const { success, data: args, error } = ArgsSchema.safeParse(opts);
-      if (!success) {
-        logger.error('Invalid options:');
-        error.issues.forEach((issue) => {
-          logger.error(`  ${issue.path.join('.')}: ${issue.message}`);
-        });
-        process.exitCode = 1;
-        return;
-      }
 
       let config: UnifiedConfig | null = null;
       // Although the providers/targets property supports multiple values, Redteaming only supports
@@ -258,45 +259,26 @@ export function discoverCommand(program: Command) {
         } else {
           invariant(config, 'Config is required');
 
-          // Set the `purpose` property on the provider:
-          // This conditional logic is LLM-generated magic...
-          // it might be the only place where the `promptfooconfig.yaml` is modified in place – so don't touch it!
-          if (typeof config.providers === 'string') {
-            // If providers is a string, convert to ProviderOptions object
-            config.providers = [{ id: config.providers, purpose } as any];
-          } else if (Array.isArray(config.providers)) {
-            // If providers is an array
-            if (config.providers.length > 0) {
-              const first = config.providers[0];
-              if (typeof first === 'string') {
-                // Replace first element with ProviderOptions
-                config.providers[0] = { id: first, purpose } as any;
-              } else if (typeof first === 'object' && first !== null && !Array.isArray(first)) {
-                // Could be ProviderOptions or record<string, ProviderOptions>
-                if ('id' in first || 'purpose' in first) {
-                  // Looks like ProviderOptions
-                  (first as any).purpose = purpose;
-                } else {
-                  // Looks like record<string, ProviderOptions>
-                  const keys = Object.keys(first);
-                  if (keys.length > 0) {
-                    (first as any)[keys[0]].purpose = purpose;
-                  }
-                }
-              }
-            }
-          } else if (typeof config.providers === 'object' && config.providers !== null) {
-            // If providers is a record<string, ProviderOptions>
-            const keys = Object.keys(config.providers);
-            if (keys.length > 0) {
-              (config.providers as any)[keys[0]].purpose = purpose;
-            }
+          // Write to a redteam.yaml file:
+          if (!args.output) {
+            args.output = path.relative(process.cwd(), 'redteam.yaml');
           }
 
-          writePromptfooConfig(config as UnifiedConfig, args.config!);
-          logger.info(
-            `Purpose written to ${chalk.italic(args.config)} under key ${chalk.magenta('\`providers[0].purpose\`')}.`,
-          );
+          logger.debug(`Writing purpose to ${args.output}`);
+
+          // TODO: Burp support:
+          if (args.output.endsWith('.burp')) {
+            throw new Error('Burp support is not yet implemented');
+          } else {
+            // Create or update config file w/ redteam.purpose:
+            const existingYaml = fs.existsSync(args.output as fs.PathLike)
+              ? (yaml.load(fs.readFileSync(args.output!, 'utf8')) as Partial<UnifiedConfig>)
+              : {};
+            existingYaml['redteam'] = { ...(existingYaml['redteam'] || {}), purpose };
+            writePromptfooConfig(existingYaml as UnifiedConfig, args.output!);
+          }
+
+          logger.info(`Purpose written to ${chalk.italic(args.output)}`);
         }
       }
     });
