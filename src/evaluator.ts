@@ -10,6 +10,7 @@ import type winston from 'winston';
 import { MODEL_GRADED_ASSERTION_TYPES, runAssertions, runCompareAssertion } from './assertions';
 import { fetchWithCache, getCache } from './cache';
 import cliState from './cliState';
+import { FILE_METADATA_KEY } from './constants';
 import { updateSignalFile } from './database/signal';
 import { getEnvBool, getEnvInt, isCI, getEvalTimeoutMs } from './envars';
 import { renderPrompt, runExtensionHook, collectFileMetadata } from './evaluatorHelpers';
@@ -186,6 +187,10 @@ export async function runEval({
 
   // Set up the special _conversation variable
   const vars = test.vars || {};
+
+  // Collect file metadata for the test case before rendering the prompt.
+  const fileMetadata = collectFileMetadata(test.vars || vars);
+  console.log('fileMetadata', fileMetadata);
   const conversationKey = `${provider.label || provider.id()}:${prompt.id}${test.metadata?.conversationId ? `:${test.metadata.conversationId}` : ''}`;
   const usesConversation = prompt.raw.includes('_conversation');
   if (
@@ -302,9 +307,6 @@ export async function runEval({
       logger.debug(`Skipping delay because response is cached`);
     }
 
-    // Metadata used to display media in the results table
-    const fileMetadata = collectFileMetadata(vars);
-
     const ret: EvaluateResult = {
       ...setup,
       response,
@@ -317,7 +319,7 @@ export async function runEval({
       metadata: {
         ...test.metadata,
         ...response.metadata,
-        ...fileMetadata,
+        [FILE_METADATA_KEY]: fileMetadata,
       },
       promptIdx,
       testIdx,

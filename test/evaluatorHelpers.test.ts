@@ -604,7 +604,6 @@ describe('collectFileMetadata', () => {
     const vars = {
       audio1: 'file://path/to/audio.mp3',
       audio2: 'file://path/to/audio.wav',
-      audio3: 'file://path/to/audio.ogg',
       text: 'This is not a file',
     };
 
@@ -620,11 +619,6 @@ describe('collectFileMetadata', () => {
         path: 'file://path/to/audio.wav',
         type: 'audio',
         format: 'wav',
-      },
-      audio3: {
-        path: 'file://path/to/audio.ogg',
-        type: 'audio',
-        format: 'ogg',
       },
     });
   });

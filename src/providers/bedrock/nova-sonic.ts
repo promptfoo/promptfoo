@@ -403,7 +403,17 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
       }
 
       return {
-        output: assistantTranscript || '[No response received from API]',
+        output:
+          hasAudioContent && audioContent
+            ? {
+                audio: {
+                  data: audioContent,
+                  format: 'lpcm',
+                  transcript: assistantTranscript,
+                },
+                userTranscript,
+              }
+            : assistantTranscript || '[No response received from API]',
         // TODO: Add token usage
         tokenUsage: { total: 0, prompt: 0, completion: 0 },
         cached: false,
