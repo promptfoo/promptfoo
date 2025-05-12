@@ -1,6 +1,8 @@
 # Perplexity
 
-The [Perplexity API](https://blog.perplexity.ai/blog/introducing-pplx-api) provides chat completion models with built-in search capabilities, citations, and structured output support. Perplexity follows OpenAI's chat completion API format - see our [OpenAI documentation](https://promptfoo.dev/docs/providers/openai) for the base API details.
+The [Perplexity API](https://blog.perplexity.ai/blog/introducing-pplx-api) provides chat completion models with built-in search capabilities, citations, and structured output support. Perplexity models retrieve information from the web in real-time, enabling up-to-date responses with source citations.
+
+Perplexity follows OpenAI's chat completion API format - see our [OpenAI documentation](https://promptfoo.dev/docs/providers/openai) for the base API details.
 
 ## Setup
 
@@ -8,6 +10,8 @@ The [Perplexity API](https://blog.perplexity.ai/blog/introducing-pplx-api) provi
 2. Set the `PERPLEXITY_API_KEY` environment variable or specify `apiKey` in your config
 
 ## Supported Models
+
+Perplexity offers several specialized models optimized for different tasks:
 
 | Model               | Context Length | Description                                         | Use Case                                         |
 | ------------------- | -------------- | --------------------------------------------------- | ------------------------------------------------ |
@@ -35,7 +39,7 @@ providers:
       search_recency_filter: 'week' # Only use recent sources
 ```
 
-## Unique Features
+## Features
 
 ### Search and Citations
 
@@ -46,29 +50,48 @@ Perplexity models automatically search the internet and cite sources. You can co
 - `return_related_questions`: Get follow-up question suggestions
 - `web_search_options.search_context_size`: Control search context amount ('low', 'medium', 'high')
 
-### Date and Location Filters
+```yaml
+providers:
+  - id: perplexity:sonar-pro
+    config:
+      search_domain_filter: ['stackoverflow.com', 'github.com', '-quora.com']
+      search_recency_filter: 'month'
+      return_related_questions: true
+      web_search_options:
+        search_context_size: 'high'
+```
 
-Control search results based on publication date or user location:
+### Date Range Filters
+
+Control search results based on publication date:
 
 ```yaml
 providers:
   - id: perplexity:sonar-pro
     config:
       # Date filters - format: "MM/DD/YYYY"
-      search_after_date_filter: "3/1/2025"
-      search_before_date_filter: "3/15/2025"
-      
-      # Location filters
+      search_after_date_filter: '3/1/2025'
+      search_before_date_filter: '3/15/2025'
+```
+
+### Location-Based Filtering
+
+Localize search results by specifying user location:
+
+```yaml
+providers:
+  - id: perplexity:sonar
+    config:
       web_search_options:
         user_location:
           latitude: 37.7749
           longitude: -122.4194
-          country: "US"
+          country: 'US'  # Optional: ISO country code
 ```
 
 ### Structured Output
 
-Get responses in specific formats using JSON Schema or Regex patterns:
+Get responses in specific formats using JSON Schema:
 
 ```yaml
 providers:
@@ -86,7 +109,7 @@ providers:
             required: ['title', 'year', 'summary']
 ```
 
-For regex patterns (sonar only):
+Or with regex patterns (sonar model only):
 
 ```yaml
 providers:
@@ -94,15 +117,15 @@ providers:
     config:
       response_format:
         type: 'regex'
-        regex: 
+        regex:
           regex: "(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)"
 ```
 
-Note: First request with a new schema may take 10-30 seconds to prepare.
+**Note**: First request with a new schema may take 10-30 seconds to prepare. For reasoning models, the response will include a `<think>` section followed by the structured output.
 
 ### Image Support
 
-You can include images in your API requests:
+Enable image retrieval in responses:
 
 ```yaml
 providers:
@@ -111,25 +134,95 @@ providers:
       return_images: true
 ```
 
-## Additional Options
+## Advanced Use Cases
 
-- `return_images` (default: false) - Include images in responses
-- `return_related_questions` (default: false) - Get follow-up questions
+### Comprehensive Research
+
+For in-depth research reports:
+
+```yaml
+providers:
+  - id: perplexity:sonar-deep-research
+    config:
+      temperature: 0.1
+      max_tokens: 4000
+      search_domain_filter: ['arxiv.org', 'researchgate.net', 'scholar.google.com']
+      web_search_options:
+        search_context_size: 'high'
+```
+
+### Step-by-Step Reasoning
+
+For problems requiring explicit reasoning steps:
+
+```yaml
+providers:
+  - id: perplexity:sonar-reasoning-pro
+    config:
+      temperature: 0.2
+      max_tokens: 3000
+```
+
+### Offline Creative Tasks
+
+For creative content that doesn't require web search:
+
+```yaml
+providers:
+  - id: perplexity:r1-1776
+    config:
+      temperature: 0.7
+      max_tokens: 2000
+```
 
 ## Best Practices
 
-- **Model Selection**:
-  - Use `sonar-pro` for complex queries requiring detailed responses
-  - Use `sonar` for factual queries and cost efficiency
-  - Use `sonar-reasoning-pro` or `sonar-reasoning` for step-by-step problem solving
-  - Use `sonar-deep-research` for comprehensive reports (may take 30+ minutes)
-  - Use `r1-1776` for creative content not requiring search
+### Model Selection
+- **sonar-pro**: Use for complex queries requiring detailed responses with citations
+- **sonar**: Use for factual queries and cost efficiency
+- **sonar-reasoning-pro/sonar-reasoning**: Use for step-by-step problem solving
+- **sonar-deep-research**: Use for comprehensive reports (may take 30+ minutes)
+- **r1-1776**: Use for creative content not requiring search
 
-- **Search Optimization**:
-  - Set `search_domain_filter` to trusted domains for higher quality citations
-  - Use `search_recency_filter` for time-sensitive topics
-  - For cost optimization, set `web_search_options.search_context_size` to "low"
-  - For comprehensive research, set `web_search_options.search_context_size` to "high"
+### Search Optimization
+- Set `search_domain_filter` to trusted domains for higher quality citations
+- Use `search_recency_filter` for time-sensitive topics
+- For cost optimization, set `web_search_options.search_context_size` to "low"
+- For comprehensive research, set `web_search_options.search_context_size` to "high"
 
-- **When using structured outputs with reasoning models**:
-  - Be aware that reasoning models will include a `<think>` section followed by the structured output
+### Structured Output Tips
+- When using structured outputs with reasoning models, responses will include a `<think>` section followed by the structured output
+- For regex patterns, ensure they follow the supported syntax
+- JSON schemas cannot include recursive structures or unconstrained objects
+
+## Example Configurations
+
+Check our [perplexity.ai-example](https://github.com/promptfoo/promptfoo/tree/main/examples/perplexity.ai-example) with multiple configurations showcasing Perplexity's capabilities:
+
+- **promptfooconfig.yaml**: Basic model comparison
+- **promptfooconfig.structured-output.yaml**: JSON schema and regex patterns
+- **promptfooconfig.search-filters.yaml**: Date and location-based filters
+- **promptfooconfig.research-reasoning.yaml**: Specialized research and reasoning models
+
+You can initialize these examples with:
+```bash
+npx promptfoo@latest init --example perplexity.ai-example
+```
+
+## Pricing and Rate Limits
+
+Pricing varies by model and usage tier:
+
+- **sonar**: Lower cost per token, optimized for quick queries
+- **sonar-pro**: Higher cost but 8k max output tokens and better citations
+- **sonar-reasoning/reasoning-pro**: Moderate cost with Chain of Thought capabilities
+- **sonar-deep-research**: Higher cost, designed for comprehensive research
+
+Check [Perplexity's pricing page](https://docs.perplexity.ai/docs/pricing) for the latest rates.
+
+## Troubleshooting
+
+- **Long Initial Requests**: First request with a new schema may take 10-30 seconds
+- **Citation Issues**: Use `search_domain_filter` with trusted domains for better citations
+- **Timeout Errors**: For research models, consider increasing your request timeout settings
+- **Reasoning Format**: For reasoning models, outputs include `<think>` sections, which may need parsing for structured outputs
