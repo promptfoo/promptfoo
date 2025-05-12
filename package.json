@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.112.4",
+  "version": "0.112.5",
   "license": "MIT",
   "type": "commonjs",
   "repository": {
@@ -140,6 +140,7 @@
     "@types/nunjucks": "^3.2.6",
     "@types/opener": "^1.4.3",
     "@types/pdf-parse": "^1.1.5",
+    "@types/proxy-from-env": "^1.0.4",
     "@types/semver": "^7.7.0",
     "@types/source-map-support": "^0.5.10",
     "@types/supertest": "^6.0.3",
@@ -170,7 +171,7 @@
     "zod-to-json-schema": "^3.24.5"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.41.0",
+    "@anthropic-ai/sdk": "^0.50.3",
     "@apidevtools/json-schema-ref-parser": "^12.0.1",
     "@googleapis/sheets": "^9.7.0",
     "@modelcontextprotocol/sdk": "^1.11.1",
@@ -210,6 +211,7 @@
     "opener": "^1.5.2",
     "posthog-node": "^4.17.1",
     "proxy-agent": "^6.5.0",
+    "proxy-from-env": "^1.1.0",
     "python-shell": "^5.0.0",
     "replicate": "^0.34.1",
     "rfdc": "^1.4.1",
@@ -217,7 +219,7 @@
     "semver": "^7.7.1",
     "socket.io": "^4.8.1",
     "tsx": "^4.19.4",
-    "undici": "^7.8.0",
+    "undici": "^7.9.0",
     "uuid": "^11.1.0",
     "winston": "^3.17.0",
     "ws": "^8.18.2",

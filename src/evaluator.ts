@@ -905,8 +905,19 @@ class Evaluator {
         invariant(metrics, 'Expected prompt.metrics to be set');
         metrics.score += row.score;
         for (const [key, value] of Object.entries(row.namedScores)) {
+          // Update named score value
           metrics.namedScores[key] = (metrics.namedScores[key] || 0) + value;
-          metrics.namedScoresCount[key] = (metrics.namedScoresCount[key] || 0) + 1;
+
+          // Count assertions contributing to this named score
+          let contributingAssertions = 0;
+          row.gradingResult?.componentResults?.forEach((result) => {
+            if (result.assertion?.metric === key) {
+              contributingAssertions++;
+            }
+          });
+
+          metrics.namedScoresCount[key] =
+            (metrics.namedScoresCount[key] || 0) + (contributingAssertions || 1);
         }
 
         if (testSuite.derivedMetrics) {
