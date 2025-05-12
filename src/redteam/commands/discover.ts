@@ -1,4 +1,5 @@
 import chalk from 'chalk';
+import cliProgress from 'cli-progress';
 import { type Command, Option } from 'commander';
 import { z } from 'zod';
 import cliState from '../../cliState';
@@ -46,6 +47,20 @@ export async function doTargetPurposeDiscovery(
 
   let turnCounter = 1;
 
+  const pbar = new cliProgress.SingleBar({
+    format: `Discovering purpose {bar} {percentage}% | {value}/${maxTurns ? '{total}' : '∞'} turns'}`,
+    barCompleteChar: '\u2588',
+    barIncompleteChar: '\u2591',
+    hideCursor: true,
+  });
+
+  pbar.start(
+    maxTurns ??
+      // fallback: estimate of 25 turns
+      25,
+    0,
+  );
+
   while (true) {
     const res = await fetch(getRemoteGenerationUrl(), {
       body: JSON.stringify({
@@ -66,9 +81,17 @@ export async function doTargetPurposeDiscovery(
     };
 
     if (done) {
+      if (pbar) {
+        pbar.increment();
+        pbar.stop();
+      }
       logger.info(`\nPurpose:\n\n${chalk.green(purpose)}\n`);
       return purpose as string;
     } else {
+      if (!question) {
+        logger.error(`Failed to discover purpose: ${res.statusText}`);
+        process.exit(1);
+      }
       conversationHistory.push({ type: 'promptfoo', content: question as string });
     }
 
@@ -82,6 +105,9 @@ export async function doTargetPurposeDiscovery(
     }
 
     turnCounter++;
+    if (pbar) {
+      pbar.increment();
+    }
   }
 }
 
