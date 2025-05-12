@@ -50,6 +50,7 @@ import {
 } from './huggingface';
 import { JfrogMlChatCompletionProvider } from './jfrog';
 import { createLambdaLabsProvider } from './lambdalabs';
+import { createPerplexityProvider } from './perplexity';
 import { LiteLLMProvider } from './litellm';
 import { LlamaProvider } from './llama';
 import {
@@ -764,15 +765,9 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
-      const splits = providerPath.split(':');
-      const modelName = splits.slice(1).join(':');
-      return new OpenAiChatCompletionProvider(modelName, {
-        ...providerOptions,
-        config: {
-          ...providerOptions.config,
-          apiBaseUrl: 'https://api.perplexity.ai',
-          apiKeyEnvar: 'PERPLEXITY_API_KEY',
-        },
+      return createPerplexityProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
       });
     },
   },
