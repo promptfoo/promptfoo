@@ -27,6 +27,7 @@ import Select from '@mui/material/Select';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import { FILE_METADATA_KEY } from '@promptfoo/constants';
 import invariant from '@promptfoo/util/invariant';
 import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
 import yaml from 'js-yaml';
@@ -415,7 +416,8 @@ function ResultsTable({
                 // Get the first output that has metadata for checking file metadata
                 const row = info.row.original;
                 const output = row.outputs && row.outputs.length > 0 ? row.outputs[0] : null;
-                const fileMetadata = output?.metadata?.fileMetadata as
+
+                const fileMetadata = output?.metadata?.[FILE_METADATA_KEY] as
                   | Record<string, { path: string; type: string; format?: string }>
                   | undefined;
                 const isMediaFile = fileMetadata && fileMetadata[varName];
@@ -434,14 +436,14 @@ function ResultsTable({
                   if (mediaType === 'audio') {
                     mediaElement = (
                       <audio controls style={{ maxWidth: '100%' }}>
-                        <source src={mediaDataUrl} />
+                        <source src={mediaDataUrl} type={`audio/${format}`} />
                         Your browser does not support the audio element.
                       </audio>
                     );
                   } else if (mediaType === 'video') {
                     mediaElement = (
                       <video controls style={{ maxWidth: '100%', maxHeight: '200px' }}>
-                        <source src={mediaDataUrl} />
+                        <source src={mediaDataUrl} type={`video/${format}`} />
                         Your browser does not support the video element.
                       </video>
                     );
