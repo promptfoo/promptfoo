@@ -11,6 +11,7 @@ import {
   AwsBedrockGenericProvider,
   AWS_BEDROCK_MODELS,
   BEDROCK_MODEL,
+  coerceStrToNum,
   formatPromptLlama2Chat,
   formatPromptLlama3Instruct,
   formatPromptLlama4,
@@ -1866,5 +1867,29 @@ describe('AwsBedrockCompletionProvider', () => {
       expect.any(Array),
       'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
     );
+  });
+});
+
+describe('coerceStrToNum', () => {
+  it('should convert string numbers to numeric values', () => {
+    expect(coerceStrToNum('42')).toBe(42);
+    expect(coerceStrToNum('3.14')).toBe(3.14);
+    expect(coerceStrToNum('-10')).toBe(-10);
+    expect(coerceStrToNum('0')).toBe(0);
+  });
+
+  it('should return original value for numbers', () => {
+    expect(coerceStrToNum(42)).toBe(42);
+    expect(coerceStrToNum(3.14)).toBe(3.14);
+    expect(coerceStrToNum(-10)).toBe(-10);
+    expect(coerceStrToNum(0)).toBe(0);
+  });
+
+  it('should handle undefined values', () => {
+    expect(coerceStrToNum(undefined)).toBeUndefined();
+  });
+
+  it('should convert invalid string numbers to NaN', () => {
+    expect(Number.isNaN(coerceStrToNum('not-a-number') as number)).toBe(true);
   });
 });
