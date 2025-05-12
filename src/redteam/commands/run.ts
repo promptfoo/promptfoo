@@ -3,7 +3,8 @@ import type { Command } from 'commander';
 import dedent from 'dedent';
 import { z } from 'zod';
 import cliState from '../../cliState';
-import logger, { setLogLevel } from '../../logger';
+import { CLOUD_PROVIDER_PREFIX } from '../../constants';
+import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { setupEnv } from '../../util';
 import { getConfigFromCloud } from '../../util/cloud';
@@ -33,7 +34,6 @@ export function redteamRunCommand(program: Command) {
       'Path to output file for generated tests. Defaults to redteam.yaml in the same directory as the configuration file.',
     )
     .option('--no-cache', 'Do not read or write results to disk cache', false)
-    .option('--env-file, --env-path <path>', 'Path to .env file')
     .option('-j, --max-concurrency <number>', 'Maximum number of concurrent API calls', (val) =>
       Number.parseInt(val, 10),
     )
@@ -42,28 +42,32 @@ export function redteamRunCommand(program: Command) {
     )
     .option('--remote', 'Force remote inference wherever possible', false)
     .option('--force', 'Force generation even if no changes are detected', false)
-    .option('--verbose', 'Show debug output', false)
     .option('--no-progress-bar', 'Do not show progress bar')
     .option(
       '--filter-providers, --filter-targets <providers>',
       'Only run tests with these providers (regex match)',
     )
+    .option('-t, --target <id>', 'Cloud provider target ID to run the scan on')
     .action(async (opts: RedteamRunOptions) => {
       setupEnv(opts.envPath);
       telemetry.record('command_used', {
         name: 'redteam run',
       });
-      await telemetry.send();
-
-      if (opts.verbose) {
-        setLogLevel('debug');
-      }
 
       if (opts.config && UUID_REGEX.test(opts.config)) {
-        const configObj = await getConfigFromCloud(opts.config);
-
+        if (opts.target && !UUID_REGEX.test(opts.target)) {
+          throw new Error('Invalid target ID, it must be a valid UUID');
+        }
+        const configObj = await getConfigFromCloud(opts.config, opts.target);
+        // backwards compatible for old cloud servers
+        if (
+          opts.target &&
+          UUID_REGEX.test(opts.target) &&
+          (!configObj.targets || configObj.targets?.length === 0)
+        ) {
+          configObj.targets = [{ id: `${CLOUD_PROVIDER_PREFIX}${opts.target}`, config: {} }];
+        }
         opts.liveRedteamConfig = configObj;
-
         opts.config = undefined;
 
         opts.loadedFromCloud = true;

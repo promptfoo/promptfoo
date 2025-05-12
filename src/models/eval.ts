@@ -90,24 +90,22 @@ export default class Eval {
   static async findById(id: string) {
     const db = getDb();
 
-    const { evals, datasetResults } = await db.transaction(async (tx) => {
-      const evals = await tx.select().from(evalsTable).where(eq(evalsTable.id, id));
-      const datasetResults = await tx
-        .select({
-          datasetId: evalsToDatasetsTable.datasetId,
-        })
-        .from(evalsToDatasetsTable)
-        .where(eq(evalsToDatasetsTable.evalId, id))
-        .limit(1);
+    const evalData = db.select().from(evalsTable).where(eq(evalsTable.id, id)).all();
 
-      return { evals, datasetResults };
-    });
-
-    if (evals.length === 0) {
+    if (evalData.length === 0) {
       return undefined;
     }
-    const eval_ = evals[0];
 
+    const datasetResults = db
+      .select({
+        datasetId: evalsToDatasetsTable.datasetId,
+      })
+      .from(evalsToDatasetsTable)
+      .where(eq(evalsToDatasetsTable.evalId, id))
+      .limit(1)
+      .all();
+
+    const eval_ = evalData[0];
     const datasetId = datasetResults[0]?.datasetId;
 
     const evalInstance = new Eval(eval_.config, {
@@ -162,9 +160,11 @@ export default class Eval {
     const evalId = opts?.id || createEvalId(createdAt);
     const author = opts?.author || getUserEmail();
     const db = getDb();
-    await db.transaction(async (tx) => {
-      await tx
-        .insert(evalsTable)
+
+    const datasetId = sha256(JSON.stringify(config.tests || []));
+
+    db.transaction(() => {
+      db.insert(evalsTable)
         .values({
           id: evalId,
           createdAt: createdAt.getTime(),
@@ -179,8 +179,7 @@ export default class Eval {
         const label = prompt.label || prompt.display || prompt.raw;
         const promptId = hashPrompt(prompt);
 
-        await tx
-          .insert(promptsTable)
+        db.insert(promptsTable)
           .values({
             id: promptId,
             prompt: label,
@@ -188,8 +187,7 @@ export default class Eval {
           .onConflictDoNothing()
           .run();
 
-        await tx
-          .insert(evalsToPromptsTable)
+        db.insert(evalsToPromptsTable)
           .values({
             evalId,
             promptId,
@@ -199,18 +197,16 @@ export default class Eval {
 
         logger.debug(`Inserting prompt ${promptId}`);
       }
+
       if (opts?.results && opts.results.length > 0) {
-        const res = await tx
+        const res = db
           .insert(evalResultsTable)
           .values(opts.results?.map((r) => ({ ...r, evalId, id: randomUUID() })))
           .run();
         logger.debug(`Inserted ${res.changes} eval results`);
       }
 
-      // Record dataset relation
-      const datasetId = sha256(JSON.stringify(config.tests || []));
-      await tx
-        .insert(datasetsTable)
+      db.insert(datasetsTable)
         .values({
           id: datasetId,
           tests: config.tests,
@@ -218,8 +214,7 @@ export default class Eval {
         .onConflictDoNothing()
         .run();
 
-      await tx
-        .insert(evalsToDatasetsTable)
+      db.insert(evalsToDatasetsTable)
         .values({
           evalId,
           datasetId,
@@ -229,13 +224,11 @@ export default class Eval {
 
       logger.debug(`Inserting dataset ${datasetId}`);
 
-      // Record tags
       if (config.tags) {
         for (const [tagKey, tagValue] of Object.entries(config.tags)) {
           const tagId = sha256(`${tagKey}:${tagValue}`);
 
-          await tx
-            .insert(tagsTable)
+          db.insert(tagsTable)
             .values({
               id: tagId,
               name: tagKey,
@@ -244,8 +237,7 @@ export default class Eval {
             .onConflictDoNothing()
             .run();
 
-          await tx
-            .insert(evalsToTagsTable)
+          db.insert(evalsToTagsTable)
             .values({
               evalId,
               tagId,
@@ -257,6 +249,7 @@ export default class Eval {
         }
       }
     });
+
     return new Eval(config, { id: evalId, author: opts?.author, createdAt, persisted: true });
   }
 
@@ -507,11 +500,10 @@ export default class Eval {
 
   async delete() {
     const db = getDb();
-    await db.transaction(() => {
+    db.transaction(() => {
       db.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, this.id)).run();
       db.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, this.id)).run();
       db.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, this.id)).run();
-
       db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, this.id)).run();
       db.delete(evalsTable).where(eq(evalsTable.id, this.id)).run();
     });
@@ -539,6 +531,7 @@ export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[
     .from(evalsTable)
     .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
     .where(datasetId ? eq(evalsToDatasetsTable.datasetId, datasetId) : undefined)
+    .orderBy(desc(evalsTable.createdAt))
     .all();
 
   /**

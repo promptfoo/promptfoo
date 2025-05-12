@@ -1,5 +1,7 @@
 ---
 sidebar_label: Best-of-N
+title: Best-of-N Jailbreaking Strategy
+description: Black-box jailbreaking technique that tests multiple prompt variations to bypass safety mechanisms
 ---
 
 # Best-of-N (BoN) Jailbreaking Strategy
@@ -14,7 +16,7 @@ While this technique achieves high attack success rates - 89% on GPT-4o and 78% 
 
 Use it like so in your `promptfooconfig.yaml`:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 strategies:
   - id: best-of-n
     config:

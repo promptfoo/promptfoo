@@ -1,13 +1,13 @@
 import compression from 'compression';
 import cors from 'cors';
-import dotenv from 'dotenv';
+import 'dotenv/config';
 import type { Request, Response } from 'express';
 import express from 'express';
 import http from 'node:http';
 import path from 'node:path';
 import { Server as SocketIOServer } from 'socket.io';
 import { fromError } from 'zod-validation-error';
-import { DEFAULT_PORT, VERSION } from '../constants';
+import { getDefaultPort, VERSION } from '../constants';
 import { setupSignalWatcher } from '../database/signal';
 import { getDirectory } from '../esm';
 import { cloudConfig } from '../globalConfig/cloud';
@@ -36,8 +36,6 @@ import { evalRouter } from './routes/eval';
 import { providersRouter } from './routes/providers';
 import { redteamRouter } from './routes/redteam';
 import { userRouter } from './routes/user';
-
-dotenv.config();
 
 // Prompts cache
 let allPrompts: PromptWithMetadata[] | null = null;
@@ -194,7 +192,7 @@ export function createApp() {
         return;
       }
       const { event, properties } = result.data;
-      await telemetry.recordAndSend(event, properties);
+      await telemetry.record(event, properties);
       res.status(200).json({ success: true });
     } catch (error) {
       logger.error(`Error processing telemetry request: ${error}`);
@@ -223,8 +221,8 @@ export function createApp() {
 }
 
 export async function startServer(
-  port = DEFAULT_PORT,
-  browserBehavior = BrowserBehavior.ASK,
+  port = getDefaultPort(),
+  browserBehavior: BrowserBehavior = BrowserBehavior.ASK,
   filterDescription?: string,
 ) {
   const app = createApp();

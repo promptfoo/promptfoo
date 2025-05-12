@@ -88,7 +88,7 @@ describe('table', () => {
 
       expect(Table).toHaveBeenCalledWith({
         head: ['var1', 'var2', '[test-provider] test-label'],
-        colWidths: [40, 40, 40],
+        colWidths: expect.any(Array),
         wordWrap: true,
         wrapOnWordBoundary: true,
         style: { head: ['blue', 'bold'] },

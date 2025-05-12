@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
 import logger from '../../logger';
 import type { ApiProvider, Assertion } from '../../types';
-import { maybeLoadFromExternalFile } from '../../util';
+import { maybeLoadFromExternalFile } from '../../util/file';
 import { getNunjucksEngine } from '../../util/templates';
 import { RedteamPluginBase } from './base';
 
@@ -39,6 +39,7 @@ export function loadCustomPluginDefinition(filePath: string): CustomPluginDefini
 
 export class CustomPlugin extends RedteamPluginBase {
   private definition: CustomPluginDefinition;
+  static readonly canGenerateRemote = false;
 
   get id(): string {
     return this.definition.id || `promptfoo:redteam:custom`;

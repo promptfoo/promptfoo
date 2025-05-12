@@ -66,13 +66,14 @@ const BRANCHING_FACTOR = 4; // b parameter from paper
 export function renderSystemPrompts(
   nunjucks: Environment,
   goal: string,
+  purpose?: string,
 ): {
   redteamSystemPrompt: string;
   onTopicSystemPrompt: string;
   judgeSystemPrompt: string;
 } {
   return {
-    redteamSystemPrompt: nunjucks.renderString(ATTACKER_SYSTEM_PROMPT, { goal }),
+    redteamSystemPrompt: nunjucks.renderString(ATTACKER_SYSTEM_PROMPT, { goal, purpose }),
     onTopicSystemPrompt: nunjucks.renderString(ON_TOPIC_SYSTEM_PROMPT, { goal }),
     judgeSystemPrompt: nunjucks.renderString(JUDGE_SYSTEM_PROMPT, { goal }),
   };
@@ -439,6 +440,7 @@ export async function runRedteamConversation({
   const { redteamSystemPrompt, onTopicSystemPrompt, judgeSystemPrompt } = renderSystemPrompts(
     nunjucks,
     goal,
+    test?.metadata?.purpose,
   );
 
   const redteamHistory: { role: 'user' | 'assistant' | 'system'; content: string }[] = [

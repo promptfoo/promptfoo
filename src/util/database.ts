@@ -427,15 +427,15 @@ export async function getEvalFromId(hash: string) {
 
 export async function deleteEval(evalId: string) {
   const db = getDb();
-  await db.transaction(async () => {
+  db.transaction(() => {
     // We need to clean up foreign keys first. We don't have onDelete: 'cascade' set on all these relationships.
-    await db.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, evalId)).run();
-    await db.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, evalId)).run();
-    await db.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, evalId)).run();
-    await db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, evalId)).run();
+    db.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, evalId)).run();
+    db.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, evalId)).run();
+    db.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, evalId)).run();
+    db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, evalId)).run();
 
     // Finally, delete the eval record
-    const deletedIds = await db.delete(evalsTable).where(eq(evalsTable.id, evalId)).run();
+    const deletedIds = db.delete(evalsTable).where(eq(evalsTable.id, evalId)).run();
     if (deletedIds.changes === 0) {
       throw new Error(`Eval with ID ${evalId} not found`);
     }
@@ -449,12 +449,12 @@ export async function deleteEval(evalId: string) {
  */
 export async function deleteAllEvals(): Promise<void> {
   const db = getDb();
-  await db.transaction(async (tx) => {
-    await tx.delete(evalResultsTable).run();
-    await tx.delete(evalsToPromptsTable).run();
-    await tx.delete(evalsToDatasetsTable).run();
-    await tx.delete(evalsToTagsTable).run();
-    await tx.delete(evalsTable).run();
+  db.transaction(() => {
+    db.delete(evalResultsTable).run();
+    db.delete(evalsToPromptsTable).run();
+    db.delete(evalsToDatasetsTable).run();
+    db.delete(evalsToTagsTable).run();
+    db.delete(evalsTable).run();
   });
 }
 

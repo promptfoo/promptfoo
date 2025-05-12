@@ -98,7 +98,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should pass the tool choice if specified', async () => {
-      const toolChoice: Anthropic.MessageCreateParams.ToolChoiceTool = {
+      const toolChoice: Anthropic.MessageCreateParams['tool_choice'] = {
         name: 'get_weather',
         type: 'tool',
       };
@@ -342,7 +342,7 @@ describe('AnthropicMessagesProvider', () => {
         .mockImplementation()
         .mockResolvedValue({
           content: [{ type: 'text', text: 'Test output' }],
-          usage: { input_tokens: 50, output_tokens: 50 },
+          usage: { input_tokens: 50, output_tokens: 50, server_tool_use: null },
         } as Anthropic.Messages.Message);
 
       const result = await provider.callApi('What is the forecast in San Francisco?');

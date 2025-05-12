@@ -192,6 +192,12 @@ const config: Config = {
         },
         { to: '/pricing/', label: 'Enterprise', position: 'left' },
         {
+          to: 'https://promptfoo.app',
+          position: 'right',
+          'aria-label': 'Promptfoo App',
+          label: 'Log in',
+        },
+        {
           href: 'https://github.com/promptfoo/promptfoo',
           position: 'right',
           className: 'header-github-link',
@@ -297,6 +303,10 @@ const config: Config = {
               label: 'Careers',
               to: '/careers/',
             },
+            {
+              label: 'Log in',
+              to: 'https://promptfoo.app',
+            },
           ],
         },
         {
@@ -376,6 +386,10 @@ const config: Config = {
           {
             from: '/docs/providers/palm',
             to: '/docs/providers/google',
+          },
+          {
+            from: '/docs',
+            to: '/docs/intro',
           },
         ],
       },

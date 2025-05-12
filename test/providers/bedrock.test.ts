@@ -7,15 +7,18 @@ import type {
 } from '../../src/providers/bedrock';
 import {
   addConfigParam,
+  AwsBedrockCompletionProvider,
   AwsBedrockGenericProvider,
   AWS_BEDROCK_MODELS,
   BEDROCK_MODEL,
   formatPromptLlama2Chat,
   formatPromptLlama3Instruct,
+  formatPromptLlama4,
   getLlamaModelHandler,
   LlamaVersion,
   parseValue,
 } from '../../src/providers/bedrock';
+import type { IBedrockModel } from '../../src/providers/bedrock';
 
 jest.mock('@aws-sdk/client-bedrock-runtime', () => ({
   BedrockRuntime: jest.fn().mockImplementation(() => ({
@@ -769,6 +772,62 @@ describe('llama', () => {
       });
     });
 
+    describe('LLAMA4', () => {
+      const handler = getLlamaModelHandler(LlamaVersion.V4);
+
+      it('should generate correct prompt for a single user message', () => {
+        const config = { temperature: 0.5, top_p: 0.9, max_gen_len: 512 };
+        const prompt = 'Describe the purpose of a "hello world" program in one sentence.';
+        expect(handler.params(config, prompt)).toEqual({
+          prompt: dedent`<|begin_of_text|><|header_start|>user<|header_end|>
+
+Describe the purpose of a "hello world" program in one sentence.<|eot|><|header_start|>assistant<|header_end|>`,
+          temperature: 0.5,
+          top_p: 0.9,
+          max_gen_len: 512,
+        });
+      });
+
+      it('should handle a system message followed by a user message', () => {
+        const config = {};
+        const prompt = JSON.stringify([
+          { role: 'system', content: 'You are a helpful assistant.' },
+          { role: 'user', content: 'What is the capital of France?' },
+        ]);
+        expect(handler.params(config, prompt)).toEqual({
+          prompt: dedent`<|begin_of_text|><|header_start|>system<|header_end|>
+
+You are a helpful assistant.<|eot|><|header_start|>user<|header_end|>
+
+What is the capital of France?<|eot|><|header_start|>assistant<|header_end|>`,
+          temperature: 0,
+          top_p: 1,
+          max_gen_len: 1024,
+        });
+      });
+
+      it('should handle multiple turns of conversation', () => {
+        const config = {};
+        const prompt = JSON.stringify([
+          { role: 'user', content: 'Hello' },
+          { role: 'assistant', content: 'Hi there! How can I assist you today?' },
+          { role: 'user', content: "What's the weather like?" },
+        ]);
+        expect(handler.params(config, prompt)).toEqual({
+          prompt: dedent`<|begin_of_text|><|header_start|>user<|header_end|>
+
+Hello<|eot|><|header_start|>assistant<|header_end|>
+
+Hi there! How can I assist you today?<|eot|><|header_start|>user<|header_end|>
+
+What's the weather like?<|eot|><|header_start|>assistant<|header_end|>`,
+          temperature: 0,
+          top_p: 1,
+          max_gen_len: 1024,
+        });
+      });
+    });
+
     it('should throw an error for unsupported LLAMA version', () => {
       expect(() => getLlamaModelHandler(1 as LlamaVersion)).toThrow('Unsupported LLAMA version: 1');
     });
@@ -895,6 +954,45 @@ describe('llama', () => {
 
         Hello<|eot_id|><|start_header_id|>assistant<|end_header_id|>`;
       expect(formatPromptLlama3Instruct(messages)).toBe(expected);
+    });
+  });
+
+  describe('formatPromptLlama4', () => {
+    it('should format a single user message correctly', () => {
+      const messages: LlamaMessage[] = [{ role: 'user', content: 'Hello, how are you?' }];
+      const expected = dedent`<|begin_of_text|><|header_start|>user<|header_end|>
+
+Hello, how are you?<|eot|><|header_start|>assistant<|header_end|>`;
+      expect(formatPromptLlama4(messages)).toBe(expected);
+    });
+
+    it('should format multiple messages correctly', () => {
+      const messages: LlamaMessage[] = [
+        { role: 'user', content: 'Hello' },
+        { role: 'assistant', content: 'Hi there! How can I help you?' },
+        { role: 'user', content: "What's the weather like?" },
+      ];
+      const expected = dedent`<|begin_of_text|><|header_start|>user<|header_end|>
+
+Hello<|eot|><|header_start|>assistant<|header_end|>
+
+Hi there! How can I help you?<|eot|><|header_start|>user<|header_end|>
+
+What's the weather like?<|eot|><|header_start|>assistant<|header_end|>`;
+      expect(formatPromptLlama4(messages)).toBe(expected);
+    });
+
+    it('should handle system messages correctly', () => {
+      const messages: LlamaMessage[] = [
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'user', content: 'Hello' },
+      ];
+      const expected = dedent`<|begin_of_text|><|header_start|>system<|header_end|>
+
+You are a helpful assistant.<|eot|><|header_start|>user<|header_end|>
+
+Hello<|eot|><|header_start|>assistant<|header_end|>`;
+      expect(formatPromptLlama4(messages)).toBe(expected);
     });
   });
 });
@@ -1557,11 +1655,22 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     );
   });
 
+  it('should include Llama 4 models with appropriate handlers', () => {
+    expect(AWS_BEDROCK_MODELS['meta.llama4-scout-17b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA4);
+    expect(AWS_BEDROCK_MODELS['meta.llama4-maverick-17b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA4);
+    expect(AWS_BEDROCK_MODELS['us.meta.llama4-scout-17b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA4);
+    expect(AWS_BEDROCK_MODELS['us.meta.llama4-maverick-17b-instruct-v1:0']).toBe(
+      BEDROCK_MODEL.LLAMA4,
+    );
+  });
+
   it('should support newer model IDs via region prefixes', () => {
     [
       'us.meta.llama3-2-3b-instruct-v1:0',
       'eu.meta.llama3-2-3b-instruct-v1:0',
       'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
+      'us.meta.llama4-scout-17b-instruct-v1:0',
+      'eu.meta.llama4-maverick-17b-instruct-v1:0',
     ].forEach((modelId) => {
       // Check if the model starts with a region prefix
       const baseModelId = modelId.split('.').slice(1).join('.');
@@ -1570,6 +1679,7 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
       const handler =
         AWS_BEDROCK_MODELS[baseModelId] ||
         (baseModelId.startsWith('meta.llama3-2') ? BEDROCK_MODEL.LLAMA3_2 : null) ||
+        (baseModelId.startsWith('meta.llama4') ? BEDROCK_MODEL.LLAMA4 : null) ||
         (baseModelId.startsWith('anthropic.claude') ? BEDROCK_MODEL.CLAUDE_MESSAGES : null);
 
       expect(handler).toBeTruthy();
@@ -1586,5 +1696,175 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     }
 
     expect(handler).toBe(BEDROCK_MODEL.MISTRAL);
+  });
+
+  it('should handle llama4 models via includes fallback', () => {
+    const newLlama4Model = 'meta.llama4-future-model-v1:0';
+
+    // This simulates the logic in getHandlerForModel
+    let handler = AWS_BEDROCK_MODELS[newLlama4Model];
+    if (!handler && newLlama4Model.includes('meta.llama4')) {
+      handler = BEDROCK_MODEL.LLAMA4;
+    }
+
+    expect(handler).toBe(BEDROCK_MODEL.LLAMA4);
+  });
+});
+
+describe('AwsBedrockCompletionProvider', () => {
+  const { BedrockRuntime } = jest.requireMock('@aws-sdk/client-bedrock-runtime');
+  const mockInvokeModel = jest.fn();
+  let originalModelHandler: IBedrockModel;
+  let mockCache;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+
+    BedrockRuntime.mockImplementation(() => ({
+      invokeModel: mockInvokeModel.mockResolvedValue({
+        body: {
+          transformToString: () => JSON.stringify({ completion: 'test response' }),
+        },
+      }),
+    }));
+
+    mockCache = {
+      get: jest.fn().mockResolvedValue(null),
+      set: jest.fn().mockResolvedValue(null),
+    };
+
+    const { getCache, isCacheEnabled } = jest.requireMock('../../src/cache');
+    getCache.mockResolvedValue(mockCache);
+    isCacheEnabled.mockReturnValue(false);
+
+    originalModelHandler = AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0'];
+
+    AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0'] = {
+      params: jest.fn().mockImplementation((config) => ({
+        prompt: 'formatted prompt',
+        ...config,
+      })),
+      output: jest.fn().mockReturnValue('processed output'),
+      tokenUsage: jest.fn().mockReturnValue({
+        prompt: 10,
+        completion: 20,
+        total: 30,
+        numRequests: 1,
+      }),
+    };
+  });
+
+  afterEach(() => {
+    AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0'] = originalModelHandler;
+  });
+
+  it('should pass base config to model.params when context is not provided', async () => {
+    const provider = new (class extends AwsBedrockCompletionProvider {
+      constructor() {
+        super('us.anthropic.claude-3-7-sonnet-20250219-v1:0', {
+          config: {
+            region: 'us-east-1',
+            temperature: 0.5,
+          } as BedrockClaudeMessagesCompletionOptions,
+        });
+      }
+    })();
+
+    await provider.callApi('test prompt');
+
+    expect(
+      AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0'].params,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        region: 'us-east-1',
+        temperature: 0.5,
+      }),
+      'test prompt',
+      expect.any(Array),
+      'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
+    );
+  });
+
+  it('should merge context.prompt.config with base config', async () => {
+    const provider = new (class extends AwsBedrockCompletionProvider {
+      constructor() {
+        super('us.anthropic.claude-3-7-sonnet-20250219-v1:0', {
+          config: {
+            region: 'us-east-1',
+            temperature: 0.5,
+          } as BedrockClaudeMessagesCompletionOptions,
+        });
+      }
+    })();
+
+    const context = {
+      prompt: {
+        raw: 'test prompt',
+        label: 'test',
+        config: {
+          temperature: 0.7,
+          max_tokens: 100,
+        },
+      },
+      vars: {},
+    };
+
+    await provider.callApi('test prompt', context);
+
+    expect(
+      AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0'].params,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        region: 'us-east-1', // From base config
+        temperature: 0.7, // Overridden by context
+        max_tokens: 100, // Added by context
+      }),
+      'test prompt',
+      expect.any(Array),
+      'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
+    );
+  });
+
+  it('should prioritize context.prompt.config values over base config', async () => {
+    const provider = new (class extends AwsBedrockCompletionProvider {
+      constructor() {
+        super('us.anthropic.claude-3-7-sonnet-20250219-v1:0', {
+          config: {
+            region: 'us-east-1',
+            temperature: 0.5,
+            max_tokens: 50,
+            top_p: 0.8,
+          } as BedrockClaudeMessagesCompletionOptions,
+        });
+      }
+    })();
+
+    const context = {
+      prompt: {
+        raw: 'test prompt',
+        label: 'test',
+        config: {
+          temperature: 0.9,
+          max_tokens: 200,
+        },
+      },
+      vars: {},
+    };
+
+    await provider.callApi('test prompt', context);
+
+    expect(
+      AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0'].params,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        region: 'us-east-1', // From base config
+        temperature: 0.9, // Overridden by context
+        max_tokens: 200, // Overridden by context
+        top_p: 0.8, // From base config (unchanged)
+      }),
+      'test prompt',
+      expect.any(Array),
+      'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
+    );
   });
 });

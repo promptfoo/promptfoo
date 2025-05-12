@@ -1,136 +1,140 @@
-import packageJson from '../package.json';
+import { PostHog } from 'posthog-node';
 import { fetchWithTimeout } from '../src/fetch';
 import { Telemetry } from '../src/telemetry';
 
+// Mock PostHog
+jest.mock('posthog-node', () => {
+  const mockCapture = jest.fn();
+  const mockIdentify = jest.fn();
+
+  return {
+    PostHog: jest.fn().mockImplementation(() => ({
+      capture: mockCapture,
+      identify: mockIdentify,
+    })),
+  };
+});
+
+// Mock fetch
 jest.mock('../src/fetch', () => ({
   fetchWithTimeout: jest.fn(),
 }));
 
-jest.mock('../package.json', () => ({
-  version: '1.0.0',
+// Mock crypto
+jest.mock('crypto', () => ({
+  randomUUID: jest.fn().mockReturnValue('test-uuid'),
+}));
+
+// Mock globalConfig
+jest.mock('../src/globalConfig/globalConfig', () => ({
+  readGlobalConfig: jest
+    .fn()
+    .mockReturnValue({ id: 'test-user-id', account: { email: 'test@example.com' } }),
+}));
+
+// Mock constants
+jest.mock('../src/constants', () => ({
+  VERSION: '1.0.0',
+}));
+
+// Mock envars
+jest.mock('../src/envars', () => ({
+  getEnvBool: jest.fn().mockImplementation((key) => {
+    if (key === 'PROMPTFOO_DISABLE_TELEMETRY') {
+      return process.env.PROMPTFOO_DISABLE_TELEMETRY === '1';
+    }
+    return false;
+  }),
+  getEnvString: jest.fn().mockImplementation((key) => {
+    if (key === 'PROMPTFOO_POSTHOG_KEY') {
+      return process.env.PROMPTFOO_POSTHOG_KEY || undefined;
+    }
+    if (key === 'PROMPTFOO_POSTHOG_HOST') {
+      return process.env.PROMPTFOO_POSTHOG_HOST || undefined;
+    }
+    if (key === 'NODE_ENV') {
+      return process.env.NODE_ENV || undefined;
+    }
+    return undefined;
+  }),
 }));
 
 describe('Telemetry', () => {
   let originalEnv: NodeJS.ProcessEnv;
+  let mockPostHogInstance: any;
+  let mockFetch: jest.Mock;
 
   beforeEach(() => {
     originalEnv = process.env;
     process.env = { ...originalEnv };
+    process.env.PROMPTFOO_POSTHOG_KEY = 'test-key';
+
+    // Setup fetch mock
+    mockFetch = jest.fn().mockResolvedValue({ ok: true });
+    global.fetch = mockFetch;
+
+    // Reset PostHog mock
+    jest.mocked(PostHog).mockClear();
+    mockPostHogInstance = {
+      capture: jest.fn(),
+      identify: jest.fn(),
+    };
+    jest.mocked(PostHog).mockImplementation(() => mockPostHogInstance);
+
+    // Reset fetchWithTimeout mock
     jest.mocked(fetchWithTimeout).mockClear();
   });
 
   afterEach(() => {
     process.env = originalEnv;
+    jest.resetAllMocks();
   });
 
-  it('should record only the "telemetry disabled" event when telemetry is disabled', () => {
+  it('should not track events with PostHog when telemetry is disabled', () => {
     process.env.PROMPTFOO_DISABLE_TELEMETRY = '1';
-    const telemetry = new Telemetry();
-    telemetry.record('eval_ran', { foo: 'bar' });
-    expect(telemetry['events']).toHaveLength(1);
-    expect(telemetry['events'][0]).toEqual({
-      event: 'feature_used',
-      packageVersion: packageJson.version,
-      properties: { feature: 'telemetry disabled' },
-    });
+
+    // Create telemetry instance with telemetry disabled
+    const _telemetry = new Telemetry();
+
+    // Record an event
+    _telemetry.record('eval_ran', { foo: 'bar' });
+
+    // PostHog capture should not be called
+    expect(mockPostHogInstance.capture).not.toHaveBeenCalled();
   });
 
-  it('should record events when telemetry is enabled', () => {
-    delete process.env.PROMPTFOO_DISABLE_TELEMETRY;
-    const telemetry = new Telemetry();
-    telemetry.record('eval_ran', { foo: 'bar' });
-    expect(telemetry['events']).toHaveLength(1);
-    expect(telemetry['events'][0]).toEqual({
-      event: 'eval_ran',
-      packageVersion: packageJson.version,
-      properties: { foo: 'bar' },
-    });
-  });
-
-  it('should send events and clear events array when telemetry is enabled and send is called', async () => {
-    delete process.env.PROMPTFOO_DISABLE_TELEMETRY;
+  it('should save consent successfully', async () => {
     jest.mocked(fetchWithTimeout).mockResolvedValue({ ok: true } as any);
+    const _telemetry = new Telemetry();
 
-    const telemetry = new Telemetry();
-    telemetry.record('eval_ran', { foo: 'bar' });
-    await telemetry.send();
+    await _telemetry.saveConsent('test@example.com', { source: 'test' });
 
     expect(fetchWithTimeout).toHaveBeenCalledWith(
-      'https://api.promptfoo.dev/telemetry',
+      'https://api.promptfoo.dev/consent',
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify([
-          { event: 'eval_ran', packageVersion: '1.0.0', properties: { foo: 'bar' } },
-        ]),
+        body: JSON.stringify({ email: 'test@example.com', metadata: { source: 'test' } }),
       },
       1000,
     );
-    expect(telemetry['events']).toHaveLength(0);
   });
 
-  it('should send only the "telemetry disabled" event when telemetry is disabled and send is called', async () => {
-    process.env.PROMPTFOO_DISABLE_TELEMETRY = '1';
-    jest.mocked(fetchWithTimeout).mockResolvedValue({ ok: true } as any);
+  it('should handle failed consent save', async () => {
+    jest.mocked(fetchWithTimeout).mockResolvedValue({ ok: false, statusText: 'Not Found' } as any);
+    const _telemetry = new Telemetry();
 
-    const telemetry = new Telemetry();
-    telemetry.record('eval_ran', { foo: 'bar' });
-    await telemetry.send();
+    await _telemetry.saveConsent('test@example.com');
 
     expect(fetchWithTimeout).toHaveBeenCalledWith(
-      'https://api.promptfoo.dev/telemetry',
-      {
+      'https://api.promptfoo.dev/consent',
+      expect.objectContaining({
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify([
-          {
-            event: 'feature_used',
-            packageVersion: '1.0.0',
-            properties: { feature: 'telemetry disabled' },
-          },
-        ]),
-      },
-      1000,
+        body: expect.any(String),
+      }),
+      expect.any(Number),
     );
-    expect(telemetry['events']).toHaveLength(0);
-  });
-
-  it('should send telemetry disabled event only once', async () => {
-    process.env.PROMPTFOO_DISABLE_TELEMETRY = '1';
-    jest.mocked(fetchWithTimeout).mockResolvedValue({ ok: true } as any);
-
-    const telemetry = new Telemetry();
-    telemetry.record('eval_ran', { foo: 'bar' });
-    await telemetry.send();
-
-    expect(fetchWithTimeout).toHaveBeenCalledTimes(1);
-    expect(fetchWithTimeout).toHaveBeenCalledWith(
-      'https://api.promptfoo.dev/telemetry',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify([
-          {
-            event: 'feature_used',
-            packageVersion: '1.0.0',
-            properties: { feature: 'telemetry disabled' },
-          },
-        ]),
-      },
-      1000,
-    );
-
-    // Record another event and send again
-    telemetry.record('command_used', { command: 'test' });
-    await telemetry.send();
-
-    // Ensure fetchWithTimeout was not called again
-    expect(fetchWithTimeout).toHaveBeenCalledTimes(1);
   });
 });

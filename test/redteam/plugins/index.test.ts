@@ -155,7 +155,7 @@ describe('Plugins', () => {
 
       jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
-      const plugin = Plugins.find((p) => p.key === 'contracts');
+      const plugin = Plugins.find((p) => p.key === 'ssrf');
       const result = await plugin?.action({
         provider: mockProvider,
         purpose: 'test',
@@ -175,14 +175,14 @@ describe('Plugins', () => {
             injectVar: 'testVar',
             n: 1,
             purpose: 'test',
-            task: 'contracts',
+            task: 'ssrf',
             version: VERSION,
             email: null,
           }),
         }),
         expect.any(Number),
       );
-      expect(result).toEqual([{ test: 'case', metadata: { pluginId: 'contracts' } }]);
+      expect(result).toEqual([{ test: 'case', metadata: { pluginId: 'ssrf' } }]);
     });
 
     it('should handle remote generation errors', async () => {

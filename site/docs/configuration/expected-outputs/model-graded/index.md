@@ -13,6 +13,7 @@ Output-based:
 - [`factuality`](/docs/configuration/expected-outputs/model-graded/factuality) - a factual consistency eval which, given a completion `A` and reference answer `B` evaluates whether A is a subset of B, A is a superset of B, A and B are equivalent, A and B disagree, or A and B differ, but that the difference doesn't matter from the perspective of factuality. It uses the prompt from OpenAI's public evals.
 - [`g-eval`](/docs/configuration/expected-outputs/model-graded/g-eval) - uses chain-of-thought prompting to evaluate outputs based on custom criteria, following the G-Eval framework.
 - [`answer-relevance`](/docs/configuration/expected-outputs/model-graded/answer-relevance) - ensure that LLM output is related to original query
+- [`pi`](/docs/configuration/expected-outputs/model-graded/pi) - an alternative scoring approach that uses a dedicated model for evaluating inputs/outputs against criteria.
 - [`classifier`](/docs/configuration/expected-outputs/classifier) - see classifier grading docs.
 - [`moderation`](/docs/configuration/expected-outputs/moderation) - see moderation grading docs.
 - [`select-best`](/docs/configuration/expected-outputs/model-graded/select-best) - compare outputs from multiple test cases and choose a winner
@@ -41,6 +42,16 @@ assert:
   - type: factuality
     # Make sure the LLM output is consistent with this statement:
     value: Sacramento is the capital of California
+```
+
+Example of pi scorer:
+
+```yaml
+assert:
+  - type: pi
+    # Evaluate output based on this criteria:
+    value: Is not apologetic and provides a clear, concise answer
+    threshold: 0.8 # Requires a score of 0.8 or higher to pass
 ```
 
 For more information on factuality, see the [guide on LLM factuality](/docs/guides/factuality-eval).
@@ -149,7 +160,7 @@ tests:
 
 ## Overriding the LLM grader
 
-By default, model-graded asserts use gpt-4.1-2025-04-14 for grading. If you do not have access to gpt-4.1-2025-04-14 or prefer not to use it, you can override the rubric grader. There are several ways to do this, depending on your preferred workflow:
+By default, model-graded asserts use `gpt-4.1-2025-04-14` for grading. If you do not have access to `gpt-4.1-2025-04-14` or prefer not to use it, you can override the rubric grader. There are several ways to do this, depending on your preferred workflow:
 
 1. Using the `--grader` CLI option:
 

@@ -8,16 +8,18 @@ Here's a basic example of configuring providers in your promptfoo YAML config:
 
 ```yaml
 providers:
-  - openai:gpt-4o-mini
   - anthropic:messages:claude-3-7-sonnet-20250219
-  - vertex:gemini-pro
+  - openai:gpt-4.1-mini
+  - openai:o3-mini
+  - google:gemini-2.5-flash-preview-04-17
+  - vertex:gemini-2.5-flash-preview-04-17
 ```
 
 ## Available Providers
 
 | Api Providers                                       | Description                                       | Syntax & Example                                   |
 | --------------------------------------------------- | ------------------------------------------------- | -------------------------------------------------- |
-| [OpenAI](./openai.md)                               | GPT models including GPT-4 and GPT-3.5            | `openai:o1-preview`                                |
+| [OpenAI](./openai.md)                               | GPT models including GPT-4.1 and reasoning models | `openai:gpt-4.1-mini` or `openai:o3-mini`          |
 | [Anthropic](./anthropic.md)                         | Claude models                                     | `anthropic:messages:claude-3-7-sonnet-latest`      |
 | [HTTP](./http.md)                                   | Generic HTTP-based providers                      | `https://api.example.com/v1/chat/completions`      |
 | [Javascript](./custom-api.md)                       | Custom - JavaScript file                          | `file://path/to/custom_provider.js`                |
@@ -27,6 +29,7 @@ providers:
 | [AWS Bedrock](./aws-bedrock.md)                     | AWS-hosted models from various providers          | `bedrock:us.meta.llama3-2-90b-instruct-v1:0`       |
 | [Amazon SageMaker](./sagemaker.md)                  | Models deployed on SageMaker endpoints            | `sagemaker:my-endpoint-name`                       |
 | [Azure OpenAI](./azure.md)                          | Azure-hosted OpenAI models                        | `azureopenai:gpt-4o-custom-deployment-name`        |
+| [Cerebras](./cerebras.md)                           | High-performance inference API for Llama models   | `cerebras:llama-4-scout-17b-16e-instruct`          |
 | [Adaline Gateway](./adaline.md)                     | Unified interface for multiple providers          | Compatible with OpenAI syntax                      |
 | [Cloudflare AI](./cloudflare-ai.md)                 | Cloudflare's AI platform                          | `cloudflare-ai:@cf/meta/llama-3-8b-instruct`       |
 | [Cohere](./cohere.md)                               | Cohere's language models                          | `cohere:command`                                   |
@@ -35,10 +38,10 @@ providers:
 | [fal.ai](./fal.md)                                  | Image Generation Provider                         | `fal:image:fal-ai/fast-sdxl`                       |
 | [Fireworks AI](./fireworks.md)                      | Various hosted models                             | `fireworks:accounts/fireworks/models/qwen-v2p5-7b` |
 | [GitHub](./github.md)                               | GitHub AI Gateway                                 | `github:gpt-4o-mini`                               |
-| [Google AI Studio](./google.md)                     | Gemini models                                     | `google:gemini-2.0-flash-thinking-exp`             |
-| [Google Vertex AI](./vertex.md)                     | Google Cloud's AI platform                        | `vertex:gemini-pro`                                |
+| [Google AI Studio](./google.md)                     | Gemini models                                     | `google:gemini-2.5-flash-preview-04-17`            |
+| [Google Vertex AI](./vertex.md)                     | Google Cloud's AI platform                        | `vertex:gemini-2.5-flash-preview-04-17`            |
 | [Groq](./groq.md)                                   | High-performance inference API                    | `groq:llama-3.3-70b-versatile`                     |
-| [Hyperbolic](./hyperbolic.md)                       | OpenAI-compatible Llama 3 provider                | `hyperbolic:meta-llama/Meta-Llama-3-70B-Instruct`  |
+| [Hyperbolic](./hyperbolic.md)                       | OpenAI-compatible Llama 3 provider                | `hyperbolic:meta-llama/Llama-3.3-70B-Instruct`     |
 | [Hugging Face](./huggingface.md)                    | Access thousands of models                        | `huggingface:text-generation:gpt2`                 |
 | [IBM BAM](./ibm-bam.md)                             | IBM's foundation models                           | `bam:chat:ibm/granite-13b-chat-v2`                 |
 | [JFrog ML](./jfrog.md)                              | JFrog's LLM Model Library                         | `jfrog:llama_3_8b_instruct`                        |
@@ -66,7 +69,7 @@ providers:
 | [Sequence](./sequence.md)                           | Custom - Multi-prompt sequencing                  | `sequence` with config.inputs array                |
 | [Simulated User](./simulated-user.md)               | Custom - Conversation simulator                   | `promptfoo:simulated-user`                         |
 | [WatsonX](./watsonx.md)                             | IBM's WatsonX                                     | `watsonx:ibm/granite-13b-chat-v2`                  |
-| [X.AI](./xai.md)                                    | X.AI's models                                     | `xai:grok-2`                                       |
+| [X.AI](./xai.md)                                    | X.AI's models                                     | `xai:grok-3-beta`                                  |
 
 ## Provider Syntax
 
@@ -78,7 +81,7 @@ Providers are specified using various syntax options:
    provider_name:model_name
    ```
 
-   Example: `openai:gpt-4o-mini` or `anthropic:claude-3-sonnet-20240229`
+   Example: `openai:gpt-4.1-mini` or `anthropic:claude-3-7-sonnet-20250219`
 
 2. Object format with configuration:
 
@@ -92,7 +95,7 @@ Providers are specified using various syntax options:
    Example:
 
    ```yaml
-   - id: openai:gpt-4o-mini
+   - id: openai:gpt-4.1-mini
      config:
        temperature: 0.7
        max_tokens: 150
@@ -103,7 +106,7 @@ Providers are specified using various syntax options:
    Load a single provider:
 
    ```yaml title="provider.yaml"
-   id: openai:chat:gpt-4o-mini
+   id: openai:chat:gpt-4.1-mini
    config:
      temperature: 0.7
    ```
@@ -111,7 +114,7 @@ Providers are specified using various syntax options:
    Or multiple providers:
 
    ```yaml title="providers.yaml"
-   - id: openai:gpt-4o-mini
+   - id: openai:gpt-4.1-mini
      config:
        temperature: 0.7
    - id: anthropic:messages:claude-3-7-sonnet-20250219
@@ -140,7 +143,7 @@ You can also specify API keys in your configuration file:
 
 ```yaml
 providers:
-  - id: openai:gpt-4o-mini
+  - id: openai:gpt-4.1-mini
     config:
       apiKey: your_api_key_here
 ```
@@ -211,7 +214,7 @@ Example:
 
 ```yaml
 providers:
-  - id: openai:gpt-4o-mini
+  - id: openai:gpt-4.1-mini
     config:
       temperature: 0.7
       max_tokens: 150
@@ -220,3 +223,44 @@ providers:
       presence_penalty: 0.5
       stop: ["\n", 'Human:', 'AI:']
 ```
+
+## Model Context Protocol (MCP)
+
+Promptfoo supports the Model Context Protocol (MCP) for enabling advanced tool use and agentic capabilities in LLM providers. MCP allows you to connect providers to external MCP servers to enable tool orchestration, memory, and more.
+
+### Basic MCP Configuration
+
+Enable MCP for a provider by adding the `mcp` block to your provider's configuration:
+
+```yaml
+providers:
+  - id: openai:gpt-4.1-mini
+    config:
+      temperature: 0.7
+      mcp:
+        enabled: true
+        server:
+          command: npx
+          args: ['-y', '@modelcontextprotocol/server-memory']
+          name: memory
+```
+
+### Multiple MCP Servers
+
+You can connect a single provider to multiple MCP servers:
+
+```yaml
+providers:
+  - id: openai:gpt-4.1-mini
+    config:
+      mcp:
+        enabled: true
+        servers:
+          - command: npx
+            args: ['-y', '@modelcontextprotocol/server-memory']
+            name: server_a
+          - url: http://localhost:8001
+            name: server_b
+```
+
+For detailed MCP documentation and advanced configurations, see the [MCP Integration Guide](../integrations/mcp.md).

@@ -8,15 +8,14 @@ The `vertex` provider enables integration with Google's [Vertex AI](https://clou
 
 - `vertex:gemini-2.5-flash-preview-04-17` - Latest Flash model with thinking capabilities for enhanced reasoning
 - `vertex:gemini-2.5-pro-exp-03-25` - Latest thinking model for complex reasoning (2M context)
-- `vertex:gemini-2.0-flash-001` - Next-gen workhorse model for all daily tasks. Supports text, code, images, audio, video, video with audio, and PDF inputs.
-- `vertex:gemini-2.0-pro-exp-02-05` - Strongest model quality, especially for code & world knowledge (2M context). Supports text, images, video, audio, and PDF inputs.
-- `vertex:gemini-2.0-flash-lite-preview-02-05` - Cost-effective offering for high throughput. Supports text, images, video, audio, and PDF inputs.
-- `vertex:gemini-2.0-flash-thinking-exp-01-21` - Enhanced reasoning with thinking process in responses. Supports text and images.
-- `vertex:gemini-1.5-flash` - Speed and efficiency for high-volume applications. Supports text, code, images, audio, video, video with audio, and PDF inputs.
-- `vertex:gemini-1.5-pro` - Long-context understanding and general-purpose use. Supports text, code, images, audio, video, video with audio, and PDF inputs.
+- `vertex:gemini-2.0-flash-001` - Workhorse model for all daily tasks with strong overall performance and real-time streaming
+- `vertex:gemini-2.0-pro-exp-02-05` - Strongest model quality, especially for code & world knowledge with 2M context window
+- `vertex:gemini-2.0-flash-lite-preview-02-05` - Cost-effective offering for high throughput
+- `vertex:gemini-2.0-flash-thinking-exp-01-21` - Enhanced reasoning capabilities with thinking process in responses
+- `vertex:gemini-1.5-flash` - Fast and efficient for high-volume, quality, cost-effective applications
+- `vertex:gemini-1.5-pro` - Strong performance for text/chat with long-context understanding
 - `vertex:gemini-1.5-pro-latest` - Latest Gemini 1.5 Pro model with same capabilities as gemini-1.5-pro
-- `vertex:gemini-1.0-pro` - Best performing model for text-only tasks (deprecated)
-- `vertex:gemini-1.0-pro-vision` - Best performing image and video understanding model (deprecated)
+- `vertex:gemini-1.5-flash-8b` - Small model optimized for high-volume, lower complexity tasks
 
 ### Claude Models
 
@@ -76,9 +75,9 @@ By default, Llama models use Llama Guard for content safety. You can disable it 
 
 ### Gemma Models (Open Models)
 
-- `vertex:gemma` - Lightweight text model for generation and summarization
-- `vertex:codegemma` - Code-specialized model for generation and completion
-- `vertex:paligemma` - Vision-language model for image tasks
+- `vertex:gemma` - Lightweight open text model for generation, summarization, and extraction
+- `vertex:codegemma` - Lightweight code generation and completion model
+- `vertex:paligemma` - Lightweight vision-language model for image tasks
 
 ### PaLM 2 (Bison) Models
 
@@ -103,6 +102,23 @@ Please note the PaLM (Bison) models are [scheduled for deprecation (April 2025)]
 - `vertex:textembedding-gecko-multilingual@001` - Multilingual embeddings (2,048 tokens, 768d)
 - `vertex:text-multilingual-embedding-002` - Latest multilingual embeddings (2,048 tokens, ≤768d)
 - `vertex:multimodalembedding` - Multimodal embeddings for text, image, and video
+
+## Model Capabilities
+
+### Gemini 2.0 Pro Specifications
+
+- Max input tokens: 2,097,152
+- Max output tokens: 8,192
+- Training data: Up to June 2024
+- Supports: Text, code, images, audio, video, PDF inputs
+- Features: System instructions, JSON support, grounding with Google Search
+
+### Language Support
+
+Gemini models support a wide range of languages including:
+
+- Core languages: Arabic, Bengali, Chinese (simplified/traditional), English, French, German, Hindi, Indonesian, Italian, Japanese, Korean, Portuguese, Russian, Spanish, Thai, Turkish, Vietnamese
+- Gemini 1.5 adds support for 50+ additional languages including regional and less common languages
 
 :::tip
 If you're using Google AI Studio directly, see the [`google` provider](/docs/providers/google) documentation instead.
@@ -464,3 +480,61 @@ When using thinking configuration:
 - The `thinkingBudget` must be at least 1024 tokens
 - The budget is counted towards your total token usage
 - The model will show its reasoning process in the response
+
+### Search Grounding
+
+Search grounding allows Gemini models to access the internet for up-to-date information, enhancing responses about recent events and real-time data.
+
+#### Basic Usage
+
+Use the object format to enable Search grounding:
+
+```yaml
+providers:
+  - id: vertex:gemini-2.0-pro
+    config:
+      tools:
+        - googleSearch: {}
+```
+
+#### Combining with Other Features
+
+You can combine Search grounding with thinking capabilities for better reasoning:
+
+```yaml
+providers:
+  - id: vertex:gemini-2.5-flash-preview-04-17
+    config:
+      generationConfig:
+        thinkingConfig:
+          thinkingBudget: 1024
+      tools:
+        - googleSearch: {}
+```
+
+#### Use Cases
+
+Search grounding is particularly valuable for:
+
+- Current events and news
+- Recent developments
+- Stock prices and market data
+- Sports results
+- Technical documentation updates
+
+#### Working with Response Metadata
+
+When using Search grounding, the API response includes additional metadata:
+
+- `groundingMetadata` - Contains information about search results used
+- `groundingChunks` - Web sources that informed the response
+- `webSearchQueries` - Queries used to retrieve information
+
+#### Requirements and Limitations
+
+- **Important**: Per Google's requirements, applications using Search grounding must display Google Search Suggestions included in the API response metadata
+- Search results may vary by region and time
+- Results may be subject to Google Search rate limits
+- Search will only be performed when the model determines it's necessary
+
+For more details, see the [Google documentation on Grounding with Google Search](https://ai.google.dev/docs/gemini_api/grounding).

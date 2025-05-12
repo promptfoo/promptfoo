@@ -1,4 +1,3 @@
-import { parse as csvParse } from 'csv-parse/sync';
 import { stringify } from 'csv-stringify/sync';
 import dedent from 'dedent';
 import dotenv from 'dotenv';
@@ -8,9 +7,8 @@ import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import nunjucks from 'nunjucks';
 import * as path from 'path';
-import cliState from '../cliState';
 import { TERMINAL_MAX_WIDTH } from '../constants';
-import { getEnvBool } from '../envars';
+import { getEnvBool, getEnvString } from '../envars';
 import { getDirectory, importModule } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
@@ -35,7 +33,8 @@ import invariant from '../util/invariant';
 import { getConfigDirectoryPath } from './config/manage';
 import { sha256 } from './createHash';
 import { convertTestResultsToTableRow, getHeaderForTable } from './exportToFile';
-import { isJavascriptFile } from './file';
+import { maybeLoadFromExternalFile } from './file';
+import { isJavascriptFile } from './fileExtensions';
 import { getNunjucksEngine } from './templates';
 
 const outputToSimpleString = (output: EvaluateTableOutput) => {
@@ -451,64 +450,14 @@ export function parsePathOrGlob(
   };
 }
 
-/**
- * Loads content from an external file if the input is a file path, otherwise
- * returns the input as-is. Supports Nunjucks templating for file paths.
- *
- * @param filePath - The input to process. Can be a file path string starting with "file://",
- * an array of file paths, or any other type of data.
- * @returns The loaded content if the input was a file path, otherwise the original input.
- * For JSON and YAML files, the content is parsed into an object.
- * For other file types, the raw file content is returned as a string.
- *
- * @throws {Error} If the specified file does not exist.
- */
-export function maybeLoadFromExternalFile(filePath: string | object | Function | undefined | null) {
-  if (Array.isArray(filePath)) {
-    return filePath.map((path) => {
-      const content: any = maybeLoadFromExternalFile(path);
-      return content;
-    });
-  }
-
-  if (typeof filePath !== 'string') {
-    return filePath;
-  }
-  if (!filePath.startsWith('file://')) {
-    return filePath;
-  }
-
-  // Render the file path using Nunjucks
-  const renderedFilePath = getNunjucksEngine().renderString(filePath, {});
-
-  const finalPath = path.resolve(cliState.basePath || '', renderedFilePath.slice('file://'.length));
-  if (!fs.existsSync(finalPath)) {
-    throw new Error(`File does not exist: ${finalPath}`);
-  }
-
-  const contents = fs.readFileSync(finalPath, 'utf8');
-  if (finalPath.endsWith('.json')) {
-    return JSON.parse(contents);
-  }
-  if (finalPath.endsWith('.yaml') || finalPath.endsWith('.yml')) {
-    return yaml.load(contents);
-  }
-  if (finalPath.endsWith('.csv')) {
-    const records = csvParse(contents, { columns: true });
-    // If single column, return array of values
-    if (records.length > 0 && Object.keys(records[0]).length === 1) {
-      return records.map((record: Record<string, string>) => Object.values(record)[0]);
-    }
-    return records;
-  }
-  return contents;
-}
-
 export function isRunningUnderNpx(): boolean {
+  const npmExecPath = getEnvString('npm_execpath');
+  const npmLifecycleScript = getEnvString('npm_lifecycle_script');
+
   return Boolean(
-    process.env.npm_execpath?.includes('npx') ||
+    (npmExecPath && npmExecPath.includes('npx')) ||
       process.execPath.includes('npx') ||
-      process.env.npm_lifecycle_script?.includes('npx'),
+      (npmLifecycleScript && npmLifecycleScript.includes('npx')),
   );
 }
 

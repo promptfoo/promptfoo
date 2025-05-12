@@ -90,7 +90,7 @@ export abstract class SageMakerGenericProvider {
     this.providerId = id; // Store custom ID if provided
 
     // Record telemetry for SageMaker usage
-    telemetry.recordAndSendOnce('feature_used', {
+    telemetry.record('feature_used', {
       feature: 'sagemaker',
     });
   }
@@ -107,7 +107,7 @@ export abstract class SageMakerGenericProvider {
   /**
    * Get AWS credentials from config or environment
    */
-  async getCredentials() {
+  async getCredentials(): Promise<any> {
     if (this.config.accessKeyId && this.config.secretAccessKey) {
       logger.debug('Using explicit credentials from config');
       return {
@@ -144,7 +144,7 @@ export abstract class SageMakerGenericProvider {
 
         this.sagemakerRuntime = new SageMakerRuntimeClient({
           region: this.getRegion(),
-          maxAttempts: Number(process.env.AWS_SAGEMAKER_MAX_RETRIES || '3'),
+          maxAttempts: getEnvInt('AWS_SAGEMAKER_MAX_RETRIES', 3),
           retryMode: 'adaptive',
           ...(credentials ? { credentials } : {}),
         });

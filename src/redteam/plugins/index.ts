@@ -18,6 +18,7 @@ import {
   shouldGenerateRemote,
 } from '../remoteGeneration';
 import { getShortPluginId } from '../util';
+import { MEMORY_POISONING_PLUGIN_ID } from './agentic/constants';
 import { type RedteamPluginBase } from './base';
 import { BeavertailsPlugin } from './beavertails';
 import { ContractPlugin } from './contracts';
@@ -46,6 +47,7 @@ import { SqlInjectionPlugin } from './sqlInjection';
 import { ToolDiscoveryPlugin } from './toolDiscovery';
 import { ToolDiscoveryMultiTurnPlugin } from './toolDiscoveryMultiTurn';
 import { UnsafeBenchPlugin } from './unsafebench';
+import { XSTestPlugin } from './xstest';
 
 export interface PluginFactory {
   key: string;
@@ -82,7 +84,7 @@ async function fetchRemoteTestCases(
     email: getUserEmail(),
   });
   try {
-    const { data } = await fetchWithCache(
+    const { data, status, statusText } = await fetchWithCache(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
@@ -93,6 +95,10 @@ async function fetchRemoteTestCases(
       },
       REQUEST_TIMEOUT_MS,
     );
+    if (status !== 200 || !data || !data.result || !Array.isArray(data.result)) {
+      logger.error(`Error generating test cases for ${key}: ${statusText} ${JSON.stringify(data)}`);
+      return [];
+    }
     const ret = (data as { result: TestCase[] }).result;
     logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
     return ret;
@@ -111,18 +117,18 @@ function createPluginFactory<T extends PluginConfig>(
     key,
     validate: validate as ((config: PluginConfig) => void) | undefined,
     action: async ({ provider, purpose, injectVar, n, delayMs, config }: PluginActionParams) => {
-      if (shouldGenerateRemote()) {
-        const testCases = await fetchRemoteTestCases(key, purpose, injectVar, n, config);
-        return testCases.map((testCase) => ({
-          ...testCase,
-          metadata: {
-            ...testCase.metadata,
-            pluginId: getShortPluginId(key),
-          },
-        }));
+      if ((PluginClass as any).canGenerateRemote === false || !shouldGenerateRemote()) {
+        logger.debug(`Using local redteam generation for ${key}`);
+        return new PluginClass(provider, purpose, injectVar, config as T).generateTests(n, delayMs);
       }
-      logger.debug(`Using local redteam generation for ${key}`);
-      return new PluginClass(provider, purpose, injectVar, config as T).generateTests(n, delayMs);
+      const testCases = await fetchRemoteTestCases(key, purpose, injectVar, n, config);
+      return testCases.map((testCase) => ({
+        ...testCase,
+        metadata: {
+          ...testCase.metadata,
+          pluginId: getShortPluginId(key),
+        },
+      }));
     },
   };
 }
@@ -162,6 +168,7 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(DivergentRepetitionPlugin, 'divergent-repetition'),
   createPluginFactory(DoNotAnswerPlugin, 'donotanswer'),
   createPluginFactory(ExcessiveAgencyPlugin, 'excessive-agency'),
+  createPluginFactory(XSTestPlugin, 'xstest'),
   createPluginFactory(ToolDiscoveryPlugin, 'tool-discovery'),
   createPluginFactory(ToolDiscoveryMultiTurnPlugin, 'tool-discovery:multi-turn'),
   createPluginFactory(HarmbenchPlugin, 'harmbench'),
@@ -261,6 +268,7 @@ function createRemotePlugin<T extends PluginConfig>(
   };
 }
 const remotePlugins: PluginFactory[] = [
+  MEMORY_POISONING_PLUGIN_ID,
   'ascii-smuggling',
   'bfla',
   'bola',

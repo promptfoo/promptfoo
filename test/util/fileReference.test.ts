@@ -5,7 +5,7 @@ import type { Logger } from 'winston';
 import * as esmModule from '../../src/esm';
 import logger from '../../src/logger';
 import * as pythonUtils from '../../src/python/pythonUtils';
-import { isJavascriptFile } from '../../src/util/file';
+import { isJavascriptFile } from '../../src/util/fileExtensions';
 import { loadFileReference, processConfigFileReferences } from '../../src/util/fileReference';
 
 jest.mock('fs', () => ({
@@ -22,7 +22,7 @@ jest.mock('../../src/esm', () => ({
 jest.mock('../../src/python/pythonUtils', () => ({
   runPython: jest.fn(),
 }));
-jest.mock('../../src/util/file');
+jest.mock('../../src/util/fileExtensions');
 jest.mock('../../src/logger');
 
 const importModule = jest.mocked(esmModule.importModule);

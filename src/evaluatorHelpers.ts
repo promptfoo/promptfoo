@@ -13,7 +13,7 @@ import { runPython } from './python/pythonUtils';
 import telemetry from './telemetry';
 import type { ApiProvider, NunjucksFilterMap, Prompt } from './types';
 import { renderVarsInObject } from './util';
-import { isJavascriptFile, isImageFile, isVideoFile, isAudioFile } from './util/file';
+import { isJavascriptFile, isImageFile, isVideoFile, isAudioFile } from './util/fileExtensions';
 import invariant from './util/invariant';
 import { getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
@@ -123,7 +123,7 @@ export async function renderPrompt(
           yaml.load(fs.readFileSync(filePath, 'utf8')) as string | object,
         );
       } else if (fileExtension === 'pdf' && !getEnvBool('PROMPTFOO_DISABLE_PDF_AS_TEXT')) {
-        telemetry.recordOnce('feature_used', {
+        telemetry.record('feature_used', {
           feature: 'extract_text_from_pdf',
         });
         vars[varName] = await extractTextFromPDF(filePath);
@@ -137,7 +137,7 @@ export async function renderPrompt(
             ? 'video'
             : 'audio';
 
-        telemetry.recordOnce('feature_used', {
+        telemetry.record('feature_used', {
           feature: `load_${fileType}_as_base64`,
         });
 
@@ -251,7 +251,18 @@ export async function renderPrompt(
     // Recursively walk the JSON structure. If we find a string, render it with nunjucks.
     return JSON.stringify(renderVarsInObject(parsed, vars), null, 2);
   } catch {
-    return renderVarsInObject(nunjucks.renderString(basePrompt, vars), vars);
+    // Vars values can be template strings, so we need to render them first:
+    const renderedVars = Object.fromEntries(
+      Object.entries(vars).map(([key, value]) => [
+        key,
+        typeof value === 'string' ? nunjucks.renderString(value, vars) : value,
+      ]),
+    );
+
+    // Note: Explicitly not using `renderVarsInObject` as it will re-call `renderString`; each call will
+    // strip Nunjucks Tags, which breaks using raw (https://mozilla.github.io/nunjucks/templating.html#raw) e.g.
+    // {% raw %}{{some_string}}{% endraw %} -> {{some_string}} -> ''
+    return nunjucks.renderString(basePrompt, renderedVars);
   }
 }
 
@@ -271,7 +282,7 @@ export async function runExtensionHook(
     return;
   }
 
-  telemetry.recordOnce('feature_used', {
+  telemetry.record('feature_used', {
     feature: 'extension_hook',
   });
 

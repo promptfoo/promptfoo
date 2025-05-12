@@ -1,5 +1,7 @@
 ---
 sidebar_label: GOAT
+title: GOAT Jailbreaking Strategy
+description: Generative Offensive Agent Tester technique for dynamic multi-turn jailbreaking of LLMs
 ---
 
 # GOAT Technique for Jailbreaking LLMs
@@ -8,9 +10,11 @@ The GOAT (Generative Offensive Agent Tester) strategy is an advanced automated r
 
 It was [introduced by Meta researchers](https://arxiv.org/abs/2410.01606) in 2024 and achieves high success rates against modern LLMs by simulating how real users interact with AI systems, with an Attack Success Rate (ASR@10) of 97% against Llama 3.1 and 88% against GPT-4-Turbo on the JailbreakBench dataset.
 
+## Implementation
+
 Use it like so in your promptfooconfig.yaml:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 strategies:
   - id: goat
     config:

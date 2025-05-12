@@ -21,8 +21,8 @@ interface AtomicTestCase {
   success?: boolean;
   score?: number;
   failureReason?: string;
+  metadata?: Record<string, any>;
 }
-
 export interface ProviderModerationResponse {
   error?: string;
   flags?: ModerationFlag[];
@@ -60,6 +60,10 @@ export interface CallApiContextParams {
 
 export interface CallApiOptionsParams {
   includeLogProbs?: boolean;
+  /**
+   * Signal that can be used to abort the request
+   */
+  abortSignal?: AbortSignal;
 }
 
 export interface ApiProvider {
@@ -73,6 +77,12 @@ export interface ApiProvider {
   label?: ProviderLabel;
   transform?: string;
   toJSON?: () => any;
+  /**
+   * Cleanup method called when a provider call is aborted (e.g., due to timeout)
+   * Providers should implement this to clean up any resources they might have
+   * allocated, such as file handles, network connections, etc.
+   */
+  cleanup?: () => void | Promise<void>;
 }
 
 export interface ApiEmbeddingProvider extends ApiProvider {
@@ -189,7 +199,6 @@ export interface ProviderTestResponse {
  * Interface defining the default providers used by the application
  */
 export interface DefaultProviders {
-  datasetGenerationProvider: ApiProvider;
   embeddingProvider: ApiProvider;
   gradingJsonProvider: ApiProvider;
   gradingProvider: ApiProvider;

@@ -1,6 +1,6 @@
 import opener from 'opener';
 import readline from 'readline';
-import { VERSION, DEFAULT_PORT } from '../constants';
+import { VERSION, getDefaultPort } from '../constants';
 import logger from '../logger';
 
 export enum BrowserBehavior {
@@ -11,7 +11,41 @@ export enum BrowserBehavior {
   OPEN_TO_REDTEAM_CREATE = 4,
 }
 
-export async function checkServerRunning(port = DEFAULT_PORT): Promise<boolean> {
+/**
+ * Prompts the user with a question and returns a Promise that resolves with their answer
+ */
+export async function promptUser(question: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    try {
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+      });
+
+      rl.question(question, (answer) => {
+        rl.close();
+        resolve(answer);
+      });
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+/**
+ * Prompts the user with a yes/no question and returns a Promise that resolves with a boolean
+ */
+export async function promptYesNo(question: string, defaultYes = false): Promise<boolean> {
+  const suffix = defaultYes ? '(Y/n): ' : '(y/N): ';
+  const answer = await promptUser(`${question} ${suffix}`);
+
+  if (defaultYes) {
+    return !answer.toLowerCase().startsWith('n');
+  }
+  return answer.toLowerCase().startsWith('y');
+}
+
+export async function checkServerRunning(port = getDefaultPort()): Promise<boolean> {
   try {
     const response = await fetch(`http://localhost:${port}/health`);
     const data = await response.json();
@@ -24,7 +58,7 @@ export async function checkServerRunning(port = DEFAULT_PORT): Promise<boolean> 
 
 export async function openBrowser(
   browserBehavior: BrowserBehavior,
-  port = DEFAULT_PORT,
+  port = getDefaultPort(),
 ): Promise<void> {
   const baseUrl = `http://localhost:${port}`;
   let url = baseUrl;
@@ -44,23 +78,10 @@ export async function openBrowser(
   };
 
   if (browserBehavior === BrowserBehavior.ASK) {
-    return new Promise((resolve, reject) => {
-      try {
-        const rl = readline.createInterface({
-          input: process.stdin,
-          output: process.stdout,
-        });
-        rl.question('Open URL in browser? (y/N): ', async (answer) => {
-          if (answer.toLowerCase().startsWith('y')) {
-            await doOpen();
-          }
-          rl.close();
-          resolve();
-        });
-      } catch (err) {
-        reject(err);
-      }
-    });
+    const shouldOpen = await promptYesNo('Open URL in browser?', false);
+    if (shouldOpen) {
+      await doOpen();
+    }
   } else if (browserBehavior !== BrowserBehavior.SKIP) {
     await doOpen();
   }
