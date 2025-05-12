@@ -286,7 +286,7 @@ If you are using promptfoo as a JS package, you can build your assertion inline:
 }
 ```
 
-output will always be a string, so if your [custom response parser](/docs/providers/http/#function-parser)returned an object, you can use `JSON.parse(output)` to convert it the value back to an object.
+Output will always be a string, so if your [custom response parser](/docs/providers/http/#function-parser) returned an object, you can use `JSON.parse(output)` to convert it back to an object.
 
 ### ES modules
 
