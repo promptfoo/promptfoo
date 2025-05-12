@@ -48,6 +48,10 @@ The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to
          temperature: 0.7
    ```
 
+## Default Providers
+
+Promptfoo will automatically use AWS Bedrock providers (Amazon Nova Pro and Titan Embeddings) as fallbacks when other credentials are not available but AWS credentials are detected. This allows you to run evals without explicitly configuring providers if you have AWS credentials set up.
+
 ## Authentication
 
 Amazon Bedrock follows a specific credential resolution order that prioritizes explicitly configured credentials over default AWS mechanisms.

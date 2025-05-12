@@ -6,6 +6,7 @@ import { getAnthropicProviders } from './anthropic/defaults';
 import { AzureChatCompletionProvider } from './azure/chat';
 import { AzureEmbeddingProvider } from './azure/embedding';
 import { AzureModerationProvider } from './azure/moderation';
+import { getBedrockProviders, hasAwsCredentials } from './bedrock/defaults';
 import { hasGoogleDefaultCredentials } from './google/util';
 import {
   DefaultEmbeddingProvider as GeminiEmbeddingProvider,
@@ -123,6 +124,9 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       suggestionsProvider: GeminiGradingProvider,
       synthesizeProvider: GeminiGradingProvider,
     };
+  } else if (!getEnvString('OPENAI_API_KEY') && !env?.OPENAI_API_KEY && hasAwsCredentials(env)) {
+    logger.debug('Using AWS Bedrock default providers');
+    providers = getBedrockProviders(env);
   } else {
     logger.debug('Using OpenAI default providers');
     providers = {
