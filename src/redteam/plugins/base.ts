@@ -273,6 +273,44 @@ export abstract class RedteamGraderBase {
     }
   }
 
+  renderProvidedTemplate(template: string, vars: Record<string, any>): string {
+    const nunjucks = getNunjucksEngine(undefined, true /* throwOnUndefined */);
+
+    try {
+      return nunjucks.renderString(template, vars);
+    } catch (error) {
+      const extractedVars = extractVariablesFromTemplate(template);
+      const missingVars = extractedVars.filter((v) => !(v in vars));
+      const availableVars = extractedVars.filter((v) => v in vars);
+      const nullOrUndefinedVars = extractedVars.filter(
+        (v) => vars[v] === null || vars[v] === undefined,
+      );
+
+      logger.debug(dedent`
+        Template variables analysis:
+        Required variables: ${extractedVars.join(', ')}
+        Available variables: ${availableVars.join(', ')}
+        Missing variables: ${missingVars.join(', ')}
+        Null/undefined variables: ${nullOrUndefinedVars.join(', ')}
+      `);
+
+      const err = error as Error;
+      throw new Error(dedent`
+        Error rendering grader template: ${err.message}
+
+        Required variables: ${extractedVars.join(', ')}
+        Missing variables: ${missingVars.length > 0 ? missingVars.join(', ') : 'none'}
+        Available variables: ${availableVars.join(', ')}
+        Null/undefined variables: ${nullOrUndefinedVars.join(', ')}
+
+        Template: ${template}
+
+        Provided variables:
+        ${JSON.stringify(vars, null, 2)}
+      `);
+    }
+  }
+
   getSuggestions({
     test,
     rawPrompt,
@@ -285,35 +323,13 @@ export abstract class RedteamGraderBase {
     return [];
   }
 
-  async getResult(
-    prompt: string,
+  async processResult(
+    finalRubric: string,
     llmOutput: string,
     test: AtomicTestCase,
-    provider: ApiProvider | undefined,
+    prompt: string,
     renderedValue: AssertionValue | undefined,
   ): Promise<{ grade: GradingResult; rubric: string; suggestions?: ResultSuggestion[] }> {
-    invariant(test.metadata?.purpose, 'Test is missing purpose metadata');
-
-    const vars = {
-      ...test.metadata,
-      prompt,
-      entities: test.metadata?.entities ?? [],
-      tools: provider?.config?.tools
-        ? maybeLoadToolsFromExternalFile(provider.config.tools)
-        : undefined,
-      value: renderedValue,
-      testVars: test.vars ?? {},
-    };
-    // Grader examples are appended to all rubrics if present.
-    const graderExamples = test.metadata?.pluginConfig?.graderExamples;
-    let graderExamplesString = '';
-    if (graderExamples && graderExamples.length > 0) {
-      graderExamplesString =
-        '\n\n' +
-        graderExamples.map((example) => `EXAMPLE OUTPUT: ${JSON.stringify(example)}`).join('\n');
-    }
-    const finalRubric = this.renderRubric(vars) + graderExamplesString;
-
     if (isEmptyResponse(llmOutput) || isBasicRefusal(llmOutput)) {
       return {
         grade: { pass: true, score: 1, reason: 'Model refused the request' },
@@ -341,5 +357,47 @@ export abstract class RedteamGraderBase {
     }
 
     return { grade, rubric: finalRubric, suggestions };
+  }
+
+  async getResult(
+    prompt: string,
+    llmOutput: string,
+    test: AtomicTestCase,
+    provider: ApiProvider | undefined,
+    renderedValue: AssertionValue | undefined,
+  ): Promise<{ grade: GradingResult; rubric: string; suggestions?: ResultSuggestion[] }> {
+    invariant(test.metadata?.purpose, 'Test is missing purpose metadata');
+
+    const vars = {
+      ...test.metadata,
+      prompt,
+      entities: test.metadata?.entities ?? [],
+      tools: provider?.config?.tools
+        ? maybeLoadToolsFromExternalFile(provider.config.tools)
+        : undefined,
+      value: renderedValue,
+      testVars: test.vars ?? {},
+    };
+
+    // If graderTemplate is defined, completely override the rubric
+    const graderTemplate = test.metadata?.pluginConfig?.graderTemplate;
+    if (graderTemplate) {
+      // Use the provided template verbatim, but still support nunjucks variables
+      const finalRubric = this.renderProvidedTemplate(graderTemplate, vars);
+      return this.processResult(finalRubric, llmOutput, test, prompt, renderedValue);
+    }
+
+    // Otherwise, use the default behavior
+    // Grader examples are appended to all rubrics if present.
+    const graderExamples = test.metadata?.pluginConfig?.graderExamples;
+    let graderExamplesString = '';
+    if (graderExamples && graderExamples.length > 0) {
+      graderExamplesString =
+        '\n\n' +
+        graderExamples.map((example) => `EXAMPLE OUTPUT: ${JSON.stringify(example)}`).join('\n');
+    }
+    const finalRubric = this.renderRubric(vars) + graderExamplesString;
+
+    return this.processResult(finalRubric, llmOutput, test, prompt, renderedValue);
   }
 }
