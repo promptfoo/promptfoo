@@ -52,7 +52,12 @@ export async function doGenerateRedteam(
 
   let testSuite: TestSuite;
   let redteamConfig: RedteamFileConfig | undefined;
-  let targetPurpose: string | undefined;
+  // Target purpose:
+  // 1. Default to the purpose passed in via command line
+  // 2. Load the purpose from the given output file (typically redteam.yaml)
+  // 3. If no purpose is given and a config file is provided, discover the purpose
+  // 4. No config file? No CLI purpose? Error.
+  let targetPurpose: string | undefined = options.purpose;
   const configPath = options.config || options.defaultConfigPath;
   const outputPath = options.output || 'redteam.yaml';
 
@@ -79,6 +84,15 @@ export async function doGenerateRedteam(
     shouldGenerate = true;
   }
 
+  // Load the purpose from the output file if it exists
+  if (!targetPurpose) {
+    const redteamContent = yaml.load(fs.readFileSync(outputPath, 'utf8')) as Partial<UnifiedConfig>;
+    if (redteamContent.redteam?.purpose) {
+      logger.info(`Using purpose from ${chalk.italic(outputPath)}`);
+      targetPurpose = redteamContent.redteam.purpose;
+    }
+  }
+
   if (configPath) {
     const resolved = await resolveConfigs(
       {
@@ -89,33 +103,27 @@ export async function doGenerateRedteam(
     testSuite = resolved.testSuite;
     redteamConfig = resolved.config.redteam;
 
-    // Attempt to read the purpose from the output file:
-    const redteamContent = yaml.load(fs.readFileSync(outputPath, 'utf8')) as Partial<UnifiedConfig>;
-    if (redteamContent.redteam?.purpose) {
-      logger.info(`Using purpose from ${chalk.italic(outputPath)}`);
-      targetPurpose = redteamContent.redteam.purpose;
-    } else if (resolved.config.providers && Array.isArray(resolved.config.providers)) {
+    // Discover the purpose from the provider:
+    if (resolved.config.providers && Array.isArray(resolved.config.providers)) {
       const providers = await loadApiProviders(resolved.config.providers);
       targetPurpose = await doTargetPurposeDiscovery(providers[0]);
-    } else {
-      logger.debug('No provider purpose found, skipping purpose discovery');
     }
-  } else if (options.purpose) {
-    // There is a purpose, so we can just have a dummy test suite for standalone invocation
+  } else if (options.purpose && targetPurpose) {
+    // The purpose was passed in via the command line, so we can just have a dummy test suite for standalone invocation
     testSuite = {
       prompts: [],
       providers: [],
       tests: [],
     };
   } else {
-    logger.info(
+    // No config, no cli purpose, error:
+    throw new Error(
       chalk.red(
-        `\nCan't generate without configuration - run ${chalk.yellow.bold(
+        `Can't generate without configuration - run ${chalk.yellow.bold(
           isRunningUnderNpx() ? 'npx promptfoo redteam init' : 'promptfoo redteam init',
         )} first`,
       ),
     );
-    return null;
   }
 
   const startTime = Date.now();
@@ -217,7 +225,6 @@ export async function doGenerateRedteam(
 
   const {
     testCases: redteamTests,
-    purpose,
     entities,
     injectVar: finalInjectVar,
   } = await synthesize({
@@ -239,7 +246,7 @@ export async function doGenerateRedteam(
   }
 
   const updatedRedteamConfig = {
-    purpose,
+    purpose: targetPurpose,
     entities,
     strategies: strategyObjs || [],
     plugins: plugins || [],
@@ -275,7 +282,6 @@ export async function doGenerateRedteam(
         ...(existingYaml.defaultTest || {}),
         metadata: {
           ...(existingYaml.defaultTest?.metadata || {}),
-          purpose,
           entities,
         },
       },
@@ -325,7 +331,6 @@ export async function doGenerateRedteam(
       ...(existingConfig.defaultTest || {}),
       metadata: {
         ...(existingConfig.defaultTest?.metadata || {}),
-        purpose,
         entities,
       },
     };

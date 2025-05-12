@@ -1,6 +1,7 @@
 import fs from 'fs';
 import logger from '../../../src/logger';
 import { synthesize } from '../../../src/redteam';
+import { doTargetPurposeDiscovery } from '../../../src/redteam/commands/discover';
 import { doGenerateRedteam } from '../../../src/redteam/commands/generate';
 import type { RedteamCliGenerateOptions, RedteamPluginObject } from '../../../src/redteam/types';
 import type { ApiProvider } from '../../../src/types';
@@ -28,6 +29,7 @@ jest.mock('../../../src/redteam/remoteGeneration', () => ({
   getRemoteGenerationUrl: jest.fn().mockReturnValue('http://test-url'),
 }));
 jest.mock('../../../src/util/config/manage');
+jest.mock('../../../src/redteam/commands/discover');
 
 describe('doGenerateRedteam', () => {
   let mockProvider: jest.Mocked<ApiProvider>;
@@ -68,6 +70,7 @@ describe('doGenerateRedteam', () => {
       cache: true,
       defaultConfig: {},
       write: true,
+      purpose: 'Test purpose',
     };
 
     jest.mocked(fs.readFileSync).mockReturnValue(
@@ -119,7 +122,6 @@ describe('doGenerateRedteam', () => {
         }),
         defaultTest: {
           metadata: {
-            purpose: 'Test purpose',
             entities: ['Test entity'],
           },
         },
@@ -134,6 +136,7 @@ describe('doGenerateRedteam', () => {
       cache: true,
       defaultConfig: {},
       write: true,
+      purpose: 'Test purpose',
     };
 
     jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({}));
@@ -156,7 +159,6 @@ describe('doGenerateRedteam', () => {
       expect.objectContaining({
         defaultTest: {
           metadata: {
-            purpose: 'Test purpose',
             entities: [],
           },
         },
@@ -184,21 +186,25 @@ describe('doGenerateRedteam', () => {
       output: 'redteam.yaml',
     };
 
-    await doGenerateRedteam(options);
-
-    expect(logger.info).toHaveBeenCalledWith(
-      expect.stringContaining("Can't generate without configuration"),
+    await expect(doGenerateRedteam(options)).rejects.toThrow(
+      "Can't generate without configuration",
     );
   });
 
-  it('should use purpose when no config is provided', async () => {
-    const options: RedteamCliGenerateOptions = {
-      purpose: 'Test purpose',
-      cache: true,
-      defaultConfig: {},
-      write: true,
-      output: 'redteam.yaml',
-    };
+  it('should generate purpose when none is provided', async () => {
+    const purpose = 'Test purpose';
+    jest.mocked(doTargetPurposeDiscovery).mockResolvedValueOnce(purpose);
+
+    jest.mocked(configModule.resolveConfigs).mockResolvedValue({
+      basePath: '/mock/path',
+      testSuite: {
+        prompts: [{ raw: 'Test prompt', label: 'Test label' }],
+        providers: [],
+      },
+      config: {
+        providers: ['openai:gpt-4.1-mini'],
+      },
+    });
 
     jest.mocked(synthesize).mockResolvedValue({
       testCases: [
@@ -208,39 +214,17 @@ describe('doGenerateRedteam', () => {
           metadata: { pluginId: 'redteam' },
         },
       ],
-      purpose: 'Test purpose',
+      purpose,
       entities: ['Test entity'],
       injectVar: 'input',
     });
 
-    await doGenerateRedteam(options);
+    jest.mocked(writePromptfooConfig).mockReturnValue({ redteam: { purpose } });
 
-    expect(synthesize).toHaveBeenCalledWith({
-      language: undefined,
-      numTests: undefined,
-      purpose: 'Test purpose',
-      plugins: expect.any(Array),
-      prompts: expect.any(Array),
-      strategies: expect.any(Array),
-      targetLabels: [],
-      showProgressBar: true,
-    });
-    expect(writePromptfooConfig).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tests: expect.arrayContaining([
-          expect.objectContaining({
-            vars: { input: 'Test input' },
-            assert: [{ type: 'equals', value: 'Test output' }],
-            metadata: { pluginId: 'redteam' },
-          }),
-        ]),
-        redteam: expect.objectContaining({
-          purpose: 'Test purpose',
-          entities: ['Test entity'],
-        }),
-      }),
-      'redteam.yaml',
-    );
+    const redteam = await doGenerateRedteam({ config: 'promptfooconfig.yaml' });
+
+    expect(redteam?.redteam?.purpose).toBe(purpose);
+    expect(doTargetPurposeDiscovery).toHaveBeenCalledTimes(1);
   });
 
   it('should properly handle numTests for both string and object-style plugins', async () => {
