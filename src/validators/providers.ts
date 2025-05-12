@@ -24,7 +24,6 @@ export const ProviderOptionsSchema = z
     transform: z.string().optional(),
     delay: z.number().optional(),
     env: ProviderEnvOverridesSchema.optional(),
-    purpose: z.string().optional(),
   })
   .strict();
 
@@ -69,7 +68,6 @@ export const ApiProviderSchema = z.object({
   transform: z.string().optional(),
   delay: z.number().optional(),
   config: z.any().optional(),
-  purpose: z.string().optional(),
 });
 
 export const ProviderResponseSchema = z.object({
