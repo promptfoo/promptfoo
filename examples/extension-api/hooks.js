@@ -23,6 +23,45 @@ async function extensionHook(hookName, context) {
     const totalTokenUsage =
       context.results?.reduce((sum, r) => sum + (r.response?.tokenUsage?.total || 0), 0) || 0;
     console.log(`Total token usage: ${totalTokenUsage}`);
+    
+    console.log('\n----- SYNTHETIC METRICS DEMO -----');
+    
+    const providerResults = {};
+    context.results?.forEach(result => {
+      const providerId = result.provider?.id || 'unknown';
+      if (!providerResults[providerId]) {
+        providerResults[providerId] = [];
+      }
+      providerResults[providerId].push(result);
+    });
+    
+    const providerScores = {};
+    for (const [providerId, results] of Object.entries(providerResults)) {
+      const totalScore = results.reduce((sum, r) => sum + r.score, 0);
+      const avgScore = totalScore / results.length;
+      providerScores[providerId] = {
+        avgScore,
+        totalTests: results.length,
+        passRate: (results.filter(r => r.success).length / results.length) * 100
+      };
+    }
+    
+    console.log('Provider Performance Summary:');
+    for (const [providerId, metrics] of Object.entries(providerScores)) {
+      console.log(`  ${providerId}:`);
+      console.log(`    Average Score: ${metrics.avgScore.toFixed(2)}`);
+      console.log(`    Pass Rate: ${metrics.passRate.toFixed(2)}%`);
+      console.log(`    Total Tests: ${metrics.totalTests}`);
+    }
+    
+    console.log('\nThis data could be used to create a synthetic provider by adding:');
+    console.log('  context.prompts.push({');
+    console.log('    provider: "synthetic-metrics",');
+    console.log('    metrics: {');
+    console.log('      providerPerformance: providerScores');
+    console.log('    }');
+    console.log('  });');
+    console.log('----- END DEMO -----');
   }
 }
 

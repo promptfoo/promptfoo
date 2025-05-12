@@ -8,8 +8,8 @@ providers:
   - openai:gpt-4o-mini
 
 extensions:
-  - file://hooks.py:extension_hook
-  # - file://hooks.js:extensionHook
+  # - file://hooks.py:extension_hook
+  - file://hooks.js:extensionHook
 
 tests:
   - vars:

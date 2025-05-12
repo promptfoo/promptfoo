@@ -1771,6 +1771,7 @@ describe('evaluator', () => {
             }),
           }),
         ]),
+        results: expect.any(Array),
         suite: testSuite,
       }),
     );
