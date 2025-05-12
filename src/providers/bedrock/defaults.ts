@@ -33,22 +33,24 @@ export function resolveAwsRegion(env?: EnvOverrides): string {
  */
 export function hasAwsCredentials(env?: EnvOverrides): boolean {
   // Check for explicit credentials
-  const hasExplicitCredentials =
-    (getEnvString('AWS_ACCESS_KEY_ID') || env?.AWS_ACCESS_KEY_ID) &&
-    (getEnvString('AWS_SECRET_ACCESS_KEY') || env?.AWS_SECRET_ACCESS_KEY);
+  const hasExplicitCredentials = Boolean(
+    (process.env.AWS_ACCESS_KEY_ID || (env as any)?.AWS_ACCESS_KEY_ID) &&
+      (process.env.AWS_SECRET_ACCESS_KEY || (env as any)?.AWS_SECRET_ACCESS_KEY),
+  );
 
   // Check for AWS_PROFILE or AWS_ROLE_ARN
-  const hasProfileOrRole =
-    getEnvString('AWS_PROFILE') ||
-    env?.AWS_PROFILE ||
-    getEnvString('AWS_ROLE_ARN') ||
-    env?.AWS_ROLE_ARN;
+  const hasProfileOrRole = Boolean(
+    process.env.AWS_PROFILE ||
+      (env as any)?.AWS_PROFILE ||
+      process.env.AWS_ROLE_ARN ||
+      (env as any)?.AWS_ROLE_ARN,
+  );
 
   // On AWS services, we might not need explicit credentials
   const isRunningOnAws = Boolean(
-    getEnvString('AWS_EXECUTION_ENV') || // Lambda, ECS, etc.
-      getEnvString('AWS_CONTAINER_CREDENTIALS_RELATIVE_URI') || // ECS
-      getEnvString('AWS_CONTAINER_CREDENTIALS_FULL_URI'), // EKS
+    process.env.AWS_EXECUTION_ENV || // Lambda, ECS, etc.
+      process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI || // ECS
+      process.env.AWS_CONTAINER_CREDENTIALS_FULL_URI, // EKS
   );
 
   return hasExplicitCredentials || hasProfileOrRole || isRunningOnAws;
@@ -74,10 +76,6 @@ export function getBedrockProviders(env?: EnvOverrides): DefaultProviders {
   const novaProProvider = new AwsBedrockCompletionProvider(getRegionalModelId(DEFAULT_NOVA_MODEL), {
     config: {
       region,
-      interfaceConfig: {
-        temperature: 0,
-        max_new_tokens: 1024,
-      },
     },
     env,
   });

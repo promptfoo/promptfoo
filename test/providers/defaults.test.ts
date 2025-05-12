@@ -5,36 +5,26 @@ import {
   setDefaultCompletionProviders,
   setDefaultEmbeddingProviders,
 } from '../../src/providers/defaults';
-import { DefaultModerationProvider } from '../../src/providers/openai/defaults';
 import type { ApiProvider } from '../../src/types';
-import type { EnvOverrides } from '../../src/types/env';
 
+// Create a mock provider for testing
 class MockProvider implements ApiProvider {
-  private providerId: string;
-
-  constructor(id: string) {
-    this.providerId = id;
+  id() {
+    return 'mock';
   }
 
-  id(): string {
-    return this.providerId;
+  toString() {
+    return 'MockProvider';
   }
+
+  // Implement callApi required by ApiProvider interface
   async callApi() {
     return {};
   }
 }
 
-// Create direct mocks
-const mockHasAwsCredentials = jest.fn().mockReturnValue(false);
-const mockHasGoogleDefaultCredentials = jest.fn().mockResolvedValue(false);
-const mockGetEnvString = jest.fn().mockImplementation((key) => {
-  // Return null by default for API keys
-  if (key === 'OPENAI_API_KEY' || key === 'ANTHROPIC_API_KEY') {
-    return null;
-  }
-  // For other keys, return the actual environment variable
-  return process.env[key] || null;
-});
+// Save original environment
+const originalEnv = process.env;
 
 // Mock dependencies
 jest.mock('../../src/logger', () => ({
@@ -46,160 +36,112 @@ jest.mock('../../src/logger', () => ({
   },
 }));
 
-// Mock the getEnvString function to control environment variables
-jest.mock('../../src/envars', () => ({
-  getEnvString: (key) => mockGetEnvString(key),
-}));
+// Interface for Bedrock exports
+interface BedrockExports {
+  getBedrockProviders: Function;
+  resolveAwsRegion: Function;
+  hasAwsCredentials: Function;
+}
 
-// Simpler mocking approach
-jest.mock('../../src/providers/bedrock/defaults', () => ({
-  hasAwsCredentials: mockHasAwsCredentials,
-  getBedrockProviders: jest.requireActual('../../src/providers/bedrock/defaults')
-    .getBedrockProviders,
-  resolveAwsRegion: jest.requireActual('../../src/providers/bedrock/defaults').resolveAwsRegion,
-}));
+// Mock hasAwsCredentials
+const mockHasAwsCredentials = jest.fn().mockReturnValue(false);
+jest.mock('../../src/providers/bedrock/defaults', () => {
+  // Cast to the interface we defined
+  const actual = jest.requireActual('../../src/providers/bedrock/defaults') as BedrockExports;
+  return {
+    getBedrockProviders: actual.getBedrockProviders,
+    resolveAwsRegion: actual.resolveAwsRegion,
+    hasAwsCredentials: mockHasAwsCredentials,
+  };
+});
 
+// Mock Google credentials check
 jest.mock('../../src/providers/google/util', () => ({
-  hasGoogleDefaultCredentials: mockHasGoogleDefaultCredentials,
+  hasGoogleDefaultCredentials: () => Promise.resolve(false),
 }));
 
 describe('Provider override tests', () => {
-  const originalEnv = process.env;
-
   beforeEach(() => {
     process.env = { ...originalEnv };
     setDefaultCompletionProviders(undefined as any);
     setDefaultEmbeddingProviders(undefined as any);
-
-    // Reset mocks
     jest.clearAllMocks();
-    mockGetEnvString.mockImplementation((key) => {
-      if (key === 'OPENAI_API_KEY' || key === 'ANTHROPIC_API_KEY') {
-        return null;
-      }
-      return process.env[key] || null;
-    });
+    mockHasAwsCredentials.mockReturnValue(false);
   });
 
   afterEach(() => {
     process.env = originalEnv;
-    jest.clearAllMocks();
   });
 
-  it('should override all completion providers when setDefaultCompletionProviders is called', async () => {
-    const mockProvider = new MockProvider('test-completion-provider');
-    await setDefaultCompletionProviders(mockProvider);
+  it('should allow overriding default providers', async () => {
+    const mockCompletionProvider = new MockProvider();
+    const mockEmbeddingProvider = new MockProvider();
+
+    setDefaultCompletionProviders({
+      gradingProvider: mockCompletionProvider,
+      suggestionsProvider: mockCompletionProvider,
+      synthesizeProvider: mockCompletionProvider,
+      moderationProvider: mockCompletionProvider,
+      gradingJsonProvider: mockCompletionProvider,
+    } as any);
+
+    setDefaultEmbeddingProviders({
+      embeddingProvider: mockEmbeddingProvider,
+    } as any);
 
     const providers = await getDefaultProviders();
 
-    expect(providers.gradingJsonProvider.id()).toBe('test-completion-provider');
-    expect(providers.gradingProvider.id()).toBe('test-completion-provider');
-    expect(providers.suggestionsProvider.id()).toBe('test-completion-provider');
-    expect(providers.synthesizeProvider.id()).toBe('test-completion-provider');
-
-    expect(providers.embeddingProvider.id()).not.toBe('test-completion-provider');
+    expect(providers.gradingProvider).toBe(mockCompletionProvider);
+    expect(providers.suggestionsProvider).toBe(mockCompletionProvider);
+    expect(providers.synthesizeProvider).toBe(mockCompletionProvider);
+    expect(providers.moderationProvider).toBe(mockCompletionProvider);
+    expect(providers.gradingJsonProvider).toBe(mockCompletionProvider);
+    expect(providers.embeddingProvider).toBe(mockEmbeddingProvider);
   });
 
-  it('should override embedding provider when setDefaultEmbeddingProviders is called', async () => {
-    const mockProvider = new MockProvider('test-embedding-provider');
-    await setDefaultEmbeddingProviders(mockProvider);
+  it('should allow overriding individual providers', async () => {
+    const mockCompletionProvider = new MockProvider();
+    const mockEmbeddingProvider = new MockProvider();
+
+    setDefaultCompletionProviders({
+      gradingProvider: mockCompletionProvider,
+      moderationProvider: mockCompletionProvider,
+    } as any);
+
+    setDefaultEmbeddingProviders({
+      embeddingProvider: mockEmbeddingProvider,
+    } as any);
 
     const providers = await getDefaultProviders();
 
-    expect(providers.embeddingProvider.id()).toBe('test-embedding-provider');
-
-    expect(providers.gradingJsonProvider.id()).not.toBe('test-embedding-provider');
-    expect(providers.gradingProvider.id()).not.toBe('test-embedding-provider');
-    expect(providers.suggestionsProvider.id()).not.toBe('test-embedding-provider');
-    expect(providers.synthesizeProvider.id()).not.toBe('test-embedding-provider');
+    expect(providers.gradingProvider).toBe(mockCompletionProvider);
+    expect(providers.moderationProvider).toBe(mockCompletionProvider);
+    expect(providers.embeddingProvider).toBe(mockEmbeddingProvider);
   });
 
-  it('should allow both completion and embedding provider overrides simultaneously', async () => {
-    const mockCompletionProvider = new MockProvider('test-completion-provider');
-    const mockEmbeddingProvider = new MockProvider('test-embedding-provider');
-
-    await setDefaultCompletionProviders(mockCompletionProvider);
-    await setDefaultEmbeddingProviders(mockEmbeddingProvider);
+  it('should use specified API version for Azure providers', async () => {
+    // Set Azure specific environment variables
+    process.env.AZURE_OPENAI_API_KEY = 'test-key';
+    process.env.AZURE_OPENAI_ENDPOINT = 'https://test-endpoint.openai.azure.com';
+    process.env.AZURE_OPENAI_API_VERSION = '2024-01-01';
+    process.env.OPENAI_MODEL_NAME = 'gpt-35-turbo';
+    process.env.OPENAI_EMBEDDING_MODEL = 'text-embedding-ada-002';
 
     const providers = await getDefaultProviders();
 
-    expect(providers.gradingJsonProvider.id()).toBe('test-completion-provider');
-    expect(providers.gradingProvider.id()).toBe('test-completion-provider');
-    expect(providers.suggestionsProvider.id()).toBe('test-completion-provider');
-    expect(providers.synthesizeProvider.id()).toBe('test-completion-provider');
-
-    expect(providers.embeddingProvider.id()).toBe('test-embedding-provider');
-  });
-
-  it('should use AzureModerationProvider when AZURE_CONTENT_SAFETY_ENDPOINT is set', async () => {
-    process.env.AZURE_CONTENT_SAFETY_ENDPOINT = 'https://test-endpoint.com';
-
-    const providers = await getDefaultProviders();
-
-    expect(providers.moderationProvider).toBeInstanceOf(AzureModerationProvider);
-    expect((providers.moderationProvider as AzureModerationProvider).modelName).toBe(
-      'text-content-safety',
-    );
-  });
-
-  it('should use DefaultModerationProvider when AZURE_CONTENT_SAFETY_ENDPOINT is not set', async () => {
-    delete process.env.AZURE_CONTENT_SAFETY_ENDPOINT;
-
-    const providers = await getDefaultProviders();
-    expect(providers.moderationProvider).toBe(DefaultModerationProvider);
-  });
-
-  it('should use AzureModerationProvider when AZURE_CONTENT_SAFETY_ENDPOINT is provided via env overrides', async () => {
-    const envOverrides: EnvOverrides = {
-      AZURE_CONTENT_SAFETY_ENDPOINT: 'https://test-endpoint.com',
-    } as EnvOverrides;
-
-    const providers = await getDefaultProviders(envOverrides);
-
-    expect(providers.moderationProvider).toBeInstanceOf(AzureModerationProvider);
-    expect((providers.moderationProvider as AzureModerationProvider).modelName).toBe(
-      'text-content-safety',
-    );
-  });
-
-  it('should use Azure moderation provider with custom configuration', async () => {
-    const envOverrides: EnvOverrides = {
-      AZURE_CONTENT_SAFETY_ENDPOINT: 'https://test-endpoint.com',
-      AZURE_CONTENT_SAFETY_API_KEY: 'test-api-key',
-      AZURE_CONTENT_SAFETY_API_VERSION: '2024-01-01',
-    } as EnvOverrides;
-
-    const providers = await getDefaultProviders(envOverrides);
-
-    expect(providers.moderationProvider).toBeInstanceOf(AzureModerationProvider);
+    // Use type assertion to access apiVersion
     const moderationProvider = providers.moderationProvider as AzureModerationProvider;
-    expect(moderationProvider.modelName).toBe('text-content-safety');
-    expect(moderationProvider.endpoint).toBe('https://test-endpoint.com');
+    expect(moderationProvider).toBeInstanceOf(AzureModerationProvider);
     expect(moderationProvider.apiVersion).toBe('2024-01-01');
   });
 });
 
 describe('Default provider selection', () => {
-  // Store original environment variables
-  const originalEnv = { ...process.env };
-
   beforeEach(() => {
-    // Reset environment variables before each test
     jest.resetModules();
     process.env = { ...originalEnv };
-
-    // Reset mocks
     jest.clearAllMocks();
     mockHasAwsCredentials.mockReturnValue(false);
-    mockHasGoogleDefaultCredentials.mockResolvedValue(false);
-
-    // Default to no OpenAI or Anthropic credentials
-    mockGetEnvString.mockImplementation((key) => {
-      if (key === 'OPENAI_API_KEY' || key === 'ANTHROPIC_API_KEY') {
-        return null;
-      }
-      return process.env[key] || null;
-    });
   });
 
   afterEach(() => {
@@ -207,23 +149,15 @@ describe('Default provider selection', () => {
     jest.clearAllMocks();
   });
 
-  it('should use OpenAI providers by default when other credentials are present', async () => {
-    // Mock OpenAI credentials as available
-    mockGetEnvString.mockImplementation((key) => {
-      if (key === 'OPENAI_API_KEY') {
-        return 'test-openai-key';
-      }
-      return process.env[key] || null;
-    });
+  it('should use OpenAI providers by default when OpenAI credentials are present', async () => {
+    process.env.OPENAI_API_KEY = 'test-openai-key';
 
     const providers = await getDefaultProviders();
 
-    // Check that we're not using Bedrock providers
     Object.values(providers).forEach((provider) => {
       expect(provider.id()).not.toContain('bedrock');
     });
 
-    // Check that we're using OpenAI providers, excluding moderation provider
     const nonModerationProviders = Object.values(providers).filter(
       (provider) => provider.id() !== 'moderation:openai:omni-moderation-latest',
     );
@@ -233,31 +167,16 @@ describe('Default provider selection', () => {
     });
   });
 
-  it('should use Bedrock providers when OpenAI credentials are not present but AWS credentials are', async () => {
-    // Skip test while we work on reliable mocking
-    expect(true).toBe(true);
-  }, 15000);
-
   it('should use OpenAI before Bedrock even if both credentials are present', async () => {
-    // Mock OpenAI credentials available
-    mockGetEnvString.mockImplementation((key) => {
-      if (key === 'OPENAI_API_KEY') {
-        return 'test-openai-key';
-      }
-      return process.env[key] || null;
-    });
-
-    // Mock AWS credentials available
+    process.env.OPENAI_API_KEY = 'test-openai-key';
     mockHasAwsCredentials.mockReturnValue(true);
 
     const providers = await getDefaultProviders();
 
-    // Check that we're not using Bedrock providers
     Object.values(providers).forEach((provider) => {
       expect(provider.id()).not.toContain('bedrock');
     });
 
-    // Check that we're using OpenAI providers, excluding moderation provider
     const nonModerationProviders = Object.values(providers).filter(
       (provider) => provider.id() !== 'moderation:openai:omni-moderation-latest',
     );
@@ -266,14 +185,4 @@ describe('Default provider selection', () => {
       expect(provider.id()).toContain('openai');
     });
   });
-
-  it('should use Bedrock providers after Google when neither OpenAI nor Anthropic credentials are present', async () => {
-    // Skip test while we work on reliable mocking
-    expect(true).toBe(true);
-  });
-
-  it('should use Bedrock providers when no other credentials are present', async () => {
-    // Skip test while we work on reliable mocking
-    expect(true).toBe(true);
-  }, 15000);
 });

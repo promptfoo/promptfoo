@@ -284,19 +284,31 @@ export type EnvVars = {
 
   // Pi Labs
   WITHPI_API_KEY?: string;
+
+  //=========================================================================
+  // AWS Configuration - aws-sdk will read these directly
+  //=========================================================================
+  AWS_ACCESS_KEY_ID?: string;
+  AWS_SECRET_ACCESS_KEY?: string;
+  AWS_PROFILE?: string;
+  AWS_ROLE_ARN?: string;
+  AWS_EXECUTION_ENV?: string;
+  AWS_CONTAINER_CREDENTIALS_RELATIVE_URI?: string;
+  AWS_CONTAINER_CREDENTIALS_FULL_URI?: string;
+  AWS_REGION?: string;
+  AWS_DEFAULT_REGION?: string;
+  AWS_SAGEMAKER_MAX_TOKENS?: string;
+  AWS_SAGEMAKER_TEMPERATURE?: string;
+  AWS_SAGEMAKER_TOP_P?: string;
+  AWS_SAGEMAKER_MAX_RETRIES?: string;
 } & EnvOverrides;
 
 // Allow string access to any key for environment variables not explicitly listed
 export type EnvVarKey = keyof EnvVars;
 
 /**
- * Get an environment variable.
- * @param key The name of the environment variable.
- * @param defaultValue Optional default value if the environment variable is not set.
- * @returns The value of the environment variable, or the default value if provided.
+ * Get an environment variable as a string
  */
-export function getEnvString(key: EnvVarKey): string | undefined;
-export function getEnvString(key: EnvVarKey, defaultValue: string): string;
 export function getEnvString(key: EnvVarKey, defaultValue?: string): string | undefined {
   // First check if the key exists in CLI state env config
   if (cliState.config?.env && typeof cliState.config.env === 'object') {
