@@ -367,6 +367,13 @@ While promptfoo is primarily written in TypeScript, we support custom Python pro
 
 If you're adding new features or changing existing ones, please update the relevant documentation. We use [Docusaurus](https://docusaurus.io/) for our documentation. We strongly encourage examples and guides as well.
 
+To run the documentation
+
+```bash
+cd site
+npm start
+```
+
 ## Advanced Topics
 
 ### Database
