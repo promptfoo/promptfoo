@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { type Command, Option } from 'commander';
+import dedent from 'dedent';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import path from 'path';
@@ -8,6 +9,7 @@ import { z } from 'zod';
 import cliState from '../../cliState';
 import { VERSION } from '../../constants';
 import { getEnvString } from '../../envars';
+import { fetchWithProxy } from '../../fetch';
 import { getUserEmail } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger, { setLogLevel } from '../../logger';
@@ -21,15 +23,20 @@ import { writePromptfooConfig } from '../../util/config/manage';
 import invariant from '../../util/invariant';
 import { getRemoteGenerationUrl } from '../remoteGeneration';
 
-const ArgsSchema = z.object({
-  config: z.string().optional(),
-  output: z.string().optional(),
-  target: z.string().optional(),
-  envPath: z.string().optional(),
-  verbose: z.boolean().optional(),
-  preview: z.boolean().optional(),
-  turns: z.number().optional(),
-});
+const ArgsSchema = z
+  .object({
+    config: z.string().optional(),
+    output: z.string().optional(),
+    target: z.string().optional(),
+    envPath: z.string().optional(),
+    verbose: z.boolean().optional(),
+    preview: z.boolean().optional(),
+    turns: z.number().optional(),
+  })
+  .refine((data) => !(data.config && data.target), {
+    message: 'Cannot specify both config and target!',
+    path: ['config', 'target'],
+  });
 
 type Args = z.infer<typeof ArgsSchema>;
 /**
@@ -62,7 +69,7 @@ export async function doTargetPurposeDiscovery(
   );
 
   while (true) {
-    const res = await fetch(getRemoteGenerationUrl(), {
+    const res = await fetchWithProxy(getRemoteGenerationUrl(), {
       body: JSON.stringify({
         task: 'target-purpose-discovery',
         conversationHistory,
@@ -139,7 +146,7 @@ async function savePurpose(targetId: string, purpose: string) {
 
   logger.debug(`Saving purpose to ${url}`);
 
-  const res = await fetch(url, {
+  const res = await fetchWithProxy(url, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
@@ -162,7 +169,12 @@ export function discoverCommand(program: Command) {
   program
     .command('discover')
     .description(
-      "Automatically discover a target application's purpose, enhancing attack probe efficacy.",
+      dedent`
+        Automatically discover a target application's purpose, enhancing attack probe efficacy.
+
+        If neither a config file nor a target ID is provided, the current working directory will be checked for a promptfooconfig.yaml file,
+        and the target will be discovered from the first provider in that config.
+      `,
     )
     .option(
       '-c, --config <path>',
@@ -226,6 +238,16 @@ export function discoverCommand(program: Command) {
         // Let the internal error handling bubble up:
         const providerOptions = await getProviderFromCloud(args.target);
         target = await loadApiProvider(providerOptions.id, { options: providerOptions });
+      }
+      // Check the current working directory for a promptfooconfig.yaml file:
+      else if (fs.existsSync(path.join(process.cwd(), 'promptfooconfig.yaml'))) {
+        const configPath = path.join(process.cwd(), 'promptfooconfig.yaml');
+        config = await readConfig(configPath);
+        invariant(config, 'An error occurred loading the config');
+        invariant(config.providers, 'Config must contain targets or providers');
+        const providers = await loadApiProviders(config.providers);
+        target = providers[0];
+        logger.info(`Using config from ${chalk.italic(configPath)}`);
       }
       // A config or a target must be provided:
       else {

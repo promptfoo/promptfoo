@@ -113,8 +113,9 @@ export async function doGenerateRedteam(
       const providers = await loadApiProviders(resolved.config.providers);
       targetPurpose = await doTargetPurposeDiscovery(providers[0]);
     }
-  } else if (options.purpose && targetPurpose) {
-    // The purpose was passed in via the command line, so we can just have a dummy test suite for standalone invocation
+  }
+  // The purpose was passed in via the command line, so we can just have a dummy test suite for standalone invocation
+  else if (options.purpose && targetPurpose) {
     testSuite = {
       prompts: [],
       providers: [],
