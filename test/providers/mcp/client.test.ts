@@ -1,9 +1,13 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { MCPClient } from '../../../src/providers/mcp/client';
 
 jest.mock('@modelcontextprotocol/sdk/client/index.js');
 jest.mock('@modelcontextprotocol/sdk/client/stdio.js');
+jest.mock('@modelcontextprotocol/sdk/client/streamableHttp.js');
+jest.mock('@modelcontextprotocol/sdk/client/sse.js');
 
 describe('MCPClient', () => {
   let mcpClient: MCPClient;
@@ -98,7 +102,23 @@ describe('MCPClient', () => {
       );
     });
 
-    it('should throw error for remote server', async () => {
+    it('should initialize with remote server using StreamableHTTPClientTransport', async () => {
+      const mockClient = {
+        _clientInfo: {},
+        _capabilities: {},
+        registerCapabilities: jest.fn(),
+        assertCapability: jest.fn(),
+        connect: jest.fn(),
+        listTools: jest.fn().mockResolvedValue({
+          tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+        }),
+        close: jest.fn(),
+      };
+      jest.mocked(Client).mockImplementation(() => mockClient as any);
+
+      const mockTransport = { close: jest.fn() };
+      jest.mocked(StreamableHTTPClientTransport).mockImplementation(() => mockTransport as any);
+
       mcpClient = new MCPClient({
         enabled: true,
         server: {
@@ -106,7 +126,49 @@ describe('MCPClient', () => {
         },
       });
 
-      await expect(mcpClient.initialize()).rejects.toThrow('Remote MCP servers are not supported');
+      await mcpClient.initialize();
+
+      expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(expect.any(URL));
+      expect(mockClient.connect).toHaveBeenCalledWith(mockTransport);
+    });
+
+    it('should fall back to SSEClientTransport if StreamableHTTPClientTransport fails', async () => {
+      const mockClient = {
+        _clientInfo: {},
+        _capabilities: {},
+        registerCapabilities: jest.fn(),
+        assertCapability: jest.fn(),
+        connect: jest.fn(),
+        listTools: jest.fn().mockResolvedValue({
+          tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+        }),
+        close: jest.fn(),
+      };
+      jest.mocked(Client).mockImplementation(() => mockClient as any);
+
+      // Make StreamableHTTPClientTransport throw on connect
+      const mockStreamable = { close: jest.fn() };
+      jest.mocked(StreamableHTTPClientTransport).mockImplementation(() => mockStreamable as any);
+      mockClient.connect
+        .mockImplementationOnce(() => {
+          throw new Error('Connection failed');
+        })
+        .mockResolvedValueOnce(undefined);
+
+      jest.mocked(SSEClientTransport).mockImplementation(() => ({ close: jest.fn() }) as any);
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: {
+          url: 'http://localhost:3000',
+        },
+      });
+
+      await mcpClient.initialize();
+
+      expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(expect.any(URL));
+      expect(SSEClientTransport).toHaveBeenCalledWith(expect.any(URL));
+      expect(mockClient.connect).toHaveBeenCalledTimes(2);
     });
 
     it('should filter tools according to config.tools', async () => {
