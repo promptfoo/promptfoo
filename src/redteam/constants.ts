@@ -1442,3 +1442,5 @@ export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
   RAG: 'Recommended plugins plus additional tests for RAG specific scenarios like access control',
   Recommended: 'A broad set of plugins recommended by Promptfoo',
 } as const;
+
+export { _ALL_STRATEGIES };
