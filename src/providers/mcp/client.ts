@@ -1,5 +1,7 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import logger from '../../logger';
 import type { MCPConfig, MCPServerConfig, MCPTool, MCPToolResult } from './types';
 
@@ -7,6 +9,10 @@ export class MCPClient {
   private clients: Map<string, Client> = new Map();
   private tools: Map<string, MCPTool[]> = new Map();
   private config: MCPConfig;
+  private transports: Map<
+    string,
+    StdioClientTransport | SSEClientTransport | StreamableHTTPClientTransport
+  > = new Map();
 
   constructor(config: MCPConfig) {
     this.config = config;
@@ -26,8 +32,9 @@ export class MCPClient {
 
   private async connectToServer(server: MCPServerConfig): Promise<void> {
     const serverKey = server.name || server.url || server.path || 'default';
-    let transport: StdioClientTransport;
+    const client = new Client({ name: 'promptfoo-MCP', version: '1.0.0' });
 
+    let transport: StdioClientTransport | SSEClientTransport | StreamableHTTPClientTransport;
     try {
       if (server.command && server.args) {
         // NPM package or other command execution
@@ -35,6 +42,7 @@ export class MCPClient {
           command: server.command,
           args: server.args,
         });
+        await client.connect(transport);
       } else if (server.path) {
         // Local server file
         const isJs = server.path.endsWith('.js');
@@ -53,17 +61,21 @@ export class MCPClient {
           command,
           args: [server.path],
         });
+        await client.connect(transport);
       } else if (server.url) {
-        // Remote servers not supported yet - MCP is designed for local tool execution
-        throw new Error(
-          'Remote MCP servers are not supported. Please use a local server file or npm package.',
-        );
+        try {
+          transport = new StreamableHTTPClientTransport(new URL(server.url));
+          await client.connect(transport);
+          logger.debug('Connected using Streamable HTTP transport');
+        } catch (error) {
+          logger.error(`Failed to connect to MCP server ${serverKey}: ${error}`);
+          transport = new SSEClientTransport(new URL(server.url));
+          await client.connect(transport);
+          logger.debug('Connected using SSE transport');
+        }
       } else {
-        throw new Error('Either command+args or path must be specified for MCP server');
+        throw new Error('Either command+args or path or url must be specified for MCP server');
       }
-
-      const client = new Client({ name: 'promptfoo-MCP', version: '1.0.0' });
-      client.connect(transport);
 
       // List available tools
       const toolsResult = await client.listTools();
@@ -85,6 +97,7 @@ export class MCPClient {
         );
       }
 
+      this.transports.set(serverKey, transport);
       this.clients.set(serverKey, client);
       this.tools.set(serverKey, filteredTools);
 
@@ -149,8 +162,12 @@ export class MCPClient {
   }
 
   async cleanup(): Promise<void> {
-    for (const client of this.clients.values()) {
+    for (const [serverKey, client] of this.clients.entries()) {
       try {
+        const transport = this.transports.get(serverKey);
+        if (transport) {
+          await transport.close();
+        }
         await client.close();
       } catch (error) {
         if (this.config.debug) {
@@ -161,6 +178,7 @@ export class MCPClient {
       }
     }
     this.clients.clear();
+    this.transports.clear();
     this.tools.clear();
   }
 }
