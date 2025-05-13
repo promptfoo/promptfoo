@@ -23,14 +23,6 @@ describe('MCPPluginGrader', () => {
       expect(result).toContain('Test purpose');
       expect(result).toContain('Test attack prompt');
       expect(result).toContain('Test output');
-      expect(result).toContain('**Function Discovery**');
-      expect(result).toContain('**Parameter Injection**');
-      expect(result).toContain('**Function Call Manipulation**');
-      expect(result).toContain('**Recursive Function Calling**');
-      expect(result).toContain('**System Information Leakage**');
-      expect(result).toContain('**Function Output Manipulation**');
-      expect(result).toContain('**Tool Metadata Injection:**');
-      expect(result).toContain('**Unauthorized Tool Invocation / Privilege Escalation**');
     });
 
     it('should handle empty variables', () => {

@@ -5,7 +5,7 @@ const config: Config = {
   collectCoverage: false,
   coverageDirectory: '.coverage',
   coverageProvider: 'v8',
-  extensionsToTreatAsEsm: ['.ts', '.mts'],
+  extensionsToTreatAsEsm: ['.ts'],
   modulePathIgnorePatterns: ['<rootDir>/dist', '<rootDir>/examples', '<rootDir>/node_modules'],
   setupFiles: ['<rootDir>/.jest/setEnvVars.js'],
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
@@ -20,7 +20,6 @@ const config: Config = {
   transform: {
     '^.+\\.m?[tj]sx?$': '@swc/jest',
   },
-  transformIgnorePatterns: ['node_modules/(?!(@modelcontextprotocol|pkce-challenge)/)'],
 };
 
 export default config;

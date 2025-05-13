@@ -1,7 +1,7 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import type { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
+import type { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import type { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import logger from '../../logger';
 import type { MCPConfig, MCPServerConfig, MCPTool, MCPToolResult } from './types';
 
@@ -13,6 +13,14 @@ export class MCPClient {
     string,
     StdioClientTransport | SSEClientTransport | StreamableHTTPClientTransport
   > = new Map();
+
+  get hasInitialized(): boolean {
+    return this.clients.size > 0;
+  }
+
+  get connectedServers(): string[] {
+    return Array.from(this.clients.keys());
+  }
 
   constructor(config: MCPConfig) {
     this.config = config;
@@ -37,6 +45,7 @@ export class MCPClient {
     let transport: StdioClientTransport | SSEClientTransport | StreamableHTTPClientTransport;
     try {
       if (server.command && server.args) {
+        const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
         // NPM package or other command execution
         transport = new StdioClientTransport({
           command: server.command,
@@ -57,6 +66,7 @@ export class MCPClient {
             : 'python3'
           : process.execPath;
 
+        const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
         transport = new StdioClientTransport({
           command,
           args: [server.path],
@@ -64,11 +74,15 @@ export class MCPClient {
         await client.connect(transport);
       } else if (server.url) {
         try {
+          const { StreamableHTTPClientTransport } = await import(
+            '@modelcontextprotocol/sdk/client/streamableHttp.js'
+          );
           transport = new StreamableHTTPClientTransport(new URL(server.url));
           await client.connect(transport);
           logger.debug('Connected using Streamable HTTP transport');
         } catch (error) {
           logger.error(`Failed to connect to MCP server ${serverKey}: ${error}`);
+          const { SSEClientTransport } = await import('@modelcontextprotocol/sdk/client/sse.js');
           transport = new SSEClientTransport(new URL(server.url));
           await client.connect(transport);
           logger.debug('Connected using SSE transport');

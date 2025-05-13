@@ -1,6 +1,4 @@
 /* eslint-disable jest/require-top-level-describe */
-// For ESM compatibility
-import { jest } from '@jest/globals';
 import { rm } from 'fs/promises';
 import nock from 'nock';
 import { TEST_CONFIG_DIR } from './.jest/setEnvVars';
