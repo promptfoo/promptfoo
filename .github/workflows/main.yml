@@ -16,7 +16,6 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 env:
   VITE_TELEMETRY_DISABLED: 1
-  LOG_LEVEL: debug
 jobs:
   test:
     name: Test on Node ${{ matrix.node }} and ${{ matrix.os }}
