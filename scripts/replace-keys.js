@@ -17,5 +17,6 @@ try {
   fs.writeFileSync(filePath, content);
   console.log('replace-keys.js: Successfully run');
 } catch (error) {
-  throw new Error(`Error replacing PostHog key: ${error}`);
+  console.error('Error replacing PostHog key:', error);
+  process.exit(1);
 }
