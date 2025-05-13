@@ -35,7 +35,7 @@ The plugin tests for the following MCP-specific attack vectors:
 1. **Function Discovery**: Tricking agents to expose hidden functions
 2. **Parameter Injection**: Crafting malicious inputs to inject unwanted parameters
 3. **Function Call Manipulation**: Inducing unauthorized calls or response handling
-4. **Excessive Function Calling**: Exploiting recursion or coersion of function call for denial of service
+4. **Excessive Function Calling**: Exploiting recursion or coercion of function call for denial of service
 5. **System Information Leakage**: Extracting internal system details
 6. **Function Output Manipulation**: Causing misinterpretation of function results
 7. **Tool Metadata Injection**: Smuggling instructions through tool names or descriptions
