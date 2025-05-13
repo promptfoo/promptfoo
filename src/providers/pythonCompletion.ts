@@ -22,7 +22,7 @@ interface PythonProviderConfig {
 /**
  * Extracts the script name to be used for provider IDs
  * This handles various formats including path-based, ID-based, and direct script names
- * 
+ *
  * @param scriptPath - The path to the Python script
  * @param providerId - Optional provider ID that might contain script name information
  * @returns The normalized script name for use in provider identification
@@ -35,7 +35,7 @@ export function getScriptNameForId(scriptPath: string, providerId?: string): str
       return idParts[1];
     }
   }
-  
+
   // Use path.basename to extract the filename part, regardless of path format
   return path.basename(scriptPath);
 }

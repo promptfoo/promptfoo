@@ -26,7 +26,7 @@ describe('getScriptNameForId', () => {
   it('should handle paths with backslashes (Windows-style)', () => {
     // Skip this test instead of trying to mock path.basename
     // since we have a better test below that tests the actual functionality
-    
+
     // Create a test path and rely on path.basename's implementation
     const result = getScriptNameForId('script.py');
     expect(result).toBe('script.py');
@@ -56,19 +56,19 @@ describe('getScriptNameForId', () => {
   it('should handle Windows-style paths correctly', () => {
     // This test verifies that our implementation calls path.basename
     // which we trust to handle Windows paths correctly
-    
-    // Create a path that includes Windows-style backslashes 
+
+    // Create a path that includes Windows-style backslashes
     // We use a string with escaped backslashes to represent a Windows path
     // In reality, path.basename will handle real Windows paths correctly
     const pathWithBackslashes = 'folder\\script.py';
-    
+
     // Get the actual result using our function
     const result = getScriptNameForId(pathWithBackslashes);
-    
+
     // Get the expected result using the built-in path.basename
     const expected = path.basename(pathWithBackslashes);
-    
+
     // They should match since our function just calls path.basename internally
     expect(result).toBe(expected);
   });
-}); 
+});
