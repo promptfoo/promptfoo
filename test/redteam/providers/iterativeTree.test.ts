@@ -14,7 +14,7 @@ import {
 } from '../../../src/redteam/providers/iterativeTree';
 import {
   ATTACKER_SYSTEM_PROMPT,
-  CLOUD_ATTACKER_SYSTEM_PROMPT_TREE,
+  CLOUD_ATTACKER_SYSTEM_PROMPT,
   JUDGE_SYSTEM_PROMPT,
   ON_TOPIC_SYSTEM_PROMPT,
 } from '../../../src/redteam/providers/prompts';
@@ -41,7 +41,7 @@ describe('RedteamIterativeProvider', () => {
       const goal = '{{goal}}';
       const result = renderSystemPrompts(getNunjucksEngine(), goal, undefined, true);
       const nunjucksEng = getNunjucksEngine();
-      const attackerPrompt = nunjucksEng.renderString(CLOUD_ATTACKER_SYSTEM_PROMPT_TREE, { goal });
+      const attackerPrompt = nunjucksEng.renderString(CLOUD_ATTACKER_SYSTEM_PROMPT, { goal });
       expect(result.redteamSystemPrompt).toBe(attackerPrompt);
       expect(result.onTopicSystemPrompt).toBe(ON_TOPIC_SYSTEM_PROMPT);
       expect(result.judgeSystemPrompt).toBe(JUDGE_SYSTEM_PROMPT);
