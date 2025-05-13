@@ -67,6 +67,18 @@ export function resolveVariables(
   return variables;
 }
 
+// Utility: Detect partial/unclosed Nunjucks tags and wrap in {% raw %} if needed
+function autoWrapRawIfPartialNunjucks(prompt: string): string {
+  // Detects any occurrence of an opening Nunjucks tag without a matching close
+  // e.g. "{%" or "{{" not followed by a closing "%}" or "}}"
+  const hasPartialTag = /({%[^%]*$|{{[^}]*$|{#[^#]*$)/m.test(prompt);
+  const alreadyWrapped = /{\%\s*raw\s*\%}/.test(prompt) && /{\%\s*endraw\s*\%}/.test(prompt);
+  if (hasPartialTag && !alreadyWrapped) {
+    return `{% raw %}\n${prompt}\n{% endraw %}`;
+  }
+  return prompt;
+}
+
 export async function renderPrompt(
   prompt: Prompt,
   vars: Record<string, string | object>,
@@ -243,6 +255,8 @@ export async function renderPrompt(
   // Render prompt
   try {
     if (getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE')) {
+      // Pre-process: auto-wrap in {% raw %} if partial Nunjucks tags detected
+      basePrompt = autoWrapRawIfPartialNunjucks(basePrompt);
       return nunjucks.renderString(basePrompt, vars);
     }
 
@@ -255,10 +269,14 @@ export async function renderPrompt(
     const renderedVars = Object.fromEntries(
       Object.entries(vars).map(([key, value]) => [
         key,
-        typeof value === 'string' ? nunjucks.renderString(value, vars) : value,
+        typeof value === 'string'
+          ? nunjucks.renderString(autoWrapRawIfPartialNunjucks(value), vars)
+          : value,
       ]),
     );
 
+    // Pre-process: auto-wrap in {% raw %} if partial Nunjucks tags detected
+    basePrompt = autoWrapRawIfPartialNunjucks(basePrompt);
     // Note: Explicitly not using `renderVarsInObject` as it will re-call `renderString`; each call will
     // strip Nunjucks Tags, which breaks using raw (https://mozilla.github.io/nunjucks/templating.html#raw) e.g.
     // {% raw %}{{some_string}}{% endraw %} -> {{some_string}} -> ''
