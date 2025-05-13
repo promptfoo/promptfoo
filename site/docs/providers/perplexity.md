@@ -146,6 +146,7 @@ providers:
 ```
 
 The cost calculation includes:
+
 - Different rates for input and output tokens
 - Model-specific pricing (sonar, sonar-pro, sonar-reasoning, etc.)
 - Usage tier considerations (high, medium, low)

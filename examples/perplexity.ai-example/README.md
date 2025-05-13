@@ -39,6 +39,7 @@ This example includes multiple configuration files to demonstrate different Perp
 ### 1. Basic Model Comparison (`promptfooconfig.yaml`)
 
 Compares different Perplexity search models against a traditional non-search model (GPT-4o-mini):
+
 - `sonar`: Lightweight search model
 - `sonar-pro`: Advanced search model with high context
 - `sonar-reasoning`: Fast reasoning model with step-by-step thinking
@@ -50,6 +51,7 @@ npx promptfoo@latest eval -c promptfooconfig.yaml
 ### 2. Structured Outputs (`promptfooconfig.structured-output.yaml`)
 
 Demonstrates Perplexity's structured output capabilities:
+
 - JSON schema enforcement for movie information
 - Regex pattern matching for postal codes
 
@@ -60,6 +62,7 @@ npx promptfoo@latest eval -c promptfooconfig.structured-output.yaml
 ### 3. Advanced Search Filters (`promptfooconfig.search-filters.yaml`)
 
 Shows how to use advanced search filtering options:
+
 - Date range filtering for time-sensitive queries
 - Location-based results for geographical context
 - Domain filtering for trusted sources
@@ -71,6 +74,7 @@ npx promptfoo@latest eval -c promptfooconfig.search-filters.yaml
 ### 4. Research and Reasoning (`promptfooconfig.research-reasoning.yaml`)
 
 Demonstrates specialized models for research and reasoning:
+
 - `sonar-deep-research`: Comprehensive research model
 - `sonar-reasoning-pro`: Advanced reasoning with Chain of Thought
 - `r1-1776`: Offline model without search capabilities

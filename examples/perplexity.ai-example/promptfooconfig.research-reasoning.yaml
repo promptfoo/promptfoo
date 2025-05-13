@@ -20,7 +20,7 @@ providers:
       temperature: 0.2
       max_tokens: 3000
       # This provider will be used for the second prompt only
-  
+
   - id: perplexity:r1-1776
     config:
       temperature: 0.2
@@ -29,8 +29,8 @@ providers:
 
 tests:
   - vars:
-      research_topic: "advancements in protein folding algorithms in 2024"
-      math_problem: "A ball is thrown upward from the ground with an initial velocity of 25 m/s. How high will the ball go and how long will it take to reach that height? (Use g = 9.8 m/s²)"
+      research_topic: 'advancements in protein folding algorithms in 2024'
+      math_problem: 'A ball is thrown upward from the ground with an initial velocity of 25 m/s. How high will the ball go and how long will it take to reach that height? (Use g = 9.8 m/s²)'
   - vars:
-      research_topic: "the impact of large language models on education"
-      math_problem: "A cylindrical water tank has a radius of 3 meters and a height of 8 meters. It is being filled at a rate of 2 cubic meters per minute. How long will it take to fill the tank? (Use π = 3.14)" 
+      research_topic: 'the impact of large language models on education'
+      math_problem: 'A cylindrical water tank has a radius of 3 meters and a height of 8 meters. It is being filled at a rate of 2 cubic meters per minute. How long will it take to fill the tank? (Use π = 3.14)'

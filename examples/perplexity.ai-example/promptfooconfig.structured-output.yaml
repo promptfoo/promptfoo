@@ -20,10 +20,7 @@ providers:
               title: { type: 'string' }
               director: { type: 'string' }
               year: { type: 'integer' }
-              genres: { 
-                type: 'array',
-                items: { type: 'string' }
-              }
+              genres: { type: 'array', items: { type: 'string' } }
               plot_summary: { type: 'string' }
             required: ['title', 'director', 'year', 'genres', 'plot_summary']
       # This provider will be used for the first prompt only

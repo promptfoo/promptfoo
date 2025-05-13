@@ -1,5 +1,9 @@
-import { calculatePerplexityCost, createPerplexityProvider } from '../../src/providers/perplexity';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import {
+  PerplexityProvider,
+  calculatePerplexityCost,
+  createPerplexityProvider,
+} from '../../src/providers/perplexity';
 
 jest.mock('../../src/providers/openai/chat');
 
@@ -12,29 +16,15 @@ describe('Perplexity Provider', () => {
     it('should create a provider with default settings', () => {
       const provider = createPerplexityProvider('perplexity:sonar');
 
-      expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
-      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('sonar', {
-        config: {
-          apiBaseUrl: 'https://api.perplexity.ai',
-          apiKeyEnvar: 'PERPLEXITY_API_KEY',
-          costCalculator: expect.any(Function),
-          passthrough: {},
-        },
-      });
+      expect(provider).toBeInstanceOf(PerplexityProvider);
     });
 
     it('should use sonar as the default model if none is specified', () => {
       const provider = createPerplexityProvider('perplexity:');
 
-      expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
-      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('sonar', {
-        config: {
-          apiBaseUrl: 'https://api.perplexity.ai',
-          apiKeyEnvar: 'PERPLEXITY_API_KEY',
-          costCalculator: expect.any(Function),
-          passthrough: {},
-        },
-      });
+      expect(provider).toBeInstanceOf(PerplexityProvider);
+      // @ts-ignore - accessing private property for testing
+      expect(provider.modelName).toBe('sonar');
     });
 
     it('should handle specific Perplexity models', () => {
@@ -49,161 +39,145 @@ describe('Perplexity Provider', () => {
       for (const model of models) {
         const provider = createPerplexityProvider(`perplexity:${model}`);
 
-        expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
-        expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(model, {
-          config: {
-            apiBaseUrl: 'https://api.perplexity.ai',
-            apiKeyEnvar: 'PERPLEXITY_API_KEY',
-            costCalculator: expect.any(Function),
-            passthrough: {},
-          },
-        });
+        expect(provider).toBeInstanceOf(PerplexityProvider);
+        // @ts-ignore - accessing private property for testing
+        expect(provider.modelName).toBe(model);
       }
     });
 
-    it('should pass through additional config options', () => {
-      const provider = createPerplexityProvider('perplexity:sonar', {
-        config: {
-          config: {
-            temperature: 0.7,
-            max_tokens: 1000,
-            search_domain_filter: ['example.com'],
-            search_recency_filter: 'week',
-            return_related_questions: true,
-          },
-        },
-      });
-
-      expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
-      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('sonar', {
-        config: {
-          apiBaseUrl: 'https://api.perplexity.ai',
-          apiKeyEnvar: 'PERPLEXITY_API_KEY',
-          costCalculator: expect.any(Function),
-          passthrough: {
-            temperature: 0.7,
-            max_tokens: 1000,
-            search_domain_filter: ['example.com'],
-            search_recency_filter: 'week',
-            return_related_questions: true,
-          },
-        },
-      });
-    });
-
-    it('should handle response_format option', () => {
-      const responseFormat = {
-        type: 'json_schema',
-        json_schema: {
-          schema: {
-            type: 'object',
-            properties: {
-              name: { type: 'string' },
-              age: { type: 'number' },
-            },
-          },
-        },
+    it('should pass through configuration options', () => {
+      const config = {
+        temperature: 0.7,
+        max_tokens: 1000,
+        search_domain_filter: ['example.com'],
+        search_recency_filter: 'week',
+        return_related_questions: true,
       };
 
       const provider = createPerplexityProvider('perplexity:sonar', {
-        config: {
-          config: {
-            response_format: responseFormat,
-          },
-        },
+        config: { config },
       });
 
-      expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
-      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('sonar', {
-        config: {
-          apiBaseUrl: 'https://api.perplexity.ai',
-          apiKeyEnvar: 'PERPLEXITY_API_KEY',
-          costCalculator: expect.any(Function),
-          passthrough: {
-            response_format: responseFormat,
-          },
-        },
-      });
+      expect(provider).toBeInstanceOf(PerplexityProvider);
+      // Verify config was passed through to constructor
+      // @ts-ignore - accessing private property for testing
+      expect(provider.config).toMatchObject(expect.objectContaining(config));
+    });
+  });
+
+  describe('PerplexityProvider', () => {
+    it('should initialize with the correct API base URL and key environment variable', () => {
+      const provider = new PerplexityProvider('sonar');
+
+      // @ts-ignore - accessing private properties for testing
+      expect(provider.config.apiBaseUrl).toBe('https://api.perplexity.ai');
+      // @ts-ignore - accessing private properties for testing
+      expect(provider.config.apiKeyEnvar).toBe('PERPLEXITY_API_KEY');
     });
 
-    it('should handle web search options', () => {
-      const webSearchOptions = {
-        search_context_size: 'high',
-        user_location: {
-          latitude: 37.7749,
-          longitude: -122.4194,
-          country: 'US',
-        },
-      };
-
-      const provider = createPerplexityProvider('perplexity:sonar-pro', {
-        config: {
-          config: {
-            web_search_options: webSearchOptions,
-          },
-        },
-      });
-
-      expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
-      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('sonar-pro', {
-        config: {
-          apiBaseUrl: 'https://api.perplexity.ai',
-          apiKeyEnvar: 'PERPLEXITY_API_KEY',
-          costCalculator: expect.any(Function),
-          passthrough: {
-            web_search_options: webSearchOptions,
-          },
-        },
-      });
-    });
-
-    it('should handle date filter options', () => {
-      const provider = createPerplexityProvider('perplexity:sonar', {
-        config: {
-          config: {
-            search_after_date_filter: '01/01/2024',
-            search_before_date_filter: '05/31/2024',
-          },
-        },
-      });
-
-      expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
-      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('sonar', {
-        config: {
-          apiBaseUrl: 'https://api.perplexity.ai',
-          apiKeyEnvar: 'PERPLEXITY_API_KEY',
-          costCalculator: expect.any(Function),
-          passthrough: {
-            search_after_date_filter: '01/01/2024',
-            search_before_date_filter: '05/31/2024',
-          },
-        },
-      });
-    });
-
-    it('should set usage tier for cost calculation', () => {
+    it('should set the correct usage tier', () => {
       const tiers = ['high', 'medium', 'low'] as const;
 
       for (const tier of tiers) {
-        const provider = createPerplexityProvider('perplexity:sonar', {
+        const provider = new PerplexityProvider('sonar', {
           config: {
-            config: {
-              usage_tier: tier,
-            },
+            usage_tier: tier,
           },
         });
 
-        expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
-        expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('sonar', expect.anything());
-        
-        // Get the cost calculator function
-        const call = (OpenAiChatCompletionProvider as jest.Mock).mock.calls.pop();
-        const config = call[1].config;
-        
-        // Call the cost calculator and verify it works
-        const cost = config.costCalculator(100, 100);
-        expect(typeof cost).toBe('number');
+        // @ts-ignore - accessing private property for testing
+        expect(provider.usageTier).toBe(tier);
       }
+    });
+
+    it('should default to "medium" usage tier if not specified', () => {
+      const provider = new PerplexityProvider('sonar');
+
+      // @ts-ignore - accessing private property for testing
+      expect(provider.usageTier).toBe('medium');
+    });
+
+    it('should have the correct id() method', () => {
+      const provider = new PerplexityProvider('sonar-pro');
+      expect(provider.id()).toBe('perplexity:sonar-pro');
+    });
+
+    it('should have the correct toString() method', () => {
+      const provider = new PerplexityProvider('sonar');
+      expect(provider.toString()).toBe('[Perplexity Provider sonar]');
+    });
+
+    it('should have the correct toJSON() method', () => {
+      const provider = new PerplexityProvider('sonar-pro', {
+        config: {
+          temperature: 0.7,
+          max_tokens: 1000,
+        },
+      });
+
+      expect(provider.toJSON()).toEqual({
+        provider: 'perplexity',
+        model: 'sonar-pro',
+        config: expect.objectContaining({
+          temperature: 0.7,
+          max_tokens: 1000,
+          apiKey: undefined,
+        }),
+      });
+    });
+
+    it('should override callApi to calculate costs correctly', async () => {
+      // Mock the parent class callApi method
+      jest.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValueOnce({
+        output: 'Test output',
+        tokenUsage: {
+          total: 20,
+          prompt: 10,
+          completion: 10,
+        },
+      });
+
+      const provider = new PerplexityProvider('sonar-pro');
+      const result = await provider.callApi('Test prompt');
+
+      // Verify the response has our custom cost calculation
+      expect(result.cost).toBeDefined();
+      expect(result.cost).toBe(0.00018); // (10/1M * $3) + (10/1M * $15) = $0.00018
+    });
+
+    it('should handle cached responses correctly', async () => {
+      // Mock the parent class callApi method with a cached response
+      jest.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValueOnce({
+        output: 'Cached output',
+        tokenUsage: {
+          total: 20,
+          cached: 20,
+        },
+        cached: true,
+      });
+
+      const provider = new PerplexityProvider('sonar');
+      const result = await provider.callApi('Test prompt');
+
+      // Verify cached response is returned unchanged
+      expect(result.cached).toBe(true);
+      expect(result.tokenUsage.cached).toBe(20);
+      // Cost should not be calculated for cached responses
+      expect(result.cost).toBeUndefined();
+    });
+
+    it('should pass through error responses', async () => {
+      // Mock the parent class callApi method with an error
+      jest.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValueOnce({
+        error: 'API error',
+      });
+
+      const provider = new PerplexityProvider('sonar');
+      const result = await provider.callApi('Test prompt');
+
+      // Verify error is passed through
+      expect(result.error).toBe('API error');
+      expect(result.cost).toBeUndefined();
     });
   });
 
@@ -278,11 +252,11 @@ describe('Perplexity Provider', () => {
       const model = 'sonar-pro';
       const inputTokens = 1000000;
       const outputTokens = 1000000;
-      
+
       // All tiers should calculate the same token costs
       expect(calculatePerplexityCost(model, inputTokens, outputTokens, 'high')).toBe(18);
       expect(calculatePerplexityCost(model, inputTokens, outputTokens, 'medium')).toBe(18);
       expect(calculatePerplexityCost(model, inputTokens, outputTokens, 'low')).toBe(18);
     });
   });
-}); 
+});

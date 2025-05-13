@@ -1,13 +1,15 @@
 import type { ApiProvider, ProviderOptions } from '../types';
+import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../types';
 import type { EnvOverrides } from '../types/env';
 import { OpenAiChatCompletionProvider } from './openai/chat';
+import type { OpenAiCompletionOptions } from './openai/types';
 
 /**
  * Calculate the cost of using the Perplexity API based on token usage
- * 
+ *
  * Pricing based on Perplexity's documentation:
  * https://docs.perplexity.ai/docs/pricing
- * 
+ *
  * @param modelName - Name of the Perplexity model
  * @param promptTokens - Number of prompt tokens
  * @param completionTokens - Number of completion tokens
@@ -27,14 +29,14 @@ export function calculatePerplexityCost(
   // Default values for tokens
   const inputTokens = promptTokens || 0;
   const outputTokens = completionTokens || 0;
-  
+
   // Pricing per million tokens
   let inputTokenPrice = 0;
   let outputTokenPrice = 0;
-  
+
   // Base model prices
   const model = modelName.toLowerCase();
-  
+
   if (model.includes('sonar-pro')) {
     // Sonar Pro pricing
     inputTokenPrice = 3;
@@ -64,39 +66,139 @@ export function calculatePerplexityCost(
     inputTokenPrice = 1;
     outputTokenPrice = 1;
   }
-  
+
   // Calculate cost: (tokens / 1M) * price per million
   const inputCost = (inputTokens / 1_000_000) * inputTokenPrice;
   const outputCost = (outputTokens / 1_000_000) * outputTokenPrice;
-  
+
   return inputCost + outputCost;
 }
 
+interface PerplexityProviderOptions extends ProviderOptions {
+  config?: OpenAiCompletionOptions & {
+    usage_tier?: 'high' | 'medium' | 'low';
+    search_domain_filter?: string[];
+    search_recency_filter?: string;
+    return_related_questions?: boolean;
+    return_images?: boolean;
+    search_after_date_filter?: string;
+    search_before_date_filter?: string;
+    web_search_options?: {
+      search_context_size?: 'low' | 'medium' | 'high';
+      user_location?: {
+        latitude?: number;
+        longitude?: number;
+        country?: string;
+      };
+    };
+    [key: string]: any;
+  };
+}
+
 /**
- * Creates a Perplexity API provider using OpenAI-compatible endpoints
+ * Perplexity API provider
  *
- * Documentation: https://docs.perplexity.ai/
+ * Extends the OpenAI chat completion provider to use Perplexity's API endpoint
+ * and adds custom cost calculation.
+ */
+export class PerplexityProvider extends OpenAiChatCompletionProvider {
+  private usageTier: 'high' | 'medium' | 'low';
+  public modelName: string;
+  public config: any;
+
+  constructor(modelName: string, providerOptions: PerplexityProviderOptions = {}) {
+    // Handle the case when config is nested inside config
+    const actualConfig = providerOptions.config?.config || providerOptions.config || {};
+
+    // Create provider options with the correct config structure
+    const normalizedOptions = {
+      ...providerOptions,
+      config: {
+        ...actualConfig,
+        apiBaseUrl: 'https://api.perplexity.ai',
+        apiKeyEnvar: 'PERPLEXITY_API_KEY',
+      },
+    };
+
+    super(modelName, normalizedOptions);
+
+    // Store the model name
+    this.modelName = modelName;
+
+    // Store the config for access in tests
+    this.config = normalizedOptions.config;
+
+    // Store the usage tier for cost calculation
+    this.usageTier = normalizedOptions.config?.usage_tier || 'medium';
+  }
+
+  /**
+   * Override callApi to use our custom cost calculation
+   */
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    // Call the parent method to get the response
+    const response = await super.callApi(prompt, context, callApiOptions);
+
+    // If there was an error, just return it
+    if (response.error) {
+      return response;
+    }
+
+    // Replace the cost calculation with our own
+    if (response.tokenUsage) {
+      if (response.tokenUsage.cached) {
+        // For cached responses, don't recalculate cost
+        return response;
+      }
+
+      // Calculate the cost using our function
+      const cost = calculatePerplexityCost(
+        this.modelName,
+        response.tokenUsage.prompt,
+        response.tokenUsage.completion,
+        this.usageTier,
+      );
+
+      // Return the response with our calculated cost
+      return {
+        ...response,
+        cost,
+      };
+    }
+
+    return response;
+  }
+
+  id(): string {
+    return `perplexity:${this.modelName}`;
+  }
+
+  toString(): string {
+    return `[Perplexity Provider ${this.modelName}]`;
+  }
+
+  toJSON() {
+    return {
+      provider: 'perplexity',
+      model: this.modelName,
+      config: {
+        ...this.config,
+        apiKey: undefined,
+      },
+    };
+  }
+}
+
+/**
+ * Creates a Perplexity API provider
  *
- * Perplexity API follows OpenAI's API format and can be used as a wrapper around OpenAI chat completion.
- * All parameters are automatically passed through to the Perplexity API.
- *
- * Supported models:
- * - sonar: Lightweight search model for quick factual queries
- * - sonar-pro: Advanced search offering for more complex queries (8k max output tokens)
- * - sonar-reasoning: Fast reasoning model with search
- * - sonar-reasoning-pro: Premier reasoning model powered by DeepSeek R1 with Chain of Thought (CoT)
- * - sonar-deep-research: Expert-level research model for comprehensive reports
- * - r1-1776: Offline chat model (DeepSeek R1) without search capabilities
- *
- * Special parameters:
- * - search_domain_filter: List of domains to include/exclude (prefix with `-` to exclude)
- * - search_recency_filter: Time filter for sources ('month', 'week', 'day', 'hour')
- * - return_related_questions: Get follow-up question suggestions
- * - return_images: Include images in responses (default: false)
- * - web_search_options.search_context_size: Control amount of search context ('low', 'medium', 'high')
- * - web_search_options.user_location: Location info to refine search results
- * - search_after_date_filter: Restrict to content published after date (format: "MM/DD/YYYY")
- * - search_before_date_filter: Restrict to content published before date (format: "MM/DD/YYYY")
+ * @param providerPath - Provider path, e.g., "perplexity:sonar"
+ * @param options - Provider options
+ * @returns A Perplexity API provider
  */
 export function createPerplexityProvider(
   providerPath: string,
@@ -107,57 +209,7 @@ export function createPerplexityProvider(
   } = {},
 ): ApiProvider {
   const splits = providerPath.split(':');
-  const modelName = splits.slice(1).join(':');
+  const modelName = splits.slice(1).join(':') || 'sonar'; // Default to sonar if not specified
 
-  const config = options.config?.config || {};
-
-  // Special case handling for response_format
-  const responseFormat = config.response_format;
-
-  // Determine usage tier from config or default to medium
-  const usageTier = (config.usage_tier as 'high' | 'medium' | 'low') || 'medium';
-
-  // Handle Perplexity-specific parameters
-  const perplexityConfig = {
-    ...options,
-    config: {
-      apiBaseUrl: 'https://api.perplexity.ai',
-      apiKeyEnvar: 'PERPLEXITY_API_KEY',
-      // Add custom cost calculation function for Perplexity
-      costCalculator: (promptTokens?: number, completionTokens?: number) => 
-        calculatePerplexityCost(modelName, promptTokens, completionTokens, usageTier),
-      passthrough: {
-        ...config,
-        // Pass through Perplexity-specific parameters
-        ...(config.search_domain_filter && {
-          search_domain_filter: config.search_domain_filter,
-        }),
-        ...(config.search_recency_filter && {
-          search_recency_filter: config.search_recency_filter,
-        }),
-        ...(config.return_related_questions && {
-          return_related_questions: config.return_related_questions,
-        }),
-        ...(config.return_images && {
-          return_images: config.return_images,
-        }),
-        ...(config.search_after_date_filter && {
-          search_after_date_filter: config.search_after_date_filter,
-        }),
-        ...(config.search_before_date_filter && {
-          search_before_date_filter: config.search_before_date_filter,
-        }),
-        ...(config.web_search_options && {
-          web_search_options: config.web_search_options,
-        }),
-        // Handle structured output
-        ...(responseFormat && {
-          response_format: responseFormat,
-        }),
-      },
-    },
-  };
-
-  // All Perplexity models use the chat completions endpoint
-  return new OpenAiChatCompletionProvider(modelName || 'sonar', perplexityConfig);
+  return new PerplexityProvider(modelName, options as PerplexityProviderOptions);
 }
