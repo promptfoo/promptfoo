@@ -19,7 +19,7 @@ Think of A2A (Agent2Agent) like a universal translator for AI agents. Just as a 
 
 ## Why A2A Matters
 
-As AI AGENTS become more specialized and sophisticated, the need for them to work together effectively becomes crucial. The A2A protocol addresses this fundamental challenge by providing a standardized way for AI agents to communicate and collaborate, regardless of their underlying architecture or the company that created them.
+As AI agents become increasingly specialized, seamless interoperability is essential to unlock their full value.  The A2A protocol satisfies this need by giving every agent a vendor-neutral, standards-based language—built on HTTP, SSE and JSON-RPC - so they can advertise capabilities, exchange tasks and collaborate securely, no matter how they were built or where they run.  
 
 Here's what makes A2A special:
 
