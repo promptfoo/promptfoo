@@ -23,12 +23,12 @@ describe('formatDuration', () => {
   it('should handle edge cases correctly', () => {
     // Test with decimal values - should round down
     expect(formatDuration(45.9)).toBe('45s');
-    
+
     // Test with very large values
     expect(formatDuration(86400)).toBe('24h 0m 0s'); // 1 day
     expect(formatDuration(90061)).toBe('25h 1m 1s'); // 1 day, 1 hour, 1 minute, 1 second
-    
+
     // Test with string numbers (TypeScript should handle this implicitly)
     expect(formatDuration(Number('120'))).toBe('2m 0s');
   });
-}); 
+});

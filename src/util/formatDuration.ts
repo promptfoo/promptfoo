@@ -5,7 +5,7 @@
  */
 export function formatDuration(seconds: number): string {
   const totalSeconds = Math.floor(seconds);
-  
+
   if (totalSeconds < 60) {
     return `${totalSeconds}s`;
   }
@@ -15,16 +15,16 @@ export function formatDuration(seconds: number): string {
   const remainingSeconds = totalSeconds % 60;
 
   let result = '';
-  
+
   if (hours > 0) {
     result += `${hours}h `;
   }
-  
+
   if (minutes > 0 || hours > 0) {
     result += `${minutes}m `;
   }
-  
+
   result += `${remainingSeconds}s`;
-  
+
   return result;
-} 
+}
