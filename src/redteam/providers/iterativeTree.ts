@@ -38,7 +38,7 @@ import { shouldGenerateRemote } from '../remoteGeneration';
 import type { BaseRedteamMetadata } from '../types';
 import {
   ATTACKER_SYSTEM_PROMPT,
-  CLOUD_ATTACKER_SYSTEM_PROMPT_TREE,
+  CLOUD_ATTACKER_SYSTEM_PROMPT,
   JUDGE_SYSTEM_PROMPT,
   ON_TOPIC_SYSTEM_PROMPT,
 } from './prompts';
@@ -82,7 +82,7 @@ export function renderSystemPrompts(
 } {
   return {
     redteamSystemPrompt: excludeTargetOutputFromAgenticAttackGeneration
-      ? nunjucks.renderString(CLOUD_ATTACKER_SYSTEM_PROMPT_TREE, { goal, purpose })
+      ? nunjucks.renderString(CLOUD_ATTACKER_SYSTEM_PROMPT, { goal, purpose })
       : nunjucks.renderString(ATTACKER_SYSTEM_PROMPT, { goal, purpose }),
     onTopicSystemPrompt: nunjucks.renderString(ON_TOPIC_SYSTEM_PROMPT, { goal }),
     judgeSystemPrompt: nunjucks.renderString(JUDGE_SYSTEM_PROMPT, { goal }),
