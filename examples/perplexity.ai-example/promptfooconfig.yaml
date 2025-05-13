@@ -14,6 +14,7 @@ providers:
       search_domain_filter: ['nature.com', 'science.org', 'newscientist.com']
       search_recency_filter: 'month'
       return_related_questions: true
+      usage_tier: 'low'
       web_search_options:
         search_context_size: 'medium'
 
@@ -23,6 +24,7 @@ providers:
       max_tokens: 2000
       search_domain_filter: ['nature.com', 'science.org', 'newscientist.com']
       search_recency_filter: 'month'
+      usage_tier: 'medium'
       web_search_options:
         search_context_size: 'high'
 
@@ -32,6 +34,7 @@ providers:
       max_tokens: 2500
       search_domain_filter: ['nature.com', 'science.org', 'newscientist.com']
       search_recency_filter: 'month'
+      usage_tier: 'high'
 
 tests:
   - vars:

@@ -3,6 +3,76 @@ import type { EnvOverrides } from '../types/env';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 
 /**
+ * Calculate the cost of using the Perplexity API based on token usage
+ * 
+ * Pricing based on Perplexity's documentation:
+ * https://docs.perplexity.ai/docs/pricing
+ * 
+ * @param modelName - Name of the Perplexity model
+ * @param promptTokens - Number of prompt tokens
+ * @param completionTokens - Number of completion tokens
+ * @param usageTier - Usage tier (high, medium, low) - defaults to medium
+ * @returns Cost in USD
+ */
+export function calculatePerplexityCost(
+  modelName: string,
+  promptTokens?: number,
+  completionTokens?: number,
+  usageTier: 'high' | 'medium' | 'low' = 'medium',
+): number {
+  if (!promptTokens && !completionTokens) {
+    return 0;
+  }
+
+  // Default values for tokens
+  const inputTokens = promptTokens || 0;
+  const outputTokens = completionTokens || 0;
+  
+  // Pricing per million tokens
+  let inputTokenPrice = 0;
+  let outputTokenPrice = 0;
+  
+  // Base model prices
+  const model = modelName.toLowerCase();
+  
+  if (model.includes('sonar-pro')) {
+    // Sonar Pro pricing
+    inputTokenPrice = 3;
+    outputTokenPrice = 15;
+  } else if (model.includes('sonar-reasoning-pro')) {
+    // Sonar Reasoning Pro pricing
+    inputTokenPrice = 2;
+    outputTokenPrice = 8;
+  } else if (model.includes('sonar-reasoning')) {
+    // Sonar Reasoning pricing
+    inputTokenPrice = 1;
+    outputTokenPrice = 5;
+  } else if (model.includes('sonar-deep-research')) {
+    // Sonar Deep Research pricing
+    inputTokenPrice = 2;
+    outputTokenPrice = 8;
+  } else if (model.includes('r1-1776')) {
+    // r1-1776 pricing
+    inputTokenPrice = 2;
+    outputTokenPrice = 8;
+  } else if (model.includes('sonar')) {
+    // Sonar pricing
+    inputTokenPrice = 1;
+    outputTokenPrice = 1;
+  } else {
+    // Default to Sonar pricing for unknown models
+    inputTokenPrice = 1;
+    outputTokenPrice = 1;
+  }
+  
+  // Calculate cost: (tokens / 1M) * price per million
+  const inputCost = (inputTokens / 1_000_000) * inputTokenPrice;
+  const outputCost = (outputTokens / 1_000_000) * outputTokenPrice;
+  
+  return inputCost + outputCost;
+}
+
+/**
  * Creates a Perplexity API provider using OpenAI-compatible endpoints
  *
  * Documentation: https://docs.perplexity.ai/
@@ -44,39 +114,45 @@ export function createPerplexityProvider(
   // Special case handling for response_format
   const responseFormat = config.response_format;
 
+  // Determine usage tier from config or default to medium
+  const usageTier = (config.usage_tier as 'high' | 'medium' | 'low') || 'medium';
+
   // Handle Perplexity-specific parameters
   const perplexityConfig = {
     ...options,
     config: {
       apiBaseUrl: 'https://api.perplexity.ai',
       apiKeyEnvar: 'PERPLEXITY_API_KEY',
+      // Add custom cost calculation function for Perplexity
+      costCalculator: (promptTokens?: number, completionTokens?: number) => 
+        calculatePerplexityCost(modelName, promptTokens, completionTokens, usageTier),
       passthrough: {
         ...config,
         // Pass through Perplexity-specific parameters
-        ...(config.search_domain_filter && { 
-          search_domain_filter: config.search_domain_filter 
+        ...(config.search_domain_filter && {
+          search_domain_filter: config.search_domain_filter,
         }),
         ...(config.search_recency_filter && {
-          search_recency_filter: config.search_recency_filter
+          search_recency_filter: config.search_recency_filter,
         }),
         ...(config.return_related_questions && {
-          return_related_questions: config.return_related_questions
+          return_related_questions: config.return_related_questions,
         }),
-        ...(config.return_images && { 
-          return_images: config.return_images 
+        ...(config.return_images && {
+          return_images: config.return_images,
         }),
         ...(config.search_after_date_filter && {
-          search_after_date_filter: config.search_after_date_filter
+          search_after_date_filter: config.search_after_date_filter,
         }),
         ...(config.search_before_date_filter && {
-          search_before_date_filter: config.search_before_date_filter
+          search_before_date_filter: config.search_before_date_filter,
         }),
-        ...(config.web_search_options && { 
-          web_search_options: config.web_search_options 
+        ...(config.web_search_options && {
+          web_search_options: config.web_search_options,
         }),
         // Handle structured output
-        ...(responseFormat && { 
-          response_format: responseFormat 
+        ...(responseFormat && {
+          response_format: responseFormat,
         }),
       },
     },

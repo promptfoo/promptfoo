@@ -86,7 +86,7 @@ providers:
         user_location:
           latitude: 37.7749
           longitude: -122.4194
-          country: 'US'  # Optional: ISO country code
+          country: 'US' # Optional: ISO country code
 ```
 
 ### Structured Output
@@ -134,6 +134,22 @@ providers:
       return_images: true
 ```
 
+### Cost Tracking
+
+promptfoo includes built-in cost calculation for Perplexity models based on their official pricing. You can specify the usage tier with the `usage_tier` parameter:
+
+```yaml
+providers:
+  - id: perplexity:sonar-pro
+    config:
+      usage_tier: 'medium' # Options: 'high', 'medium', 'low'
+```
+
+The cost calculation includes:
+- Different rates for input and output tokens
+- Model-specific pricing (sonar, sonar-pro, sonar-reasoning, etc.)
+- Usage tier considerations (high, medium, low)
+
 ## Advanced Use Cases
 
 ### Comprehensive Research
@@ -178,6 +194,7 @@ providers:
 ## Best Practices
 
 ### Model Selection
+
 - **sonar-pro**: Use for complex queries requiring detailed responses with citations
 - **sonar**: Use for factual queries and cost efficiency
 - **sonar-reasoning-pro/sonar-reasoning**: Use for step-by-step problem solving
@@ -185,12 +202,14 @@ providers:
 - **r1-1776**: Use for creative content not requiring search
 
 ### Search Optimization
+
 - Set `search_domain_filter` to trusted domains for higher quality citations
 - Use `search_recency_filter` for time-sensitive topics
 - For cost optimization, set `web_search_options.search_context_size` to "low"
 - For comprehensive research, set `web_search_options.search_context_size` to "high"
 
 ### Structured Output Tips
+
 - When using structured outputs with reasoning models, responses will include a `<think>` section followed by the structured output
 - For regex patterns, ensure they follow the supported syntax
 - JSON schemas cannot include recursive structures or unconstrained objects
@@ -205,6 +224,7 @@ Check our [perplexity.ai-example](https://github.com/promptfoo/promptfoo/tree/ma
 - **promptfooconfig.research-reasoning.yaml**: Specialized research and reasoning models
 
 You can initialize these examples with:
+
 ```bash
 npx promptfoo@latest init --example perplexity.ai-example
 ```
@@ -213,10 +233,16 @@ npx promptfoo@latest init --example perplexity.ai-example
 
 Pricing varies by model and usage tier:
 
-- **sonar**: Lower cost per token, optimized for quick queries
-- **sonar-pro**: Higher cost but 8k max output tokens and better citations
-- **sonar-reasoning/reasoning-pro**: Moderate cost with Chain of Thought capabilities
-- **sonar-deep-research**: Higher cost, designed for comprehensive research
+| Model               | Input Tokens (per million) | Output Tokens (per million) |
+| ------------------- | -------------------------- | --------------------------- |
+| sonar               | $1                         | $1                          |
+| sonar-pro           | $3                         | $15                         |
+| sonar-reasoning     | $1                         | $5                          |
+| sonar-reasoning-pro | $2                         | $8                          |
+| sonar-deep-research | $2                         | $8                          |
+| r1-1776             | $2                         | $8                          |
+
+Rate limits also vary by usage tier (high, medium, low). Specify your tier with the `usage_tier` parameter to get accurate cost calculations.
 
 Check [Perplexity's pricing page](https://docs.perplexity.ai/docs/pricing) for the latest rates.
 
