@@ -99,7 +99,7 @@ describe('Perplexity Provider', () => {
 
     it('should have the correct id() method', () => {
       const provider = new PerplexityProvider('sonar-pro');
-      expect(provider.id()).toBe('perplexity:sonar-pro');
+      expect(provider.id()).toBe('sonar-pro');
     });
 
     it('should have the correct toString() method', () => {

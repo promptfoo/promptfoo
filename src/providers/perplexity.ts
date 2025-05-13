@@ -174,7 +174,7 @@ export class PerplexityProvider extends OpenAiChatCompletionProvider {
   }
 
   id(): string {
-    return `perplexity:${this.modelName}`;
+    return this.modelName;
   }
 
   toString(): string {
