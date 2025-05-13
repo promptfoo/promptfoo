@@ -81,6 +81,7 @@ export async function validatePythonPath(pythonPath: string, isExplicit: boolean
  * @param args - An array of arguments to pass to the Python script.
  * @param options - Optional settings for running the Python script.
  * @param options.pythonExecutable - Optional path to the Python executable.
+ * @param options.cwd - Optional working directory for the Python script.
  * @returns A promise that resolves to the output of the Python script.
  * @throws An error if there's an issue running the Python script or parsing its output.
  */
@@ -88,7 +89,7 @@ export async function runPython(
   scriptPath: string,
   method: string,
   args: (string | number | object | undefined)[],
-  options: { pythonExecutable?: string } = {},
+  options: { pythonExecutable?: string; cwd?: string } = {},
 ): Promise<any> {
   const absPath = path.resolve(scriptPath);
   const tempJsonPath = path.join(
@@ -111,6 +112,12 @@ export async function runPython(
     pythonPath,
     scriptPath: __dirname,
   };
+
+  // Set the working directory if provided
+  if (options.cwd) {
+    pythonOptions.cwd = options.cwd;
+    logger.debug(`Setting Python working directory to: ${options.cwd}`);
+  }
 
   try {
     await fs.writeFileSync(tempJsonPath, safeJsonStringify(args) as string, 'utf-8');

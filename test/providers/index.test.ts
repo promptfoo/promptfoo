@@ -1254,4 +1254,51 @@ describe('loadApiProvider', () => {
       'Invalid Alibaba Cloud model: unknown-model',
     );
   });
+
+  // Test for GitHub issue #3991 - Relative path resolution fails for file providers
+  it('should correctly handle relative parent directory paths (Issue #3991)', async () => {
+    // Mock the file system checks so our test can run
+    const originalExistsSync = fs.existsSync;
+    fs.existsSync = jest.fn().mockReturnValue(true);
+
+    try {
+      // Create a test configuration that mimics the issue #3991 scenario
+      // Config file is in a subdirectory, but references a file in the parent directory
+      const basePath = 'project/evaluation'; // Config location
+      const options = {
+        config: {
+          basePath,
+        },
+      };
+
+      // This is the path format from the issue: file://../provider.py
+      const provider = await loadApiProvider('file://../provider.py', { options });
+      
+      // The provider should be created correctly
+      expect(provider).toBeInstanceOf(PythonProvider);
+      
+      // The ID should reflect the simple provider.py filename
+      expect(provider.id()).toBe('python:provider.py:default');
+      
+      // The key test - access the private scriptPath directly using type assertion
+      // to verify the path is correctly resolved
+      const pythonProvider = provider as PythonProvider;
+      
+      // @ts-ignore - accessing private property for testing
+      const scriptPath = pythonProvider.scriptPath;
+      
+      // The actual path might vary based on the test environment,
+      // but what's important is that it correctly resolves the path
+      // without duplicating path segments
+      expect(scriptPath).toBeDefined();
+      
+      // Most importantly, verify it doesn't have the duplicated path issue from #3991
+      // where it would incorrectly become: project/evaluation/project/evaluation/...
+      expect(scriptPath).not.toContain(`${basePath}/${basePath}`);
+      expect(scriptPath).not.toContain(`evaluation/evaluation`);
+    } finally {
+      // Restore original function
+      fs.existsSync = originalExistsSync;
+    }
+  });
 });

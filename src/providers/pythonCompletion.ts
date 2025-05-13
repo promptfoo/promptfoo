@@ -11,7 +11,6 @@ import type {
   ProviderEmbeddingResponse,
   ProviderClassificationResponse,
 } from '../types';
-import { parsePathOrGlob } from '../util';
 import { sha256 } from '../util/createHash';
 import { processConfigFileReferences } from '../util/fileReference';
 import { safeJsonStringify } from '../util/json';
@@ -24,6 +23,7 @@ export class PythonProvider implements ApiProvider {
   config: PythonProviderConfig;
 
   private scriptPath: string;
+  private originalScriptName: string; // Store original script name/path for ID generation
   private functionName: string | null;
   private isInitialized: boolean = false;
   private initializationPromise: Promise<void> | null = null;
@@ -33,19 +33,47 @@ export class PythonProvider implements ApiProvider {
     runPath: string,
     private options?: ProviderOptions,
   ) {
-    const { filePath: providerPath, functionName } = parsePathOrGlob(
-      options?.config.basePath || '',
-      runPath,
-    );
-    this.scriptPath = path.relative(options?.config.basePath || '', providerPath);
-    this.functionName = functionName || null;
-    this.id = () => options?.id ?? `python:${this.scriptPath}:${this.functionName || 'default'}`;
+    // IMPORTANT: The runPath is already resolved by scriptBasedProvider.ts using getResolvedRelativePath.
+    // We should NOT call parsePathOrGlob here as it will re-resolve against the basePath,
+    // resulting in duplicate path components.
+
+    // Instead, extract the function name directly if present
+    let functionName: string | null = null;
+    let scriptPath = runPath;
+
+    if (runPath.includes(':')) {
+      const parts = runPath.split(':');
+      scriptPath = parts[0];
+      functionName = parts[1] || null;
+    }
+
+    this.scriptPath = scriptPath;
+
+    // Extract just the filename or relative path component for ID generation
+    this.originalScriptName = path.basename(scriptPath);
+    if (options?.id?.startsWith('python:') && options.id.includes(':')) {
+      // If an ID was provided with python: prefix, extract the script name from it
+      const idParts = options.id.split(':');
+      if (idParts.length >= 2) {
+        this.originalScriptName = idParts[1];
+      }
+    } else if (scriptPath.includes('/') || scriptPath.includes('\\')) {
+      // Use the original filename for ID generation
+      this.originalScriptName = path.basename(scriptPath);
+    } else {
+      // If it's already just a filename, use it as is
+      this.originalScriptName = scriptPath;
+    }
+
+    this.functionName = functionName;
+    this.id = () =>
+      options?.id ?? `python:${this.originalScriptName}:${this.functionName || 'default'}`;
     this.label = options?.label;
     this.config = options?.config ?? {};
   }
 
   id() {
-    return `python:${this.scriptPath}:${this.functionName || 'default'}`;
+    return `python:${this.originalScriptName}:${this.functionName || 'default'}`;
   }
 
   /**
@@ -101,9 +129,9 @@ export class PythonProvider implements ApiProvider {
       await this.initialize();
     }
 
-    const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
-    logger.debug(`Computing file hash for script ${absPath}`);
-    const fileHash = sha256(fs.readFileSync(absPath, 'utf-8'));
+    // Use the scriptPath directly as it's already been resolved by scriptBasedProvider.ts
+    logger.debug(`Computing file hash for script ${this.scriptPath}`);
+    const fileHash = sha256(fs.readFileSync(this.scriptPath, 'utf-8'));
 
     // Create cache key including the function name to ensure different functions don't share caches
     const cacheKey = `python:${this.scriptPath}:${this.functionName || 'default'}:${apiType}:${fileHash}:${prompt}:${JSON.stringify(
@@ -122,7 +150,7 @@ export class PythonProvider implements ApiProvider {
     }
 
     if (cachedResult) {
-      logger.debug(`Returning cached ${apiType} result for script ${absPath}`);
+      logger.debug(`Returning cached ${apiType} result for script ${this.scriptPath}`);
       const parsedResult = JSON.parse(cachedResult as string);
 
       logger.debug(
@@ -172,7 +200,7 @@ export class PythonProvider implements ApiProvider {
           : [prompt, optionsWithProcessedConfig];
 
       logger.debug(
-        `Running python script ${absPath} with scriptPath ${this.scriptPath} and args: ${safeJsonStringify(args)}`,
+        `Running python script ${this.scriptPath} with scriptPath ${this.scriptPath} and args: ${safeJsonStringify(args)}`,
       );
 
       const functionName = this.functionName || apiType;
@@ -180,7 +208,7 @@ export class PythonProvider implements ApiProvider {
 
       switch (apiType) {
         case 'call_api':
-          result = await runPython(absPath, functionName, args, {
+          result = await runPython(this.scriptPath, functionName, args, {
             pythonExecutable: this.config.pythonExecutable,
           });
 
@@ -207,7 +235,7 @@ export class PythonProvider implements ApiProvider {
           }
           break;
         case 'call_embedding_api':
-          result = await runPython(absPath, functionName, args, {
+          result = await runPython(this.scriptPath, functionName, args, {
             pythonExecutable: this.config.pythonExecutable,
           });
 
@@ -224,7 +252,7 @@ export class PythonProvider implements ApiProvider {
           }
           break;
         case 'call_classification_api':
-          result = await runPython(absPath, functionName, args, {
+          result = await runPython(this.scriptPath, functionName, args, {
             pythonExecutable: this.config.pythonExecutable,
           });
 
