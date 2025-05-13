@@ -127,22 +127,11 @@ export async function doTargetPurposeDiscovery(
  * @returns The response from the database.
  */
 async function saveCloudTargetPurpose(targetId: string, purpose: string) {
-  // First, attempt to load from the environment (self-hosted)
-  let apiDomain: string | undefined = getEnvString('PROMPTFOO_REMOTE_API_BASE_URL');
-  // Otherwise, must be using Cloud:
-  if (!apiDomain) {
-    invariant(
-      cloudConfig.isEnabled(),
-      // We should never be in this state: if args.target is provided, we've already confirmed with
-      // the API that it's a valid target (which requires Cloud).
-      'Cloud config should have been enabled for a target to be provided',
-    );
-    apiDomain = cloudConfig.getApiHost();
-  }
-
-  invariant(apiDomain, 'Error determining API domain');
-
-  const url = `${apiDomain!}/api/v1/providers/${targetId}`;
+  invariant(
+    cloudConfig.isEnabled(),
+    'Cloud config should have been enabled for a target to be provided',
+  );
+  const url = `${cloudConfig.getApiHost()}/api/v1/providers/${targetId}`;
 
   logger.debug(`Saving purpose to ${url}`);
 
@@ -224,12 +213,26 @@ export function discoverCommand(program: Command) {
       // Although the providers/targets property supports multiple values, Redteaming only supports
       // a single target at a time.
       let target: ApiProvider | undefined = undefined;
+      // Fallback to the default config path:
+      const fallbackConfigPath = path.join(process.cwd(), 'promptfooconfig.yaml');
 
       // If user provides a config, read the target from it:
       if (args.config) {
+        // Validate that the config is a valid path:
+        if (!fs.existsSync(args.config)) {
+          throw new Error(`Config not found at ${args.config}`);
+        }
+
         config = await readConfig(args.config);
-        invariant(config, 'An error occurred loading the config');
-        invariant(config.providers, 'Config must contain targets or providers');
+
+        if (!config) {
+          throw new Error(`Config is invalid at ${args.config}`);
+        }
+
+        if (!config.providers) {
+          throw new Error('Config must contain at least one target or provider');
+        }
+
         const providers = await loadApiProviders(config.providers);
         target = providers[0];
       }
@@ -240,14 +243,22 @@ export function discoverCommand(program: Command) {
         target = await loadApiProvider(providerOptions.id, { options: providerOptions });
       }
       // Check the current working directory for a promptfooconfig.yaml file:
-      else if (fs.existsSync(path.join(process.cwd(), 'promptfooconfig.yaml'))) {
-        const configPath = path.join(process.cwd(), 'promptfooconfig.yaml');
-        config = await readConfig(configPath);
-        invariant(config, 'An error occurred loading the config');
-        invariant(config.providers, 'Config must contain targets or providers');
+      else if (fs.existsSync(fallbackConfigPath)) {
+        config = await readConfig(fallbackConfigPath);
+
+        if (!config) {
+          throw new Error(`Config is invalid at ${fallbackConfigPath}`);
+        }
+
+        if (!config.providers) {
+          throw new Error('Config must contain at least one target or provider');
+        }
+
         const providers = await loadApiProviders(config.providers);
         target = providers[0];
-        logger.info(`Using config from ${chalk.italic(configPath)}`);
+
+        // Alert the user that we're using a config from the current working directory:
+        logger.info(`Using config from ${chalk.italic(fallbackConfigPath)}`);
       }
       // A config or a target must be provided:
       else {
