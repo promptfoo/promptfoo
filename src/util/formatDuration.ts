@@ -4,8 +4,7 @@
  * @returns Formatted string like "2h 5m 30s" or "45s" depending on duration
  */
 export function formatDuration(seconds: number): string {
-  // Handle negative values by using absolute value
-  const totalSeconds = Math.floor(Math.abs(seconds));
+  const totalSeconds = Math.floor(seconds);
   
   if (totalSeconds < 60) {
     return `${totalSeconds}s`;

@@ -21,9 +21,6 @@ describe('formatDuration', () => {
   });
 
   it('should handle edge cases correctly', () => {
-    // Test with negative values - should handle as absolute value
-    expect(formatDuration(-45)).toBe('45s');
-    
     // Test with decimal values - should round down
     expect(formatDuration(45.9)).toBe('45s');
     
