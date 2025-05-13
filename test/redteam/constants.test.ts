@@ -20,6 +20,11 @@ import {
   AGENTIC_PLUGINS,
   riskCategories,
   categoryDescriptions,
+  displayNameOverrides,
+  riskCategorySeverityMap,
+  categoryAliases,
+  pluginDescriptions,
+  subCategoryDescriptions,
 } from '../../src/redteam/constants';
 
 describe('constants', () => {
@@ -82,6 +87,10 @@ describe('constants', () => {
     expect(BASE_PLUGINS).toContain('contracts');
     expect(BASE_PLUGINS).toContain('excessive-agency');
     expect(BASE_PLUGINS).toContain('hallucination');
+  });
+
+  it('ADDITIONAL_PLUGINS should contain MCP plugin', () => {
+    expect(ADDITIONAL_PLUGINS).toContain('mcp');
   });
 
   it('DEFAULT_PLUGINS should be a Set containing base plugins, harm plugins and PII plugins', () => {
@@ -162,5 +171,29 @@ describe('constants', () => {
       expect(categoryDescriptions[category]).toBeDefined();
       expect(typeof categoryDescriptions[category]).toBe('string');
     });
+  });
+
+  it('should have correct display name for MCP plugin', () => {
+    expect(displayNameOverrides['mcp']).toBe('Model Context Protocol');
+  });
+
+  it('should have correct severity for MCP plugin', () => {
+    expect(riskCategorySeverityMap['mcp']).toBe(Severity.Low);
+  });
+
+  it('should have correct alias for MCP plugin', () => {
+    expect(categoryAliases['mcp']).toBe('MCP');
+  });
+
+  it('should have correct plugin description for MCP plugin', () => {
+    expect(pluginDescriptions['mcp']).toBe(
+      'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
+    );
+  });
+
+  it('should have correct subcategory description for MCP plugin', () => {
+    expect(subCategoryDescriptions['mcp']).toBe(
+      'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
+    );
   });
 });
