@@ -29,7 +29,13 @@ export default [
     },
   },
   {
-    ignores: ['dist/**/*', 'site/.docusaurus/**/*', 'site/build/**/*', '**/venv/**/*'],
+    ignores: [
+      'dist/**/*',
+      'site/.docusaurus/**/*',
+      'site/build/**/*',
+      '**/venv/**/*',
+      'examples/redteam-medical-agent/src/**/*',
+    ],
   },
   {
     languageOptions: {
