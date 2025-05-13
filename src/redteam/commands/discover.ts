@@ -8,7 +8,6 @@ import path from 'path';
 import { z } from 'zod';
 import cliState from '../../cliState';
 import { VERSION } from '../../constants';
-import { getEnvString } from '../../envars';
 import { fetchWithProxy } from '../../fetch';
 import { getUserEmail } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
