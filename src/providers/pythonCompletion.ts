@@ -19,6 +19,27 @@ interface PythonProviderConfig {
   pythonExecutable?: string;
 }
 
+/**
+ * Extracts the script name to be used for provider IDs
+ * This handles various formats including path-based, ID-based, and direct script names
+ * 
+ * @param scriptPath - The path to the Python script
+ * @param providerId - Optional provider ID that might contain script name information
+ * @returns The normalized script name for use in provider identification
+ */
+export function getScriptNameForId(scriptPath: string, providerId?: string): string {
+  // If a provider ID with python: prefix was provided, extract the script name from it
+  if (providerId?.startsWith('python:') && providerId.includes(':')) {
+    const idParts = providerId.split(':');
+    if (idParts.length >= 2) {
+      return idParts[1];
+    }
+  }
+  
+  // Use path.basename to extract the filename part, regardless of path format
+  return path.basename(scriptPath);
+}
+
 export class PythonProvider implements ApiProvider {
   config: PythonProviderConfig;
 
@@ -28,27 +49,6 @@ export class PythonProvider implements ApiProvider {
   private isInitialized: boolean = false;
   private initializationPromise: Promise<void> | null = null;
   public label: string | undefined;
-
-  /**
-   * Extracts the script name to be used for provider IDs
-   * This handles various formats including path-based, ID-based, and direct script names
-   * 
-   * @param scriptPath - The path to the Python script
-   * @param providerId - Optional provider ID that might contain script name information
-   * @returns The normalized script name for use in provider identification
-   */
-  static getScriptNameForId(scriptPath: string, providerId?: string): string {
-    // If a provider ID with python: prefix was provided, extract the script name from it
-    if (providerId?.startsWith('python:') && providerId.includes(':')) {
-      const idParts = providerId.split(':');
-      if (idParts.length >= 2) {
-        return idParts[1];
-      }
-    }
-    
-    // Use path.basename to extract the filename part, regardless of path format
-    return path.basename(scriptPath);
-  }
 
   constructor(
     runPath: string,
@@ -71,7 +71,7 @@ export class PythonProvider implements ApiProvider {
     this.scriptPath = scriptPath;
 
     // Extract just the filename or relative path component for ID generation
-    this.originalScriptName = PythonProvider.getScriptNameForId(scriptPath, options?.id);
+    this.originalScriptName = getScriptNameForId(scriptPath, options?.id);
 
     this.functionName = functionName;
     this.id = () =>
