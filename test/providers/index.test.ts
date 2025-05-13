@@ -1258,8 +1258,7 @@ describe('loadApiProvider', () => {
   // Test for GitHub issue #3991 - Relative path resolution fails for file providers
   it('should correctly handle relative parent directory paths (Issue #3991)', async () => {
     // Mock the file system checks so our test can run
-    const originalExistsSync = fs.existsSync;
-    jest.spyOn(fs, 'existsSync').mockImplementation().mockReturnValue(true);
+    const mockExistsSync = jest.spyOn(fs, 'existsSync').mockReturnValue(true);
 
     try {
       // Create a test configuration that mimics the issue #3991 scenario
@@ -1298,7 +1297,7 @@ describe('loadApiProvider', () => {
       expect(scriptPath).not.toContain(`evaluation/evaluation`);
     } finally {
       // Restore original function
-      fs.existsSync = originalExistsSync;
+      mockExistsSync.mockRestore();
     }
   });
 });
