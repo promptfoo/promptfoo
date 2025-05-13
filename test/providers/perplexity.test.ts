@@ -161,7 +161,7 @@ describe('Perplexity Provider', () => {
 
       // Verify cached response is returned unchanged
       expect(result.cached).toBe(true);
-      expect(result.tokenUsage.cached).toBe(20);
+      expect(result.tokenUsage?.cached).toBe(20);
       // Cost should not be calculated for cached responses
       expect(result.cost).toBeUndefined();
     });
