@@ -29,6 +29,27 @@ export class PythonProvider implements ApiProvider {
   private initializationPromise: Promise<void> | null = null;
   public label: string | undefined;
 
+  /**
+   * Extracts the script name to be used for provider IDs
+   * This handles various formats including path-based, ID-based, and direct script names
+   * 
+   * @param scriptPath - The path to the Python script
+   * @param providerId - Optional provider ID that might contain script name information
+   * @returns The normalized script name for use in provider identification
+   */
+  static getScriptNameForId(scriptPath: string, providerId?: string): string {
+    // If a provider ID with python: prefix was provided, extract the script name from it
+    if (providerId?.startsWith('python:') && providerId.includes(':')) {
+      const idParts = providerId.split(':');
+      if (idParts.length >= 2) {
+        return idParts[1];
+      }
+    }
+    
+    // Use path.basename to extract the filename part, regardless of path format
+    return path.basename(scriptPath);
+  }
+
   constructor(
     runPath: string,
     private options?: ProviderOptions,
@@ -50,20 +71,7 @@ export class PythonProvider implements ApiProvider {
     this.scriptPath = scriptPath;
 
     // Extract just the filename or relative path component for ID generation
-    this.originalScriptName = path.basename(scriptPath);
-    if (options?.id?.startsWith('python:') && options.id.includes(':')) {
-      // If an ID was provided with python: prefix, extract the script name from it
-      const idParts = options.id.split(':');
-      if (idParts.length >= 2) {
-        this.originalScriptName = idParts[1];
-      }
-    } else if (scriptPath.includes('/') || scriptPath.includes('\\')) {
-      // Use the original filename for ID generation
-      this.originalScriptName = path.basename(scriptPath);
-    } else {
-      // If it's already just a filename, use it as is
-      this.originalScriptName = scriptPath;
-    }
+    this.originalScriptName = PythonProvider.getScriptNameForId(scriptPath, options?.id);
 
     this.functionName = functionName;
     this.id = () =>
