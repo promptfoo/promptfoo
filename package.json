@@ -53,7 +53,7 @@
     "format:check": "prettier --check .",
     "format": "prettier -w .",
     "jsonSchema:generate": "npx -y tsx scripts/generateJsonSchema.ts > site/static/config-schema.json | npx prettier --write site/static/config-schema.json",
-    "l": "git diff --name-only --diff-filter=ACMRTUXB origin/main | grep -E '\\.(js|ts|tsx)$' | xargs eslint --max-warnings=0 --fix",
+    "l": "git diff --name-only --diff-filter=ACMRTUXB origin/main | grep -E '\\.(js|ts|tsx)$' | xargs eslint --max-warnings=0 --fix --no-warn-ignored",
     "lint:site": "eslint site --max-warnings=0",
     "lint:src": "eslint src --max-warnings=0",
     "lint:tests": "eslint test --max-warnings=0",

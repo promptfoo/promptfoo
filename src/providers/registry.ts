@@ -69,6 +69,7 @@ import { OpenAiModerationProvider } from './openai/moderation';
 import { OpenAiRealtimeProvider } from './openai/realtime';
 import { OpenAiResponsesProvider } from './openai/responses';
 import { parsePackageProvider } from './packageParser';
+import { createPerplexityProvider } from './perplexity';
 import { PortkeyChatCompletionProvider } from './portkey';
 import { PromptfooModelProvider } from './promptfooModel';
 import { PythonProvider } from './pythonCompletion';
@@ -764,15 +765,9 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
-      const splits = providerPath.split(':');
-      const modelName = splits.slice(1).join(':');
-      return new OpenAiChatCompletionProvider(modelName, {
-        ...providerOptions,
-        config: {
-          ...providerOptions.config,
-          apiBaseUrl: 'https://api.perplexity.ai',
-          apiKeyEnvar: 'PERPLEXITY_API_KEY',
-        },
+      return createPerplexityProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
       });
     },
   },
