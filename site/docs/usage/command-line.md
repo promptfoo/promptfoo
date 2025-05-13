@@ -283,6 +283,20 @@ Example:
 promptfoo redteam run -c custom_config.yaml -o custom_output.yaml
 ```
 
+## `promptfoo redteam discover`
+
+Automatically discovers the [purpose](https://www.promptfoo.dev/docs/red-team/configuration/#purpose) of your target application.
+
+| Option                | Description                                                                                | Default        |
+| --------------------- | ------------------------------------------------------------------------------------------ | -------------- |
+| `-c, --config <path>` | Path to `promptfooconfig.yaml` configuration file.                                         |                |
+| `-o, --output <path>` | Path to output file.                                                                       | `redteam.yaml` |
+| `-t, --target <id>`   | UUID of a Cloud-defined target to run the discovery on                                     |                |
+| `--preview`           | Preview discovery results without writing to an output file                                | false          |
+| `--turns <turns>`     | A maximum number of turns to run the discovery process. Lower is faster but less accurate. |                |
+| `--env-path <path>`   | Path to a custom `.env` file                                                               |                |
+| `--verbose`           | Show debug logs                                                                            |                |
+
 ## `promptfoo redteam generate`
 
 Generate adversarial test cases to challenge your prompts and models.

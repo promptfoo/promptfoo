@@ -25,11 +25,11 @@ import { getRemoteGenerationUrl } from '../remoteGeneration';
 const ArgsSchema = z
   .object({
     config: z.string().optional(),
-    output: z.string().optional(),
+    output: z.string(),
     target: z.string().optional(),
     envPath: z.string().optional(),
     verbose: z.boolean().optional(),
-    preview: z.boolean().optional(),
+    preview: z.boolean(),
     turns: z.number().optional(),
   })
   .refine((data) => !(data.config && data.target), {
@@ -38,6 +38,9 @@ const ArgsSchema = z
   });
 
 type Args = z.infer<typeof ArgsSchema>;
+
+const DEFAULT_OUTPUT_PATH = 'redteam.yaml';
+
 /**
  * Queries Cloud for the purpose-discovery logic, sends each logic to the target,
  * and summarizes the results.
@@ -164,13 +167,10 @@ export function discoverCommand(program: Command) {
         and the target will be discovered from the first provider in that config.
       `,
     )
-    .option(
-      '-c, --config <path>',
-      'Path to configuration file or cloud config UUID. Defaults to promptfooconfig.yaml',
-    )
-    .option('-o, --output <path>', 'Path to output file. Defaults to redteam.yaml')
-    .option('-t, --target <id>', 'Cloud provider target ID to run the scan on')
-    .option('--preview', 'Preview discovery results without modifying the config file', false)
+    .option('-c, --config <path>', 'Path to `promptfooconfig.yaml` configuration file.')
+    .option('-o, --output <path>', 'Path to output file.', DEFAULT_OUTPUT_PATH)
+    .option('-t, --target <id>', 'UUID of a Cloud-defined target to run the discovery on')
+    .option('--preview', 'Preview discovery results without writing to an output file', false)
     .addOption(
       new Option(
         '--turns <turns>',
@@ -293,9 +293,8 @@ export function discoverCommand(program: Command) {
         } else {
           invariant(config, 'Config is required');
 
-          // Write to a redteam.yaml file:
-          if (!args.output) {
-            args.output = path.relative(process.cwd(), 'redteam.yaml');
+          if (args.output === DEFAULT_OUTPUT_PATH) {
+            args.output = path.relative(process.cwd(), DEFAULT_OUTPUT_PATH);
           }
 
           logger.debug(`Writing purpose to ${args.output}`);
