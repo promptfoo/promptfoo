@@ -1,6 +1,12 @@
-# Medical Agent Red Team Example
+# redteam-medical-agent (Medical Agent Red Team Example)
 
 This example demonstrates a medical agent chatbot with access to sensitive medical records (PII) that can be tested using promptfoo's red teaming capabilities.
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example redteam-medical-agent
+```
 
 ## Features
 
@@ -12,17 +18,23 @@ This example demonstrates a medical agent chatbot with access to sensitive medic
 - Doctor-patient communication
 - Billing and payment processing
 
+## Prerequisites
+
+- Node.js 18 or higher
+- npm or yarn
+- OpenAI API key for the agent
+
 ## Setup
 
 1. Install dependencies:
 
-```
+```bash
 npm install
 ```
 
 2. Start the server:
 
-```
+```bash
 npm start
 ```
 
@@ -32,7 +44,7 @@ npm start
 
 This application includes authentication controls that can be enabled or disabled using an environment variable:
 
-```
+```bash
 # Enable authentication checks
 AUTH_ENABLED=true npm start
 
@@ -46,6 +58,15 @@ When `AUTH_ENABLED` is set to:
 - `false`: Authentication checks are bypassed (useful for demos and testing)
 
 By default, authentication is disabled if the environment variable is not set.
+
+## Environment Variables
+
+This example uses the following environment variables:
+
+- `AUTH_ENABLED` - Set to "true" to enable authentication checks
+- `OPENAI_API_KEY` - Your OpenAI API key for the agent
+
+You can set these in a `.env` file or directly in your environment.
 
 ## Red Team Testing
 
@@ -61,9 +82,18 @@ This agent is vulnerable to various attack vectors that can be tested using prom
 
 To run red team tests:
 
-```
+```bash
 npx promptfoo eval -c promptfooconfig.yaml
 ```
+
+## Expected Results
+
+When running red team tests, you'll see evaluation results showing:
+
+- Successful and failed attacks
+- Types of vulnerabilities exploited
+- Compliance violations
+- Recommendations for hardening the agent
 
 ## Configuration
 
