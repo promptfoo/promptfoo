@@ -120,13 +120,13 @@ export async function doTargetPurposeDiscovery(
 }
 
 /**
- * Saves the purpose to the database.
+ * For targets hosted on Cloud, save the purpose to the database.
  *
  * @param targetId - The target ID.
  * @param purpose - The purpose.
  * @returns The response from the database.
  */
-async function savePurpose(targetId: string, purpose: string) {
+async function saveCloudTargetPurpose(targetId: string, purpose: string) {
   // First, attempt to load from the environment (self-hosted)
   let apiDomain: string | undefined = getEnvString('PROMPTFOO_REMOTE_API_BASE_URL');
   // Otherwise, must be using Cloud:
@@ -279,7 +279,7 @@ export function discoverCommand(program: Command) {
       if (!args.preview) {
         // Persist the purposes:
         if (args.target) {
-          await savePurpose(args.target, purpose);
+          await saveCloudTargetPurpose(args.target, purpose);
         } else {
           invariant(config, 'Config is required');
 
