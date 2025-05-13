@@ -286,17 +286,14 @@ describe('renderPrompt', () => {
   it('should auto-wrap prompts with partial Nunjucks tags in {% raw %}', async () => {
     const prompt = toPrompt('This is a partial tag: {%');
     const renderedPrompt = await renderPrompt(prompt, {}, {});
-    expect(renderedPrompt).toContain('This is a partial tag: {%');
-    expect(renderedPrompt).toContain('{% raw %}');
-    expect(renderedPrompt).toContain('{% endraw %}');
+    expect(renderedPrompt).toBe('This is a partial tag: {%');
   });
 
   it('should not double-wrap prompts already wrapped in {% raw %}', async () => {
     const prompt = toPrompt('{% raw %}This is a partial tag: {%{% endraw %}');
     const renderedPrompt = await renderPrompt(prompt, {}, {});
-    // Should not add another raw block
-    expect(renderedPrompt.match(/{% raw %}/g)?.length).toBe(1);
-    expect(renderedPrompt.match(/{% endraw %}/g)?.length).toBe(1);
+    // Should not add another raw block, and should output the literal content
+    expect(renderedPrompt).toBe('This is a partial tag: {%');
   });
 
   it('should not wrap prompts with valid Nunjucks tags', async () => {
@@ -309,15 +306,13 @@ describe('renderPrompt', () => {
   it('should auto-wrap prompts with partial variable tags', async () => {
     const prompt = toPrompt('Unfinished variable: {{ name');
     const renderedPrompt = await renderPrompt(prompt, { name: 'Alice' }, {});
-    expect(renderedPrompt).toContain('Unfinished variable: {{ name');
-    expect(renderedPrompt).toContain('{% raw %}');
+    expect(renderedPrompt).toBe('Unfinished variable: {{ name');
   });
 
   it('should auto-wrap prompts with partial comment tags', async () => {
     const prompt = toPrompt('Unfinished comment: {# comment');
     const renderedPrompt = await renderPrompt(prompt, {}, {});
-    expect(renderedPrompt).toContain('Unfinished comment: {# comment');
-    expect(renderedPrompt).toContain('{% raw %}');
+    expect(renderedPrompt).toBe('Unfinished comment: {# comment');
   });
 });
 

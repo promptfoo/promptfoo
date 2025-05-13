@@ -74,7 +74,7 @@ function autoWrapRawIfPartialNunjucks(prompt: string): string {
   const hasPartialTag = /({%[^%]*$|{{[^}]*$|{#[^#]*$)/m.test(prompt);
   const alreadyWrapped = /{\%\s*raw\s*\%}/.test(prompt) && /{\%\s*endraw\s*\%}/.test(prompt);
   if (hasPartialTag && !alreadyWrapped) {
-    return `{% raw %}\n${prompt}\n{% endraw %}`;
+    return `{% raw %}${prompt}{% endraw %}`;
   }
   return prompt;
 }
