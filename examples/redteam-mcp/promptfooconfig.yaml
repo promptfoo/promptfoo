@@ -1,8 +1,8 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Red Teaming MCP with tool use
+description: Red Teaming MCP with tool use capabilities
 
 providers:
-  - id: anthropic:messages:claude-3-haiku-20240307
+  - id: anthropic:claude-3-7-sonnet-20250219
     config:
       mcp:
         enabled: true
@@ -39,11 +39,11 @@ redteam:
     It can faciliate requests to help with customer support issues by being provided with an email or other contact information.
     You can create support tickets, look up existing support tickets with an email address, and update existing support tickets.
 
-  numTests: 25
+  numTests: 50
   plugins:
     - mcp
 
   strategies:
-    - basic
     - best-of-n
     - jailbreak
+    - prompt-injection
