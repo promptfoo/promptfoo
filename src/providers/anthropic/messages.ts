@@ -6,6 +6,7 @@ import logger from '../../logger';
 import type { ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
 import { maybeLoadToolsFromExternalFile } from '../../util';
+import { normalizeFinishReason } from '../../util/finishReason';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToAnthropic } from '../mcp/transform';
 import { AnthropicGenericProvider } from './generic';
@@ -134,6 +135,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
           return {
             output: outputFromMessage(parsedCachedResponse, this.config.showThinking ?? true),
             tokenUsage: getTokenUsage(parsedCachedResponse, true),
+            finishReason: normalizeFinishReason(parsedCachedResponse.stop_reason),
             cost: calculateAnthropicCost(
               this.modelName,
               this.config,
@@ -176,6 +178,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       return {
         output: outputFromMessage(response, this.config.showThinking ?? true),
         tokenUsage: getTokenUsage(response, false),
+        finishReason: normalizeFinishReason(response.stop_reason),
         cost: calculateAnthropicCost(
           this.modelName,
           this.config,
