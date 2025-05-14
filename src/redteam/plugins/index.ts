@@ -270,6 +270,7 @@ function createRemotePlugin<T extends PluginConfig>(
 const remotePlugins: PluginFactory[] = [
   MEMORY_POISONING_PLUGIN_ID,
   'ascii-smuggling',
+  'bias:gender',
   'bfla',
   'bola',
   'cca',

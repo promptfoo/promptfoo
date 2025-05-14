@@ -146,6 +146,7 @@ export const ADDITIONAL_PLUGINS = [
   'beavertails',
   'bfla',
   'bola',
+  'bias:gender',
   'cca',
   'competitors',
   'cross-session-leak',
