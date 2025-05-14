@@ -45,21 +45,3 @@ npx promptfoo eval -c promptfooconfig.yaml
 # View results
 npx promptfoo view
 ```
-
-## Test Scenarios
-
-The example evaluates how agents handle different customer inquiries:
-
-- Baggage policy questions
-- Seat change requests
-- Food service inquiries
-
-Each scenario tests appropriate agent selection, handoffs, and response quality.
-
-## Implementation Details
-
-- `agent_provider.py` - Implements the airline agents with handoff functionality
-- `promptfooconfig.yaml` - Test configuration for different query types
-- `requirements.txt` - Python dependencies
-
-The implementation demonstrates how to build complex agent systems with the OpenAI Agents SDK while leveraging promptfoo for evaluation.
