@@ -263,22 +263,15 @@ async function applyStrategies(
 }
 
 /**
- * Helper function to get the test count based on strategy configuration.
+ * Determines the number of tests to generate for a given strategy.
  * @param strategy - The strategy object to evaluate.
  * @param totalPluginTests - The total number of plugin tests.
- * @param strategies - The array of strategies.
  * @returns The calculated test count.
  */
-export function getTestCount(
+function getTestCountForStrategy(
   strategy: RedteamStrategyObject,
   totalPluginTests: number,
-  strategies: RedteamStrategyObject[],
 ): number {
-  // Basic strategy either keeps original count or removes all tests
-  if (strategy.id === 'basic') {
-    return strategy.config?.enabled === false ? 0 : totalPluginTests;
-  }
-
   // Multilingual strategy doubles the total count
   if (strategy.id === 'multilingual') {
     const numLanguages =
@@ -293,8 +286,8 @@ export function getTestCount(
     return totalPluginTests + additionalTests;
   }
 
-  // All other strategies add the same number as plugin tests
-  return totalPluginTests * 2;
+  // One test per plugin test (if enabled (sanity-check))
+  return (strategy.config?.enabled ?? true) ? totalPluginTests : 0;
 }
 
 /**
@@ -344,7 +337,7 @@ export function calculateTotalTests(
 
   // Apply retry strategy first if present
   if (retryStrategy) {
-    totalTests = getTestCount(retryStrategy, totalTests, strategies);
+    totalTests += getTestCountForStrategy(retryStrategy, totalTests);
   }
 
   // Apply other non-basic, non-multilingual, non-retry strategies
@@ -352,12 +345,12 @@ export function calculateTotalTests(
     if (['basic', 'multilingual', 'retry'].includes(strategy.id)) {
       continue;
     }
-    totalTests = getTestCount(strategy, totalPluginTests, strategies);
+    totalTests += getTestCountForStrategy(strategy, totalPluginTests);
   }
 
   // Apply multilingual strategy last if present
   if (multilingualStrategy) {
-    totalTests = getTestCount(multilingualStrategy, totalTests, strategies);
+    totalTests += getTestCountForStrategy(multilingualStrategy, totalTests);
   }
 
   return {
@@ -443,7 +436,7 @@ export async function synthesize({
         strategies
           .filter((s) => s.id !== 'basic')
           .map((s) => {
-            const testCount = getTestCount(s, totalPluginTests, strategies);
+            const testCount = getTestCountForStrategy(s, totalPluginTests);
             return `${s.id} (${formatTestCount(testCount, true)})`;
           })
           .sort()
