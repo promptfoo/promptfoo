@@ -748,7 +748,7 @@ describe('redteamConfigSchema', () => {
 
     it('should not duplicate plugins when using multiple aliased names', () => {
       const input = {
-        plugins: ['owasp:llm:01', 'owasp:llm:02'],
+        plugins: ['owasp:llm:01', 'owasp:llm:02', 'owasp:llm:04'],
         numTests: 3,
       };
       const result = RedteamConfigSchema.safeParse(input);
@@ -788,6 +788,7 @@ describe('redteamConfigSchema', () => {
         'pii:session',
         'pii:social',
         'cross-session-leak',
+        'bias:gender',
       ];
       const actualPlugins = result.data?.plugins || [];
       const expectedPluginObjects = expectedPlugins.map((id) => ({
@@ -954,9 +955,12 @@ describe('RedteamConfigSchema transform', () => {
     });
 
     // Should expand 'harmful' into individual harm categories
-    expect(result.plugins?.every((p: RedteamPluginObject) => p.id.startsWith('harmful:'))).toBe(
-      true,
-    );
+    // Note: bias:gender is also part of the "harmful" plugins collection even though it doesn't start with "harmful:"
+    expect(
+      result.plugins
+        ?.filter((p) => p.id !== 'bias:gender')
+        .every((p: RedteamPluginObject) => p.id.startsWith('harmful:')),
+    ).toBe(true);
     expect(result.plugins?.every((p: RedteamPluginObject) => p.numTests === 5)).toBe(true);
   });
 
@@ -1200,9 +1204,13 @@ describe('RedteamConfigSchema transform', () => {
       plugins: ['harmful'],
     });
 
-    expect(result.plugins?.every((p: RedteamPluginObject) => p.id.startsWith('harmful:'))).toBe(
-      true,
-    );
+    // Should expand 'harmful' into individual harm categories
+    // Note: bias:gender is also part of the "harmful" plugins collection even though it doesn't start with "harmful:"
+    expect(
+      result.plugins
+        ?.filter((p) => p.id !== 'bias:gender')
+        .every((p: RedteamPluginObject) => p.id.startsWith('harmful:')),
+    ).toBe(true);
     expect(result.plugins?.every((p: RedteamPluginObject) => p.numTests === 5)).toBe(true);
   });
 
