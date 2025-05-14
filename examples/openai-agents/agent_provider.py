@@ -1,3 +1,36 @@
+"""Airline customer service agent implementation using OpenAI Agents SDK.
+
+This module demonstrates how to build a multi-agent system with the OpenAI Agents SDK
+that can be evaluated by promptfoo. The example implements an airline customer
+service system with three specialized agents:
+
+1. Triage Agent: Routes customer inquiries to specialized agents
+2. FAQ Agent: Answers policy questions about baggage, food, etc.
+3. Seat Booking Agent: Handles seat change requests
+
+The agents use custom tools to look up information and update bookings, while
+maintaining context across agent handoffs. This example showcases:
+
+- Agent handoffs between specialized services
+- Context persistence across conversations
+- Custom tool implementation with the Agents SDK
+- Conversation tracing
+- Token usage tracking
+- Integration with promptfoo for evaluation
+
+For a complete run through, see the README.md in this directory.
+
+Typical usage:
+    import asyncio
+    from agent_provider import call_api
+    
+    result = call_api(
+        "What's your baggage policy?",
+        {"config": {"agent_type": "triage"}},
+        {"vars": {}}
+    )
+    print(result["output"])
+"""
 import asyncio
 import random
 import uuid
@@ -24,6 +57,11 @@ from pydantic import BaseModel
 
 
 class AirlineAgentContext(BaseModel):
+    """Shared context maintained across agent handoffs.
+    
+    This context is persisted throughout the conversation and passed
+    between agents during handoffs, allowing information to be shared.
+    """
     passenger_name: Optional[str] = None
     confirmation_number: Optional[str] = None
     seat_number: Optional[str] = None
@@ -38,7 +76,14 @@ class AirlineAgentContext(BaseModel):
     description_override="Lookup frequently asked questions.",
 )
 async def faq_lookup_tool(question: str) -> str:
-    """Look up answers to frequently asked questions about the airline."""
+    """Look up answers to frequently asked questions about the airline.
+    
+    Args:
+        question: The customer's question about airline policies or services
+        
+    Returns:
+        A string containing the answer to the question, if found
+    """
     if (
         "bag" in question.lower()
         or "baggage" in question.lower()
@@ -84,12 +129,15 @@ async def update_seat(
     confirmation_number: str,
     new_seat: str,
 ) -> str:
-    """
-    Update the seat for a given confirmation number.
+    """Update the seat for a given confirmation number.
 
     Args:
-        confirmation_number: The confirmation number for the flight.
-        new_seat: The new seat to update to.
+        context: The shared context wrapper containing customer information
+        confirmation_number: The confirmation number for the flight
+        new_seat: The new seat to update to
+
+    Returns:
+        A confirmation message with the updated seat information
     """
     # Update the context based on the customer's input
     context.context.confirmation_number = confirmation_number
@@ -108,13 +156,21 @@ async def update_seat(
 async def on_seat_booking_handoff(
     context: RunContextWrapper[AirlineAgentContext],
 ) -> None:
-    """Function called when handing off to the seat booking agent."""
+    """Function called when handing off to the seat booking agent.
+    
+    This hook is automatically executed when the triage agent hands off 
+    to the seat booking agent, allowing for context preparation.
+    
+    Args:
+        context: The shared context wrapper containing customer information
+    """
     flight_number = f"FLT-{random.randint(100, 999)}"
     context.context.flight_number = flight_number
 
 
 ### AGENTS
 
+# FAQ Agent specializes in answering policy questions
 faq_agent = Agent[AirlineAgentContext](
     name="FAQ Agent",
     handoff_description="A helpful agent that can answer questions about the airline.",
@@ -128,6 +184,7 @@ faq_agent = Agent[AirlineAgentContext](
     tools=[faq_lookup_tool],
 )
 
+# Seat Booking Agent specializes in handling seat changes
 seat_booking_agent = Agent[AirlineAgentContext](
     name="Seat Booking Agent",
     handoff_description="A helpful agent that can update a seat on a flight.",
@@ -142,6 +199,7 @@ seat_booking_agent = Agent[AirlineAgentContext](
     tools=[update_seat],
 )
 
+# Triage Agent is the main entry point that routes to specialized agents
 triage_agent = Agent[AirlineAgentContext](
     name="Triage Agent",
     handoff_description="A triage agent that can delegate a customer's request to the appropriate agent.",
@@ -164,7 +222,18 @@ seat_booking_agent.handoffs.append(triage_agent)
 
 
 async def run_agent(prompt: str, options: Dict[str, Any]) -> Dict[str, Any]:
-    """Run an agent with the provided prompt and options."""
+    """Run an agent with the provided prompt and options.
+    
+    This function initializes the appropriate agent based on configuration,
+    runs it with the provided prompt, and formats the result for promptfoo.
+    
+    Args:
+        prompt: The user's input message
+        options: Configuration options including agent_type
+        
+    Returns:
+        A dictionary containing the agent's output, token usage, context, and metadata
+    """
     config = options.get("config", {})
     agent_type = config.get("agent_type", "triage")
 
@@ -246,6 +315,10 @@ def call_api(
 ) -> Dict[str, Any]:
     """
     Main entry point for promptfoo to call the airline agent system.
+    
+    This function is called by promptfoo to interact with the agent system.
+    It handles transferring variables from promptfoo context to agent options
+    and runs the agent in an asyncio event loop.
 
     Args:
         prompt: The prompt to send to the agent
