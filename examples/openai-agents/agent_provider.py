@@ -32,7 +32,6 @@ Typical usage:
     print(result["output"])
 """
 
-import asyncio
 import random
 import uuid
 from typing import Any, Dict, List, Optional
@@ -314,15 +313,15 @@ async def run_agent(prompt: str, options: Dict[str, Any]) -> Dict[str, Any]:
         return {"error": str(e), "output": f"Error: {str(e)}"}
 
 
-def call_api(
+async def call_api(
     prompt: str, options: Dict[str, Any], context: Dict[str, Any]
 ) -> Dict[str, Any]:
     """
     Main entry point for promptfoo to call the airline agent system.
 
-    This function is called by promptfoo to interact with the agent system.
+    This async function is called by promptfoo to interact with the agent system.
     It handles transferring variables from promptfoo context to agent options
-    and runs the agent in an asyncio event loop.
+    and directly awaits the agent run operation.
 
     Args:
         prompt: The prompt to send to the agent
@@ -352,8 +351,7 @@ def call_api(
                 options["config"] = {}
             options["config"]["conversation_id"] = context["vars"]["conversation_id"]
 
-        # Run the agent in an asyncio event loop
-        result = asyncio.run(run_agent(prompt, options))
+        result = await run_agent(prompt, options)
         return result
     except Exception as e:
         return {"error": str(e), "output": f"Error: {str(e)}"}
