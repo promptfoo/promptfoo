@@ -208,5 +208,3 @@ A2A includes sophisticated mechanisms to prevent abuse and ensure fair resource 
 - **Concurrent Task Limits**: Controls on parallel operations
 - **Resource Quotas**: Limits on storage and computation
 - **Automatic Throttling**: Dynamic adjustment based on system load
-
-Try exploring these security features in the interactive demo above. You can see how each security measure works and how they combine to create a robust security framework for agent interactions.

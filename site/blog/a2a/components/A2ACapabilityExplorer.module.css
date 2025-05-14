@@ -613,3 +613,211 @@
   color: #6b7280;
   font-size: 0.875rem;
 }
+
+/* Dark mode adjustments */
+html[data-theme='dark'] .container {
+  background: var(--ifm-background-surface-color);
+}
+
+html[data-theme='dark'] .tab {
+  color: var(--ifm-color-emphasis-600);
+}
+
+html[data-theme='dark'] .tab:hover {
+  background: var(--ifm-color-emphasis-100);
+  color: var(--ifm-color-emphasis-900);
+}
+
+html[data-theme='dark'] .tab.active {
+  background: var(--ifm-color-primary);
+  color: var(--ifm-color-white);
+}
+
+html[data-theme='dark'] .content {
+  background: var(--ifm-background-surface-color);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+html[data-theme='dark'] .cardContent {
+  border-color: var(--ifm-color-emphasis-300);
+  background: var(--ifm-card-background-color);
+}
+
+html[data-theme='dark'] .cardHeader h4 {
+  color: var(--ifm-color-white);
+}
+
+html[data-theme='dark'] .agentDescription {
+  color: var(--ifm-color-emphasis-600);
+}
+
+html[data-theme='dark'] .version {
+  background: var(--ifm-color-emphasis-100);
+  color: var(--ifm-color-emphasis-600);
+}
+
+html[data-theme='dark'] .cardSection h5 {
+  color: var(--ifm-color-white);
+}
+
+html[data-theme='dark'] .cardSection code {
+  background: var(--ifm-color-emphasis-100);
+  color: var(--ifm-color-emphasis-900);
+}
+
+html[data-theme='dark'] .capability {
+  border-color: var(--ifm-color-emphasis-300);
+  background: var(--ifm-card-background-color);
+}
+
+html[data-theme='dark'] .capability:hover {
+  border-color: var(--ifm-color-primary);
+  background: var(--ifm-color-emphasis-100);
+}
+
+html[data-theme='dark'] .capabilityName {
+  color: var(--ifm-color-white);
+}
+
+html[data-theme='dark'] .performanceMetrics {
+  color: var(--ifm-color-emphasis-600);
+}
+
+html[data-theme='dark'] .agentButton {
+  background: var(--ifm-card-background-color);
+  border-color: var(--ifm-color-emphasis-300);
+  color: var(--ifm-color-emphasis-900);
+}
+
+html[data-theme='dark'] .agentButton:hover {
+  background: var(--ifm-color-emphasis-100);
+}
+
+html[data-theme='dark'] .agentButton.active {
+  border-color: var(--ifm-color-primary);
+  background: var(--ifm-color-primary);
+  color: var(--ifm-color-white);
+}
+
+html[data-theme='dark'] .detailItem {
+  background: var(--ifm-color-emphasis-100);
+  color: var(--ifm-color-emphasis-900);
+}
+
+html[data-theme='dark'] .tag {
+  background: var(--ifm-color-emphasis-200);
+  color: var(--ifm-color-emphasis-800);
+}
+
+html[data-theme='dark'] .jsonPreview {
+  background: var(--ifm-color-emphasis-900);
+  border-color: var(--ifm-color-emphasis-300);
+}
+
+html[data-theme='dark'] .jsonPreview .key {
+  color: var(--ifm-color-primary-lighter);
+}
+
+html[data-theme='dark'] .jsonPreview .string {
+  color: var(--ifm-color-success-lighter);
+}
+
+html[data-theme='dark'] .jsonPreview .number {
+  color: var(--ifm-color-info-lighter);
+}
+
+html[data-theme='dark'] .updateSimulator {
+  background: var(--ifm-color-emphasis-100);
+}
+
+html[data-theme='dark'] .flowStep {
+  background: var(--ifm-color-emphasis-100);
+  color: var(--ifm-color-emphasis-900);
+}
+
+html[data-theme='dark'] .queryControls {
+  background: var(--ifm-card-background-color);
+  border-color: var(--ifm-color-emphasis-300);
+}
+
+html[data-theme='dark'] .searchInput {
+  background: var(--ifm-background-surface-color);
+  border-color: var(--ifm-color-emphasis-300);
+  color: var(--ifm-color-white);
+}
+
+html[data-theme='dark'] .searchInput:focus {
+  border-color: var(--ifm-color-primary);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+html[data-theme='dark'] .filters {
+  background: var(--ifm-card-background-color);
+  border-color: var(--ifm-color-emphasis-300);
+}
+
+html[data-theme='dark'] .filterItem label {
+  color: var(--ifm-color-emphasis-900);
+}
+
+html[data-theme='dark'] .filterItem select {
+  background: var(--ifm-background-surface-color);
+  border-color: var(--ifm-color-emphasis-300);
+  color: var(--ifm-color-white);
+}
+
+html[data-theme='dark'] .filterItem select:hover {
+  border-color: var(--ifm-color-primary);
+}
+
+html[data-theme='dark'] .filterItem input[type='range'] {
+  background: var(--ifm-color-emphasis-200);
+}
+
+html[data-theme='dark'] .filterItem input[type='range']::-webkit-slider-thumb {
+  background: var(--ifm-color-primary);
+}
+
+html[data-theme='dark'] .queryResult {
+  background: var(--ifm-card-background-color);
+  border-color: var(--ifm-color-emphasis-300);
+}
+
+html[data-theme='dark'] .queryResult:hover {
+  border-color: var(--ifm-color-primary);
+  box-shadow: 0 4px 6px rgba(59, 130, 246, 0.2);
+}
+
+html[data-theme='dark'] .queryResult h5 {
+  color: var(--ifm-color-white);
+}
+
+html[data-theme='dark'] .queryResult p {
+  color: var(--ifm-color-emphasis-600);
+}
+
+html[data-theme='dark'] .resultDetails {
+  border-color: var(--ifm-color-emphasis-300);
+}
+
+html[data-theme='dark'] .metricItem {
+  color: var(--ifm-color-emphasis-600);
+}
+
+html[data-theme='dark'] .metricValue {
+  color: var(--ifm-color-white);
+}
+
+html[data-theme='dark'] .modalContent {
+  background: var(--ifm-background-surface-color);
+}
+
+html[data-theme='dark'] .metric {
+  background: var(--ifm-color-emphasis-100);
+}
+
+html[data-theme='dark'] .noResults {
+  background: var(--ifm-color-emphasis-100);
+  border-color: var(--ifm-color-emphasis-300);
+  color: var(--ifm-color-emphasis-600);
+}
