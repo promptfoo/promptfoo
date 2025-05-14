@@ -709,6 +709,21 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
 });
 ```
 
+## Agents SDK Integration
+
+Promptfoo supports evaluation of OpenAI's Agents SDK, which enables building multi-agent systems with specialized agents, handoffs, and persistent context. You can integrate the agents sdk as a [python provider](./python.md).
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - file://agent_provider.py:call_api
+```
+
+For a complete working example of an airline customer service system with multiple agents, see the [OpenAI Agents SDK example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-agents) or initialize it with:
+
+```bash
+npx promptfoo@latest init --example openai-agents
+```
+
 ## Audio capabilities
 
 OpenAI models with audio support (like `gpt-4o-audio-preview` and `gpt-4o-mini-audio-preview`) can process audio inputs and generate audio outputs. This enables testing speech-to-text, text-to-speech, and speech-to-speech capabilities.
