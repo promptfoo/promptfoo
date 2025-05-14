@@ -156,8 +156,8 @@ export const ADDITIONAL_PLUGINS = [
   'donotanswer',
   'harmbench',
   'imitation',
-  'xstest',
   'indirect-prompt-injection',
+  'mcp',
   'overreliance',
   'pliny',
   'prompt-extraction',
@@ -170,9 +170,10 @@ export const ADDITIONAL_PLUGINS = [
   'sql-injection',
   'ssrf',
   'system-prompt-override',
-  'tool-discovery',
   'tool-discovery:multi-turn',
+  'tool-discovery',
   'unsafebench',
+  'xstest',
 ] as const;
 export type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
 
@@ -937,6 +938,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   multilingual: 'Tests handling of attacks across multiple languages',
   'other-encodings':
     'Tests handling of content encoded with various encodings to potentially bypass filters',
+  mcp: 'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
   overreliance: 'Tests for overreliance on system assumptions',
   pandamonium:
     "[Experimental] Promptfoo's blackbox jailbreak. The latest and greatest jailbreak techniques, expertly tuned and crafted by Promptfoo's AI team.",
@@ -997,6 +999,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'excessive-agency': 'Excessive Agency',
   foundation: 'Foundation Model Plugin Collection',
   gcg: 'Greedy Coordinate Gradient',
+  mcp: 'Model Context Protocol',
   goat: 'Generative Offensive Agent Tester',
   hallucination: 'False Information (Hallucination)',
   harmbench: 'HarmBench Dataset',
@@ -1100,6 +1103,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   bfla: Severity.High,
   bola: Severity.High,
   cca: Severity.High,
+  mcp: Severity.Low,
   competitors: Severity.Low,
   contracts: Severity.Medium,
   'cross-session-leak': Severity.Medium,
@@ -1294,6 +1298,7 @@ export const categoryAliases: Record<Plugin, string> = {
   donotanswer: 'DoNotAnswer',
   'debug-access': 'DebugAccess',
   default: 'Default',
+  mcp: 'MCP',
   'divergent-repetition': 'DivergentRepetition',
   'excessive-agency': 'ExcessiveAgency',
   'tool-discovery': 'ToolDiscovery',
@@ -1421,6 +1426,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'harmful:weapons:ied': 'Tests handling of Improvised Explosive Devices',
   hijacking: 'Assesses protection against unauthorized resource usage and purpose deviation',
   imitation: 'Tests safeguards against unauthorized entity impersonation attempts',
+  mcp: 'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
   'indirect-prompt-injection':
     'Evaluates vulnerability to injection attacks via untrusted variables',
   intent: 'Tests system resilience against specific manipulation attempts',
