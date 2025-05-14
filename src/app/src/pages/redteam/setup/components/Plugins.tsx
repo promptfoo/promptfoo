@@ -36,6 +36,7 @@ import {
   type Plugin,
   riskCategories,
   OWASP_LLM_RED_TEAM_MAPPING,
+  EU_AI_ACT_MAPPING,
 } from '@promptfoo/redteam/constants';
 import { useDebounce } from 'use-debounce';
 import { useRedTeamConfig, useRecentlyUsedPlugins } from '../hooks/useRedTeamConfig';
@@ -234,6 +235,10 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     {
       name: 'MITRE',
       plugins: new Set(Object.values(MITRE_ATLAS_MAPPING).flatMap((v) => v.plugins)),
+    },
+    {
+      name: 'EU AI Act',
+      plugins: new Set(Object.values(EU_AI_ACT_MAPPING).flatMap((v) => v.plugins)),
     },
   ];
 
