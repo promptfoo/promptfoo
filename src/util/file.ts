@@ -90,14 +90,11 @@ export function getResolvedRelativePath(
   contextBasePath?: string,
   isCloudConfig?: boolean,
 ): string {
-  // If it's already an absolute path, return it as is
-  if (path.isAbsolute(filePath)) {
+  // If it's already an absolute path, or not a cloud config, return it as is
+  if (path.isAbsolute(filePath) || !isCloudConfig) {
     return filePath;
   }
 
-  // If using a cloud config, always use process.cwd() instead of contextBasePath
-  const basePath = isCloudConfig === true ? process.cwd() : contextBasePath || process.cwd();
-
   // Join the basePath and filePath to get the resolved path
-  return path.join(basePath, filePath);
+  return path.join(process.cwd(), filePath);
 }
