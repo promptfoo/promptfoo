@@ -27,8 +27,6 @@ const ArgsSchema = z
     config: z.string().optional(),
     output: z.string(),
     target: z.string().optional(),
-    envPath: z.string().optional(),
-    verbose: z.boolean().optional(),
     preview: z.boolean(),
     turns: z.number().optional(),
   })
@@ -177,9 +175,6 @@ export function discoverCommand(program: Command) {
         'A maximum number of turns to run the discovery process. Lower is faster but less accurate.',
       ).argParser(Number.parseInt),
     )
-
-    .option('--env-path <path>', 'Path to a custom .env file')
-    .option('-v, --verbose', 'Show debug logs')
     .action(async (rawArgs: Args) => {
       // Validate the arguments:
       const { success, data: args, error } = ArgsSchema.safeParse(rawArgs);
@@ -192,21 +187,10 @@ export function discoverCommand(program: Command) {
         return;
       }
 
-      // Set up the environment:
-      setupEnv(args.envPath);
-
-      // Set up logging:
-      if (args.verbose) {
-        setLogLevel('debug');
-      }
-
       // Record telemetry:
       telemetry.record('command_used', {
         name: 'redteam discover',
       });
-
-      // Always use remote for discovery
-      cliState.remote = true;
 
       let config: UnifiedConfig | null = null;
       // Although the providers/targets property supports multiple values, Redteaming only supports
