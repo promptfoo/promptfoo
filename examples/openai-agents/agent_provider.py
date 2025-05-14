@@ -177,7 +177,7 @@ faq_agent = Agent[AirlineAgentContext](
     name="FAQ Agent",
     handoff_description="A helpful agent that can answer questions about the airline.",
     instructions=f"""{RECOMMENDED_PROMPT_PREFIX}
-    You are an FAQ agent. If you are speaking to a customer, you probably were transferred to from the triage agent.
+    You are an FAQ agent. If you are speaking to a customer, you probably were transferred from the triage agent.
     Use the following routine to support the customer.
     # Routine
     1. Identify the last question asked by the customer.
