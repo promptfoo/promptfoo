@@ -35,6 +35,7 @@ import { printBorder, setupEnv, writeMultipleOutputs } from '../util';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
 import { maybeLoadFromExternalFile } from '../util/file';
+import { formatDuration } from '../util/formatDuration';
 import invariant from '../util/invariant';
 import { filterProviders } from './eval/filterProviders';
 import type { FilterOptions } from './eval/filterTests';
@@ -408,6 +409,10 @@ export async function doEval(
 
     printBorder();
 
+    // Format and display duration
+    const duration = Math.round((Date.now() - startTime) / 1000);
+    const durationDisplay = formatDuration(duration);
+
     const isRedteam = Boolean(config.redteam);
 
     logger.info(chalk.green.bold(`Successes: ${successes}`));
@@ -418,6 +423,8 @@ export async function doEval(
     if (!Number.isNaN(passRate)) {
       logger.info(chalk.blue.bold(`Pass Rate: ${passRate.toFixed(2)}%`));
     }
+    logger.info(chalk.blue.bold(`Duration: ${durationDisplay} (concurrency: ${maxConcurrency})`));
+
     if (tokenUsage.total > 0) {
       const evalTokens = {
         total: tokenUsage.total,
