@@ -23,7 +23,7 @@ For a complete run through, see the README.md in this directory.
 Typical usage:
     import asyncio
     from agent_provider import call_api
-    
+
     result = call_api(
         "What's your baggage policy?",
         {"config": {"agent_type": "triage"}},
@@ -31,6 +31,7 @@ Typical usage:
     )
     print(result["output"])
 """
+
 import asyncio
 import random
 import uuid
@@ -58,10 +59,11 @@ from pydantic import BaseModel
 
 class AirlineAgentContext(BaseModel):
     """Shared context maintained across agent handoffs.
-    
+
     This context is persisted throughout the conversation and passed
     between agents during handoffs, allowing information to be shared.
     """
+
     passenger_name: Optional[str] = None
     confirmation_number: Optional[str] = None
     seat_number: Optional[str] = None
@@ -77,10 +79,10 @@ class AirlineAgentContext(BaseModel):
 )
 async def faq_lookup_tool(question: str) -> str:
     """Look up answers to frequently asked questions about the airline.
-    
+
     Args:
         question: The customer's question about airline policies or services
-        
+
     Returns:
         A string containing the answer to the question, if found
     """
@@ -157,10 +159,10 @@ async def on_seat_booking_handoff(
     context: RunContextWrapper[AirlineAgentContext],
 ) -> None:
     """Function called when handing off to the seat booking agent.
-    
-    This hook is automatically executed when the triage agent hands off 
+
+    This hook is automatically executed when the triage agent hands off
     to the seat booking agent, allowing for context preparation.
-    
+
     Args:
         context: The shared context wrapper containing customer information
     """
@@ -223,14 +225,14 @@ seat_booking_agent.handoffs.append(triage_agent)
 
 async def run_agent(prompt: str, options: Dict[str, Any]) -> Dict[str, Any]:
     """Run an agent with the provided prompt and options.
-    
+
     This function initializes the appropriate agent based on configuration,
     runs it with the provided prompt, and formats the result for promptfoo.
-    
+
     Args:
         prompt: The user's input message
         options: Configuration options including agent_type
-        
+
     Returns:
         A dictionary containing the agent's output, token usage, context, and metadata
     """
@@ -286,15 +288,17 @@ async def run_agent(prompt: str, options: Dict[str, Any]) -> Dict[str, Any]:
                 "prompt": 0,
                 "completion": 0,
             }
-            
+
             # Accumulate token usage from all API responses
-            if hasattr(result, 'raw_responses') and result.raw_responses:
+            if hasattr(result, "raw_responses") and result.raw_responses:
                 for resp in result.raw_responses:
-                    if hasattr(resp, 'usage'):
+                    if hasattr(resp, "usage"):
                         token_usage["total"] += getattr(resp.usage, "total_tokens", 0)
-                        token_usage["prompt"] += getattr(resp.usage, "prompt_tokens", 0) 
-                        token_usage["completion"] += getattr(resp.usage, "completion_tokens", 0)
-            
+                        token_usage["prompt"] += getattr(resp.usage, "prompt_tokens", 0)
+                        token_usage["completion"] += getattr(
+                            resp.usage, "completion_tokens", 0
+                        )
+
             # Use minimal fallback values if no usage info is available
             if token_usage["total"] == 0:
                 token_usage = {"total": 1, "prompt": 1, "completion": 0}
@@ -315,7 +319,7 @@ def call_api(
 ) -> Dict[str, Any]:
     """
     Main entry point for promptfoo to call the airline agent system.
-    
+
     This function is called by promptfoo to interact with the agent system.
     It handles transferring variables from promptfoo context to agent options
     and runs the agent in an asyncio event loop.
