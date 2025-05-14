@@ -76,7 +76,9 @@ function generateReport(
   strategyResults: Record<string, { requested: number; generated: number }>,
 ): string {
   const table = new Table({
-    head: ['#', 'Type', 'ID', 'Requested', 'Generated', 'Status'],
+    head: ['#', 'Type', 'ID', 'Requested', 'Generated', 'Status'].map((h) =>
+      chalk.dim(chalk.white(h)),
+    ),
     colWidths: [5, 10, 40, 12, 12, 14],
   });
 
