@@ -26,6 +26,7 @@ export const LLAMA_GUARD_ENABLED_CATEGORIES: string[] = [
 export const FOUNDATION_PLUGINS = [
   'ascii-smuggling',
   'beavertails',
+  'bias:gender',
   'contracts',
   'cyberseceval',
   'donotanswer',
@@ -126,7 +127,10 @@ export const HARM_PLUGINS = {
 export type HarmPlugin = keyof typeof HARM_PLUGINS;
 
 export const PII_PLUGINS = ['pii:api-db', 'pii:direct', 'pii:session', 'pii:social'] as const;
+
+export const BIAS_PLUGINS = ['bias:gender'] as const;
 export type PIIPlugin = (typeof PII_PLUGINS)[number];
+export type BiasPlugin = (typeof BIAS_PLUGINS)[number];
 
 export const BASE_PLUGINS = [
   'contracts',
@@ -142,6 +146,7 @@ export const ADDITIONAL_PLUGINS = [
   'beavertails',
   'bfla',
   'bola',
+  'bias:gender',
   'cca',
   'competitors',
   'cross-session-leak',
@@ -151,8 +156,8 @@ export const ADDITIONAL_PLUGINS = [
   'donotanswer',
   'harmbench',
   'imitation',
-  'xstest',
   'indirect-prompt-injection',
+  'mcp',
   'overreliance',
   'pliny',
   'prompt-extraction',
@@ -165,9 +170,10 @@ export const ADDITIONAL_PLUGINS = [
   'sql-injection',
   'ssrf',
   'system-prompt-override',
-  'tool-discovery',
   'tool-discovery:multi-turn',
+  'tool-discovery',
   'unsafebench',
+  'xstest',
 ] as const;
 export type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
 
@@ -188,6 +194,7 @@ export type StrategyExemptPlugin = (typeof STRATEGY_EXEMPT_PLUGINS)[number];
 export type Plugin =
   | AdditionalPlugin
   | BasePlugin
+  | BiasPlugin
   | Collection
   | ConfigRequiredPlugin
   | HarmPlugin
@@ -213,6 +220,7 @@ export const FRAMEWORK_NAMES: Record<string, string> = {
   'owasp:api': 'OWASP API Top 10',
   'owasp:llm': 'OWASP LLM Top 10',
   'owasp:agentic': 'OWASP Agentic v1.0',
+  'eu:ai-act': 'EU AI Act',
 };
 
 export const OWASP_LLM_TOP_10_NAMES = [
@@ -275,6 +283,7 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
     plugins: [
       'harmful:misinformation-disinformation',
       'harmful:hate',
+      'bias:gender',
       'harmful:radicalization',
       'harmful:specialized-advice',
     ],
@@ -632,6 +641,77 @@ export const MITRE_ATLAS_MAPPING: Record<string, { plugins: Plugin[]; strategies
   },
 };
 
+/**
+ *  EU Artificial Intelligence Act
+ *  ▸ Art. 5  (Prohibited AI practices)           – unacceptable-risk
+ *  ▸ Annex III (High-risk AI systems, Art. 6(2)) – high-risk
+ *
+ *  Sources:
+ *   * Art. 5 list of prohibitions  [oai_citation:0‡Artificial Intelligence Act](https://artificialintelligenceact.eu/article/5/?utm_source=chatgpt.com)
+ *   * Annex III high-risk categories  [oai_citation:1‡Lexology](https://www.lexology.com/library/detail.aspx?g=ec2aab25-67aa-4635-87a0-fc43d9fd1f51&utm_source=chatgpt.com)
+ */
+export const EU_AI_ACT_MAPPING: Record<string, { plugins: Plugin[]; strategies: Strategy[] }> = {
+  /* ----------  Art. 5 – Prohibited practices  --------------------------------- */
+  'eu:ai-act:art5:subliminal-manipulation': {
+    plugins: ['hijacking', 'intent', 'excessive-agency'],
+    strategies: ['jailbreak', 'jailbreak:tree', 'jailbreak:composite', 'prompt-injection'],
+  },
+  'eu:ai-act:art5:exploitation-of-vulnerabilities': {
+    plugins: ['hijacking', 'imitation', 'harmful:misinformation-disinformation'],
+    strategies: [],
+  },
+  'eu:ai-act:art5:social-scoring': {
+    plugins: ['harmful:misinformation-disinformation', 'overreliance'],
+    strategies: [],
+  },
+  'eu:ai-act:art5:biometric-categorisation': {
+    plugins: ['pii:direct', 'pii:session', 'harmful:privacy'],
+    strategies: [],
+  },
+  'eu:ai-act:art5:remote-biometric-id-live': {
+    plugins: ['pii:session', 'pii:direct', 'harmful:privacy'],
+    strategies: [],
+  },
+  'eu:ai-act:art5:remote-biometric-id-post': {
+    plugins: ['pii:api-db', 'pii:direct', 'harmful:privacy'],
+    strategies: [],
+  },
+
+  /* ----------  Annex III – High-risk use-cases  ------------------------------- */
+  'eu:ai-act:annex3:biometric-id': {
+    plugins: ['pii:direct', 'pii:session', 'harmful:privacy'],
+    strategies: [],
+  },
+  'eu:ai-act:annex3:critical-infrastructure': {
+    plugins: ['shell-injection', 'sql-injection', 'ssrf', 'excessive-agency'],
+    strategies: ['jailbreak', 'prompt-injection'],
+  },
+  'eu:ai-act:annex3:education': {
+    plugins: ['harmful:misinformation-disinformation', 'hallucination', 'overreliance'],
+    strategies: [],
+  },
+  'eu:ai-act:annex3:employment': {
+    plugins: ['imitation', 'pii:direct', 'overreliance'],
+    strategies: [],
+  },
+  'eu:ai-act:annex3:essential-services': {
+    plugins: ['pii:direct', 'pii:session', 'excessive-agency'],
+    strategies: [],
+  },
+  'eu:ai-act:annex3:law-enforcement': {
+    plugins: ['pii:direct', 'pii:api-db', 'harmful:privacy'],
+    strategies: [],
+  },
+  'eu:ai-act:annex3:migration-border': {
+    plugins: ['pii:direct', 'harmful:hate', 'harmful:privacy'],
+    strategies: [],
+  },
+  'eu:ai-act:annex3:justice-democracy': {
+    plugins: ['hallucination', 'harmful:misinformation-disinformation', 'pii:direct'],
+    strategies: [],
+  },
+};
+
 // Aliased plugins are like collections, except they are hidden from the standard plugin list.
 export const ALIASED_PLUGINS = [
   'mitre:atlas',
@@ -648,11 +728,13 @@ export const ALIASED_PLUGINS = [
   'misinformation',
   'illegal-activity',
   'personal-safety',
+  'eu:ai-act',
   ...Object.keys(MITRE_ATLAS_MAPPING),
   ...Object.keys(NIST_AI_RMF_MAPPING),
   ...Object.keys(OWASP_API_TOP_10_MAPPING),
   ...Object.keys(OWASP_LLM_TOP_10_MAPPING),
   ...Object.keys(OWASP_AGENTIC_REDTEAM_MAPPING),
+  ...Object.keys(EU_AI_ACT_MAPPING),
 ] as const;
 
 export const ALIASED_PLUGIN_MAPPINGS: Record<
@@ -665,6 +747,7 @@ export const ALIASED_PLUGIN_MAPPINGS: Record<
   'owasp:llm': OWASP_LLM_TOP_10_MAPPING,
   'owasp:llm:redteam': OWASP_LLM_RED_TEAM_MAPPING,
   'owasp:agentic:redteam': OWASP_AGENTIC_REDTEAM_MAPPING,
+  'eu:ai-act': EU_AI_ACT_MAPPING,
   toxicity: {
     toxicity: {
       plugins: [
@@ -680,7 +763,7 @@ export const ALIASED_PLUGIN_MAPPINGS: Record<
   },
   bias: {
     bias: {
-      plugins: ['politics', 'religion'],
+      plugins: ['politics', 'religion', 'bias:gender'],
       strategies: [],
     },
   },
@@ -720,6 +803,7 @@ export const FRAMEWORK_COMPLIANCE_IDS = [
   'nist:ai:measure',
   'owasp:api',
   'owasp:llm',
+  'eu:ai-act',
 ] as const;
 export type FrameworkComplianceId = (typeof FRAMEWORK_COMPLIANCE_IDS)[number];
 
@@ -789,6 +873,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   beavertails: 'Tests handling of malicious prompts from the BeaverTails dataset',
   'best-of-n': 'Jailbreak technique published by Anthropic and Stanford',
   bfla: 'Tests for broken function-level authorization vulnerabilities (OWASP API 5)',
+  'bias:gender': 'Tests handling of gender bias, stereotypes, and discrimination',
   bola: 'Tests for broken object-level authorization vulnerabilities (OWASP API 1)',
   cca: 'Tests for vulnerability to Context Compliance Attacks using fabricated conversation history',
   citation: 'Exploits academic authority bias to bypass content filters',
@@ -853,6 +938,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   multilingual: 'Tests handling of attacks across multiple languages',
   'other-encodings':
     'Tests handling of content encoded with various encodings to potentially bypass filters',
+  mcp: 'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
   overreliance: 'Tests for overreliance on system assumptions',
   pandamonium:
     "[Experimental] Promptfoo's blackbox jailbreak. The latest and greatest jailbreak techniques, expertly tuned and crafted by Promptfoo's AI team.",
@@ -913,10 +999,12 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'excessive-agency': 'Excessive Agency',
   foundation: 'Foundation Model Plugin Collection',
   gcg: 'Greedy Coordinate Gradient',
+  mcp: 'Model Context Protocol',
   goat: 'Generative Offensive Agent Tester',
   hallucination: 'False Information (Hallucination)',
   harmbench: 'HarmBench Dataset',
   harmful: 'Malicious Content Suite',
+  'bias:gender': 'Gender Bias',
   'harmful:chemical-biological-weapons': 'WMD Content',
   'harmful:child-exploitation': 'Child Exploitation',
   'harmful:copyright-violations': 'IP Violations',
@@ -1015,6 +1103,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   bfla: Severity.High,
   bola: Severity.High,
   cca: Severity.High,
+  mcp: Severity.Low,
   competitors: Severity.Low,
   contracts: Severity.Medium,
   'cross-session-leak': Severity.Medium,
@@ -1028,6 +1117,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   hallucination: Severity.Medium,
   harmbench: Severity.Medium,
   harmful: Severity.Medium,
+  'bias:gender': Severity.Low,
   'harmful:chemical-biological-weapons': Severity.High,
   'harmful:child-exploitation': Severity.Critical,
   'harmful:copyright-violations': Severity.Low,
@@ -1110,6 +1200,8 @@ export const riskCategories: Record<string, Plugin[]> = {
     'pii:social',
     'pii',
     'prompt-extraction',
+
+    MEMORY_POISONING_PLUGIN_ID,
   ],
 
   'Compliance & Legal': [
@@ -1132,6 +1224,7 @@ export const riskCategories: Record<string, Plugin[]> = {
   ],
 
   'Trust & Safety': [
+    'bias:gender',
     'harmful:child-exploitation',
     'harmful:graphic-content',
     'harmful:harassment-bullying',
@@ -1141,16 +1234,6 @@ export const riskCategories: Record<string, Plugin[]> = {
     'harmful:radicalization',
     'harmful:self-harm',
     'harmful:sexual-content',
-  ],
-
-  Dataset: [
-    'beavertails',
-    'cyberseceval',
-    'donotanswer',
-    'harmbench',
-    'pliny',
-    'unsafebench',
-    'xstest',
   ],
 
   Brand: [
@@ -1167,16 +1250,23 @@ export const riskCategories: Record<string, Plugin[]> = {
     'religion',
   ],
 
-  Agentic: [MEMORY_POISONING_PLUGIN_ID],
+  Datasets: [
+    'beavertails',
+    'cyberseceval',
+    'donotanswer',
+    'harmbench',
+    'pliny',
+    'unsafebench',
+    'xstest',
+  ],
 };
 
 export const categoryDescriptions = {
   'Security & Access Control': 'Data protection, access control, and system security risks.',
-  'Content Safety & Moderation': 'Harmful, inappropriate, or offensive content generation risks.',
   'Compliance & Legal': 'Regulatory compliance, legal, and policy violation risks.',
-  'Output Quality & Trust': 'Output reliability, accuracy, and brand reputation risks.',
-  Dataset:
-    'Pre-compiled collections of test cases from research datasets designed to evaluate model safety, robustness, and alignment.',
+  'Trust & Safety': 'Harmful, inappropriate, or offensive content generation risks.',
+  Brand: 'Output reliability, accuracy, and brand reputation risks.',
+  Datasets: 'Pre-defined test cases from research datasets.',
 };
 
 export type TopLevelCategory = keyof typeof riskCategories;
@@ -1208,6 +1298,7 @@ export const categoryAliases: Record<Plugin, string> = {
   donotanswer: 'DoNotAnswer',
   'debug-access': 'DebugAccess',
   default: 'Default',
+  mcp: 'MCP',
   'divergent-repetition': 'DivergentRepetition',
   'excessive-agency': 'ExcessiveAgency',
   'tool-discovery': 'ToolDiscovery',
@@ -1216,6 +1307,7 @@ export const categoryAliases: Record<Plugin, string> = {
   hallucination: 'Hallucination',
   harmbench: 'Harmbench',
   harmful: 'Harmful',
+  'bias:gender': 'Gender Bias',
   'harmful:chemical-biological-weapons': 'Chemical & Biological Weapons',
   'harmful:child-exploitation': 'Child Exploitation',
   'harmful:copyright-violations': 'Copyright Violations - Copyrighted text',
@@ -1305,6 +1397,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   harmbench:
     'Tests for harmful content, illegal activities, misinformation using the HarmBench dataset from the Center for AI Safety (CAIS)',
   harmful: 'Comprehensive suite for testing handling of various categories of malicious content',
+  'bias:gender': 'Tests handling of gender bias in responses, stereotypes, and discrimination',
   'harmful:chemical-biological-weapons': 'Tests detection and response to WMD-related content',
   'harmful:child-exploitation': 'Tests handling of child exploitation content',
   'harmful:copyright-violations': 'Tests handling of intellectual property violations',
@@ -1333,6 +1426,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'harmful:weapons:ied': 'Tests handling of Improvised Explosive Devices',
   hijacking: 'Assesses protection against unauthorized resource usage and purpose deviation',
   imitation: 'Tests safeguards against unauthorized entity impersonation attempts',
+  mcp: 'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
   'indirect-prompt-injection':
     'Evaluates vulnerability to injection attacks via untrusted variables',
   intent: 'Tests system resilience against specific manipulation attempts',
@@ -1436,4 +1530,5 @@ export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
   'OWASP Agentic AI Top 10': 'OWASP Agentic AI Top 10 Threats and Mitigations',
   RAG: 'Recommended plugins plus additional tests for RAG specific scenarios like access control',
   Recommended: 'A broad set of plugins recommended by Promptfoo',
+  'EU AI Act': 'Plugins mapped to EU AI Act prohibited & high-risk requirements',
 } as const;

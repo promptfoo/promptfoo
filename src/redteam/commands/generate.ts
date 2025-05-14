@@ -11,7 +11,7 @@ import { synthesize } from '../';
 import { disableCache } from '../../cache';
 import cliState from '../../cliState';
 import { VERSION } from '../../constants';
-import logger, { setLogLevel } from '../../logger';
+import logger from '../../logger';
 import telemetry from '../../telemetry';
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types';
 import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
@@ -277,6 +277,19 @@ export async function doGenerateRedteam(
     const relativeOutputPath = path.relative(process.cwd(), options.output);
     logger.info(`Wrote ${redteamTests.length} test cases to ${relativeOutputPath}`);
     if (!options.inRedteamRun) {
+      // Provider cleanup step
+      try {
+        const provider = testSuite.providers[0] as ApiProvider;
+        if (provider && typeof provider.cleanup === 'function') {
+          const cleanupResult = provider.cleanup();
+          if (cleanupResult instanceof Promise) {
+            await cleanupResult;
+          }
+        }
+      } catch (cleanupErr) {
+        logger.warn(`Error during provider cleanup: ${cleanupErr}`);
+      }
+
       const commandPrefix = isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo';
       logger.info(
         '\n' +
@@ -391,7 +404,6 @@ export function redteamGenerateCommand(
       'Specify the language for generated tests. Defaults to English',
     )
     .option('--no-cache', 'Do not read or write results to disk cache', false)
-    .option('--env-file, --env-path <path>', 'Path to .env file')
     .option(
       '-j, --max-concurrency <number>',
       'Maximum number of concurrent API calls',
@@ -403,14 +415,9 @@ export function redteamGenerateCommand(
     )
     .option('--remote', 'Force remote inference wherever possible', false)
     .option('--force', 'Force generation even if no changes are detected', false)
-    .option('--verbose', 'Show debug logs', defaultConfig?.commandLineOptions?.verbose)
     .option('--no-progress-bar', 'Do not show progress bar')
     .option('--burp-escape-json', 'Escape quotes in Burp payloads', false)
     .action((opts: Partial<RedteamCliGenerateOptions>): void => {
-      if (opts.verbose) {
-        setLogLevel('debug');
-      }
-
       if (opts.remote) {
         cliState.remote = true;
       }

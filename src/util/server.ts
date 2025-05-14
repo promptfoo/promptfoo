@@ -1,6 +1,6 @@
 import opener from 'opener';
 import readline from 'readline';
-import { VERSION, DEFAULT_PORT } from '../constants';
+import { VERSION, getDefaultPort } from '../constants';
 import logger from '../logger';
 
 export enum BrowserBehavior {
@@ -45,7 +45,7 @@ export async function promptYesNo(question: string, defaultYes = false): Promise
   return answer.toLowerCase().startsWith('y');
 }
 
-export async function checkServerRunning(port = DEFAULT_PORT): Promise<boolean> {
+export async function checkServerRunning(port = getDefaultPort()): Promise<boolean> {
   try {
     const response = await fetch(`http://localhost:${port}/health`);
     const data = await response.json();
@@ -58,7 +58,7 @@ export async function checkServerRunning(port = DEFAULT_PORT): Promise<boolean> 
 
 export async function openBrowser(
   browserBehavior: BrowserBehavior,
-  port = DEFAULT_PORT,
+  port = getDefaultPort(),
 ): Promise<void> {
   const baseUrl = `http://localhost:${port}`;
   let url = baseUrl;

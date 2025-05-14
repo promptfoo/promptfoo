@@ -733,6 +733,7 @@ export class VertexChatProvider extends VertexGenericProvider {
 
   async cleanup(): Promise<void> {
     if (this.mcpClient) {
+      await this.initializationPromise;
       await this.mcpClient.cleanup();
       this.mcpClient = null;
     }

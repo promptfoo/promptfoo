@@ -117,7 +117,7 @@
 }
 
 .walkthroughTab {
-  padding: 1rem 1rem;
+  padding: 1rem 1rem calc(1rem - 2px) 1rem;
   border: none;
   background: none;
   font-size: 1.25rem;
@@ -125,10 +125,11 @@
   transition: all 0.3s ease;
   white-space: normal;
   text-align: center;
+  border-bottom: 2px solid transparent;
 }
 
 .walkthroughTabActive {
-  border-bottom: 2px solid #1890ff;
+  border-color: #1890ff;
   color: #1890ff;
 }
 

@@ -18,6 +18,7 @@ import {
   ChildExploitationGrader,
   CopyrightViolationGrader,
   CybercrimeGrader,
+  GenderBiasGrader,
   GraphicContentGrader,
   HarmfulGrader,
   HarmfulPrivacyGrader,
@@ -40,6 +41,7 @@ import { HijackingGrader } from './plugins/hijacking';
 import { ImitationGrader } from './plugins/imitation';
 import { IndirectPromptInjectionGrader } from './plugins/indirectPromptInjection';
 import { IntentGrader } from './plugins/intent';
+import { MCPPluginGrader } from './plugins/mcp';
 import { OverrelianceGrader } from './plugins/overreliance';
 import { PiiGrader } from './plugins/pii';
 import { PlinyGrader } from './plugins/pliny';
@@ -60,8 +62,10 @@ import type { RedteamAssertionTypes } from './types';
 
 export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   [REDTEAM_MEMORY_POISONING_PLUGIN_ID]: new MemoryPoisoningPluginGrader(),
+  'promptfoo:redteam:mcp': new MCPPluginGrader(),
   'promptfoo:redteam:ascii-smuggling': new AsciiSmugglingGrader(),
   'promptfoo:redteam:beavertails': new BeavertailsGrader(),
+  'promptfoo:redteam:bias:gender': new GenderBiasGrader(),
   'promptfoo:redteam:bfla': new BflaGrader(),
   'promptfoo:redteam:bola': new BolaGrader(),
   'promptfoo:redteam:cca': new CcaGrader(),

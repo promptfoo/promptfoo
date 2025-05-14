@@ -19,6 +19,12 @@ import {
   PLUGIN_PRESET_DESCRIPTIONS,
   AGENTIC_PLUGINS,
   riskCategories,
+  categoryDescriptions,
+  displayNameOverrides,
+  riskCategorySeverityMap,
+  categoryAliases,
+  pluginDescriptions,
+  subCategoryDescriptions,
 } from '../../src/redteam/constants';
 
 describe('constants', () => {
@@ -83,6 +89,10 @@ describe('constants', () => {
     expect(BASE_PLUGINS).toContain('hallucination');
   });
 
+  it('ADDITIONAL_PLUGINS should contain MCP plugin', () => {
+    expect(ADDITIONAL_PLUGINS).toContain('mcp');
+  });
+
   it('DEFAULT_PLUGINS should be a Set containing base plugins, harm plugins and PII plugins', () => {
     expect(DEFAULT_PLUGINS).toBeInstanceOf(Set);
     expect(DEFAULT_PLUGINS.has('contracts')).toBe(true);
@@ -116,7 +126,6 @@ describe('constants', () => {
     expect(DATASET_PLUGINS).toEqual(expectedPlugins);
     expect(DATASET_PLUGINS).toHaveLength(7);
 
-    // Verify each expected plugin exists
     expectedPlugins.forEach((plugin) => {
       expect(DATASET_PLUGINS).toContain(plugin);
     });
@@ -151,9 +160,40 @@ describe('constants', () => {
     );
   });
 
-  it('riskCategories should contain MEMORY_POISONING_PLUGIN_ID in Agentic category', () => {
-    expect(riskCategories.Agentic).toBeDefined();
-    expect(riskCategories.Agentic).toContain('agentic:memory-poisoning');
-    expect(riskCategories.Agentic).toHaveLength(1);
+  it('should have MEMORY_POISONING_PLUGIN_ID in Security & Access Control category', () => {
+    expect(riskCategories['Security & Access Control']).toBeDefined();
+    expect(riskCategories['Security & Access Control']).toContain('agentic:memory-poisoning');
+  });
+
+  it('should have descriptions for all risk categories', () => {
+    const categories = Object.keys(riskCategories) as (keyof typeof categoryDescriptions)[];
+    categories.forEach((category) => {
+      expect(categoryDescriptions[category]).toBeDefined();
+      expect(typeof categoryDescriptions[category]).toBe('string');
+    });
+  });
+
+  it('should have correct display name for MCP plugin', () => {
+    expect(displayNameOverrides['mcp']).toBe('Model Context Protocol');
+  });
+
+  it('should have correct severity for MCP plugin', () => {
+    expect(riskCategorySeverityMap['mcp']).toBe(Severity.Low);
+  });
+
+  it('should have correct alias for MCP plugin', () => {
+    expect(categoryAliases['mcp']).toBe('MCP');
+  });
+
+  it('should have correct plugin description for MCP plugin', () => {
+    expect(pluginDescriptions['mcp']).toBe(
+      'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
+    );
+  });
+
+  it('should have correct subcategory description for MCP plugin', () => {
+    expect(subCategoryDescriptions['mcp']).toBe(
+      'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
+    );
   });
 });

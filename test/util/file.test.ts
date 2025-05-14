@@ -224,23 +224,11 @@ describe('file utilities', () => {
 
     it('returns absolute path unchanged', () => {
       const absolutePath = path.resolve('/absolute/path/file.txt');
-      expect(getResolvedRelativePath(absolutePath, '/some/base/path')).toBe(absolutePath);
-    });
-
-    it('resolves relative path with contextBasePath', () => {
-      expect(getResolvedRelativePath('relative/file.txt', '/base/path')).toBe(
-        path.join('/base/path', 'relative/file.txt'),
-      );
+      expect(getResolvedRelativePath(absolutePath, false)).toBe(absolutePath);
     });
 
     it('uses process.cwd() when isCloudConfig is true', () => {
-      expect(getResolvedRelativePath('relative/file.txt', '/base/path', true)).toBe(
-        path.join('/mock/cwd', 'relative/file.txt'),
-      );
-    });
-
-    it('uses process.cwd() when contextBasePath is undefined', () => {
-      expect(getResolvedRelativePath('relative/file.txt')).toBe(
+      expect(getResolvedRelativePath('relative/file.txt', true)).toBe(
         path.join('/mock/cwd', 'relative/file.txt'),
       );
     });

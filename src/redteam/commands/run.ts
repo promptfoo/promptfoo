@@ -4,7 +4,7 @@ import dedent from 'dedent';
 import { z } from 'zod';
 import cliState from '../../cliState';
 import { CLOUD_PROVIDER_PREFIX } from '../../constants';
-import logger, { setLogLevel } from '../../logger';
+import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { setupEnv } from '../../util';
 import { getConfigFromCloud } from '../../util/cloud';
@@ -34,7 +34,6 @@ export function redteamRunCommand(program: Command) {
       'Path to output file for generated tests. Defaults to redteam.yaml in the same directory as the configuration file.',
     )
     .option('--no-cache', 'Do not read or write results to disk cache', false)
-    .option('--env-file, --env-path <path>', 'Path to .env file')
     .option('-j, --max-concurrency <number>', 'Maximum number of concurrent API calls', (val) =>
       Number.parseInt(val, 10),
     )
@@ -43,7 +42,6 @@ export function redteamRunCommand(program: Command) {
     )
     .option('--remote', 'Force remote inference wherever possible', false)
     .option('--force', 'Force generation even if no changes are detected', false)
-    .option('--verbose', 'Show debug output', false)
     .option('--no-progress-bar', 'Do not show progress bar')
     .option(
       '--filter-providers, --filter-targets <providers>',
@@ -55,10 +53,6 @@ export function redteamRunCommand(program: Command) {
       telemetry.record('command_used', {
         name: 'redteam run',
       });
-
-      if (opts.verbose) {
-        setLogLevel('debug');
-      }
 
       if (opts.config && UUID_REGEX.test(opts.config)) {
         if (opts.target && !UUID_REGEX.test(opts.target)) {

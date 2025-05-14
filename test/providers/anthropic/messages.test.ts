@@ -3,12 +3,28 @@ import { APIError } from '@anthropic-ai/sdk';
 import dedent from 'dedent';
 import { clearCache, disableCache, enableCache, getCache } from '../../../src/cache';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
+import { MCPClient } from '../../../src/providers/mcp/client';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
 }));
 
+jest.mock('../../../src/providers/mcp/client');
+
 describe('AnthropicMessagesProvider', () => {
+  let provider: AnthropicMessagesProvider;
+  let mockMCPClient: jest.Mocked<MCPClient>;
+
+  beforeEach(() => {
+    jest.resetAllMocks();
+    mockMCPClient = {
+      initialize: jest.fn(),
+      cleanup: jest.fn(),
+      getAllTools: jest.fn().mockReturnValue([]),
+    } as any;
+    jest.mocked(MCPClient).mockImplementation(() => mockMCPClient);
+  });
+
   afterEach(async () => {
     jest.clearAllMocks();
     await clearCache();
@@ -98,7 +114,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should pass the tool choice if specified', async () => {
-      const toolChoice: Anthropic.MessageCreateParams.ToolChoiceTool = {
+      const toolChoice: Anthropic.MessageCreateParams['tool_choice'] = {
         name: 'get_weather',
         type: 'tool',
       };
@@ -342,7 +358,7 @@ describe('AnthropicMessagesProvider', () => {
         .mockImplementation()
         .mockResolvedValue({
           content: [{ type: 'text', text: 'Test output' }],
-          usage: { input_tokens: 50, output_tokens: 50 },
+          usage: { input_tokens: 50, output_tokens: 50, server_tool_use: null },
         } as Anthropic.Messages.Message);
 
       const result = await provider.callApi('What is the forecast in San Francisco?');
@@ -587,6 +603,63 @@ describe('AnthropicMessagesProvider', () => {
           'anthropic-beta': 'output-128k-2025-02-19,another-beta-feature',
         },
       });
+    });
+  });
+
+  describe('cleanup', () => {
+    it('should await initialization before cleanup', async () => {
+      provider = new AnthropicMessagesProvider('claude-3-sonnet', {
+        config: {
+          mcp: {
+            enabled: true,
+            server: {
+              command: 'npm',
+              args: ['start'],
+            },
+          },
+        },
+      });
+
+      // Simulate initialization in progress
+      const initPromise = Promise.resolve();
+      provider['initializationPromise'] = initPromise;
+
+      await provider.cleanup();
+
+      // Verify cleanup was called after initialization
+      expect(mockMCPClient.cleanup).toHaveBeenCalledWith();
+    });
+
+    it('should handle cleanup when MCP is not enabled', async () => {
+      provider = new AnthropicMessagesProvider('claude-3-sonnet', {
+        config: {
+          mcp: {
+            enabled: false,
+          },
+        },
+      });
+
+      await provider.cleanup();
+
+      expect(mockMCPClient.cleanup).not.toHaveBeenCalled();
+    });
+
+    it('should handle cleanup errors gracefully', async () => {
+      provider = new AnthropicMessagesProvider('claude-3-sonnet', {
+        config: {
+          mcp: {
+            enabled: true,
+            server: {
+              command: 'npm',
+              args: ['start'],
+            },
+          },
+        },
+      });
+
+      mockMCPClient.cleanup.mockRejectedValueOnce(new Error('Cleanup failed'));
+
+      await expect(provider.cleanup()).rejects.toThrow('Cleanup failed');
     });
   });
 });

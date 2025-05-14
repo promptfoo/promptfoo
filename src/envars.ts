@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import cliState from './cliState';
 import type { EnvOverrides } from './types/env';
 
@@ -103,10 +104,13 @@ export type EnvVars = {
   JEST_WORKER_ID?: string;
   NODE_EXTRA_CA_CERTS?: string;
   NODE_TLS_REJECT_UNAUTHORIZED?: string;
-  POSTHOG_KEY?: string;
   REQUEST_TIMEOUT_MS?: number;
   RESULT_HISTORY_LENGTH?: number;
   WEBHOOK_TIMEOUT?: number;
+
+  // Posthog
+  PROMPTFOO_POSTHOG_KEY?: string;
+  PROMPTFOO_POSTHOG_HOST?: string;
 
   //=========================================================================
   // UI configuration
@@ -277,6 +281,9 @@ export type EnvVars = {
   WATSONX_AI_AUTH_TYPE?: string;
   WATSONX_AI_BEARER_TOKEN?: string;
   WATSONX_AI_PROJECT_ID?: string;
+
+  // Pi Labs
+  WITHPI_API_KEY?: string;
 } & EnvOverrides;
 
 // Allow string access to any key for environment variables not explicitly listed

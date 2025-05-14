@@ -37,6 +37,7 @@ type TestCase = {
 export type RedteamPluginObject = ConfigurableObject &
   WithNumTests & {
     severity?: Severity;
+    config?: PluginConfig;
   };
 export type RedteamPlugin = string | RedteamPluginObject;
 
