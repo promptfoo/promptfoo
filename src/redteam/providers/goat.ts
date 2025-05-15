@@ -36,6 +36,11 @@ export interface GoatResponse extends ProviderResponse {
   metadata: GoatMetadata;
 }
 
+export interface ExtractAttackFailureResponse {
+  message: string;
+  task: string;
+}
+
 export default class GoatProvider implements ApiProvider {
   private maxTurns: number;
   private readonly injectVar: string;
@@ -137,12 +142,13 @@ export default class GoatProvider implements ApiProvider {
             },
             method: 'POST',
           });
-          const data = await response.json();
-          if (typeof data?.message !== 'object' || !data.message?.content || !data.message?.role) {
+          const data = (await response.json()) as ExtractAttackFailureResponse;
+
+          if (!data.message) {
             logger.info(`[GOAT] Invalid message from GOAT, skipping turn: ${JSON.stringify(data)}`);
             continue;
           }
-          const failureReason = data.message.content;
+          failureReason = data.message;
           logger.debug(`[GOAT] Previous attack attempt failure reason: ${failureReason}`);
         }
 
