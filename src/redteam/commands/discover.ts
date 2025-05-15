@@ -75,7 +75,7 @@ export async function doTargetPurposeDiscovery(
 ): Promise<string> {
   const conversationHistory: { type: 'promptfoo' | 'target'; content: string }[] = [];
 
-  let turnCounter = 5;
+  let turnCounter = 1;
 
   const pbar = new cliProgress.SingleBar({
     format: `Discovering purpose {bar} {percentage}% | {value}${maxTurns ? '/{total}' : ''} turns`,
