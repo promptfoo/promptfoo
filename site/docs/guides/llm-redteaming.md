@@ -59,7 +59,7 @@ npx promptfoo@latest redteam init my-redteam-project --no-gui
 
 The `init` command will guide you through setting up a redteam for your use case, and includes several useful defaults to quickly get you started.
 
-It will create a `promptfooconfig.yaml` config file where we’ll do most of our setup.
+It will create a `promptfooconfig.yaml` config file where we'll do most of our setup.
 
 ## Getting started
 
@@ -84,7 +84,7 @@ npx promptfoo@latest redteam report
 
 The easiest way to get started is to edit `promptfooconfig.yaml` to include your prompt(s).
 
-In this example, let's pretend we're building a trip planner app. I’ll set a prompt and include `{{variables}}` to indicate placeholders that will be replaced by user inputs:
+In this example, let's pretend we're building a trip planner app. I'll set a prompt and include `{{variables}}` to indicate placeholders that will be replaced by user inputs:
 
 ```yaml
 prompts:
@@ -148,28 +148,35 @@ function getPrompt(context) {
 }
 ```
 
-## Step 2: Configure your targets
+## Step 2: Configure your target
 
-LLMs are configured with the `targets` property in `promptfooconfig.yaml`. An LLM target can be a known LLM API (such as OpenAI, Anthropic, Ollama, etc.) or a custom RAG or agent flow you've built yourself.
+Promptfoo supports red teaming against various language models and AI services, known as _Targets_. Promptfoo supports a [variety of targets](/docs/providers) such as LLM APIs (e.g. OpenAI, Anthropic, Ollama, etc.), RAGs, or agentic applications you've built yourself.
+
+Targets are configured with the `targets` property in `promptfooconfig.yaml`.
 
 ### LLM APIs
 
 Promptfoo supports [many LLM providers](/docs/providers) including OpenAI, Anthropic, Mistral, Azure, Groq, Perplexity, Cohere, and more. In most cases all you need to do is set the appropriate API key environment variable.
 
-You should choose at least one target. If desired, set multiple in order to compare their performance in the red team eval. In this example, we’re comparing performance of GPT, Claude, and Llama:
+You should choose at least one target. If desired, set multiple in order to compare their performance in the red team eval. In this example, we're comparing performance of GPT, Claude, and Llama:
 
 ```yaml
 targets:
   - openai:gpt-4o
   - anthropic:messages:claude-3-5-sonnet-20241022
   - ollama:chat:llama3.1:70b
+
+redteam:
+  purpose: You are a helpful travel assistant that helps users plan their trips.
 ```
 
-To learn more, find your preferred LLM provider [here](/docs/providers).
+:::tip
+LLM APIs require a [manually defined](/docs/red-team/configuration/#manual-definition) `redteam.purpose` key/value pair for optimal test generation quality.
+:::
 
-### Custom flows
+### Executables
 
-If you have a custom RAG or agent flow, you can include them in your project like this:
+If you have a RAG pipeline or agentic workflow that is inferfaced via an executable, you can include them in your project like this:
 
 ```yaml
 targets:
@@ -178,8 +185,6 @@ targets:
   - file://path/to/python_agent.py
   # Any executable can be run with the `exec:` directive
   - exec:/path/to/shell_agent
-  # HTTP requests can be made with the `webhook:` directive
-  - webhook:<http://localhost:8000/api/agent>
 ```
 
 To learn more, see:
@@ -187,7 +192,10 @@ To learn more, see:
 - [Javascript provider](/docs/providers/custom-api/)
 - [Python provider](/docs/providers/python)
 - [Exec provider](/docs/providers/custom-script) (Used to run any executable from any programming language)
-- [Webhook provider](/docs/providers/webhook) (HTTP requests, useful for testing an app that is online or running locally)
+
+:::tip
+Although the `targets` property supports multiple values, we recommend targeting a single executable per config.
+:::
 
 ### HTTP endpoints
 
@@ -217,11 +225,19 @@ For example, `json.nested.output` will reference the output in the following API
 
 You can also reference nested objects. For example, `json.choices[0].message.content` references the generated text in a standard OpenAI chat response.
 
+:::tip
+Although the `targets` property supports multiple values, we recommend targeting a single HTTP endpoint per config.
+:::
+
+### Promptfoo Target Scanning Agent (PTSA)
+
+When scanning an Executable or HTTP endpoint, we recommend using the [Promptfoo Target Scanning Agent (PTSA)](/docs/red-team/ptsa) to automatically discover the target's purpose, capabilities, and constraints. This requires no additional configuration.
+
 ### Configuring the grader
 
 The results of the red team are graded by a model. By default, `gpt-4.1-2025-04-14` is used and the test expects an `OPENAI_API_KEY` environment variable.
 
-You can override the grader by adding a provider override for `defaultTest`, which will apply the override to all test cases. Here’s an example of using Llama3 as a grader locally:
+You can override the grader by adding a provider override for `defaultTest`, which will apply the override to all test cases. Here's an example of using Llama3 as a grader locally:
 
 ```yaml
 defaultTest:

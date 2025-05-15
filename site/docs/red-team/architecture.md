@@ -29,6 +29,8 @@ For usage details, see the [quickstart guide](/docs/red-team/quickstart).
 }}%%
 
 graph TB
+    PTSA["<strong>Promptfoo Target Scanning Agent (PTSA)</strong><br/><small>Auto-discovers the purpose, capabilities, and constraints of targets</small>"]
+
     %% Configuration Layer
     subgraph Configuration
         Purpose["<strong>Application Details</strong><br/><small>Purpose & Policies</small>"]
@@ -64,6 +66,9 @@ graph TB
 
     Plugins --> Probes
     Strategies --> Probes
+
+    PTSA --> Targets
+    PTSA --> Probes
 
     Probes --> API
     Probes --> Model
@@ -167,9 +172,10 @@ The configuration defines:
 ## Component Flow
 
 1. **Configuration** initializes **plugins** and **strategies**
-2. **Test engine** generates probes using enabled components
-3. **Target interface** delivers probes to the system
-4. **Evaluation engine** analyzes responses and reports findings
+2. **[PTSA](/docs/red-team/ptsa)** auto-discovers the purpose, capabilities, and constraints of the target.
+3. **Test engine** generates probes using enabled components
+4. **Target interface** delivers probes to the system
+5. **Evaluation engine** analyzes responses and reports findings
 
 Components can be used independently or composed into larger test suites. The modular design allows for extending functionality by adding new [plugins](/docs/red-team/configuration/#plugins), [strategies](/docs/red-team/configuration/#strategies), [targets](/docs/providers/) or evaluators.
 

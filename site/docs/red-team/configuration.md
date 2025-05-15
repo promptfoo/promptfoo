@@ -49,15 +49,15 @@ redteam:
 
 ### Configuration Fields
 
-| Field                   | Type                      | Description                                                              | Default                         |
-| ----------------------- | ------------------------- | ------------------------------------------------------------------------ | ------------------------------- |
-| `injectVar`             | `string`                  | Variable to inject adversarial inputs into                               | Inferred from prompts           |
-| `numTests`              | `number`                  | Default number of tests to generate per plugin                           | 5                               |
-| `plugins`               | `Array<string\|object>`   | Plugins to use for red team generation                                   | `default`                       |
-| `provider` or `targets` | `string\|ProviderOptions` | Endpoint or AI model provider for generating adversarial inputs          | `openai:gpt-4o`                 |
-| `purpose`               | `string`                  | Description of prompt templates' purpose to guide adversarial generation | Inferred from prompts           |
-| `strategies`            | `Array<string\|object>`   | Strategies to apply to other plugins                                     | `jailbreak`, `prompt-injection` |
-| `language`              | `string`                  | Language for generated tests                                             | English                         |
+| Field        | Type                      | Description                                                                    | Default                                                           |
+| ------------ | ------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
+| `injectVar`  | `string`                  | Variable to inject adversarial inputs into                                     | Inferred from prompts                                             |
+| `numTests`   | `number`                  | Default number of tests to generate per plugin                                 | 5                                                                 |
+| `plugins`    | `Array<string\|object>`   | Plugins to use for red team generation                                         | `default`                                                         |
+| `targets`    | `string\|ProviderOptions` | Endpoint or AI model provider for generating adversarial inputs                | `openai:gpt-4o`                                                   |
+| `purpose`    | `string`                  | Description of the target application's purpose, capabilities, and constraints | Auto-discovered by the **Promptfoo Target Scanning Agent (PTSA)** |
+| `strategies` | `Array<string\|object>`   | Strategies to apply to other plugins                                           | `jailbreak`, `prompt-injection`                                   |
+| `language`   | `string`                  | Language for generated tests                                                   | English                                                           |
 
 ### Plugin Configuration
 
@@ -445,25 +445,25 @@ strategies:
 
 ### Purpose
 
-The `purpose` field provides context to guide the generation of adversarial inputs. It is derived automatically, or you can set it.
+The `purpose` field provides context to guide the generation of adversarial inputs. It can be defined in one of two ways:
 
-The purpose should be descriptive, as it will be used as the basis for generated adversarial tests and grading. For example:
+#### Auto-Discovery
+
+When targeting an executable (e.g. via the [Python](/docs/providers/python/) or [Javascript](/docs/providers/custom-api/) providers) or a HTTP endpoint, we recommend automatically discovering purpose via [PTSA](/docs/red-team/ptsa) as it is easier to set up and more thorough than manual definition. Use of PTSA requires no additional configuration.
+
+#### Manual Definition
+
+When targeting an LLM (e.g. `openai:gpt-4o`), we recommend manually defining purpose by setting the `redteam.purpose` field in your `promptfooconfig.yaml`. The set purpose should describe the capabilities and constraints of the target application in detail as this information will be used as the basis for generated adversarial tests and grading.
 
 ```yaml
 redteam:
   purpose: |
     The application is a customer service assistant for users on redpandashopping.com. redpandashopping.com is an online electronics retailer selling cell phones, tv's and computers.
-
     You are acting as a customer on redpandashopping.com
-
     You have access to: Product information, reviews, their own order history, their own customer support issues
-
     You do not have access to: Other user's order histories and customer support issues
-
     You can take the following actions: Search for products, ask for reviews of products, view their own order history, view their own customer support issues, open new customer support issues, reply to existing customer support issues.
-
     You should not take the following actions: Place new orders, cancel orders
-
     The LLM agent has access to these systems: Product catalogue, reviews, order histories, customer support software
 ```
 
