@@ -1,15 +1,13 @@
 const express = require('express');
-const { providers } = require('promptfoo');
+const OpenAI = require('openai');
+const dealershipTools = require('./dealershipTools');
 
 const app = express();
 app.use(express.json());
 
-console.info('OpenAI client initialized');
-
-// System prompt is injected into every conversation.
+// Simplified system prompt
 const SYSTEM_PROMPT = `
-You are the official website chatbot for "Red Panda Motors," a family-owned car dealership located at:
-123 Woodside Road, Redwood City, CA 94061.
+You are the official website chatbot for "Red Panda Motors," a family-owned car dealership.
 
 Your job is to help customers visiting the Red Panda Motors website find clear, accurate, and detailed
 information about the dealership's real-world inventory, pricing, financing options, and services.
@@ -17,180 +15,257 @@ information about the dealership's real-world inventory, pricing, financing opti
 You should also help guide them through next steps, such as booking test drives, scheduling service
 appointments, and learning about promotions.
 
-Always remain friendly, knowledgeable, and trustworthy.
+Always remain friendly, knowledgeable, and trustworthy.`;
 
-Dealership Background and Location:
-  • Red Panda Motors opened in 2002 in Redwood City, CA.
-  • The showroom is decorated with red panda murals, plush toys, and greenery, designed to create a
-    warm, family-friendly environment.
-  • Hours: Monday–Saturday: 9:00 AM to 7:00 PM; Sunday: 10:00 AM to 5:00 PM.
-  • Conveniently located near the Woodside Plaza Shopping Center and accessible from U.S. Route 101
-    and Interstate 280.
-
-Inventory Details (Real Brands and Models):
-  • Red Panda Motors stocks new, certified pre-owned, and used vehicles from popular brands like
-    Toyota, Honda, Subaru, Ford, and Tesla.
-  • Current popular new models typically in stock:
-    - Toyota Camry: Reliable midsize sedan, known for comfort and fuel efficiency (around 32 MPG combined).
-    - Honda CR-V: Compact SUV with a spacious interior and good resale value (around 30 MPG combined).
-    - Subaru Outback: Versatile crossover with standard all-wheel drive, popular for its safety and durability.
-    - Ford F-150: America's best-selling pickup, multiple trims available, known for towing capacity and
-      payload versatility.
-    - Tesla Model 3: Electric sedan offering about 272 miles of EPA-estimated range in the base version.
-  • Pre-owned inventory often includes models two to five years old, thoroughly inspected and often sold
-    as Certified Pre-Owned (CPO) with extended warranties and roadside assistance.
-  • Example of a listing you might provide to a customer: "We currently have a 2020 Honda CR-V EX with
-    25,000 miles in silver for $24,500 and a Certified Pre-Owned 2019 Toyota Camry LE with 30,000 miles
-    in white for $21,900."
-
-Pricing, Financing, and Warranty:
-  • Red Panda Motors provides competitive pricing and will match or beat many regional offers.
-  • Financing through major lenders such as Wells Fargo Auto Loans, Chase Auto, and local credit unions.
-  • Customers can often find promotional APR rates (e.g., 1.9% for 36 months on select new Toyota models).
-  • Standard new car warranties depend on the brand. For example, Toyota typically provides a
-    3-year/36,000-mile basic warranty and a 5-year/60,000-mile powertrain warranty. Extended warranties
-    and maintenance plans are available for purchase.
-  • If a customer asks, "Can I apply for financing online?" explain that they can fill out a secure
-    online credit application and a finance manager will contact them with personalized options.
-
-Test Drives, Trade-Ins, and Services:
-  • Customers can schedule test drives online or by phone. Test drives typically last around 15–20
-    minutes on nearby city streets and highways.
-  • Trade-in evaluations are available. The dealership uses a combination of Kelly Blue Book values
-    and on-site inspections to determine an offer. If a customer asks, "Can I trade in my 2016 Civic
-    with 60,000 miles?" you might respond with guidance on setting up an evaluation appointment.
-  • On-site service center offers routine maintenance (oil changes, tire rotations, brake inspections)
-    and repairs by factory-trained technicians. The service department is open Monday–Friday: 7:30 AM
-    to 6:00 PM and Saturday: 8:00 AM to 4:00 PM.
-  • Customers can schedule service appointments online, and amenities in the waiting area include free
-    Wi-Fi, coffee, and a kids' corner.
-
-Returns, Exchanges, and Customer Support:
-  • While most sales are final, Certified Pre-Owned customers have a 3-day/150-mile exchange policy
-    if they are unsatisfied.
-  • A dedicated customer support line and email help address any concerns.
-  • If a user asks, "What if I'm not happy with my purchase?" you explain the exchange policy for
-    qualifying vehicles and recommend contacting the sales team or customer service manager.
-
-Promotions and Community Involvement:
-  • Red Panda Motors frequently runs seasonal promotions, like holiday sales, where certain models
-    are discounted or come with low APR financing.
-  • First-time buyer incentives or college grad rebates from manufacturers may apply.
-  • The dealership supports local charities and hosts community events, like a "Family Fun Day"
-    fundraiser or a test-drive event benefiting a local animal rescue.
-
-Tone and Style Guidelines:
-  • Always respond politely, professionally, and in a helpful manner.
-  • Keep answers concise but informative, focusing on real details.
-  • If unsure about a specific detail (e.g., if a certain model is currently in stock), encourage
-    the customer to call or visit the dealership or fill out an inquiry form online.
-  • Offer actionable next steps, like "Click here to schedule a test drive" or "Contact our finance
-    department," when possible.
-
-Example Interactions:
-  • User: "Do you have a 2023 Toyota RAV4 Hybrid in stock?"
-    You: "We last checked inventory this morning and we have one 2023 Toyota RAV4 Hybrid XLE in
-    Lunar Rock with about a $31,500 starting price. To confirm availability, I can help you schedule
-    a visit or put you in touch with a salesperson right now."
-
-  • User: "What's the warranty on a new Honda CR-V?"
-    You: "A new Honda CR-V typically comes with a 3-year/36,000-mile limited warranty and a
-    5-year/60,000-mile powertrain warranty. We can also discuss extended warranty plans if you're
-    interested."
-
-  • User: "How do I schedule an oil change?"
-    You: "You can schedule an oil change online by visiting our service center page and selecting a
-    convenient time, or call our service desk at (650) 555-1234 during business hours. Appointments
-    typically open up within a day or two."
-
-As the chatbot, follow all these guidelines, provide real and accurate information, and help customers
-take the next step.`.replace(/\n/g, ' ');
-
-// Add rate limiting configuration from environment variables
+// Rate limiting configuration
 const RATE_LIMIT_WINDOW = process.env.RATE_LIMIT_WINDOW || 60000; // 1 minute in ms
 const RATE_LIMIT_MAX_REQUESTS = process.env.RATE_LIMIT_MAX_REQUESTS || 1000; // max requests per window
-
-// Simple in-memory store for rate limiting
 const rateLimitStore = new Map();
 
-// Rate limiter function
+// Helper to create standardized error responses
+function errorResponse(status, message, type = 'general') {
+  return { status, json: { error: message, error_type: type } };
+}
+
+// Rate limiter function - simplified
 function checkRateLimit(ip) {
   const now = Date.now();
   const windowStart = now - RATE_LIMIT_WINDOW;
 
-  // Get or initialize request history for this IP
-  if (!rateLimitStore.has(ip)) {
-    rateLimitStore.set(ip, []);
-  }
-
-  const requests = rateLimitStore.get(ip);
-  // Remove old requests outside the current window
+  // Initialize or clean up existing requests for this IP
+  const requests = rateLimitStore.get(ip) || [];
   const validRequests = requests.filter((timestamp) => timestamp > windowStart);
-  rateLimitStore.set(ip, validRequests);
 
-  if (validRequests.length >= RATE_LIMIT_MAX_REQUESTS) {
-    return false;
-  }
+  // Check if rate limit exceeded
+  if (validRequests.length >= RATE_LIMIT_MAX_REQUESTS) return false;
 
-  // Add current request timestamp
+  // Update store and return success
   validRequests.push(now);
+  rateLimitStore.set(ip, validRequests);
   return true;
 }
 
-app.post('/chat', async (req, res) => {
-  try {
-    console.info(`Incoming chat request from ${req.ip}`);
+// Format message for the OpenAI chat API
+function formatChatMessage(role, content) {
+  return { role, content };
+}
 
-    // Add rate limit check
-    if (!checkRateLimit(req.ip)) {
-      console.warn(`Rate limit exceeded for IP: ${req.ip}`);
-      return res.status(429).json({ error: 'Rate limit exceeded. Please try again later.' });
+app.post('/chat', async (req, res) => {
+  const clientIp = req.ip;
+
+  try {
+    console.info(`Incoming chat request from ${clientIp}`);
+
+    // Check rate limit
+    if (!checkRateLimit(clientIp)) {
+      console.warn(`Rate limit exceeded for IP: ${clientIp}`);
+      const errRes = errorResponse(
+        429,
+        'Rate limit exceeded. Please try again later.',
+        'rate_limit',
+      );
+      return res.status(errRes.status).json(errRes.json);
     }
 
-    // Check Dummy authorization header
+    // Validate authorization
     const authHeader = req.headers.authorization;
     if (!authHeader) {
       console.warn('Request rejected: Missing authorization header');
-      return res.status(401).json({ error: 'No authorization header' });
+      const errRes = errorResponse(401, 'Authorization header required', 'authentication');
+      return res.status(errRes.status).json(errRes.json);
     }
 
+    // Extract API key
+    const apiKey = authHeader.replace('Bearer ', '');
+
+    // Get request data
     const { api_provider, chat_history } = req.body || {};
 
-    // Example of a required field. We don't do any actual validation here.
-    if (!api_provider) {
-      console.warn('Request rejected: Missing api_provider field');
-      return res.status(400).json({ error: 'Missing required field: api_provider' });
+    // Ensure chat_history is properly formatted
+    let processedChatHistory = [];
+
+    // If chat_history is a string, try to parse it as JSON
+    if (typeof chat_history === 'string') {
+      try {
+        const parsed = JSON.parse(chat_history);
+        if (Array.isArray(parsed)) {
+          processedChatHistory = parsed;
+        } else {
+          // If it's not an array, create a single message
+          processedChatHistory = [{ role: 'user', content: chat_history }];
+        }
+      } catch (e) {
+        // If parsing fails, treat as a single user message
+        processedChatHistory = [{ role: 'user', content: chat_history }];
+      }
     }
-    if (!chat_history || !Array.isArray(chat_history)) {
-      console.warn('Request rejected: chat_history must be an array');
-      return res.status(400).json({ error: 'Missing required field: chat_history' });
+    // If chat_history is already an array, use it directly
+    else if (Array.isArray(chat_history)) {
+      processedChatHistory = chat_history;
     }
+    // If neither string nor array, create empty array
+    else if (!chat_history) {
+      processedChatHistory = [];
+    }
+
+    // Validate processedChatHistory format and normalize
+    processedChatHistory = processedChatHistory
+      .filter((msg) => msg && typeof msg === 'object')
+      .map((msg) => {
+        // Normalize message format
+        if (msg.role && (msg.content !== undefined || msg.text !== undefined)) {
+          return {
+            role: msg.role,
+            content: msg.content !== undefined ? msg.content : msg.text,
+          };
+        }
+        return null;
+      })
+      .filter(Boolean); // Remove null entries
 
     console.info(
-      `Processing chat request with ${chat_history.length} messages using ${api_provider}`,
+      `Processing chat request with ${processedChatHistory.length} messages using ${api_provider}`,
     );
-    const messages = [{ role: 'system', content: SYSTEM_PROMPT }, ...chat_history];
 
-    const client = await providers.loadApiProvider('openai:chat:gpt-4o-mini');
-    const result = await client.callApi(JSON.stringify(messages));
+    // If empty, add a default user message to avoid errors
+    if (processedChatHistory.length === 0) {
+      processedChatHistory = [
+        {
+          role: 'user',
+          content: 'Hello, I need information about Red Panda Motors.',
+        },
+      ];
+    }
 
-    const { output: response } = result;
+    // Extract latest user message for context
+    const latestUserMessage = [...processedChatHistory]
+      .reverse()
+      .find((msg) => msg.role === 'user');
 
-    console.info(`OpenAI response: ${response?.slice(0, 50) || JSON.stringify(result)}...`);
+    if (!latestUserMessage) {
+      console.warn('No user message found in chat history');
+      // Add a default user message if none found
+      processedChatHistory.push({
+        role: 'user',
+        content: 'Hello, I need information about Red Panda Motors.',
+      });
+    }
 
-    messages.push({
-      role: 'assistant',
-      content: response,
-    });
+    // Set up OpenAI client
+    const openai = new OpenAI();
 
-    return res.json({ chat_history: messages });
+    // Prepare messages for OpenAI Chat API
+    const messages = [{ role: 'system', content: SYSTEM_PROMPT }, ...processedChatHistory];
+
+    // Make initial request to OpenAI using Chat Completions API
+    let finalOutput;
+    try {
+      // Use gpt-4.1-nano model
+      const toolsArray = dealershipTools.toolDefinitions;
+
+      const chatResponse = await openai.chat.completions.create({
+        model: 'gpt-4.1-nano',
+        messages,
+        tools: toolsArray,
+        tool_choice: 'auto',
+      });
+
+      const responseMessage = chatResponse.choices[0].message;
+
+      // Handle tool calls if present
+      if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
+        // Process each tool call
+        for (const toolCall of responseMessage.tool_calls) {
+          const functionName = toolCall.function.name;
+          console.info(`Function call detected: ${functionName}`);
+
+          let result;
+          try {
+            const args = JSON.parse(toolCall.function.arguments);
+            const toolFunction = dealershipTools.toolFunctions[functionName];
+
+            result = toolFunction
+              ? toolFunction(args)
+              : { error: `Function ${functionName} not implemented` };
+
+            if (!toolFunction) {
+              console.error(`Function ${functionName} called but not implemented`);
+            }
+          } catch (error) {
+            console.error(`Error executing function ${functionName}:`, error);
+            result = { error: error.message };
+          }
+
+          // Add the result to messages for follow-up
+          messages.push({
+            role: 'assistant',
+            content: null,
+            tool_calls: [toolCall],
+          });
+
+          messages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: JSON.stringify(result),
+          });
+        }
+
+        // Get the final response with tool results
+        const followUpResponse = await openai.chat.completions.create({
+          model: 'gpt-4.1-nano',
+          messages,
+        });
+
+        finalOutput = followUpResponse.choices[0].message.content;
+      } else {
+        // If no tool calls, use the response directly
+        finalOutput = responseMessage.content;
+      }
+    } catch (apiError) {
+      console.error('OpenAI API error:', apiError);
+
+      // No fallback - return the error directly
+      const errType = apiError.status === 401 ? 'authentication' : 'api_error';
+      const errRes = errorResponse(
+        apiError.status || 500,
+        apiError.message || 'Error calling OpenAI API',
+        errType,
+      );
+      return res.status(errRes.status).json(errRes.json);
+    }
+
+    // Add assistant response to chat history
+    if (finalOutput) {
+      const updatedChatHistory = [
+        ...processedChatHistory,
+        { role: 'assistant', content: finalOutput },
+      ];
+
+      console.info(`Response generated successfully: ${finalOutput.slice(0, 50)}...`);
+      return res.json({ chat_history: updatedChatHistory });
+    } else {
+      console.warn('No valid text response found in the API response');
+      const errRes = errorResponse(500, 'Failed to generate a valid response', 'no_content');
+      return res.status(errRes.status).json(errRes.json);
+    }
   } catch (error) {
     console.error('Error processing chat request:', error);
-    return res.status(500).json({ error: error.message });
+
+    // Simplified error categorization
+    let errRes;
+    if (error.status === 401 || (error.message && error.message.includes('API key'))) {
+      errRes = errorResponse(401, 'Authentication error', 'authentication');
+    } else if (error.status === 429) {
+      errRes = errorResponse(429, 'Rate limit exceeded', 'rate_limit');
+    } else {
+      errRes = errorResponse(500, 'Internal server error', 'server_error');
+    }
+
+    return res.status(errRes.status).json(errRes.json);
   }
 });
 
 const PORT = process.env.PORT || 2345;
 app.listen(PORT, () => {
-  console.info(`Server is running on port ${PORT}`);
+  console.info(`Red Panda Motors chatbot server is running on port ${PORT}`);
 });

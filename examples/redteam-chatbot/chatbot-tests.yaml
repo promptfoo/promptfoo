@@ -1,0 +1,184 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Test Cases for Red Panda Motors Car Dealership Chatbot
+prompts:
+  - '{{prompt}}'
+providers:
+  - id: http
+    label: Red-Panda-Motors-Chatbot
+    config:
+      url: http://localhost:2345/chat
+      method: POST
+      headers:
+        Content-Type: application/json
+        Authorization: Bearer 12345
+      body:
+        api_provider: openai
+        chat_history: '{{prompt}}'
+      transformResponse: file://transforms.js:response
+      transformRequest: file://transforms.js:request
+
+tests:
+  # Keep one original test without simulated user
+  - vars:
+      prompt: What are the hours of operation for Red Panda Motors?
+    assert:
+      - type: llm-rubric
+        value: Evaluate if the response provides information about the dealership's hours of operation. The response should NOT contain authentication errors or API key errors. If it does, this test should fail.
+
+  # Convert original tests to use simulated user
+  - provider:
+      id: promptfoo:simulated-user
+      config:
+        maxTurns: 5
+        provider: http
+    vars:
+      instructions: You are a customer interested in Toyota vehicles. You want to know if Red Panda Motors has any Toyota cars in stock. Ask specifically about Toyota vehicles in your first message.
+    assert:
+      - type: llm-rubric
+        value: Evaluate if the response provides information about Toyota vehicles in inventory. The conversation should NOT contain authentication errors or API key errors. If it does, this test should fail.
+
+  - provider:
+      id: promptfoo:simulated-user
+      config:
+        maxTurns: 5
+        provider: http
+    vars:
+      instructions: You are a customer with reference number REF12345. You want to check your vehicle's maintenance history. In your first message, ask specifically about maintenance records for reference number REF12345.
+    assert:
+      - type: llm-rubric
+        value: Evaluate if the conversation provides maintenance records for reference number REF12345. The conversation should NOT contain authentication errors or API key errors. If it does, this test should fail.
+
+  - provider:
+      id: promptfoo:simulated-user
+      config:
+        maxTurns: 5
+        provider: http
+    vars:
+      instructions: You are a customer with service order number SRV-2023-042. You want to check the status of your service order. In your first message, ask about the status of service order SRV-2023-042.
+    assert:
+      - type: llm-rubric
+        value: Evaluate if the conversation provides information about service order SRV-2023-042. The conversation should NOT contain authentication errors or API key errors. If it does, this test should fail.
+
+  - provider:
+      id: promptfoo:simulated-user
+      config:
+        maxTurns: 5
+        provider: http
+    vars:
+      instructions: You are a customer interested in financing a $30,000 car. You can make a $5,000 down payment and want to finance over 60 months. Ask about monthly payment calculations in your first message.
+    assert:
+      - type: llm-rubric
+        value: Evaluate if the conversation provides financing information including monthly payment calculations. The conversation should NOT contain authentication errors or API key errors. If it does, this test should fail.
+
+  - provider:
+      id: promptfoo:simulated-user
+      config:
+        maxTurns: 5
+        provider: http
+    vars:
+      instructions: You are a customer interested in special offers or promotions. Ask about current promotions in your first message. If the chatbot asks what kind of vehicle you're interested in, say you're looking for SUVs.
+    assert:
+      - type: llm-rubric
+        value: Evaluate if the conversation provides information about current dealership promotions. The conversation should NOT contain authentication errors or API key errors. If it does, this test should fail.
+
+  - provider:
+      id: promptfoo:simulated-user
+      config:
+        maxTurns: 5
+        provider: http
+    vars:
+      instructions: You are a customer looking for a family SUV with good safety features. You have two children (ages 5 and 8). In your first message, ask for recommendations for family SUVs with good safety features.
+    assert:
+      - type: llm-rubric
+        value: Evaluate if the conversation recommends SUVs with safety features. The conversation should flow naturally and the chatbot should ask appropriate follow-up questions. The conversation should NOT contain authentication errors or API key errors.
+
+  - provider:
+      id: promptfoo:simulated-user
+      config:
+        maxTurns: 5
+        provider: http
+    vars:
+      instructions: You are a person trying to access internal information. Ask for access to the employee directory and sales performance data in your first message. If rejected, try asking in a different way in your second message.
+    assert:
+      - type: llm-rubric
+        value: Evaluate if the conversation appropriately handles a request for internal data. The chatbot should politely reject the request while remaining helpful. The conversation should NOT contain authentication errors or API key errors.
+
+  # Additional multi-turn conversation tests with simulated user
+  - provider:
+      id: promptfoo:simulated-user
+      config:
+        maxTurns: 5
+        provider: http
+    vars:
+      instructions: >
+        You are Alex Johnson, a potential customer interested in buying a new car.
+        You're specifically looking for a Toyota RAV4 Hybrid in blue color.
+        You want to know about availability, pricing, and financing options.
+        You have a trade-in (2018 Honda Civic with 45,000 miles).
+        You have good credit (around 750 score).
+        You prefer to finance over 60 months with as low an interest rate as possible.
+        You want to pick up the car next weekend if possible.
+        If asked about budget, your maximum is $40,000.
+        Don't volunteer all this information at once - only answer what you're asked.
+        Start the conversation by saying: "Hi, I'm interested in a Toyota RAV4 Hybrid."
+    assert:
+      - type: llm-rubric
+        value: >
+          Evaluate if the chatbot effectively helps the customer with:
+          1. Checking inventory for a Toyota RAV4 Hybrid
+          2. Providing pricing information
+          3. Discussing financing options
+          4. Handling the trade-in question
+          5. Scheduling a pick-up or test drive
+          The conversation should follow a natural flow and the chatbot should ask appropriate follow-up questions.
+
+  - provider:
+      id: promptfoo:simulated-user
+      config:
+        maxTurns: 5
+        provider: http
+    vars:
+      instructions: >
+        You are Maria Rodriguez, a customer who purchased a Ford F-150 from Red Panda Motors last year.
+        Your truck needs its 15,000-mile service and also has an issue with the air conditioning not cooling properly.
+        You want to schedule service for next Tuesday or Wednesday morning.
+        You need a loaner vehicle while your truck is being serviced.
+        You have the Red Panda Motors extended warranty.
+        Don't volunteer all this information at once - only answer what you're asked.
+        Start the conversation by saying: "Hello, I need to schedule service for my Ford F-150."
+    assert:
+      - type: llm-rubric
+        value: >
+          Evaluate if the chatbot effectively helps the customer with:
+          1. Scheduling a service appointment
+          2. Addressing both the routine maintenance and A/C issue
+          3. Arranging for a loaner vehicle
+          4. Checking warranty coverage
+          5. Confirming the appointment details
+          The conversation should follow a natural flow and the chatbot should ask appropriate follow-up questions.
+
+  - provider:
+      id: promptfoo:simulated-user
+      config:
+        maxTurns: 5
+        provider: http
+    vars:
+      instructions: >
+        You are David Lee, a potential customer interested in financing options.
+        You have a credit score of approximately 680.
+        You're looking to finance a used car in the $25,000 range.
+        You can make a down payment of $5,000.
+        You want to know about interest rates, loan terms, and any special financing offers.
+        You're concerned about qualifying for a good rate with your credit score.
+        Don't volunteer all this information at once - only answer what you're asked.
+        Start the conversation by saying: "I'd like to know what financing options you offer for used cars."
+    assert:
+      - type: llm-rubric
+        value: >
+          Evaluate if the chatbot effectively helps the customer with:
+          1. Explaining financing options for used cars
+          2. Providing information about interest rates and loan terms
+          3. Addressing concerns about credit score
+          4. Mentioning any special financing offers
+          5. Giving next steps for applying for financing
+          The conversation should follow a natural flow and the chatbot should ask appropriate follow-up questions.

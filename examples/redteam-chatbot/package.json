@@ -1,16 +1,25 @@
 {
   "name": "redteam-chatbot",
-  "version": "0.0.0",
-  "description": "A simple chatbot for testing multi-turn redteam scenarios in Promptfoo",
+  "version": "1.0.0",
+  "description": "A car dealership chatbot for testing multi-turn redteam scenarios in Promptfoo",
   "main": "app.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node app.js"
+    "start": "node app.js",
+    "dev": "nodemon app.js",
+    "redteam:generate": "npx promptfoo@latest redteam generate",
+    "redteam:eval": "npx promptfoo@latest redteam eval",
+    "view": "npx promptfoo@latest view"
   },
   "author": "Promptfoo",
   "license": "MIT",
   "dependencies": {
-    "express": "^4.21.2",
-    "promptfoo": "^0.100.5"
+    "express": "^5.1.0",
+    "openai": "^4.98.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
