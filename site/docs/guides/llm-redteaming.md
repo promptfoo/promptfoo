@@ -176,7 +176,7 @@ LLM APIs require a [manually defined](/docs/red-team/configuration/#manual-defin
 
 ### Executables
 
-If you have a RAG pipeline or agentic workflow that is inferfaced via an executable, you can include them in your project like this:
+If you have a RAG pipeline or agentic workflow that is interfaced via an executable, you can include them in your project like this:
 
 ```yaml
 targets:
