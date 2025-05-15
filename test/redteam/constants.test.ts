@@ -178,7 +178,7 @@ describe('constants', () => {
   });
 
   it('should have correct severity for MCP plugin', () => {
-    expect(riskCategorySeverityMap['mcp']).toBe(Severity.Low);
+    expect(riskCategorySeverityMap['mcp']).toBe(Severity.High);
   });
 
   it('should have correct alias for MCP plugin', () => {
