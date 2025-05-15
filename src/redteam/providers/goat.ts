@@ -40,6 +40,7 @@ export default class GoatProvider implements ApiProvider {
   private maxTurns: number;
   private readonly injectVar: string;
   private readonly stateful: boolean;
+  private readonly excludeTargetOutputFromAgenticAttackGeneration: boolean;
 
   id() {
     return 'promptfoo:redteam:goat';
@@ -52,6 +53,7 @@ export default class GoatProvider implements ApiProvider {
       // @deprecated
       stateless?: boolean;
       stateful?: boolean;
+      excludeTargetOutputFromAgenticAttackGeneration?: boolean;
     } = {},
   ) {
     if (neverGenerateRemote()) {
@@ -74,6 +76,9 @@ export default class GoatProvider implements ApiProvider {
     invariant(typeof options.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = options.injectVar;
     this.maxTurns = options.maxTurns || 5;
+    this.excludeTargetOutputFromAgenticAttackGeneration = Boolean(
+      options.excludeTargetOutputFromAgenticAttackGeneration,
+    );
   }
 
   async callApi(
@@ -110,6 +115,8 @@ export default class GoatProvider implements ApiProvider {
       assertToUse = test?.assert?.find((a: { type: string }) => a.type);
     }
 
+    let previousAttackerMessage = '';
+
     for (let turn = 0; turn < this.maxTurns; turn++) {
       try {
         const body = JSON.stringify({
@@ -120,7 +127,11 @@ export default class GoatProvider implements ApiProvider {
           task: 'goat',
           version: VERSION,
           email: getUserEmail(),
+          excludeTargetOutputFromAgenticAttackGeneration:
+            this.excludeTargetOutputFromAgenticAttackGeneration,
+          previousAttackerMessage,
         });
+
         logger.debug(`[GOAT] Sending request to ${getRemoteGenerationUrl()}: ${body}`);
         response = await fetch(getRemoteGenerationUrl(), {
           body,
@@ -135,6 +146,8 @@ export default class GoatProvider implements ApiProvider {
           continue;
         }
         const attackerMessage = data.message;
+
+        previousAttackerMessage = attackerMessage?.content;
 
         const targetVars = {
           ...context.vars,
