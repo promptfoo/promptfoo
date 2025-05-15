@@ -6,33 +6,48 @@ import * as fs from 'fs';
 import yaml from 'js-yaml';
 import path from 'path';
 import { z } from 'zod';
-import cliState from '../../cliState';
 import { VERSION } from '../../constants';
 import { fetchWithProxy } from '../../fetch';
 import { getUserEmail } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
-import logger, { setLogLevel } from '../../logger';
+import logger from '../../logger';
 import { loadApiProvider, loadApiProviders } from '../../providers';
 import telemetry from '../../telemetry';
 import type { ApiProvider, UnifiedConfig } from '../../types';
-import { setupEnv } from '../../util';
 import { getProviderFromCloud } from '../../util/cloud';
 import { readConfig } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/manage';
 import invariant from '../../util/invariant';
 import { getRemoteGenerationUrl } from '../remoteGeneration';
 
-const ArgsSchema = z
+export const ArgsSchema = z
   .object({
     config: z.string().optional(),
-    output: z.string(),
+    output: z.string().optional(),
     target: z.string().optional(),
     preview: z.boolean(),
     turns: z.number().optional(),
+    overwrite: z.boolean(),
   })
+  // Config and target are mutually exclusive:
   .refine((data) => !(data.config && data.target), {
     message: 'Cannot specify both config and target!',
     path: ['config', 'target'],
+  })
+  // Either config or target must be provided:
+  .refine((data) => data.config || data.target, {
+    message: 'Either config or target must be provided!',
+    path: ['config', 'target'],
+  })
+  // `output` and `preview` are mutually exclusive:
+  .refine((data) => !(data.output && data.preview), {
+    message: 'Cannot specify both output and preview!',
+    path: ['output', 'preview'],
+  })
+  // `overwrite` can only be used if `output` is provided:
+  .refine((data) => !(data.overwrite && !data.output), {
+    message: 'Cannot specify overwrite without output!',
+    path: ['overwrite', 'output'],
   });
 
 type Args = z.infer<typeof ArgsSchema>;
@@ -166,7 +181,12 @@ export function discoverCommand(program: Command) {
       `,
     )
     .option('-c, --config <path>', 'Path to `promptfooconfig.yaml` configuration file.')
-    .option('-o, --output <path>', 'Path to output file.', DEFAULT_OUTPUT_PATH)
+    .option(
+      '-o, --output <path>',
+      'Path to output file. Discovered purpose will be appended to the file if it already exists.',
+      DEFAULT_OUTPUT_PATH,
+    )
+    .option('--overwrite', 'Overwrite the existing purpose if it already exists.', false)
     .option('-t, --target <id>', 'UUID of a Cloud-defined target to run the discovery on')
     .option('--preview', 'Preview discovery results without writing to an output file', false)
     .addOption(
@@ -176,6 +196,14 @@ export function discoverCommand(program: Command) {
       ).argParser(Number.parseInt),
     )
     .action(async (rawArgs: Args) => {
+      // If preview is true and output is DEFAULT_OUTPUT_PATH, set output to undefined to satisfy
+      // the schema. Defaults are defined within the `option` definitions to include them within the
+      // help message; however the schema enforces combinations of options that are mutually exclusive,
+      // such as `output` and `preview`.
+      if (rawArgs.preview && rawArgs.output === DEFAULT_OUTPUT_PATH) {
+        rawArgs.output = undefined;
+      }
+
       // Validate the arguments:
       const { success, data: args, error } = ArgsSchema.safeParse(rawArgs);
       if (!success) {
@@ -243,14 +271,6 @@ export function discoverCommand(program: Command) {
         // Alert the user that we're using a config from the current working directory:
         logger.info(`Using config from ${chalk.italic(fallbackConfigPath)}`);
       }
-      // A config or a target must be provided:
-      else {
-        logger.error(
-          'A config (-c, --config <path>) or a target (-t, --target <id>) must be provided!\n',
-        );
-        process.exitCode = 1;
-        return;
-      }
 
       // At this point, we should have at least one target:
       invariant(target != undefined, 'An error occurred loading the target config');
@@ -284,18 +304,46 @@ export function discoverCommand(program: Command) {
           logger.debug(`Writing purpose to ${args.output}`);
 
           // TODO: Burp support:
-          if (args.output.endsWith('.burp')) {
+          if (args.output!.endsWith('.burp')) {
             throw new Error('Burp support is not yet implemented');
-          } else {
-            // Create or update config file w/ redteam.purpose:
-            const existingYaml = fs.existsSync(args.output as fs.PathLike)
-              ? (yaml.load(fs.readFileSync(args.output!, 'utf8')) as Partial<UnifiedConfig>)
-              : {};
-            existingYaml['redteam'] = { ...(existingYaml['redteam'] || {}), purpose };
+          }
+          // If the output file already exists, update it:
+          else if (fs.existsSync(args.output as fs.PathLike)) {
+            const existingYaml = yaml.load(
+              fs.readFileSync(args.output!, 'utf8'),
+            ) as Partial<UnifiedConfig>;
+
+            // Either append or overwrite the existing purpose:
+            const existingPurpose = existingYaml['redteam']?.purpose;
+
+            if (existingPurpose) {
+              if (args.overwrite) {
+                logger.warn(dedent`
+                  Output file already contains a value at \`redteam.purpose\`; overwriting it.
+                `);
+              } else {
+                logger.warn(dedent`
+                  Output file already contains a value at \`redteam.purpose\`; appending discovered purpose to it.
+
+                  To overwrite the existing purpose, use the \`--overwrite\` flag.
+                `);
+              }
+            }
+
+            existingYaml['redteam'] = {
+              ...(existingYaml['redteam'] || {}),
+              purpose:
+                existingPurpose && !args.overwrite
+                  ? `${existingPurpose}\n\nDiscovered Purpose:\n\n${purpose}`
+                  : purpose,
+            };
             writePromptfooConfig(existingYaml as UnifiedConfig, args.output!);
+          } else {
+            // Create a new config file with the purpose.
+            writePromptfooConfig({ redteam: { purpose } } as UnifiedConfig, args.output!);
           }
 
-          logger.info(`Purpose written to ${chalk.italic(args.output)}`);
+          logger.info(`\nPurpose written to ${chalk.italic(args.output)}`);
         }
       }
     });
