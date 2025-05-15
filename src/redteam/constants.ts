@@ -1532,3 +1532,5 @@ export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
   Recommended: 'A broad set of plugins recommended by Promptfoo',
   'EU AI Act': 'Plugins mapped to EU AI Act prohibited & high-risk requirements',
 } as const;
+
+export const DEFAULT_OUTPUT_PATH = 'redteam.yaml';

@@ -27,7 +27,7 @@ import {
   DEFAULT_STRATEGIES,
   REDTEAM_MODEL,
 } from '../constants';
-import { shouldGenerateRemote } from '../remoteGeneration';
+import { shouldGenerateRemote, neverGenerateRemote } from '../remoteGeneration';
 import type {
   RedteamCliGenerateOptions,
   RedteamFileConfig,
@@ -89,8 +89,13 @@ export async function doGenerateRedteam(
     testSuite = resolved.testSuite;
     redteamConfig = resolved.config.redteam;
 
-    // If a config is provided that contains at least one target, discover the purpose from the target:
-    if (resolved.config.providers && Array.isArray(resolved.config.providers)) {
+    // If remote generation is enabled and a config is provided that contains at least one target,
+    // discover the purpose from the target:
+    if (
+      !neverGenerateRemote() &&
+      resolved.config.providers &&
+      Array.isArray(resolved.config.providers)
+    ) {
       invariant(
         resolved.config.providers.length > 0,
         'At least one provider must be provided in the config file',

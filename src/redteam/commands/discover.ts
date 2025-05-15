@@ -18,7 +18,9 @@ import { getProviderFromCloud } from '../../util/cloud';
 import { readConfig } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/manage';
 import invariant from '../../util/invariant';
+import { DEFAULT_OUTPUT_PATH } from '../constants';
 import { getRemoteGenerationUrl } from '../remoteGeneration';
+import { neverGenerateRemote } from '../remoteGeneration';
 
 export const ArgsSchema = z
   .object({
@@ -57,7 +59,7 @@ export const ArgsSchema = z
 
 type Args = z.infer<typeof ArgsSchema>;
 
-const DEFAULT_OUTPUT_PATH = 'redteam.yaml';
+const DEFAULT_TURN_COUNT = 50;
 
 /**
  * Queries Cloud for the purpose-discovery logic, sends each logic to the target,
@@ -69,7 +71,7 @@ const DEFAULT_OUTPUT_PATH = 'redteam.yaml';
  */
 export async function doTargetPurposeDiscovery(
   target: ApiProvider,
-  maxTurns: number = 100,
+  maxTurns: number = DEFAULT_TURN_COUNT,
 ): Promise<string> {
   const conversationHistory: { type: 'promptfoo' | 'target'; content: string }[] = [];
 
@@ -82,11 +84,7 @@ export async function doTargetPurposeDiscovery(
     hideCursor: true,
   });
 
-  pbar.start(
-    // fallback: estimate of 25 turns
-    maxTurns ?? 25,
-    0,
-  );
+  pbar.start(maxTurns, turnCounter);
 
   while (true) {
     const res = await fetchWithProxy(getRemoteGenerationUrl(), {
@@ -108,10 +106,8 @@ export async function doTargetPurposeDiscovery(
     };
 
     if (done) {
-      if (pbar) {
-        pbar.increment();
-        pbar.stop();
-      }
+      pbar.increment();
+      pbar.stop();
       logger.info(`\nPurpose:\n\n${chalk.green(purpose)}\n`);
       return purpose as string;
     } else {
@@ -127,13 +123,11 @@ export async function doTargetPurposeDiscovery(
     logger.debug(JSON.stringify({ question, output: response.output }, null, 2));
     conversationHistory.push({ type: 'target', content: response.output });
 
-    if (maxTurns && turnCounter === maxTurns) {
+    if (turnCounter === maxTurns) {
       // Purpose will always be defined because the generator task is max turn aware.
       return purpose as string;
-    }
-
-    turnCounter++;
-    if (pbar) {
+    } else {
+      turnCounter++;
       pbar.increment();
     }
   }
@@ -198,7 +192,9 @@ export function discoverCommand(program: Command) {
       new Option(
         '--turns <turns>',
         'A maximum number of turns to run the discovery process. Lower is faster but less accurate.',
-      ).argParser(Number.parseInt),
+      )
+        .argParser(Number.parseInt)
+        .default(DEFAULT_TURN_COUNT),
     )
     .action(async (rawArgs: Args) => {
       // If preview is true and output is DEFAULT_OUTPUT_PATH, set output to undefined to satisfy
@@ -207,6 +203,16 @@ export function discoverCommand(program: Command) {
       // such as `output` and `preview`.
       if (rawArgs.preview && rawArgs.output === DEFAULT_OUTPUT_PATH) {
         rawArgs.output = undefined;
+      }
+
+      // Check that remote generation is enabled:
+      if (neverGenerateRemote()) {
+        logger.error(dedent`
+          Discovery relies on remote generation which is disabled.
+
+          To enable remote generation, unset the PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION environment variable.
+        `);
+        process.exit(1);
       }
 
       // Validate the arguments:
