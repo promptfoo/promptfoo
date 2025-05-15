@@ -308,12 +308,7 @@ export function discoverCommand(program: Command) {
 
           logger.debug(`Writing purpose to ${args.output}`);
 
-          // TODO: Burp support:
-          if (args.output!.endsWith('.burp')) {
-            throw new Error('Burp support is not yet implemented');
-          }
-          // If the output file already exists, update it:
-          else if (fs.existsSync(args.output!)) {
+          if (fs.existsSync(args.output!)) {
             const existingYaml = yaml.load(
               fs.readFileSync(args.output!, 'utf8'),
             ) as Partial<UnifiedConfig>;
