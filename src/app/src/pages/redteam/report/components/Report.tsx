@@ -291,7 +291,7 @@ const App: React.FC = () => {
         {evalData.config.redteam && <EnterpriseBanner evalId={evalId || ''} />}
         <Card className="report-header" sx={{ position: 'relative' }}>
           <Box sx={{ position: 'absolute', top: 8, right: 8, display: 'flex' }}>
-            <Tooltip title="View All Logs" placement="top">
+            <Tooltip title="View all logs" placement="top">
               <IconButton
                 sx={{ position: 'relative' }}
                 aria-label="view all logs"
