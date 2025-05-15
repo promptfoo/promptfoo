@@ -1502,7 +1502,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   leetspeak: 'Leetspeak Encoding',
   'math-prompt': 'Mathematical Encoding',
   morse: 'Morse Code',
-  multilingual: 'Multilingual Encoding',
+  multilingual: 'Multilingual Translation',
   'other-encodings': 'Alternative Encodings',
   pandamonium: 'Pandamonium',
   piglatin: 'Pig Latin',
