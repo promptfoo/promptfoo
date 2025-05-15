@@ -1,15 +1,15 @@
-import type { Command } from 'commander';
-import logger from '../logger';
-import telemetry from '../telemetry';
-import { setupEnv } from '../util';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import type { Command } from 'commander';
 import express from 'express';
 import { z } from 'zod';
+import logger from '../logger';
 import { getEvalSummaries } from '../models/eval';
-import { readResult, getPromptsForTestCasesHash, getTestCases } from '../util/database';
+import telemetry from '../telemetry';
+import { setupEnv } from '../util';
 import { loadDefaultConfig } from '../util/config/default';
+import { readResult, getPromptsForTestCasesHash, getTestCases } from '../util/database';
 
 /**
  * Creates an MCP server with tools for interacting with promptfoo
@@ -22,7 +22,8 @@ async function createMcpServer() {
 
   // Define tools for retrieving evaluations
   server.tool(
-    'listEvals',
+    'listEvals', 
+    'List evaluation summaries, optionally filtered by dataset ID',
     { datasetId: z.string().optional() },
     async ({ datasetId }) => {
       const evals = await getEvalSummaries(datasetId);
@@ -34,6 +35,7 @@ async function createMcpServer() {
 
   server.tool(
     'getEval',
+    'Get detailed evaluation results by ID',
     { id: z.string() },
     async ({ id }) => {
       const result = await readResult(id);
@@ -51,6 +53,7 @@ async function createMcpServer() {
 
   server.tool(
     'getPrompts',
+    'Get prompts for a specific test case hash',
     { sha256hash: z.string() },
     async ({ sha256hash }) => {
       const prompts = await getPromptsForTestCasesHash(sha256hash);
@@ -62,6 +65,7 @@ async function createMcpServer() {
 
   server.tool(
     'listDatasets',
+    'List available test datasets',
     {},
     async () => {
       const datasets = await getTestCases();
@@ -74,6 +78,7 @@ async function createMcpServer() {
   // Tool to get summary statistics for an evaluation
   server.tool(
     'getEvalStats',
+    'Get summary statistics for an evaluation by ID',
     { id: z.string() },
     async ({ id }) => {
       const result = await readResult(id);
@@ -85,7 +90,7 @@ async function createMcpServer() {
       }
 
       const evalResults = result.result.results.results || [];
-      
+
       // Calculate basic statistics
       const totalTests = evalResults.length;
       const passedTests = evalResults.filter((r) => r.success === true).length;
@@ -122,13 +127,18 @@ async function createMcpServer() {
   server.resource(
     'config',
     'config://default',
+    {
+      description: 'Access the default promptfoo configuration'
+    },
     async () => {
       const { defaultConfig } = await loadDefaultConfig();
       return {
-        contents: [{
-          uri: 'config://default',
-          text: JSON.stringify(defaultConfig, null, 2),
-        }],
+        contents: [
+          {
+            uri: 'config://default',
+            text: JSON.stringify(defaultConfig, null, 2),
+          },
+        ],
       };
     }
   );
@@ -180,13 +190,13 @@ export async function startHttpMcpServer(port: number) {
  */
 export async function startStdioMcpServer() {
   const server = await createMcpServer();
-  
+
   // Set up stdio transport
   const transport = new StdioServerTransport();
-  
+
   // Connect the server to the stdio transport
   await server.connect(transport);
-  
+
   logger.info('Promptfoo MCP stdio server started');
 }
 
@@ -218,4 +228,4 @@ export function mcpCommand(program: Command) {
         }
       },
     );
-} 
+}

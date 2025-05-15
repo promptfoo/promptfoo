@@ -1,9 +1,11 @@
 {
   "mcpServers": {
     "promptfoo": {
-      "command": "npx",
+      "command": "npm",
       "args": [
-        "promptfoo",
+        "run",
+        "local",
+        "--",
         "mcp",
         "--transport",
         "stdio"
