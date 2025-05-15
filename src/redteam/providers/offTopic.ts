@@ -190,3 +190,5 @@ export class ServerOffTopicProvider implements ApiProvider {
     }
   }
 }
+
+export { MAX_ROUNDS };
