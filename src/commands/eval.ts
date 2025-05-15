@@ -9,7 +9,7 @@ import { fromError } from 'zod-validation-error';
 import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { getEnvFloat, getEnvInt } from '../envars';
-import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
+import { DEFAULT_MAX_CONCURRENCY, evaluate, newTokenUsage } from '../evaluator';
 import { checkEmailStatusOrExit, promptForEmailUnverified } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger, { getLogLevel } from '../logger';
@@ -92,6 +92,257 @@ function formatTokenUsage(type: string, usage: Partial<TokenUsage>): string {
   }
 
   return parts.join(' / ');
+}
+
+/**
+ * Generate a table showing token usage per provider
+ */
+function generateTokenUsageTable(providerTokenUsage: Map<string, TokenUsage>): string {
+  if (providerTokenUsage.size === 0) {
+    return '';
+  }
+
+  try {
+    const Table = require('cli-table3');
+    
+    // Create table with headers
+    const table = new Table({
+      head: ['Provider', 'Total Tokens', 'Prompt', 'Completion', 'Cached', 'Requests'],
+      style: {
+        head: ['cyan'],
+      },
+    });
+
+    // Sort providers by total token usage (descending)
+    const sortedProviders = Array.from(providerTokenUsage.entries())
+      .sort((a, b) => (b[1].total || 0) - (a[1].total || 0));
+
+    // Add rows for each provider
+    for (const [provider, usage] of sortedProviders) {
+      table.push([
+        provider,
+        (usage.total || 0).toLocaleString(),
+        (usage.prompt || 0).toLocaleString(),
+        (usage.completion || 0).toLocaleString(),
+        (usage.cached || 0).toLocaleString(),
+        (usage.numRequests || 0).toLocaleString(),
+      ]);
+    }
+
+    return '\n' + table.toString();
+  } catch (error) {
+    // Fallback if cli-table3 isn't available
+    let output = '\nToken Usage Per Provider:\n';
+    for (const [provider, usage] of providerTokenUsage.entries()) {
+      output += `${provider}: ${usage.total?.toLocaleString() || 0} tokens (${usage.prompt?.toLocaleString() || 0} prompt, ${usage.completion?.toLocaleString() || 0} completion, ${usage.cached?.toLocaleString() || 0} cached)\n`;
+    }
+    return output;
+  }
+}
+
+/**
+ * Determines if a provider is a non-token-using provider (e.g., echo, fixed, template)
+ * These providers don't actually consume tokens but might report token usage incorrectly.
+ */
+function isNonTokenProvider(providerId: string): boolean {
+  const lowerProviderId = providerId.toLowerCase();
+  return (
+    lowerProviderId === 'echo' ||
+    lowerProviderId.includes(':echo') ||
+    lowerProviderId === 'fixed' ||
+    lowerProviderId.includes(':fixed') ||
+    lowerProviderId === 'template') ||
+    lowerProviderId.includes(':template')
+  );
+}
+
+/**
+ * Generate a detailed token usage report with all models in a single table
+ */
+function generateDetailedTokenUsageReport(evaluator: any): string {
+  if (!evaluator) {
+    return '';
+  }
+
+  try {
+    const Table = require('cli-table3');
+    
+    // Create a single table with headers
+    const usageTable = new Table({
+      head: ['Model', 'Type', 'Total Tokens', 'Prompt', 'Completion', 'Reasoning', 'Cached', 'Requests'],
+      style: {
+        head: ['cyan'],
+      },
+    });
+
+    // Combine both provider and grader data
+    const combinedData: Array<[string, TokenUsage, string]> = [];
+    
+    // Add provider data, filtering out non-token providers with zero usage
+    if (evaluator.providerTokenUsage && evaluator.providerTokenUsage.size > 0) {
+      const providers = Array.from(evaluator.providerTokenUsage.entries() as Iterable<[string, TokenUsage]>);
+      providers.forEach(([providerId, usage]) => {
+        // Skip non-token providers or providers with zero usage
+        if (isNonTokenProvider(providerId) || (usage?.total || 0) === 0) {
+          return;
+        }
+        
+        // For display, try to make the provider name more readable
+        let displayName = providerId;
+        
+        // If the provider ID includes responses: or similar path, make it more visible
+        if (displayName.includes(':responses:')) {
+          displayName = `${displayName} (responses)`;
+        } else if (displayName.includes(':completions:')) {
+          displayName = `${displayName} (completions)`;
+        }
+        
+        combinedData.push([displayName, usage, 'Target']);
+      });
+    }
+    
+    // Add grader data - each grader is listed separately, filtering out zero usage
+    if (evaluator.gradingTokenUsage && evaluator.gradingTokenUsage.size > 0) {
+      const graders = Array.from(evaluator.gradingTokenUsage.entries() as Iterable<[string, TokenUsage]>);
+      
+      // Filter out non-token providers and zero-usage graders
+      const validGraders = graders.filter(([graderId, usage]) => 
+        !isNonTokenProvider(graderId) && (usage?.total || 0) > 0
+      );
+      
+      // Sort graders by token usage (largest first)
+      validGraders.sort((a, b) => ((b[1]?.total || 0) - (a[1]?.total || 0)));
+      
+      // Add each grader as a separate row
+      validGraders.forEach(([graderId, usage]) => {
+        if (graderId === 'unknown-grader') {
+          combinedData.push(['Default Grader', usage, 'Grader']);
+        } else {
+          combinedData.push([graderId, usage, 'Grader']);
+        }
+      });
+    }
+    
+    // Sort by total token usage (descending)
+    combinedData.sort((a, b) => ((b[1]?.total || 0) - (a[1]?.total || 0)));
+    
+    // Add rows to the table
+    for (const [modelName, usage, type] of combinedData) {
+      usageTable.push([
+        modelName, 
+        type,
+        (usage?.total || 0).toLocaleString(),
+        (usage?.prompt || 0).toLocaleString(),
+        (usage?.completion || 0).toLocaleString(),
+        (usage?.completionDetails?.reasoning || 0).toLocaleString(),
+        (usage?.cached || 0).toLocaleString(),
+        (usage?.numRequests || 0).toLocaleString(),
+      ]);
+    }
+    
+    // Only show the table if we have data to display
+    if (combinedData.length === 0) {
+      return '';
+    }
+    
+    // Add a summary row with totals
+    const totals = {
+      total: 0,
+      prompt: 0,
+      completion: 0,
+      reasoning: 0,
+      cached: 0,
+      numRequests: 0
+    };
+    
+    combinedData.forEach(([_, usage]) => {
+      totals.total += usage?.total || 0;
+      totals.prompt += usage?.prompt || 0;
+      totals.completion += usage?.completion || 0;
+      totals.reasoning += usage?.completionDetails?.reasoning || 0;
+      totals.cached += usage?.cached || 0;
+      totals.numRequests += usage?.numRequests || 0;
+    });
+    
+    usageTable.push([
+      'TOTAL', 
+      '',
+      totals.total.toLocaleString(),
+      totals.prompt.toLocaleString(),
+      totals.completion.toLocaleString(),
+      totals.reasoning.toLocaleString(),
+      totals.cached.toLocaleString(),
+      totals.numRequests.toLocaleString(),
+    ]);
+
+    return chalk.bold('\nDetailed Token Usage:\n') + usageTable.toString();
+  } catch (error) {
+    // Fallback if cli-table3 isn't available
+    let fallbackOutput = '\nDetailed Token Usage:\n';
+    
+    const combinedData: Array<[string, any, string]> = [];
+    
+    // Add provider data, filtering non-token providers
+    if (evaluator.providerTokenUsage) {
+      for (const [providerId, usage] of Array.from(evaluator.providerTokenUsage.entries() as Iterable<[string, TokenUsage]>)) {
+        // Skip non-token providers or providers with zero usage
+        if (isNonTokenProvider(providerId) || (usage?.total || 0) === 0) {
+          continue;
+        }
+        
+        // For display, try to make the provider name more readable
+        let displayName = providerId;
+        
+        // If the provider ID includes responses: or similar path, make it more visible
+        if (displayName.includes(':responses:')) {
+          displayName = `${displayName} (responses)`;
+        } else if (displayName.includes(':completions:')) {
+          displayName = `${displayName} (completions)`;
+        }
+        
+        combinedData.push([displayName, usage, 'Target']);
+      }
+    }
+    
+    // Add grader data individually, filtering non-token providers
+    if (evaluator.gradingTokenUsage) {
+      for (const [graderId, usage] of Array.from(evaluator.gradingTokenUsage.entries() as Iterable<[string, TokenUsage]>)) {
+        // Skip non-token providers or providers with zero usage
+        if (isNonTokenProvider(graderId) || (usage?.total || 0) === 0) {
+          continue;
+        }
+        
+        let displayName = graderId;
+        if (graderId === 'unknown-grader') {
+          displayName = 'Default Grader';
+        }
+        combinedData.push([displayName, usage, 'Grader']);
+      }
+    }
+    
+    // Only show output if we have data
+    if (combinedData.length === 0) {
+      return '';
+    }
+    
+    // Sort by total token usage (descending)
+    combinedData.sort((a, b) => ((b[1]?.total || 0) - (a[1]?.total || 0)));
+    
+    // Format the output
+    for (const [modelName, usage, type] of combinedData) {
+      fallbackOutput += `${modelName} (${type}): ${usage?.total?.toLocaleString() || 0} tokens (${usage?.prompt?.toLocaleString() || 0} prompt, ${usage?.completion?.toLocaleString() || 0} completion, ${usage?.completionDetails?.reasoning?.toLocaleString() || 0} reasoning, ${usage?.cached?.toLocaleString() || 0} cached, ${usage?.numRequests?.toLocaleString() || 0} requests)\n`;
+    }
+    
+    // Add total
+    let totalTokens = 0;
+    combinedData.forEach(([_, usage]) => {
+      totalTokens += usage?.total || 0;
+    });
+    
+    fallbackOutput += `\nTOTAL: ${totalTokens.toLocaleString()} tokens\n`;
+    
+    return fallbackOutput;
+  }
 }
 
 export async function doEval(
@@ -450,6 +701,15 @@ export async function doEval(
       logger.info(
         `Total tokens: ${combinedTotal.toLocaleString()} (eval: ${evalTokens.total.toLocaleString()} + Grading: ${tokenUsage.assertions.total.toLocaleString()})`,
       );
+      
+      // Display detailed token usage by provider and grader
+      if (ret instanceof Eval && (ret as any)._evaluator) {
+        const evaluator = (ret as any)._evaluator;
+        const detailedTokenReport = generateDetailedTokenUsageReport(evaluator);
+        if (detailedTokenReport) {
+          logger.info(detailedTokenReport);
+        }
+      }
     }
 
     telemetry.record('command_used', {
@@ -771,3 +1031,4 @@ export function evalCommand(
 
   return evalCmd;
 }
+

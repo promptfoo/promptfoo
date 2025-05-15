@@ -33,6 +33,8 @@ import {
   ResultFailureReason,
   type RunEvalOptions,
   type TestSuite,
+  type ApiProvider,
+  type AtomicTestCase,
 } from './types';
 import { isApiProvider } from './types/providers';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
@@ -88,6 +90,51 @@ function updateAssertionMetrics(
       (assertions.completionDetails.rejectedPrediction ?? 0) +
       (assertionTokens.completionDetails.rejectedPrediction ?? 0);
   }
+}
+
+/**
+ * Determines if a provider is a non-token-using provider (e.g., echo, fixed, template)
+ * These providers don't actually consume tokens but might report token usage incorrectly.
+ */
+function isNonTokenProvider(providerId: string): boolean {
+  const lowerProviderId = providerId.toLowerCase();
+  return (
+    lowerProviderId === 'echo' ||
+    lowerProviderId.includes(':echo') ||
+    lowerProviderId === 'fixed' ||
+    lowerProviderId.includes(':fixed') ||
+    lowerProviderId === 'template' ||
+    lowerProviderId.includes(':template')
+  );
+}
+
+/**
+ * Determines the grader key based on test configuration and environment settings.
+ * This follows the same priority logic as the defaults.ts provider determination.
+ */
+function determineGraderKey(
+  testCase: AtomicTestCase,
+  testSuite: TestSuite,
+  currentProvider: ApiProvider
+): string {
+  // Check for explicit provider in test options
+  if (testCase?.options?.provider) {
+    return typeof testCase.options.provider === 'object'
+      ? testCase.options.provider.id()
+      : String(testCase.options.provider);
+  }
+  
+  // Check default test provider
+  if (testSuite?.defaultTest?.options?.provider) {
+    const defaultProvider = testSuite.defaultTest.options.provider;
+    return typeof defaultProvider === 'object'
+      ? defaultProvider.id()
+      : String(defaultProvider);
+  }
+  
+  // If no specific provider is set, default to the current provider
+  // This assumes the current provider is being used for grading too
+  return currentProvider.id();
 }
 
 /**
@@ -498,6 +545,9 @@ class Evaluator {
   conversations: EvalConversations;
   registers: EvalRegisters;
   fileWriters: JsonlFileWriter[];
+  providerTokenUsage: Map<string, TokenUsage>;
+  gradingTokenUsage: Map<string, TokenUsage>;
+  
   constructor(testSuite: TestSuite, evalRecord: Eval, options: EvaluateOptions) {
     this.testSuite = testSuite;
     this.evalRecord = evalRecord;
@@ -510,6 +560,8 @@ class Evaluator {
     };
     this.conversations = {};
     this.registers = {};
+    this.providerTokenUsage = new Map<string, TokenUsage>();
+    this.gradingTokenUsage = new Map<string, TokenUsage>();
 
     const jsonlFiles = Array.isArray(evalRecord.config.outputPath)
       ? evalRecord.config.outputPath.filter((p) => p.endsWith('.jsonl'))
@@ -834,6 +886,7 @@ class Evaluator {
             if (MODEL_GRADED_ASSERTION_TYPES.has(assertion.type as AssertionType)) {
               const tokensUsed = row.gradingResult.tokensUsed;
 
+              // Update global stats
               if (!this.stats.tokenUsage.assertions) {
                 this.stats.tokenUsage.assertions = {
                   total: 0,
@@ -843,13 +896,30 @@ class Evaluator {
                 };
               }
 
-              const assertions = this.stats.tokenUsage.assertions;
-              assertions.total = (assertions.total ?? 0) + (tokensUsed.total ?? 0);
-              assertions.prompt = (assertions.prompt ?? 0) + (tokensUsed.prompt ?? 0);
-              assertions.completion = (assertions.completion ?? 0) + (tokensUsed.completion ?? 0);
-              assertions.cached = (assertions.cached ?? 0) + (tokensUsed.cached ?? 0);
-
-              break;
+              // Update aggregate stats
+              updateAssertionMetrics({ tokenUsage: this.stats.tokenUsage }, tokensUsed);
+              
+              // Determine the actual grader model used
+              const graderKey = determineGraderKey(row.testCase, this.testSuite, evalStep.provider);
+              
+              // Skip updating token usage for non-token providers when they're used as graders
+              if (isNonTokenProvider(graderKey)) {
+                logger.debug(`Skipping token tracking for non-token grader: ${graderKey}`);
+                continue;
+              }
+              
+              // Get or create token usage tracker for this grader
+              if (!this.gradingTokenUsage.has(graderKey)) {
+                this.gradingTokenUsage.set(graderKey, newTokenUsage());
+              }
+              
+              const graderUsage = this.gradingTokenUsage.get(graderKey);
+              if (graderUsage) {
+                updateAssertionMetrics({ tokenUsage: graderUsage }, tokensUsed);
+                logger.debug(`Updated token usage for grader ${graderKey}: +${tokensUsed.total} tokens`);
+              }
+              
+              break; // Only need to count tokens once per assertion set
             }
           }
         }
@@ -864,18 +934,53 @@ class Evaluator {
         }
 
         if (row.tokenUsage) {
-          this.stats.tokenUsage.total += row.tokenUsage.total || 0;
-          this.stats.tokenUsage.prompt += row.tokenUsage.prompt || 0;
-          this.stats.tokenUsage.completion += row.tokenUsage.completion || 0;
-          this.stats.tokenUsage.cached += row.tokenUsage.cached || 0;
-          this.stats.tokenUsage.numRequests += row.tokenUsage.numRequests || 1;
-          if (row.tokenUsage.completionDetails) {
-            this.stats.tokenUsage.completionDetails.reasoning! +=
-              row.tokenUsage.completionDetails.reasoning || 0;
-            this.stats.tokenUsage.completionDetails.acceptedPrediction! +=
-              row.tokenUsage.completionDetails.acceptedPrediction || 0;
-            this.stats.tokenUsage.completionDetails.rejectedPrediction! +=
-              row.tokenUsage.completionDetails.rejectedPrediction || 0;
+          // Skip updating token usage for non-token providers
+          if (isNonTokenProvider(evalStep.provider.id())) {
+            logger.debug(`Skipping token tracking for non-token provider: ${evalStep.provider.id()}`);
+          } else {
+            // Update global stats
+            this.stats.tokenUsage.total += row.tokenUsage.total || 0;
+            this.stats.tokenUsage.prompt += row.tokenUsage.prompt || 0;
+            this.stats.tokenUsage.completion += row.tokenUsage.completion || 0;
+            this.stats.tokenUsage.cached += row.tokenUsage.cached || 0;
+            this.stats.tokenUsage.numRequests += row.tokenUsage.numRequests || 1;
+            if (row.tokenUsage.completionDetails) {
+              this.stats.tokenUsage.completionDetails.reasoning! +=
+                row.tokenUsage.completionDetails.reasoning || 0;
+              this.stats.tokenUsage.completionDetails.acceptedPrediction! +=
+                row.tokenUsage.completionDetails.acceptedPrediction || 0;
+              this.stats.tokenUsage.completionDetails.rejectedPrediction! +=
+                row.tokenUsage.completionDetails.rejectedPrediction || 0;
+            }
+            
+            // Track token usage per provider
+            const providerKey = evalStep.provider.id();
+            if (!this.providerTokenUsage.has(providerKey)) {
+              this.providerTokenUsage.set(providerKey, newTokenUsage());
+            }
+            
+            const providerUsage = this.providerTokenUsage.get(providerKey);
+            if (providerUsage) {
+              // Use direct updates for these simple fields with nullish coalescing
+              providerUsage.total = (providerUsage.total ?? 0) + (row.tokenUsage.total || 0);
+              providerUsage.prompt = (providerUsage.prompt ?? 0) + (row.tokenUsage.prompt || 0);
+              providerUsage.completion = (providerUsage.completion ?? 0) + (row.tokenUsage.completion || 0);
+              providerUsage.cached = (providerUsage.cached ?? 0) + (row.tokenUsage.cached || 0);
+              providerUsage.numRequests = (providerUsage.numRequests ?? 0) + (row.tokenUsage.numRequests || 1);
+              
+              // Update completion details if available
+              if (row.tokenUsage.completionDetails && providerUsage.completionDetails) {
+                providerUsage.completionDetails.reasoning = 
+                  (providerUsage.completionDetails.reasoning ?? 0) + 
+                  (row.tokenUsage.completionDetails.reasoning || 0);
+                providerUsage.completionDetails.acceptedPrediction = 
+                  (providerUsage.completionDetails.acceptedPrediction ?? 0) + 
+                  (row.tokenUsage.completionDetails.acceptedPrediction || 0);
+                providerUsage.completionDetails.rejectedPrediction = 
+                  (providerUsage.completionDetails.rejectedPrediction ?? 0) + 
+                  (row.tokenUsage.completionDetails.rejectedPrediction || 0);
+              }
+            }
           }
         }
 
@@ -1416,7 +1521,11 @@ export function evaluate(
   testSuite: TestSuite,
   evalRecord: Eval,
   options: EvaluateOptions,
-): Promise<Eval> {
+): Promise<Eval & { _evaluator?: Evaluator }> {
   const ev = new Evaluator(testSuite, evalRecord, options);
-  return ev.evaluate();
+  return ev.evaluate().then(result => {
+    // Attach the evaluator instance to the result
+    (result as any)._evaluator = ev;
+    return result;
+  });
 }
