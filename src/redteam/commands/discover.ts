@@ -48,6 +48,11 @@ export const ArgsSchema = z
   .refine((data) => !(data.overwrite && !data.output), {
     message: 'Cannot specify overwrite without output!',
     path: ['overwrite', 'output'],
+  })
+  // if `preview` is false, `output` must be provided:
+  .refine((data) => !(data.preview === false && !data.output), {
+    message: 'If preview is false, output must be provided!',
+    path: ['preview', 'output'],
   });
 
 type Args = z.infer<typeof ArgsSchema>;
@@ -308,7 +313,7 @@ export function discoverCommand(program: Command) {
             throw new Error('Burp support is not yet implemented');
           }
           // If the output file already exists, update it:
-          else if (fs.existsSync(args.output as fs.PathLike)) {
+          else if (fs.existsSync(args.output!)) {
             const existingYaml = yaml.load(
               fs.readFileSync(args.output!, 'utf8'),
             ) as Partial<UnifiedConfig>;

@@ -64,15 +64,34 @@ describe('ArgsSchema', () => {
     expect(error?.issues[0].message).toBe('Cannot specify overwrite without output!');
 
     // Remove the overwrite flag:
+    args.output = 'test';
     args.overwrite = false;
     const { success: success2, error: error2 } = ArgsSchema.safeParse(args);
     expect(success2).toBe(true);
     expect(error2).toBeUndefined();
 
-    // Add the output flag:
-    args.output = 'test';
+    // Overwrite to true
+    args.overwrite = true;
     const { success: success3, error: error3 } = ArgsSchema.safeParse(args);
     expect(success3).toBe(true);
     expect(error3).toBeUndefined();
+  });
+
+  it('If `preview` is false, `output` must be provided', () => {
+    const args: z.infer<typeof ArgsSchema> = {
+      config: 'test',
+      preview: false,
+      overwrite: false,
+    };
+
+    const { success, error } = ArgsSchema.safeParse(args);
+    expect(success).toBe(false);
+    expect(error?.issues[0].message).toBe('If preview is false, output must be provided!');
+
+    // Remove the preview flag:
+    args.preview = true;
+    const { success: success2, error: error2 } = ArgsSchema.safeParse(args);
+    expect(success2).toBe(true);
+    expect(error2).toBeUndefined();
   });
 });
