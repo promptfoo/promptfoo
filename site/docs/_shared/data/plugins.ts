@@ -1074,6 +1074,22 @@ export const PLUGINS = [
     },
     vulnerabilityType: 'security',
   },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests if an AI system can be manipulated to deviate from its defined purpose through social engineering',
+    label: 'security',
+    link: '/docs/red-team/plugins/off-topic/',
+    name: 'Off-topic Deviation',
+    pluginId: 'off-topic',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
 ] as const as readonly Plugin[];
 
 // Compile-time check

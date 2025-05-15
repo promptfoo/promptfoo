@@ -35,6 +35,7 @@ import { getHarmfulAssertions } from './harmful/common';
 import { getHarmfulTests } from './harmful/unaligned';
 import { ImitationPlugin } from './imitation';
 import { IntentPlugin } from './intent';
+import { OffTopicPlugin } from './offTopic';
 import { OverreliancePlugin } from './overreliance';
 import { getPiiLeakTestsForCategory } from './pii';
 import { PlinyPlugin } from './pliny';
@@ -188,6 +189,7 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(ShellInjectionPlugin, 'shell-injection'),
   createPluginFactory(SqlInjectionPlugin, 'sql-injection'),
   createPluginFactory(UnsafeBenchPlugin, 'unsafebench'),
+  createPluginFactory(OffTopicPlugin, 'off-topic'),
   ...unalignedHarmCategories.map((category) => ({
     key: category,
     action: async (params: PluginActionParams) => {

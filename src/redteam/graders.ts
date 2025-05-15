@@ -42,6 +42,7 @@ import { ImitationGrader } from './plugins/imitation';
 import { IndirectPromptInjectionGrader } from './plugins/indirectPromptInjection';
 import { IntentGrader } from './plugins/intent';
 import { MCPPluginGrader } from './plugins/mcp';
+import { OffTopicGrader } from './plugins/offTopic';
 import { OverrelianceGrader } from './plugins/overreliance';
 import { PiiGrader } from './plugins/pii';
 import { PlinyGrader } from './plugins/pliny';
@@ -128,6 +129,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:sql-injection': new SqlInjectionGrader(),
   'promptfoo:redteam:ssrf': new SsrfGrader(),
   'promptfoo:redteam:unsafebench': new UnsafeBenchGrader(),
+  'promptfoo:redteam:off-topic': new OffTopicGrader(),
 };
 
 export function getGraderById(id: string): RedteamGraderBase | undefined {
