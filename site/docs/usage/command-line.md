@@ -23,6 +23,9 @@ The `promptfoo` command line utility supports the following subcommands:
 - `feedback` - Send feedback to the promptfoo developers
 - `import` - Import an eval record from a JSON file
 - `list` - List various resources
+  - `list evals`
+  - `list prompts`
+  - `list datasets`
 - `scan-model` - Scan ML models for security vulnerabilities
 - `show` - Show details of a specific resource (defaults to most recent)
 
