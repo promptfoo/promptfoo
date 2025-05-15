@@ -69,6 +69,18 @@ class AirlineAgentContext(BaseModel):
     flight_number: Optional[str] = None
 
 
+### HELPERS
+
+
+def generate_flight_number() -> str:
+    """Generate a random flight number.
+
+    Returns:
+        A string representing a random flight number in the format FLT-XXX.
+    """
+    return f"FLT-{random.randint(100, 999)}"
+
+
 ### TOOLS
 
 
@@ -146,7 +158,7 @@ async def update_seat(
 
     # Generate flight number if it doesn't exist
     if context.context.flight_number is None:
-        context.context.flight_number = f"FLT-{random.randint(100, 999)}"
+        context.context.flight_number = generate_flight_number()
 
     return f"Updated seat to {new_seat} for confirmation number {confirmation_number} on flight {context.context.flight_number}"
 
@@ -165,8 +177,7 @@ async def on_seat_booking_handoff(
     Args:
         context: The shared context wrapper containing customer information
     """
-    flight_number = f"FLT-{random.randint(100, 999)}"
-    context.context.flight_number = flight_number
+    context.context.flight_number = generate_flight_number()
 
 
 ### AGENTS
@@ -235,7 +246,9 @@ async def run_agent(prompt: str, options: Dict[str, Any]) -> Dict[str, Any]:
     Returns:
         A dictionary containing the agent's output, token usage, context, and metadata
     """
-    config = options.get("config", {})
+    # Use setdefault to ensure config exists
+    options.setdefault("config", {})
+    config = options["config"]
     agent_type = config.get("agent_type", "triage")
 
     # Setup context
@@ -252,7 +265,7 @@ async def run_agent(prompt: str, options: Dict[str, Any]) -> Dict[str, Any]:
         current_agent = seat_booking_agent
         # Generate a flight number if needed
         if context.flight_number is None:
-            context.flight_number = f"FLT-{random.randint(100, 999)}"
+            context.flight_number = generate_flight_number()
     else:  # Default to triage
         current_agent = triage_agent
 
@@ -267,19 +280,22 @@ async def run_agent(prompt: str, options: Dict[str, Any]) -> Dict[str, Any]:
         with trace("Customer service", group_id=conversation_id):
             result = await Runner.run(current_agent, input_items, context=context)
 
-            # Process and collect outputs
-            output = ""
+            # Process and collect outputs using list accumulation instead of string concatenation
+            output_lines = []
             for new_item in result.new_items:
-                agent_name = new_item.agent.name
                 if isinstance(new_item, MessageOutputItem):
+                    agent_name = new_item.agent.name
                     message = ItemHelpers.text_message_output(new_item)
-                    output += f"{agent_name}: {message}\n"
+                    output_lines.append(f"{agent_name}: {message}")
                 elif isinstance(new_item, HandoffOutputItem):
-                    handoff_text = f"Handed off from {new_item.source_agent.name} to {new_item.target_agent.name}\n"
-                    output += handoff_text
+                    output_lines.append(
+                        f"Handed off from {new_item.source_agent.name} to {new_item.target_agent.name}"
+                    )
                 elif isinstance(new_item, ToolCallOutputItem):
-                    tool_text = f"Tool result: {new_item.output}\n"
-                    output += tool_text
+                    output_lines.append(f"Tool result: {new_item.output}")
+
+            # Join accumulated lines
+            output = "\n".join(output_lines)
 
             # Extract token usage information from raw responses
             token_usage = {
@@ -304,7 +320,7 @@ async def run_agent(prompt: str, options: Dict[str, Any]) -> Dict[str, Any]:
 
             # Return the result following promptfoo's ProviderResponse interface
             return {
-                "output": output.strip(),
+                "output": output,
                 "tokenUsage": token_usage,
                 "context": context.dict(),
                 "final_agent": result.last_agent.name,
@@ -332,24 +348,20 @@ async def call_api(
         A dictionary containing the output and any additional information
     """
     try:
-        # Transfer variables from promptfoo to agent options
-        if "passenger_name" in context.get("vars", {}):
-            if "config" not in options:
-                options["config"] = {}
-            options["config"]["passenger_name"] = context["vars"]["passenger_name"]
+        # Use setdefault to ensure config exists
+        options.setdefault("config", {})
 
-        if "confirmation_number" in context.get("vars", {}):
-            if "config" not in options:
-                options["config"] = {}
-            options["config"]["confirmation_number"] = context["vars"][
-                "confirmation_number"
-            ]
+        # Transfer variables from promptfoo to agent options
+        vars_dict = context.get("vars", {})
+        if "passenger_name" in vars_dict:
+            options["config"]["passenger_name"] = vars_dict["passenger_name"]
+
+        if "confirmation_number" in vars_dict:
+            options["config"]["confirmation_number"] = vars_dict["confirmation_number"]
 
         # Create conversation ID for continuing conversations
-        if "conversation_id" in context.get("vars", {}):
-            if "config" not in options:
-                options["config"] = {}
-            options["config"]["conversation_id"] = context["vars"]["conversation_id"]
+        if "conversation_id" in vars_dict:
+            options["config"]["conversation_id"] = vars_dict["conversation_id"]
 
         result = await run_agent(prompt, options)
         return result
