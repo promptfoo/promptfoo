@@ -59,7 +59,7 @@ export const ArgsSchema = z
 
 type Args = z.infer<typeof ArgsSchema>;
 
-const DEFAULT_TURN_COUNT = 50;
+const DEFAULT_TURN_COUNT = 5;
 
 /**
  * Queries Cloud for the purpose-discovery logic, sends each logic to the target,
@@ -113,7 +113,7 @@ export async function doTargetPurposeDiscovery(
     } else {
       if (!question) {
         logger.error(`Failed to discover purpose: ${res.statusText}`);
-        process.exit(1);
+        return '';
       }
       conversationHistory.push({ type: 'promptfoo', content: question as string });
     }
