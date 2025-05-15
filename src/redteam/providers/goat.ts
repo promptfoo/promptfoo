@@ -148,7 +148,7 @@ export default class GoatProvider implements ApiProvider {
             logger.info(`[GOAT] Invalid message from GOAT, skipping turn: ${JSON.stringify(data)}`);
             continue;
           }
-          const failureReason = data.message;
+          failureReason = data.message;
           logger.debug(`[GOAT] Previous attack attempt failure reason: ${failureReason}`);
         }
 
