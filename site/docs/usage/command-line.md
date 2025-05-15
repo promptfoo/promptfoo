@@ -7,27 +7,27 @@ sidebar_label: Command line
 
 The `promptfoo` command line utility supports the following subcommands:
 
-- `init [directory]` - Initialize a new project with dummy files.
-- `eval` - Evaluate prompts and models. This is the command you'll be using the most!
-- `view` - Start a browser UI for visualization of results.
-- `share` - Create a URL that can be shared online.
-- `auth` - Manage authentication for cloud features.
-- `cache` - Manage cache.
-  - `cache clear`
-- `config` - Edit configuration settings.
-  - `config get`
-  - `config set`
-  - `config unset`
-- `debug` - Display debug information for troubleshooting.
-- `list` - List various resources like evaluations, prompts, and datasets.
+- `eval` - Evaluate prompts
+- `init` - Initialize project with dummy files or download an example
+- `view` - Start browser UI
+- `redteam` - Red team LLM applications
+- `share` - Create a shareable URL of an eval (defaults to most recent)
+
+- `auth` - Manage authentication
+- `cache` - Manage cache
+- `config` - Edit configuration settings
+- `debug` - Display debug information for troubleshooting
+- `delete` - Delete various resources
+- `export` - Export an eval record to a JSON file
+- `generate` - Generate synthetic data
+- `feedback` - Send feedback to the promptfoo developers
+- `import` - Import an eval record from a JSON file
+- `list` - List various resources
   - `list evals`
   - `list prompts`
   - `list datasets`
-- `show <id>` - Show details of a specific resource (evaluation, prompt, dataset).
-- `delete <id>` - Delete a resource by its ID (currently, just evaluations)
-- `feedback <message>` - Send feedback to the Promptfoo developers.
-- `import <filepath>` - Import an eval file from JSON format.
-- `export <evalId>` - Export an eval record to JSON format.
+- `scan-model` - Scan ML models for security vulnerabilities
+- `show` - Show details of a specific resource (defaults to most recent)
 
 ## `promptfoo eval`
 

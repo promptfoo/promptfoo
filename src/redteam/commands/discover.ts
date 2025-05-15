@@ -18,7 +18,6 @@ import { getProviderFromCloud } from '../../util/cloud';
 import { readConfig } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/manage';
 import invariant from '../../util/invariant';
-import { DEFAULT_OUTPUT_PATH } from '../constants';
 import { getRemoteGenerationUrl } from '../remoteGeneration';
 
 export const ArgsSchema = z
@@ -58,7 +57,7 @@ export const ArgsSchema = z
 
 type Args = z.infer<typeof ArgsSchema>;
 
-const DEFAULT_TURN_COUNT = 50;
+const DEFAULT_OUTPUT_PATH = 'redteam.yaml';
 
 /**
  * Queries Cloud for the purpose-discovery logic, sends each logic to the target,
@@ -70,7 +69,7 @@ const DEFAULT_TURN_COUNT = 50;
  */
 export async function doTargetPurposeDiscovery(
   target: ApiProvider,
-  maxTurns: number = DEFAULT_TURN_COUNT,
+  maxTurns: number = 100,
 ): Promise<string> {
   const conversationHistory: { type: 'promptfoo' | 'target'; content: string }[] = [];
 
@@ -83,7 +82,11 @@ export async function doTargetPurposeDiscovery(
     hideCursor: true,
   });
 
-  pbar.start(maxTurns, turnCounter);
+  pbar.start(
+    // fallback: estimate of 25 turns
+    maxTurns ?? 25,
+    0,
+  );
 
   while (true) {
     const res = await fetchWithProxy(getRemoteGenerationUrl(), {
@@ -105,8 +108,10 @@ export async function doTargetPurposeDiscovery(
     };
 
     if (done) {
-      pbar.increment();
-      pbar.stop();
+      if (pbar) {
+        pbar.increment();
+        pbar.stop();
+      }
       logger.info(`\nPurpose:\n\n${chalk.green(purpose)}\n`);
       return purpose as string;
     } else {
@@ -122,11 +127,13 @@ export async function doTargetPurposeDiscovery(
     logger.debug(JSON.stringify({ question, output: response.output }, null, 2));
     conversationHistory.push({ type: 'target', content: response.output });
 
-    if (turnCounter === maxTurns) {
+    if (maxTurns && turnCounter === maxTurns) {
       // Purpose will always be defined because the generator task is max turn aware.
       return purpose as string;
-    } else {
-      turnCounter++;
+    }
+
+    turnCounter++;
+    if (pbar) {
       pbar.increment();
     }
   }
@@ -191,9 +198,7 @@ export function discoverCommand(program: Command) {
       new Option(
         '--turns <turns>',
         'A maximum number of turns to run the discovery process. Lower is faster but less accurate.',
-      )
-        .argParser(Number.parseInt)
-        .default(DEFAULT_TURN_COUNT),
+      ).argParser(Number.parseInt),
     )
     .action(async (rawArgs: Args) => {
       // If preview is true and output is DEFAULT_OUTPUT_PATH, set output to undefined to satisfy

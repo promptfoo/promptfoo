@@ -49,15 +49,15 @@ redteam:
 
 ### Configuration Fields
 
-| Field        | Type                      | Description                                                                                                                 | Default                         |
-| ------------ | ------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
-| `injectVar`  | `string`                  | Variable to inject adversarial inputs into                                                                                  | Inferred from prompts           |
-| `numTests`   | `number`                  | Default number of tests to generate per plugin                                                                              | 5                               |
-| `plugins`    | `Array<string\|object>`   | Plugins to use for red team generation                                                                                      | `default`                       |
-| `targets`    | `string\|ProviderOptions` | Endpoint or AI model provider for generating adversarial inputs. See [LLM Providers](/docs/providers) for more information. | `openai:gpt-4o`                 |
-| `purpose`    | `string`                  | Description of prompt templates' purpose to guide adversarial generation                                                    | Inferred from prompts           |
-| `strategies` | `Array<string\|object>`   | Strategies to apply to other plugins                                                                                        | `jailbreak`, `prompt-injection` |
-| `language`   | `string`                  | Language for generated tests                                                                                                | English                         |
+| Field                   | Type                      | Description                                                              | Default                         |
+| ----------------------- | ------------------------- | ------------------------------------------------------------------------ | ------------------------------- |
+| `injectVar`             | `string`                  | Variable to inject adversarial inputs into                               | Inferred from prompts           |
+| `numTests`              | `number`                  | Default number of tests to generate per plugin                           | 5                               |
+| `plugins`               | `Array<string\|object>`   | Plugins to use for red team generation                                   | `default`                       |
+| `provider` or `targets` | `string\|ProviderOptions` | Endpoint or AI model provider for generating adversarial inputs          | `openai:gpt-4o`                 |
+| `purpose`               | `string`                  | Description of prompt templates' purpose to guide adversarial generation | Inferred from prompts           |
+| `strategies`            | `Array<string\|object>`   | Strategies to apply to other plugins                                     | `jailbreak`, `prompt-injection` |
+| `language`              | `string`                  | Language for generated tests                                             | English                         |
 
 ### Plugin Configuration
 
@@ -445,9 +445,9 @@ strategies:
 
 ### Purpose
 
-The `purpose` field provides context to guide the generation of adversarial inputs. It is derived automatically via a scan of your target application, or you can set it. For guidance on manually setting or automatically discovering purpose, see the [LLM Redteaming Guide](/docs/guides/llm-redteaming/#step-3-configure-the-targets-purpose).
+The `purpose` field provides context to guide the generation of adversarial inputs. It is derived automatically, or you can set it.
 
-A set purpose should be descriptive, as it will be used as the basis for generated adversarial tests and grading. For example:
+The purpose should be descriptive, as it will be used as the basis for generated adversarial tests and grading. For example:
 
 ```yaml
 redteam:
