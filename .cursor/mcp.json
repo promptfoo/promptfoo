@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "promptfoo": {
+      "command": "npx",
+      "args": [
+        "promptfoo",
+        "mcp",
+        "--transport",
+        "stdio"
+      ],
+      "description": "Promptfoo MCP server for LLM evaluation and testing context",
+      "env": {
+        "PROMPTFOO_LOG_LEVEL": "debug",
+        "PROMPTFOO_CONFIG_PATH": "${workspaceFolder}"
+      }
+    }
+  }
+}

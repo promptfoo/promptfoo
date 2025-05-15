@@ -14,6 +14,7 @@ import { generateDatasetCommand } from './commands/generate/dataset';
 import { importCommand } from './commands/import';
 import { initCommand } from './commands/init';
 import { listCommand } from './commands/list';
+import { mcpCommand } from './commands/mcp';
 import { modelScanCommand } from './commands/modelScan';
 import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
@@ -87,6 +88,7 @@ async function main() {
   evalCommand(program, defaultConfig, defaultConfigPath);
   initCommand(program);
   viewCommand(program);
+  mcpCommand(program);
   const redteamBaseCommand = program.command('redteam').description('Red team LLM applications');
   shareCommand(program);
 

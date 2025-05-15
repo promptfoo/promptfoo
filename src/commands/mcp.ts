@@ -1,0 +1,221 @@
+import type { Command } from 'commander';
+import logger from '../logger';
+import telemetry from '../telemetry';
+import { setupEnv } from '../util';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import express from 'express';
+import { z } from 'zod';
+import { getEvalSummaries } from '../models/eval';
+import { readResult, getPromptsForTestCasesHash, getTestCases } from '../util/database';
+import { loadDefaultConfig } from '../util/config/default';
+
+/**
+ * Creates an MCP server with tools for interacting with promptfoo
+ */
+async function createMcpServer() {
+  const server = new McpServer({
+    name: 'Promptfoo MCP',
+    version: '1.0.0',
+  });
+
+  // Define tools for retrieving evaluations
+  server.tool(
+    'listEvals',
+    { datasetId: z.string().optional() },
+    async ({ datasetId }) => {
+      const evals = await getEvalSummaries(datasetId);
+      return {
+        content: [{ type: 'text', text: JSON.stringify(evals, null, 2) }],
+      };
+    }
+  );
+
+  server.tool(
+    'getEval',
+    { id: z.string() },
+    async ({ id }) => {
+      const result = await readResult(id);
+      if (!result) {
+        return {
+          content: [{ type: 'text', text: 'Eval not found' }],
+          isError: true,
+        };
+      }
+      return {
+        content: [{ type: 'text', text: JSON.stringify(result.result, null, 2) }],
+      };
+    }
+  );
+
+  server.tool(
+    'getPrompts',
+    { sha256hash: z.string() },
+    async ({ sha256hash }) => {
+      const prompts = await getPromptsForTestCasesHash(sha256hash);
+      return {
+        content: [{ type: 'text', text: JSON.stringify(prompts, null, 2) }],
+      };
+    }
+  );
+
+  server.tool(
+    'listDatasets',
+    {},
+    async () => {
+      const datasets = await getTestCases();
+      return {
+        content: [{ type: 'text', text: JSON.stringify(datasets, null, 2) }],
+      };
+    }
+  );
+
+  // Tool to get summary statistics for an evaluation
+  server.tool(
+    'getEvalStats',
+    { id: z.string() },
+    async ({ id }) => {
+      const result = await readResult(id);
+      if (!result) {
+        return {
+          content: [{ type: 'text', text: 'Eval not found' }],
+          isError: true,
+        };
+      }
+
+      const evalResults = result.result.results.results || [];
+      
+      // Calculate basic statistics
+      const totalTests = evalResults.length;
+      const passedTests = evalResults.filter((r) => r.success === true).length;
+      const failedTests = totalTests - passedTests;
+      const passRate = totalTests > 0 ? (passedTests / totalTests) * 100 : 0;
+
+      // Group by test case
+      const testCaseGroups = evalResults.reduce<Record<string, unknown[]>>((acc, r) => {
+        const testCase = r.vars ? JSON.stringify(r.vars) : 'unknown';
+        if (!acc[testCase]) {
+          acc[testCase] = [];
+        }
+        acc[testCase].push(r);
+        return acc;
+      }, {});
+
+      const stats = {
+        id,
+        totalTests,
+        passedTests,
+        failedTests,
+        passRate: `${passRate.toFixed(2)}%`,
+        testCaseCount: Object.keys(testCaseGroups).length,
+        description: result.result.config?.description || 'No description',
+      };
+
+      return {
+        content: [{ type: 'text', text: JSON.stringify(stats, null, 2) }],
+      };
+    }
+  );
+
+  // Resources
+  server.resource(
+    'config',
+    'config://default',
+    async () => {
+      const { defaultConfig } = await loadDefaultConfig();
+      return {
+        contents: [{
+          uri: 'config://default',
+          text: JSON.stringify(defaultConfig, null, 2),
+        }],
+      };
+    }
+  );
+
+  return server;
+}
+
+/**
+ * Starts an MCP server with HTTP transport
+ */
+export async function startHttpMcpServer(port: number) {
+  const app = express();
+  app.use(express.json());
+
+  const server = await createMcpServer();
+
+  // Set up HTTP transport for MCP
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: () => Math.random().toString(36).substring(2, 15),
+  });
+
+  await server.connect(transport);
+
+  // Handle MCP requests
+  app.post('/mcp', async (req, res) => {
+    await transport.handleRequest(req, res, req.body);
+  });
+
+  // Handle SSE
+  app.get('/mcp/sse', async (req, res) => {
+    await transport.handleRequest(req, res);
+  });
+
+  // Health check
+  app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'OK', message: 'Promptfoo MCP server is running' });
+  });
+
+  // Start the server
+  app.listen(port, () => {
+    logger.info(`Promptfoo MCP server running at http://localhost:${port}`);
+    logger.info(`MCP endpoint: http://localhost:${port}/mcp`);
+    logger.info(`SSE endpoint: http://localhost:${port}/mcp/sse`);
+  });
+}
+
+/**
+ * Starts an MCP server with stdio transport
+ */
+export async function startStdioMcpServer() {
+  const server = await createMcpServer();
+  
+  // Set up stdio transport
+  const transport = new StdioServerTransport();
+  
+  // Connect the server to the stdio transport
+  await server.connect(transport);
+  
+  logger.info('Promptfoo MCP stdio server started');
+}
+
+export function mcpCommand(program: Command) {
+  program
+    .command('mcp')
+    .description('Start an MCP server for external tool integrations')
+    .option('-p, --port <number>', 'Port number for HTTP transport', '3100')
+    .option('--transport <type>', 'Transport type: "http" or "stdio"', 'http')
+    .option('--env-file, --env-path <path>', 'Path to .env file')
+    .action(
+      async (
+        cmdObj: {
+          port: string;
+          transport: string;
+          envPath?: string;
+        } & Command,
+      ) => {
+        setupEnv(cmdObj.envPath);
+        telemetry.record('command_used', {
+          name: 'mcp',
+          transport: cmdObj.transport,
+        });
+
+        if (cmdObj.transport === 'stdio') {
+          await startStdioMcpServer();
+        } else {
+          await startHttpMcpServer(Number.parseInt(cmdObj.port, 10));
+        }
+      },
+    );
+} 
