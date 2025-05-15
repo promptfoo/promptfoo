@@ -116,20 +116,49 @@ export default class GoatProvider implements ApiProvider {
     }
 
     let previousAttackerMessage = '';
+    let previousTargetOutput = '';
 
     for (let turn = 0; turn < this.maxTurns; turn++) {
       try {
-        const body = JSON.stringify({
+        let body: string;
+        let failureReason: string | undefined;
+        if (this.excludeTargetOutputFromAgenticAttackGeneration && turn > 0) {
+          body = JSON.stringify({
+            goal: context?.vars[this.injectVar],
+            targetOutput: previousTargetOutput,
+            attackAttempt: previousAttackerMessage,
+            task: 'extract-goat-failure',
+          });
+          logger.debug(`[GOAT] Sending request to ${getRemoteGenerationUrl()}: ${body}`);
+          response = await fetch(getRemoteGenerationUrl(), {
+            body,
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            method: 'POST',
+          });
+          const data = await response.json();
+          if (typeof data?.message !== 'object' || !data.message?.content || !data.message?.role) {
+            logger.info(`[GOAT] Invalid message from GOAT, skipping turn: ${JSON.stringify(data)}`);
+            continue;
+          }
+          const failureReason = data.message.content;
+          logger.debug(`[GOAT] Previous attack attempt failure reason: ${failureReason}`);
+        }
+
+        body = JSON.stringify({
           goal: context?.vars[this.injectVar],
           i: turn,
-          messages,
+          messages: this.excludeTargetOutputFromAgenticAttackGeneration
+            ? messages.filter((m) => m.role !== 'assistant')
+            : messages,
           prompt: context?.prompt?.raw,
           task: 'goat',
           version: VERSION,
           email: getUserEmail(),
           excludeTargetOutputFromAgenticAttackGeneration:
             this.excludeTargetOutputFromAgenticAttackGeneration,
-          previousAttackerMessage,
+          failureReason,
         });
 
         logger.debug(`[GOAT] Sending request to ${getRemoteGenerationUrl()}: ${body}`);
@@ -216,6 +245,7 @@ export default class GoatProvider implements ApiProvider {
           );
           continue;
         }
+        previousTargetOutput = stringifiedOutput;
 
         messages.push({
           role: 'assistant',
