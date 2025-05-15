@@ -151,7 +151,7 @@ function isNonTokenProvider(providerId: string): boolean {
     lowerProviderId.includes(':echo') ||
     lowerProviderId === 'fixed' ||
     lowerProviderId.includes(':fixed') ||
-    lowerProviderId === 'template') ||
+    lowerProviderId === 'template' ||
     lowerProviderId.includes(':template')
   );
 }
