@@ -148,9 +148,11 @@ function getPrompt(context) {
 }
 ```
 
-## Step 2: Configure your targets
+## Step 2: Configure your target
 
-LLMs are configured with the `targets` property in `promptfooconfig.yaml`. An LLM target can be a known LLM API (such as OpenAI, Anthropic, Ollama, etc.) or a custom RAG or agent flow you've built yourself.
+Promptfoo supports red teaming against various language models and AI services, known as _Targets_. Promptfoo supports a [variety of targets](/docs/providers) such as LLM APIs (e.g. OpenAI, Anthropic, Ollama, etc.), RAGs, or agentic applications you've built yourself.
+
+Targets are configured with the `targets` property in `promptfooconfig.yaml`.
 
 ### LLM APIs
 
@@ -165,11 +167,9 @@ targets:
   - ollama:chat:llama3.1:70b
 ```
 
-To learn more, find your preferred LLM provider [here](/docs/providers).
+### Executables
 
-### Custom flows
-
-If you have a custom RAG or agent flow, you can include them in your project like this:
+If you have a RAG pipeline or agentic workflow that is inferfaced via an executable, you can include them in your project like this:
 
 ```yaml
 targets:
@@ -178,8 +178,6 @@ targets:
   - file://path/to/python_agent.py
   # Any executable can be run with the `exec:` directive
   - exec:/path/to/shell_agent
-  # HTTP requests can be made with the `webhook:` directive
-  - webhook:<http://localhost:8000/api/agent>
 ```
 
 To learn more, see:
@@ -187,9 +185,12 @@ To learn more, see:
 - [Javascript provider](/docs/providers/custom-api/)
 - [Python provider](/docs/providers/python)
 - [Exec provider](/docs/providers/custom-script) (Used to run any executable from any programming language)
-- [Webhook provider](/docs/providers/webhook) (HTTP requests, useful for testing an app that is online or running locally)
 
-### HTTP endpoints
+:::note
+Although the `targets` property supports multiple values, we recommend targetting a single executable per config.
+:::
+
+### HTTP Endpoints
 
 In order to pentest a live API endpoint, set the provider id to a URL. This will send an HTTP request to the endpoint. It expects that the LLM or agent output will be in the HTTP response.
 
@@ -217,6 +218,10 @@ For example, `json.nested.output` will reference the output in the following API
 
 You can also reference nested objects. For example, `json.choices[0].message.content` references the generated text in a standard OpenAI chat response.
 
+:::note
+Although the `targets` property supports multiple values, we recommend targetting a single HTTP endpoint per config.
+:::
+
 ### Configuring the grader
 
 The results of the red team are graded by a model. By default, `gpt-4.1-2025-04-14` is used and the test expects an `OPENAI_API_KEY` environment variable.
@@ -242,7 +247,51 @@ defaultTest:
 
 For more information, see [Overriding the LLM grader](/docs/configuration/expected-outputs/model-graded/#overriding-the-llm-grader).
 
-## Step 3: Generate adversarial test cases
+## Step 3: Configure the target's purpose
+
+The `redteam.purpose` field provides context to guide the generation of adversarial test cases. It can be defined in one of two ways:
+
+### Auto-Discovery
+
+When targetting an executable or HTTP endpoint, we recommend automatically discovering purpose as it is typically more thorough than manual definition. Auto-discovery leverages the **Promptfoo Target Scanning Agent (PTSA)** to automatically infer:
+
+- The application's purpose including limitations and restrictions
+- Available tools and external system access
+- System prompt contents and architecture
+- Information regarding ownership of the application
+- User roles and permissions (RBAC)
+- Access to Model Context Protocol (MCP) servers
+- Model diagnostics
+
+Auto-discovery will be performed without additional configuration. To preview the inferred purpose, run the following command:
+
+```sh
+npx promptfoo@latest redteam discover --preview
+```
+
+### Manual Definition
+
+When targetting an LLM API, we recommend manually defining purpose by setting the `redteam.purpose` field in your `promptfooconfig.yaml`. The set purpose should describe what your target application in detail as it will be used as the basis for generated adversarial tests and grading.
+
+```yaml
+redteam:
+  purpose: |
+    The application is a customer service assistant for users on redpandashopping.com. redpandashopping.com is an online electronics retailer selling cell phones, tv's and computers.
+
+    You are acting as a customer on redpandashopping.com
+
+    You have access to: Product information, reviews, their own order history, their own customer support issues
+
+    You do not have access to: Other user's order histories and customer support issues
+
+    You can take the following actions: Search for products, ask for reviews of products, view their own order history, view their own customer support issues, open new customer support issues, reply to existing customer support issues.
+
+    You should not take the following actions: Place new orders, cancel orders
+
+    The LLM agent has access to these systems: Product catalogue, reviews, order histories, customer support software
+```
+
+## Step 4: Generate adversarial test cases
 
 Now that you've configured everything, the next step is to generate the red teaming inputs. This is done by running the `promptfoo redteam generate` command:
 
@@ -325,7 +374,7 @@ These additional plugins can be optionally enabled:
 
 The adversarial test cases will be written to `promptfooconfig.yaml`.
 
-## Step 4: Run the pentest
+## Step 5: Run the pentest
 
 Now that all the red team tests are ready, run the eval:
 
@@ -335,7 +384,7 @@ npx promptfoo@latest redteam eval
 
 This will take a while, usually ~15 minutes or so depending on how many plugins you have chosen.
 
-## Step 5: Review results
+## Step 6: Review results
 
 Use the web viewer to review the flagged outputs and understand the failure cases.
 
