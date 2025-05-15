@@ -818,62 +818,34 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
               <CustomIntentSection />
             </AccordionDetails>
           </Accordion>
-        </Box>
-
-        <Accordion
-          expanded={expandedCategories.has('Custom Policies')}
-          onChange={(event, expanded) => {
-            setExpandedCategories((prev) => {
-              const newSet = new Set(prev);
-              if (expanded) {
-                newSet.add('Custom Policies');
-              } else {
-                newSet.delete('Custom Policies');
-              }
-              return newSet;
-            });
-          }}
-        >
-          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-            <Typography variant="h6" sx={{ fontWeight: 'medium' }}>
-              Custom Policies (
-              {config.plugins.filter((p) => typeof p === 'object' && 'id' in p && p.id === 'policy')
-                .length || 0}
-              )
-            </Typography>
-          </AccordionSummary>
-          <AccordionDetails>
-            <CustomPoliciesSection />
-          </AccordionDetails>
-        </Accordion>
-
-        <Accordion
-          expanded={expandedCategories.has('Custom Policy')}
-          onChange={(event, expanded) => {
-            setExpandedCategories((prev) => {
-              const newSet = new Set(prev);
-              if (expanded) {
-                newSet.add('Custom Policy');
-              } else {
-                newSet.delete('Custom Policy');
-              }
-              return newSet;
-            });
-          }}
-        >
-          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-            <Typography variant="h6" sx={{ fontWeight: 'medium' }}>
-              Custom Policy
-            </Typography>
-          </AccordionSummary>
-          <AccordionDetails>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <Typography variant="body2" color="text.secondary">
-                Add your custom policy content here.
+          <Accordion
+            expanded={expandedCategories.has('Custom Policies')}
+            onChange={(event, expanded) => {
+              setExpandedCategories((prev) => {
+                const newSet = new Set(prev);
+                if (expanded) {
+                  newSet.add('Custom Policies');
+                } else {
+                  newSet.delete('Custom Policies');
+                }
+                return newSet;
+              });
+            }}
+          >
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Typography variant="h6" sx={{ fontWeight: 'medium' }}>
+                Custom Policies (
+                {config.plugins.filter(
+                  (p) => typeof p === 'object' && 'id' in p && p.id === 'policy',
+                ).length || 0}
+                )
               </Typography>
-            </Box>
-          </AccordionDetails>
-        </Accordion>
+            </AccordionSummary>
+            <AccordionDetails>
+              <CustomPoliciesSection />
+            </AccordionDetails>
+          </Accordion>
+        </Box>
 
         <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
           <Button
