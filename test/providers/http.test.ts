@@ -2115,7 +2115,7 @@ describe('error handling', () => {
 
 describe('validateStatus', () => {
   describe('default behavior', () => {
-    it('should accept all status codes when validateStatus is not provided', async () => {
+    it('should only accept 200 - 300 validateStatus is not provided', async () => {
       const provider = new HttpProvider('http://test.com', {
         config: {
           method: 'POST',
@@ -2139,8 +2139,18 @@ describe('validateStatus', () => {
         };
         jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
-        const result = await provider.callApi('test');
-        expect(result.output).toEqual({ result: 'success' });
+        if (status === 200) {
+          const result = await provider.callApi('test');
+          expect(result.output).toEqual({ result: 'success' });
+        } else if (status === 400) {
+          await expect(provider.callApi('test')).rejects.toThrow(
+            'HTTP call failed with status 400 Bad Request: {\"result\":\"success\"}',
+          );
+        } else {
+          await expect(provider.callApi('test')).rejects.toThrow(
+            'HTTP call failed with status 500 Server Error: {\"result\":\"success\"}',
+          );
+        }
       }
     });
   });
