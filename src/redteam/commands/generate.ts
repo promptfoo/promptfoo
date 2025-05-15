@@ -12,6 +12,7 @@ import { disableCache } from '../../cache';
 import cliState from '../../cliState';
 import { VERSION } from '../../constants';
 import logger from '../../logger';
+import { loadApiProviders } from '../../providers';
 import telemetry from '../../telemetry';
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types';
 import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
@@ -26,13 +27,14 @@ import {
   DEFAULT_STRATEGIES,
   REDTEAM_MODEL,
 } from '../constants';
-import { shouldGenerateRemote } from '../remoteGeneration';
+import { shouldGenerateRemote, neverGenerateRemote } from '../remoteGeneration';
 import type {
   RedteamCliGenerateOptions,
   RedteamFileConfig,
   RedteamStrategyObject,
   SynthesizeOptions,
 } from '../types';
+import { doTargetPurposeDiscovery } from './discover';
 
 function getConfigHash(configPath: string): string {
   const content = fs.readFileSync(configPath, 'utf8');
@@ -52,6 +54,7 @@ export async function doGenerateRedteam(
   let redteamConfig: RedteamFileConfig | undefined;
   const configPath = options.config || options.defaultConfigPath;
   const outputPath = options.output || 'redteam.yaml';
+  let generatedPurpose: string | undefined;
 
   // Check for updates to the config file and decide whether to generate
   let shouldGenerate = options.force;
@@ -85,6 +88,21 @@ export async function doGenerateRedteam(
     );
     testSuite = resolved.testSuite;
     redteamConfig = resolved.config.redteam;
+
+    // If remote generation is enabled and a config is provided that contains at least one target,
+    // discover the purpose from the target:
+    if (
+      !neverGenerateRemote() &&
+      resolved.config.providers &&
+      Array.isArray(resolved.config.providers)
+    ) {
+      invariant(
+        resolved.config.providers.length > 0,
+        'At least one provider must be provided in the config file',
+      );
+      const providers = await loadApiProviders(resolved.config.providers);
+      generatedPurpose = await doTargetPurposeDiscovery(providers[0]);
+    }
   } else if (options.purpose) {
     // There is a purpose, so we can just have a dummy test suite for standalone invocation
     testSuite = {
@@ -182,7 +200,7 @@ export async function doGenerateRedteam(
     entities: redteamConfig?.entities,
     plugins,
     provider: redteamConfig?.provider || options.provider,
-    purpose: redteamConfig?.purpose || options.purpose,
+    purpose: generatedPurpose ?? redteamConfig?.purpose ?? options.purpose,
     strategies: strategyObjs,
     delay: redteamConfig?.delay || options.delay,
     sharing: redteamConfig?.sharing || options.sharing,
