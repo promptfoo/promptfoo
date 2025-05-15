@@ -52,7 +52,7 @@ describe('ArgsSchema', () => {
     expect(error3).toBeUndefined();
   });
 
-  it('`force` can only be used if `output` is provided', () => {
+  it('`overwrite` can only be used if `output` is provided', () => {
     const args: z.infer<typeof ArgsSchema> = {
       config: 'test',
       preview: false,
