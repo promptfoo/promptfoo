@@ -40,6 +40,7 @@ export default class GoatProvider implements ApiProvider {
   private maxTurns: number;
   private readonly injectVar: string;
   private readonly stateful: boolean;
+  private readonly excludeTargetOutputFromAgenticAttackGeneration: boolean;
 
   id() {
     return 'promptfoo:redteam:goat';
@@ -52,6 +53,7 @@ export default class GoatProvider implements ApiProvider {
       // @deprecated
       stateless?: boolean;
       stateful?: boolean;
+      excludeTargetOutputFromAgenticAttackGeneration?: boolean;
     } = {},
   ) {
     if (neverGenerateRemote()) {
@@ -74,6 +76,9 @@ export default class GoatProvider implements ApiProvider {
     invariant(typeof options.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = options.injectVar;
     this.maxTurns = options.maxTurns || 5;
+    this.excludeTargetOutputFromAgenticAttackGeneration = Boolean(
+      options.excludeTargetOutputFromAgenticAttackGeneration,
+    );
   }
 
   async callApi(
@@ -110,17 +115,52 @@ export default class GoatProvider implements ApiProvider {
       assertToUse = test?.assert?.find((a: { type: string }) => a.type);
     }
 
+    let previousAttackerMessage = '';
+    let previousTargetOutput = '';
+
     for (let turn = 0; turn < this.maxTurns; turn++) {
       try {
-        const body = JSON.stringify({
+        let body: string;
+        let failureReason: string | undefined;
+        if (this.excludeTargetOutputFromAgenticAttackGeneration && turn > 0) {
+          body = JSON.stringify({
+            goal: context?.vars[this.injectVar],
+            targetOutput: previousTargetOutput,
+            attackAttempt: previousAttackerMessage,
+            task: 'extract-goat-failure',
+          });
+          logger.debug(`[GOAT] Sending request to ${getRemoteGenerationUrl()}: ${body}`);
+          response = await fetch(getRemoteGenerationUrl(), {
+            body,
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            method: 'POST',
+          });
+          const data = await response.json();
+          if (typeof data?.message !== 'object' || !data.message?.content || !data.message?.role) {
+            logger.info(`[GOAT] Invalid message from GOAT, skipping turn: ${JSON.stringify(data)}`);
+            continue;
+          }
+          const failureReason = data.message.content;
+          logger.debug(`[GOAT] Previous attack attempt failure reason: ${failureReason}`);
+        }
+
+        body = JSON.stringify({
           goal: context?.vars[this.injectVar],
           i: turn,
-          messages,
+          messages: this.excludeTargetOutputFromAgenticAttackGeneration
+            ? messages.filter((m) => m.role !== 'assistant')
+            : messages,
           prompt: context?.prompt?.raw,
           task: 'goat',
           version: VERSION,
           email: getUserEmail(),
+          excludeTargetOutputFromAgenticAttackGeneration:
+            this.excludeTargetOutputFromAgenticAttackGeneration,
+          failureReason,
         });
+
         logger.debug(`[GOAT] Sending request to ${getRemoteGenerationUrl()}: ${body}`);
         response = await fetch(getRemoteGenerationUrl(), {
           body,
@@ -135,6 +175,8 @@ export default class GoatProvider implements ApiProvider {
           continue;
         }
         const attackerMessage = data.message;
+
+        previousAttackerMessage = attackerMessage?.content;
 
         const targetVars = {
           ...context.vars,
@@ -203,6 +245,7 @@ export default class GoatProvider implements ApiProvider {
           );
           continue;
         }
+        previousTargetOutput = stringifiedOutput;
 
         messages.push({
           role: 'assistant',
