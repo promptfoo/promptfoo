@@ -15,7 +15,7 @@ import { getEnvBool, isCI } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import { readPrompts, readProviderPromptMap } from '../../prompts';
-import { loadApiProviders } from '../../providers';
+import { loadApiProvider, loadApiProviders } from '../../providers';
 import telemetry from '../../telemetry';
 import {
   UnifiedConfigSchema,
@@ -28,13 +28,16 @@ import {
   type TestCase,
   type TestSuite,
   type UnifiedConfig,
+  type ApiProvider,
 } from '../../types';
 import { isRunningUnderNpx, readFilters } from '../../util';
-import { maybeLoadFromExternalFile } from '../../util/file';
-import { isJavascriptFile } from '../../util/fileExtensions';
-import invariant from '../../util/invariant';
+import { maybeLoadFromExternalFile } from '../file';
+import { isJavascriptFile } from '../fileExtensions';
+import invariant from '../invariant';
 import { PromptSchema } from '../../validators/prompts';
 import { readTest, readTests } from '../testCaseReader';
+import { getProviderFromCloud } from '../cloud';
+import { loadDefaultConfig } from './default';
 
 export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
   if (getEnvBool('PROMPTFOO_DISABLE_REF_PARSER')) {
@@ -641,4 +644,104 @@ export async function resolveConfigs(
 
   cliState.config = config;
   return { config, testSuite, basePath };
+}
+
+/**
+ * Find a target provider from config path, target id, or using default config
+ * This function helps discover the appropriate provider to use based on available
+ * configuration paths and options.
+ *
+ * @param options - The options for finding a target provider.
+ * @param options.configPath - Optional path to a configuration file.
+ * @param options.targetId - Optional cloud target ID.
+ * @param options.defaultConfigPath - Optional default configuration path to use if no explicit path is provided.
+ * @returns The found target provider, config, and the config path that was used.
+ */
+export async function findTargetProvider({
+  configPath,
+  targetId,
+  defaultConfigPath,
+}: {
+  configPath?: string;
+  targetId?: string;
+  defaultConfigPath?: string;
+}): Promise<{
+  target: ApiProvider;
+  config: UnifiedConfig | null;
+  usedConfigPath: string | undefined;
+}> {
+  // 1. Try cloud-hosted target provider first if targetId is provided
+  if (targetId) {
+    logger.debug(`Attempting to load cloud provider with ID: ${targetId}`);
+    const providerOptions = await getProviderFromCloud(targetId);
+    const target = await loadApiProvider(providerOptions.id, { options: providerOptions });
+    logger.info(`Using cloud provider: ${chalk.italic(providerOptions.id)}`);
+    return { target, config: null, usedConfigPath: undefined };
+  }
+  
+  // 2. Helper function to load providers from a config
+  async function tryLoadProvidersFromConfig(config: UnifiedConfig, configPath: string) {
+    if (!config.providers || !Array.isArray(config.providers) || config.providers.length === 0) {
+      logger.debug(`Config at ${configPath} has no valid providers array`);
+      return null;
+    }
+    
+    try {
+      const providers = await loadApiProviders(config.providers);
+      if (providers.length === 0) {
+        logger.debug(`No providers could be loaded from config at ${configPath}`);
+        return null;
+      }
+      
+      logger.info(`Using config from ${chalk.italic(configPath)}`);
+      return providers[0];
+    } catch (error) {
+      logger.debug(`Error loading providers from ${configPath}: ${error}`);
+      return null;
+    }
+  }
+
+  // 3. Try explicit config path if provided
+  if (configPath) {
+    logger.debug(`Attempting to load config from explicit path: ${configPath}`);
+    const config = await maybeReadConfig(configPath);
+    
+    if (config) {
+      const provider = await tryLoadProvidersFromConfig(config, configPath);
+      if (provider) {
+        return { target: provider, config, usedConfigPath: configPath };
+      }
+    }
+  }
+
+  // 4. Try default config using the built-in utilities
+  const dir = defaultConfigPath ? path.dirname(defaultConfigPath) : process.cwd();
+  const configName = defaultConfigPath 
+    ? path.basename(defaultConfigPath, path.extname(defaultConfigPath)) 
+    : 'promptfooconfig';
+  
+  logger.debug(`Attempting to load default config from ${dir} with name ${configName}`);
+  const { defaultConfig, defaultConfigPath: foundConfigPath } = await loadDefaultConfig(dir, configName);
+  
+  if (foundConfigPath && Object.keys(defaultConfig).length > 0) {
+    const provider = await tryLoadProvidersFromConfig(defaultConfig as UnifiedConfig, foundConfigPath);
+    if (provider) {
+      return {
+        target: provider,
+        config: defaultConfig as UnifiedConfig,
+        usedConfigPath: foundConfigPath
+      };
+    }
+  }
+
+  // 5. If we get here, we tried all available options and couldn't find a valid provider
+  const errorLocations = [
+    configPath && `explicit path (${configPath})`,
+    defaultConfigPath && `default path (${defaultConfigPath})`,
+    `current directory (${process.cwd()}/promptfooconfig.*)`
+  ].filter(Boolean).join(', ');
+  
+  throw new Error(
+    `Could not find a valid configuration with providers. Locations tried: ${errorLocations}`
+  );
 }

@@ -21,7 +21,7 @@ import { viewCommand } from './commands/view';
 import logger, { setLogLevel } from './logger';
 import { runDbMigrations } from './migrate';
 import { discoverCommand as redteamDiscoverCommand } from './redteam/commands/discover';
-import { redteamGenerateCommand } from './redteam/commands/generate';
+import { redteamGenerateCommand, generateCommand as redteamGenerateSubcommand } from './redteam/commands/generate';
 import { initCommand as redteamInitCommand } from './redteam/commands/init';
 import { pluginsCommand as redteamPluginsCommand } from './redteam/commands/plugins';
 import { redteamReportCommand } from './redteam/commands/report';
@@ -117,8 +117,8 @@ async function main() {
     redteamConfig ?? defaultConfig,
     redteamConfigPath ?? defaultConfigPath,
   );
-  redteamDiscoverCommand(redteamBaseCommand);
-  redteamGenerateCommand(redteamBaseCommand, 'generate', defaultConfig, defaultConfigPath);
+  redteamDiscoverCommand(redteamBaseCommand, redteamConfig ?? defaultConfig, redteamConfigPath ?? defaultConfigPath);
+  redteamGenerateSubcommand(redteamBaseCommand, redteamConfig ?? defaultConfig, redteamConfigPath ?? defaultConfigPath);
   redteamRunCommand(redteamBaseCommand);
   redteamReportCommand(redteamBaseCommand);
   redteamSetupCommand(redteamBaseCommand);

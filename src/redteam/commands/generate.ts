@@ -12,11 +12,10 @@ import { disableCache } from '../../cache';
 import cliState from '../../cliState';
 import { VERSION } from '../../constants';
 import logger from '../../logger';
-import { loadApiProviders } from '../../providers';
 import telemetry from '../../telemetry';
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types';
 import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
-import { resolveConfigs } from '../../util/config/load';
+import { findTargetProvider, resolveConfigs } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/manage';
 import invariant from '../../util/invariant';
 import { RedteamConfigSchema, RedteamGenerateOptionsSchema } from '../../validators/redteam';
@@ -94,14 +93,21 @@ export async function doGenerateRedteam(
     if (
       !neverGenerateRemote() &&
       resolved.config.providers &&
-      Array.isArray(resolved.config.providers)
+      Array.isArray(resolved.config.providers) &&
+      resolved.config.providers.length > 0 &&
+      !options.purpose &&
+      !redteamConfig?.purpose
     ) {
-      invariant(
-        resolved.config.providers.length > 0,
-        'At least one provider must be provided in the config file',
-      );
-      const providers = await loadApiProviders(resolved.config.providers);
-      generatedPurpose = await doTargetPurposeDiscovery(providers[0]);
+      try {
+        // Use findTargetProvider to get a target provider
+        const { target } = await findTargetProvider({
+          configPath,
+          defaultConfigPath: options.defaultConfigPath,
+        });
+        generatedPurpose = await doTargetPurposeDiscovery(target);
+      } catch (error) {
+        logger.warn(`Failed to discover purpose automatically: ${error}`);
+      }
     }
   } else if (options.purpose) {
     // There is a purpose, so we can just have a dummy test suite for standalone invocation
@@ -124,8 +130,8 @@ export async function doGenerateRedteam(
   const startTime = Date.now();
   telemetry.record('command_used', {
     name: 'generate redteam - started',
-    numPrompts: testSuite.prompts.length,
-    numTestsExisting: (testSuite.tests || []).length,
+    numPrompts: testSuite?.prompts?.length || 0,
+    numTestsExisting: (testSuite?.tests || []).length,
     plugins: redteamConfig?.plugins?.map((p) => (typeof p === 'string' ? p : p.id)) || [],
     strategies: redteamConfig?.strategies?.map((s) => (typeof s === 'string' ? s : s.id)) || [],
   });
@@ -214,9 +220,9 @@ export async function doGenerateRedteam(
     throw new Error('Invalid redteam configuration');
   }
 
-  const targetLabels = testSuite.providers
-    .map((provider: ApiProvider) => provider?.label)
-    .filter(Boolean);
+  const targetLabels = testSuite?.providers
+    ?.map((provider: ApiProvider) => provider?.label)
+    .filter(Boolean) || [];
 
   const {
     testCases: redteamTests,
@@ -227,7 +233,7 @@ export async function doGenerateRedteam(
     ...parsedConfig.data,
     language: config.language,
     numTests: config.numTests,
-    prompts: testSuite.prompts.map((prompt) => prompt.raw),
+    prompts: testSuite?.prompts?.map((prompt) => prompt.raw) || [],
     maxConcurrency: config.maxConcurrency,
     delay: config.delay,
     abortSignal: options.abortSignal,
@@ -297,7 +303,7 @@ export async function doGenerateRedteam(
     if (!options.inRedteamRun) {
       // Provider cleanup step
       try {
-        const provider = testSuite.providers[0] as ApiProvider;
+        const provider = testSuite?.providers?.[0] as ApiProvider;
         if (provider && typeof provider.cleanup === 'function') {
           const cleanupResult = provider.cleanup();
           if (cleanupResult instanceof Promise) {
@@ -353,8 +359,8 @@ export async function doGenerateRedteam(
   telemetry.record('command_used', {
     duration: Math.round((Date.now() - startTime) / 1000),
     name: 'generate redteam',
-    numPrompts: testSuite.prompts.length,
-    numTestsExisting: (testSuite.tests || []).length,
+    numPrompts: testSuite?.prompts?.length || 0,
+    numTestsExisting: (testSuite?.tests || []).length,
     numTestsGenerated: redteamTests.length,
     plugins: plugins.map((p) => p.id),
     strategies: strategies.map((s) => (typeof s === 'string' ? s : s.id)),
@@ -489,4 +495,15 @@ export function redteamGenerateCommand(
         process.exit(1);
       }
     });
+}
+
+/**
+ * Create a dedicated command for the generate subcommand of redteam
+ */
+export function generateCommand(
+  program: Command,
+  defaultConfig: Partial<UnifiedConfig>,
+  defaultConfigPath: string | undefined,
+) {
+  redteamGenerateCommand(program, 'generate', defaultConfig, defaultConfigPath);
 }

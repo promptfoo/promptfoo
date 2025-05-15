@@ -11,11 +11,9 @@ import { fetchWithProxy } from '../../fetch';
 import { getUserEmail } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
-import { loadApiProvider, loadApiProviders } from '../../providers';
 import telemetry from '../../telemetry';
 import type { ApiProvider, UnifiedConfig } from '../../types';
-import { getProviderFromCloud } from '../../util/cloud';
-import { readConfig } from '../../util/config/load';
+import { findTargetProvider } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/manage';
 import invariant from '../../util/invariant';
 import { DEFAULT_OUTPUT_PATH } from '../constants';
@@ -34,11 +32,6 @@ export const ArgsSchema = z
   // Config and target are mutually exclusive:
   .refine((data) => !(data.config && data.target), {
     message: 'Cannot specify both config and target!',
-    path: ['config', 'target'],
-  })
-  // Either config or target must be provided:
-  .refine((data) => data.config || data.target, {
-    message: 'Either config or target must be provided!',
     path: ['config', 'target'],
   })
   // `output` and `preview` are mutually exclusive:
@@ -168,7 +161,11 @@ async function saveCloudTargetPurpose(targetId: string, purpose: string) {
 /**
  * Registers the `discover` command with the CLI.
  */
-export function discoverCommand(program: Command) {
+export function discoverCommand(
+  program: Command,
+  defaultConfig: Partial<UnifiedConfig> = {},
+  defaultConfigPath?: string,
+) {
   program
     .command('discover')
     .description(
@@ -231,60 +228,12 @@ export function discoverCommand(program: Command) {
         name: 'redteam discover',
       });
 
-      let config: UnifiedConfig | null = null;
-      // Although the providers/targets property supports multiple values, Redteaming only supports
-      // a single target at a time.
-      let target: ApiProvider | undefined = undefined;
-      // Fallback to the default config path:
-      const fallbackConfigPath = path.join(process.cwd(), 'promptfooconfig.yaml');
-
-      // If user provides a config, read the target from it:
-      if (args.config) {
-        // Validate that the config is a valid path:
-        if (!fs.existsSync(args.config)) {
-          throw new Error(`Config not found at ${args.config}`);
-        }
-
-        config = await readConfig(args.config);
-
-        if (!config) {
-          throw new Error(`Config is invalid at ${args.config}`);
-        }
-
-        if (!config.providers) {
-          throw new Error('Config must contain at least one target or provider');
-        }
-
-        const providers = await loadApiProviders(config.providers);
-        target = providers[0];
-      }
-      // If the target flag is provided, load it from Cloud:
-      else if (args.target) {
-        // Let the internal error handling bubble up:
-        const providerOptions = await getProviderFromCloud(args.target);
-        target = await loadApiProvider(providerOptions.id, { options: providerOptions });
-      }
-      // Check the current working directory for a promptfooconfig.yaml file:
-      else if (fs.existsSync(fallbackConfigPath)) {
-        config = await readConfig(fallbackConfigPath);
-
-        if (!config) {
-          throw new Error(`Config is invalid at ${fallbackConfigPath}`);
-        }
-
-        if (!config.providers) {
-          throw new Error('Config must contain at least one target or provider');
-        }
-
-        const providers = await loadApiProviders(config.providers);
-        target = providers[0];
-
-        // Alert the user that we're using a config from the current working directory:
-        logger.info(`Using config from ${chalk.italic(fallbackConfigPath)}`);
-      }
-
-      // At this point, we should have at least one target:
-      invariant(target != undefined, 'An error occurred loading the target config');
+      // Find the target provider
+      const { target, config, usedConfigPath } = await findTargetProvider({
+        configPath: args.config,
+        targetId: args.target,
+        defaultConfigPath
+      });
 
       // Discover the purpose for the target:
       let purpose: string | undefined = undefined;
@@ -308,15 +257,23 @@ export function discoverCommand(program: Command) {
         } else {
           invariant(config, 'Config is required');
 
+          // Use the output path or the config file path if no output was specified
+          const outputPath = args.output || usedConfigPath;
+          if (!outputPath) {
+            logger.error('No output path specified and no usable config path found');
+            process.exitCode = 1;
+            return;
+          }
+
           if (args.output === DEFAULT_OUTPUT_PATH) {
             args.output = path.relative(process.cwd(), DEFAULT_OUTPUT_PATH);
           }
 
-          logger.debug(`Writing purpose to ${args.output}`);
+          logger.debug(`Writing purpose to ${outputPath}`);
 
-          if (fs.existsSync(args.output!)) {
+          if (fs.existsSync(outputPath)) {
             const existingYaml = yaml.load(
-              fs.readFileSync(args.output!, 'utf8'),
+              fs.readFileSync(outputPath, 'utf8'),
             ) as Partial<UnifiedConfig>;
 
             // Either append or overwrite the existing purpose:
@@ -343,13 +300,13 @@ export function discoverCommand(program: Command) {
                   ? `${existingPurpose}\n\nDiscovered Purpose:\n\n${purpose}`
                   : purpose,
             };
-            writePromptfooConfig(existingYaml as UnifiedConfig, args.output!);
+            writePromptfooConfig(existingYaml as UnifiedConfig, outputPath);
           } else {
             // Create a new config file with the purpose.
-            writePromptfooConfig({ redteam: { purpose } } as UnifiedConfig, args.output!);
+            writePromptfooConfig({ redteam: { purpose } } as UnifiedConfig, outputPath);
           }
 
-          logger.info(`\nPurpose written to ${chalk.italic(args.output)}`);
+          logger.info(`\nPurpose written to ${chalk.italic(outputPath)}`);
         }
       }
     });
