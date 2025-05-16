@@ -78,8 +78,6 @@ export async function doTargetPurposeDiscovery(
 ): Promise<string> {
   const conversationHistory: { type: 'promptfoo' | 'target'; content: string }[] = [];
 
-  let turnCounter = 1;
-
   const pbar = new cliProgress.SingleBar({
     format: `Discovering purpose {bar} {percentage}% | {value}${maxTurns ? '/{total}' : ''} turns`,
     barCompleteChar: '\u2588',
@@ -89,54 +87,66 @@ export async function doTargetPurposeDiscovery(
 
   pbar.start(maxTurns, 0);
 
-  function onCompletion(purpose: string) {
-    pbar.increment();
-    pbar.stop();
-    logger.info(`\nPurpose:\n\n${chalk.green(purpose)}\n`);
-    return purpose;
-  }
+  try {
+    for (let i = 1; i <= maxTurns; i++) {
+      // Fetch the {initial | next} question from the server:
+      const res = await fetchWithProxy(getRemoteGenerationUrl(), {
+        body: JSON.stringify({
+          task: 'target-purpose-discovery',
+          conversationHistory,
+          maxTurns,
+          version: VERSION,
+          email: getUserEmail(),
+        }),
+        headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+      });
 
-  while (true) {
-    const res = await fetchWithProxy(getRemoteGenerationUrl(), {
-      body: JSON.stringify({
-        task: 'target-purpose-discovery',
-        conversationHistory,
-        maxTurns,
-        version: VERSION,
-        email: getUserEmail(),
-      }),
-      headers: { 'Content-Type': 'application/json' },
-      method: 'POST',
-    });
+      const { done, question, purpose } = (await res.json()) as {
+        done: boolean;
+        question?: string;
+        purpose?: string;
+      };
 
-    const { done, question, purpose } = (await res.json()) as {
-      done: boolean;
-      question?: string;
-      purpose?: string;
-    };
+      // `done` will be true if max turns are reached (server is aware of the turn count) OR the server
+      // is satisfied with the current purpose.
+      if (
+        done ||
+        // `done` should never not be `true` here, but it's good to have a fallback:
+        i === maxTurns
+      ) {
+        // Finalize the progress bar:
+        pbar.increment();
 
-    if (done) {
-      return onCompletion(purpose as string);
-    } else {
-      if (!question) {
-        throw new Error(`Failed to discover purpose: ${res.statusText}`);
+        // Handle the edge case where the server did not call `done` when max turns are reached:
+        if (purpose) {
+          logger.info(`\n\nPurpose:\n\n${chalk.green(purpose)}\n`);
+          return purpose as string;
+        } else {
+          throw new Error(
+            'Failed to discover purpose: server did not call `done` when max turns are reached',
+          );
+        }
+      } else {
+        if (!question) {
+          throw new Error(`Failed to discover purpose: ${res.statusText}`);
+        }
+
+        // Add the promptfoo question to the conversation history:
+        conversationHistory.push({ type: 'promptfoo', content: question as string });
+
+        // Call the target with the question:
+        const response = await target.callApi(question as string);
+        logger.debug(JSON.stringify({ question, output: response.output }, null, 2));
+        conversationHistory.push({ type: 'target', content: response.output });
+
+        pbar.increment();
       }
-      conversationHistory.push({ type: 'promptfoo', content: question as string });
     }
 
-    // Call the target with the question:
-    const response = await target.callApi(question as string);
-    logger.debug(JSON.stringify({ question, output: response.output }, null, 2));
-    conversationHistory.push({ type: 'target', content: response.output });
-
-    // The server should always call `done` when max turns are reached; this provides a fallback in-case it does not!
-    // Purpose will always be defined because the generator task is max turn aware.
-    if (turnCounter === maxTurns) {
-      return onCompletion(purpose as string);
-    } else {
-      turnCounter++;
-      pbar.increment();
-    }
+    throw new Error('Failed to discover purpose: max turns reached');
+  } finally {
+    pbar.stop();
   }
 }
 
