@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import chokidar from 'chokidar';
+import Table from 'cli-table3';
 import type { Command } from 'commander';
 import dedent from 'dedent';
 import fs from 'fs';
@@ -66,18 +67,36 @@ function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
   }
 }
 
-// Add this function to display the token usage summary
+// Add this function to display the token usage summary using cli-table3
 function displayTokenUsageSummary() {
   const tracker = TokenUsageTracker.getInstance();
   const providers = tracker.getProviderIds().sort();
 
+  // Create header
+  logger.info('\n==== Token & Byte Usage Summary ====');
+
   if (providers.length === 0) {
+    logger.info('No token or byte usage recorded.');
+    logger.info('==============================\n');
     return;
   }
 
-  logger.info('\n==== Token Usage Summary ====');
+  // Create the provider details table with fewer columns
+  const providersTable = new Table({
+    head: [
+      chalk.blue('Provider'),
+      chalk.blue('Tokens (In/Out)'),
+      chalk.blue('Bytes (In/Out)'),
+      chalk.blue('Requests'),
+    ],
+    colWidths: [30, 26, 26, 12],
+    style: {
+      head: [], // Don't add the default styling as we've already colored the header text
+      border: [], // No border color
+    },
+  });
 
-  // Display per-provider usage
+  // Add a row for each provider
   providers.forEach((providerId) => {
     const usage = tracker.getProviderUsage(providerId);
     if (!usage) {
@@ -86,30 +105,75 @@ function displayTokenUsageSummary() {
 
     const promptTokens = usage.prompt || 0;
     const completionTokens = usage.completion || 0;
-    const cachedTokens = usage.cached || 0;
     const totalTokens = usage.total || promptTokens + completionTokens;
     const numRequests = usage.numRequests || 0;
 
-    logger.info(
-      `${providerId}: ${totalTokens.toLocaleString()} tokens total ` +
-        `(${promptTokens.toLocaleString()} prompt, ${completionTokens.toLocaleString()} completion, ` +
-        `${cachedTokens.toLocaleString()} cached) across ${numRequests} requests`,
-    );
+    // Get character counts
+    const promptChars = usage.promptChars || 0;
+    const completionChars = usage.completionChars || 0;
+    const totalChars = usage.totalChars || promptChars + completionChars;
+
+    // Create a combined tokens column: total (in/out)
+    const tokensDisplay = `${totalTokens.toLocaleString()} (${promptTokens.toLocaleString()}/${completionTokens.toLocaleString()})`;
+
+    // Create a combined bytes column: total (in/out)
+    const bytesDisplay = `${totalChars.toLocaleString()} (${promptChars.toLocaleString()}/${completionChars.toLocaleString()})`;
+
+    // Only add rows that have some activity
+    if (totalChars > 0 || promptChars > 0 || completionChars > 0 || numRequests > 0) {
+      providersTable.push([
+        providerId.length > 28 ? providerId.substring(0, 25) + '...' : providerId,
+        tokensDisplay,
+        bytesDisplay,
+        numRequests.toLocaleString(),
+      ]);
+    }
   });
 
-  // Display total usage across all providers
+  if (providersTable.length > 0) {
+    logger.info(providersTable.toString());
+  }
+
+  // Create the totals table with fewer columns
   const totalUsage = tracker.getTotalUsage();
   const totalPrompt = totalUsage.prompt || 0;
   const totalCompletion = totalUsage.completion || 0;
-  const totalCached = totalUsage.cached || 0;
   const grandTotal = totalUsage.total || totalPrompt + totalCompletion;
   const totalRequests = totalUsage.numRequests || 0;
 
-  logger.info(
-    `\nTotal: ${grandTotal.toLocaleString()} tokens ` +
-      `(${totalPrompt.toLocaleString()} prompt, ${totalCompletion.toLocaleString()} completion, ` +
-      `${totalCached.toLocaleString()} cached) across ${totalRequests} requests`,
-  );
+  // Get total character counts
+  const totalPromptChars = totalUsage.promptChars || 0;
+  const totalCompletionChars = totalUsage.completionChars || 0;
+  const grandTotalChars = totalUsage.totalChars || totalPromptChars + totalCompletionChars;
+
+  // Create a combined tokens column for totals
+  const totalsTokensDisplay = `${grandTotal.toLocaleString()} (${totalPrompt.toLocaleString()}/${totalCompletion.toLocaleString()})`;
+
+  // Create a combined bytes column for totals
+  const totalsBytesDisplay = `${grandTotalChars.toLocaleString()} (${totalPromptChars.toLocaleString()}/${totalCompletionChars.toLocaleString()})`;
+
+  const totalsTable = new Table({
+    head: [
+      chalk.blue.bold('TOTAL'),
+      chalk.blue.bold('Tokens (In/Out)'),
+      chalk.blue.bold('Bytes (In/Out)'),
+      chalk.blue.bold('Requests'),
+    ],
+    colWidths: [30, 26, 26, 12],
+    style: {
+      head: [], // Don't add the default styling as we've already colored the header text
+      border: [], // No border color
+    },
+  });
+
+  totalsTable.push([
+    chalk.bold('All Providers'),
+    chalk.bold(totalsTokensDisplay),
+    chalk.bold(totalsBytesDisplay),
+    chalk.bold(totalRequests.toLocaleString()),
+  ]);
+
+  logger.info(totalsTable.toString());
   logger.info('==============================\n');
 }
 

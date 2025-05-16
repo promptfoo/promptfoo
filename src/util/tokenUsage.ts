@@ -39,6 +39,43 @@ export class TokenUsageTracker {
   }
 
   /**
+   * Track character usage for a provider
+   * @param providerId Provider ID
+   * @param promptText The prompt text
+   * @param completionText The completion text
+   */
+  public trackCharUsage(providerId: string, promptText?: string, completionText?: string): void {
+    if (!promptText && !completionText) {
+      return;
+    }
+
+    const current = this.providersMap.get(providerId) || {};
+    const usage: TokenUsage = { ...current };
+
+    // Count bytes rather than JavaScript string length for more accurate measurement
+    if (promptText) {
+      const promptBytes = Buffer.byteLength(promptText, 'utf8');
+      usage.promptChars = (usage.promptChars || 0) + promptBytes;
+    }
+
+    if (completionText) {
+      const completionBytes = Buffer.byteLength(completionText, 'utf8');
+      usage.completionChars = (usage.completionChars || 0) + completionBytes;
+    }
+
+    if (promptText || completionText) {
+      const promptCharsToAdd = promptText ? Buffer.byteLength(promptText, 'utf8') : 0;
+      const completionCharsToAdd = completionText ? Buffer.byteLength(completionText, 'utf8') : 0;
+      usage.totalChars = (usage.totalChars || 0) + promptCharsToAdd + completionCharsToAdd;
+    }
+
+    // Always increment the request count when tracking usage
+    usage.numRequests = (usage.numRequests || 0) + 1;
+
+    this.providersMap.set(providerId, usage);
+  }
+
+  /**
    * Get the cumulative token usage for a specific provider
    * @param providerId The ID of the provider to get usage for
    * @returns The token usage for the provider
@@ -60,10 +97,67 @@ export class TokenUsageTracker {
    * @returns Aggregated token usage
    */
   public getTotalUsage(): TokenUsage {
-    const result: TokenUsage = {};
+    const result: TokenUsage = {
+      total: 0,
+      prompt: 0,
+      completion: 0,
+      cached: 0,
+      numRequests: 0,
+      promptChars: 0,
+      completionChars: 0,
+      totalChars: 0,
+      completionDetails: {
+        reasoning: 0,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+      },
+    };
 
+    // Explicitly accumulate totals from all providers
     for (const usage of this.providersMap.values()) {
-      this.mergeUsage(result, usage);
+      // Add token counts
+      result.total += usage.total || 0;
+      result.prompt += usage.prompt || 0;
+      result.completion += usage.completion || 0;
+      result.cached += usage.cached || 0;
+      result.numRequests += usage.numRequests || 0;
+
+      // Add character counts
+      result.promptChars += usage.promptChars || 0;
+      result.completionChars += usage.completionChars || 0;
+      result.totalChars += usage.totalChars || 0;
+
+      // Add completion details
+      if (usage.completionDetails) {
+        result.completionDetails.reasoning += usage.completionDetails.reasoning || 0;
+        result.completionDetails.acceptedPrediction +=
+          usage.completionDetails.acceptedPrediction || 0;
+        result.completionDetails.rejectedPrediction +=
+          usage.completionDetails.rejectedPrediction || 0;
+      }
+
+      // Add assertion statistics if present
+      if (usage.assertions) {
+        if (!result.assertions) {
+          result.assertions = {
+            total: 0,
+            prompt: 0,
+            completion: 0,
+            cached: 0,
+            promptChars: 0,
+            completionChars: 0,
+            totalChars: 0,
+          };
+        }
+
+        result.assertions.total += usage.assertions.total || 0;
+        result.assertions.prompt += usage.assertions.prompt || 0;
+        result.assertions.completion += usage.assertions.completion || 0;
+        result.assertions.cached += usage.assertions.cached || 0;
+        result.assertions.promptChars += usage.assertions.promptChars || 0;
+        result.assertions.completionChars += usage.assertions.completionChars || 0;
+        result.assertions.totalChars += usage.assertions.totalChars || 0;
+      }
     }
 
     return result;
@@ -99,6 +193,11 @@ export class TokenUsageTracker {
     result.cached = (result.cached || 0) + (update.cached || 0);
     result.total = (result.total || 0) + (update.total || 0);
     result.numRequests = (result.numRequests || 0) + (update.numRequests || 1);
+
+    // Add character counts
+    result.promptChars = (result.promptChars || 0) + (update.promptChars || 0);
+    result.completionChars = (result.completionChars || 0) + (update.completionChars || 0);
+    result.totalChars = (result.totalChars || 0) + (update.totalChars || 0);
 
     // Handle completion details
     if (update.completionDetails) {
@@ -151,11 +250,13 @@ export function withTokenTracking<T extends ApiProvider>(provider: T): T {
     if (response.tokenUsage) {
       const providerId = provider.id();
       // Include the provider's class in the tracking ID
-      const trackingId = provider.constructor?.name 
-        ? `${providerId} (${provider.constructor.name})` 
+      const trackingId = provider.constructor?.name
+        ? `${providerId} (${provider.constructor.name})`
         : providerId;
-        
+
       TokenUsageTracker.getInstance().trackUsage(trackingId, response.tokenUsage);
+
+      // Character counting is now handled in evaluator.ts to avoid double-counting
     }
     return response;
   };

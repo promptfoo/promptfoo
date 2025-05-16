@@ -22,6 +22,11 @@ export const BaseTokenUsageSchema = z.object({
   // Request metadata
   numRequests: z.number().optional(),
 
+  // Character counts
+  promptChars: z.number().optional(),
+  completionChars: z.number().optional(),
+  totalChars: z.number().optional(),
+
   // Detailed completion information
   completionDetails: CompletionTokenDetailsSchema.optional(),
 });

@@ -172,6 +172,9 @@ function fail(reason: string, tokensUsed?: Partial<TokenUsage>): Omit<GradingRes
       prompt: tokensUsed?.prompt || 0,
       completion: tokensUsed?.completion || 0,
       cached: tokensUsed?.cached || 0,
+      promptChars: tokensUsed?.promptChars || 0,
+      completionChars: tokensUsed?.completionChars || 0,
+      totalChars: tokensUsed?.totalChars || 0,
       completionDetails: tokensUsed?.completionDetails,
     },
   };
@@ -211,6 +214,9 @@ export async function matchesSimilarity(
     prompt: 0,
     completion: 0,
     cached: 0,
+    promptChars: 0,
+    completionChars: 0,
+    totalChars: 0,
     completionDetails: {
       reasoning: 0,
       acceptedPrediction: 0,
@@ -244,6 +250,15 @@ export async function matchesSimilarity(
         (outputEmbedding.tokenUsage?.completion || 0),
       cached:
         (expectedEmbedding.tokenUsage?.cached || 0) + (outputEmbedding.tokenUsage?.cached || 0),
+      promptChars:
+        (expectedEmbedding.tokenUsage?.promptChars || 0) +
+        (outputEmbedding.tokenUsage?.promptChars || 0),
+      completionChars:
+        (expectedEmbedding.tokenUsage?.completionChars || 0) +
+        (outputEmbedding.tokenUsage?.completionChars || 0),
+      totalChars:
+        (expectedEmbedding.tokenUsage?.totalChars || 0) +
+        (outputEmbedding.tokenUsage?.totalChars || 0),
       completionDetails: {
         reasoning:
           (expectedEmbedding.tokenUsage?.completionDetails?.reasoning || 0) +
@@ -883,6 +898,9 @@ export async function matchesAnswerRelevance(
     prompt: 0,
     completion: 0,
     cached: 0,
+    promptChars: 0,
+    completionChars: 0,
+    totalChars: 0,
     completionDetails: {
       reasoning: 0,
       acceptedPrediction: 0,
@@ -901,6 +919,9 @@ export async function matchesAnswerRelevance(
       tokensUsed.prompt += resp.tokenUsage?.prompt || 0;
       tokensUsed.completion += resp.tokenUsage?.completion || 0;
       tokensUsed.cached += resp.tokenUsage?.cached || 0;
+      tokensUsed.promptChars += resp.tokenUsage?.promptChars || 0;
+      tokensUsed.completionChars += resp.tokenUsage?.completionChars || 0;
+      tokensUsed.totalChars += resp.tokenUsage?.totalChars || 0;
       tokensUsed.completionDetails = {
         reasoning:
           (tokensUsed.completionDetails?.reasoning || 0) +
@@ -933,6 +954,9 @@ export async function matchesAnswerRelevance(
     tokensUsed.prompt += inputEmbeddingResp.tokenUsage?.prompt || 0;
     tokensUsed.completion += inputEmbeddingResp.tokenUsage?.completion || 0;
     tokensUsed.cached += inputEmbeddingResp.tokenUsage?.cached || 0;
+    tokensUsed.promptChars += inputEmbeddingResp.tokenUsage?.promptChars || 0;
+    tokensUsed.completionChars += inputEmbeddingResp.tokenUsage?.completionChars || 0;
+    tokensUsed.totalChars += inputEmbeddingResp.tokenUsage?.totalChars || 0;
     tokensUsed.completionDetails = {
       reasoning:
         (tokensUsed.completionDetails?.reasoning || 0) +
@@ -955,6 +979,9 @@ export async function matchesAnswerRelevance(
     tokensUsed.prompt += resp.tokenUsage?.prompt || 0;
     tokensUsed.completion += resp.tokenUsage?.completion || 0;
     tokensUsed.cached += resp.tokenUsage?.cached || 0;
+    tokensUsed.promptChars += resp.tokenUsage?.promptChars || 0;
+    tokensUsed.completionChars += resp.tokenUsage?.completionChars || 0;
+    tokensUsed.totalChars += resp.tokenUsage?.totalChars || 0;
     tokensUsed.completionDetails = {
       reasoning:
         (tokensUsed.completionDetails?.reasoning || 0) +
