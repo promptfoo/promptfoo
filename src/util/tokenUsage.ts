@@ -150,7 +150,12 @@ export function withTokenTracking<T extends ApiProvider>(provider: T): T {
     const response = await originalCallApi.apply(provider, args);
     if (response.tokenUsage) {
       const providerId = provider.id();
-      TokenUsageTracker.getInstance().trackUsage(providerId, response.tokenUsage);
+      // Include the provider's class in the tracking ID
+      const trackingId = provider.constructor?.name 
+        ? `${providerId} (${provider.constructor.name})` 
+        : providerId;
+        
+      TokenUsageTracker.getInstance().trackUsage(trackingId, response.tokenUsage);
     }
     return response;
   };

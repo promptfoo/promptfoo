@@ -69,7 +69,7 @@ function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
 // Add this function to display the token usage summary
 function displayTokenUsageSummary() {
   const tracker = TokenUsageTracker.getInstance();
-  const providers = tracker.getProviderIds();
+  const providers = tracker.getProviderIds().sort();
 
   if (providers.length === 0) {
     return;

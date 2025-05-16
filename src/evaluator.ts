@@ -272,7 +272,12 @@ export async function runEval({
       // Track token usage at the call site
       if (response.tokenUsage) {
         const providerId = activeProvider.id();
-        TokenUsageTracker.getInstance().trackUsage(providerId, response.tokenUsage);
+        // Include the provider's class in the tracking ID
+        const trackingId = activeProvider.constructor?.name 
+          ? `${providerId} (${activeProvider.constructor.name})` 
+          : providerId;
+          
+        TokenUsageTracker.getInstance().trackUsage(trackingId, response.tokenUsage);
       }
 
       logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
