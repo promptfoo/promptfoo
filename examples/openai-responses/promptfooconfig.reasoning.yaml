@@ -7,19 +7,19 @@ prompts:
 
 providers:
   - id: openai:responses:o3-mini
-    label: o3-mini-reasoning
+    label: o3-mini
     config:
       max_output_tokens: 1000
       reasoning_effort: 'high'
 
   - id: openai:responses:o3
-    label: o3-reasoning
+    label: o3
     config:
       max_output_tokens: 2000
       reasoning_effort: 'high'
 
   - id: openai:responses:o4-mini
-    label: o4-mini-reasoning
+    label: o4-mini
     config:
       max_output_tokens: 1000
       reasoning_effort: 'medium'

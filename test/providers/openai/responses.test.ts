@@ -1633,4 +1633,51 @@ describe('OpenAiResponsesProvider', () => {
     expect(body.max_output_tokens).toBe(1000);
     expect(body.temperature).toBeUndefined(); // o4-mini model should not have temperature
   });
+
+  it('should configure codex-mini-latest model correctly with reasoning parameters', async () => {
+    const mockApiResponse = {
+      id: 'resp_abc123',
+      status: 'completed',
+      model: 'codex-mini-latest',
+      output: [
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [
+            {
+              type: 'output_text',
+              text: 'Response from codex-mini-latest model',
+            },
+          ],
+        },
+      ],
+      usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
+    };
+
+    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new OpenAiResponsesProvider('codex-mini-latest', {
+      config: {
+        apiKey: 'test-key',
+        reasoning_effort: 'medium',
+        max_output_tokens: 1000,
+      },
+    });
+
+    await provider.callApi('Test prompt');
+
+    const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+    const reqOptions = mockCall[1] as { body: string };
+    const body = JSON.parse(reqOptions.body);
+
+    expect(body.model).toBe('codex-mini-latest');
+    expect(body.reasoning).toEqual({ effort: 'medium' });
+    expect(body.max_output_tokens).toBe(1000);
+    expect(body.temperature).toBeUndefined(); // codex-mini-latest model should not have temperature
+  });
 });
