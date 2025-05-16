@@ -36,6 +36,14 @@ import { convertTestResultsToTableRow, getHeaderForTable } from './exportToFile'
 import { maybeLoadFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
 import { getNunjucksEngine } from './templates';
+import {
+  getCumulativeTokenUsage,
+  resetCumulativeTokenUsage,
+  getTotalTokenUsage,
+  resetAllProviderTokenUsage,
+  withTokenTracking,
+  TokenUsageTracker,
+} from './tokenUsage';
 
 const outputToSimpleString = (output: EvaluateTableOutput) => {
   const passFailText = output.pass
@@ -476,3 +484,13 @@ export function maybeLoadToolsFromExternalFile(
 ): any {
   return maybeLoadFromExternalFile(renderVarsInObject(tools, vars));
 }
+
+// Re-export token usage utilities
+export {
+  getCumulativeTokenUsage,
+  resetCumulativeTokenUsage,
+  getTotalTokenUsage,
+  resetAllProviderTokenUsage,
+  withTokenTracking,
+  TokenUsageTracker,
+};

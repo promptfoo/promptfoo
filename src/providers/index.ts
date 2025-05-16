@@ -12,6 +12,7 @@ import type { ApiProvider, ProviderOptions, ProviderOptionsMap } from '../types/
 import { getProviderFromCloud } from '../util/cloud';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
+import { withTokenTracking } from '../util/tokenUsage';
 import { providerMap } from './registry';
 
 // FIXME(ian): Make loadApiProvider handle all the different provider types (string, ProviderOptions, ApiProvider, etc), rather than the callers.
@@ -194,4 +195,19 @@ export async function loadApiProviders(
     return providersArrays.flat();
   }
   throw new Error('Invalid providers list');
+}
+
+/**
+ * Load an API provider with token tracking enabled
+ * This wraps the provider's callApi method to track token usage
+ * @param providerPath The provider path
+ * @param context The context for loading the provider
+ * @returns The provider with token tracking
+ */
+export async function loadApiProviderWithTracking(
+  providerPath: string,
+  context: LoadApiProviderContext = {},
+): Promise<ApiProvider> {
+  const provider = await loadApiProvider(providerPath, context);
+  return withTokenTracking(provider);
 }

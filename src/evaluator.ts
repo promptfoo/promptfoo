@@ -40,6 +40,7 @@ import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
 import { safeJsonStringify } from './util/json';
 import { sleep } from './util/time';
+import { TokenUsageTracker } from './util/tokenUsage';
 import { transform, type TransformContext, TransformInputType } from './util/transform';
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
@@ -268,6 +269,12 @@ export async function runEval({
         abortSignal ? { abortSignal } : undefined,
       );
 
+      // Track token usage at the call site
+      if (response.tokenUsage) {
+        const providerId = activeProvider.id();
+        TokenUsageTracker.getInstance().trackUsage(providerId, response.tokenUsage);
+      }
+
       logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
       logger.debug(`Provider response cached property explicitly: ${response.cached}`);
     }
@@ -488,6 +495,53 @@ export function generateVarCombinations(
   }
 
   return combinations;
+}
+
+// Add this function to display the token usage summary
+function displayTokenUsageSummary() {
+  const tracker = TokenUsageTracker.getInstance();
+  const providers = tracker.getProviderIds();
+
+  if (providers.length === 0) {
+    return;
+  }
+
+  logger.info('\n==== Token Usage Summary ====');
+
+  // Display per-provider usage
+  providers.forEach((providerId) => {
+    const usage = tracker.getProviderUsage(providerId);
+    if (!usage) {
+      return;
+    }
+
+    const promptTokens = usage.prompt || 0;
+    const completionTokens = usage.completion || 0;
+    const cachedTokens = usage.cached || 0;
+    const totalTokens = usage.total || promptTokens + completionTokens;
+    const numRequests = usage.numRequests || 0;
+
+    logger.info(
+      `${providerId}: ${totalTokens.toLocaleString()} tokens total ` +
+        `(${promptTokens.toLocaleString()} prompt, ${completionTokens.toLocaleString()} completion, ` +
+        `${cachedTokens.toLocaleString()} cached) across ${numRequests} requests`,
+    );
+  });
+
+  // Display total usage across all providers
+  const totalUsage = tracker.getTotalUsage();
+  const totalPrompt = totalUsage.prompt || 0;
+  const totalCompletion = totalUsage.completion || 0;
+  const totalCached = totalUsage.cached || 0;
+  const grandTotal = totalUsage.total || totalPrompt + totalCompletion;
+  const totalRequests = totalUsage.numRequests || 0;
+
+  logger.info(
+    `\nTotal: ${grandTotal.toLocaleString()} tokens ` +
+      `(${totalPrompt.toLocaleString()} prompt, ${totalCompletion.toLocaleString()} completion, ` +
+      `${totalCached.toLocaleString()} cached) across ${totalRequests} requests`,
+  );
+  logger.info('==============================\n');
 }
 
 class Evaluator {
@@ -1374,6 +1428,9 @@ class Evaluator {
       suite: testSuite,
     });
 
+    // Display token usage summary
+    displayTokenUsageSummary();
+
     telemetry.record('eval_ran', {
       numPrompts: prompts.length,
       numTests: prompts.reduce(
@@ -1401,8 +1458,6 @@ class Evaluator {
       hasAnyPass: this.evalRecord.prompts.some(
         (p) => p.metrics?.testPassCount && p.metrics.testPassCount > 0,
       ),
-      // FIXME(ian): Does this work?  I think redteam is only on the config, not testSuite.
-      // isRedteam: Boolean(testSuite.redteam),
     });
 
     // Update database signal file after all results are written
