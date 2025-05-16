@@ -185,7 +185,32 @@ export class TokenUsageTracker {
    * @returns The merged token usage
    */
   private mergeUsage(current: TokenUsage, update: TokenUsage): TokenUsage {
-    const result = { ...current };
+    // Create a result object with all properties initialized
+    const result: TokenUsage = { 
+      prompt: 0, 
+      completion: 0, 
+      cached: 0, 
+      total: 0, 
+      numRequests: 0,
+      promptChars: 0,
+      completionChars: 0,
+      totalChars: 0,
+      completionDetails: {
+        reasoning: 0,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+      },
+      assertions: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
+        promptChars: 0,
+        completionChars: 0,
+        totalChars: 0,
+      },
+      ...current
+    };
 
     // Add basic fields
     result.prompt = (result.prompt || 0) + (update.prompt || 0);
@@ -202,35 +227,46 @@ export class TokenUsageTracker {
     // Handle completion details
     if (update.completionDetails) {
       if (!result.completionDetails) {
-        result.completionDetails = {};
+        result.completionDetails = {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        };
       }
 
       result.completionDetails.reasoning =
-        (result.completionDetails?.reasoning || 0) + (update.completionDetails.reasoning || 0);
+        (result.completionDetails.reasoning || 0) + (update.completionDetails.reasoning || 0);
 
       result.completionDetails.acceptedPrediction =
-        (result.completionDetails?.acceptedPrediction || 0) +
+        (result.completionDetails.acceptedPrediction || 0) +
         (update.completionDetails.acceptedPrediction || 0);
 
       result.completionDetails.rejectedPrediction =
-        (result.completionDetails?.rejectedPrediction || 0) +
+        (result.completionDetails.rejectedPrediction || 0) +
         (update.completionDetails.rejectedPrediction || 0);
     }
 
     // Handle assertions
     if (update.assertions) {
       if (!result.assertions) {
-        result.assertions = {};
+        result.assertions = {
+          total: 0,
+          prompt: 0,
+          completion: 0,
+          cached: 0,
+          promptChars: 0,
+          completionChars: 0,
+          totalChars: 0,
+        };
       }
 
-      result.assertions.prompt = (result.assertions?.prompt || 0) + (update.assertions.prompt || 0);
-
-      result.assertions.completion =
-        (result.assertions?.completion || 0) + (update.assertions.completion || 0);
-
-      result.assertions.cached = (result.assertions?.cached || 0) + (update.assertions.cached || 0);
-
-      result.assertions.total = (result.assertions?.total || 0) + (update.assertions.total || 0);
+      result.assertions.prompt = (result.assertions.prompt || 0) + (update.assertions.prompt || 0);
+      result.assertions.completion = (result.assertions.completion || 0) + (update.assertions.completion || 0);
+      result.assertions.cached = (result.assertions.cached || 0) + (update.assertions.cached || 0);
+      result.assertions.total = (result.assertions.total || 0) + (update.assertions.total || 0);
+      result.assertions.promptChars = (result.assertions.promptChars || 0) + (update.assertions.promptChars || 0);
+      result.assertions.completionChars = (result.assertions.completionChars || 0) + (update.assertions.completionChars || 0);
+      result.assertions.totalChars = (result.assertions.totalChars || 0) + (update.assertions.totalChars || 0);
     }
 
     return result;
