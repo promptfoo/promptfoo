@@ -76,8 +76,8 @@ export class MCPClient {
         // Get auth headers and combine with custom headers
         const authHeaders = this.getAuthHeaders(server);
         const headers = {
-          ...authHeaders,
           ...(server.headers || {}),
+          ...authHeaders,
         };
 
         // Only set options if we have headers

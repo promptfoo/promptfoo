@@ -34,7 +34,7 @@ providers:
   - `name`: (Optional) A name for the server instance.
   - `url`: URL for connecting to a remote MCP server.
   - `headers`: (Optional) Custom HTTP headers to send when connecting to a remote MCP server (only applies to `url`-based connections).
-  - `auth`: (Optional) Authentication configuration for the server.
+  - `auth`: (Optional) Authentication configuration for the server. Can be used to automatically set auth headers for all connection types.
     - `type`: Authentication type, either `'bearer'` or `'api_key'`.
     - `token`: Token for bearer authentication.
     - `api_key`: API key for api_key authentication.
