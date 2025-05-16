@@ -11,6 +11,7 @@ import { synthesize } from '../';
 import { disableCache } from '../../cache';
 import cliState from '../../cliState';
 import { VERSION } from '../../constants';
+import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import { loadApiProviders } from '../../providers';
 import telemetry from '../../telemetry';
@@ -89,9 +90,10 @@ export async function doGenerateRedteam(
     testSuite = resolved.testSuite;
     redteamConfig = resolved.config.redteam;
 
-    // If remote generation is enabled and a config is provided that contains at least one target,
+    // If automatic purpose discovery is enabled, remote generation is enabled, and a config is provided that contains at least one target,
     // discover the purpose from the target:
     if (
+      getEnvBool('PROMPTFOO_REDTEAM_ENABLE_PURPOSE_DISCOVERY_AGENT', false) &&
       !neverGenerateRemote() &&
       resolved.config.providers &&
       Array.isArray(resolved.config.providers)
