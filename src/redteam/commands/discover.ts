@@ -194,13 +194,11 @@ export function discoverCommand(program: Command) {
     .option('--overwrite', 'Overwrite the existing purpose if it already exists.', false)
     .option('-t, --target <id>', 'UUID of a Cloud-defined target to run the discovery on')
     .option('--preview', 'Preview discovery results without writing to an output file', false)
-    .addOption(
-      new Option(
+    .option(
         '--turns <turns>',
         'A maximum number of turns to run the discovery process. Lower is faster but less accurate.',
-      )
-        .argParser(Number.parseInt)
-        .default(DEFAULT_TURN_COUNT),
+      (value) => Number.parseInt(value),
+      DEFAULT_TURN_COUNT,
     )
     .action(async (rawArgs: Args) => {
       // If preview is true and output is DEFAULT_OUTPUT_PATH, set output to undefined to satisfy
