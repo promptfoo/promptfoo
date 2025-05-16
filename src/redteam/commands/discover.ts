@@ -212,7 +212,7 @@ export function discoverCommand(program: Command) {
     .option(
       '--turns <turns>',
       'A maximum number of turns to run the discovery process. Lower is faster but less accurate.',
-      (value) => Number.parseInt(value),
+      (value) => Number.parseInt(value, 10),
       DEFAULT_TURN_COUNT,
     )
     .action(async (rawArgs: Args) => {
