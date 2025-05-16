@@ -64,7 +64,7 @@ type ConversationHistory = { type: 'promptfoo' | 'target'; content: string }[];
 // A larger turn count is more accurate (b/c more probes) but slower.
 // TODO: Optimize this default to balance quality/runtime using the Discover eval.
 // NOTE: Set to 5 because UI lacks ability to set the count.
-const DEFAULT_TURN_COUNT = 5;
+export const DEFAULT_TURN_COUNT = 5;
 
 /**
  * Queries Cloud for the purpose-discovery logic, sends each logic to the target,
@@ -98,14 +98,15 @@ export async function doTargetPurposeDiscovery(
         maxTurns,
         version: VERSION,
         email: getUserEmail(),
+        forceReturn: true,
       }),
       headers: { 'Content-Type': 'application/json' },
       method: 'POST',
     });
 
-    const { done, question, purpose } = (await res.json()) as {
-      done: boolean;
+    const { done, purpose, question } = (await res.json()) as {
       question?: string;
+      done: boolean;
       purpose?: string;
     };
 
