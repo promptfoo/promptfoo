@@ -37,6 +37,7 @@ import { resolveConfigs } from '../util/config/load';
 import { maybeLoadFromExternalFile } from '../util/file';
 import { formatDuration } from '../util/formatDuration';
 import invariant from '../util/invariant';
+import { TokenUsageTracker } from '../util/tokenUsage';
 import { filterProviders } from './eval/filterProviders';
 import type { FilterOptions } from './eval/filterTests';
 import { filterTests } from './eval/filterTests';
@@ -63,6 +64,53 @@ function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
       `,
     );
   }
+}
+
+// Add this function to display the token usage summary
+function displayTokenUsageSummary() {
+  const tracker = TokenUsageTracker.getInstance();
+  const providers = tracker.getProviderIds();
+
+  if (providers.length === 0) {
+    return;
+  }
+
+  logger.info('\n==== Token Usage Summary ====');
+
+  // Display per-provider usage
+  providers.forEach((providerId) => {
+    const usage = tracker.getProviderUsage(providerId);
+    if (!usage) {
+      return;
+    }
+
+    const promptTokens = usage.prompt || 0;
+    const completionTokens = usage.completion || 0;
+    const cachedTokens = usage.cached || 0;
+    const totalTokens = usage.total || promptTokens + completionTokens;
+    const numRequests = usage.numRequests || 0;
+
+    logger.info(
+      `${providerId}: ${totalTokens.toLocaleString()} tokens total ` +
+        `(${promptTokens.toLocaleString()} prompt, ${completionTokens.toLocaleString()} completion, ` +
+        `${cachedTokens.toLocaleString()} cached) across ${numRequests} requests`,
+    );
+  });
+
+  // Display total usage across all providers
+  const totalUsage = tracker.getTotalUsage();
+  const totalPrompt = totalUsage.prompt || 0;
+  const totalCompletion = totalUsage.completion || 0;
+  const totalCached = totalUsage.cached || 0;
+  const grandTotal = totalUsage.total || totalPrompt + totalCompletion;
+  const totalRequests = totalUsage.numRequests || 0;
+
+  logger.info(
+    `\nTotal: ${grandTotal.toLocaleString()} tokens ` +
+      `(${totalPrompt.toLocaleString()} prompt, ${totalCompletion.toLocaleString()} completion, ` +
+      `${totalCached.toLocaleString()} cached) across ${totalRequests} requests`,
+  );
+  logger.info('==============================\n');
 }
 
 /**
@@ -450,6 +498,8 @@ export async function doEval(
       logger.info(
         `Total tokens: ${combinedTotal.toLocaleString()} (eval: ${evalTokens.total.toLocaleString()} + Grading: ${tokenUsage.assertions.total.toLocaleString()})`,
       );
+      // Display token usage summary
+      displayTokenUsageSummary();
     }
 
     telemetry.record('command_used', {
