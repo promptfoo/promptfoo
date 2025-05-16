@@ -16,6 +16,7 @@ Promptfoo is an [open-source](https://github.com/promptfoo/promptfoo) tool for r
   - <a href="/docs/red-team/llm-vulnerability-types/#privacy-and-security" className={styles.badge}>Security & data privacy</a>: jailbreaks, injections, RAG poisoning, etc.
   - <a href="/docs/red-team/llm-vulnerability-types/" className={styles.badge}>Compliance & ethics</a>: harmful & biased content, content filter validation, OWASP/NIST/EU compliance, etc.
   - <a href="/docs/red-team/configuration/#custom-policies" className={styles.badge}>Custom policies</a>: enforce organizational guidelines.
+- Discovers the purpose, capabilities, and constraints of your application using the [Promptfoo Target Scanning Agent](/docs/red-team/ptsa).
 - Generates **dynamic attack probes** tailored to your application using specialized uncensored models.
 - Implements state-of-the-art **adversarial ML research** from [Microsoft](/docs/red-team/strategies/multi-turn/), [Meta](/docs/red-team/strategies/goat/), and others.
 - Integrates with [CI/CD](/docs/integrations/ci-cd/).

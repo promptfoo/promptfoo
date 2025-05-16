@@ -4,6 +4,8 @@ sidebar_position: 10001
 
 # How to red team LLM Agents
 
+> **Tip:** For agent-based systems, we recommend using the [Promptfoo Target Scanning Agent (PTSA)](/docs/red-team/ptsa) to automatically discover the agent's purpose, capabilities, and constraints. PTSA runs automatically as part of the red team scan and helps generate more targeted adversarial tests.
+
 LLM agents capable of interacting with their environment and executing complex tasks using natural language interfaces. As these agents gain access to external systems and sensitive data, security assessments are essential.
 
 This guide outlines strategies for red teaming LLM agents, with a focus on technical vulnerabilities and security implications.
