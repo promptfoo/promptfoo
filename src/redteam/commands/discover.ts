@@ -87,7 +87,14 @@ export async function doTargetPurposeDiscovery(
     hideCursor: true,
   });
 
-  pbar.start(maxTurns, turnCounter);
+  pbar.start(maxTurns, 0);
+
+  function onCompletion(purpose: string) {
+    pbar.increment();
+    pbar.stop();
+    logger.info(`\nPurpose:\n\n${chalk.green(purpose)}\n`);
+    return purpose;
+  }
 
   while (true) {
     const res = await fetchWithProxy(getRemoteGenerationUrl(), {
@@ -109,10 +116,7 @@ export async function doTargetPurposeDiscovery(
     };
 
     if (done) {
-      pbar.increment();
-      pbar.stop();
-      logger.info(`\nPurpose:\n\n${chalk.green(purpose)}\n`);
-      return purpose as string;
+      return onCompletion(purpose as string);
     } else {
       if (!question) {
         throw new Error(`Failed to discover purpose: ${res.statusText}`);
@@ -125,9 +129,10 @@ export async function doTargetPurposeDiscovery(
     logger.debug(JSON.stringify({ question, output: response.output }, null, 2));
     conversationHistory.push({ type: 'target', content: response.output });
 
+    // The server should always call `done` when max turns are reached; this provides a fallback in-case it does not!
+    // Purpose will always be defined because the generator task is max turn aware.
     if (turnCounter === maxTurns) {
-      // Purpose will always be defined because the generator task is max turn aware.
-      return purpose as string;
+      return onCompletion(purpose as string);
     } else {
       turnCounter++;
       pbar.increment();
@@ -195,8 +200,8 @@ export function discoverCommand(program: Command) {
     .option('-t, --target <id>', 'UUID of a Cloud-defined target to run the discovery on')
     .option('--preview', 'Preview discovery results without writing to an output file', false)
     .option(
-        '--turns <turns>',
-        'A maximum number of turns to run the discovery process. Lower is faster but less accurate.',
+      '--turns <turns>',
+      'A maximum number of turns to run the discovery process. Lower is faster but less accurate.',
       (value) => Number.parseInt(value),
       DEFAULT_TURN_COUNT,
     )
