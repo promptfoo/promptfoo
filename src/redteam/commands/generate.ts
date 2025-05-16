@@ -500,5 +500,3 @@ export function redteamGenerateCommand(
       }
     });
 }
-
-export { getConfigHash };
