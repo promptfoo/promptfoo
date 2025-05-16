@@ -358,3 +358,5 @@ export function discoverCommand(program: Command) {
       }
     });
 }
+
+export { DEFAULT_TURN_COUNT, saveCloudTargetPurpose };
