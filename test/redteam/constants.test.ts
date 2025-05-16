@@ -25,6 +25,7 @@ import {
   categoryAliases,
   pluginDescriptions,
   subCategoryDescriptions,
+  STRATEGY_EXEMPT_PLUGINS,
 } from '../../src/redteam/constants';
 
 describe('constants', () => {
@@ -89,8 +90,15 @@ describe('constants', () => {
     expect(BASE_PLUGINS).toContain('hallucination');
   });
 
-  it('ADDITIONAL_PLUGINS should contain MCP plugin', () => {
+  it('ADDITIONAL_PLUGINS should contain expected plugins', () => {
     expect(ADDITIONAL_PLUGINS).toContain('mcp');
+    expect(ADDITIONAL_PLUGINS).toContain('off-topic');
+  });
+
+  it('STRATEGY_EXEMPT_PLUGINS should contain expected plugins', () => {
+    expect(STRATEGY_EXEMPT_PLUGINS).toContain('off-topic');
+    expect(STRATEGY_EXEMPT_PLUGINS).toContain('pliny');
+    expect(STRATEGY_EXEMPT_PLUGINS).toContain('system-prompt-override');
   });
 
   it('DEFAULT_PLUGINS should be a Set containing base plugins, harm plugins and PII plugins', () => {
@@ -173,27 +181,32 @@ describe('constants', () => {
     });
   });
 
-  it('should have correct display name for MCP plugin', () => {
+  it('should have correct display name for plugins', () => {
     expect(displayNameOverrides['mcp']).toBe('Model Context Protocol');
+    expect(displayNameOverrides['off-topic']).toBe('Lead it off-topic');
   });
 
-  it('should have correct severity for MCP plugin', () => {
+  it('should have correct severity for plugins', () => {
     expect(riskCategorySeverityMap['mcp']).toBe(Severity.Low);
+    expect(riskCategorySeverityMap['off-topic']).toBe(Severity.Low);
   });
 
-  it('should have correct alias for MCP plugin', () => {
+  it('should have correct alias for plugins', () => {
     expect(categoryAliases['mcp']).toBe('MCP');
+    expect(categoryAliases['off-topic']).toBe('Off-topic');
   });
 
-  it('should have correct plugin description for MCP plugin', () => {
+  it('should have correct plugin description for plugins', () => {
     expect(pluginDescriptions['mcp']).toBe(
       'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
     );
+    expect(pluginDescriptions['off-topic']).toBe('Try to make it go off-topic');
   });
 
-  it('should have correct subcategory description for MCP plugin', () => {
+  it('should have correct subcategory description for plugins', () => {
     expect(subCategoryDescriptions['mcp']).toBe(
       'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
     );
+    expect(subCategoryDescriptions['off-topic']).toBe('Off-topic conversation detection');
   });
 });

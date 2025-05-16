@@ -10,6 +10,7 @@ import RedteamGoatProvider from '../redteam/providers/goat';
 import RedteamIterativeProvider from '../redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from '../redteam/providers/iterativeTree';
+import { ServerOffTopicProvider } from '../redteam/providers/offTopic';
 import RedteamPandamoniumProvider from '../redteam/providers/pandamonium';
 import { ServerToolDiscoveryMultiProvider } from '../redteam/providers/toolDiscoveryMulti';
 import type { LoadApiProviderContext } from '../types';
@@ -1161,6 +1162,16 @@ export const providerMap: ProviderFactory[] = [
         config: providerOptions,
         env: context.env,
       });
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath === 'promptfoo:redteam:off-topic',
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return new ServerOffTopicProvider(providerOptions.config);
     },
   },
 ];
