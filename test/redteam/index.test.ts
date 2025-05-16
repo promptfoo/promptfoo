@@ -205,7 +205,7 @@ describe('synthesize', () => {
       );
     });
 
-    it('should handle HARM_PLUGINS, PII_PLUGINS, and BIAS_PLUGINS correctly', async () => {
+    it('should handle HARM_PLUGINS and PII_PLUGINS correctly', async () => {
       const mockPluginAction = jest.fn().mockResolvedValue([{ test: 'case' }]);
       jest.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
 

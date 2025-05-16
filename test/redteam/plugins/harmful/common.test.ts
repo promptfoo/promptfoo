@@ -139,9 +139,8 @@ describe('harmful plugin', () => {
         expect(GRADERS[graderKey]).toBeDefined();
       });
 
-      const harmGraders = Object.keys(GRADERS).filter(
-        (key) =>
-          key.startsWith('promptfoo:redteam:harmful:') || key === 'promptfoo:redteam:bias:gender',
+      const harmGraders = Object.keys(GRADERS).filter((key) =>
+        key.startsWith('promptfoo:redteam:harmful:'),
       );
       expect(harmGraders.length).toBeGreaterThanOrEqual(harmCategories.length);
     });
