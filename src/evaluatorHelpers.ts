@@ -350,5 +350,3 @@ export async function runExtensionHook(
     await transform(extension, hookName, context, false);
   }
 }
-
-export { autoWrapRawIfPartialNunjucks };
