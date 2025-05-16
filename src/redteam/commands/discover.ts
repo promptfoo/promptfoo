@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
-import { type Command, Option } from 'commander';
+import { type Command } from 'commander';
 import dedent from 'dedent';
 import * as fs from 'fs';
 import yaml from 'js-yaml';

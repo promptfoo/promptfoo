@@ -102,7 +102,7 @@ export async function doGenerateRedteam(
       );
       const providers = await loadApiProviders(resolved.config.providers);
       try {
-        const generatedPurpose = await doTargetPurposeDiscovery(providers[0]);
+        const { purpose: generatedPurpose } = await doTargetPurposeDiscovery(providers[0]);
         // Append the discovered purpose to the purpose if it exists:
         finalPurpose = finalPurpose
           ? mergePurposes(finalPurpose, generatedPurpose)
