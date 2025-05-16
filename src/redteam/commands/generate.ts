@@ -93,7 +93,7 @@ export async function doGenerateRedteam(
     // If automatic purpose discovery is enabled, remote generation is enabled, and a config is provided that contains at least one target,
     // discover the purpose from the target:
     if (
-      getEnvBool('PROMPTFOO_REDTEAM_ENABLE_PURPOSE_DISCOVERY_AGENT', false) &&
+      !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_PURPOSE_DISCOVERY_AGENT', true) &&
       !neverGenerateRemote() &&
       resolved.config.providers &&
       Array.isArray(resolved.config.providers)
