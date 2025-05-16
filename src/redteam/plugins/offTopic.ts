@@ -25,7 +25,7 @@ interface InitialPromptTemplate {
   prompt: string;
 }
 
-const INITIAL_PROMPT_TEMPLATES: InitialPromptTemplate[] = [
+export const INITIAL_PROMPT_TEMPLATES: InitialPromptTemplate[] = [
   {
     description: 'Direct topic deviation attempt',
     prompt:
