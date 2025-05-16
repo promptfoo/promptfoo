@@ -61,7 +61,8 @@ type Args = z.infer<typeof ArgsSchema>;
 
 // A larger turn count is more accurate (b/c more probes) but slower.
 // TODO: Optimize this default to balance quality/runtime using the Discover eval.
-const DEFAULT_TURN_COUNT = 50;
+// NOTE: Set to 5 because UI lacks ability to set the count.
+const DEFAULT_TURN_COUNT = 5;
 
 /**
  * Queries Cloud for the purpose-discovery logic, sends each logic to the target,

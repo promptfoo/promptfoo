@@ -73,17 +73,27 @@ export class MCPClient {
         });
         await client.connect(transport);
       } else if (server.url) {
+        // Get auth headers and combine with custom headers
+        const authHeaders = this.getAuthHeaders(server);
+        const headers = {
+          ...(server.headers || {}),
+          ...authHeaders,
+        };
+
+        // Only set options if we have headers
+        const options = Object.keys(headers).length > 0 ? { requestInit: { headers } } : undefined;
+
         try {
           const { StreamableHTTPClientTransport } = await import(
             '@modelcontextprotocol/sdk/client/streamableHttp.js'
           );
-          transport = new StreamableHTTPClientTransport(new URL(server.url));
+          transport = new StreamableHTTPClientTransport(new URL(server.url), options);
           await client.connect(transport);
           logger.debug('Connected using Streamable HTTP transport');
         } catch (error) {
           logger.error(`Failed to connect to MCP server ${serverKey}: ${error}`);
           const { SSEClientTransport } = await import('@modelcontextprotocol/sdk/client/sse.js');
-          transport = new SSEClientTransport(new URL(server.url));
+          transport = new SSEClientTransport(new URL(server.url), options);
           await client.connect(transport);
           logger.debug('Connected using SSE transport');
         }
