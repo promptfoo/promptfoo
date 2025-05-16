@@ -101,11 +101,17 @@ export async function doGenerateRedteam(
         'At least one provider must be provided in the config file',
       );
       const providers = await loadApiProviders(resolved.config.providers);
-      const generatedPurpose = await doTargetPurposeDiscovery(providers[0]);
-      // Append the discovered purpose to the purpose if it exists:
-      finalPurpose = finalPurpose
-        ? mergePurposes(finalPurpose, generatedPurpose)
-        : generatedPurpose;
+      try {
+        const generatedPurpose = await doTargetPurposeDiscovery(providers[0]);
+        // Append the discovered purpose to the purpose if it exists:
+        finalPurpose = finalPurpose
+          ? mergePurposes(finalPurpose, generatedPurpose)
+          : generatedPurpose;
+      } catch (error) {
+        logger.error(
+          `Failed to auto-discover purpose: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     }
   } else if (options.purpose) {
     // There is a purpose, so we can just have a dummy test suite for standalone invocation
