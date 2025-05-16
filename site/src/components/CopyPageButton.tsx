@@ -4,13 +4,14 @@ import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 
 const getMarkdownUrl = (pathname: string) => {
-  // Assumes docs are served as /docs/slug and source is available at /docs/slug.md
-  // Adjust if your routing is different
+  // Extract the path and map to the new markdown directory structure
   let docPath = pathname.replace(/^\/docs\//, '').replace(/\/$/, '');
   if (!docPath) {
     docPath = 'index';
   }
-  return `/docs/${docPath}.md`;
+  // Use .md extension regardless of original file type
+  // Files are now in /markdown/ directory instead of /docs/
+  return `/markdown/${docPath}.md`;
 };
 
 const fetchMarkdown = async (pathname: string) => {

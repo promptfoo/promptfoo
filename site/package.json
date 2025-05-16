@@ -3,10 +3,9 @@
   "version": "0.0.1",
   "license": "MIT",
   "scripts": {
-    "prebuild": "rm -rf static/docs && cp -r docs static/docs && sed -i '' '/---/,/---/d' static/docs/**/*.md",
     "docusaurus": "docusaurus",
-    "start": "npm run prebuild && NODE_ENV=development docusaurus start --port ${PORT:-3100}",
-    "build": "npm run prebuild && docusaurus build",
+    "start": "NODE_ENV=development docusaurus start --port ${PORT:-3100}",
+    "build": "docusaurus build",
     "swizzle": "docusaurus swizzle",
     "deploy": "docusaurus deploy",
     "clear": "docusaurus clear",
