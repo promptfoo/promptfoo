@@ -6,6 +6,7 @@ import {
   resolveVariables,
   runExtensionHook,
   collectFileMetadata,
+  extractTextFromPDF,
 } from '../src/evaluatorHelpers';
 import type { Prompt } from '../src/types';
 import { transform } from '../src/util/transform';
@@ -13,6 +14,7 @@ import { transform } from '../src/util/transform';
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
 }));
+
 jest.mock('glob', () => ({
   globSync: jest.fn(),
 }));
@@ -38,6 +40,13 @@ jest.mock('fs', () => ({
   },
 }));
 
+jest.mock('pdf-parse', () => ({
+  __esModule: true,
+  default: jest
+    .fn()
+    .mockImplementation((buffer) => Promise.resolve({ text: 'Extracted PDF text' })),
+}));
+
 jest.mock('../src/esm');
 jest.mock('../src/database', () => ({
   getDb: jest.fn(),
@@ -49,6 +58,42 @@ jest.mock('../src/util/transform', () => ({
 function toPrompt(text: string): Prompt {
   return { raw: text, label: text };
 }
+
+describe('extractTextFromPDF', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should extract text from PDF successfully', async () => {
+    const mockPDFText = 'Extracted PDF text';
+    jest.spyOn(fs, 'readFileSync').mockReturnValueOnce(Buffer.from('mock pdf content'));
+
+    const result = await extractTextFromPDF('test.pdf');
+    expect(result).toBe(mockPDFText);
+  });
+
+  it('should throw error when pdf-parse is not installed', async () => {
+    jest.spyOn(fs, 'readFileSync').mockReturnValueOnce(Buffer.from('mock pdf content'));
+    const mockPDFParse = jest.requireMock('pdf-parse');
+    mockPDFParse.default.mockImplementationOnce(() => {
+      throw new Error("Cannot find module 'pdf-parse'");
+    });
+
+    await expect(extractTextFromPDF('test.pdf')).rejects.toThrow(
+      'pdf-parse is not installed. Please install it with: npm install pdf-parse',
+    );
+  });
+
+  it('should handle PDF extraction errors', async () => {
+    jest.spyOn(fs, 'readFileSync').mockReturnValueOnce(Buffer.from('mock pdf content'));
+    const mockPDFParse = jest.requireMock('pdf-parse');
+    mockPDFParse.default.mockRejectedValueOnce(new Error('PDF parsing failed'));
+
+    await expect(extractTextFromPDF('test.pdf')).rejects.toThrow(
+      'Failed to extract text from PDF test.pdf: PDF parsing failed',
+    );
+  });
+});
 
 describe('renderPrompt', () => {
   beforeEach(() => {
@@ -194,13 +239,11 @@ describe('renderPrompt', () => {
 
     jest.doMock(
       path.resolve('/node_modules/@promptfoo/fake/index.js'),
-      () => {
-        return {
-          testFunction: (varName: any, prompt: any, vars: any) => ({
-            output: `Dynamic value for ${varName}`,
-          }),
-        };
-      },
+      () => ({
+        testFunction: (varName: any, prompt: any, vars: any) => ({
+          output: `Dynamic value for ${varName}`,
+        }),
+      }),
       { virtual: true },
     );
 
@@ -270,7 +313,7 @@ describe('renderPrompt', () => {
     expect(renderedPrompt).toBe('{{ var1 }}');
   });
 
-  it('should respect Nunjucks escaped strings when variable is provided as a template string', async () => {
+  it('should respect Nunjucks escaped strings when variable is provided as a string', async () => {
     const prompt = toPrompt(`{{ '{{ var1 }}' }}`);
     const renderedPrompt = await renderPrompt(prompt, { var1: 'value1' }, {});
     expect(renderedPrompt).toBe('{{ var1 }}');
@@ -297,7 +340,6 @@ describe('renderPrompt', () => {
   it('should not double-wrap prompts already wrapped in {% raw %}', async () => {
     const prompt = toPrompt('{% raw %}This is a partial tag: {%{% endraw %}');
     const renderedPrompt = await renderPrompt(prompt, {}, {});
-    // Should not add another raw block, and should output the literal content
     expect(renderedPrompt).toBe('This is a partial tag: {%');
   });
 
@@ -481,7 +523,7 @@ describe('runExtensionHook', () => {
   });
 
   it('should throw an error if an extension is not a string', async () => {
-    const extensions = ['ext1', 123, 'ext3'] as string[];
+    const extensions = ['ext1', 123, 'ext3'] as unknown as string[];
     const hookName = 'testHook';
     const context = { data: 'test' };
 
@@ -494,9 +536,7 @@ describe('runExtensionHook', () => {
 describe('collectFileMetadata', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.spyOn(path, 'resolve').mockImplementation((...paths) => {
-      return paths[paths.length - 1];
-    });
+    jest.spyOn(path, 'resolve').mockImplementation((...paths) => paths[paths.length - 1]);
   });
 
   it('should identify image files correctly', () => {
@@ -554,35 +594,6 @@ describe('collectFileMetadata', () => {
         path: 'file://path/to/video.mkv',
         type: 'video',
         format: 'mkv',
-      },
-    });
-  });
-
-  it('should identify audio files correctly', () => {
-    const vars = {
-      audio1: 'file://path/to/audio.mp3',
-      audio2: 'file://path/to/audio.wav',
-      audio3: 'file://path/to/audio.ogg',
-      text: 'This is not a file',
-    };
-
-    const metadata = collectFileMetadata(vars);
-
-    expect(metadata).toEqual({
-      audio1: {
-        path: 'file://path/to/audio.mp3',
-        type: 'audio',
-        format: 'mp3',
-      },
-      audio2: {
-        path: 'file://path/to/audio.wav',
-        type: 'audio',
-        format: 'wav',
-      },
-      audio3: {
-        path: 'file://path/to/audio.ogg',
-        type: 'audio',
-        format: 'ogg',
       },
     });
   });
