@@ -15,6 +15,7 @@ import {
   UnifiedConfigSchema,
   TestSuiteSchema,
 } from '../../src/types';
+import { JAVASCRIPT_EXTENSIONS } from '../../src/util/fileExtensions';
 
 describe('AssertionSchema', () => {
   it('should validate a basic assertion', () => {
@@ -227,6 +228,14 @@ describe('isGradingResult', () => {
 });
 
 describe('TestCaseSchema assertScoringFunction', () => {
+  const originalJsExtensions = [...JAVASCRIPT_EXTENSIONS];
+
+  afterEach(() => {
+    // Restore original extensions
+    JAVASCRIPT_EXTENSIONS.length = 0;
+    JAVASCRIPT_EXTENSIONS.push(...originalJsExtensions);
+  });
+
   it('should validate test case with valid file-based scoring function', () => {
     const testCase = {
       description: 'Test with file scoring',
@@ -299,6 +308,18 @@ describe('TestCaseSchema assertScoringFunction', () => {
     const testCase = {
       description: 'Relative file path',
       assertScoringFunction: 'file://./relative/path/score.js:scoreFunc',
+      vars: { input: 'test' },
+    };
+    expect(() => TestCaseSchema.parse(testCase)).not.toThrow('Invalid test case schema');
+  });
+
+  it('should validate when JAVASCRIPT_EXTENSIONS is undefined', () => {
+    // Clear the array to simulate undefined
+    JAVASCRIPT_EXTENSIONS.length = 0;
+
+    const testCase = {
+      description: 'Test with file scoring',
+      assertScoringFunction: 'file://path/to/score.js:scoreFunc',
       vars: { input: 'test' },
     };
     expect(() => TestCaseSchema.parse(testCase)).not.toThrow('Invalid test case schema');
