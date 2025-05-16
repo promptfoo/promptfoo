@@ -62,7 +62,7 @@ type Args = z.infer<typeof ArgsSchema>;
 // A larger turn count is more accurate (b/c more probes) but slower.
 // TODO: Optimize this default to balance quality/runtime using the Discover eval.
 // NOTE: Set to 5 because UI lacks ability to set the count.
-const DEFAULT_TURN_COUNT = 5;
+export const DEFAULT_TURN_COUNT = 5;
 
 /**
  * Queries Cloud for the purpose-discovery logic, sends each logic to the target,
@@ -78,7 +78,7 @@ export async function doTargetPurposeDiscovery(
 ): Promise<string> {
   const conversationHistory: { type: 'promptfoo' | 'target'; content: string }[] = [];
 
-  let turnCounter = 1;
+  let turnCounter = 0;
 
   const pbar = new cliProgress.SingleBar({
     format: `Discovering purpose {bar} {percentage}% | {value}${maxTurns ? '/{total}' : ''} turns`,
@@ -89,7 +89,48 @@ export async function doTargetPurposeDiscovery(
 
   pbar.start(maxTurns, turnCounter);
 
-  while (true) {
+  try {
+    for (turnCounter = 0; turnCounter < maxTurns; turnCounter++) {
+      const res = await fetchWithProxy(getRemoteGenerationUrl(), {
+        body: JSON.stringify({
+          task: 'target-purpose-discovery',
+          conversationHistory,
+          maxTurns,
+          version: VERSION,
+          email: getUserEmail(),
+        }),
+        headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+      });
+
+      const { done, question, purpose } = (await res.json()) as {
+        done: boolean;
+        question?: string;
+        purpose?: string;
+      };
+
+      if (done) {
+        pbar.increment();
+        pbar.stop();
+        logger.info(`\nPurpose:\n\n${chalk.green(purpose)}\n`);
+        return purpose as string;
+      } else {
+        if (!question) {
+          throw new Error(`Failed to discover purpose: ${res.statusText}`);
+        }
+        conversationHistory.push({ type: 'promptfoo', content: question as string });
+      }
+
+      // Call the target with the question:
+      const response = await target.callApi(question as string);
+      logger.debug(JSON.stringify({ question, output: response.output }, null, 2));
+      conversationHistory.push({ type: 'target', content: response.output });
+
+      pbar.increment();
+    }
+
+    // If we've exhausted all turns, assume the last purpose is available
+    // This will only be reached if done=false for all turns
     const res = await fetchWithProxy(getRemoteGenerationUrl(), {
       body: JSON.stringify({
         task: 'target-purpose-discovery',
@@ -97,40 +138,23 @@ export async function doTargetPurposeDiscovery(
         maxTurns,
         version: VERSION,
         email: getUserEmail(),
+        forceReturn: true,
       }),
       headers: { 'Content-Type': 'application/json' },
       method: 'POST',
     });
 
-    const { done, question, purpose } = (await res.json()) as {
-      done: boolean;
-      question?: string;
-      purpose?: string;
-    };
+    const { purpose } = (await res.json()) as { purpose?: string };
 
-    if (done) {
-      pbar.increment();
-      pbar.stop();
-      logger.info(`\nPurpose:\n\n${chalk.green(purpose)}\n`);
-      return purpose as string;
-    } else {
-      if (!question) {
-        throw new Error(`Failed to discover purpose: ${res.statusText}`);
-      }
-      conversationHistory.push({ type: 'promptfoo', content: question as string });
+    if (purpose) {
+      return purpose;
     }
 
-    // Call the target with the question:
-    const response = await target.callApi(question as string);
-    logger.debug(JSON.stringify({ question, output: response.output }, null, 2));
-    conversationHistory.push({ type: 'target', content: response.output });
-
-    if (turnCounter === maxTurns) {
-      // Purpose will always be defined because the generator task is max turn aware.
-      return purpose as string;
-    } else {
-      turnCounter++;
-      pbar.increment();
+    throw new Error('Failed to discover purpose after exhausting maximum turns');
+  } finally {
+    // Ensure progress bar is always stopped, even if an exception occurs
+    if (pbar) {
+      pbar.stop();
     }
   }
 }
