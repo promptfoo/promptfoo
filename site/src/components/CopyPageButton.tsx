@@ -53,6 +53,8 @@ const CopyPageButton: React.FC = () => {
     <div style={{ width: '100%', display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
       <button
         onClick={handleCopy}
+        aria-label={copied ? 'Copied markdown to clipboard' : 'Copy markdown to clipboard'}
+        aria-live="polite"
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -67,7 +69,6 @@ const CopyPageButton: React.FC = () => {
           height: 36,
           minWidth: 110, // Fixed minimum width instead of dynamic measurement
         }}
-        aria-label="Copy page as markdown"
       >
         <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
           <span
