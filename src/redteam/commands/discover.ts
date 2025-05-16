@@ -59,7 +59,9 @@ export const ArgsSchema = z
 
 type Args = z.infer<typeof ArgsSchema>;
 
-const DEFAULT_TURN_COUNT = 5;
+// A larger turn count is more accurate (b/c more probes) but slower.
+// TODO: Optimize this default to balance quality/runtime using the Discover eval.
+const DEFAULT_TURN_COUNT = 50;
 
 /**
  * Queries Cloud for the purpose-discovery logic, sends each logic to the target,
@@ -112,8 +114,7 @@ export async function doTargetPurposeDiscovery(
       return purpose as string;
     } else {
       if (!question) {
-        logger.error(`Failed to discover purpose: ${res.statusText}`);
-        return '';
+        throw new Error(`Failed to discover purpose: ${res.statusText}`);
       }
       conversationHistory.push({ type: 'promptfoo', content: question as string });
     }
@@ -163,6 +164,10 @@ async function saveCloudTargetPurpose(targetId: string, purpose: string) {
   } else {
     logger.error(`Failed to save purpose to database: ${res.statusText}`);
   }
+}
+
+export function mergePurposes(humanDefinedPurpose: string, discoveredPurpose: string) {
+  return `${humanDefinedPurpose}\n\nDiscovered Purpose:\n\n${discoveredPurpose}`;
 }
 
 /**
@@ -296,8 +301,7 @@ export function discoverCommand(program: Command) {
             error instanceof Error ? error.stack : ''
           }`,
         );
-        process.exitCode = 1;
-        return;
+        process.exit(1);
       }
 
       // If not previewing, persist the purposes:
@@ -340,7 +344,7 @@ export function discoverCommand(program: Command) {
               ...(existingYaml['redteam'] || {}),
               purpose:
                 existingPurpose && !args.overwrite
-                  ? `${existingPurpose}\n\nDiscovered Purpose:\n\n${purpose}`
+                  ? mergePurposes(existingPurpose, purpose)
                   : purpose,
             };
             writePromptfooConfig(existingYaml as UnifiedConfig, args.output!);

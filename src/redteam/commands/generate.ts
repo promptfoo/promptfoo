@@ -34,7 +34,7 @@ import type {
   RedteamStrategyObject,
   SynthesizeOptions,
 } from '../types';
-import { doTargetPurposeDiscovery } from './discover';
+import { doTargetPurposeDiscovery, mergePurposes } from './discover';
 
 function getConfigHash(configPath: string): string {
   const content = fs.readFileSync(configPath, 'utf8');
@@ -54,7 +54,7 @@ export async function doGenerateRedteam(
   let redteamConfig: RedteamFileConfig | undefined;
   const configPath = options.config || options.defaultConfigPath;
   const outputPath = options.output || 'redteam.yaml';
-  let generatedPurpose: string | undefined;
+  let finalPurpose = redteamConfig?.purpose ?? options.purpose;
 
   // Check for updates to the config file and decide whether to generate
   let shouldGenerate = options.force;
@@ -101,7 +101,17 @@ export async function doGenerateRedteam(
         'At least one provider must be provided in the config file',
       );
       const providers = await loadApiProviders(resolved.config.providers);
-      generatedPurpose = await doTargetPurposeDiscovery(providers[0]);
+      try {
+        const generatedPurpose = await doTargetPurposeDiscovery(providers[0]);
+        // Append the discovered purpose to the purpose if it exists:
+        finalPurpose = finalPurpose
+          ? mergePurposes(finalPurpose, generatedPurpose)
+          : generatedPurpose;
+      } catch (error) {
+        logger.error(
+          `Failed to auto-discover purpose: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     }
   } else if (options.purpose) {
     // There is a purpose, so we can just have a dummy test suite for standalone invocation
@@ -200,7 +210,7 @@ export async function doGenerateRedteam(
     entities: redteamConfig?.entities,
     plugins,
     provider: redteamConfig?.provider || options.provider,
-    purpose: generatedPurpose ?? redteamConfig?.purpose ?? options.purpose,
+    purpose: finalPurpose,
     strategies: strategyObjs,
     delay: redteamConfig?.delay || options.delay,
     sharing: redteamConfig?.sharing || options.sharing,
