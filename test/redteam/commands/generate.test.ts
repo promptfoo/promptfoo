@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { getEnvBool } from '../../../src/envars';
 import logger from '../../../src/logger';
 import { synthesize } from '../../../src/redteam';
 import { doTargetPurposeDiscovery, mergePurposes } from '../../../src/redteam/commands/discover';
@@ -14,6 +15,16 @@ jest.mock('../../../src/telemetry');
 jest.mock('../../../src/util/config/load', () => ({
   combineConfigs: jest.fn(),
   resolveConfigs: jest.fn(),
+}));
+
+jest.mock('../../../src/envars', () => ({
+  ...jest.requireActual('../../../src/envars'),
+  getEnvBool: jest.fn().mockImplementation((key) => {
+    if (key === 'PROMPTFOO_REDTEAM_ENABLE_PURPOSE_DISCOVERY_AGENT') {
+      return true;
+    }
+    return false;
+  }),
 }));
 
 jest.mock('../../../src/globalConfig/cloud', () => ({
