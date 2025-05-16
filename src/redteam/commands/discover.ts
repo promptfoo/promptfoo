@@ -78,7 +78,7 @@ export async function doTargetPurposeDiscovery(
 ): Promise<string> {
   const conversationHistory: { type: 'promptfoo' | 'target'; content: string }[] = [];
 
-  let turnCounter = 1;
+  let turnCounter = 0;
 
   const pbar = new cliProgress.SingleBar({
     format: `Discovering purpose {bar} {percentage}% | {value}${maxTurns ? '/{total}' : ''} turns`,
@@ -90,7 +90,7 @@ export async function doTargetPurposeDiscovery(
   pbar.start(maxTurns, turnCounter);
 
   try {
-    for (turnCounter = 1; turnCounter <= maxTurns; turnCounter++) {
+    for (turnCounter = 0; turnCounter < maxTurns; turnCounter++) {
       const res = await fetchWithProxy(getRemoteGenerationUrl(), {
         body: JSON.stringify({
           task: 'target-purpose-discovery',
@@ -126,10 +126,7 @@ export async function doTargetPurposeDiscovery(
       logger.debug(JSON.stringify({ question, output: response.output }, null, 2));
       conversationHistory.push({ type: 'target', content: response.output });
 
-      // Increment progress bar (except on the last iteration)
-      if (turnCounter < maxTurns) {
-        pbar.increment();
-      }
+      pbar.increment();
     }
 
     // If we've exhausted all turns, assume the last purpose is available
