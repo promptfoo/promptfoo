@@ -332,8 +332,8 @@ prompts:
   - 'Act as a trip planner and help the user plan their trip'
 
 providers:
-  - openai:gpt-4o-mini
-  - openai:gpt-4o
+  - openai:gpt-4.1-mini
+  - openai:gpt-4.1
 ```
 
 This command will generate adversarial test cases and write them to `redteam.yaml`.

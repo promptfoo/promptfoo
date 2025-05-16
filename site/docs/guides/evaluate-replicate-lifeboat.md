@@ -33,7 +33,7 @@ prompts:
   - 'Respond to the user concisely: {{message}}'
 
 providers:
-  - id: openai:chat:gpt-4o-mini
+  - id: openai:chat:gpt-4.1-mini
     config:
       apiKey: 'your_openai_api_key'
       temperature: 0.01
