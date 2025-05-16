@@ -165,6 +165,10 @@ async function saveCloudTargetPurpose(targetId: string, purpose: string) {
   }
 }
 
+export function mergePurposes(humanDefinedPurpose: string, discoveredPurpose: string) {
+  return `${humanDefinedPurpose}\n\nDiscovered Purpose:\n\n${discoveredPurpose}`;
+}
+
 /**
  * Registers the `discover` command with the CLI.
  */
@@ -340,7 +344,7 @@ export function discoverCommand(program: Command) {
               ...(existingYaml['redteam'] || {}),
               purpose:
                 existingPurpose && !args.overwrite
-                  ? `${existingPurpose}\n\nDiscovered Purpose:\n\n${purpose}`
+                  ? mergePurposes(existingPurpose, purpose)
                   : purpose,
             };
             writePromptfooConfig(existingYaml as UnifiedConfig, args.output!);
