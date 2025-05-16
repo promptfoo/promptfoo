@@ -59,6 +59,8 @@ export const ArgsSchema = z
 
 type Args = z.infer<typeof ArgsSchema>;
 
+// A larger turn count is more accurate (b/c more probes) but slower.
+// TODO: Optimize this default to balance quality/runtime using the Discover eval.
 const DEFAULT_TURN_COUNT = 50;
 
 /**
