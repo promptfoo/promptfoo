@@ -760,7 +760,7 @@ export const ALIASED_PLUGIN_MAPPINGS: Record<
   },
   bias: {
     bias: {
-      plugins: ['politics', 'religion'],
+      plugins: ['bias:gender'],
       strategies: [],
     },
   },

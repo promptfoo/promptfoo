@@ -370,6 +370,29 @@ export function calculateTotalTests(
 }
 
 /**
+ * Expands a plugin based on mapping configuration, returning new plugins and strategies.
+ * @param plugin - The plugin to expand
+ * @param mapping - The mapping configuration containing plugins and strategies
+ * @returns Object containing expanded plugins and strategies arrays
+ */
+function expandPlugin(
+  plugin: SynthesizeOptions['plugins'][0],
+  mapping: { plugins: string[]; strategies: string[] }
+): {
+  expandedPlugins: SynthesizeOptions['plugins'][0][];
+  expandedStrategies: RedteamStrategyObject[];
+} {
+  const expandedPlugins = mapping.plugins.map(p => ({ 
+    id: p, 
+    numTests: plugin.numTests 
+  }));
+  
+  const expandedStrategies = mapping.strategies.map(s => ({ id: s }));
+  
+  return { expandedPlugins, expandedStrategies };
+}
+
+/**
  * Synthesizes test cases based on provided options.
  * @param options - The options for test case synthesis.
  * @returns A promise that resolves to an object containing the purpose, entities, and test cases.
@@ -484,16 +507,9 @@ export async function synthesize({
     }
   }
 
+  console.log(`------- plugins: ${JSON.stringify(plugins)}`);
+
   const expandedPlugins: typeof plugins = [];
-  const expandPlugin = (
-    plugin: (typeof plugins)[0],
-    mapping: { plugins: string[]; strategies: string[] },
-  ) => {
-    mapping.plugins.forEach((p: string) =>
-      expandedPlugins.push({ id: p, numTests: plugin.numTests }),
-    );
-    strategies.push(...mapping.strategies.map((s: string) => ({ id: s })));
-  };
 
   plugins.forEach((plugin) => {
     const mappingKey = Object.keys(ALIASED_PLUGIN_MAPPINGS).find(
@@ -504,10 +520,12 @@ export async function synthesize({
       const mapping =
         ALIASED_PLUGIN_MAPPINGS[mappingKey][plugin.id] ||
         Object.values(ALIASED_PLUGIN_MAPPINGS[mappingKey]).find((m) =>
-          plugin.id.startsWith(`${mappingKey}:`),
+          plugin.id.startsWith(`${mappingKey}:`)
         );
       if (mapping) {
-        expandPlugin(plugin, mapping);
+        const { expandedPlugins: newPlugins, expandedStrategies } = expandPlugin(plugin, mapping);
+        expandedPlugins.push(...newPlugins);
+        strategies.push(...expandedStrategies);
       }
     } else {
       expandedPlugins.push(plugin);
@@ -517,6 +535,8 @@ export async function synthesize({
   plugins = [...new Set(expandedPlugins)]
     .filter((p) => !Object.keys(categories).includes(p.id))
     .sort();
+
+  console.log(`------- final plugins: ${JSON.stringify(plugins)}`);
 
   // Validate all plugins upfront
   logger.debug('Validating plugins...');
