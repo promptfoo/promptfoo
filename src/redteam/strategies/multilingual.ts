@@ -14,6 +14,13 @@ import { getRemoteGenerationUrl, shouldGenerateRemote } from '../remoteGeneratio
 
 export const DEFAULT_LANGUAGES = ['bn', 'sw', 'jv']; // Bengali, Swahili, Javanese
 
+/**
+ * Helper function to determine if progress bar should be shown
+ */
+function shouldShowProgressBar(): boolean {
+  return !cliState.webUI && logger.level !== 'debug';
+}
+
 export async function generateMultilingual(
   testCases: TestCase[],
   injectVar: string,
@@ -31,7 +38,7 @@ export async function generateMultilingual(
     let processedBatches = 0;
 
     let progressBar: SingleBar | undefined;
-    if (!cliState.webUI && logger.level !== 'debug') {
+    if (shouldShowProgressBar()) {
       progressBar = new SingleBar(
         {
           format:
@@ -132,8 +139,7 @@ export async function addMultilingual(
   const totalOperations = testCases.length * languages.length;
 
   let progressBar: SingleBar | undefined;
-  if (!cliState.webUI && logger.level !== 'debug') {
-    /*
+  if (shouldShowProgressBar()) {
     progressBar = new SingleBar(
       {
         format: 'Generating Multilingual {bar} {percentage}% | ETA: {eta}s | {value}/{total}',
