@@ -12,7 +12,7 @@ Generic benchmarks are for generic use cases. If you're building an LLM app, you
 
 The end result will be a side-by-side comparison that looks like this:
 
-![gpt-4.1 vs gpt-4.1-mini](/img/docs/gpt-4o-vs-gpt-4o-mini.png)
+![gpt-4.1 vs gpt-4.1-mini](/img/docs/gpt-4.1-vs-gpt-4.1-mini.png)
 
 ## Prerequisites
 
