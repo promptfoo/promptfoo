@@ -1,18 +1,3 @@
-/**
- * Multilingual Strategy for Red Team Testing
- *
- * This strategy translates test cases into different languages and tests if
- * the model behavior is consistent across languages.
- *
- * Recent improvements (August 2023):
- * 1. Added structured XML prompt for more reliable translation
- * 2. Improved response parsing with multiple fallback methods
- * 3. Implemented batch translation for multiple languages in a single API call
- * 4. Added proper concurrency management using async.mapLimit
- * 5. Fixed test case count calculation to account for languages
- * 6. Added language information to test case metadata for better tracking
- * 7. Comprehensive error handling and graceful failure
- */
 import async from 'async';
 import { SingleBar, Presets } from 'cli-progress';
 import dedent from 'dedent';

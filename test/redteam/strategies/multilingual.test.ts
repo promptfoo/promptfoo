@@ -89,7 +89,17 @@ describe('Multilingual Strategy', () => {
     const result = await addMultilingual([{ vars: { text: 'Test' } }], 'text', {});
 
     expect(result).toEqual(remoteResult);
-    expect(fetchWithCache).toHaveBeenCalled();
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      'http://test.url',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          'Content-Type': 'application/json',
+        }),
+        body: expect.any(String),
+      }),
+      expect.any(Number),
+    );
   });
 
   it('should support multiple languages', async () => {
@@ -101,7 +111,7 @@ describe('Multilingual Strategy', () => {
       }),
       config: {},
       isAvailable: jest.fn().mockResolvedValue(true),
-    } as unknown);
+    } as any);
 
     const result = await addMultilingual([{ vars: { text: 'Hello world' } }], 'text', {
       languages: ['es', 'fr'],
