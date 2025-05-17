@@ -68,6 +68,17 @@ This example uses the following environment variables:
 
 You can set these in a `.env` file or directly in your environment.
 
+## Example API Usage
+
+You can interact with the medical agent API using `curl`. Here's how to send a message to the agent:
+
+```bash
+curl -X POST http://localhost:3090/api/chat \
+  -H "Content-Type: application/json" \
+  -H "x-promptfoo-session: test-session-123" \
+  -d '{"message": "Show me my upcoming appointments."}'
+```
+
 ## Red Team Testing
 
 This agent is vulnerable to various attack vectors that can be tested using promptfoo's red teaming:
