@@ -3,6 +3,7 @@ import { SingleBar, Presets } from 'cli-progress';
 import dedent from 'dedent';
 import yaml from 'js-yaml';
 import { fetchWithCache } from '../../cache';
+import cliState from '../../cliState';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
@@ -30,7 +31,7 @@ export async function generateMultilingual(
     let processedBatches = 0;
 
     let progressBar: SingleBar | undefined;
-    if (logger.level !== 'debug') {
+    if (!cliState.webUI && logger.level !== 'debug') {
       progressBar = new SingleBar(
         {
           format:
@@ -131,7 +132,8 @@ export async function addMultilingual(
   const totalOperations = testCases.length * languages.length;
 
   let progressBar: SingleBar | undefined;
-  if (logger.level !== 'debug') {
+  if (!cliState.webUI && logger.level !== 'debug') {
+    /*
     progressBar = new SingleBar(
       {
         format: 'Generating Multilingual {bar} {percentage}% | ETA: {eta}s | {value}/{total}',
