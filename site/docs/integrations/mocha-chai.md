@@ -147,7 +147,7 @@ import { expect } from 'chai';
 import './assertions';
 
 const gradingConfig = {
-  provider: 'openai:chat:gpt-4o-mini',
+  provider: 'openai:chat:gpt-4.1-mini',
 };
 
 describe('semantic similarity tests', () => {

@@ -51,7 +51,7 @@ targets:
           'chatbotId': 'YOUR_CHATBOT_ID',
           'stream': false,
           'temperature': 0,
-          'model': 'gpt-4o-mini',
+          'model': 'gpt-4.1-mini',
           'conversationId': '{{conversationId}}',
         }
       transformResponse: 'json.text'

@@ -17,7 +17,7 @@ The end result will be a custom benchmark that looks similar to this:
 ## Requirements
 
 - OpenRouter API key for DBRX and Mixtral.
-- OpenAI API key for gpt-4o-mini
+- OpenAI API key for gpt-4.1-mini
 - Node 18+
 
 ## Step 1: Initial Setup
@@ -48,7 +48,7 @@ providers:
       apiBaseUrl: https://openrouter.ai/api/v1
       apiKeyEnvar: OPENROUTER_API_KEY
       temperature: 0
-  - id: openai:gpt-4o-mini
+  - id: openai:gpt-4.1-mini
 ```
 
 Set your API keys as environment variables:
@@ -78,7 +78,7 @@ providers:
       // highlight-start
       temperature: 0
       // highlight-end
-  - id: openai:gpt-4o-mini
+  - id: openai:gpt-4.1-mini
     // highlight-start
     config:
       temperature: 0

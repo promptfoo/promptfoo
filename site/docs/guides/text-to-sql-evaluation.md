@@ -41,8 +41,8 @@ Define one or more language model providers to use. For example, here we compare
 
 ```yaml
 providers:
-  - openai:gpt-4o-mini
-  - openai:gpt-4o
+  - openai:gpt-4.1-mini
+  - openai:gpt-4.1
 ```
 
 A wide variety of LLM APIs are supported, including local models. See [providers](/docs/providers) for more information.
@@ -159,7 +159,7 @@ prompts:
     Only output SQL code.
 
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
 
 tests:
   - vars:

@@ -4,11 +4,11 @@
 
 The Github provider is compatible with all the options provided by the [OpenAI provider](/docs/providers/openai/).
 
-Here's an example of how to configure the provider to use the `gpt-4o-mini` model:
+Here's an example of how to configure the provider to use the `gpt-4.1-mini` model:
 
 ```yaml
 providers:
-  - id: github:gpt-4o-mini
+  - id: github:gpt-4.1-mini
     config:
       temperature: 0.5
       apiKey: YOUR_GITHUB_TOKEN

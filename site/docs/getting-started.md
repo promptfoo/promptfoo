@@ -162,7 +162,7 @@ See the [Configuration docs](/docs/configuration/guide) for a detailed guide.
 prompts:
   - file://prompts.txt
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
 tests:
   - description: First test case - automatic review
     vars:
@@ -214,7 +214,7 @@ prompts:
 
 # Set an LLM
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
 
 # These test properties are applied to every test
 defaultTest:
@@ -292,8 +292,8 @@ prompts:
 
 # Set the LLMs we want to test
 providers:
-  - openai:gpt-4o-mini
-  - openai:gpt-4o
+  - openai:gpt-4.1-mini
+  - openai:gpt-4.1
 ```
 
 A simple `npx promptfoo@latest eval` will run the example. Also note that you can override parameters directly from the command line. For example, this command:
@@ -301,24 +301,24 @@ A simple `npx promptfoo@latest eval` will run the example. Also note that you ca
 <Tabs groupId="promptfoo-command">
   <TabItem value="npx" label="npx" default>
     <CodeBlock language="bash">
-      npx promptfoo@latest eval -p prompts.txt -r openai:gpt-4o-mini openai:gpt-4o -o output.html
+      npx promptfoo@latest eval -p prompts.txt -r openai:gpt-4.1-mini openai:gpt-4.1 -o output.html
     </CodeBlock>
   </TabItem>
   <TabItem value="npm" label="npm">
     <CodeBlock language="bash">
-      promptfoo eval -p prompts.txt -r openai:gpt-4o-mini openai:gpt-4o -o output.html
+      promptfoo eval -p prompts.txt -r openai:gpt-4.1-mini openai:gpt-4.1 -o output.html
     </CodeBlock>
   </TabItem>
   <TabItem value="brew" label="brew">
     <CodeBlock language="bash">
-      promptfoo eval -p prompts.txt -r openai:gpt-4o-mini openai:gpt-4o -o output.html
+      promptfoo eval -p prompts.txt -r openai:gpt-4.1-mini openai:gpt-4.1 -o output.html
     </CodeBlock>
   </TabItem>
 </Tabs>
 
 Produces this HTML table:
 
-![Side-by-side evaluation of LLM model quality, gpt-4o vs gpt-4o-mini, html output](https://user-images.githubusercontent.com/310310/235490527-e0c31f40-00a0-493a-8afc-8ed6322bb5ca.png)
+![Side-by-side evaluation of LLM model quality, gpt-4.1 vs gpt-4.1-mini, html output](https://user-images.githubusercontent.com/310310/235490527-e0c31f40-00a0-493a-8afc-8ed6322bb5ca.png)
 
 Full setup and output [here](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-4o-vs-4o-mini).
 
