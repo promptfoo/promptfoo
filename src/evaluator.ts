@@ -40,53 +40,51 @@ import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
 import { safeJsonStringify } from './util/json';
 import { sleep } from './util/time';
+import { TokenUsageTracker } from './util/tokenUsage';
 import { transform, type TransformContext, TransformInputType } from './util/transform';
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
 
+/**
+ * Update token usage metrics with assertion token usage
+ */
 function updateAssertionMetrics(
   metrics: { tokenUsage: Partial<TokenUsage> },
   assertionTokens: Partial<TokenUsage>,
 ): void {
-  if (!metrics.tokenUsage.assertions) {
-    metrics.tokenUsage.assertions = {
-      total: 0,
-      prompt: 0,
-      completion: 0,
-      cached: 0,
-    };
-  }
-
-  const assertions = metrics.tokenUsage.assertions;
-  assertions.total = (assertions.total ?? 0) + (assertionTokens.total ?? 0);
-  assertions.prompt = (assertions.prompt ?? 0) + (assertionTokens.prompt ?? 0);
-  assertions.completion = (assertions.completion ?? 0) + (assertionTokens.completion ?? 0);
-  assertions.cached = (assertions.cached ?? 0) + (assertionTokens.cached ?? 0);
-
-  if (assertionTokens.numRequests) {
-    assertions.numRequests = (assertions.numRequests ?? 0) + assertionTokens.numRequests;
-  }
-
-  if (assertionTokens.completionDetails) {
-    if (!assertions.completionDetails) {
-      assertions.completionDetails = {
-        reasoning: 0,
-        acceptedPrediction: 0,
-        rejectedPrediction: 0,
-      };
+  if (metrics.tokenUsage && assertionTokens) {
+    if (!metrics.tokenUsage.assertions) {
+      metrics.tokenUsage.assertions = {};
     }
 
-    assertions.completionDetails.reasoning =
-      (assertions.completionDetails.reasoning ?? 0) +
-      (assertionTokens.completionDetails.reasoning ?? 0);
+    // Update tokens
+    metrics.tokenUsage.assertions.prompt =
+      (metrics.tokenUsage.assertions.prompt || 0) + (assertionTokens.prompt || 0);
+    metrics.tokenUsage.assertions.completion =
+      (metrics.tokenUsage.assertions.completion || 0) + (assertionTokens.completion || 0);
+    metrics.tokenUsage.assertions.cached =
+      (metrics.tokenUsage.assertions.cached || 0) + (assertionTokens.cached || 0);
+    metrics.tokenUsage.assertions.total =
+      (metrics.tokenUsage.assertions.total || 0) +
+      (assertionTokens.total || (assertionTokens.prompt || 0) + (assertionTokens.completion || 0));
 
-    assertions.completionDetails.acceptedPrediction =
-      (assertions.completionDetails.acceptedPrediction ?? 0) +
-      (assertionTokens.completionDetails.acceptedPrediction ?? 0);
+    // Add character counts if available
+    metrics.tokenUsage.assertions.promptChars =
+      (metrics.tokenUsage.assertions.promptChars || 0) + (assertionTokens.promptChars || 0);
+    metrics.tokenUsage.assertions.completionChars =
+      (metrics.tokenUsage.assertions.completionChars || 0) + (assertionTokens.completionChars || 0);
+    metrics.tokenUsage.assertions.totalChars =
+      (metrics.tokenUsage.assertions.totalChars || 0) + (assertionTokens.totalChars || 0);
 
-    assertions.completionDetails.rejectedPrediction =
-      (assertions.completionDetails.rejectedPrediction ?? 0) +
-      (assertionTokens.completionDetails.rejectedPrediction ?? 0);
+    // If no totalChars but we have the other counts, calculate it
+    if (
+      !assertionTokens.totalChars &&
+      (assertionTokens.promptChars || assertionTokens.completionChars)
+    ) {
+      metrics.tokenUsage.assertions.totalChars =
+        (metrics.tokenUsage.assertions.totalChars || 0) +
+        ((assertionTokens.promptChars || 0) + (assertionTokens.completionChars || 0));
+    }
   }
 }
 
@@ -117,11 +115,14 @@ export function isAllowedPrompt(prompt: Prompt, allowedPrompts: string[] | undef
 
 export function newTokenUsage(): Required<TokenUsage> {
   return {
-    total: 0,
     prompt: 0,
     completion: 0,
+    total: 0,
     cached: 0,
     numRequests: 0,
+    promptChars: 0,
+    completionChars: 0,
+    totalChars: 0,
     completionDetails: {
       reasoning: 0,
       acceptedPrediction: 0,
@@ -132,11 +133,9 @@ export function newTokenUsage(): Required<TokenUsage> {
       prompt: 0,
       completion: 0,
       cached: 0,
-      completionDetails: {
-        reasoning: 0,
-        acceptedPrediction: 0,
-        rejectedPrediction: 0,
-      },
+      promptChars: 0,
+      completionChars: 0,
+      totalChars: 0,
     },
   };
 }
@@ -268,6 +267,17 @@ export async function runEval({
         abortSignal ? { abortSignal } : undefined,
       );
 
+      // Track token usage at the call site
+      if (response.tokenUsage) {
+        const providerId = activeProvider.id();
+        // Include the provider's class in the tracking ID
+        const trackingId = activeProvider.constructor?.name
+          ? `${providerId} (${activeProvider.constructor.name})`
+          : providerId;
+
+        TokenUsageTracker.getInstance().trackUsage(trackingId, response.tokenUsage);
+      }
+
       logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
       logger.debug(`Provider response cached property explicitly: ${response.cached}`);
     }
@@ -323,6 +333,28 @@ export async function runEval({
     };
 
     invariant(ret.tokenUsage, 'This is always defined, just doing this to shut TS up');
+
+    // Always count bytes, even if token usage isn't present
+    // Update character counts - normalize all inputs to strings before counting
+    const promptCharsToAdd = renderedPrompt ? Buffer.byteLength(renderedPrompt, 'utf8') : 0;
+    const outputText =
+      response.output !== null && response.output !== undefined ? String(response.output) : '';
+    const completionCharsToAdd = Buffer.byteLength(outputText, 'utf8');
+
+    // Update individual counts
+    ret.tokenUsage.promptChars += promptCharsToAdd;
+    ret.tokenUsage.completionChars += completionCharsToAdd;
+    ret.tokenUsage.totalChars += promptCharsToAdd + completionCharsToAdd;
+
+    // Always increment the request count
+    ret.tokenUsage.numRequests += 1;
+
+    // Track character usage at the provider level too
+    const providerId = provider.id();
+    const trackingId = provider.constructor?.name
+      ? `${providerId} (${provider.constructor.name})`
+      : providerId;
+    TokenUsageTracker.getInstance().trackCharUsage(trackingId, renderedPrompt, outputText);
 
     if (response.error) {
       ret.error = response.error;
@@ -397,6 +429,7 @@ export async function runEval({
       ret.tokenUsage.completion += response.tokenUsage.completion || 0;
       ret.tokenUsage.cached += response.tokenUsage.cached || 0;
       ret.tokenUsage.numRequests += response.tokenUsage.numRequests || 1;
+
       if (response.tokenUsage.completionDetails) {
         ret.tokenUsage.completionDetails.reasoning! +=
           response.tokenUsage.completionDetails.reasoning || 0;
@@ -610,6 +643,23 @@ class Evaluator {
               completion: 0,
               cached: 0,
               numRequests: 0,
+              promptChars: 0,
+              completionChars: 0,
+              totalChars: 0,
+              completionDetails: {
+                reasoning: 0,
+                acceptedPrediction: 0,
+                rejectedPrediction: 0,
+              },
+              assertions: {
+                total: 0,
+                prompt: 0,
+                completion: 0,
+                cached: 0,
+                promptChars: 0,
+                completionChars: 0,
+                totalChars: 0,
+              },
             },
             namedScores: {},
             namedScoresCount: {},

@@ -406,6 +406,9 @@ export default class Eval {
         prompt: 0,
         total: 0,
         numRequests: 0,
+        promptChars: 0,
+        completionChars: 0,
+        totalChars: 0,
         completionDetails: {
           reasoning: 0,
           acceptedPrediction: 0,
@@ -416,6 +419,9 @@ export default class Eval {
           prompt: 0,
           completion: 0,
           cached: 0,
+          promptChars: 0,
+          completionChars: 0,
+          totalChars: 0,
         },
       },
     };
