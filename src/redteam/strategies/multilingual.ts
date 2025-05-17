@@ -14,7 +14,6 @@ import { redteamProviderManager } from '../providers/shared';
 import { getRemoteGenerationUrl, shouldGenerateRemote } from '../remoteGeneration';
 
 export const DEFAULT_LANGUAGES = ['bn', 'sw', 'jv']; // Bengali, Swahili, Javanese
-export const DEFAULT_BATCH_SIZE = 3; // Default number of languages to process in a single batch
 
 /**
  * Helper function to get the concurrency limit from config or use default
@@ -28,13 +27,6 @@ function getConcurrencyLimit(config: Record<string, any> = {}): number {
  */
 function shouldShowProgressBar(): boolean {
   return !cliState.webUI && logger.level !== 'debug';
-}
-
-/**
- * Helper function to get the batch size from config or use default
- */
-function getBatchSize(config: Record<string, any> = {}): number {
-  return config.batchSize || DEFAULT_BATCH_SIZE;
 }
 
 export async function generateMultilingual(
@@ -111,14 +103,6 @@ export async function generateMultilingual(
   }
 }
 
-/**
- * Translates a given text into multiple target languages.
- *
- * @param {string} text - The text to be translated, written in English.
- * @param {string[]} languages - An array of language codes (e.g., 'bn', 'sw') specifying the target languages.
- * @returns {Promise<Record<string, string>>} A promise that resolves to an object where keys are language codes and values are the translated text.
- * The function attempts several parsing strategies to extract translations from model responses.
- */
 export async function translateBatch(
   text: string,
   languages: string[],
@@ -152,7 +136,9 @@ export async function translateBatch(
 
     Respond with ONLY a valid JSON object containing all translations:
     {
-      ${languages.map((lang) => `"${lang}": "translation for ${lang}"`).join(',\n      ')}
+      "${languages[0]}": "translation for ${languages[0]}",
+      "${languages.length > 1 ? languages[1] : 'example'}": "translation for ${languages.length > 1 ? languages[1] : 'example'}"
+      // ... include all requested languages
     }`,
   );
 
@@ -258,17 +244,14 @@ export async function addMultilingual(
     }
   }
 
-  const languages =
-    Array.isArray(config.languages) && config.languages.length > 0
-      ? config.languages
-      : DEFAULT_LANGUAGES;
+  const languages = config.languages || DEFAULT_LANGUAGES;
   invariant(
     Array.isArray(languages),
     'multilingual strategy: `languages` must be an array of strings',
   );
 
   const translatedTestCases: TestCase[] = [];
-  const batchSize = getBatchSize(config);
+  const batchSize = 3;
   const maxConcurrency = getConcurrencyLimit(config);
 
   let progressBar: SingleBar | undefined;
@@ -354,3 +337,5 @@ export async function addMultilingual(
 
   return translatedTestCases;
 }
+
+export { getConcurrencyLimit, shouldShowProgressBar };
