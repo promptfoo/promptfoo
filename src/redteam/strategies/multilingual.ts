@@ -14,6 +14,13 @@ import { getRemoteGenerationUrl, shouldGenerateRemote } from '../remoteGeneratio
 
 export const DEFAULT_LANGUAGES = ['bn', 'sw', 'jv']; // Bengali, Swahili, Javanese
 
+/**
+ * Helper function to get the concurrency limit from config or use default
+ */
+function getConcurrencyLimit(config: Record<string, any> = {}): number {
+  return config.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
+}
+
 export async function generateMultilingual(
   testCases: TestCase[],
   injectVar: string,
@@ -21,7 +28,7 @@ export async function generateMultilingual(
 ): Promise<TestCase[]> {
   try {
     const batchSize = 8;
-    const maxConcurrency = config.maxConcurrency || 10;
+    const maxConcurrency = getConcurrencyLimit(config);
     const batches = [];
     for (let i = 0; i < testCases.length; i += batchSize) {
       batches.push(testCases.slice(i, i + batchSize));
@@ -237,7 +244,7 @@ export async function addMultilingual(
 
   const translatedTestCases: TestCase[] = [];
   const batchSize = 3;
-  const maxConcurrency = config.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
+  const maxConcurrency = getConcurrencyLimit(config);
 
   let progressBar: SingleBar | undefined;
   if (logger.level !== 'debug') {
