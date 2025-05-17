@@ -9,6 +9,7 @@ import { getAuthor, getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
 import logger from './logger';
 import type Eval from './models/eval';
+import type EvalResult from './models/evalResult';
 import type { SharedResults } from './types';
 import { cloudCanAcceptChunkedResults, makeRequest as makeCloudRequest } from './util/cloud';
 
@@ -107,32 +108,11 @@ function findLargestResultSize(results: any[], sampleSize: number = 1000): numbe
   return maxSize;
 }
 
-function createChunks(results: any[]): any[][] {
-  if (results.length === 0) {
-    return [];
-  }
-  const largestResult = findLargestResultSize(results);
-  // Constants
-  const TARGET_CHUNK_SIZE = 10 * 1024 * 1024; // 10MB in bytes
-  // PROMPTFOO_SHARE_CHUNK_SIZE lets you directly specify how many results to include in each chunk.
-  // The value represents the number of results per chunk, not a byte size.
-  const estimatedResultsPerChunk =
-    getEnvInt('PROMPTFOO_SHARE_CHUNK_SIZE') ??
-    Math.max(1, Math.floor(TARGET_CHUNK_SIZE / largestResult));
-
-  logger.debug(
-    `Largest result size: ${largestResult} bytes, estimated results per chunk: ${estimatedResultsPerChunk}`,
-  );
-
-  const chunks: any[][] = [];
-  for (let i = 0; i < results.length; i += estimatedResultsPerChunk) {
-    chunks.push(results.slice(i, i + estimatedResultsPerChunk));
-  }
-
-  return chunks;
-}
-
-async function sendInitialEvalData(evalRecord: Eval, url: string, headers: Record<string, string>) {
+async function sendInitialEvalData(
+  evalRecord: Eval,
+  url: string,
+  headers: Record<string, string>,
+): Promise<string> {
   const evalDataWithoutResults = { ...evalRecord, results: [] };
   logger.debug(`Sending initial eval data to ${url}`);
   const response = await fetchWithProxy(url, {
@@ -142,10 +122,18 @@ async function sendInitialEvalData(evalRecord: Eval, url: string, headers: Recor
   });
 
   if (!response.ok) {
+    const responseBody = await response.text();
+    throw new Error(
+      `Failed to send initial eval data to ${url}: ${response.statusText}, body: ${responseBody}`,
+    );
+  }
+
+  const responseJson = await response.json();
+  if (!responseJson.id) {
     throw new Error(`Failed to send initial eval data to ${url}: ${response.statusText}`);
   }
 
-  return (await response.json()).id;
+  return responseJson.id;
 }
 
 async function sendChunkOfResults(
@@ -205,7 +193,8 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
   // Determine how many results per chunk
   const TARGET_CHUNK_SIZE = 10 * 1024 * 1024; // 10MB in bytes
   const estimatedResultsPerChunk =
-    getEnvInt('PROMPTFOO_SHARE_CHUNK_SIZE') ?? Math.max(1, Math.floor(TARGET_CHUNK_SIZE / largestSize));
+    getEnvInt('PROMPTFOO_SHARE_CHUNK_SIZE') ??
+    Math.max(1, Math.floor(TARGET_CHUNK_SIZE / largestSize));
 
   logger.debug(`Estimated results per chunk: ${estimatedResultsPerChunk}`);
 
@@ -235,7 +224,7 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
     logger.debug(`Initial eval data sent successfully - ${evalId}`);
 
     // Send chunks using batched cursor
-    let currentChunk: any[] = [];
+    let currentChunk: EvalResult[] = [];
     for await (const batch of evalRecord.fetchResultsBatched(estimatedResultsPerChunk)) {
       for (const result of batch) {
         currentChunk.push(result);
