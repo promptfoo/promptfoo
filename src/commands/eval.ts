@@ -268,6 +268,8 @@ export async function doEval(
       abortSignal: evaluateOptions.abortSignal,
     });
 
+    evalRecord.clearResults();
+
     const wantsToShare = cmdObj.share && config.sharing;
 
     const shareableUrl =

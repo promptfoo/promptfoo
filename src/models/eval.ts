@@ -69,6 +69,7 @@ export default class Eval {
   prompts: CompletedPrompt[];
   oldResults?: EvaluateSummaryV2;
   persisted: boolean;
+  _resultsLoaded: boolean;
 
   static async latest() {
     const db = getDb();
@@ -275,6 +276,7 @@ export default class Eval {
     this.prompts = opts?.prompts || [];
     this.datasetId = opts?.datasetId;
     this.persisted = opts?.persisted || false;
+    this._resultsLoaded = false;
   }
 
   version() {
@@ -360,6 +362,35 @@ export default class Eval {
     }
   }
 
+  async fetchSampleResults(sampleSize: number = 100): Promise<EvalResult[]> {
+    const results: EvalResult[] = [];
+    let remaining = sampleSize;
+    for await (const batch of this.fetchResultsBatched(sampleSize)) {
+      if (batch.length >= remaining) {
+        results.push(...batch.slice(0, remaining));
+        break;
+      } else {
+        results.push(...batch);
+        remaining -= batch.length;
+      }
+      if (remaining <= 0) {
+        break;
+      }
+    }
+    return results;
+  }
+
+  async getResultsCount(): Promise<number> {
+    const db = getDb();
+    const result = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(evalResultsTable)
+      .where(eq(evalResultsTable.evalId, this.id))
+      .all();
+    const count = result[0]?.count ?? 0;
+    return Number(count);
+  }
+
   async fetchResultsByTestIdx(testIdx: number) {
     return await EvalResult.findManyByEvalId(this.id, { testIdx });
   }
@@ -379,11 +410,13 @@ export default class Eval {
       const db = getDb();
       await db.insert(evalResultsTable).values(results.map((r) => ({ ...r, evalId: this.id })));
     }
+    this._resultsLoaded = true;
   }
 
   async loadResults() {
     this.results = await EvalResult.findManyByEvalId(this.id);
     this.resultsCount = this.results.length;
+    this._resultsLoaded = true;
   }
 
   async getResults(): Promise<EvaluateResult[] | EvalResult[]> {
@@ -392,7 +425,13 @@ export default class Eval {
       return this.oldResults.results;
     }
     await this.loadResults();
+    this._resultsLoaded = true;
     return this.results;
+  }
+
+  clearResults() {
+    this.results = [];
+    this._resultsLoaded = false;
   }
 
   getStats(): EvaluateStats {
