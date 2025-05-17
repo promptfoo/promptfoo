@@ -69,6 +69,7 @@ export default class Eval {
   prompts: CompletedPrompt[];
   oldResults?: EvaluateSummaryV2;
   persisted: boolean;
+  _resultsLoaded: boolean;
 
   static async latest() {
     const db = getDb();
@@ -275,6 +276,7 @@ export default class Eval {
     this.prompts = opts?.prompts || [];
     this.datasetId = opts?.datasetId;
     this.persisted = opts?.persisted || false;
+    this._resultsLoaded = false;
   }
 
   version() {
@@ -412,11 +414,13 @@ export default class Eval {
       const db = getDb();
       await db.insert(evalResultsTable).values(results.map((r) => ({ ...r, evalId: this.id })));
     }
+    this._resultsLoaded = true;
   }
 
   async loadResults() {
     this.results = await EvalResult.findManyByEvalId(this.id);
     this.resultsCount = this.results.length;
+    this._resultsLoaded = true;
   }
 
   async getResults(): Promise<EvaluateResult[] | EvalResult[]> {
@@ -426,6 +430,12 @@ export default class Eval {
     }
     await this.loadResults();
     return this.results;
+    this._resultsLoaded = true;
+  }
+
+  clearResults() {
+    this.results = [];
+    this._resultsLoaded = false;
   }
 
   getStats(): EvaluateStats {

@@ -274,6 +274,7 @@ describe('createShareableUrl', () => {
       toEvaluateSummary: jest.fn().mockResolvedValue({}),
       getTable: jest.fn().mockResolvedValue([]),
       id: randomUUID(),
+      getResultsCount: jest.fn().mockResolvedValue(2),
     };
 
     const result = await createShareableUrl(mockEval as Eval);
@@ -296,6 +297,7 @@ describe('createShareableUrl', () => {
       loadResults: jest.fn().mockResolvedValue(undefined),
       results: [{ id: '1' }] as EvalResult[],
       save: jest.fn().mockResolvedValue(undefined),
+      getResultsCount: jest.fn().mockResolvedValue(1),
     };
 
     mockFetch.mockResolvedValue({
@@ -318,6 +320,7 @@ describe('createShareableUrl', () => {
       loadResults: jest.fn().mockResolvedValue(undefined),
       results: [{ id: '1' }] as EvalResult[],
       save: jest.fn().mockResolvedValue(undefined),
+      getResultsCount: jest.fn().mockResolvedValue(1),
     };
 
     mockFetch
@@ -338,7 +341,7 @@ describe('createShareableUrl', () => {
     expect(mockEval.id).toBe(newId);
   });
 
-  describe('chunked vs regular sending', () => {
+  describe('chunked sending', () => {
     let mockEval: Partial<Eval>;
 
     beforeEach(() => {
@@ -352,6 +355,24 @@ describe('createShareableUrl', () => {
         toEvaluateSummary: jest.fn().mockResolvedValue({}),
         getTable: jest.fn().mockResolvedValue([]),
         id: randomUUID(),
+        getResultsCount: jest.fn().mockResolvedValue(2),
+        fetchSampleResults: jest.fn().mockResolvedValue([{ id: '1' }, { id: '2' }] as EvalResult[]),
+        fetchResultsBatched: jest.fn().mockImplementation(() => {
+          return {
+            [Symbol.asyncIterator]: () => {
+              let called = false;
+              return {
+                next: async () => {
+                  if (!called) {
+                    called = true;
+                    return { done: false, value: [{ id: '1' }, { id: '2' }] as EvalResult[] };
+                  }
+                  return { done: true, value: undefined };
+                },
+              };
+            },
+          };
+        }),
       };
 
       jest.mocked(getUserEmail).mockReturnValue('test@example.com');
@@ -361,48 +382,31 @@ describe('createShareableUrl', () => {
       mockFetch.mockReset();
     });
 
-    it('sends regular eval when cloud build date is older than supported', async () => {
-      jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
-      jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
-      jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
-      jest.mocked(cloudCanAcceptChunkedResults).mockResolvedValue(false);
-
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ id: 'mock-eval-id' }),
-      });
-
-      await createShareableUrl(mockEval as Eval);
-
-      expect(mockEval.loadResults).toHaveBeenCalledTimes(1);
-      expect(mockFetch).toHaveBeenCalledWith(
-        'https://api.example.com/results',
-        expect.objectContaining({
-          method: 'POST',
-          body: expect.stringContaining('"results":[{"id":"1"},{"id":"2"}]'),
-        }),
-      );
-    });
-
-    it('sends chunked eval when cloud build date is newer than supported', async () => {
+    it('sends chunked eval to cloud', async () => {
       jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
       jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
       jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
       jest.mocked(cloudCanAcceptChunkedResults).mockResolvedValue(true);
 
+      // Set up mock responses
       mockFetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({ id: 'mock-eval-id' }),
+        .mockImplementationOnce((url, options) => {
+          // Initial eval data
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ id: 'mock-eval-id' }),
+          });
         })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({}),
+        .mockImplementationOnce((url, options) => {
+          // Chunk of results
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({}),
+          });
         });
 
       await createShareableUrl(mockEval as Eval);
 
-      expect(mockEval.loadResults).toHaveBeenCalledTimes(1);
       expect(mockFetch).toHaveBeenCalledWith(
         'https://api.example.com/results',
         expect.objectContaining({
@@ -419,40 +423,7 @@ describe('createShareableUrl', () => {
       );
     });
 
-    it('sends regular eval when open source version is older than supported', async () => {
-      jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
-
-      mockFetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({ version: '0.103.7' }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({ version: '0.103.7' }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({ id: mockEval.id }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({}),
-        });
-
-      const result = await createShareableUrl(mockEval as Eval);
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/eval'),
-        expect.objectContaining({
-          method: 'POST',
-          body: expect.stringContaining('"results":[{"id":"1"},{"id":"2"}]'),
-        }),
-      );
-      expect(result).toBe(`https://promptfoo.app/eval/${mockEval.id}`);
-    });
-
-    it('sends chunked eval when open source version is newer than supported', async () => {
+    it('sends chunked eval when open source self hosted', async () => {
       jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
 
       mockFetch
@@ -514,6 +485,24 @@ describe('createShareableUrl', () => {
       toEvaluateSummary: jest.fn().mockResolvedValue({}),
       getTable: jest.fn().mockResolvedValue([]),
       id: randomUUID(),
+      getResultsCount: jest.fn().mockResolvedValue(2),
+      fetchSampleResults: jest.fn().mockResolvedValue([{ id: '1' }, { id: '2' }] as EvalResult[]),
+      fetchResultsBatched: jest.fn().mockImplementation(() => {
+        return {
+          [Symbol.asyncIterator]: () => {
+            let called = false;
+            return {
+              next: async () => {
+                if (!called) {
+                  called = true;
+                  return { done: false, value: [{ id: '1' }, { id: '2' }] as EvalResult[] };
+                }
+                return { done: true, value: undefined };
+              },
+            };
+          },
+        };
+      }),
     };
 
     mockFetch

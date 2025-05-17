@@ -235,6 +235,7 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
         }
       }
     }
+    // Send final chunk
     if (currentChunk.length > 0) {
       await sendChunkOfResults(currentChunk, url, evalId, headers);
       progressBar.increment(currentChunk.length);
@@ -255,7 +256,8 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
 
 async function sendEvalResults(evalRecord: Eval, url: string): Promise<string | null> {
   await evalRecord.loadResults();
-  logger.debug(`Sending eval results to ${url} with ${evalRecord.results.length} results`);
+  const numResults = await evalRecord.getResultsCount();
+  logger.debug(`Sending eval results to ${url} with ${numResults} results`);
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',

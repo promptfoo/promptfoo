@@ -49,6 +49,7 @@ jest.mock('../../../src/models/eval', () => {
     default: jest.fn().mockImplementation(() => ({
       addResult: jest.fn().mockResolvedValue({}),
       addPrompts: jest.fn().mockResolvedValue({}),
+      clearResults: jest.fn().mockReturnValue(undefined),
       getTable: jest.fn().mockResolvedValue({
         head: {
           prompts: [],
