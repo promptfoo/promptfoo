@@ -394,6 +394,71 @@ const config: Config = {
         ],
       },
     ],
+    // Plugin to serve markdown files for CopyPageButton
+    async function markdownServePlugin(context) {
+      return {
+        name: 'markdown-serve-plugin',
+        loadContent: async () => {
+          const { siteDir } = context;
+          const docsDir = path.join(siteDir, 'docs');
+          const mdFiles: { [path: string]: string } = {};
+
+          // Recursive function to get all mdx/md files with their paths
+          const getMdFiles = async (dir: string, basePath: string = ''): Promise<void> => {
+            const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+
+            for (const entry of entries) {
+              const fullPath = path.join(dir, entry.name);
+              const relativePath = path.join(basePath, entry.name);
+
+              if (entry.isDirectory()) {
+                await getMdFiles(fullPath, relativePath);
+              } else if (entry.name.endsWith('.md') || entry.name.endsWith('.mdx')) {
+                let content = await fs.promises.readFile(fullPath, 'utf8');
+
+                // Remove frontmatter (content between --- delimiters)
+                content = content.replace(/^---[\s\S]*?---\s*/m, '');
+
+                mdFiles[relativePath] = content;
+              }
+            }
+          };
+
+          await getMdFiles(docsDir);
+          return { mdFiles };
+        },
+        postBuild: async ({ content, outDir }) => {
+          // Type assertion to handle TypeScript type checking
+          const pluginContent = content as { mdFiles: { [path: string]: string } };
+          const { mdFiles } = pluginContent;
+
+          // Create directory for markdown files
+          const mdOutDir = path.join(outDir, 'markdown');
+          try {
+            await fs.promises.mkdir(mdOutDir, { recursive: true });
+          } catch (err) {
+            console.error('Error creating markdown directory:', err);
+            throw err;
+          }
+
+          // Write each markdown file to the output directory
+          for (const [filePath, content] of Object.entries(mdFiles)) {
+            const outPath = path.join(mdOutDir, filePath);
+            const outDirname = path.dirname(outPath);
+
+            try {
+              // Create nested directories if needed
+              await fs.promises.mkdir(outDirname, { recursive: true });
+              await fs.promises.writeFile(outPath, content);
+            } catch (err) {
+              console.error(`Error writing markdown file ${filePath}:`, err);
+            }
+          }
+
+          console.log('Successfully copied markdown files for CopyPageButton.');
+        },
+      };
+    },
     // Define the llms.txt plugin inline similar to the Prisma example
     async function llmsTxtPlugin(context) {
       return {
