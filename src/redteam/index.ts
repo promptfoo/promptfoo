@@ -194,10 +194,15 @@ function pluginMatchesStrategyTargets(
 /**
  * Helper function to calculate the number of expected test cases for the multilingual strategy.
  */
-function getMultilingualRequestedCount(
+export function getMultilingualRequestedCount(
   testCases: TestCaseWithPlugin[],
   strategy: RedteamStrategyObject,
 ): number {
+  // If languages is an empty array, return 0
+  if (Array.isArray(strategy.config?.languages) && strategy.config.languages.length === 0) {
+    return 0;
+  }
+
   const numLanguages = Array.isArray(strategy.config?.languages)
     ? strategy.config.languages.length
     : DEFAULT_LANGUAGES.length;
@@ -303,6 +308,10 @@ export function getTestCount(
 
   // Multilingual strategy doubles the total count
   if (strategy.id === 'multilingual') {
+    // If languages is an empty array, return 0
+    if (Array.isArray(strategy.config?.languages) && strategy.config.languages.length === 0) {
+      return 0;
+    }
     const numLanguages =
       Object.keys(strategy.config?.languages ?? {}).length || DEFAULT_LANGUAGES.length;
     return totalPluginTests * numLanguages;
@@ -756,14 +765,3 @@ export async function synthesize({
 
   return { purpose, entities, testCases: finalTestCases, injectVar };
 }
-
-export {
-  getPluginSeverity,
-  getStatus,
-  generateReport,
-  categories,
-  formatTestCount,
-  pluginMatchesStrategyTargets,
-  getMultilingualRequestedCount,
-  applyStrategies,
-};
