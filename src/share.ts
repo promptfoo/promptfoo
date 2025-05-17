@@ -487,3 +487,21 @@ export async function hasEvalBeenShared(eval_: Eval): Promise<boolean> {
     return false;
   }
 }
+
+export {
+  VERSION_SUPPORTS_CHUNKS,
+  isVersionGreaterOrEqual,
+  getTargetOpenSourceServerVersion,
+  targetOpenSourceServerCanAcceptChunks,
+  targetHostCanUseNewResults,
+  getResultSize,
+  findLargestResultSize,
+  sendInitialEvalData,
+  sendChunkOfResults,
+  rollbackEval,
+  sendChunkedResults,
+  sendEvalResults,
+  handleEmailCollection,
+  getApiConfig,
+  handleLegacyResults,
+};

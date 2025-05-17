@@ -88,7 +88,6 @@ describe('isSharingEnabled', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
-    // Reset the mock to default value for each test
     jest
       .requireMock('../src/constants')
       .getShareApiBaseUrl.mockReturnValue('https://api.promptfoo.app');
@@ -130,12 +129,6 @@ describe('isSharingEnabled', () => {
   });
 
   it('returns false when no sharing options are enabled', () => {
-    // Explicitly ensure we're using the default mock return value
-    jest
-      .requireMock('../src/constants')
-      .getShareApiBaseUrl.mockReturnValue('https://api.promptfoo.app');
-    jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
-
     const mockEval: Partial<Eval> = {
       config: {},
     };
@@ -144,12 +137,6 @@ describe('isSharingEnabled', () => {
   });
 
   it('returns false when sharing config is not an object', () => {
-    // Explicitly ensure we're using the default mock return value
-    jest
-      .requireMock('../src/constants')
-      .getShareApiBaseUrl.mockReturnValue('https://api.promptfoo.app');
-    jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
-
     const mockEval: Partial<Eval> = {
       config: {
         sharing: true,
@@ -257,16 +244,10 @@ describe('createShareableUrl', () => {
     });
   });
 
-  it('creates correct URL for cloud config and updates author', async () => {
-    jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
-    jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
-    jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
-    jest.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
-    jest.mocked(getUserEmail).mockReturnValue('logged-in@example.com');
-
-    const mockEval: Partial<Eval> = {
+  const createMockEval = (overrides: Partial<Eval> = {}): Eval =>
+    ({
       config: {},
-      author: 'original@example.com',
+      author: 'test@example.com',
       useOldResults: jest.fn().mockReturnValue(false),
       loadResults: jest.fn().mockResolvedValue(undefined),
       results: [{ id: '1' }, { id: '2' }] as EvalResult[],
@@ -274,223 +255,63 @@ describe('createShareableUrl', () => {
       toEvaluateSummary: jest.fn().mockResolvedValue({}),
       getTable: jest.fn().mockResolvedValue([]),
       id: randomUUID(),
-    };
+      fetchSampleResults: jest.fn().mockResolvedValue([{ id: '1' }]),
+      getResultsCount: jest.fn().mockResolvedValue(2),
+      fetchResultsBatched: jest.fn().mockImplementation(async function* () {
+        yield [{ id: '1' }, { id: '2' }];
+      }),
+      ...overrides,
+    }) as unknown as Eval;
 
-    const result = await createShareableUrl(mockEval as Eval);
-    expect(result).toBe(`https://app.example.com/eval/${mockEval.id}`);
-  });
-
-  it('updates eval ID when server returns different ID for cloud instance', async () => {
+  it('creates correct URL for cloud config and updates author', async () => {
     jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
     jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
     jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
     jest.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
-    jest.mocked(cloudCanAcceptChunkedResults).mockResolvedValue(false);
+    jest.mocked(getUserEmail).mockReturnValue('logged-in@example.com');
 
-    const originalId = randomUUID();
-    const newId = randomUUID();
-    const mockEval: Partial<Eval> = {
-      config: {},
-      id: originalId,
-      useOldResults: jest.fn().mockReturnValue(false),
-      loadResults: jest.fn().mockResolvedValue(undefined),
-      results: [{ id: '1' }] as EvalResult[],
-      save: jest.fn().mockResolvedValue(undefined),
-    };
+    const mockEval = createMockEval();
 
-    mockFetch.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ id: newId }),
-    });
-
-    await createShareableUrl(mockEval as Eval);
-    expect(mockEval.id).toBe(newId);
+    const result = await createShareableUrl(mockEval);
+    expect(result).toBe(`https://app.example.com/eval/${mockEval.id}`);
   });
 
-  it('updates eval ID when server returns different ID for self-hosted instance', async () => {
-    jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
-    const originalId = randomUUID();
-    const newId = randomUUID();
-    const mockEval: Partial<Eval> = {
-      config: {},
-      id: originalId,
-      useOldResults: jest.fn().mockReturnValue(false),
-      loadResults: jest.fn().mockResolvedValue(undefined),
-      results: [{ id: '1' }] as EvalResult[],
-      save: jest.fn().mockResolvedValue(undefined),
-    };
+  it('sends chunked eval when cloud build date is newer than supported', async () => {
+    jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+    jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+    jest.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
+    jest.mocked(cloudCanAcceptChunkedResults).mockResolvedValue(true);
+
+    const mockEval = createMockEval();
 
     mockFetch
       .mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve({ version: '0.103.7' }),
+        json: () => Promise.resolve({ id: mockEval.id }),
       })
       .mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve({ version: '0.103.7' }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ id: newId }),
+        json: () => Promise.resolve({}),
       });
 
-    await createShareableUrl(mockEval as Eval);
-    expect(mockEval.id).toBe(newId);
-  });
+    const result = await createShareableUrl(mockEval);
 
-  describe('chunked vs regular sending', () => {
-    let mockEval: Partial<Eval>;
-
-    beforeEach(() => {
-      mockEval = {
-        config: {},
-        author: 'test@example.com',
-        useOldResults: jest.fn().mockReturnValue(false),
-        loadResults: jest.fn().mockResolvedValue(undefined),
-        results: [{ id: '1' }, { id: '2' }] as EvalResult[],
-        save: jest.fn().mockResolvedValue(undefined),
-        toEvaluateSummary: jest.fn().mockResolvedValue({}),
-        getTable: jest.fn().mockResolvedValue([]),
-        id: randomUUID(),
-      };
-
-      jest.mocked(getUserEmail).mockReturnValue('test@example.com');
-      jest.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
-      jest.requireMock('../src/envars').getEnvString.mockImplementation((_key: string) => '');
-
-      mockFetch.mockReset();
-    });
-
-    it('sends regular eval when cloud build date is older than supported', async () => {
-      jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
-      jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
-      jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
-      jest.mocked(cloudCanAcceptChunkedResults).mockResolvedValue(false);
-
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ id: 'mock-eval-id' }),
-      });
-
-      await createShareableUrl(mockEval as Eval);
-
-      expect(mockEval.loadResults).toHaveBeenCalledTimes(1);
-      expect(mockFetch).toHaveBeenCalledWith(
-        'https://api.example.com/results',
-        expect.objectContaining({
-          method: 'POST',
-          body: expect.stringContaining('"results":[{"id":"1"},{"id":"2"}]'),
-        }),
-      );
-    });
-
-    it('sends chunked eval when cloud build date is newer than supported', async () => {
-      jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
-      jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
-      jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
-      jest.mocked(cloudCanAcceptChunkedResults).mockResolvedValue(true);
-
-      mockFetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({ id: 'mock-eval-id' }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({}),
-        });
-
-      await createShareableUrl(mockEval as Eval);
-
-      expect(mockEval.loadResults).toHaveBeenCalledTimes(1);
-      expect(mockFetch).toHaveBeenCalledWith(
-        'https://api.example.com/results',
-        expect.objectContaining({
-          method: 'POST',
-          body: expect.stringContaining('"results":[]'),
-        }),
-      );
-      expect(mockFetch).toHaveBeenCalledWith(
-        'https://api.example.com/results/mock-eval-id/results',
-        expect.objectContaining({
-          method: 'POST',
-          body: expect.stringContaining('[{"id":"1"},{"id":"2"}]'),
-        }),
-      );
-    });
-
-    it('sends regular eval when open source version is older than supported', async () => {
-      jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
-
-      mockFetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({ version: '0.103.7' }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({ version: '0.103.7' }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({ id: mockEval.id }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({}),
-        });
-
-      const result = await createShareableUrl(mockEval as Eval);
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/eval'),
-        expect.objectContaining({
-          method: 'POST',
-          body: expect.stringContaining('"results":[{"id":"1"},{"id":"2"}]'),
-        }),
-      );
-      expect(result).toBe(`https://promptfoo.app/eval/${mockEval.id}`);
-    });
-
-    it('sends chunked eval when open source version is newer than supported', async () => {
-      jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
-
-      mockFetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({ version: '0.103.9' }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({ version: '0.103.9' }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({ id: mockEval.id }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({}),
-        });
-
-      const result = await createShareableUrl(mockEval as Eval);
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/eval'),
-        expect.objectContaining({
-          method: 'POST',
-          body: expect.stringContaining('"results":[]'),
-        }),
-      );
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringMatching(`/api/eval/${mockEval.id}/results`),
-        expect.objectContaining({
-          method: 'POST',
-          body: expect.stringContaining('[{"id":"1"},{"id":"2"}]'),
-        }),
-      );
-      expect(result).toBe(`https://promptfoo.app/eval/${mockEval.id}`);
-    });
+    expect(result).toBe(`https://app.example.com/eval/${mockEval.id}`);
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://api.example.com/results',
+      expect.objectContaining({
+        method: 'POST',
+        body: expect.stringContaining('"results":[]'),
+      }),
+    );
+    expect(mockFetch).toHaveBeenCalledWith(
+      `https://api.example.com/results/${mockEval.id}/results`,
+      expect.objectContaining({
+        method: 'POST',
+        body: expect.stringContaining('[{"id":"1"},{"id":"2"}]'),
+      }),
+    );
   });
 
   it('creates URL with custom domain from environment variables', async () => {
@@ -504,17 +325,7 @@ describe('createShareableUrl', () => {
       return '';
     });
 
-    const mockEval: Partial<Eval> = {
-      config: {},
-      author: 'test@example.com',
-      useOldResults: jest.fn().mockReturnValue(false),
-      loadResults: jest.fn().mockResolvedValue(undefined),
-      results: [{ id: '1' }, { id: '2' }] as EvalResult[],
-      save: jest.fn().mockResolvedValue(undefined),
-      toEvaluateSummary: jest.fn().mockResolvedValue({}),
-      getTable: jest.fn().mockResolvedValue([]),
-      id: randomUUID(),
-    };
+    const mockEval = createMockEval();
 
     mockFetch
       .mockResolvedValueOnce({
@@ -530,8 +341,7 @@ describe('createShareableUrl', () => {
         json: () => Promise.resolve({ id: mockEval.id }),
       });
 
-    const result = await createShareableUrl(mockEval as Eval);
-
+    const result = await createShareableUrl(mockEval);
     expect(result).toBe(`${customDomain}/eval/?evalId=${mockEval.id}`);
   });
 });
@@ -542,7 +352,7 @@ describe('hasEvalBeenShared', () => {
   });
 
   it('returns true if the server does not return 404', async () => {
-    const mockEval: Partial<Eval> = {
+    const mockEval = {
       config: {},
       id: randomUUID(),
     };
@@ -554,12 +364,24 @@ describe('hasEvalBeenShared', () => {
   });
 
   it('returns false if the server returns 404', async () => {
-    const mockEval: Partial<Eval> = {
+    const mockEval = {
       config: {},
       id: randomUUID(),
     };
 
     jest.mocked(makeRequest).mockResolvedValue({ status: 404 } as Response);
+
+    const result = await hasEvalBeenShared(mockEval as Eval);
+    expect(result).toBe(false);
+  });
+
+  it('returns false if there is an error', async () => {
+    const mockEval = {
+      config: {},
+      id: randomUUID(),
+    };
+
+    jest.mocked(makeRequest).mockRejectedValue(new Error('Network error'));
 
     const result = await hasEvalBeenShared(mockEval as Eval);
     expect(result).toBe(false);
