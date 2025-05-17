@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
-import { type Command, Option } from 'commander';
+import { type Command } from 'commander';
 import dedent from 'dedent';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
@@ -59,6 +59,8 @@ export const ArgsSchema = z
 
 type Args = z.infer<typeof ArgsSchema>;
 
+type ConversationHistory = { type: 'promptfoo' | 'target'; content: string }[];
+
 // A larger turn count is more accurate (b/c more probes) but slower.
 // TODO: Optimize this default to balance quality/runtime using the Discover eval.
 // NOTE: Set to 5 because UI lacks ability to set the count.
@@ -75,10 +77,8 @@ export const DEFAULT_TURN_COUNT = 5;
 export async function doTargetPurposeDiscovery(
   target: ApiProvider,
   maxTurns: number = DEFAULT_TURN_COUNT,
-): Promise<string> {
-  const conversationHistory: { type: 'promptfoo' | 'target'; content: string }[] = [];
-
-  let turnCounter = 0;
+): Promise<{ purpose: string; conversationHistory: ConversationHistory }> {
+  const conversationHistory: ConversationHistory = [];
 
   const pbar = new cliProgress.SingleBar({
     format: `Discovering purpose {bar} {percentage}% | {value}${maxTurns ? '/{total}' : ''} turns`,
@@ -87,50 +87,10 @@ export async function doTargetPurposeDiscovery(
     hideCursor: true,
   });
 
-  pbar.start(maxTurns, turnCounter);
+  pbar.start(maxTurns, 0);
 
-  try {
-    for (turnCounter = 0; turnCounter < maxTurns; turnCounter++) {
-      const res = await fetchWithProxy(getRemoteGenerationUrl(), {
-        body: JSON.stringify({
-          task: 'target-purpose-discovery',
-          conversationHistory,
-          maxTurns,
-          version: VERSION,
-          email: getUserEmail(),
-        }),
-        headers: { 'Content-Type': 'application/json' },
-        method: 'POST',
-      });
-
-      const { done, question, purpose } = (await res.json()) as {
-        done: boolean;
-        question?: string;
-        purpose?: string;
-      };
-
-      if (done) {
-        pbar.increment();
-        pbar.stop();
-        logger.info(`\nPurpose:\n\n${chalk.green(purpose)}\n`);
-        return purpose as string;
-      } else {
-        if (!question) {
-          throw new Error(`Failed to discover purpose: ${res.statusText}`);
-        }
-        conversationHistory.push({ type: 'promptfoo', content: question as string });
-      }
-
-      // Call the target with the question:
-      const response = await target.callApi(question as string);
-      logger.debug(JSON.stringify({ question, output: response.output }, null, 2));
-      conversationHistory.push({ type: 'target', content: response.output });
-
-      pbar.increment();
-    }
-
-    // If we've exhausted all turns, assume the last purpose is available
-    // This will only be reached if done=false for all turns
+  for (let i = 1; i <= maxTurns; i++) {
+    // Fetch the {initial | next} question from the server:
     const res = await fetchWithProxy(getRemoteGenerationUrl(), {
       body: JSON.stringify({
         task: 'target-purpose-discovery',
@@ -144,19 +104,50 @@ export async function doTargetPurposeDiscovery(
       method: 'POST',
     });
 
-    const { purpose } = (await res.json()) as { purpose?: string };
+    const { done, purpose, question } = (await res.json()) as {
+      question?: string;
+      done: boolean;
+      purpose?: string;
+    };
 
-    if (purpose) {
-      return purpose;
-    }
-
-    throw new Error('Failed to discover purpose after exhausting maximum turns');
-  } finally {
-    // Ensure progress bar is always stopped, even if an exception occurs
-    if (pbar) {
+    // `done` will be true if max turns are reached (server is aware of the turn count) OR the server
+    // is satisfied with the current purpose.
+    if (
+      done ||
+      // `done` should never not be `true` here, but it's good to have a fallback:
+      i === maxTurns
+    ) {
+      // Finalize the progress bar:
+      pbar.increment();
       pbar.stop();
+
+      // Handle the edge case where the server did not call `done` when max turns are reached:
+      if (purpose) {
+        logger.info(`\nPurpose:\n\n${chalk.green(purpose)}\n`);
+        return { purpose: purpose as string, conversationHistory };
+      } else {
+        throw new Error(
+          'Failed to discover purpose: server did not call `done` when max turns are reached',
+        );
+      }
+    } else {
+      if (!question) {
+        throw new Error(`Failed to discover purpose: ${res.statusText}`);
+      }
+
+      // Add the promptfoo question to the conversation history:
+      conversationHistory.push({ type: 'promptfoo', content: question as string });
+
+      // Call the target with the question:
+      const response = await target.callApi(question as string);
+      logger.debug(JSON.stringify({ question, output: response.output }, null, 2));
+      conversationHistory.push({ type: 'target', content: response.output });
+
+      pbar.increment();
     }
   }
+
+  throw new Error('Failed to discover purpose: max turns reached');
 }
 
 /**
@@ -218,13 +209,11 @@ export function discoverCommand(program: Command) {
     .option('--overwrite', 'Overwrite the existing purpose if it already exists.', false)
     .option('-t, --target <id>', 'UUID of a Cloud-defined target to run the discovery on')
     .option('--preview', 'Preview discovery results without writing to an output file', false)
-    .addOption(
-      new Option(
-        '--turns <turns>',
-        'A maximum number of turns to run the discovery process. Lower is faster but less accurate.',
-      )
-        .argParser(Number.parseInt)
-        .default(DEFAULT_TURN_COUNT),
+    .option(
+      '--turns <turns>',
+      'A maximum number of turns to run the discovery process. Lower is faster but less accurate.',
+      (value) => Number.parseInt(value, 10),
+      DEFAULT_TURN_COUNT,
     )
     .action(async (rawArgs: Args) => {
       // If preview is true and output is DEFAULT_OUTPUT_PATH, set output to undefined to satisfy
@@ -319,7 +308,8 @@ export function discoverCommand(program: Command) {
       // Discover the purpose for the target:
       let purpose: string | undefined = undefined;
       try {
-        purpose = await doTargetPurposeDiscovery(target, args.turns);
+        const result = await doTargetPurposeDiscovery(target, args.turns);
+        purpose = result.purpose;
       } catch (error) {
         logger.error(
           `An unexpected error occurred during target discovery: ${error instanceof Error ? error.message : String(error)}\n${

@@ -666,7 +666,10 @@ describe('doGenerateRedteam', () => {
       write: true,
     };
 
-    jest.mocked(doTargetPurposeDiscovery).mockResolvedValue('Generated purpose');
+    jest.mocked(doTargetPurposeDiscovery).mockResolvedValue({
+      purpose: 'Generated purpose',
+      conversationHistory: [],
+    });
     jest.mocked(synthesize).mockResolvedValue({
       testCases: [],
       purpose: 'CLI purpose merged with Generated purpose',
@@ -736,7 +739,10 @@ describe('doGenerateRedteam', () => {
       write: true,
     };
 
-    jest.mocked(doTargetPurposeDiscovery).mockResolvedValue('Generated purpose');
+    jest.mocked(doTargetPurposeDiscovery).mockResolvedValue({
+      purpose: 'Generated purpose',
+      conversationHistory: [],
+    });
     jest.mocked(mergePurposes).mockImplementation((a, b) => `${a} + ${b}`);
     jest.mocked(synthesize).mockResolvedValue({
       testCases: [],
@@ -777,7 +783,10 @@ describe('doGenerateRedteam', () => {
       write: true,
     };
 
-    jest.mocked(doTargetPurposeDiscovery).mockResolvedValue('Generated purpose');
+    jest.mocked(doTargetPurposeDiscovery).mockResolvedValue({
+      purpose: 'Generated purpose',
+      conversationHistory: [],
+    });
     jest.mocked(synthesize).mockResolvedValue({
       testCases: [],
       purpose: 'Generated purpose',
@@ -855,7 +864,10 @@ describe('doGenerateRedteam', () => {
       purpose: 'CLI purpose',
     };
 
-    jest.mocked(doTargetPurposeDiscovery).mockResolvedValue('Generated purpose');
+    jest.mocked(doTargetPurposeDiscovery).mockResolvedValue({
+      purpose: 'Generated purpose',
+      conversationHistory: [],
+    });
     jest.mocked(mergePurposes).mockImplementation((a, b) => `MERGED(${a} && ${b})`);
     jest.mocked(synthesize).mockResolvedValue({
       testCases: [],
@@ -896,7 +908,10 @@ describe('doGenerateRedteam', () => {
       }),
     );
 
-    jest.mocked(doTargetPurposeDiscovery).mockResolvedValue('Gen');
+    jest.mocked(doTargetPurposeDiscovery).mockResolvedValue({
+      purpose: 'Gen',
+      conversationHistory: [],
+    });
     jest.mocked(synthesize).mockResolvedValue({
       testCases: [],
       purpose: 'Gen',
