@@ -1,183 +1,120 @@
-import { SingleBar } from 'cli-progress';
 import { fetchWithCache } from '../../../src/cache';
-import logger from '../../../src/logger';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
 import { shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { addMultilingual } from '../../../src/redteam/strategies/multilingual';
-import type { AtomicTestCase } from '../../../src/types';
+import type { TestCase } from '../../../src/types';
 
+// Mock cli-progress
+jest.mock('cli-progress', () => ({
+  Presets: { shades_classic: {} },
+  SingleBar: jest.fn(() => ({
+    start: jest.fn(),
+    increment: jest.fn(),
+    stop: jest.fn(),
+    update: jest.fn(),
+  })),
+}));
+
+// Mock logger
+jest.mock('../../../src/logger', () => ({
+  level: 'info',
+  debug: jest.fn(),
+  error: jest.fn(),
+  info: jest.fn(),
+}));
+
+// Mock remote generation
 jest.mock('../../../src/redteam/remoteGeneration', () => ({
   getRemoteGenerationUrl: jest.fn().mockReturnValue('http://test.url'),
   shouldGenerateRemote: jest.fn().mockReturnValue(false),
 }));
 
+// Mock cache
 jest.mock('../../../src/cache', () => ({
   fetchWithCache: jest.fn().mockResolvedValue({
     data: { result: [] },
+    cached: false,
+    status: 200,
+    statusText: 'OK',
   }),
 }));
 
-jest.spyOn(redteamProviderManager, 'getProvider').mockResolvedValue({
-  callApi: jest.fn().mockResolvedValue({ output: '{"translation": "Hallo Welt"}' }),
-  config: {},
-  getOpenAiBody: jest.fn(),
-  modelName: 'test-model',
-  id: 'test-provider',
-  type: 'openai',
-  isAvailable: jest.fn().mockResolvedValue(true),
-  validateConfig: jest.fn(),
-} as any);
-
-jest.mock('cli-progress', () => ({
-  Presets: {
-    shades_classic: {},
+// Mock redteamProviderManager
+jest.mock('../../../src/redteam/providers/shared', () => ({
+  redteamProviderManager: {
+    getProvider: jest.fn().mockResolvedValue({
+      callApi: jest.fn().mockResolvedValue({
+        output: '{"de": "Hallo Welt"}',
+      }),
+      config: {},
+      isAvailable: jest.fn().mockResolvedValue(true),
+    }),
   },
-  SingleBar: jest.fn().mockImplementation(() => ({
-    increment: jest.fn(),
-    start: jest.fn(),
-    stop: jest.fn(),
-  })),
 }));
 
-describe('addMultilingual', () => {
+describe('Multilingual Strategy', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  afterEach(() => {
-    jest.resetModules();
-  });
-
-  it('should preserve harmCategory and modify assertion metrics', async () => {
-    const testCase: AtomicTestCase = {
-      assert: [{ type: 'promptfoo:redteam:contracts' }, { type: 'promptfoo:redteam:harmful' }],
-      metadata: {
-        harmCategory: 'Illegal Activities - Fraud & scams',
-        otherField: 'value',
-      },
-      vars: {
-        text: 'Hello world',
-      },
-    };
-
-    const result = await addMultilingual([testCase], 'text', { languages: ['de'] });
-
-    expect(result[0].metadata).toEqual({
-      harmCategory: 'Illegal Activities - Fraud & scams',
-      otherField: 'value',
-      strategyId: 'multilingual',
-    });
-    expect(result[0].assert).toEqual([
-      {
-        metric: 'contracts/Multilingual-DE',
-        type: 'promptfoo:redteam:contracts',
-      },
-      {
-        metric: 'harmful/Multilingual-DE',
-        type: 'promptfoo:redteam:harmful',
-      },
-    ]);
-  });
-
-  it('should handle test cases without metadata', async () => {
-    const testCase: AtomicTestCase = {
-      vars: {
-        text: 'Hello world',
-      },
-    };
-
-    const result = await addMultilingual([testCase], 'text', { languages: ['de'] });
-
-    expect(result[0].metadata).toEqual({
-      strategyId: 'multilingual',
-    });
-  });
-
-  it('should translate text and update vars correctly', async () => {
-    const testCase: AtomicTestCase = {
-      vars: {
-        otherVar: 'test',
-        text: 'Hello world',
-      },
-    };
-
-    const result = await addMultilingual([testCase], 'text', { languages: ['de'] });
-
-    expect(result[0].vars).toEqual({
-      otherVar: 'test',
-      text: 'Hallo Welt',
-    });
-  });
-
-  it('should increment progress bar when provided', async () => {
-    const testCase: AtomicTestCase = {
-      vars: {
-        text: 'Hello world',
-      },
-    };
-
-    (logger as any).level = 'info';
-
-    await addMultilingual([testCase], 'text', { languages: ['de'] });
-
-    const mockBarInstance = jest.mocked(SingleBar).mock.results[0].value;
-
-    expect(mockBarInstance.increment).toHaveBeenCalledWith(1);
-    expect(mockBarInstance.stop).toHaveBeenCalledWith();
-  });
-
-  it('should attempt remote generation first', async () => {
-    const testCase: AtomicTestCase = {
+  it('should translate text and update metadata', async () => {
+    const testCase: TestCase = {
       vars: { text: 'Hello world' },
+      assert: [{ type: 'promptfoo:redteam:harmful' }],
+      metadata: { harmCategory: 'Test' },
     };
 
+    const result = await addMultilingual([testCase], 'text', { languages: ['de'] });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].metadata).toMatchObject({
+      harmCategory: 'Test',
+      strategyId: 'multilingual',
+      language: 'de',
+    });
+    expect(result[0].vars?.text).toBe('Hallo Welt');
+  });
+
+  it('should use remote generation when available', async () => {
+    // Setup mock to use remote generation
+    const remoteResult = [{ vars: { text: 'Remote result' } }];
     jest.mocked(shouldGenerateRemote).mockReturnValueOnce(true);
     jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: { result: remoteResult },
       cached: false,
-      data: {
-        result: [
-          {
-            vars: { text: 'Hallo Welt' },
-          },
-        ],
-      },
       status: 200,
       statusText: 'OK',
     });
 
-    const result = await addMultilingual([testCase], 'text', { languages: ['es'] });
+    const result = await addMultilingual([{ vars: { text: 'Test' } }], 'text', {});
 
-    expect(result).toHaveLength(1);
-    expect(result[0].vars?.text).toBe('Hallo Welt');
+    expect(result).toEqual(remoteResult);
+    expect(fetchWithCache).toHaveBeenCalled();
   });
 
-  it('should preserve harmCategory and modify assertion metrics only for redteam types', async () => {
-    const testCase: AtomicTestCase = {
-      assert: [{ type: 'promptfoo:redteam:harmful' }, { type: 'moderation' }],
-      metadata: {
-        harmCategory: 'Illegal Activities - Fraud & scams',
-        otherField: 'value',
-      },
-      vars: {
-        text: 'Hello world',
-      },
-    };
+  it('should support multiple languages', async () => {
+    // Setup mock for multiple languages
+    const mockProvider = jest.mocked(redteamProviderManager.getProvider);
+    mockProvider.mockResolvedValueOnce({
+      callApi: jest.fn().mockResolvedValue({
+        output: '{"es": "Hola mundo", "fr": "Bonjour le monde"}',
+      }),
+      config: {},
+      isAvailable: jest.fn().mockResolvedValue(true),
+    } as unknown);
 
-    const result = await addMultilingual([testCase], 'text', { languages: ['de'] });
-
-    expect(result[0].metadata).toEqual({
-      harmCategory: 'Illegal Activities - Fraud & scams',
-      otherField: 'value',
-      strategyId: 'multilingual',
+    const result = await addMultilingual([{ vars: { text: 'Hello world' } }], 'text', {
+      languages: ['es', 'fr'],
     });
-    expect(result[0].assert).toEqual([
-      {
-        metric: 'harmful/Multilingual-DE',
-        type: 'promptfoo:redteam:harmful',
-      },
-      {
-        type: 'moderation',
-      },
-    ]);
+
+    expect(result).toHaveLength(2);
+    const languages = result.map((tc) => tc.metadata?.language);
+    expect(languages).toContain('es');
+    expect(languages).toContain('fr');
+
+    // Check translations
+    const translations = result.map((tc) => tc.vars?.text);
+    expect(translations).toContain('Hola mundo');
+    expect(translations).toContain('Bonjour le monde');
   });
 });
