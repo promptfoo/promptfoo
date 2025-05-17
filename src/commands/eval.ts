@@ -612,7 +612,7 @@ export function evalCommand(
     )
     .option(
       '--prompt-suffix <path>',
-      'This suffix is append to every prompt',
+      'This suffix is appended to every prompt.',
       defaultConfig.defaultTest?.options?.suffix,
     )
     .option(
