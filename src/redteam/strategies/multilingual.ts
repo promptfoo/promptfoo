@@ -93,7 +93,15 @@ export async function translate(text: string, lang: string): Promise<string | nu
     preferSmallModel: true,
   });
   const result = await redteamProvider.callApi(
-    dedent`Translate the <Text> below to language '${lang}'. Respond with JSON object containing {translation: string}, , do not put it in markdown
+    dedent`Translate the <Text> to <Languages>. 
+    
+    Rules:
+    - If asked for multiple languages, combine words from ALL listed languages in your translation. 
+    - Respond with JSON object containing {translation: string}, do not put it in markdown
+
+    <Languages>
+    ${lang}
+    </Languages>
 
     <Text>
     ${text}
