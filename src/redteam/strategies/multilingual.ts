@@ -3,6 +3,7 @@ import { SingleBar, Presets } from 'cli-progress';
 import dedent from 'dedent';
 import yaml from 'js-yaml';
 import { fetchWithCache } from '../../cache';
+import cliState from '../../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../../evaluator';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
@@ -19,6 +20,13 @@ export const DEFAULT_LANGUAGES = ['bn', 'sw', 'jv']; // Bengali, Swahili, Javane
  */
 function getConcurrencyLimit(config: Record<string, any> = {}): number {
   return config.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
+}
+
+/**
+ * Helper function to determine if progress bar should be shown
+ */
+function shouldShowProgressBar(): boolean {
+  return !cliState.webUI && logger.level !== 'debug';
 }
 
 export async function generateMultilingual(
@@ -38,7 +46,7 @@ export async function generateMultilingual(
     let processedBatches = 0;
 
     let progressBar: SingleBar | undefined;
-    if (logger.level !== 'debug') {
+    if (shouldShowProgressBar()) {
       progressBar = new SingleBar(
         {
           format:
@@ -247,7 +255,7 @@ export async function addMultilingual(
   const maxConcurrency = getConcurrencyLimit(config);
 
   let progressBar: SingleBar | undefined;
-  if (logger.level !== 'debug') {
+  if (shouldShowProgressBar()) {
     progressBar = new SingleBar(
       {
         format: 'Generating Multilingual {bar} {percentage}% | ETA: {eta}s | {value}/{total}',
