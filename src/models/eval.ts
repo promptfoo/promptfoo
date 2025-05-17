@@ -381,9 +381,6 @@ export default class Eval {
   }
 
   async getResultsCount(): Promise<number> {
-    if (this.resultsCount > 0) {
-      return this.resultsCount;
-    }
     const db = getDb();
     const result = await db
       .select({ count: sql<number>`count(*)` })
@@ -391,8 +388,7 @@ export default class Eval {
       .where(eq(evalResultsTable.evalId, this.id))
       .all();
     const count = result[0]?.count ?? 0;
-    this.resultsCount = Number(count);
-    return this.resultsCount;
+    return Number(count);
   }
 
   async fetchResultsByTestIdx(testIdx: number) {
@@ -429,8 +425,8 @@ export default class Eval {
       return this.oldResults.results;
     }
     await this.loadResults();
-    return this.results;
     this._resultsLoaded = true;
+    return this.results;
   }
 
   clearResults() {
