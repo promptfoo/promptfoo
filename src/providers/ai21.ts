@@ -166,7 +166,9 @@ export class AI21ChatCompletionProvider implements ApiProvider {
         error: `API call error: ${data.error}`,
       };
     }
-    if (!data.choices[0] && !data.choices[0].message.content) {
+    // Ensure the expected shape of the API response to avoid accessing
+    // properties of undefined
+    if (!data.choices?.[0] || !data.choices[0].message?.content) {
       return {
         error: `Malformed response data: ${JSON.stringify(data)}`,
       };
