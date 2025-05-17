@@ -2,6 +2,7 @@ import { getDb } from '../../src/database';
 import { getUserEmail } from '../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../src/migrate';
 import Eval, { getEvalSummaries } from '../../src/models/eval';
+import EvalResult from '../../src/models/evalResult';
 import type { Prompt } from '../../src/types';
 import EvalFactory from '../factories/evalFactory';
 
@@ -16,14 +17,11 @@ describe('evaluator', () => {
   });
 
   beforeEach(async () => {
-    // Clear all tables before each test
     const db = getDb();
-    // Delete related tables first
     await db.run('DELETE FROM eval_results');
     await db.run('DELETE FROM evals_to_datasets');
     await db.run('DELETE FROM evals_to_prompts');
     await db.run('DELETE FROM evals_to_tags');
-    // Then delete from main table
     await db.run('DELETE FROM evals');
   });
 
@@ -275,6 +273,47 @@ describe('evaluator', () => {
       const results = await eval1.toResultsFile();
 
       expect(results.results).toEqual(await eval1.toEvaluateSummary());
+    });
+  });
+
+  describe('fetchSampleResults', () => {
+    it('should return empty array when no results exist', async () => {
+      const eval1 = new Eval({});
+      const results = await eval1.fetchSampleResults(10);
+      expect(results).toEqual([]);
+    });
+
+    it('should return all results when sample size is larger', async () => {
+      const eval1 = await EvalFactory.create();
+      // Insert 1 result for this eval
+      const dbResults = await EvalResult.findManyByEvalId(eval1.id);
+      eval1.resultsCount = dbResults.length;
+      const results = await eval1.fetchSampleResults(5);
+      expect(results).toHaveLength(dbResults.length);
+      expect(results[0].evalId).toBe(eval1.id);
+    });
+  });
+
+  describe('getResultsCount', () => {
+    it('should return cached count when available', async () => {
+      const eval1 = new Eval({});
+      eval1.resultsCount = 5;
+      const count = await eval1.getResultsCount();
+      expect(count).toBe(5);
+    });
+
+    it('should handle empty results', async () => {
+      const eval1 = new Eval({});
+      eval1.resultsCount = 0;
+      const count = await eval1.getResultsCount();
+      expect(count).toBe(0);
+    });
+
+    it('should return 0 if there are no rows for evalId', async () => {
+      const eval1 = new Eval({});
+      eval1.resultsCount = 0;
+      const count = await eval1.getResultsCount();
+      expect(count).toBe(0);
     });
   });
 });
