@@ -198,10 +198,9 @@ function getMultilingualRequestedCount(
   testCases: TestCaseWithPlugin[],
   strategy: RedteamStrategyObject,
 ): number {
-  const numLanguages =
-    Array.isArray(strategy.config?.languages) && strategy.config.languages.length > 0
-      ? strategy.config.languages.length
-      : DEFAULT_LANGUAGES.length;
+  const numLanguages = Array.isArray(strategy.config?.languages)
+    ? strategy.config.languages.length
+    : DEFAULT_LANGUAGES.length;
   return testCases.length * numLanguages;
 }
 
@@ -757,3 +756,14 @@ export async function synthesize({
 
   return { purpose, entities, testCases: finalTestCases, injectVar };
 }
+
+export {
+  getPluginSeverity,
+  getStatus,
+  generateReport,
+  categories,
+  formatTestCount,
+  pluginMatchesStrategyTargets,
+  getMultilingualRequestedCount,
+  applyStrategies,
+};
