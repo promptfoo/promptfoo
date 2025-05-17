@@ -360,6 +360,39 @@ export default class Eval {
     }
   }
 
+  async fetchSampleResults(sampleSize: number = 100): Promise<EvalResult[]> {
+    const results: EvalResult[] = [];
+    let remaining = sampleSize;
+    for await (const batch of this.fetchResultsBatched(sampleSize)) {
+      if (batch.length >= remaining) {
+        results.push(...batch.slice(0, remaining));
+        break;
+      } else {
+        results.push(...batch);
+        remaining -= batch.length;
+      }
+      if (remaining <= 0) {
+        break;
+      }
+    }
+    return results;
+  }
+
+  async getResultsCount(): Promise<number> {
+    if (this.resultsCount > 0) {
+      return this.resultsCount;
+    }
+    const db = getDb();
+    const result = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(evalResultsTable)
+      .where(eq(evalResultsTable.evalId, this.id))
+      .all();
+    const count = result[0]?.count ?? 0;
+    this.resultsCount = Number(count);
+    return this.resultsCount;
+  }
+
   async fetchResultsByTestIdx(testIdx: number) {
     return await EvalResult.findManyByEvalId(this.id, { testIdx });
   }

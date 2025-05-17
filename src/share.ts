@@ -195,17 +195,19 @@ async function rollbackEval(url: string, evalId: string, headers: Record<string,
 }
 
 async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string | null> {
-  await evalRecord.loadResults();
+  const sampleResults = await evalRecord.fetchSampleResults(100);
+  logger.debug(`Loaded ${sampleResults.length} sample results to determine chunk size`);
 
-  const allResults = evalRecord.results;
-  logger.debug(`Loaded ${allResults.length} results`);
+  // Calculate chunk sizes based on sample
+  const largestSize = findLargestResultSize(sampleResults);
+  logger.debug(`Largest result size from sample: ${largestSize} bytes`);
 
-  // Calculate chunk sizes
-  const medianSize = findLargestResultSize(allResults);
-  logger.debug(`Median result size: ${medianSize} bytes`);
+  // Determine how many results per chunk
+  const TARGET_CHUNK_SIZE = 10 * 1024 * 1024; // 10MB in bytes
+  const estimatedResultsPerChunk =
+    getEnvInt('PROMPTFOO_SHARE_CHUNK_SIZE') ?? Math.max(1, Math.floor(TARGET_CHUNK_SIZE / largestSize));
 
-  // Create chunks
-  const chunks = createChunks(allResults);
+  logger.debug(`Estimated results per chunk: ${estimatedResultsPerChunk}`);
 
   // Prepare headers
   const headers: Record<string, string> = {
@@ -215,6 +217,8 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
     headers['Authorization'] = `Bearer ${cloudConfig.getApiKey()}`;
   }
 
+  const totalResults = await evalRecord.getResultsCount();
+
   // Setup progress bar
   const progressBar = new cliProgress.SingleBar(
     {
@@ -222,27 +226,39 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
     },
     cliProgress.Presets.shades_classic,
   );
-  progressBar.start(allResults.length, 0);
+  progressBar.start(totalResults, 0);
 
+  let evalId: string | undefined;
   try {
     // Send initial data and get eval ID
-    const evalId = await sendInitialEvalData(evalRecord, url, headers);
+    evalId = await sendInitialEvalData(evalRecord, url, headers);
     logger.debug(`Initial eval data sent successfully - ${evalId}`);
 
-    // Send chunks
-    logger.debug(`Sending ${chunks.length} requests to upload results`);
-    try {
-      for (const chunk of chunks) {
-        await sendChunkOfResults(chunk, url, evalId, headers);
-        progressBar.increment(chunk.length);
+    // Send chunks using batched cursor
+    let currentChunk: any[] = [];
+    for await (const batch of evalRecord.fetchResultsBatched(estimatedResultsPerChunk)) {
+      for (const result of batch) {
+        currentChunk.push(result);
+        if (currentChunk.length >= estimatedResultsPerChunk) {
+          await sendChunkOfResults(currentChunk, url, evalId, headers);
+          progressBar.increment(currentChunk.length);
+          currentChunk = [];
+        }
       }
-    } catch (e) {
-      logger.error(`Upload failed: ${e}`);
-      logger.info(`Upload failed, rolling back...`);
-      await rollbackEval(url, evalId, headers);
+    }
+    if (currentChunk.length > 0) {
+      await sendChunkOfResults(currentChunk, url, evalId, headers);
+      progressBar.increment(currentChunk.length);
     }
 
     return evalId;
+  } catch (e) {
+    logger.error(`Upload failed: ${e}`);
+    if (evalId) {
+      logger.info(`Upload failed, rolling back...`);
+      await rollbackEval(url, evalId, headers);
+    }
+    return null;
   } finally {
     progressBar.stop();
   }
