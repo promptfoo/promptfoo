@@ -15,6 +15,7 @@ import { loadApiProvider } from '../../src/providers';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../src/types';
 import { resolveConfigs } from '../../src/util/config/load';
+import * as path from 'path';
 
 jest.mock('../../src/cache');
 jest.mock('../../src/evaluator');
@@ -24,7 +25,14 @@ jest.mock('../../src/providers');
 jest.mock('../../src/share');
 jest.mock('../../src/table');
 jest.mock('fs');
-jest.mock('path');
+jest.mock('path', () => {
+  // Use actual path module for platform-agnostic tests
+  const actualPath = jest.requireActual('path');
+  return {
+    ...actualPath,
+    // Add any specific mocks for path methods if needed
+  };
+});
 jest.mock('../../src/util/config/load');
 jest.mock('../../src/database/index', () => ({
   getDb: jest.fn(() => ({
@@ -61,7 +69,7 @@ describe('evalCommand', () => {
         prompts: [],
         providers: [],
       },
-      basePath: '/',
+      basePath: path.resolve('/'), // Platform-agnostic root path
     });
   });
 
@@ -100,7 +108,7 @@ describe('evalCommand', () => {
         providers: [],
         tests: [{ vars: { test: 'value' } }],
       },
-      basePath: '/',
+      basePath: path.resolve('/'), // Platform-agnostic root path
     });
 
     const mockEvalRecord = new Eval(config);
@@ -123,7 +131,7 @@ describe('evalCommand', () => {
         prompts: [],
         providers: [],
       },
-      basePath: '/',
+      basePath: path.resolve('/'), // Platform-agnostic root path
     });
 
     jest.mocked(evaluate).mockResolvedValue(evalRecord);
