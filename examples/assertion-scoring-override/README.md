@@ -1,4 +1,10 @@
-# Assertion Scoring Function Override Example
+# assertion-scoring-override (Assertion Scoring Function Override Example)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example assertion-scoring-override
+```
 
 This example demonstrates different ways to define and override the default scoring function in promptfoo. It shows three patterns for implementing and referencing scoring functions:
 

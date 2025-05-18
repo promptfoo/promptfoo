@@ -1,3 +1,11 @@
+# watsonx (Watsonx)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example watsonx
+```
+
 To get started, you need to set up authentication and project ID. You can choose between two authentication methods:
 
 **Option 1: IAM Authentication**

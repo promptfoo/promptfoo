@@ -1,4 +1,10 @@
-# Custom Extensions Example for promptfoo
+# extension-api (Custom Extensions Example for promptfoo)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example extension-api
+```
 
 This example demonstrates how to leverage promptfoo's powerful extensions API to implement custom setup and teardown hooks for individual tests. These extensions can be defined in either Python or JavaScript, providing flexibility for your preferred programming environment.
 
