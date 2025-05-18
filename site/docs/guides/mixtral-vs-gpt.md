@@ -30,8 +30,8 @@ Edit your `promptfooconfig.yaml` to include the models you want to compare. Here
 ```yaml title="promptfooconfig.yaml"
 providers:
   - replicate:mistralai/mixtral-8x7b-instruct-v0.1:2b56576fcfbe32fa0526897d8385dd3fb3d36ba6fd0dbe033c72886b81ade93e
-  - openai:gpt-4o-mini
-  - openai:gpt-4o
+  - openai:gpt-4.1-mini
+  - openai:gpt-4.1
 ```
 
 Set your API keys as environment variables:
@@ -60,13 +60,13 @@ Customize the behavior of each model by setting parameters such as `temperature`
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:gpt-4o-mini
+  - id: openai:gpt-4.1-mini
     // highlight-start
     config:
       temperature: 0
       max_tokens: 128
     // highlight-end
-  - id: openai:gpt-4o
+  - id: openai:gpt-4.1
     // highlight-start
     config:
       temperature: 0
@@ -166,9 +166,9 @@ Contrast this with public benchmarks from the [Chatbot Arena](https://lmarena.ai
 
 | Model                      | Arena rating | MT-bench score |
 | -------------------------- | ------------ | -------------- |
-| gpt-4o                     | 1243         | 9.32           |
+| gpt-4.1                    | 1243         | 9.32           |
 | Mixtral-8x7b-Instruct-v0.1 | 1121         | 8.3            |
-| gpt-4o-mini                | 1074         | 8.32           |
+| gpt-4.1-mini               | 1074         | 8.32           |
 
 While public benchmarks tell you how these models perform on _generic_ tasks, they are no substitute for running a benchmark on your _own_ data and use cases.
 
