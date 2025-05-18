@@ -75,7 +75,6 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `-j, --max-concurrency <number>`    | Maximum number of concurrent API calls                                      |
 | `--model-outputs <path>`            | Path to JSON containing list of LLM output strings                          |
 | `--no-cache`                        | Do not read or write results to disk cache                                  |
-| `--env-file, --env-path <path>`     | Path to .env file                                                           |
 | `--no-progress-bar`                 | Do not show progress bar                                                    |
 | `--no-table`                        | Do not output table in CLI                                                  |
 | `--no-write`                        | Do not write results to promptfoo directory                                 |
@@ -93,7 +92,6 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `-t, --tests <path>`                | Path to CSV with test cases                                                 |
 | `--var <key=value>`                 | Set a variable in key=value format                                          |
 | `-v, --vars <path>`                 | Path to CSV with test cases (alias for --tests)                             |
-| `--verbose`                         | Show debug logs                                                             |
 | `-w, --watch`                       | Watch for changes in config and re-run                                      |
 
 The `eval` command will return exit code `100` when there is at least 1 test case failure or when the pass rate is below the threshold set by `PROMPTFOO_PASS_RATE_THRESHOLD`. It will return exit code `1` for any other error. The exit code for failed tests can be overridden with environment variable `PROMPTFOO_FAILED_TEST_EXIT_CODE`.
@@ -102,12 +100,10 @@ The `eval` command will return exit code `100` when there is at least 1 test cas
 
 Initialize a new project with dummy files.
 
-| Option                          | Description                    |
-| ------------------------------- | ------------------------------ |
-| `directory`                     | Directory to create files in   |
-| `--no-interactive`              | Do not run in interactive mode |
-| `--env-file, --env-path <path>` | Path to .env file              |
-| `-v, --verbose`                 | Show debug logs                |
+| Option             | Description                    |
+| ------------------ | ------------------------------ |
+| `directory`        | Directory to create files in   |
+| `--no-interactive` | Do not run in interactive mode |
 
 ## `promptfoo view`
 
@@ -118,8 +114,6 @@ Start a browser UI for visualization of results.
 | `-p, --port <number>`            | Port number for the local server        |
 | `-y, --yes`                      | Skip confirmation and auto-open the URL |
 | `--filter-description <pattern>` | Filter evals by description using regex |
-| `--env-file, --env-path <path>`  | Path to .env file                       |
-| `-v, --verbose`                  | Show debug logs                         |
 
 If you've used `PROMPTFOO_CONFIG_DIR` to override the promptfoo output directory, run `promptfoo view [directory]`.
 
@@ -127,32 +121,26 @@ If you've used `PROMPTFOO_CONFIG_DIR` to override the promptfoo output directory
 
 Create a URL that can be shared online.
 
-| Option                          | Description                                     |
-| ------------------------------- | ----------------------------------------------- |
-| `--show-auth`                   | Include auth info in the shared URL             |
-| `-y, --yes`                     | Skip confirmation before creating shareable URL |
-| `--env-file, --env-path <path>` | Path to .env file                               |
-| `-v, --verbose`                 | Show debug logs                                 |
+| Option        | Description                                     |
+| ------------- | ----------------------------------------------- |
+| `--show-auth` | Include auth info in the shared URL             |
+| `-y, --yes`   | Skip confirmation before creating shareable URL |
 
 ## `promptfoo cache`
 
 Manage cache.
 
-| Option                          | Description       |
-| ------------------------------- | ----------------- |
-| `clear`                         | Clear the cache   |
-| `--env-file, --env-path <path>` | Path to .env file |
-| `-v, --verbose`                 | Show debug logs   |
+| Option  | Description     |
+| ------- | --------------- |
+| `clear` | Clear the cache |
 
 ## `promptfoo feedback <message>`
 
 Send feedback to the promptfoo developers.
 
-| Option                          | Description       |
-| ------------------------------- | ----------------- |
-| `message`                       | Feedback message  |
-| `--env-file, --env-path <path>` | Path to .env file |
-| `-v, --verbose`                 | Show debug logs   |
+| Option    | Description      |
+| --------- | ---------------- |
+| `message` | Feedback message |
 
 ## `promptfoo list`
 
@@ -164,67 +152,52 @@ List various resources like evaluations, prompts, and datasets.
 | `prompts`  | List prompts     |
 | `datasets` | List datasets    |
 
-| Option                          | Description                                                     |
-| ------------------------------- | --------------------------------------------------------------- |
-| `-n`                            | Show the first n records, sorted by descending date of creation |
-| `--ids-only`                    | Show only IDs without descriptions                              |
-| `--env-file, --env-path <path>` | Path to .env file                                               |
-| `-v, --verbose`                 | Show debug logs                                                 |
+| Option       | Description                                                     |
+| ------------ | --------------------------------------------------------------- |
+| `-n`         | Show the first n records, sorted by descending date of creation |
+| `--ids-only` | Show only IDs without descriptions                              |
 
 ## `promptfoo show <id>`
 
 Show details of a specific resource.
 
-| Option                          | Description                           |
-| ------------------------------- | ------------------------------------- |
-| `eval <id>`                     | Show details of a specific evaluation |
-| `prompt <id>`                   | Show details of a specific prompt     |
-| `dataset <id>`                  | Show details of a specific dataset    |
-| `--env-file, --env-path <path>` | Path to .env file                     |
-| `-v, --verbose`                 | Show debug logs                       |
+| Option         | Description                           |
+| -------------- | ------------------------------------- |
+| `eval <id>`    | Show details of a specific evaluation |
+| `prompt <id>`  | Show details of a specific prompt     |
+| `dataset <id>` | Show details of a specific dataset    |
 
 ## `promptfoo delete <id>`
 
 Deletes a specific resource.
 
-| Option                          | Description                |
-| ------------------------------- | -------------------------- |
-| `eval <id>`                     | Delete an evaluation by id |
-| `--env-file, --env-path <path>` | Path to .env file          |
-| `-v, --verbose`                 | Show debug logs            |
+| Option      | Description                |
+| ----------- | -------------------------- |
+| `eval <id>` | Delete an evaluation by id |
 
 ## `promptfoo import <filepath>`
 
 Import an eval file from JSON format.
 
-| Option                          | Description       |
-| ------------------------------- | ----------------- |
-| `--env-file, --env-path <path>` | Path to .env file |
-| `-v, --verbose`                 | Show debug logs   |
-
 ## `promptfoo export <evalId>`
 
 Export an eval record to JSON format. To export the most recent, use evalId `latest`.
 
-| Option                          | Description                                 |
-| ------------------------------- | ------------------------------------------- |
-| `-o, --output <filepath>`       | File to write. Writes to stdout by default. |
-| `--env-file, --env-path <path>` | Path to .env file                           |
-| `-v, --verbose`                 | Show debug logs                             |
+| Option                    | Description                                 |
+| ------------------------- | ------------------------------------------- |
+| `-o, --output <filepath>` | File to write. Writes to stdout by default. |
 
 ## `promptfoo scan-model`
 
 Scan ML models for security vulnerabilities. Provide one or more paths to model files or directories.
 
-| Option                          | Description                                                | Default |
-| ------------------------------- | ---------------------------------------------------------- | ------- |
-| `-b, --blacklist <pattern>`     | Additional blacklist patterns to check against model names |         |
-| `-f, --format <format>`         | Output format (`text` or `json`)                           | `text`  |
-| `-o, --output <path>`           | Output file path (prints to stdout if not specified)       |         |
-| `-t, --timeout <seconds>`       | Scan timeout in seconds                                    | `300`   |
-| `--max-file-size <bytes>`       | Maximum file size to scan in bytes                         |         |
-| `--env-file, --env-path <path>` | Path to .env file                                          |         |
-| `-v, --verbose`                 | Show debug logs                                            |         |
+| Option                      | Description                                                | Default |
+| --------------------------- | ---------------------------------------------------------- | ------- |
+| `-b, --blacklist <pattern>` | Additional blacklist patterns to check against model names |         |
+| `-f, --format <format>`     | Output format (`text` or `json`)                           | `text`  |
+| `-o, --output <path>`       | Output file path (prints to stdout if not specified)       |         |
+| `-t, --timeout <seconds>`   | Scan timeout in seconds                                    | `300`   |
+| `--max-file-size <bytes>`   | Maximum file size to scan in bytes                         |         |
 
 ## `promptfoo auth`
 
@@ -234,31 +207,19 @@ Manage authentication for cloud features.
 
 Login to the promptfoo cloud.
 
-| Option                          | Description                                                                |
-| ------------------------------- | -------------------------------------------------------------------------- |
-| `-o, --org <orgId>`             | The organization ID to login to                                            |
-| `-h, --host <host>`             | The host of the promptfoo instance (API URL if different from the app URL) |
-| `-k, --api-key <key>`           | Login using an API key                                                     |
-| `--env-file, --env-path <path>` | Path to .env file                                                          |
-| `-v, --verbose`                 | Show debug logs                                                            |
+| Option                | Description                                                                |
+| --------------------- | -------------------------------------------------------------------------- |
+| `-o, --org <orgId>`   | The organization ID to login to                                            |
+| `-h, --host <host>`   | The host of the promptfoo instance (API URL if different from the app URL) |
+| `-k, --api-key <key>` | Login using an API key                                                     |
 
 ### `promptfoo auth logout`
 
 Logout from the promptfoo cloud.
 
-| Option                          | Description       |
-| ------------------------------- | ----------------- |
-| `--env-file, --env-path <path>` | Path to .env file |
-| `-v, --verbose`                 | Show debug logs   |
-
 ### `promptfoo auth whoami`
 
 Show current user information.
-
-| Option                          | Description       |
-| ------------------------------- | ----------------- |
-| `--env-file, --env-path <path>` | Path to .env file |
-| `-v, --verbose`                 | Show debug logs   |
 
 ## `promptfoo config`
 
@@ -268,39 +229,25 @@ Edit configuration settings.
 
 Get the user's email address.
 
-| Option                          | Description       |
-| ------------------------------- | ----------------- |
-| `--env-file, --env-path <path>` | Path to .env file |
-| `-v, --verbose`                 | Show debug logs   |
-
 ### `promptfoo config set email <email>`
 
 Set the user's email address.
-
-| Option                          | Description       |
-| ------------------------------- | ----------------- |
-| `--env-file, --env-path <path>` | Path to .env file |
-| `-v, --verbose`                 | Show debug logs   |
 
 ### `promptfoo config unset email`
 
 Unset the user's email address.
 
-| Option                          | Description                      |
-| ------------------------------- | -------------------------------- |
-| `-f, --force`                   | Force unset without confirmation |
-| `--env-file, --env-path <path>` | Path to .env file                |
-| `-v, --verbose`                 | Show debug logs                  |
+| Option        | Description                      |
+| ------------- | -------------------------------- |
+| `-f, --force` | Force unset without confirmation |
 
 ## `promptfoo debug`
 
 Display debug information for troubleshooting.
 
-| Option                          | Description                                                  |
-| ------------------------------- | ------------------------------------------------------------ |
-| `-c, --config [path]`           | Path to configuration file. Defaults to promptfooconfig.yaml |
-| `--env-file, --env-path <path>` | Path to .env file                                            |
-| `-v, --verbose`                 | Show debug logs                                              |
+| Option                | Description                                                  |
+| --------------------- | ------------------------------------------------------------ |
+| `-c, --config [path]` | Path to configuration file. Defaults to promptfooconfig.yaml |
 
 ## `promptfoo generate dataset`
 
@@ -316,7 +263,6 @@ BETA: Generate synthetic test cases based on existing prompts and variables.
 | `--numTestCasesPerPersona <number>` | Number of test cases per persona                           | 3                    |
 | `--provider <provider>`             | Provider to use for generating test cases                  | default grader       |
 | `--no-cache`                        | Do not read or write results to disk cache                 | false                |
-| `--env-file, --env-path <path>`     | Path to .env file                                          |
 
 For example, this command will modify your default config file (usually `promptfooconfig.yaml`) with new test cases:
 
@@ -338,12 +284,10 @@ Alias for [`promptfoo redteam generate`](#promptfoo-redteam-generate).
 
 Initialize a red teaming project.
 
-| Option                          | Description                            | Default |
-| ------------------------------- | -------------------------------------- | ------- |
-| `[directory]`                   | Directory to initialize the project in | .       |
-| `--no-gui`                      | Do not open the browser UI             |         |
-| `--env-file, --env-path <path>` | Path to .env file                      |         |
-| `-v, --verbose`                 | Show debug logs                        |         |
+| Option        | Description                            | Default |
+| ------------- | -------------------------------------- | ------- |
+| `[directory]` | Directory to initialize the project in | .       |
+| `--no-gui`    | Do not open the browser UI             |         |
 
 Example:
 
@@ -366,8 +310,6 @@ Start browser UI and open to red team setup.
 | `[configDirectory]`              | Directory containing configuration files        |         |
 | `-p, --port <number>`            | Port number for the local server                | 15500   |
 | `--filter-description <pattern>` | Filter evals by description using regex pattern |         |
-| `--env-file, --env-path <path>`  | Path to .env file                               |         |
-| `-v, --verbose`                  | Show debug logs                                 |         |
 
 ## `promptfoo redteam run`
 
@@ -378,7 +320,6 @@ Run the complete red teaming process (init, generate, and evaluate).
 | `-c, --config [path]`                              | Path to configuration file                        | promptfooconfig.yaml |
 | `-o, --output [path]`                              | Path to output file for generated tests           | redteam.yaml         |
 | `--no-cache`                                       | Do not read or write results to disk cache        | false                |
-| `--env-file, --env-path <path>`                    | Path to .env file                                 |
 | `-j, --max-concurrency <number>`                   | Maximum number of concurrent API calls            |                      |
 | `--delay <number>`                                 | Delay in milliseconds between API calls           |                      |
 | `--remote`                                         | Force remote inference wherever possible          | false                |
@@ -391,16 +332,14 @@ Run the complete red teaming process (init, generate, and evaluate).
 
 Automatically discovers the [purpose](https://www.promptfoo.dev/docs/red-team/configuration/#purpose) of your target application.
 
-| Option                          | Description                                                                                | Default        |
-| ------------------------------- | ------------------------------------------------------------------------------------------ | -------------- |
-| `-c, --config <path>`           | Path to `promptfooconfig.yaml` configuration file.                                         |                |
-| `-o, --output <path>`           | Path to output file.                                                                       | `redteam.yaml` |
-| `--overwrite`                   | Overwrite the existing purpose if it already exists.                                       | false          |
-| `-t, --target <id>`             | UUID of a Cloud-defined target to run the discovery on                                     |                |
-| `--preview`                     | Preview discovery results without writing to an output file                                | false          |
-| `--turns <turns>`               | A maximum number of turns to run the discovery process. Lower is faster but less accurate. | 50             |
-| `-v, --verbose`                 | Show debug logs                                                                            | false          |
-| `--env-file, --env-path <path>` | Path to .env file                                                                          |                |
+| Option                | Description                                                                                | Default        |
+| --------------------- | ------------------------------------------------------------------------------------------ | -------------- |
+| `-c, --config <path>` | Path to `promptfooconfig.yaml` configuration file.                                         |                |
+| `-o, --output <path>` | Path to output file.                                                                       | `redteam.yaml` |
+| `--overwrite`         | Overwrite the existing purpose if it already exists.                                       | false          |
+| `-t, --target <id>`   | UUID of a Cloud-defined target to run the discovery on                                     |                |
+| `--preview`           | Preview discovery results without writing to an output file                                | false          |
+| `--turns <turns>`     | A maximum number of turns to run the discovery process. Lower is faster but less accurate. | 50             |
 
 ## `promptfoo redteam generate`
 
@@ -419,7 +358,6 @@ Generate adversarial test cases to challenge your prompts and models.
 | `-n, --num-tests <number>`       | Number of test cases to generate per plugin                          |                      |
 | `--language <language>`          | Specify the language for generated tests                             | English              |
 | `--no-cache`                     | Do not read or write results to disk cache                           | false                |
-| `--env-file, --env-path <path>`  | Path to .env file                                                    |
 | `-j, --max-concurrency <number>` | Maximum number of concurrent API calls                               |                      |
 | `--delay <number>`               | Delay in milliseconds between plugin API calls                       |                      |
 | `--remote`                       | Force remote inference wherever possible                             | false                |
@@ -453,14 +391,12 @@ promptfoo redteam generate --purpose 'Travel agent that helps users plan trips' 
 
 Generate poisoned documents for RAG testing.
 
-| Option                          | Description                                       | Default                |
-| ------------------------------- | ------------------------------------------------- | ---------------------- |
-| `documents`                     | Documents, directories, or text content to poison |                        |
-| `-g, --goal <goal>`             | Goal/intended result of the poisoning             |                        |
-| `-o, --output <path>`           | Output YAML file path                             | `poisoned-config.yaml` |
-| `-d, --output-dir <path>`       | Directory to write individual poisoned documents  | `poisoned-documents`   |
-| `--env-file, --env-path <path>` | Path to .env file                                 |                        |
-| `-v, --verbose`                 | Show debug logs                                   |                        |
+| Option                    | Description                                       | Default                |
+| ------------------------- | ------------------------------------------------- | ---------------------- |
+| `documents`               | Documents, directories, or text content to poison |                        |
+| `-g, --goal <goal>`       | Goal/intended result of the poisoning             |                        |
+| `-o, --output <path>`     | Output YAML file path                             | `poisoned-config.yaml` |
+| `-d, --output-dir <path>` | Directory to write individual poisoned documents  | `poisoned-documents`   |
 
 ## `promptfoo redteam eval`
 
@@ -475,8 +411,6 @@ Start a browser UI and open the red teaming report.
 | `[directory]`                    | Directory containing the red teaming configuration | .       |
 | `-p, --port <number>`            | Port number for the server                         | 15500   |
 | `--filter-description <pattern>` | Filter evals by description using a regex pattern  |         |
-| `--env-file, --env-path <path>`  | Path to .env file                                  |         |
-| `-v, --verbose`                  | Show debug logs                                    |         |
 
 Example:
 
@@ -488,12 +422,10 @@ promptfoo redteam report -p 8080
 
 List all available red team plugins.
 
-| Option                          | Description                               |
-| ------------------------------- | ----------------------------------------- |
-| `--ids-only`                    | Show only plugin IDs without descriptions |
-| `--default`                     | Show only the default plugins             |
-| `--env-file, --env-path <path>` | Path to .env file                         |
-| `-v, --verbose`                 | Show debug logs                           |
+| Option       | Description                               |
+| ------------ | ----------------------------------------- |
+| `--ids-only` | Show only plugin IDs without descriptions |
+| `--default`  | Show only the default plugins             |
 
 ## Specifying Command Line Options in Config
 
