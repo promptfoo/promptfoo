@@ -85,6 +85,13 @@
       "when": 1732340901582,
       "tag": "0011_moaning_millenium_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1747540425042,
+      "tag": "0012_late_marten_broadcloak",
+      "breakpoints": true
     }
   ]
 }

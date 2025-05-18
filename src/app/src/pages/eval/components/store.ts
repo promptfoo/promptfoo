@@ -25,6 +25,9 @@ interface TableState {
 
   version: number | null;
   setVersion: (version: number) => void;
+
+  rowCount: number;
+  setRowCount: (count: number) => void;
 }
 
 interface SettingsState {
@@ -79,6 +82,9 @@ export const useStore = create<TableState>()((set, get) => ({
   },
   config: null,
   setConfig: (config: Partial<UnifiedConfig> | null) => set(() => ({ config })),
+
+  rowCount: 0,
+  setRowCount: (count: number) => set(() => ({ rowCount: count })),
 }));
 
 export const useResultsViewSettingsStore = create<SettingsState>()(

@@ -7,7 +7,13 @@ import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
-import type { SharedResults, ResultLightweightWithLabel, ResultsFile } from '@promptfoo/types';
+import type {
+  SharedResults,
+  ResultLightweightWithLabel,
+  ResultsFile,
+  EvaluateTable,
+  UnifiedConfig,
+} from '@promptfoo/types';
 import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
@@ -38,7 +44,9 @@ export default function Eval({
     setConfig,
     evalId,
     setEvalId,
+    setVersion,
     setAuthor,
+    setRowCount,
   } = useStore();
 
   const { setInComparisonMode } = useResultsViewSettingsStore();
@@ -62,19 +70,23 @@ export default function Eval({
 
   const fetchEvalById = React.useCallback(
     async (id: string) => {
-      const resp = await callApi(`/results/${id}`, { cache: 'no-store' });
+      const resp = await callApi(`/eval/${id}/table?offset=0&limit=50`);
       if (!resp.ok) {
         setFailed(true);
         return;
       }
-      const body = (await resp.json()) as { data: ResultsFile };
+      const body = (await resp.json()) as {
+        data: { table: EvaluateTable; totalCount: number; config: Partial<UnifiedConfig>; author: string | null; version: number };
+      };
 
-      setTableFromResultsFile(body.data);
+      setTable(body.data.table);
+      setRowCount(body.data.totalCount);
       setConfig(body.data.config);
+      setVersion(body.data.version);
       setAuthor(body.data.author);
       setEvalId(id);
     },
-    [setTable, setConfig, setEvalId, setAuthor],
+    [setTable, setConfig, setEvalId, setAuthor, setRowCount, setVersion],
   );
   const [searchParams] = useSearchParams();
 
@@ -155,10 +167,12 @@ export default function Eval({
         const evals = await fetchRecentFileEvals();
         if (evals && evals.length > 0) {
           const defaultEvalId = evals[0].evalId;
-          const resp = await callApi(`/results/${defaultEvalId}`);
+          const resp = await callApi(`/eval/${defaultEvalId}/table?offset=0&limit=50`);
           const body = await resp.json();
-          setTableFromResultsFile(body.data);
+          setTable(body.data.table);
+          setRowCount(body.data.totalCount);
           setConfig(body.data.config);
+          setVersion(body.data.version);
           setAuthor(body.data.author || null);
           setLoaded(true);
           setDefaultEvalId(defaultEvalId);
@@ -185,6 +199,8 @@ export default function Eval({
     preloadedData,
     setDefaultEvalId,
     setInComparisonMode,
+    setRowCount,
+    setVersion,
   ]);
 
   React.useEffect(() => {

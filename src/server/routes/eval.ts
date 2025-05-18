@@ -163,6 +163,31 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
   }
 });
 
+evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params;
+  const limit = Number(req.query.limit) || 50;
+  const offset = Number(req.query.offset) || 0;
+  const filter = String(req.query.filter || 'all');
+
+  const eval_ = await Eval.findById(id);
+  if (!eval_) {
+    res.status(404).json({ error: 'Eval not found' });
+    return;
+  }
+
+  const table = await eval_.getTablePage({ offset, limit, filterMode: filter as any });
+
+  res.json({
+    data: {
+      table: { head: table.head, body: table.body },
+      totalCount: table.totalCount,
+      config: eval_.config,
+      author: eval_.author || null,
+      version: eval_.version(),
+    },
+  });
+});
+
 evalRouter.post('/:id/results', async (req: Request, res: Response) => {
   const { id } = req.params;
   const results = req.body as unknown as EvalResult[];

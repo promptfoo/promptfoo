@@ -16,20 +16,22 @@ import { getEnvBool } from '../envars';
 import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
-import type {
-  CompletedPrompt,
-  EvaluateResult,
-  EvaluateStats,
-  EvaluateSummaryV3,
-  EvaluateSummaryV2,
-  EvaluateTable,
-  Prompt,
-  ResultsFile,
-  UnifiedConfig,
-  EvalSummary,
+import {
+  type CompletedPrompt,
+  type EvaluateResult,
+  type EvaluateStats,
+  type EvaluateSummaryV3,
+  type EvaluateSummaryV2,
+  type EvaluateTable,
+  ResultFailureReason,
+  type Prompt,
+  type ResultsFile,
+  type UnifiedConfig,
+  type EvalSummary,
 } from '../types';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
+import { convertTestResultsToTableRow } from '../util/exportToFile';
 import invariant from '../util/invariant';
 import { getCurrentTimestamp } from '../util/time';
 import EvalResult from './evalResult';
@@ -54,6 +56,32 @@ FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')}))
     }, {});
     return vars;
   }
+
+  static async getVarsFromEval(evalId: string) {
+    const db = getDb();
+    const query = sql.raw(
+      `SELECT DISTINCT j.key from (SELECT json_extract(eval_results.test_case, '$.vars') as vars
+    FROM eval_results where eval_results.eval_id = '${evalId}') t, json_each(t.vars) j;`,
+    );
+    // @ts-ignore
+    const results: { key: string }[] = await db.all(query);
+    const vars = results.map((r) => r.key);
+
+    return new Set(vars);
+  }
+
+  static async setVars(evalId: string, vars: Set<string>) {
+    const db = getDb();
+    try {
+      await db
+        .update(evalsTable)
+        .set({ vars: Array.from(vars) })
+        .where(eq(evalsTable.id, evalId))
+        .run();
+    } catch (e) {
+      logger.error(`Error setting vars: ${vars} for eval ${evalId}: ${e}`);
+    }
+  }
 }
 
 export default class Eval {
@@ -69,6 +97,7 @@ export default class Eval {
   oldResults?: EvaluateSummaryV2;
   persisted: boolean;
   _resultsLoaded: boolean = false;
+  _vars: Set<string>;
 
   static async latest() {
     const db = getDb();
@@ -116,9 +145,17 @@ export default class Eval {
       prompts: eval_.prompts || [],
       datasetId,
       persisted: true,
+      vars: eval_.vars || [],
     });
     if (eval_.results && 'table' in eval_.results) {
       evalInstance.oldResults = eval_.results as EvaluateSummaryV2;
+    }
+
+    // backfill vars
+    if (!eval_.vars) {
+      const vars = await EvalQueries.getVarsFromEval(id);
+      evalInstance.setVars(vars);
+      await EvalQueries.setVars(id, vars);
     }
 
     return evalInstance;
@@ -263,6 +300,7 @@ export default class Eval {
       prompts?: CompletedPrompt[];
       datasetId?: string;
       persisted?: boolean;
+      vars?: Set<string>;
     },
   ) {
     const createdAt = opts?.createdAt || new Date();
@@ -275,6 +313,7 @@ export default class Eval {
     this.datasetId = opts?.datasetId;
     this.persisted = opts?.persisted || false;
     this._resultsLoaded = false;
+    this._vars = new Set(opts?.vars || []);
   }
 
   version() {
@@ -303,6 +342,7 @@ export default class Eval {
       description: this.config.description,
       author: this.author,
       updatedAt: getCurrentTimestamp(),
+      vars: Array.from(this.vars),
     };
 
     if (this.useOldResults()) {
@@ -313,18 +353,16 @@ export default class Eval {
     this.persisted = true;
   }
 
-  async getVars() {
-    if (this.useOldResults()) {
-      invariant(this.oldResults, 'Old results not found');
-      return this.oldResults.table?.head.vars || [];
-    }
-    const db = getDb();
-    const query = sql`SELECT DISTINCT j.key from (SELECT json_extract(test_case_results.test_case, '$.vars') as vars
-    FROM test_case_results where test_case_results.eval_id = ${this.id}) t, json_each(t.vars) j;`;
-    // @ts-ignore
-    const results: { key: string }[] = await db.all(query);
+  setVars(vars: Set<string>) {
+    this._vars = vars;
+  }
 
-    return results.map((r) => r.key) || [];
+  addVar(varName: string) {
+    this.vars.add(varName);
+  }
+
+  get vars(): Set<string> {
+    return this._vars;
   }
 
   getPrompts() {
@@ -372,6 +410,59 @@ export default class Eval {
 
   async fetchResultsByTestIdx(testIdx: number) {
     return await EvalResult.findManyByEvalId(this.id, { testIdx });
+  }
+
+  async getTablePage(opts: { offset?: number; limit?: number; filterMode?: string }) {
+    const db = getDb();
+    const offset = opts.offset ?? 0;
+    const limit = opts.limit ?? 50;
+    const filter = opts.filterMode ?? 'all';
+
+    const conditions = [`eval_id = '${this.id}'`];
+    if (filter === 'errors') {
+      conditions.push(`failure_reason = ${ResultFailureReason.ERROR}`);
+    } else if (filter === 'failures') {
+      conditions.push(`success = 0 AND failure_reason != ${ResultFailureReason.ERROR}`);
+    } else if (filter === 'passes') {
+      conditions.push(`success = 1`);
+    } else if (filter === 'highlights') {
+      conditions.push(`json_extract(grading_result, '$.comment') LIKE '!highlight%'`);
+    }
+
+    const whereSql = conditions.join(' AND ');
+
+    const countQuery = sql.raw(
+      `SELECT COUNT(DISTINCT test_idx) as count FROM eval_results WHERE ${whereSql}`,
+    );
+    const countStart = Date.now();
+    // @ts-ignore
+    const countResult: { count: number } = await db.get(countQuery);
+    const countEnd = Date.now();
+    logger.debug(`Count query took ${countEnd - countStart}ms`);
+    const totalCount = countResult?.count || 0;
+
+    const idxQuery = sql.raw(
+      `SELECT DISTINCT test_idx FROM eval_results WHERE ${whereSql} ORDER BY test_idx LIMIT ${limit} OFFSET ${offset}`,
+    );
+    const idxStart = Date.now();
+    // @ts-ignore
+    const rows: { test_idx: number }[] = await db.all(idxQuery);
+    const idxEnd = Date.now();
+    logger.debug(`Index query took ${idxEnd - idxStart}ms`);
+    const varsStart = Date.now();
+    const vars = Array.from(this.vars);
+    const varsEnd = Date.now();
+    logger.debug(`Vars query took ${varsEnd - varsStart}ms`);
+    const body = [];
+    const bodyStart = Date.now();
+    for (const row of rows) {
+      const results = await this.fetchResultsByTestIdx(row.test_idx);
+      body.push(convertTestResultsToTableRow(results as EvalResult[], vars));
+    }
+    const bodyEnd = Date.now();
+    logger.debug(`Body query took ${bodyEnd - bodyStart}ms`);
+
+    return { head: { prompts: this.prompts, vars }, body, totalCount };
   }
 
   async addPrompts(prompts: CompletedPrompt[]) {

@@ -65,6 +65,7 @@ export const evalsTable = sqliteTable(
     results: text('results', { mode: 'json' }).$type<EvaluateSummaryV2 | object>().notNull(),
     config: text('config', { mode: 'json' }).$type<Partial<UnifiedConfig>>().notNull(),
     prompts: text('prompts', { mode: 'json' }).$type<CompletedPrompt[]>(),
+    vars: text('vars', { mode: 'json' }).$type<string[]>(),
   },
   (table) => ({
     createdAtIdx: index('evals_created_at_idx').on(table.createdAt),
@@ -114,6 +115,7 @@ export const evalResultsTable = sqliteTable(
   },
   (table) => ({
     evalIdIdx: index('eval_result_eval_id_idx').on(table.evalId),
+    evalIdTestIdxIdx: index('eval_result_eval_id_test_idx_idx').on(table.evalId, table.testIdx),
   }),
 );
 

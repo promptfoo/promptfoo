@@ -2,7 +2,6 @@ import {
   createColumnHelper,
   flexRender,
   getCoreRowModel,
-  getPaginationRowModel,
   useReactTable,
 } from '@tanstack/react-table';
 import * as React from 'react';
@@ -203,7 +202,7 @@ function ResultsTable({
   onSearchTextChange,
   setFilterMode,
 }: ResultsTableProps) {
-  const { evalId, table, setTable, config, version } = useMainStore();
+  const { evalId, table, setTable, config, version, rowCount, setRowCount } = useMainStore();
   const { inComparisonMode } = useResultsViewSettingsStore();
   const { showToast } = useToast();
 
@@ -413,45 +412,49 @@ function ResultsTable({
     setPagination((prev) => ({ ...prev, pageIndex: 0 }));
   }, [failureFilter, filterMode, debouncedSearchText]);
 
+  React.useEffect(() => {
+    if (!evalId) {
+      return;
+    }
+    const fetchPage = async () => {
+      const resp = await callApi(
+        `/eval/${evalId}/table?offset=${pagination.pageIndex * pagination.pageSize}&limit=${pagination.pageSize}&filter=${filterMode}`,
+      );
+      if (resp.ok) {
+        const body = await resp.json();
+        setTable(body.data.table);
+        setRowCount(body.data.totalCount);
+      }
+    };
+    fetchPage();
+  }, [evalId, pagination.pageIndex, pagination.pageSize, filterMode]);
+
   // TODO(ian): Switch this to use prompt.metrics field once most clients have updated.
   const numGoodTests = React.useMemo(
+    () => head.prompts.map((prompt) => prompt.metrics?.testPassCount || 0),
+    [head.prompts, body],
+  );
+
+  const numTests = React.useMemo(
     () =>
-      head.prompts.map((_, idx) =>
-        body.reduce((acc, row) => acc + (row.outputs[idx]?.pass ? 1 : 0), 0),
+      head.prompts.map(
+        (prompt) => (prompt.metrics?.testPassCount ?? 0) + (prompt.metrics?.testFailCount ?? 0),
       ),
     [head.prompts, body],
   );
 
   const numAsserts = React.useMemo(
     () =>
-      head.prompts.map((_, idx) =>
-        body.reduce(
-          (acc, row) => acc + (row.outputs[idx]?.gradingResult?.componentResults?.length || 0),
-          0,
-        ),
+      head.prompts.map(
+        (prompt) => (prompt.metrics?.assertFailCount ?? 0) + (prompt.metrics?.assertPassCount ?? 0),
       ),
     [head.prompts, body],
   );
 
   const numGoodAsserts = React.useMemo(
-    () =>
-      head.prompts.map((_, idx) =>
-        body.reduce((acc, row) => {
-          const componentResults = row.outputs[idx]?.gradingResult?.componentResults;
-          return acc + (componentResults ? componentResults.filter((r) => r?.pass).length : 0);
-        }, 0),
-      ),
+    () => head.prompts.map((prompt) => prompt.metrics?.assertPassCount || 0),
     [head.prompts, body],
   );
-
-  const highestPassingIndex = React.useMemo(
-    () =>
-      numGoodTests.reduce((maxIndex, currentPassCount, currentIndex, array) => {
-        return currentPassCount > array[maxIndex] ? currentIndex : maxIndex;
-      }, 0),
-    [numGoodTests],
-  );
-  const highestPassingCount = numGoodTests[highestPassingIndex];
 
   const columnHelper = React.useMemo(() => createColumnHelper<EvaluateTableRow>(), []);
 
@@ -544,8 +547,8 @@ function ResultsTable({
             id: `Prompt ${idx + 1}`,
             header: () => {
               const pct =
-                numGoodTests[idx] && body.length
-                  ? ((numGoodTests[idx] / body.length) * 100.0).toFixed(2)
+                numGoodTests[idx] && numTests[idx]
+                  ? ((numGoodTests[idx] / numTests[idx]) * 100.0).toFixed(2)
                   : '0.00';
               const columnId = `Prompt ${idx + 1}`;
               const isChecked = failureFilter[columnId] || false;
@@ -563,8 +566,8 @@ function ResultsTable({
                       <Tooltip
                         title={`Average: $${Intl.NumberFormat(undefined, {
                           minimumFractionDigits: 1,
-                          maximumFractionDigits: prompt.metrics.cost / body.length >= 1 ? 2 : 4,
-                        }).format(prompt.metrics.cost / body.length)} per test`}
+                          maximumFractionDigits: prompt.metrics.cost / numTests[idx] >= 1 ? 2 : 4,
+                        }).format(prompt.metrics.cost / numTests[idx])} per test`}
                       >
                         <span style={{ cursor: 'help' }}>
                           $
@@ -590,7 +593,7 @@ function ResultsTable({
                       <strong>Avg Tokens:</strong>{' '}
                       {Intl.NumberFormat(undefined, {
                         maximumFractionDigits: 0,
-                      }).format(prompt.metrics.tokenUsage.total / body.length)}
+                      }).format(prompt.metrics.tokenUsage.total / numTests[idx])}
                     </div>
                   ) : null}
                   {prompt.metrics?.totalLatencyMs ? (
@@ -598,7 +601,7 @@ function ResultsTable({
                       <strong>Avg Latency:</strong>{' '}
                       {Intl.NumberFormat(undefined, {
                         maximumFractionDigits: 0,
-                      }).format(prompt.metrics.totalLatencyMs / body.length)}{' '}
+                      }).format(prompt.metrics.totalLatencyMs / numTests[idx])}{' '}
                       ms
                     </div>
                   ) : null}
@@ -656,12 +659,12 @@ function ResultsTable({
                     <div className="summary">
                       <div
                         className={`highlight ${
-                          numGoodTests[idx] && body.length
-                            ? `success-${Math.round(((numGoodTests[idx] / body.length) * 100) / 20) * 20}`
+                          numGoodTests[idx] && numTests[idx]
+                            ? `success-${Math.round(((numGoodTests[idx] / numTests[idx]) * 100) / 20) * 20}`
                             : 'success-0'
                         }`}
                       >
-                        <strong>{pct}% passing</strong> ({numGoodTests[idx]}/{body.length} cases)
+                        <strong>{pct}% passing</strong> ({numGoodTests[idx]}/{numTests[idx]} cases)
                       </div>
                     </div>
                     {prompt.metrics?.testErrorCount && prompt.metrics.testErrorCount > 0 ? (
@@ -748,7 +751,7 @@ function ResultsTable({
     getOutput,
     handleRating,
     head.prompts,
-    highestPassingCount,
+
     maxTextLength,
     metricTotals,
     numAsserts,
@@ -787,12 +790,14 @@ function ResultsTable({
     return cols;
   }, [descriptionColumn, variableColumns, promptColumns]);
 
+  const pageCount = Math.ceil(rowCount / pagination.pageSize);
   const reactTable = useReactTable({
     data: filteredBody,
     columns,
     columnResizeMode: 'onChange',
     getCoreRowModel: getCoreRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
+    manualPagination: true,
+    pageCount,
     state: {
       columnVisibility,
       pagination,
@@ -822,7 +827,7 @@ function ResultsTable({
 
       const rowPageIndex = Math.floor(rowIndex / pagination.pageSize);
 
-      const maxPageIndex = reactTable.getPageCount() - 1;
+      const maxPageIndex = pageCount - 1;
       const safeRowPageIndex = Math.min(rowPageIndex, maxPageIndex);
 
       if (pagination.pageIndex !== safeRowPageIndex) {
@@ -1021,7 +1026,7 @@ function ResultsTable({
           })}
         </tbody>
       </table>
-      {reactTable.getPageCount() > 1 && (
+      {pageCount > 1 && (
         <Box className="pagination" mx={1} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <Button
             onClick={() => {
@@ -1044,7 +1049,7 @@ function ResultsTable({
                 const page = e.target.value ? Number(e.target.value) - 1 : 0;
                 setPagination((prev) => ({
                   ...prev,
-                  pageIndex: Math.min(Math.max(page, 0), reactTable.getPageCount() - 1),
+                  pageIndex: Math.min(Math.max(page, 0), pageCount - 1),
                 }));
                 clearRowIdFromUrl();
               }}
@@ -1053,18 +1058,18 @@ function ResultsTable({
               }}
               variant="outlined"
             />
-            <span>of {reactTable.getPageCount()}</span>
+            <span>of {pageCount}</span>
           </Typography>
           <Button
             onClick={() => {
               setPagination((prev) => ({
                 ...prev,
-                pageIndex: Math.min(prev.pageIndex + 1, reactTable.getPageCount() - 1),
+                pageIndex: Math.min(prev.pageIndex + 1, pageCount - 1),
               }));
               clearRowIdFromUrl();
               window.scrollTo(0, 0);
             }}
-            disabled={reactTable.getState().pagination.pageIndex + 1 >= reactTable.getPageCount()}
+            disabled={reactTable.getState().pagination.pageIndex + 1 >= pageCount}
             variant="contained"
           >
             Next
