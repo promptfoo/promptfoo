@@ -1,4 +1,10 @@
-# Golang Provider Example
+# golang-provider (Golang Provider Example)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example golang-provider
+```
 
 This example demonstrates how to structure a Go-based provider for promptfoo. For detailed documentation, see [Go Provider](https://www.promptfoo.dev/docs/providers/go/) documentation.
 

@@ -1,3 +1,11 @@
+# multishot (Multishot)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example multishot
+```
+
 This example is pre-configured in `promptfooconfig.yaml` (both identical examples). That means you can just run:
 
 ```

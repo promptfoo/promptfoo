@@ -1,3 +1,11 @@
+# dbrx-benchmark (Dbrx Benchmark)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example dbrx-benchmark
+```
+
 To get started, set your OPENAI_API_KEY environment variable.
 
 Next, edit promptfooconfig.yaml.
