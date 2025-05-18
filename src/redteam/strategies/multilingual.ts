@@ -19,7 +19,7 @@ export const DEFAULT_BATCH_SIZE = 3; // Default number of languages to process i
 /**
  * Helper function to get the concurrency limit from config or use default
  */
-function getConcurrencyLimit(config: Record<string, any> = {}): number {
+export function getConcurrencyLimit(config: Record<string, any> = {}): number {
   return config.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
 }
 
