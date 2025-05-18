@@ -99,7 +99,7 @@ export function modelScanCommand(program: Command): void {
           logger.info('Model scan completed successfully.');
         } else {
           logger.error(`Model scan completed with issues. Exit code: ${code}`);
-          process.exit(code || 1);
+          process.exitCode = code || 1;
         }
       });
     });

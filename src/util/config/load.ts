@@ -465,8 +465,7 @@ export async function resolveConfigs(
     });
     if (!cmdObj.modelOutputs) {
       logger.error('You must provide --model-outputs when using --assertions');
-      process.exitCode = 1;
-      return { config: {}, testSuite: { prompts: [], providers: [], tests: [] }, basePath: '' };
+      throw new Error('You must provide --model-outputs when using --assertions');
     }
     const modelOutputs = JSON.parse(
       fs.readFileSync(path.join(process.cwd(), cmdObj.modelOutputs), 'utf8'),
@@ -536,14 +535,12 @@ export async function resolveConfigs(
 
       ${chalk.green(`${runCommand} init`)}
     `);
-    process.exitCode = 1;
-    return { config: {}, testSuite: { prompts: [], providers: [], tests: [] }, basePath: '' };
+    throw new Error('No promptfooconfig found');
   }
 
   if (!hasPrompts) {
     logger.error('You must provide at least 1 prompt');
-    process.exitCode = 1;
-    return { config: {}, testSuite: { prompts: [], providers: [], tests: [] }, basePath: '' };
+    throw new Error('You must provide at least 1 prompt');
   }
 
   if (
@@ -552,8 +549,7 @@ export async function resolveConfigs(
     !hasProviders
   ) {
     logger.error('You must specify at least 1 provider (for example, openai:gpt-4o)');
-    process.exitCode = 1;
-    return { config: {}, testSuite: { prompts: [], providers: [], tests: [] }, basePath: '' };
+    throw new Error('You must specify at least 1 provider (for example, openai:gpt-4o)');
   }
 
   invariant(Array.isArray(config.providers), 'providers must be an array');
@@ -607,8 +603,7 @@ export async function resolveConfigs(
 
   if (parsedPrompts.length === 0) {
     logger.error('No prompts found');
-    process.exitCode = 1;
-    return { config: {}, testSuite: { prompts: [], providers: [], tests: [] }, basePath: '' };
+    throw new Error('No prompts found');
   }
 
   const defaultTest: TestCase = {
