@@ -324,8 +324,7 @@ export function getTestCount(
     return totalPluginTests + additionalTests;
   }
 
-  // For other strategies like morse and piglatin, we generate additional tests equal to the plugin tests
-  // Not doubling the total, just adding 'totalPluginTests' new tests
+  // Return the number of additional tests (equal to totalPluginTests) for these strategies
   return totalPluginTests;
 }
 
@@ -474,10 +473,9 @@ export async function synthesize({
     logger.info(
       `Using strategies:\n\n${chalk.yellow(
         strategies
-          .filter((s) => s.id !== 'basic')
+          .filter((s) => !['basic', 'retry'].includes(s.id))
           .map((s) => {
             // For non-basic, non-multilingual strategies, we want to show the additional tests they generate
-            // not the total including the original tests
             const testCount =
               s.id === 'multilingual'
                 ? getTestCount(s, totalPluginTests, strategies)

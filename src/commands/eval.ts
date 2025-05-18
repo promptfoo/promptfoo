@@ -50,7 +50,7 @@ const EvalCommandSchema = CommandLineOptionsSchema.extend({
 
 type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
 
-function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
+export function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
   const hasProviderWithoutLabel = testSuite.providers.some((p) => !p.label);
   if (hasProviderWithoutLabel) {
     logger.warn(
@@ -68,7 +68,7 @@ function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
 /**
  * Format token usage for display in CLI output
  */
-function formatTokenUsage(type: string, usage: Partial<TokenUsage>): string {
+export function formatTokenUsage(type: string, usage: Partial<TokenUsage>): string {
   const parts = [];
 
   if (usage.total !== undefined) {
