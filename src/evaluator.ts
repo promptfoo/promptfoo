@@ -36,7 +36,6 @@ import {
 } from './types';
 import { isApiProvider } from './types/providers';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
-import { processConfigFileReferences } from './util/fileReference';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
 import { safeJsonStringify } from './util/json';
@@ -462,7 +461,7 @@ export function generateVarCombinations(
     if (typeof vars[key] === 'string' && vars[key].startsWith('file://')) {
       const filePath = vars[key].slice('file://'.length);
       const resolvedPath = path.resolve(cliState.basePath || '', filePath);
-      const filePaths = globSync(resolvedPath.replace(/\\/g, '/'));
+      const filePaths = globSync(resolvedPath.replace(/\\/g, '/')) || [];
       values = filePaths.map((path: string) => `file://${path}`);
       if (values.length === 0) {
         throw new Error(`No files found for variable ${key} at path ${resolvedPath}`);
@@ -689,7 +688,6 @@ class Evaluator {
       testCase.vars = { ...testSuite.defaultTest?.vars, ...testCase?.vars };
 
       if (testCase.vars) {
-        testCase.vars = await processConfigFileReferences(testCase.vars, cliState.basePath || '');
         const varWithSpecialColsRemoved: Vars = {};
         const inputTransformForIndividualTest = testCase.options?.transformVars;
         const inputTransform = inputTransformForIndividualTest || inputTransformDefault;
@@ -711,7 +709,6 @@ class Evaluator {
           );
           testCase.vars = { ...testCase.vars, ...transformedVars };
         }
-        invariant(testCase.vars, 'testCase.vars is undefined');
         for (const varName of Object.keys(testCase.vars)) {
           varNames.add(varName);
           varWithSpecialColsRemoved[varName] = testCase.vars[varName];
