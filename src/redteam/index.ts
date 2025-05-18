@@ -324,8 +324,9 @@ export function getTestCount(
     return totalPluginTests + additionalTests;
   }
 
-  // All other strategies add the same number as plugin tests
-  return totalPluginTests * 2;
+  // For other strategies like morse and piglatin, we generate additional tests equal to the plugin tests
+  // Not doubling the total, just adding 'totalPluginTests' new tests
+  return totalPluginTests;
 }
 
 /**
@@ -383,7 +384,8 @@ export function calculateTotalTests(
     if (['basic', 'multilingual', 'retry'].includes(strategy.id)) {
       continue;
     }
-    totalTests = getTestCount(strategy, totalPluginTests, strategies);
+    // Add the tests from this strategy to the total, not replace the total
+    totalTests += getTestCount(strategy, totalPluginTests, strategies);
   }
 
   // Apply multilingual strategy last if present
@@ -474,7 +476,12 @@ export async function synthesize({
         strategies
           .filter((s) => s.id !== 'basic')
           .map((s) => {
-            const testCount = getTestCount(s, totalPluginTests, strategies);
+            // For non-basic, non-multilingual strategies, we want to show the additional tests they generate
+            // not the total including the original tests
+            const testCount =
+              s.id === 'multilingual'
+                ? getTestCount(s, totalPluginTests, strategies)
+                : totalPluginTests;
             return `${s.id} (${formatTestCount(testCount, true)})`;
           })
           .sort()
