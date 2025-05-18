@@ -128,7 +128,7 @@ You can override providers in several ways:
 
 1. For all test cases using `defaultTest`:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 defaultTest:
   options:
     provider:
