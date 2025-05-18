@@ -324,8 +324,8 @@ export function getTestCount(
     return totalPluginTests + additionalTests;
   }
 
-  // All other strategies add the same number as plugin tests
-  return totalPluginTests * 2;
+  // Return the number of additional tests (equal to totalPluginTests) for these strategies
+  return totalPluginTests;
 }
 
 /**
@@ -383,7 +383,8 @@ export function calculateTotalTests(
     if (['basic', 'multilingual', 'retry'].includes(strategy.id)) {
       continue;
     }
-    totalTests = getTestCount(strategy, totalPluginTests, strategies);
+    // Add the tests from this strategy to the total, not replace the total
+    totalTests += getTestCount(strategy, totalPluginTests, strategies);
   }
 
   // Apply multilingual strategy last if present
@@ -472,9 +473,13 @@ export async function synthesize({
     logger.info(
       `Using strategies:\n\n${chalk.yellow(
         strategies
-          .filter((s) => s.id !== 'basic')
+          .filter((s) => !['basic', 'retry'].includes(s.id))
           .map((s) => {
-            const testCount = getTestCount(s, totalPluginTests, strategies);
+            // For non-basic, non-multilingual strategies, we want to show the additional tests they generate
+            const testCount =
+              s.id === 'multilingual'
+                ? getTestCount(s, totalPluginTests, strategies)
+                : totalPluginTests;
             return `${s.id} (${formatTestCount(testCount, true)})`;
           })
           .sort()
