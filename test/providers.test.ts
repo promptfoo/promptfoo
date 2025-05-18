@@ -110,14 +110,17 @@ describe('loadApiProvider', () => {
   });
 
   it('should load OpenAI chat provider', async () => {
-    const provider = await loadApiProvider('openai:chat:gpt-4');
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-4', expect.any(Object));
+    const provider = await loadApiProvider('openai:chat:gpt-4.1');
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-4.1', expect.any(Object));
     expect(provider).toBeDefined();
   });
 
   it('should load OpenAI chat provider with default model', async () => {
     const provider = await loadApiProvider('openai:chat');
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-4o-mini', expect.any(Object));
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
+      'gpt-4.1-2025-04-14',
+      expect.any(Object),
+    );
     expect(provider).toBeDefined();
   });
 
