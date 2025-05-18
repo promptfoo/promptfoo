@@ -35,7 +35,7 @@ describe('other encodings strategy', () => {
       expect(result[0].vars!.expected).toBe('normal value');
 
       // Check that metadata and assertion are updated correctly
-      expect(result[0].metadata?.strategyId).toBe('other-encodings');
+      expect(result[0].metadata?.strategyId).toBe('morse');
       expect(result[0].metadata?.encodingType).toBe(EncodingType.MORSE);
     });
 
@@ -72,7 +72,7 @@ describe('other encodings strategy', () => {
       expect(result[0].vars!.expected).toBe('normal value');
 
       // Check that metadata and assertion are updated correctly
-      expect(result[0].metadata?.strategyId).toBe('other-encodings');
+      expect(result[0].metadata?.strategyId).toBe('piglatin');
       expect(result[0].metadata?.encodingType).toBe(EncodingType.PIG_LATIN);
     });
 
@@ -144,7 +144,7 @@ describe('other encodings strategy', () => {
     it('should preserve other test case properties', () => {
       const result = addOtherEncodings(testCases, 'prompt', EncodingType.MORSE);
       expect(result[0].vars!.expected).toBe('normal value');
-      expect(result[0].metadata?.strategyId).toBe('other-encodings');
+      expect(result[0].metadata?.strategyId).toBe('morse');
     });
 
     it('should handle invalid encoding type by defaulting to Morse', () => {

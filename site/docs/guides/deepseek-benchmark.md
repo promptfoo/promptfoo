@@ -28,7 +28,7 @@ npx promptfoo@latest init --no-interactive deepseek-benchmark
 
 Edit your `promptfooconfig.yaml` to include the three models:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - 'openai:gpt-4.1'
   - 'openai:o3-mini'

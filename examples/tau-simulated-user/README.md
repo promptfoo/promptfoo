@@ -1,3 +1,11 @@
+# tau-simulated-user (Tau Simulated User)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example tau-simulated-user
+```
+
 To get started, set your OPENAI_API_KEY environment variable, or other required keys for the providers you selected.
 
 Next, edit promptfooconfig.yaml.

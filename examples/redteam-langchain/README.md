@@ -1,4 +1,10 @@
-# LangChain Red Team Example
+# redteam-langchain (LangChain Red Team Example)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example redteam-langchain
+```
 
 Example of red teaming a LangChain customer service agent using Promptfoo.
 

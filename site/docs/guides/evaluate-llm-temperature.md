@@ -34,7 +34,7 @@ This command sets up a basic configuration file in your current directory, which
 
 Here's an example configuration that compares the outputs of gpt-4.1-mini at a low temperature (0.2) and a high temperature (0.9):
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 prompts:
   - 'Respond to the following instruction: {{message}}'
 

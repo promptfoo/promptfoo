@@ -897,6 +897,7 @@ The Responses API supports a wide range of models, including:
 - `o3` - OpenAI's most powerful reasoning model
 - `o3-mini` - Smaller, more affordable reasoning model
 - `o4-mini` - Latest fast, cost-effective reasoning model
+- `codex-mini-latest` - Fast reasoning model optimized for the Codex CLI
 
 ### Using the Responses API
 

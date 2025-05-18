@@ -89,7 +89,16 @@ export const useStore = create<State>()(
         set(updates);
       },
       getTestSuite: () => {
-        const { description, env, extensions, prompts, providers, scenarios, testCases } = get();
+        const {
+          description,
+          env,
+          extensions,
+          prompts,
+          providers,
+          scenarios,
+          testCases,
+          evaluateOptions,
+        } = get();
         return {
           description,
           env,
@@ -98,6 +107,7 @@ export const useStore = create<State>()(
           providers,
           scenarios,
           tests: testCases,
+          evaluateOptions,
         };
       },
     }),

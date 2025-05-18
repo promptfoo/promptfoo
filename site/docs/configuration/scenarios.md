@@ -12,7 +12,7 @@ This is useful for when you want to test a wide range of inputs with the same se
 
 Let's take the example of a language translation app. We want to test whether the system can accurately translate three phrases ('Hello world', 'Good morning', and 'How are you?') from English to three different languages (Spanish, French, and German).
 
-```text title=prompts.txt
+```text title="prompts.txt"
 You're a translator.  Translate this into {{language}}: {{input}}
 ---
 Speak in {{language}}: {{input}}
@@ -21,7 +21,7 @@ Speak in {{language}}: {{input}}
 Instead of creating individual `tests` for each combination,
 we can create a `scenarios` that groups this data and the tests/assertions together:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 scenarios:
   - config:
       - vars:
