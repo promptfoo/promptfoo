@@ -6,12 +6,18 @@ import { loadApiProvider } from '../../src/providers';
 import { HARM_PLUGINS, PII_PLUGINS } from '../../src/redteam/constants';
 import { extractEntities } from '../../src/redteam/extraction/entities';
 import { extractSystemPurpose } from '../../src/redteam/extraction/purpose';
-import { synthesize, resolvePluginConfig, calculateTotalTests } from '../../src/redteam/index';
+import {
+  synthesize,
+  resolvePluginConfig,
+  calculateTotalTests,
+  getMultilingualRequestedCount,
+} from '../../src/redteam/index';
 import { Plugins } from '../../src/redteam/plugins';
 import { shouldGenerateRemote, getRemoteHealthUrl } from '../../src/redteam/remoteGeneration';
 import { Strategies } from '../../src/redteam/strategies';
 import { validateStrategies } from '../../src/redteam/strategies';
 import { DEFAULT_LANGUAGES } from '../../src/redteam/strategies/multilingual';
+import type { TestCaseWithPlugin } from '../../src/types';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 
 jest.mock('cli-progress');
@@ -644,5 +650,51 @@ describe('calculateTotalTests', () => {
       includeBasicTests: true,
       multilingualStrategy: undefined,
     });
+  });
+});
+
+describe('getMultilingualRequestedCount', () => {
+  const testCases = [
+    { metadata: { pluginId: 'test1' } },
+    { metadata: { pluginId: 'test2' } },
+  ] as TestCaseWithPlugin[];
+
+  it('should calculate count with custom languages array', () => {
+    const strategy = {
+      id: 'multilingual',
+      config: { languages: ['en', 'es', 'fr'] },
+    };
+    const count = getMultilingualRequestedCount(testCases, strategy);
+    expect(count).toBe(6); // 2 test cases * 3 languages
+  });
+
+  it('should use DEFAULT_LANGUAGES when no languages config provided', () => {
+    const strategy = { id: 'multilingual' };
+    const count = getMultilingualRequestedCount(testCases, strategy);
+    expect(count).toBe(2 * DEFAULT_LANGUAGES.length);
+  });
+
+  it('should handle empty languages array', () => {
+    const strategy = {
+      id: 'multilingual',
+      config: { languages: [] },
+    };
+    const count = getMultilingualRequestedCount(testCases, strategy);
+    expect(count).toBe(0); // 2 test cases * 0 languages
+  });
+
+  it('should handle undefined config', () => {
+    const strategy = { id: 'multilingual' };
+    const count = getMultilingualRequestedCount(testCases, strategy);
+    expect(count).toBe(2 * DEFAULT_LANGUAGES.length);
+  });
+
+  it('should handle empty test cases', () => {
+    const strategy = {
+      id: 'multilingual',
+      config: { languages: ['en', 'es'] },
+    };
+    const count = getMultilingualRequestedCount([], strategy);
+    expect(count).toBe(0);
   });
 });
