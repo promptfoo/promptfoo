@@ -1,4 +1,5 @@
 import { Command } from 'commander';
+import * as path from 'path';
 import { disableCache } from '../../src/cache';
 import {
   doEval,
@@ -15,7 +16,6 @@ import { loadApiProvider } from '../../src/providers';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../src/types';
 import { resolveConfigs } from '../../src/util/config/load';
-import * as path from 'path';
 
 jest.mock('../../src/cache');
 jest.mock('../../src/evaluator');
