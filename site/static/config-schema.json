@@ -308,6 +308,9 @@
                             },
                             "AWS_SAGEMAKER_MAX_RETRIES": {
                               "type": "string"
+                            },
+                            "PROMPTFOO_EVAL_TIMEOUT_MS": {
+                              "type": "string"
                             }
                           },
                           "additionalProperties": false
@@ -532,6 +535,7 @@
                                               "latency",
                                               "levenshtein",
                                               "llm-rubric",
+                                              "pi",
                                               "meteor",
                                               "model-graded-closedqa",
                                               "model-graded-factuality",
@@ -1023,6 +1027,7 @@
                           "beavertails",
                           "bfla",
                           "bias",
+                          "bias:gender",
                           "bola",
                           "cca",
                           "competitors",
@@ -1033,6 +1038,21 @@
                           "default",
                           "divergent-repetition",
                           "donotanswer",
+                          "eu:ai-act",
+                          "eu:ai-act:annex3:biometric-id",
+                          "eu:ai-act:annex3:critical-infrastructure",
+                          "eu:ai-act:annex3:education",
+                          "eu:ai-act:annex3:employment",
+                          "eu:ai-act:annex3:essential-services",
+                          "eu:ai-act:annex3:justice-democracy",
+                          "eu:ai-act:annex3:law-enforcement",
+                          "eu:ai-act:annex3:migration-border",
+                          "eu:ai-act:art5:biometric-categorisation",
+                          "eu:ai-act:art5:exploitation-of-vulnerabilities",
+                          "eu:ai-act:art5:remote-biometric-id-live",
+                          "eu:ai-act:art5:remote-biometric-id-post",
+                          "eu:ai-act:art5:social-scoring",
+                          "eu:ai-act:art5:subliminal-manipulation",
                           "excessive-agency",
                           "foundation",
                           "hallucination",
@@ -1069,6 +1089,7 @@
                           "imitation",
                           "indirect-prompt-injection",
                           "intent",
+                          "mcp",
                           "misinformation",
                           "mitre:atlas",
                           "mitre:atlas:exfiltration",
@@ -1174,6 +1195,7 @@
                               "beavertails",
                               "bfla",
                               "bias",
+                              "bias:gender",
                               "bola",
                               "cca",
                               "competitors",
@@ -1184,6 +1206,21 @@
                               "default",
                               "divergent-repetition",
                               "donotanswer",
+                              "eu:ai-act",
+                              "eu:ai-act:annex3:biometric-id",
+                              "eu:ai-act:annex3:critical-infrastructure",
+                              "eu:ai-act:annex3:education",
+                              "eu:ai-act:annex3:employment",
+                              "eu:ai-act:annex3:essential-services",
+                              "eu:ai-act:annex3:justice-democracy",
+                              "eu:ai-act:annex3:law-enforcement",
+                              "eu:ai-act:annex3:migration-border",
+                              "eu:ai-act:art5:biometric-categorisation",
+                              "eu:ai-act:art5:exploitation-of-vulnerabilities",
+                              "eu:ai-act:art5:remote-biometric-id-live",
+                              "eu:ai-act:art5:remote-biometric-id-post",
+                              "eu:ai-act:art5:social-scoring",
+                              "eu:ai-act:art5:subliminal-manipulation",
                               "excessive-agency",
                               "foundation",
                               "hallucination",
@@ -1220,6 +1257,7 @@
                               "imitation",
                               "indirect-prompt-injection",
                               "intent",
+                              "mcp",
                               "misinformation",
                               "mitre:atlas",
                               "mitre:atlas:exfiltration",
@@ -1365,12 +1403,12 @@
                           "math-prompt",
                           "morse",
                           "multilingual",
-                          "other-encodings",
                           "pandamonium",
                           "piglatin",
                           "prompt-injection",
                           "retry",
-                          "rot13"
+                          "rot13",
+                          "video"
                         ]
                       },
                       {
@@ -1398,7 +1436,7 @@
                   }
                 ]
               },
-              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports audio, base64, basic, best-of-n, citation, crescendo, default, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak:composite, jailbreak:likert, jailbreak:tree, leetspeak, math-prompt, morse, multilingual, other-encodings, pandamonium, piglatin, prompt-injection, retry, rot13",
+              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports audio, base64, basic, best-of-n, citation, crescendo, default, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak:composite, jailbreak:likert, jailbreak:tree, leetspeak, math-prompt, morse, multilingual, pandamonium, piglatin, prompt-injection, retry, rot13, video",
               "default": [
                 "default"
               ]
@@ -1449,6 +1487,9 @@
             },
             "showProgressBar": {
               "type": "boolean"
+            },
+            "timeoutMs": {
+              "type": "number"
             }
           },
           "additionalProperties": false

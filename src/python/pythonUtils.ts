@@ -20,7 +20,7 @@ export async function tryPath(path: string): Promise<string | null> {
     const result = await Promise.race([
       execAsync(`${path} --version`),
       new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Command timed out')), 250),
+        setTimeout(() => reject(new Error('Command timed out')), 2500),
       ),
     ]);
     const versionOutput = (result as { stdout: string }).stdout.trim();

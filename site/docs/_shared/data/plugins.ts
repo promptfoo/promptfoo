@@ -1,6 +1,7 @@
 export const PLUGIN_CATEGORIES = [
   'Brand',
   'Compliance and Legal',
+  'Dataset',
   'Security and Access Control',
   'Trust and Safety',
   'Custom',
@@ -21,6 +22,11 @@ export const CATEGORY_DESCRIPTIONS: CategoryDescription[] = [
     category: 'Compliance and Legal',
     description:
       'Tests for LLM behavior that may encourage illegal activity, breach contractual commitments, or violate intellectual property rights.',
+  },
+  {
+    category: 'Dataset',
+    description:
+      'Pre-compiled collections of test cases from research datasets designed to evaluate model safety, robustness, and alignment.',
   },
   {
     category: 'Security and Access Control',
@@ -85,6 +91,21 @@ type AssertArrayIsSorted<T extends readonly { pluginId: string }[]> = T extends 
 export const PLUGINS = [
   {
     category: 'Security and Access Control',
+    description: 'Tests whether an agent is vulnerable to memory poisoning attacks',
+    label: 'security',
+    link: '/docs/red-team/plugins/memory-poisoning/',
+    name: 'Memory Poisoning',
+    pluginId: 'agentic:memory-poisoning',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
     description: 'Attempts to obfuscate malicious content using ASCII smuggling',
     label: 'technical',
     link: '/docs/red-team/plugins/ascii-smuggling/',
@@ -99,7 +120,7 @@ export const PLUGINS = [
     isRemote: true,
   },
   {
-    category: 'Trust and Safety',
+    category: 'Dataset',
     description: 'Uses the BeaverTails prompt injection dataset',
     label: 'harmful',
     link: '/docs/red-team/plugins/beavertails/',
@@ -113,7 +134,7 @@ export const PLUGINS = [
     vulnerabilityType: 'security',
   },
   {
-    category: 'Trust and Safety',
+    category: 'Dataset',
     description: 'Tests handling of unsafe image content through multi-modal model evaluation',
     label: 'harmful',
     link: '/docs/red-team/plugins/unsafebench/',
@@ -244,7 +265,7 @@ export const PLUGINS = [
     vulnerabilityType: 'security',
   },
   {
-    category: 'Trust and Safety',
+    category: 'Dataset',
     description: 'Tests prompt injection attacks using the CyberSecEval dataset',
     label: 'technical',
     link: '/docs/red-team/plugins/cyberseceval/',
@@ -258,7 +279,7 @@ export const PLUGINS = [
     vulnerabilityType: 'security',
   },
   {
-    category: 'Trust and Safety',
+    category: 'Dataset',
     description: 'Tests prompt injection attacks using the Harmbench dataset',
     label: 'technical',
     link: '/docs/red-team/plugins/harmbench/',
@@ -834,7 +855,7 @@ export const PLUGINS = [
     vulnerabilityType: 'privacy',
   },
   {
-    category: 'Trust and Safety',
+    category: 'Dataset',
     description:
       'Tests LLM systems using a curated collection of prompts from https://github.com/elder-plinius/L1B3RT4S',
     label: 'technical',
@@ -917,6 +938,21 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'misinformation and misuse',
+    isRemote: true,
+  },
+  {
+    category: 'Trust and Safety',
+    description: 'Tests handling of gender bias',
+    label: 'harmful',
+    link: '/docs/red-team/plugins/gender-bias/',
+    name: 'Gender Bias',
+    pluginId: 'bias:gender',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'harmful',
     isRemote: true,
   },
   {
@@ -1010,7 +1046,7 @@ export const PLUGINS = [
     vulnerabilityType: 'security',
   },
   {
-    category: 'Trust and Safety',
+    category: 'Dataset',
     description: 'Tests how well LLMs handle harmful queries using the DoNotAnswer dataset',
     label: 'technical',
     link: '/docs/red-team/plugins/donotanswer/',
@@ -1024,7 +1060,7 @@ export const PLUGINS = [
     vulnerabilityType: 'security',
   },
   {
-    category: 'Trust and Safety',
+    category: 'Dataset',
     description:
       'Tests how well LLMs handle ambiguous words (homonyms) that can have both harmful and benign interpretations',
     label: 'technical',

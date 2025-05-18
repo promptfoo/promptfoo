@@ -14,6 +14,7 @@ import {
 } from '../../../src/redteam/providers/iterativeTree';
 import {
   ATTACKER_SYSTEM_PROMPT,
+  CLOUD_ATTACKER_SYSTEM_PROMPT,
   JUDGE_SYSTEM_PROMPT,
   ON_TOPIC_SYSTEM_PROMPT,
 } from '../../../src/redteam/providers/prompts';
@@ -26,10 +27,22 @@ jest.mock('../../../src/util/templates');
 
 describe('RedteamIterativeProvider', () => {
   describe('renderSystemPrompts', () => {
-    it('should render system prompts correctly', () => {
+    it('should render system prompts correctly with default settings', () => {
       const goal = '{{goal}}';
       const result = renderSystemPrompts(getNunjucksEngine(), goal);
-      expect(result.redteamSystemPrompt).toBe(ATTACKER_SYSTEM_PROMPT);
+      const nunjucksEng = getNunjucksEngine();
+      const attackerPrompt = nunjucksEng.renderString(ATTACKER_SYSTEM_PROMPT, { goal });
+      expect(result.redteamSystemPrompt).toBe(attackerPrompt);
+      expect(result.onTopicSystemPrompt).toBe(ON_TOPIC_SYSTEM_PROMPT);
+      expect(result.judgeSystemPrompt).toBe(JUDGE_SYSTEM_PROMPT);
+    });
+
+    it('should render system prompts with excludeTargetOutputFromAgenticAttackGeneration=true', () => {
+      const goal = '{{goal}}';
+      const result = renderSystemPrompts(getNunjucksEngine(), goal, undefined, true);
+      const nunjucksEng = getNunjucksEngine();
+      const attackerPrompt = nunjucksEng.renderString(CLOUD_ATTACKER_SYSTEM_PROMPT, { goal });
+      expect(result.redteamSystemPrompt).toBe(attackerPrompt);
       expect(result.onTopicSystemPrompt).toBe(ON_TOPIC_SYSTEM_PROMPT);
       expect(result.judgeSystemPrompt).toBe(JUDGE_SYSTEM_PROMPT);
     });
@@ -281,6 +294,7 @@ describe('RedteamIterativeProvider', () => {
       const score = 7;
       const isOnTopic = true;
       const containsPenalizedPhrase = false;
+      const excludeTargetOutput = false;
 
       const result = updateRedteamHistory(
         targetResponse,
@@ -288,6 +302,7 @@ describe('RedteamIterativeProvider', () => {
         score,
         isOnTopic,
         containsPenalizedPhrase,
+        excludeTargetOutput,
       );
 
       expect(result).toEqual({
@@ -306,6 +321,7 @@ describe('RedteamIterativeProvider', () => {
       const score = 3;
       const isOnTopic = false;
       const containsPenalizedPhrase = true;
+      const excludeTargetOutput = false;
 
       const result = updateRedteamHistory(
         targetResponse,
@@ -313,6 +329,7 @@ describe('RedteamIterativeProvider', () => {
         score,
         isOnTopic,
         containsPenalizedPhrase,
+        excludeTargetOutput,
       );
 
       expect(result).toEqual({
@@ -331,6 +348,7 @@ describe('RedteamIterativeProvider', () => {
       const score = 10; // Maximum score
       const isOnTopic = true;
       const containsPenalizedPhrase = false;
+      const excludeTargetOutput = false;
 
       const result = updateRedteamHistory(
         targetResponse,
@@ -338,6 +356,7 @@ describe('RedteamIterativeProvider', () => {
         score,
         isOnTopic,
         containsPenalizedPhrase,
+        excludeTargetOutput,
       );
 
       expect(result).toEqual({
@@ -353,6 +372,7 @@ describe('RedteamIterativeProvider', () => {
       const score = 0; // Minimum score
       const isOnTopic = true;
       const containsPenalizedPhrase = false;
+      const excludeTargetOutput = false;
 
       const result = updateRedteamHistory(
         targetResponse,
@@ -360,6 +380,7 @@ describe('RedteamIterativeProvider', () => {
         score,
         isOnTopic,
         containsPenalizedPhrase,
+        excludeTargetOutput,
       );
 
       expect(result).toEqual({
@@ -367,6 +388,32 @@ describe('RedteamIterativeProvider', () => {
         content: expect.stringContaining('LANGUAGE MODEL OUTPUT: Minimum score response'),
       });
       expect(result.content).toContain(`SCORE: ${score}`);
+    });
+
+    it('should exclude target output when excludeTargetOutputFromAgenticAttackGeneration is true', () => {
+      const targetResponse = 'Target response';
+      const goal = 'Test goal';
+      const score = 7;
+      const isOnTopic = true;
+      const containsPenalizedPhrase = false;
+      const excludeTargetOutput = true;
+
+      const result = updateRedteamHistory(
+        targetResponse,
+        goal,
+        score,
+        isOnTopic,
+        containsPenalizedPhrase,
+        excludeTargetOutput,
+      );
+
+      expect(result).toEqual({
+        role: 'user',
+        content: expect.not.stringContaining('LANGUAGE MODEL OUTPUT:'),
+      });
+      expect(result.content).toContain(`OBJECTIVE: ${goal}`);
+      expect(result.content).toContain(`SCORE: ${score}`);
+      expect(result.content).not.toContain(targetResponse);
     });
   });
 

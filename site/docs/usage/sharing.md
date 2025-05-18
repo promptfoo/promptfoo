@@ -14,7 +14,8 @@ Most users will share to promptfoo.app cloud:
 
 ```sh
 # Login (one-time setup)
-promptfoo auth login
+# First, get your API key from https://promptfoo.app/welcome
+promptfoo auth login -k YOUR_API_KEY
 
 # Run an eval and share it
 promptfoo eval
@@ -22,7 +23,7 @@ promptfoo share
 ```
 
 :::note
-Cloud sharing creates private links only visible to you and your organization. If you don't have an account, visit https://promptfoo.app/welcome to create one.
+Cloud sharing creates private links only visible to you and your organization. If you don't have an account, visit https://promptfoo.app/welcome to create one and get your API key.
 :::
 
 ## Sharing Specific Evals
@@ -41,7 +42,8 @@ If you have a Promptfoo Enterprise account:
 
 ```sh
 # Login to your enterprise instance
-promptfoo auth login --host https://your-company.promptfoo.app
+# Get your API key from the "CLI Login Information" section in your profile
+promptfoo auth login --host https://your-company.promptfoo.app -k YOUR_API_KEY
 
 # Share your eval
 promptfoo share
@@ -50,8 +52,10 @@ promptfoo share
 Enterprise sharing includes additional features:
 
 - Team-based access controls
-- Custom sharing policies
-- SSO integration
+- Role-based permissions for shared evaluations
+- SSO integration (SAML 2.0 and OIDC)
+
+For more details on authentication and team management, see the [Enterprise documentation](/docs/enterprise/authentication.md).
 
 ## CI/CD Integration
 
@@ -65,7 +69,7 @@ export PROMPTFOO_API_KEY=your_api_token
 promptfoo eval --share
 ```
 
-Get your API token from the "CLI Login Information" section in your account settings.
+Get your API token from the "CLI Login Information" section in your account settings. For Enterprise users, you can also use [Service Accounts](/docs/enterprise/service-accounts.md) for CI/CD integration.
 
 ## Advanced: Self-Hosted Sharing
 
@@ -78,6 +82,14 @@ export PROMPTFOO_REMOTE_APP_BASE_URL=http://your-server:3000
 
 # Share your eval (no login required)
 promptfoo share
+```
+
+If you need to use HTTP Basic Authentication with your self-hosted server:
+
+```sh
+# Configure sharing with basic auth credentials in URL
+export PROMPTFOO_REMOTE_API_BASE_URL=http://username:password@your-server:3000
+export PROMPTFOO_REMOTE_APP_BASE_URL=http://username:password@your-server:3000
 ```
 
 You can also add these settings to your `promptfooconfig.yaml`:
@@ -128,3 +140,5 @@ sharing: false
 
 - [Self-hosting](/docs/usage/self-hosting.md)
 - [Command Line Usage](/docs/usage/command-line.md)
+- [Enterprise Authentication](/docs/enterprise/authentication.md)
+- [Managing Roles and Teams](/docs/enterprise/teams.md)

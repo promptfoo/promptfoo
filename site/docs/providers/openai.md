@@ -567,6 +567,12 @@ config:
   response_format: file://./path/to/response_format.json
 ```
 
+For a complete example, see the [OpenAI Structured Output example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-structured-output) or initialize it with:
+
+```bash
+npx promptfoo@latest init --example openai-structured-output
+```
+
 ## Supported environment variables
 
 These OpenAI-related environment variables are supported:
@@ -891,6 +897,7 @@ The Responses API supports a wide range of models, including:
 - `o3` - OpenAI's most powerful reasoning model
 - `o3-mini` - Smaller, more affordable reasoning model
 - `o4-mini` - Latest fast, cost-effective reasoning model
+- `codex-mini-latest` - Fast reasoning model optimized for the Codex CLI
 
 ### Using the Responses API
 
@@ -1038,3 +1045,18 @@ There are a few things you can do if you encounter OpenAI rate limits (most comm
 ### OpenAI flakiness
 
 To retry HTTP requests that are Internal Server errors, set the `PROMPTFOO_RETRY_5XX` environment variable to `1`.
+
+## Agents SDK Integration
+
+Promptfoo supports evaluation of OpenAI's Agents SDK, which enables building multi-agent systems with specialized agents, handoffs, and persistent context. You can integrate the Agents SDK as a [Python provider](./python.md).
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - file://agent_provider.py:call_api
+```
+
+For a complete working example of an airline customer service system with multiple agents, see the [OpenAI Agents SDK example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-agents) or initialize it with:
+
+```bash
+npx promptfoo@latest init --example openai-agents
+```

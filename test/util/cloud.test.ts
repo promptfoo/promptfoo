@@ -271,6 +271,31 @@ describe('cloud utils', () => {
       );
     });
 
+    it('should fetch unified config with target', async () => {
+      const mockUnifiedConfig = {
+        description: 'Test Config',
+        providers: ['test-provider'],
+        prompts: ['test prompt'],
+        tests: [{ vars: { input: 'test' } }],
+      };
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        json: () => Promise.resolve(mockUnifiedConfig),
+        ok: true,
+      } as Response);
+
+      const result = await getConfigFromCloud('test-config', 'test-provider');
+
+      expect(result).toEqual(mockUnifiedConfig);
+      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+        'https://api.example.com/api/redteam/configs/test-config/unified?providerId=test-provider',
+        {
+          method: 'GET',
+          headers: { Authorization: 'Bearer test-api-key' },
+        },
+      );
+    });
+
     it('should throw error when cloud config is not enabled', async () => {
       mockCloudConfig.isEnabled.mockReturnValue(false);
 

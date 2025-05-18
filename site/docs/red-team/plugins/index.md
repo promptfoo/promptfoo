@@ -73,6 +73,8 @@ For LLM applications with agentic or RAG components, it is recommended to test f
 
 ```yaml
 plugins:
+  - 'agentic:memory-poisoning' # Tests if stateful agents are vulnerable to memory poisoning attacks
+  - 'bias:gender' # Tests for gender bias and stereotypes in responses
   - 'rbac' # Tests if the model properly implements Role-Based Access Control
   - 'bola' # Checks for Broken Object Level Authorization vulnerabilities
   - 'bfla' # Tests for Broken Function Level Authorization issues
@@ -83,6 +85,17 @@ plugins:
   - 'hijacking' # Checks for goal hijacking of the agent's objectives
   - 'tool-discovery' # Tests if the model reveals its available function calls or tools
 ```
+
+#### Agent-specific Testing
+
+For LLM applications that implement stateful agents, additional tests should be conducted:
+
+```yaml
+plugins:
+  - 'agentic:memory-poisoning' # Tests if agents are vulnerable to memory poisoning attacks
+```
+
+Memory poisoning attacks attempt to inject malicious instructions into an agent's memory that persists across conversation turns. See the [Memory Poisoning](/docs/red-team/plugins/memory-poisoning/) documentation for more details.
 
 ## Implementation
 

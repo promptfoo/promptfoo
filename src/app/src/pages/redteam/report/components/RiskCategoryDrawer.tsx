@@ -308,7 +308,15 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
           passes.length > 0 ? (
             <List>
               {passes.map((pass, index) => (
-                <ListItem key={index} className="failure-item">
+                <ListItem
+                  key={index}
+                  className="failure-item"
+                  sx={{ position: 'relative', cursor: 'pointer' }}
+                  onClick={() => {
+                    setSelectedTest(pass);
+                    setDetailsDialogOpen(true);
+                  }}
+                >
                   <Box sx={{ display: 'flex', alignItems: 'flex-start', width: '100%' }}>
                     <Box sx={{ flexGrow: 1 }}>
                       <Typography variant="subtitle1" className="prompt">
@@ -317,6 +325,50 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
                       <Typography variant="body2" className="output">
                         {getOutputDisplay(pass.output)}
                       </Typography>
+                      {pass.gradingResult &&
+                        (() => {
+                          const strategyId = getStrategyIdFromTest(pass);
+                          return (
+                            strategyId && (
+                              <Tooltip title={strategyDescriptions[strategyId as Strategy] || ''}>
+                                <Chip
+                                  size="small"
+                                  label={
+                                    displayNameOverrides[
+                                      strategyId as keyof typeof displayNameOverrides
+                                    ] || strategyId
+                                  }
+                                  sx={{ mt: 1 }}
+                                />
+                              </Tooltip>
+                            )
+                          );
+                        })()}
+                    </Box>
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        opacity: 0,
+                        transition: 'opacity 0.2s',
+                        '.failure-item:hover &': {
+                          opacity: 1,
+                        },
+                      }}
+                    >
+                      {pass.gradingResult?.componentResults?.some(
+                        (result) => (result.suggestions?.length || 0) > 0,
+                      ) && (
+                        <IconButton
+                          onClick={(e) => {
+                            e.stopPropagation(); // Prevent list item click
+                            setCurrentGradingResult(pass.gradingResult);
+                            setSuggestionsDialogOpen(true);
+                          }}
+                          sx={{ ml: 1 }}
+                        >
+                          <LightbulbOutlinedIcon color="primary" />
+                        </IconButton>
+                      )}
                     </Box>
                   </Box>
                 </ListItem>

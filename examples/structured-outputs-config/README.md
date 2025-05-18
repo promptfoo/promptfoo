@@ -1,4 +1,10 @@
-# Structured Outputs Config
+# structured-outputs-config (Structured Outputs Config)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example structured-outputs-config
+```
 
 This example demonstrates how to enforce structured JSON outputs using schema validation with OpenAI and Azure OpenAI providers. The configuration supports both providers, but you can remove either one if you only want to test with a specific provider.
 

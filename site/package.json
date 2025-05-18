@@ -32,7 +32,7 @@
     "@tsconfig/docusaurus": "^2.0.3",
     "canvas-confetti": "^1.9.3",
     "clsx": "^2.1.1",
-    "dedent": "^1.5.3",
+    "dedent": "^1.6.0",
     "docusaurus-plugin-image-zoom": "^2.0.0",
     "framer-motion": "^11.13.3",
     "lucide-react": "^0.468.0",

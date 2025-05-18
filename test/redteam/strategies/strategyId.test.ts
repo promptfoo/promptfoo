@@ -89,12 +89,12 @@ describe('Strategy IDs', () => {
       'math-prompt': 'mathPrompt.ts',
       morse: 'otherEncodings.ts',
       multilingual: 'multilingual.ts',
-      'other-encodings': 'otherEncodings.ts',
       pandamonium: 'pandamonium.ts',
       piglatin: 'otherEncodings.ts',
       'prompt-injection': 'promptInjections/index.ts',
       retry: 'retry.ts',
       rot13: 'rot13.ts',
+      video: 'simpleVideo.ts',
     };
 
     // Check all defined strategies

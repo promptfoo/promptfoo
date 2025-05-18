@@ -1,4 +1,10 @@
-# Image Analysis Example
+# claude-vs-gpt-image (Image Analysis Example)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example claude-vs-gpt-image
+```
 
 This example compares an image analysis task using:
 

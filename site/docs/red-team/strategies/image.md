@@ -1,5 +1,7 @@
 ---
 sidebar_label: Image Inputs
+title: Image Jailbreaking Strategy
+description: Test how AI systems handle image-encoded text inputs that may bypass content filters
 ---
 
 # Image Jailbreaking
@@ -104,6 +106,8 @@ npm i sharp
 
 ## Related Concepts
 
-- [Audio Jailbreaking](/docs/red-team/strategies/audio.md) - Similar approach using speech audio instead of images
+- [Audio Jailbreaking](audio.md) - Similar approach using speech audio instead of images
+- [Base64 Encoding](base64.md) - Similar encoding technique using text-to-base64 conversion
+- [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) - Comprehensive overview of vulnerabilities
 
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.

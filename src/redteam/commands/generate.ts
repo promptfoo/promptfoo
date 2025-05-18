@@ -11,7 +11,9 @@ import { synthesize } from '../';
 import { disableCache } from '../../cache';
 import cliState from '../../cliState';
 import { VERSION } from '../../constants';
-import logger, { setLogLevel } from '../../logger';
+import { getEnvBool } from '../../envars';
+import logger from '../../logger';
+import { loadApiProviders } from '../../providers';
 import telemetry from '../../telemetry';
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types';
 import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
@@ -26,13 +28,14 @@ import {
   DEFAULT_STRATEGIES,
   REDTEAM_MODEL,
 } from '../constants';
-import { shouldGenerateRemote } from '../remoteGeneration';
+import { shouldGenerateRemote, neverGenerateRemote } from '../remoteGeneration';
 import type {
   RedteamCliGenerateOptions,
   RedteamFileConfig,
   RedteamStrategyObject,
   SynthesizeOptions,
 } from '../types';
+import { doTargetPurposeDiscovery, mergePurposes } from './discover';
 
 function getConfigHash(configPath: string): string {
   const content = fs.readFileSync(configPath, 'utf8');
@@ -52,6 +55,7 @@ export async function doGenerateRedteam(
   let redteamConfig: RedteamFileConfig | undefined;
   const configPath = options.config || options.defaultConfigPath;
   const outputPath = options.output || 'redteam.yaml';
+  let finalPurpose = redteamConfig?.purpose ?? options.purpose;
 
   // Check for updates to the config file and decide whether to generate
   let shouldGenerate = options.force;
@@ -85,6 +89,32 @@ export async function doGenerateRedteam(
     );
     testSuite = resolved.testSuite;
     redteamConfig = resolved.config.redteam;
+
+    // If automatic purpose discovery is enabled, remote generation is enabled, and a config is provided that contains at least one target,
+    // discover the purpose from the target:
+    if (
+      !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_PURPOSE_DISCOVERY_AGENT', true) &&
+      !neverGenerateRemote() &&
+      resolved.config.providers &&
+      Array.isArray(resolved.config.providers)
+    ) {
+      invariant(
+        resolved.config.providers.length > 0,
+        'At least one provider must be provided in the config file',
+      );
+      const providers = await loadApiProviders(resolved.config.providers);
+      try {
+        const generatedPurpose = await doTargetPurposeDiscovery(providers[0]);
+        // Append the discovered purpose to the purpose if it exists:
+        finalPurpose = finalPurpose
+          ? mergePurposes(finalPurpose, generatedPurpose)
+          : generatedPurpose;
+      } catch (error) {
+        logger.error(
+          `Failed to auto-discover purpose: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
   } else if (options.purpose) {
     // There is a purpose, so we can just have a dummy test suite for standalone invocation
     testSuite = {
@@ -182,7 +212,7 @@ export async function doGenerateRedteam(
     entities: redteamConfig?.entities,
     plugins,
     provider: redteamConfig?.provider || options.provider,
-    purpose: redteamConfig?.purpose || options.purpose,
+    purpose: finalPurpose,
     strategies: strategyObjs,
     delay: redteamConfig?.delay || options.delay,
     sharing: redteamConfig?.sharing || options.sharing,
@@ -277,6 +307,19 @@ export async function doGenerateRedteam(
     const relativeOutputPath = path.relative(process.cwd(), options.output);
     logger.info(`Wrote ${redteamTests.length} test cases to ${relativeOutputPath}`);
     if (!options.inRedteamRun) {
+      // Provider cleanup step
+      try {
+        const provider = testSuite.providers[0] as ApiProvider;
+        if (provider && typeof provider.cleanup === 'function') {
+          const cleanupResult = provider.cleanup();
+          if (cleanupResult instanceof Promise) {
+            await cleanupResult;
+          }
+        }
+      } catch (cleanupErr) {
+        logger.warn(`Error during provider cleanup: ${cleanupErr}`);
+      }
+
       const commandPrefix = isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo';
       logger.info(
         '\n' +
@@ -391,7 +434,6 @@ export function redteamGenerateCommand(
       'Specify the language for generated tests. Defaults to English',
     )
     .option('--no-cache', 'Do not read or write results to disk cache', false)
-    .option('--env-file, --env-path <path>', 'Path to .env file')
     .option(
       '-j, --max-concurrency <number>',
       'Maximum number of concurrent API calls',
@@ -403,14 +445,9 @@ export function redteamGenerateCommand(
     )
     .option('--remote', 'Force remote inference wherever possible', false)
     .option('--force', 'Force generation even if no changes are detected', false)
-    .option('--verbose', 'Show debug logs', defaultConfig?.commandLineOptions?.verbose)
     .option('--no-progress-bar', 'Do not show progress bar')
     .option('--burp-escape-json', 'Escape quotes in Burp payloads', false)
     .action((opts: Partial<RedteamCliGenerateOptions>): void => {
-      if (opts.verbose) {
-        setLogLevel('debug');
-      }
-
       if (opts.remote) {
         cliState.remote = true;
       }

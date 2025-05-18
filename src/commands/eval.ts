@@ -12,7 +12,7 @@ import { getEnvFloat, getEnvInt } from '../envars';
 import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
 import { checkEmailStatusOrExit, promptForEmailUnverified } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
-import logger, { getLogLevel, setLogLevel } from '../logger';
+import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
 import { loadApiProvider } from '../providers';
@@ -35,6 +35,7 @@ import { printBorder, setupEnv, writeMultipleOutputs } from '../util';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
 import { maybeLoadFromExternalFile } from '../util/file';
+import { formatDuration } from '../util/formatDuration';
 import invariant from '../util/invariant';
 import { filterProviders } from './eval/filterProviders';
 import type { FilterOptions } from './eval/filterTests';
@@ -49,7 +50,7 @@ const EvalCommandSchema = CommandLineOptionsSchema.extend({
 
 type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
 
-function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
+export function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
   const hasProviderWithoutLabel = testSuite.providers.some((p) => !p.label);
   if (hasProviderWithoutLabel) {
     logger.warn(
@@ -67,7 +68,7 @@ function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
 /**
  * Format token usage for display in CLI output
  */
-function formatTokenUsage(type: string, usage: Partial<TokenUsage>): string {
+export function formatTokenUsage(type: string, usage: Partial<TokenUsage>): string {
   const parts = [];
 
   if (usage.total !== undefined) {
@@ -100,9 +101,6 @@ export async function doEval(
   evaluateOptions: EvaluateOptions,
 ): Promise<Eval> {
   setupEnv(cmdObj.envPath);
-  if (cmdObj.verbose) {
-    setLogLevel('debug');
-  }
 
   let config: Partial<UnifiedConfig> | undefined = undefined;
   let testSuite: TestSuite | undefined = undefined;
@@ -411,6 +409,10 @@ export async function doEval(
 
     printBorder();
 
+    // Format and display duration
+    const duration = Math.round((Date.now() - startTime) / 1000);
+    const durationDisplay = formatDuration(duration);
+
     const isRedteam = Boolean(config.redteam);
 
     logger.info(chalk.green.bold(`Successes: ${successes}`));
@@ -421,6 +423,8 @@ export async function doEval(
     if (!Number.isNaN(passRate)) {
       logger.info(chalk.blue.bold(`Pass Rate: ${passRate.toFixed(2)}%`));
     }
+    logger.info(chalk.blue.bold(`Duration: ${durationDisplay} (concurrency: ${maxConcurrency})`));
+
     if (tokenUsage.total > 0) {
       const evalTokens = {
         total: tokenUsage.total,
@@ -549,7 +553,10 @@ export async function doEval(
     if (testSuite.providers.length > 0) {
       for (const provider of testSuite.providers) {
         if (isApiProvider(provider)) {
-          provider?.cleanup?.();
+          const cleanup = provider?.cleanup?.();
+          if (cleanup instanceof Promise) {
+            await cleanup;
+          }
         }
       }
     }
@@ -581,7 +588,6 @@ export function evalCommand(
       '-c, --config <paths...>',
       'Path to configuration file. Automatically loads promptfooconfig.yaml',
     )
-    .option('--env-file, --env-path <path>', 'Path to .env file')
 
     // Input sources
     .option('-a, --assertions <path>', 'Path to assertions file')
@@ -606,7 +612,7 @@ export function evalCommand(
     )
     .option(
       '--prompt-suffix <path>',
-      'This suffix is append to every prompt',
+      'This suffix is appended to every prompt.',
       defaultConfig.defaultTest?.options?.suffix,
     )
     .option(
@@ -704,7 +710,6 @@ export function evalCommand(
 
     // Miscellaneous
     .option('--description <description>', 'Description of the eval run')
-    .option('--verbose', 'Show debug logs', defaultConfig?.commandLineOptions?.verbose)
     .option('--no-progress-bar', 'Do not show progress bar')
     .action(async (opts: EvalCommandOptions, command: Command) => {
       let validatedOpts: z.infer<typeof EvalCommandSchema>;
