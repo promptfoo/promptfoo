@@ -41,7 +41,8 @@ export function modelScanCommand(program: Command): void {
         logger.error(
           'No paths specified. Please provide at least one model file or directory to scan.',
         );
-        process.exit(1);
+        process.exitCode = 1;
+        return;
       }
 
       // Check if modelaudit is installed
@@ -50,7 +51,8 @@ export function modelScanCommand(program: Command): void {
         logger.error('ModelAudit is not installed.');
         logger.info(`Please install it using: ${chalk.green('pip install modelaudit')}`);
         logger.info('For more information, visit: https://www.promptfoo.dev/docs/model-audit/');
-        process.exit(1);
+        process.exitCode = 1;
+        return;
       }
 
       const args = ['-m', 'modelaudit'];
@@ -89,7 +91,7 @@ export function modelScanCommand(program: Command): void {
         logger.error(`Failed to start modelaudit: ${error.message}`);
         logger.info('Make sure modelaudit is installed and available in your PATH.');
         logger.info('Install it using: pip install modelaudit');
-        process.exit(1);
+        process.exitCode = 1;
       });
 
       modelAudit.on('close', (code) => {

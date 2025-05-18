@@ -470,7 +470,8 @@ export function redteamGenerateCommand(
             parsed.error.errors.forEach((err: z.ZodIssue) => {
               logger.error(`  ${err.path.join('.')}: ${err.message}`);
             });
-            process.exit(1);
+            process.exitCode = 1;
+            return;
           }
           overrides = parsed.data;
         }
@@ -498,7 +499,7 @@ export function redteamGenerateCommand(
             }`,
           );
         }
-        process.exit(1);
+        process.exitCode = 1;
       }
     });
 }

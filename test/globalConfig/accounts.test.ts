@@ -180,10 +180,10 @@ describe('accounts', () => {
   });
 
   describe('checkEmailStatusOrExit', () => {
-    const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
-
     beforeEach(() => {
       jest.clearAllMocks();
+      // Reset exitCode before each test
+      process.exitCode = undefined;
     });
 
     it('should use CI email when in CI environment', async () => {
@@ -241,7 +241,7 @@ describe('accounts', () => {
 
       await checkEmailStatusOrExit();
 
-      expect(mockExit).toHaveBeenCalledWith(1);
+      expect(process.exitCode).toBe(1);
       expect(logger.error).toHaveBeenCalledWith(
         'You have exceeded the maximum cloud inference limit. Please contact inquiries@promptfoo.dev to upgrade your account.',
       );
@@ -268,7 +268,6 @@ describe('accounts', () => {
 
       expect(logger.info).toHaveBeenCalledTimes(2);
       expect(logger.warn).toHaveBeenCalledWith(chalk.yellow(warningMessage));
-      expect(mockExit).not.toHaveBeenCalled();
     });
 
     it('should handle fetch errors', async () => {
@@ -284,7 +283,6 @@ describe('accounts', () => {
       expect(logger.debug).toHaveBeenCalledWith(
         'Failed to check user status: Error: Network error',
       );
-      expect(mockExit).not.toHaveBeenCalled();
     });
   });
 });

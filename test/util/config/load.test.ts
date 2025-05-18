@@ -1177,25 +1177,34 @@ describe('resolveConfigs', () => {
   });
 
   it('should warn and exit when no config file, no prompts, no providers, and not in CI', async () => {
-    jest.spyOn(process, 'exit').mockImplementation((code) => {
-      throw new Error(`Process exited with code ${code}`);
-    });
+    // Save original exitCode
+    const originalExitCode = process.exitCode;
+    // Reset exitCode
+    process.exitCode = undefined;
+
     jest.mocked(isCI).mockReturnValue(false);
     jest.mocked(isRunningUnderNpx).mockReturnValue(true);
 
     const cmdObj = {};
     const defaultConfig = {};
 
-    await expect(resolveConfigs(cmdObj, defaultConfig)).rejects.toThrow(
-      'Process exited with code 1',
-    );
+    await resolveConfigs(cmdObj, defaultConfig);
 
+    expect(process.exitCode).toBe(1);
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('No promptfooconfig found'));
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('npx promptfoo eval -c'));
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('npx promptfoo init'));
+
+    // Restore original exitCode
+    process.exitCode = originalExitCode;
   });
 
   it('should throw an error if no providers are provided', async () => {
+    // Save original exitCode
+    const originalExitCode = process.exitCode;
+    // Reset exitCode
+    process.exitCode = undefined;
+
     const cmdObj = { config: ['config.json'] };
     const defaultConfig = {};
     const promptfooConfig = {
@@ -1204,13 +1213,15 @@ describe('resolveConfigs', () => {
 
     jest.mocked(fs.readFileSync).mockReturnValueOnce(JSON.stringify(promptfooConfig));
 
-    await expect(resolveConfigs(cmdObj, defaultConfig)).rejects.toThrow(
-      'Process exited with code 1',
-    );
+    await resolveConfigs(cmdObj, defaultConfig);
 
+    expect(process.exitCode).toBe(1);
     expect(logger.error).toHaveBeenCalledWith(
       expect.stringContaining('You must specify at least 1 provider (for example, openai:gpt-4o)'),
     );
+
+    // Restore original exitCode
+    process.exitCode = originalExitCode;
   });
 
   it('should allow dataset generation configs to omit providers', async () => {

@@ -262,10 +262,10 @@ export async function startServer(
         logger.error(
           `Port ${port} is already in use. Do you have another Promptfoo instance running?`,
         );
-        process.exit(1);
+        process.exitCode = 1;
       } else {
         logger.error(`Failed to start server: ${error.message}`);
-        process.exit(1);
+        process.exitCode = 1;
       }
     });
 }

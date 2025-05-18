@@ -49,7 +49,7 @@ export function importCommand(program: Command) {
         });
       } catch (error) {
         logger.error(`Failed to import eval: ${error}`);
-        process.exit(1);
+        process.exitCode = 1;
       }
     });
 }

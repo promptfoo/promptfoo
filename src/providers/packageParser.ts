@@ -35,7 +35,8 @@ export async function loadFromPackage(packageInstancePath: string, basePath: str
       logger.error(dedent`
         Could not find entity: ${chalk.bold(entityName)} in module: ${chalk.bold(filePath)}.
       `);
-      process.exit(1);
+      process.exitCode = 1;
+      return null;
     }
 
     return entity;
