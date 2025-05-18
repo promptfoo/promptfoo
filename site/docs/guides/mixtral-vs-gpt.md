@@ -27,7 +27,7 @@ npx promptfoo@latest init mixtral-gpt-comparison
 
 Edit your `promptfooconfig.yaml` to include the models you want to compare. Here's an example configuration with Mixtral, GPT-4o-mini, and GPT-4o:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - replicate:mistralai/mixtral-8x7b-instruct-v0.1:2b56576fcfbe32fa0526897d8385dd3fb3d36ba6fd0dbe033c72886b81ade93e
   - openai:gpt-4o-mini
@@ -58,7 +58,7 @@ Local options such as [ollama](/docs/providers/ollama), [vllm](/docs/providers/v
 
 Customize the behavior of each model by setting parameters such as `temperature` and `max_tokens` or `max_length`:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: openai:gpt-4o-mini
     // highlight-start
@@ -84,7 +84,7 @@ providers:
 
 Set up the prompts that you want to run for each model. In this case, we'll just use a simple prompt, because we want to compare model performance.
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 prompts:
   - 'Answer this as best you can: {{query}}'
 ```
@@ -95,7 +95,7 @@ If desired, you can test multiple prompts (just add more to the list), or test [
 
 Define the test cases that you want to use for the evaluation. This includes setting up variables that will be interpolated into the prompts:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 tests:
   - vars:
       query: 'What is the capital of France?'
