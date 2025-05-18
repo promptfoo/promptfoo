@@ -11,6 +11,7 @@ import {
   resolvePluginConfig,
   calculateTotalTests,
   getMultilingualRequestedCount,
+  getTestCount,
 } from '../../src/redteam/index';
 import { Plugins } from '../../src/redteam/plugins';
 import { shouldGenerateRemote, getRemoteHealthUrl } from '../../src/redteam/remoteGeneration';
@@ -651,6 +652,50 @@ describe('calculateTotalTests', () => {
       multilingualStrategy: undefined,
     });
   });
+
+  it('should add tests for each strategy instead of replacing the total', () => {
+    const strategies = [{ id: 'morse' }, { id: 'piglatin' }];
+    const result = calculateTotalTests(mockPlugins, strategies);
+    expect(result).toEqual({
+      totalTests: 15, // Base 5 + 5 for morse + 5 for piglatin
+      totalPluginTests: 5,
+      effectiveStrategyCount: 2,
+      includeBasicTests: true,
+      multilingualStrategy: undefined,
+    });
+  });
+
+  it('should handle multiple strategies with multilingual applied last', () => {
+    const strategies = [
+      { id: 'morse' },
+      { id: 'piglatin' },
+      { id: 'multilingual', config: { languages: { en: true, es: true } } },
+    ];
+    const result = calculateTotalTests(mockPlugins, strategies);
+    expect(result).toEqual({
+      totalTests: 30, // (Base 5 + 5 morse + 5 piglatin) * 2 languages
+      totalPluginTests: 5,
+      effectiveStrategyCount: 3,
+      includeBasicTests: true,
+      multilingualStrategy: strategies[2],
+    });
+  });
+
+  it('should handle multiple strategies with basic strategy disabled', () => {
+    const strategies = [
+      { id: 'basic', config: { enabled: false } },
+      { id: 'morse' },
+      { id: 'piglatin' },
+    ];
+    const result = calculateTotalTests(mockPlugins, strategies);
+    expect(result).toEqual({
+      totalTests: 10, // 0 base (basic disabled) + 5 morse + 5 piglatin
+      totalPluginTests: 5,
+      effectiveStrategyCount: 2,
+      includeBasicTests: false,
+      multilingualStrategy: undefined,
+    });
+  });
 });
 
 describe('getMultilingualRequestedCount', () => {
@@ -696,5 +741,46 @@ describe('getMultilingualRequestedCount', () => {
     };
     const count = getMultilingualRequestedCount([], strategy);
     expect(count).toBe(0);
+  });
+});
+
+describe('getTestCount', () => {
+  it('should return totalPluginTests when basic strategy is enabled', () => {
+    const strategy = { id: 'basic', config: { enabled: true } };
+    const result = getTestCount(strategy, 10, []);
+    expect(result).toBe(10);
+  });
+
+  it('should return 0 when basic strategy is disabled', () => {
+    const strategy = { id: 'basic', config: { enabled: false } };
+    const result = getTestCount(strategy, 10, []);
+    expect(result).toBe(0);
+  });
+
+  it('should multiply by number of languages for multilingual strategy', () => {
+    const strategy = {
+      id: 'multilingual',
+      config: { languages: { en: true, es: true, fr: true } },
+    };
+    const result = getTestCount(strategy, 10, []);
+    expect(result).toBe(30); // 10 * 3 languages
+  });
+
+  it('should add configured number of tests for retry strategy', () => {
+    const strategy = { id: 'retry', config: { numTests: 5 } };
+    const result = getTestCount(strategy, 10, []);
+    expect(result).toBe(15); // 10 + 5
+  });
+
+  it('should add totalPluginTests for retry strategy when numTests not specified', () => {
+    const strategy = { id: 'retry' };
+    const result = getTestCount(strategy, 10, []);
+    expect(result).toBe(20); // 10 + 10
+  });
+
+  it('should return totalPluginTests for other strategies', () => {
+    const strategy = { id: 'morse' };
+    const result = getTestCount(strategy, 10, []);
+    expect(result).toBe(10); // Return exactly totalPluginTests, not doubled
   });
 });
