@@ -14,13 +14,13 @@ import { extractVariablesFromTemplates } from '../util/templates';
 import type { StrategyExemptPlugin } from './constants';
 import {
   ALIASED_PLUGIN_MAPPINGS,
-  ALIASED_STRATEGY_MAPPINGS,
+  STRATEGY_COLLECTION_MAPPINGS,
   FOUNDATION_PLUGINS,
   HARM_PLUGINS,
   PII_PLUGINS,
   riskCategorySeverityMap,
   Severity,
-  STRATEGY_ALIASES,
+  STRATEGY_COLLECTIONS,
   STRATEGY_EXEMPT_PLUGINS,
 } from './constants';
 import { extractEntities } from './extraction/entities';
@@ -450,10 +450,10 @@ export async function synthesize({
   // Expand strategy aliases
   const expandedStrategies: typeof strategies = [];
   strategies.forEach((strategy) => {
-    if (STRATEGY_ALIASES.includes(strategy.id as any)) {
-      // If this is a strategy alias, expand it to its component strategies
+    if (STRATEGY_COLLECTIONS.includes(strategy.id as any)) {
+      // If this is a strategy collection, expand it to its component strategies
       const aliasedStrategies =
-        ALIASED_STRATEGY_MAPPINGS[strategy.id as keyof typeof ALIASED_STRATEGY_MAPPINGS];
+        STRATEGY_COLLECTION_MAPPINGS[strategy.id as keyof typeof STRATEGY_COLLECTION_MAPPINGS];
       if (aliasedStrategies) {
         aliasedStrategies.forEach((strategyId) => {
           expandedStrategies.push({

@@ -859,20 +859,25 @@ export const ADDITIONAL_STRATEGIES = [
 ] as const;
 export type AdditionalStrategy = (typeof ADDITIONAL_STRATEGIES)[number];
 
-const _ALL_STRATEGIES = ['default', ...DEFAULT_STRATEGIES, ...ADDITIONAL_STRATEGIES] as const;
-export const ALL_STRATEGIES = [..._ALL_STRATEGIES].sort();
-export type Strategy = (typeof ALL_STRATEGIES)[number];
-
 // Strategy aliases - collections of strategies that can be referenced by a single name
-export const STRATEGY_ALIASES = ['other-encodings'] as const;
-export type StrategyAlias = (typeof STRATEGY_ALIASES)[number];
+export const STRATEGY_COLLECTIONS = ['other-encodings'] as const;
+export type StrategyCollection = (typeof STRATEGY_COLLECTIONS)[number];
 
-// Mapping from strategy alias to included strategies
-export const ALIASED_STRATEGY_MAPPINGS: Record<StrategyAlias, string[]> = {
+// Mapping from strategy collection to included strategies
+export const STRATEGY_COLLECTION_MAPPINGS: Record<StrategyCollection, string[]> = {
   'other-encodings': ['morse', 'piglatin'],
 };
 
-export const subCategoryDescriptions: Record<Plugin | Strategy | StrategyAlias, string> = {
+const _ALL_STRATEGIES = [
+  'default',
+  ...DEFAULT_STRATEGIES,
+  ...ADDITIONAL_STRATEGIES,
+  ...STRATEGY_COLLECTIONS,
+] as const;
+export const ALL_STRATEGIES = [..._ALL_STRATEGIES].sort();
+export type Strategy = (typeof ALL_STRATEGIES)[number];
+
+export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   [MEMORY_POISONING_PLUGIN_ID]: 'Tests whether an agent is vulnerable to memory poisoning attacks',
   'ascii-smuggling': 'Tests vulnerability to Unicode tag-based instruction smuggling attacks',
   audio: 'Tests handling of audio content',
@@ -1054,6 +1059,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'math-prompt': 'Mathematical Notation Attack',
   morse: 'Morse Code Encoding',
   multilingual: 'Cross-Language Attack',
+  'other-encodings': 'Alternative Text Encodings',
   overreliance: 'Overreliance',
   pandamonium: '[Experimental] Pandamonium',
   piglatin: 'Pig Latin Encoding',
@@ -1463,7 +1469,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests how models handle ambiguous terms related to potentially harmful topics like violence and drugs',
 };
 
-export const strategyDescriptions: Record<Strategy | StrategyAlias, string> = {
+export const strategyDescriptions: Record<Strategy, string> = {
   audio: 'Tests detection and handling of audio-based malicious payloads',
   base64: 'Tests detection and handling of Base64-encoded malicious payloads',
   basic: 'Equivalent to no strategy. Always included. Can be disabled in configuration.',
@@ -1498,7 +1504,7 @@ export const strategyDescriptions: Record<Strategy | StrategyAlias, string> = {
     'Collection of alternative text transformation strategies (Morse code and Pig Latin) for testing evasion techniques',
 };
 
-export const strategyDisplayNames: Record<Strategy | StrategyAlias, string> = {
+export const strategyDisplayNames: Record<Strategy, string> = {
   audio: 'Audio',
   base64: 'Base64 Encoding',
   basic: 'Basic',

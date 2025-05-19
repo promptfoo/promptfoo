@@ -14,7 +14,6 @@ import {
   FOUNDATION_PLUGINS,
   HARM_PLUGINS,
   PII_PLUGINS,
-  STRATEGY_ALIASES,
   type Plugin,
   type Strategy,
 } from '../redteam/constants';
@@ -83,29 +82,26 @@ export const RedteamPluginSchema = z.union([
 
 export const strategyIdSchema = z
   .union([
-    z.string().superRefine((val, ctx) => {
-      const validStrategies = [...ALL_STRATEGIES, ...STRATEGY_ALIASES];
-      if (!validStrategies.includes(val as any)) {
+    z.enum(ALL_STRATEGIES as unknown as [string, ...string[]]).superRefine((val, ctx) => {
+      if (!ALL_STRATEGIES.includes(val as Strategy)) {
         ctx.addIssue({
           code: z.ZodIssueCode.invalid_enum_value,
-          options: validStrategies,
+          options: [...ALL_STRATEGIES] as [string, ...string[]],
           received: val,
-          message: `Invalid strategy name. Must be one of: ${validStrategies.join(', ')} (or a path starting with file://)`,
+          message: `Invalid strategy name. Must be one of: ${[...ALL_STRATEGIES].join(', ')} (or a path starting with file://)`,
         });
       }
     }),
-    z
-      .string()
-      .refine(
-        (value) => {
-          return value.startsWith('file://') && isJavascriptFile(value);
-        },
-        {
-          message: `Custom strategies must start with file:// and end with .js or .ts, or use one of the built-in strategies: ${[...ALL_STRATEGIES, ...STRATEGY_ALIASES].join(', ')}`,
-        },
-      ),
+    z.string().refine(
+      (value) => {
+        return value.startsWith('file://') && isJavascriptFile(value);
+      },
+      {
+        message: `Custom strategies must start with file:// and end with .js or .ts, or use one of the built-in strategies: ${[...ALL_STRATEGIES].join(', ')}`,
+      },
+    ),
   ])
-  .describe(`Identifiers for test strategies. Can be one of: ${[...ALL_STRATEGIES, ...STRATEGY_ALIASES].join(', ')}, or a path to a custom strategy file starting with file://.`);
+  .describe('Name of the strategy');
 /**
  * Schema for individual redteam strategies
  */
