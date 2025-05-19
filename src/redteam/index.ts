@@ -792,3 +792,13 @@ export async function synthesize({
 
   return { purpose, entities, testCases: finalTestCases, injectVar };
 }
+
+export {
+  getPluginSeverity,
+  getStatus,
+  generateReport,
+  categories,
+  formatTestCount,
+  pluginMatchesStrategyTargets,
+  applyStrategies,
+};
