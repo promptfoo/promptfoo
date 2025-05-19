@@ -137,7 +137,7 @@ export async function doTargetPurposeDiscovery(target: ApiProvider): Promise<{
 
   logger.info(`\nPurpose:\n\n${chalk.green(purpose)}\n`);
 
-  // Serialize the conversation history:
+  // Serialize the conversation history, ignoring the original order of messages:
   const serializedConversationHistory = [];
 
   for (const msg of conversationHistory) {
