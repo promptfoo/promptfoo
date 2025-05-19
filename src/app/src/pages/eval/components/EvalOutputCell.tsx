@@ -211,7 +211,6 @@ function EvalOutputCell({
       />
     );
   } else if (output.audio) {
-    console.log('HELLOOO output.audio', output.audio);
     node = (
       <div className="audio-output">
         <audio controls style={{ width: '100%' }} data-testid="audio-player">
