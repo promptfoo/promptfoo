@@ -28,12 +28,12 @@ npx promptfoo@latest init replicate-lifeboat-eval
 
 Modify the `promptfooconfig.yaml` file to include the models you wish to compare. Below is an example configuration that compares a Llama model on Replicate with a GPT model:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 prompts:
   - 'Respond to the user concisely: {{message}}'
 
 providers:
-  - id: openai:chat:gpt-4o-mini
+  - id: openai:chat:gpt-4.1-mini
     config:
       apiKey: 'your_openai_api_key'
       temperature: 0.01
@@ -58,7 +58,7 @@ You'll need to provide your own Replicate and OpenAI API tokens (these are used 
 
 Define a set of test cases in `promptfooconfig.yaml`. Here's an example with a few test cases and corresponding assertions:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 # ... (previous config sections)
 
 tests:

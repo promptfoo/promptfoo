@@ -1,5 +1,11 @@
 # google-live (Google Live API with Gemini)
 
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example google-live
+```
+
 This example demonstrates how to use promptfoo with Google's WebSocket-based Live API, which enables low-latency bidirectional interactions with Gemini models. The example includes four different configurations:
 
 1. Basic query demonstration

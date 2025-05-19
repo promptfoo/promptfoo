@@ -1,3 +1,11 @@
+# redteam-travel-agent (Redteam Travel Agent)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example redteam-travel-agent
+```
+
 This is a simple red team example for a hypothetical customer service agent representing Travel R Us, a hotel search company.
 
 We check for things like:

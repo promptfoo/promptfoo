@@ -1,0 +1,69 @@
+{
+  "type": "json_schema",
+  "json_schema": {
+    "name": "customer_support_analysis",
+    "strict": true,
+    "schema": {
+      "type": "object",
+      "properties": {
+        "query_summary": {
+          "type": "string",
+          "description": "A brief summary of the customer's query"
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "billing",
+            "technical_issue",
+            "product_inquiry",
+            "complaint",
+            "feature_request",
+            "other"
+          ],
+          "description": "The main category of the customer's query"
+        },
+        "sentiment": {
+          "type": "string",
+          "enum": ["positive", "neutral", "negative"],
+          "description": "The overall sentiment of the customer's query"
+        },
+        "urgency": {
+          "type": "string",
+          "enum": ["1", "2", "3", "4", "5"],
+          "description": "The urgency level of the query, where 1 is lowest and 5 is highest"
+        },
+        "suggested_actions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "description": "A specific action to be taken"
+              },
+              "priority": {
+                "type": "string",
+                "enum": ["low", "medium", "high"]
+              }
+            },
+            "required": ["action", "priority"],
+            "additionalProperties": false
+          }
+        },
+        "estimated_resolution_time": {
+          "type": "string",
+          "description": "Estimated time to resolve the query (e.g., '2 hours', '1 day')"
+        }
+      },
+      "required": [
+        "query_summary",
+        "category",
+        "sentiment",
+        "urgency",
+        "suggested_actions",
+        "estimated_resolution_time"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,4 +1,10 @@
-# Redteam: Agent
+# redteam-agent (Redteam: Agent)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example redteam-agent
+```
 
 This example demonstrates redteaming a travel agent agent implemented using LangGraph.
 

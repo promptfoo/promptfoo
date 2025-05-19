@@ -29,17 +29,17 @@ npx promptfoo@latest init gpt-comparison
 
 Edit `promptfooconfig.yaml` to include GPT-3.5 and GPT-4:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 providers:
-  - openai:gpt-4o-mini
-  - openai:gpt-4o
+  - openai:gpt-4.1-mini
+  - openai:gpt-4.1
 ```
 
 ## Step 2: Crafting the prompts
 
 For our comparison, we'll use a simple prompt:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 prompts:
   - 'Solve this riddle: {{riddle}}'
 ```
@@ -50,7 +50,7 @@ Feel free to add multiple prompts and tailor to your use case.
 
 Above, we have a `{{riddle}}` placeholder variable. Each test case runs the prompts with a different riddle:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 tests:
   - vars:
       riddle: 'I speak without a mouth and hear without ears. I have no body, but I come alive with wind. What am I?'
@@ -125,8 +125,8 @@ Finally, we'll use `defaultTest` to clean things up a bit and apply global `late
 
 ```yaml
 providers:
-  - openai:gpt-4o-mini
-  - openai:gpt-4o
+  - openai:gpt-4.1-mini
+  - openai:gpt-4.1
 
 prompts:
   - 'Solve this riddle: {{riddle}}'

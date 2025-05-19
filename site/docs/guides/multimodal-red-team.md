@@ -279,7 +279,7 @@ Create a configuration file named `promptfooconfig.unsafebench.yaml`:
 description: UnsafeBench Multi-Modal Model Evaluation
 
 targets:
-  - id: openai:gpt-4o-mini
+  - id: openai:gpt-4.1-mini
     label: multimodal-model
 
 prompts:
@@ -426,7 +426,7 @@ prompts:
     label: audio-prompt
 
 targets:
-  - id: openai:gpt-4o
+  - id: openai:gpt-4.1
     label: multimodal-model
 
 defaultTest:

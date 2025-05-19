@@ -42,6 +42,8 @@ We offer two deployment models:
 
 - **Promptfoo Enterprise On-Prem**: Our self-hosted solution that can be deployed on any cloud provider, including AWS, Azure, and GCP. Includes a dedicated runner component for executing scans within your network perimeter.
 
+![Basic red team architecture](/img/docs/red-team-basic-architecture.png)
+
 ## Product Comparison
 
 | Feature                                             | Community                       | Promptfoo Enterprise                               | Promptfoo Enterprise On-Prem                       |

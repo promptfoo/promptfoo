@@ -1,4 +1,10 @@
-# HTTP Provider Example
+# http-provider (HTTP Provider Example)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example http-provider
+```
 
 This example demonstrates how to configure and use HTTP providers with promptfoo to integrate with external API endpoints.
 

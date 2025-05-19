@@ -1,4 +1,10 @@
-# CyberSecEval Example
+# cyberseceval (CyberSecEval Example)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example cyberseceval
+```
 
 This example shows how to run Meta's CyberSecEval benchmark to test LLMs for prompt injection vulnerabilities.
 

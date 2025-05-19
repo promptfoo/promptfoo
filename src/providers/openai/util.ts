@@ -206,6 +206,20 @@ export const OPENAI_CHAT_MODELS = [
       output: 2 / 1e6,
     },
   })),
+  ...['o4-mini', 'o4-mini-2025-04-16'].map((model) => ({
+    id: model,
+    cost: {
+      input: 1.1 / 1e6,
+      output: 4.4 / 1e6,
+    },
+  })),
+  ...['codex-mini-latest'].map((model) => ({
+    id: model,
+    cost: {
+      input: 1.5 / 1e6,
+      output: 6.0 / 1e6,
+    },
+  })),
 ];
 
 // See https://platform.openai.com/docs/models/model-endpoint-compatibility

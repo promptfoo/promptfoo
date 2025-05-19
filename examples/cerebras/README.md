@@ -1,4 +1,4 @@
-# Cerebras Example (High-Performance LLM Inference)
+# cerebras (Cerebras Example (High-Performance LLM Inference))
 
 This example demonstrates how to use the Cerebras provider with promptfoo to evaluate Cerebras Inference API models, which offer high-performance inference for Llama and other LLM models.
 

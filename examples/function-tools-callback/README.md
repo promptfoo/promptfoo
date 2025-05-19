@@ -1,4 +1,10 @@
-# Function Tool Callbacks Example
+# function-tools-callback (Function Tool Callbacks Example)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example function-tools-callback
+```
 
 This example demonstrates how to use promptfoo to evaluate OpenAI's function calling capabilities with the gpt-4o, utilizing the `functionToolCallbacks` feature.
 

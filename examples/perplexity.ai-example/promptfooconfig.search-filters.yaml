@@ -1,0 +1,47 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Advanced search filters with Perplexity (date and location)
+
+prompts:
+  - 'What were the major tech announcements during {{event}}?'
+  - 'What are the best {{food}} restaurants near {{location}}?'
+
+providers:
+  - id: perplexity:sonar-pro
+    config:
+      temperature: 0.2
+      max_tokens: 1500
+      # Date range filters (only used with first prompt)
+      search_after_date_filter: '01/01/2024'
+      search_before_date_filter: '05/31/2024'
+      search_domain_filter: ['theverge.com', 'techcrunch.com', 'wired.com']
+      web_search_options:
+        search_context_size: 'high'
+      # This provider will be used for the first prompt only
+
+  - id: perplexity:sonar-pro
+    config:
+      temperature: 0.2
+      max_tokens: 1500
+      # Location-based search (only used with second prompt)
+      web_search_options:
+        user_location:
+          # San Francisco coordinates
+          latitude: 37.7749
+          longitude: -122.4194
+          country: 'US'
+        search_context_size: 'medium'
+      # This provider will be used for the second prompt only
+
+tests:
+  - vars:
+      event: Google I/O 2024
+      food: sushi
+      location: downtown
+  - vars:
+      event: Apple WWDC 2024
+      food: pizza
+      location: financial district
+  - vars:
+      event: CES 2024
+      food: vegan
+      location: mission district

@@ -273,6 +273,21 @@ module.exports = (output, context) => {
 };
 ```
 
+## Inline assertions
+
+If you are using promptfoo as a JS package, you can build your assertion inline:
+
+```js
+{
+  type:"javascript",
+  value: (output, context) => {
+    return output.includes("specific text");
+  }
+}
+```
+
+Output will always be a string, so if your [custom response parser](/docs/providers/http/#function-parser) returned an object, you can use `JSON.parse(output)` to convert it back to an object.
+
 ### ES modules
 
 ES modules are supported, but must have a `.mjs` file extension. Alternatively, if you are transpiling Javascript or Typescript, we recommend pointing promptfoo to the transpiled plain Javascript output.

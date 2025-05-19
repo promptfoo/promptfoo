@@ -14,7 +14,6 @@ import { calculateAzureCost } from './util';
 
 export class AzureChatCompletionProvider extends AzureGenericProvider {
   private mcpClient: MCPClient | null = null;
-  protected initializationPromise: Promise<void> | null = null;
 
   constructor(...args: ConstructorParameters<typeof AzureGenericProvider>) {
     super(...args);
@@ -30,6 +29,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
   async cleanup(): Promise<void> {
     if (this.mcpClient) {
+      await this.initializationPromise;
       await this.mcpClient.cleanup();
       this.mcpClient = null;
     }

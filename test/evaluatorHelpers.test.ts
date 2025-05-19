@@ -1,13 +1,19 @@
 import * as fs from 'fs';
 import { createRequire } from 'node:module';
 import * as path from 'path';
-import { renderPrompt, resolveVariables, runExtensionHook } from '../src/evaluatorHelpers';
+import {
+  renderPrompt,
+  resolveVariables,
+  runExtensionHook,
+  extractTextFromPDF,
+} from '../src/evaluatorHelpers';
 import type { Prompt } from '../src/types';
 import { transform } from '../src/util/transform';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
 }));
+
 jest.mock('glob', () => ({
   globSync: jest.fn(),
 }));
@@ -33,6 +39,13 @@ jest.mock('fs', () => ({
   },
 }));
 
+jest.mock('pdf-parse', () => ({
+  __esModule: true,
+  default: jest
+    .fn()
+    .mockImplementation((buffer) => Promise.resolve({ text: 'Extracted PDF text' })),
+}));
+
 jest.mock('../src/esm');
 jest.mock('../src/database', () => ({
   getDb: jest.fn(),
@@ -44,6 +57,42 @@ jest.mock('../src/util/transform', () => ({
 function toPrompt(text: string): Prompt {
   return { raw: text, label: text };
 }
+
+describe('extractTextFromPDF', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should extract text from PDF successfully', async () => {
+    const mockPDFText = 'Extracted PDF text';
+    jest.spyOn(fs, 'readFileSync').mockReturnValueOnce(Buffer.from('mock pdf content'));
+
+    const result = await extractTextFromPDF('test.pdf');
+    expect(result).toBe(mockPDFText);
+  });
+
+  it('should throw error when pdf-parse is not installed', async () => {
+    jest.spyOn(fs, 'readFileSync').mockReturnValueOnce(Buffer.from('mock pdf content'));
+    const mockPDFParse = jest.requireMock('pdf-parse');
+    mockPDFParse.default.mockImplementationOnce(() => {
+      throw new Error("Cannot find module 'pdf-parse'");
+    });
+
+    await expect(extractTextFromPDF('test.pdf')).rejects.toThrow(
+      'pdf-parse is not installed. Please install it with: npm install pdf-parse',
+    );
+  });
+
+  it('should handle PDF extraction errors', async () => {
+    jest.spyOn(fs, 'readFileSync').mockReturnValueOnce(Buffer.from('mock pdf content'));
+    const mockPDFParse = jest.requireMock('pdf-parse');
+    mockPDFParse.default.mockRejectedValueOnce(new Error('PDF parsing failed'));
+
+    await expect(extractTextFromPDF('test.pdf')).rejects.toThrow(
+      'Failed to extract text from PDF test.pdf: PDF parsing failed',
+    );
+  });
+});
 
 describe('renderPrompt', () => {
   beforeEach(() => {
@@ -189,13 +238,11 @@ describe('renderPrompt', () => {
 
     jest.doMock(
       path.resolve('/node_modules/@promptfoo/fake/index.js'),
-      () => {
-        return {
-          testFunction: (varName: any, prompt: any, vars: any) => ({
-            output: `Dynamic value for ${varName}`,
-          }),
-        };
-      },
+      () => ({
+        testFunction: (varName: any, prompt: any, vars: any) => ({
+          output: `Dynamic value for ${varName}`,
+        }),
+      }),
       { virtual: true },
     );
 
@@ -265,7 +312,7 @@ describe('renderPrompt', () => {
     expect(renderedPrompt).toBe('{{ var1 }}');
   });
 
-  it('should respect Nunjucks escaped strings when variable is provided as a template string', async () => {
+  it('should respect Nunjucks escaped strings when variable is provided as a string', async () => {
     const prompt = toPrompt(`{{ '{{ var1 }}' }}`);
     const renderedPrompt = await renderPrompt(prompt, { var1: 'value1' }, {});
     expect(renderedPrompt).toBe('{{ var1 }}');
@@ -281,6 +328,37 @@ describe('renderPrompt', () => {
     const prompt = toPrompt('{{ var1 }}');
     const renderedPrompt = await renderPrompt(prompt, { var1: '{{ var2 }}', var2: 'value2' }, {});
     expect(renderedPrompt).toBe('value2');
+  });
+
+  it('should auto-wrap prompts with partial Nunjucks tags in {% raw %}', async () => {
+    const prompt = toPrompt('This is a partial tag: {%');
+    const renderedPrompt = await renderPrompt(prompt, {}, {});
+    expect(renderedPrompt).toBe('This is a partial tag: {%');
+  });
+
+  it('should not double-wrap prompts already wrapped in {% raw %}', async () => {
+    const prompt = toPrompt('{% raw %}This is a partial tag: {%{% endraw %}');
+    const renderedPrompt = await renderPrompt(prompt, {}, {});
+    expect(renderedPrompt).toBe('This is a partial tag: {%');
+  });
+
+  it('should not wrap prompts with valid Nunjucks tags', async () => {
+    const prompt = toPrompt('Hello {{ name }}!');
+    const renderedPrompt = await renderPrompt(prompt, { name: 'Alice' }, {});
+    expect(renderedPrompt).toBe('Hello Alice!');
+    expect(renderedPrompt).not.toContain('{% raw %}');
+  });
+
+  it('should auto-wrap prompts with partial variable tags', async () => {
+    const prompt = toPrompt('Unfinished variable: {{ name');
+    const renderedPrompt = await renderPrompt(prompt, { name: 'Alice' }, {});
+    expect(renderedPrompt).toBe('Unfinished variable: {{ name');
+  });
+
+  it('should auto-wrap prompts with partial comment tags', async () => {
+    const prompt = toPrompt('Unfinished comment: {# comment');
+    const renderedPrompt = await renderPrompt(prompt, {}, {});
+    expect(renderedPrompt).toBe('Unfinished comment: {# comment');
   });
 });
 
@@ -444,7 +522,7 @@ describe('runExtensionHook', () => {
   });
 
   it('should throw an error if an extension is not a string', async () => {
-    const extensions = ['ext1', 123, 'ext3'] as string[];
+    const extensions = ['ext1', 123, 'ext3'] as unknown as string[];
     const hookName = 'testHook';
     const context = { data: 'test' };
 

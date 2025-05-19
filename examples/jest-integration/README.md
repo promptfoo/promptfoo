@@ -1,4 +1,10 @@
-# Prompt Testing with Jest and Vitest
+# jest-integration (Prompt Testing with Jest and Vitest)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example jest-integration
+```
 
 This folder contains a small example of how to test LLM prompts using Jest, Vitest, and `promptfoo`.
 

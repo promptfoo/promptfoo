@@ -7,9 +7,11 @@ import type {
 } from '../../src/providers/bedrock';
 import {
   addConfigParam,
+  AwsBedrockCompletionProvider,
   AwsBedrockGenericProvider,
   AWS_BEDROCK_MODELS,
   BEDROCK_MODEL,
+  coerceStrToNum,
   formatPromptLlama2Chat,
   formatPromptLlama3Instruct,
   formatPromptLlama4,
@@ -17,6 +19,7 @@ import {
   LlamaVersion,
   parseValue,
 } from '../../src/providers/bedrock';
+import type { IBedrockModel } from '../../src/providers/bedrock';
 
 jest.mock('@aws-sdk/client-bedrock-runtime', () => ({
   BedrockRuntime: jest.fn().mockImplementation(() => ({
@@ -1360,6 +1363,24 @@ describe('BEDROCK_MODEL token counting functionality', () => {
       });
     });
 
+    it('should handle string token counts', () => {
+      const mockResponse = {
+        usage: {
+          prompt_tokens: '25',
+          completion_tokens: '50',
+          total_tokens: '75',
+        },
+      };
+
+      const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
+      expect(result).toEqual({
+        prompt: 25,
+        completion: 50,
+        total: 75,
+        numRequests: 1,
+      });
+    });
+
     it('should return undefined token counts when not provided by the API', () => {
       const mockResponse = {
         outputs: [{ text: 'This is a generated response' }],
@@ -1405,6 +1426,21 @@ describe('BEDROCK_MODEL token counting functionality', () => {
       });
     });
 
+    it('should handle string token counts', () => {
+      const mockResponse = {
+        prompt_tokens: '30',
+        completion_tokens: '45',
+      };
+
+      const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
+      expect(result).toEqual({
+        prompt: 30,
+        completion: 45,
+        total: 75, // 30 + 45 = 75, not "3045"
+        numRequests: 1,
+      });
+    });
+
     it('should return undefined token counts when not provided by the API', () => {
       const mockResponse = {
         choices: [
@@ -1442,6 +1478,24 @@ describe('BEDROCK_MODEL token counting functionality', () => {
         numRequests: 1,
       });
     });
+
+    it('should handle string token counts', () => {
+      const mockResponse = {
+        generation: 'Test response',
+        prompt_token_count: '10',
+        generation_token_count: '20',
+      };
+
+      const handler = getLlamaModelHandler(LlamaVersion.V3);
+      const result = handler.tokenUsage!(mockResponse, 'Test prompt');
+
+      expect(result).toEqual({
+        prompt: 10,
+        completion: 20,
+        total: 30,
+        numRequests: 1,
+      });
+    });
   });
 
   describe('Claude model handlers', () => {
@@ -1450,6 +1504,23 @@ describe('BEDROCK_MODEL token counting functionality', () => {
         usage: {
           input_tokens: 15,
           output_tokens: 25,
+        },
+      };
+
+      const result = BEDROCK_MODEL.CLAUDE_MESSAGES.tokenUsage!(mockResponse, 'Test prompt');
+      expect(result).toEqual({
+        prompt: 15,
+        completion: 25,
+        total: 40,
+        numRequests: 1,
+      });
+    });
+
+    it('should handle string token counts in Claude Messages', () => {
+      const mockResponse = {
+        usage: {
+          input_tokens: '15',
+          output_tokens: '25',
         },
       };
 
@@ -1476,6 +1547,102 @@ describe('BEDROCK_MODEL token counting functionality', () => {
         prompt: 20,
         completion: 30,
         total: 50,
+        numRequests: 1,
+      });
+    });
+
+    it('should handle string token counts in Claude Completion', () => {
+      const mockResponse = {
+        usage: {
+          prompt_tokens: '20',
+          completion_tokens: '30',
+          total_tokens: '50',
+        },
+      };
+
+      const result = BEDROCK_MODEL.CLAUDE_COMPLETION.tokenUsage!(mockResponse, 'Test prompt');
+      expect(result).toEqual({
+        prompt: 20,
+        completion: 30,
+        total: 50,
+        numRequests: 1,
+      });
+    });
+  });
+
+  describe('AMAZON_NOVA model handler', () => {
+    it('should handle numeric token counts', () => {
+      const mockResponse = {
+        usage: {
+          inputTokens: 100,
+          outputTokens: 200,
+          totalTokens: 300,
+        },
+      };
+
+      const result = BEDROCK_MODEL.AMAZON_NOVA.tokenUsage!(mockResponse, 'Test prompt');
+      expect(result).toEqual({
+        prompt: 100,
+        completion: 200,
+        total: 300,
+        numRequests: 1,
+      });
+    });
+
+    it('should handle string token counts', () => {
+      const mockResponse = {
+        usage: {
+          inputTokens: '113',
+          outputTokens: '335',
+          totalTokens: '448',
+        },
+      };
+
+      const result = BEDROCK_MODEL.AMAZON_NOVA.tokenUsage!(mockResponse, 'Test prompt');
+      expect(result).toEqual({
+        prompt: 113,
+        completion: 335,
+        total: 448, // 113 + 335 = 448, not "113335"
+        numRequests: 1,
+      });
+    });
+  });
+
+  describe('COHERE model handlers', () => {
+    it('should handle numeric token counts in COHERE_COMMAND', () => {
+      const mockResponse = {
+        meta: {
+          billed_units: {
+            input_tokens: 50,
+            output_tokens: 100,
+          },
+        },
+      };
+
+      const result = BEDROCK_MODEL.COHERE_COMMAND.tokenUsage!(mockResponse, 'Test prompt');
+      expect(result).toEqual({
+        prompt: 50,
+        completion: 100,
+        total: 150,
+        numRequests: 1,
+      });
+    });
+
+    it('should handle string token counts in COHERE_COMMAND', () => {
+      const mockResponse = {
+        meta: {
+          billed_units: {
+            input_tokens: '50',
+            output_tokens: '100',
+          },
+        },
+      };
+
+      const result = BEDROCK_MODEL.COHERE_COMMAND.tokenUsage!(mockResponse, 'Test prompt');
+      expect(result).toEqual({
+        prompt: 50,
+        completion: 100,
+        total: 150, // 50 + 100 = 150, not "50100"
         numRequests: 1,
       });
     });
@@ -1542,5 +1709,187 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     }
 
     expect(handler).toBe(BEDROCK_MODEL.LLAMA4);
+  });
+});
+
+describe('AwsBedrockCompletionProvider', () => {
+  const { BedrockRuntime } = jest.requireMock('@aws-sdk/client-bedrock-runtime');
+  const mockInvokeModel = jest.fn();
+  let originalModelHandler: IBedrockModel;
+  let mockCache;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+
+    BedrockRuntime.mockImplementation(() => ({
+      invokeModel: mockInvokeModel.mockResolvedValue({
+        body: {
+          transformToString: () => JSON.stringify({ completion: 'test response' }),
+        },
+      }),
+    }));
+
+    mockCache = {
+      get: jest.fn().mockResolvedValue(null),
+      set: jest.fn().mockResolvedValue(null),
+    };
+
+    const { getCache, isCacheEnabled } = jest.requireMock('../../src/cache');
+    getCache.mockResolvedValue(mockCache);
+    isCacheEnabled.mockReturnValue(false);
+
+    originalModelHandler = AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0'];
+
+    AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0'] = {
+      params: jest.fn().mockImplementation((config) => ({
+        prompt: 'formatted prompt',
+        ...config,
+      })),
+      output: jest.fn().mockReturnValue('processed output'),
+      tokenUsage: jest.fn().mockReturnValue({
+        prompt: 10,
+        completion: 20,
+        total: 30,
+        numRequests: 1,
+      }),
+    };
+  });
+
+  afterEach(() => {
+    AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0'] = originalModelHandler;
+  });
+
+  it('should pass base config to model.params when context is not provided', async () => {
+    const provider = new (class extends AwsBedrockCompletionProvider {
+      constructor() {
+        super('us.anthropic.claude-3-7-sonnet-20250219-v1:0', {
+          config: {
+            region: 'us-east-1',
+            temperature: 0.5,
+          } as BedrockClaudeMessagesCompletionOptions,
+        });
+      }
+    })();
+
+    await provider.callApi('test prompt');
+
+    expect(
+      AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0'].params,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        region: 'us-east-1',
+        temperature: 0.5,
+      }),
+      'test prompt',
+      expect.any(Array),
+      'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
+    );
+  });
+
+  it('should merge context.prompt.config with base config', async () => {
+    const provider = new (class extends AwsBedrockCompletionProvider {
+      constructor() {
+        super('us.anthropic.claude-3-7-sonnet-20250219-v1:0', {
+          config: {
+            region: 'us-east-1',
+            temperature: 0.5,
+          } as BedrockClaudeMessagesCompletionOptions,
+        });
+      }
+    })();
+
+    const context = {
+      prompt: {
+        raw: 'test prompt',
+        label: 'test',
+        config: {
+          temperature: 0.7,
+          max_tokens: 100,
+        },
+      },
+      vars: {},
+    };
+
+    await provider.callApi('test prompt', context);
+
+    expect(
+      AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0'].params,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        region: 'us-east-1', // From base config
+        temperature: 0.7, // Overridden by context
+        max_tokens: 100, // Added by context
+      }),
+      'test prompt',
+      expect.any(Array),
+      'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
+    );
+  });
+
+  it('should prioritize context.prompt.config values over base config', async () => {
+    const provider = new (class extends AwsBedrockCompletionProvider {
+      constructor() {
+        super('us.anthropic.claude-3-7-sonnet-20250219-v1:0', {
+          config: {
+            region: 'us-east-1',
+            temperature: 0.5,
+            max_tokens: 50,
+            top_p: 0.8,
+          } as BedrockClaudeMessagesCompletionOptions,
+        });
+      }
+    })();
+
+    const context = {
+      prompt: {
+        raw: 'test prompt',
+        label: 'test',
+        config: {
+          temperature: 0.9,
+          max_tokens: 200,
+        },
+      },
+      vars: {},
+    };
+
+    await provider.callApi('test prompt', context);
+
+    expect(
+      AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0'].params,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        region: 'us-east-1', // From base config
+        temperature: 0.9, // Overridden by context
+        max_tokens: 200, // Overridden by context
+        top_p: 0.8, // From base config (unchanged)
+      }),
+      'test prompt',
+      expect.any(Array),
+      'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
+    );
+  });
+});
+
+describe('coerceStrToNum', () => {
+  it('should convert string numbers to numeric values', () => {
+    expect(coerceStrToNum('42')).toBe(42);
+    expect(coerceStrToNum('3.14')).toBe(3.14);
+    expect(coerceStrToNum('-10')).toBe(-10);
+    expect(coerceStrToNum('0')).toBe(0);
+  });
+
+  it('should return original value for numbers', () => {
+    expect(coerceStrToNum(42)).toBe(42);
+    expect(coerceStrToNum(3.14)).toBe(3.14);
+    expect(coerceStrToNum(-10)).toBe(-10);
+    expect(coerceStrToNum(0)).toBe(0);
+  });
+
+  it('should handle undefined values', () => {
+    expect(coerceStrToNum(undefined)).toBeUndefined();
+  });
+
+  it('should convert invalid string numbers to NaN', () => {
+    expect(Number.isNaN(coerceStrToNum('not-a-number') as number)).toBe(true);
   });
 });

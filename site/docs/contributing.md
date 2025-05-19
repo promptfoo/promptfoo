@@ -211,7 +211,7 @@ Here's a simple example:
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - id: openai:chat:gpt-4o
+  - id: openai:chat:gpt-4.1
 prompts:
   - Translate "{{input}}" to {{language}}
 tests:
@@ -366,6 +366,24 @@ While promptfoo is primarily written in TypeScript, we support custom Python pro
 ## Documentation
 
 If you're adding new features or changing existing ones, please update the relevant documentation. We use [Docusaurus](https://docusaurus.io/) for our documentation. We strongly encourage examples and guides as well.
+
+To run the documentation in development mode:
+
+```bash
+cd site
+npm start
+```
+
+This will start the Docusaurus development server on port 3100 by default (or a custom port if you set the `PORT` environment variable). You can then view the documentation at http://localhost:3100.
+
+To build the documentation for production:
+
+```bash
+cd site
+npm run build
+```
+
+This will generate static content in the `build` directory that can be served using any static content hosting service. Building the documentation may occasionally catch errors that do not surface when running `npm start`.
 
 ## Advanced Topics
 

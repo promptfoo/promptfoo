@@ -1,3 +1,11 @@
+# custom-grader-csv (Custom Grader Csv)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example custom-grader-csv
+```
+
 This example uses a custom API provider in `customProvider.ts`. It also uses CSV test cases.
 
 Run:

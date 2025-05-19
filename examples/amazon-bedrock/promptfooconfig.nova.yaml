@@ -1,25 +1,19 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Bedrock Nova Eval'
+description: 'Bedrock Nova Models Comparison'
 
 prompts:
   - 'Write a tweet about {{topic}}'
 
 providers:
-  - id: bedrock:amazon.nova-sonic-v1:0
-    config:
-      region: 'us-east-1'
-      inferenceConfig:
-        temperature: 0.7
-        max_new_tokens: 256
   - id: bedrock:amazon.nova-lite-v1:0
     config:
       region: 'us-east-1'
       inferenceConfig:
         temperature: 0.7
         max_new_tokens: 256
-  - id: bedrock:amazon.nova-pro-v1:0
+  - id: bedrock:us.amazon.nova-premier-v1:0
     config:
-      region: 'us-east-1'
+      region: 'us-west-2'
       inferenceConfig:
         temperature: 0.7
         max_new_tokens: 256

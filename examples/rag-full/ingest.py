@@ -6,9 +6,9 @@ and stores them in a Chroma vector database.
 
 from __future__ import annotations
 
+import concurrent.futures
 import logging
 import os
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Optional, Tuple
 from urllib.parse import quote
 
@@ -94,7 +94,7 @@ def process_pdfs() -> List[Document]:
     """
     all_chunks: List[Document] = []
 
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         # Submit all PDF processing tasks
         future_to_pdf: Dict[
             concurrent.futures.Future[Tuple[str, List[Document]]], str
@@ -105,7 +105,7 @@ def process_pdfs() -> List[Document]:
 
         # Process completed tasks with progress bar
         with tqdm(total=len(PDF_FILES), desc="Processing PDFs") as pbar:
-            for future in as_completed(future_to_pdf):
+            for future in concurrent.futures.as_completed(future_to_pdf):
                 pdf_file: str = future_to_pdf[future]
                 try:
                     _, chunks = future.result()

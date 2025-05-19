@@ -1,4 +1,10 @@
-# F-Score HuggingFace Dataset Sentiment Analysis Eval
+# f-score (F-Score HuggingFace Dataset Sentiment Analysis Eval)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example f-score
+```
 
 This project evaluates GPT-4o-mini's zero-shot performance on IMDB movie review sentiment analysis using promptfoo. Each model response includes:
 

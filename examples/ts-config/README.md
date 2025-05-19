@@ -1,4 +1,10 @@
-# TypeScript Configuration Example for promptfoo
+# ts-config (TypeScript Configuration Example for promptfoo)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example ts-config
+```
 
 This guide demonstrates how to set up a TypeScript configuration for promptfoo using `promptfooconfig.ts`.
 

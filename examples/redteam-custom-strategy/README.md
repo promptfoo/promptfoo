@@ -1,4 +1,10 @@
-# Custom Red Team Strategy Example
+# redteam-custom-strategy (Custom Red Team Strategy Example)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example redteam-custom-strategy
+```
 
 A simple example showing how to create a custom red team strategy that prepends "PLEASE" to test prompts.
 

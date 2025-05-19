@@ -1,3 +1,11 @@
+# google-vertex-tools-callback (Google Vertex Tools Callback)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example google-vertex-tools-callback
+```
+
 To call Vertex AI models in Node, you'll need to install Google's official auth client as a peer dependency:
 
 ```sh

@@ -9,6 +9,7 @@ export interface MCPServerConfig {
   name?: string; // Optional name to reference specific tools
   url?: string; // URL for remote server (not currently supported)
   auth?: MCPServerAuth; // Authentication configuration
+  headers?: Record<string, string>; // Additional HTTP headers for URL-based servers
 }
 
 export interface MCPServerAuth {

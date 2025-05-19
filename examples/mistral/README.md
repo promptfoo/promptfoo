@@ -1,4 +1,10 @@
-# Mistral AI Model Comparison Example
+# mistral (Mistral AI Model Comparison Example)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example mistral
+```
 
 This example demonstrates how to use promptfoo to compare different Mistral AI models on their ability to explain complex scientific concepts in simple terms. It compares several chat models and uses the embedding model to compare the semantic similarity of the explanations.
 

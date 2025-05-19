@@ -35,7 +35,6 @@ export function modelScanCommand(program: Command): void {
       (val) => Number.parseInt(val, 10),
       300,
     )
-    .option('-v, --verbose', 'Enable verbose output')
     .option('--max-file-size <bytes>', 'Maximum file size to scan in bytes')
     .action(async (paths: string[], options) => {
       if (!paths || paths.length === 0) {
@@ -76,10 +75,6 @@ export function modelScanCommand(program: Command): void {
 
       if (options.timeout) {
         args.push('--timeout', options.timeout);
-      }
-
-      if (options.verbose) {
-        args.push('--verbose');
       }
 
       if (options.maxFileSize) {

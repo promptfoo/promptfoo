@@ -27,7 +27,6 @@ export const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   'math-prompt': 1,
   morse: 1,
   multilingual: 3, // This won't matter, we multiply all probes by number of languages
-  'other-encodings': 1,
   pandamonium: 5,
   piglatin: 1,
   'prompt-injection': 1,

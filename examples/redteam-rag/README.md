@@ -1,3 +1,11 @@
+# redteam-rag (Redteam Rag)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example redteam-rag
+```
+
 This is a simple red team example for a hypothetical customer service agent representing Travel R Us, a hotel search company.
 
 We check for things like:

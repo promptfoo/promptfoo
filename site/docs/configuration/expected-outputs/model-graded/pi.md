@@ -94,7 +94,7 @@ You can use the [Pi Labs Copilot](https://build.withpi.ai) to interactively brai
 prompts:
   - 'Explain {{concept}} in simple terms.'
 providers:
-  - openai:gpt-4o
+  - openai:gpt-4.1
 tests:
   - vars:
       concept: quantum computing

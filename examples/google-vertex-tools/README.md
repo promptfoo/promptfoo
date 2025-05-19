@@ -1,4 +1,10 @@
-# Google Vertex Tools
+# google-vertex-tools (Google Vertex Tools)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example google-vertex-tools
+```
 
 This example demonstrates how to use [Vertex AI models](https://www.promptfoo.dev/docs/providers/vertex/) with function calling and tools.
 

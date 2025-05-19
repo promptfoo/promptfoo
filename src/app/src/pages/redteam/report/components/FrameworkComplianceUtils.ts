@@ -84,6 +84,7 @@ export const FRAMEWORK_DESCRIPTIONS: Record<string, string> = {
   'nist:ai:measure': 'NIST AI Risk Management Framework for responsible AI development',
   'owasp:api': 'OWASP API Top 10 security risks for application programming interfaces',
   'owasp:llm': 'OWASP LLM Top 10 security vulnerabilities for large language models',
+  'eu:ai-act': 'EU AI Act for responsible AI development',
 };
 
 export const getSeverityColor = (severity: Severity): string => {

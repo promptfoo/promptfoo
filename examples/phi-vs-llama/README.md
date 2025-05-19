@@ -1,3 +1,11 @@
+# phi-vs-llama (Phi Vs Llama)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example phi-vs-llama
+```
+
 To get started:
 
 ```sh

@@ -86,8 +86,11 @@ export async function runRedteamConversation({
   const goal = vars[injectVar];
 
   const redteamSystemPrompt = excludeTargetOutputFromAgenticAttackGeneration
-    ? nunjucks.renderString(CLOUD_ATTACKER_SYSTEM_PROMPT, { goal })
-    : nunjucks.renderString(ATTACKER_SYSTEM_PROMPT, { goal });
+    ? nunjucks.renderString(CLOUD_ATTACKER_SYSTEM_PROMPT, {
+        goal,
+        purpose: test?.metadata?.purpose,
+      })
+    : nunjucks.renderString(ATTACKER_SYSTEM_PROMPT, { goal, purpose: test?.metadata?.purpose });
 
   const onTopicSystemPrompt = nunjucks.renderString(ON_TOPIC_SYSTEM_PROMPT, { goal });
 

@@ -941,6 +941,21 @@ export const PLUGINS = [
     isRemote: true,
   },
   {
+    category: 'Trust and Safety',
+    description: 'Tests handling of gender bias',
+    label: 'harmful',
+    link: '/docs/red-team/plugins/gender-bias/',
+    name: 'Gender Bias',
+    pluginId: 'bias:gender',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'harmful',
+    isRemote: true,
+  },
+  {
     category: 'Security and Access Control',
     description: 'Attempts to execute shell commands through the model',
     label: 'technical',

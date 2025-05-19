@@ -1,11 +1,26 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import type { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
+import type { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import type { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import logger from '../../logger';
 import type { MCPConfig, MCPServerConfig, MCPTool, MCPToolResult } from './types';
 
 export class MCPClient {
   private clients: Map<string, Client> = new Map();
   private tools: Map<string, MCPTool[]> = new Map();
   private config: MCPConfig;
+  private transports: Map<
+    string,
+    StdioClientTransport | SSEClientTransport | StreamableHTTPClientTransport
+  > = new Map();
+
+  get hasInitialized(): boolean {
+    return this.clients.size > 0;
+  }
+
+  get connectedServers(): string[] {
+    return Array.from(this.clients.keys());
+  }
 
   constructor(config: MCPConfig) {
     this.config = config;
@@ -25,15 +40,18 @@ export class MCPClient {
 
   private async connectToServer(server: MCPServerConfig): Promise<void> {
     const serverKey = server.name || server.url || server.path || 'default';
-    let transport: StdioClientTransport;
+    const client = new Client({ name: 'promptfoo-MCP', version: '1.0.0' });
 
+    let transport: StdioClientTransport | SSEClientTransport | StreamableHTTPClientTransport;
     try {
       if (server.command && server.args) {
+        const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
         // NPM package or other command execution
         transport = new StdioClientTransport({
           command: server.command,
           args: server.args,
         });
+        await client.connect(transport);
       } else if (server.path) {
         // Local server file
         const isJs = server.path.endsWith('.js');
@@ -48,21 +66,40 @@ export class MCPClient {
             : 'python3'
           : process.execPath;
 
+        const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
         transport = new StdioClientTransport({
           command,
           args: [server.path],
         });
+        await client.connect(transport);
       } else if (server.url) {
-        // Remote servers not supported yet - MCP is designed for local tool execution
-        throw new Error(
-          'Remote MCP servers are not supported. Please use a local server file or npm package.',
-        );
-      } else {
-        throw new Error('Either command+args or path must be specified for MCP server');
-      }
+        // Get auth headers and combine with custom headers
+        const authHeaders = this.getAuthHeaders(server);
+        const headers = {
+          ...(server.headers || {}),
+          ...authHeaders,
+        };
 
-      const client = new Client({ name: 'promptfoo-anthropic', version: '1.0.0' });
-      client.connect(transport);
+        // Only set options if we have headers
+        const options = Object.keys(headers).length > 0 ? { requestInit: { headers } } : undefined;
+
+        try {
+          const { StreamableHTTPClientTransport } = await import(
+            '@modelcontextprotocol/sdk/client/streamableHttp.js'
+          );
+          transport = new StreamableHTTPClientTransport(new URL(server.url), options);
+          await client.connect(transport);
+          logger.debug('Connected using Streamable HTTP transport');
+        } catch (error) {
+          logger.error(`Failed to connect to MCP server ${serverKey}: ${error}`);
+          const { SSEClientTransport } = await import('@modelcontextprotocol/sdk/client/sse.js');
+          transport = new SSEClientTransport(new URL(server.url), options);
+          await client.connect(transport);
+          logger.debug('Connected using SSE transport');
+        }
+      } else {
+        throw new Error('Either command+args or path or url must be specified for MCP server');
+      }
 
       // List available tools
       const toolsResult = await client.listTools();
@@ -84,6 +121,7 @@ export class MCPClient {
         );
       }
 
+      this.transports.set(serverKey, transport);
       this.clients.set(serverKey, client);
       this.tools.set(serverKey, filteredTools);
 
@@ -96,7 +134,7 @@ export class MCPClient {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       if (this.config.debug) {
-        console.error(`Failed to connect to MCP server ${serverKey}:`, errorMessage);
+        logger.error(`Failed to connect to MCP server ${serverKey}: ${errorMessage}`);
       }
       throw new Error(`Failed to connect to MCP server ${serverKey}: ${errorMessage}`);
     }
@@ -134,7 +172,7 @@ export class MCPClient {
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
           if (this.config.debug) {
-            console.error(`Error calling tool ${name}:`, errorMessage);
+            logger.error(`Error calling tool ${name}: ${errorMessage}`);
           }
           return {
             content: '',
@@ -148,16 +186,23 @@ export class MCPClient {
   }
 
   async cleanup(): Promise<void> {
-    for (const client of this.clients.values()) {
+    for (const [serverKey, client] of this.clients.entries()) {
       try {
+        const transport = this.transports.get(serverKey);
+        if (transport) {
+          await transport.close();
+        }
         await client.close();
       } catch (error) {
         if (this.config.debug) {
-          console.error('Error during cleanup:', error);
+          logger.error(
+            `Error during cleanup: ${error instanceof Error ? error.message : String(error)}`,
+          );
         }
       }
     }
     this.clients.clear();
+    this.transports.clear();
     this.tools.clear();
   }
 }

@@ -45,6 +45,7 @@ This example includes several configuration files, each demonstrating a differen
 3. **Web Search** (`promptfooconfig.web-search.yaml`): Retrieves recent information from the web using `gpt-4o`
 4. **Function Calling** (`promptfooconfig.function-call.yaml`): Calls a weather function with parameters using various reasoning models (o1-pro, o3, o4-mini)
 5. **Mathematical Reasoning** (`promptfooconfig.reasoning.yaml`): Solves math problems step-by-step using OpenAI's reasoning models (o3-mini, o3, o4-mini)
+6. **Codex Reasoning** (`promptfooconfig.codex.yaml`): Generates Python code using the `codex-mini-latest` model with medium reasoning effort
 
 ## Key Differences from Chat Completions API
 
@@ -61,3 +62,4 @@ This example includes several configuration files, each demonstrating a differen
 - `openai:responses:o1-mini`, `openai:responses:o1`, `openai:responses:o1-pro` - Reasoning models
 - `openai:responses:o3-mini`, `openai:responses:o3` - High-performance reasoning models
 - `openai:responses:o4-mini` - Latest fast, cost-effective reasoning model
+- `openai:responses:codex-mini-latest` - Fast reasoning model optimized for the Codex CLI

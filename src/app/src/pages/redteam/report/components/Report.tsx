@@ -1,11 +1,13 @@
 import React from 'react';
 import EnterpriseBanner from '@app/components/EnterpriseBanner';
 import { callApi } from '@app/utils/api';
+import ListAltIcon from '@mui/icons-material/ListAlt';
 import WarningIcon from '@mui/icons-material/Warning';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import Chip from '@mui/material/Chip';
 import Container from '@mui/material/Container';
+import IconButton from '@mui/material/IconButton';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
@@ -289,6 +291,22 @@ const App: React.FC = () => {
         {evalData.config.redteam && <EnterpriseBanner evalId={evalId || ''} />}
         <Card className="report-header" sx={{ position: 'relative' }}>
           <Box sx={{ position: 'absolute', top: 8, right: 8, display: 'flex' }}>
+            <Tooltip title="View all logs" placement="top">
+              <IconButton
+                sx={{ position: 'relative' }}
+                aria-label="view all logs"
+                onClick={(event) => {
+                  const url = `/eval/${evalId}`;
+                  if (event.ctrlKey || event.metaKey) {
+                    window.open(url, '_blank');
+                  } else {
+                    window.location.href = url;
+                  }
+                }}
+              >
+                <ListAltIcon />
+              </IconButton>
+            </Tooltip>
             <ReportDownloadButton
               evalDescription={evalData.config.description || evalId}
               evalData={evalData}

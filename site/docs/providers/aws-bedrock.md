@@ -131,6 +131,12 @@ providers:
       interfaceConfig:
         temperature: 0.7
         max_new_tokens: 256
+  - id: bedrock:us.amazon.nova-premier-v1:0
+    config:
+      region: 'us-east-1'
+      interfaceConfig:
+        temperature: 0.7
+        max_new_tokens: 256
   - id: bedrock:anthropic.claude-3-5-sonnet-20240229-v1:0
     config:
       region: 'us-east-1'
@@ -152,7 +158,7 @@ Different models may support different configuration options. Here are some mode
 
 ### Amazon Nova Models
 
-Amazon Nova models (e.g., `amazon.nova-lite-v1:0`, `amazon.nova-pro-v1:0`, `amazon.nova-micro-v1:0`) support advanced features like tool use and structured outputs. You can configure them with the following options:
+Amazon Nova models (e.g., `amazon.nova-lite-v1:0`, `amazon.nova-pro-v1:0`, `amazon.nova-micro-v1:0`, `amazon.nova-premier-v1:0`) support advanced features like tool use and structured outputs. You can configure them with the following options:
 
 ```yaml
 providers:

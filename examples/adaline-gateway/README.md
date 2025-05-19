@@ -1,4 +1,10 @@
-# Adaline Gateway Examples
+# adaline-gateway (Adaline Gateway Examples)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example adaline-gateway
+```
 
 This directory contains examples demonstrating how to use the Adaline Gateway with promptfoo. The Adaline Gateway provides a unified interface for interacting with various AI providers.
 

@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Codex
+
+prompts:
+  - |
+    Please write a function in Python that {{func_purpose}} and is named {{func_name}}.
+
+providers:
+  - id: openai:responses:codex-mini-latest
+    label: codex-mini-latest
+    config:
+      max_output_tokens: 1000
+      reasoning_effort: 'medium'
+
+tests:
+  - vars:
+      func_name: 'sum_of_numbers'
+      func_purpose: 'takes a list of numbers and returns the sum of the numbers'
+    assert:
+      - type: llm-rubric
+        value: 'Output should contain >=1 function(s) named {{func_name}} that take a list of numbers as input and return the sum of the numbers and are written in Python'

@@ -28,7 +28,7 @@ npx promptfoo@latest init mistral-llama-comparison
 
 Now let's start editing `promptfooconfig.yaml`. Create a list of models we'd like to compare:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - openrouter:mistralai/mistral-7b-instruct
   - openrouter:mistralai/mixtral-8x7b-instruct
@@ -60,13 +60,13 @@ Let's create some simple chat prompts that wrap the expected chat formats. We'll
 
 First, we'll put the Mistral chat prompt in `prompts/mistral_prompt.txt` using the special `<s>` and `[INST]` tokens that the model was fine-tuned on:
 
-```title=prompts/mistral_prompt.txt
+```title="prompts/mistral_prompt.txt"
 <s>[INST] {{message}} [/INST]
 ```
 
 Next, we'll put the slightly different Llama chat prompt in `prompts/llama_prompt.txt`:
 
-```title=prompts/llama_prompt.txt
+```title="prompts/llama_prompt.txt"
 <|begin_of_text|><|start_header_id|>user<|end_header_id|>
 
 {{message}}<|eot_id|><|start_header_id|>assistant<|end_header_id|>
@@ -74,12 +74,12 @@ Next, we'll put the slightly different Llama chat prompt in `prompts/llama_promp
 
 Now, let's go back to `promptfooconfig.yaml` and add our prompts. We'll name them `mistral_prompt` and `llama_prompt` respectively. For example:
 
-````yaml title=promptfooconfig.yaml
+````yaml title="promptfooconfig.yaml"
 prompts:
   prompts/mistral_prompt.txt: mistral_prompt
   prompts/llama_prompt.txt: llama_prompt
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 prompts:
   prompts/mistral_prompt.txt: mistral_prompt
   prompts/llama_prompt.txt: llama_prompt
@@ -106,7 +106,7 @@ These prompt files are [Nunjucks templates](https://mozilla.github.io/nunjucks/)
 
 Each model has a `config` field where you can specify additional parameters. Let's add `temperature` for each model:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: openrouter:mistralai/mistral-7b-instruct
     // highlight-start
@@ -141,7 +141,7 @@ The `tests` field in the `promptfooconfig.yaml` file is where you add your test 
 
 Here are the test cases we will use:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 # ...
 tests:
   - vars:
@@ -166,7 +166,7 @@ tests:
 
 Let's set up a few assertions to automatically assess the output for correctness:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 # ...
 tests:
   - vars:

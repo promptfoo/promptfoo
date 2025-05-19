@@ -1,0 +1,48 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: OpenAI Agents SDK with Agent Handoffs for Customer Service
+
+prompts:
+  - '{{query}}'
+
+providers:
+  - id: 'file://agent_provider.py:call_api'
+    label: 'Triage Agent'
+    config:
+      agent_type: 'triage'
+
+  - id: 'file://agent_provider.py:call_api'
+    label: 'FAQ Agent'
+    config:
+      agent_type: 'faq'
+
+  - id: 'file://agent_provider.py:call_api'
+    label: 'Seat Booking Agent'
+    config:
+      agent_type: 'seat_booking'
+
+tests:
+  - vars:
+      query: "What's your baggage policy?"
+    assert:
+      - type: llm-rubric
+        value: 'Rate the response on a scale of 1-5 based on how effectively it addresses the baggage policy question.'
+      - type: contains
+        value: bag
+
+  - vars:
+      query: 'I want to change my seat'
+      passenger_name: 'John Smith'
+      confirmation_number: 'ABC123'
+    assert:
+      - type: llm-rubric
+        value: 'Rate the response on a scale of 1-5 based on how effectively it handles the seat change request.'
+      - type: contains
+        value: seat
+
+  - vars:
+      query: 'Do you serve food on the flight?'
+    assert:
+      - type: llm-rubric
+        value: 'Rate the response on a scale of 1-5 based on how effectively it provides information about food service.'
+      - type: contains
+        value: food

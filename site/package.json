@@ -16,7 +16,7 @@
     "format": "prettier --ignore-path .gitignore -w ."
   },
   "devDependencies": {
-    "@calcom/embed-react": "^1.5.2",
+    "@calcom/embed-react": "^1.5.3",
     "@docusaurus/core": "^3.7.0",
     "@docusaurus/module-type-aliases": "^3.7.0",
     "@docusaurus/plugin-client-redirects": "^3.7.0",
