@@ -159,8 +159,6 @@ export default function EvalsDataGrid({
       const focusedEval = rows_.find(({ evalId }: Eval) => evalId === focusedEvalId);
       invariant(focusedEval, 'focusedEvalId is not a valid eval ID');
 
-      rows_ = rows_.filter(({ evalId }: Eval) => evalId !== focusedEvalId);
-
       // Filter by dataset ID if enabled
       if (filterByDatasetId) {
         rows_ = rows_.filter(({ datasetId }: Eval) => datasetId === focusedEval.datasetId);
