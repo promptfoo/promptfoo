@@ -404,6 +404,13 @@ export function calculateTotalTests(
 }
 
 /**
+ * Type guard to check if a strategy ID is a strategy collection
+ */
+function isStrategyCollection(id: string): id is keyof typeof STRATEGY_COLLECTION_MAPPINGS {
+  return STRATEGY_COLLECTIONS.includes(id as any);
+}
+
+/**
  * Synthesizes test cases based on provided options.
  * @param options - The options for test case synthesis.
  * @returns A promise that resolves to an object containing the purpose, entities, and test cases.
@@ -449,22 +456,32 @@ export async function synthesize({
 
   const expandedStrategies: typeof strategies = [];
   strategies.forEach((strategy) => {
-    if (STRATEGY_COLLECTIONS.includes(strategy.id as any)) {
-      const aliasedStrategies =
-        STRATEGY_COLLECTION_MAPPINGS[strategy.id as keyof typeof STRATEGY_COLLECTION_MAPPINGS];
+    if (isStrategyCollection(strategy.id)) {
+      const aliasedStrategies = STRATEGY_COLLECTION_MAPPINGS[strategy.id];
       if (aliasedStrategies) {
         aliasedStrategies.forEach((strategyId) => {
           expandedStrategies.push({
+            ...strategy,
             id: strategyId,
-            ...(strategy.config ? { config: strategy.config } : {}),
           });
         });
+      } else {
+        logger.warn(`Strategy collection ${strategy.id} has no mappings, skipping`);
       }
     } else {
       expandedStrategies.push(strategy);
     }
   });
-  strategies = expandedStrategies;
+
+  // Deduplicate strategies by id
+  const seen = new Set<string>();
+  strategies = expandedStrategies.filter((strategy) => {
+    if (seen.has(strategy.id)) {
+      return false;
+    }
+    seen.add(strategy.id);
+    return true;
+  });
 
   validateStrategies(strategies);
 
