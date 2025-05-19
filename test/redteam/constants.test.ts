@@ -27,9 +27,9 @@ import {
   subCategoryDescriptions,
   STRATEGY_COLLECTIONS,
   STRATEGY_COLLECTION_MAPPINGS,
+  _ALL_STRATEGIES,
   ALL_STRATEGIES,
   strategyDescriptions,
-  strategyDisplayNames,
 } from '../../src/redteam/constants';
 
 describe('constants', () => {
@@ -202,7 +202,7 @@ describe('constants', () => {
     );
   });
 
-  it('STRATEGY_COLLECTIONS should contain expected collections', () => {
+  it('STRATEGY_COLLECTIONS should contain expected values', () => {
     expect(STRATEGY_COLLECTIONS).toEqual(['other-encodings']);
   });
 
@@ -210,23 +210,17 @@ describe('constants', () => {
     expect(STRATEGY_COLLECTION_MAPPINGS['other-encodings']).toEqual(['morse', 'piglatin']);
   });
 
-  it('ALL_STRATEGIES should include strategy collections', () => {
+  it('_ALL_STRATEGIES should include strategy collections', () => {
+    expect(_ALL_STRATEGIES).toContain('other-encodings');
     expect(ALL_STRATEGIES).toContain('other-encodings');
   });
 
-  it('strategy collections should have proper descriptions', () => {
-    expect(strategyDescriptions['other-encodings']).toBe(
-      'Collection of alternative text transformation strategies (Morse code and Pig Latin) for testing evasion techniques',
-    );
-  });
+  it('should have correct descriptions for other-encodings strategy', () => {
+    const expectedDescription =
+      'Collection of alternative text transformation strategies (Morse code and Pig Latin) for testing evasion techniques';
 
-  it('strategy collections should have proper display names', () => {
-    expect(strategyDisplayNames['other-encodings']).toBe('Collection of Text Encodings');
-  });
-
-  it('strategy collections should have proper subcategory descriptions', () => {
-    expect(subCategoryDescriptions['other-encodings']).toBe(
-      'Collection of alternative text transformation strategies (Morse code and Pig Latin) for testing evasion techniques',
-    );
+    expect(subCategoryDescriptions['other-encodings']).toBe(expectedDescription);
+    expect(strategyDescriptions['other-encodings']).toBe(expectedDescription);
+    expect(displayNameOverrides['other-encodings']).toBe('Collection of Text Encodings');
   });
 });
