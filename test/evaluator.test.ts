@@ -32,6 +32,16 @@ jest.mock('../src/util/time', () => ({
   sleep: jest.fn(),
 }));
 
+jest.mock('../src/util/fileExtensions', () => ({
+  ...jest.requireActual('../src/util/fileExtensions'),
+  isImageFile: jest
+    .fn()
+    .mockImplementation((filePath) => filePath.endsWith('.jpg') || filePath.endsWith('.png')),
+  isVideoFile: jest.fn().mockImplementation((filePath) => filePath.endsWith('.mp4')),
+  isAudioFile: jest.fn().mockImplementation((filePath) => filePath.endsWith('.mp3')),
+  isJavascriptFile: jest.fn().mockReturnValue(false),
+}));
+
 jest.mock('../src/util/functions/loadFunction', () => ({
   ...jest.requireActual('../src/util/functions/loadFunction'),
   loadFunction: jest.fn().mockImplementation((options) => {
