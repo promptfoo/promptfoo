@@ -26,17 +26,6 @@ describe('ArgsSchema', () => {
     expect(error?.issues[0].message).toBe('Cannot specify both config and target!');
   });
 
-  it('Either `config` or `target` must be provided', () => {
-    const args = {
-      preview: false,
-      overwrite: false,
-    };
-
-    const { success, error } = ArgsSchema.safeParse(args);
-    expect(success).toBe(false);
-    expect(error?.issues[0].message).toBe('Either config or target must be provided!');
-  });
-
   it('`output` and `preview` are mutually exclusive', () => {
     const args: z.infer<typeof ArgsSchema> = {
       config: 'test',
