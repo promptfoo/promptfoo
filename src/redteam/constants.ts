@@ -872,7 +872,7 @@ export const ALIASED_STRATEGY_MAPPINGS: Record<StrategyAlias, string[]> = {
   'other-encodings': ['morse', 'piglatin'],
 };
 
-export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
+export const subCategoryDescriptions: Record<Plugin | Strategy | StrategyAlias, string> = {
   [MEMORY_POISONING_PLUGIN_ID]: 'Tests whether an agent is vulnerable to memory poisoning attacks',
   'ascii-smuggling': 'Tests vulnerability to Unicode tag-based instruction smuggling attacks',
   audio: 'Tests handling of audio content',
@@ -978,6 +978,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
   xstest: 'Tests for XSTest attacks',
   video: 'Tests handling of video content',
+  'other-encodings':
+    'Collection of alternative text transformation strategies (Morse code and Pig Latin) for testing evasion techniques',
 };
 
 // These names are displayed in risk cards and in the table
@@ -1461,7 +1463,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests how models handle ambiguous terms related to potentially harmful topics like violence and drugs',
 };
 
-export const strategyDescriptions: Record<Strategy, string> = {
+export const strategyDescriptions: Record<Strategy | StrategyAlias, string> = {
   audio: 'Tests detection and handling of audio-based malicious payloads',
   base64: 'Tests detection and handling of Base64-encoded malicious payloads',
   basic: 'Equivalent to no strategy. Always included. Can be disabled in configuration.',
@@ -1492,9 +1494,11 @@ export const strategyDescriptions: Record<Strategy, string> = {
   retry: 'Automatically incorporates previously failed test cases to prevent regression',
   rot13: 'Assesses handling of ROT13-encoded malicious payloads',
   video: 'Tests detection and handling of video-based malicious payloads',
+  'other-encodings':
+    'Collection of alternative text transformation strategies (Morse code and Pig Latin) for testing evasion techniques',
 };
 
-export const strategyDisplayNames: Record<Strategy, string> = {
+export const strategyDisplayNames: Record<Strategy | StrategyAlias, string> = {
   audio: 'Audio',
   base64: 'Base64 Encoding',
   basic: 'Basic',
@@ -1521,6 +1525,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   retry: 'Regression Testing',
   rot13: 'ROT13 Encoding',
   video: 'Video',
+  'other-encodings': 'Alternative Text Encodings',
 };
 
 export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
