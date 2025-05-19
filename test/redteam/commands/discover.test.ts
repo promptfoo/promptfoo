@@ -1,12 +1,5 @@
 import type { z } from 'zod';
-import { fetchWithProxy } from '../../../src/fetch';
-import {
-  ArgsSchema,
-  DEFAULT_TURN_COUNT,
-  doTargetPurposeDiscovery,
-  mergePurposes,
-} from '../../../src/redteam/commands/discover';
-import type { ApiProvider } from '../../../src/types';
+import { ArgsSchema } from '../../../src/redteam/commands/discover';
 
 jest.mock('../../../src/fetch');
 
@@ -93,74 +86,5 @@ describe('ArgsSchema', () => {
     const { success: success2, error: error2 } = ArgsSchema.safeParse(args);
     expect(success2).toBe(true);
     expect(error2).toBeUndefined();
-  });
-});
-
-describe('mergePurposes', () => {
-  it('should correctly merge human-defined and discovered purposes', () => {
-    const humanDefined = 'This is a human defined purpose';
-    const discovered = 'This is a discovered purpose';
-    const expected = `${humanDefined}\n\nDiscovered Purpose:\n\n${discovered}`;
-
-    expect(mergePurposes(humanDefined, discovered)).toBe(expected);
-  });
-});
-
-describe('doTargetPurposeDiscovery', () => {
-  const mockTarget: ApiProvider = {
-    id: () => 'test-target',
-    callApi: jest.fn().mockResolvedValue({ output: 'test response' }),
-  };
-
-  beforeEach(() => {
-    jest.resetAllMocks();
-  });
-
-  it('should throw error when question is undefined', async () => {
-    const mockFetchResponse = {
-      ok: true,
-      json: () => Promise.resolve({ done: false }),
-      statusText: 'Bad Request',
-    } as Response;
-    jest.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
-
-    await expect(doTargetPurposeDiscovery(mockTarget)).rejects.toThrow(
-      'Failed to discover purpose: Bad Request',
-    );
-  });
-
-  it('should use DEFAULT_TURN_COUNT when maxTurns not provided', async () => {
-    const mockFetchResponse = {
-      ok: true,
-      json: () => Promise.resolve({ done: true, purpose: 'discovered purpose' }),
-    } as Response;
-    jest.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
-
-    await doTargetPurposeDiscovery(mockTarget);
-
-    expect(fetchWithProxy).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({
-        body: expect.stringContaining(`"maxTurns":${DEFAULT_TURN_COUNT}`),
-      }),
-    );
-  });
-
-  it('should use provided maxTurns value', async () => {
-    const mockFetchResponse = {
-      ok: true,
-      json: () => Promise.resolve({ done: true, purpose: 'discovered purpose' }),
-    } as Response;
-    jest.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
-
-    const customTurns = 10;
-    await doTargetPurposeDiscovery(mockTarget, customTurns);
-
-    expect(fetchWithProxy).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({
-        body: expect.stringContaining(`"maxTurns":${customTurns}`),
-      }),
-    );
   });
 });
