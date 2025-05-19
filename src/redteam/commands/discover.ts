@@ -54,12 +54,7 @@ export const ArgsSchema = z
 
 type Args = z.infer<typeof ArgsSchema>;
 
-type ConversationHistory = { type: 'promptfoo' | 'target'; content: string }[];
-
-// A larger turn count is more accurate (b/c more probes) but slower.
-// TODO: Optimize this default to balance quality/runtime using the Discover eval.
-// NOTE: Set to 5 because UI lacks ability to set the count.
-export const DEFAULT_TURN_COUNT = 5;
+type Question = { id: string; question: string };
 
 /**
  * Queries Cloud for the purpose-discovery logic, sends each logic to the target,
@@ -69,80 +64,94 @@ export const DEFAULT_TURN_COUNT = 5;
  * @param maxTurns - The maximum number of turns to run the discovery process.
  * @returns The purpose of the target.
  */
-export async function doTargetPurposeDiscovery(
-  target: ApiProvider,
-  maxTurns: number = DEFAULT_TURN_COUNT,
-): Promise<{ purpose: string; conversationHistory: ConversationHistory }> {
-  const conversationHistory: ConversationHistory = [];
+export async function doTargetPurposeDiscovery(target: ApiProvider): Promise<{
+  purpose: string;
+  conversationHistory: { type: 'promptfoo' | 'target'; content: string }[];
+}> {
+  // Internal conversation history:
+  const conversationHistory: { question: Question; response: string }[] = [];
 
-  const pbar = new cliProgress.SingleBar({
-    format: `Discovering purpose {bar} {percentage}% | {value}${maxTurns ? '/{total}' : ''} turns`,
-    barCompleteChar: '\u2588',
-    barIncompleteChar: '\u2591',
-    hideCursor: true,
+  // Fetch the initial question set from the server:
+  const questionsRes = await fetchWithProxy(getRemoteGenerationUrl(), {
+    body: JSON.stringify({
+      task: 'target-purpose-discovery',
+      conversationHistory,
+      version: VERSION,
+      email: getUserEmail(),
+      forceReturn: true,
+    }),
+    headers: { 'Content-Type': 'application/json' },
+    method: 'POST',
   });
 
-  pbar.start(maxTurns, 0);
+  const { questions } = (await questionsRes.json()) as {
+    questions: Question[];
+  };
 
-  for (let i = 1; i <= maxTurns; i++) {
-    // Fetch the {initial | next} question from the server:
-    const res = await fetchWithProxy(getRemoteGenerationUrl(), {
-      body: JSON.stringify({
-        task: 'target-purpose-discovery',
-        conversationHistory,
-        maxTurns,
-        version: VERSION,
-        email: getUserEmail(),
-        forceReturn: true,
-      }),
-      headers: { 'Content-Type': 'application/json' },
-      method: 'POST',
+  await Promise.all(
+    questions.map(async (question) => {
+      const response = await target.callApi(question.question);
+      conversationHistory.push({ question, response: response.output });
+    }),
+  );
+
+  // Request followup questions:
+  const followupQuestionsRes = await fetchWithProxy(getRemoteGenerationUrl(), {
+    body: JSON.stringify({
+      task: 'target-purpose-discovery',
+      conversationHistory,
+      version: VERSION,
+      email: getUserEmail(),
+      forceReturn: true,
+    }),
+    headers: { 'Content-Type': 'application/json' },
+    method: 'POST',
+  });
+
+  const { questions: followupQuestions } = (await followupQuestionsRes.json()) as {
+    questions: Question[];
+  };
+
+  await Promise.all(
+    followupQuestions.map(async (question) => {
+      const response = await target.callApi(question.question);
+      conversationHistory.push({ question, response: response.output });
+    }),
+  );
+
+  // Get the summary:
+  const summaryRes = await fetchWithProxy(getRemoteGenerationUrl(), {
+    body: JSON.stringify({
+      task: 'target-purpose-discovery',
+      conversationHistory,
+      summarize: true,
+      version: VERSION,
+      email: getUserEmail(),
+      forceReturn: true,
+    }),
+    headers: { 'Content-Type': 'application/json' },
+    method: 'POST',
+  });
+
+  const { purpose } = (await summaryRes.json()) as { purpose: string };
+
+  logger.info(`\nPurpose:\n\n${chalk.green(purpose)}\n`);
+
+  // Serialize the conversation history:
+  const serializedConversationHistory = [];
+
+  for (const msg of conversationHistory) {
+    serializedConversationHistory.push({
+      type: 'promptfoo' as const,
+      content: msg.question.question,
     });
-
-    const { done, purpose, question } = (await res.json()) as {
-      question?: string;
-      done: boolean;
-      purpose?: string;
-    };
-
-    // `done` will be true if max turns are reached (server is aware of the turn count) OR the server
-    // is satisfied with the current purpose.
-    if (
-      done ||
-      // `done` should never not be `true` here, but it's good to have a fallback:
-      i === maxTurns
-    ) {
-      // Finalize the progress bar:
-      pbar.increment();
-      pbar.stop();
-
-      // Handle the edge case where the server did not call `done` when max turns are reached:
-      if (purpose) {
-        logger.info(`\nPurpose:\n\n${chalk.green(purpose)}\n`);
-        return { purpose: purpose as string, conversationHistory };
-      } else {
-        throw new Error(
-          'Failed to discover purpose: server did not call `done` when max turns are reached',
-        );
-      }
-    } else {
-      if (!question) {
-        throw new Error(`Failed to discover purpose: ${res.statusText}`);
-      }
-
-      // Add the promptfoo question to the conversation history:
-      conversationHistory.push({ type: 'promptfoo', content: question as string });
-
-      // Call the target with the question:
-      const response = await target.callApi(question as string);
-      logger.debug(JSON.stringify({ question, output: response.output }, null, 2));
-      conversationHistory.push({ type: 'target', content: response.output });
-
-      pbar.increment();
-    }
+    serializedConversationHistory.push({
+      type: 'target' as const,
+      content: msg.response,
+    });
   }
 
-  throw new Error('Failed to discover purpose: max turns reached');
+  return { purpose, conversationHistory: serializedConversationHistory };
 }
 
 /**
@@ -178,7 +187,16 @@ async function saveCloudTargetPurpose(targetId: string, purpose: string) {
 }
 
 export function mergePurposes(humanDefinedPurpose: string, discoveredPurpose: string) {
-  return `${humanDefinedPurpose}\n\nDiscovered Purpose:\n\n${discoveredPurpose}`;
+  return dedent`
+    ${humanDefinedPurpose}
+
+    Discovered Purpose:
+
+    Note to LLMs: The discovered purpose is a summary of the target's purpose. It is not a complete description of the target.
+    It is possible that the discovered purpose is incomplete or incorrect.
+
+    ${discoveredPurpose}
+  `;
 }
 
 /**
@@ -204,12 +222,6 @@ export function discoverCommand(program: Command) {
     .option('--overwrite', 'Overwrite the existing purpose if it already exists.', false)
     .option('-t, --target <id>', 'UUID of a Cloud-defined target to run the discovery on')
     .option('--preview', 'Preview discovery results without writing to an output file', false)
-    .option(
-      '--turns <turns>',
-      'A maximum number of turns to run the discovery process. Lower is faster but less accurate.',
-      (value) => Number.parseInt(value, 10),
-      DEFAULT_TURN_COUNT,
-    )
     .action(async (rawArgs: Args) => {
       // If preview is true and output is DEFAULT_OUTPUT_PATH, set output to undefined to satisfy
       // the schema. Defaults are defined within the `option` definitions to include them within the
@@ -303,7 +315,7 @@ export function discoverCommand(program: Command) {
       // Discover the purpose for the target:
       let purpose: string | undefined = undefined;
       try {
-        const result = await doTargetPurposeDiscovery(target, args.turns);
+        const result = await doTargetPurposeDiscovery(target);
         purpose = result.purpose;
       } catch (error) {
         logger.error(
