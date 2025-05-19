@@ -549,7 +549,7 @@ export async function resolveConfigs(
     !hasProviders
   ) {
     logger.error('You must specify at least 1 provider (for example, openai:gpt-4o)');
-    throw new Error('You must specify at least 1 provider (for example, openai:gpt-4o)');
+    throw new Error('You must specify at least 1 provider (for example, openai:gpt-4.1)');
   }
 
   invariant(Array.isArray(config.providers), 'providers must be an array');
