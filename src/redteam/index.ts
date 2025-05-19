@@ -407,7 +407,7 @@ export function calculateTotalTests(
  * Type guard to check if a strategy ID is a strategy collection
  */
 function isStrategyCollection(id: string): id is keyof typeof STRATEGY_COLLECTION_MAPPINGS {
-  return STRATEGY_COLLECTIONS.includes(id as any);
+  return STRATEGY_COLLECTIONS.includes(id as keyof typeof STRATEGY_COLLECTION_MAPPINGS);
 }
 
 /**
