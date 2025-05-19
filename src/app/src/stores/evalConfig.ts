@@ -1,7 +1,7 @@
 import type {
   EnvOverrides,
   EvaluateOptions,
-  EvaluateTestSuite,
+  EvaluateTestSuiteWithEvaluateOptions,
   ProviderOptions,
   TestCase,
   UnifiedConfig,
@@ -29,7 +29,7 @@ export interface State {
   setEvaluateOptions: (options: EvaluateOptions) => void;
   setScenarios: (scenarios: Scenario[]) => void;
   setStateFromConfig: (config: Partial<UnifiedConfig>) => void;
-  getTestSuite: () => EvaluateTestSuite;
+  getTestSuite: () => EvaluateTestSuiteWithEvaluateOptions;
   setExtensions: (extensions: string[]) => void;
 }
 
