@@ -64,11 +64,11 @@ export default class Eval {
   config: Partial<UnifiedConfig>;
   // If these are empty, you need to call loadResults(). We don't load them by default to save memory.
   results: EvalResult[];
-  resultsCount: number; // Fast way to get the number of results
   datasetId?: string;
   prompts: CompletedPrompt[];
   oldResults?: EvaluateSummaryV2;
   persisted: boolean;
+  _resultsLoaded: boolean = false;
 
   static async latest() {
     const db = getDb();
@@ -271,10 +271,10 @@ export default class Eval {
     this.author = opts?.author;
     this.config = config;
     this.results = [];
-    this.resultsCount = 0;
     this.prompts = opts?.prompts || [];
     this.datasetId = opts?.datasetId;
     this.persisted = opts?.persisted || false;
+    this._resultsLoaded = false;
   }
 
   version() {
@@ -351,13 +351,23 @@ export default class Eval {
       // This is to avoid memory issues when running large evaluations
       this.results.push(newResult);
     }
-    this.resultsCount++;
   }
 
   async *fetchResultsBatched(batchSize: number = 100) {
     for await (const batch of EvalResult.findManyByEvalIdBatched(this.id, { batchSize })) {
       yield batch;
     }
+  }
+
+  async getResultsCount(): Promise<number> {
+    const db = getDb();
+    const result = db
+      .select({ count: sql<number>`count(*)` })
+      .from(evalResultsTable)
+      .where(eq(evalResultsTable.evalId, this.id))
+      .all();
+    const count = result[0]?.count ?? 0;
+    return Number(count);
   }
 
   async fetchResultsByTestIdx(testIdx: number) {
@@ -374,16 +384,16 @@ export default class Eval {
 
   async setResults(results: EvalResult[]) {
     this.results = results;
-    this.resultsCount = results.length;
     if (this.persisted) {
       const db = getDb();
       await db.insert(evalResultsTable).values(results.map((r) => ({ ...r, evalId: this.id })));
     }
+    this._resultsLoaded = true;
   }
 
   async loadResults() {
     this.results = await EvalResult.findManyByEvalId(this.id);
-    this.resultsCount = this.results.length;
+    this._resultsLoaded = true;
   }
 
   async getResults(): Promise<EvaluateResult[] | EvalResult[]> {
@@ -392,7 +402,13 @@ export default class Eval {
       return this.oldResults.results;
     }
     await this.loadResults();
+    this._resultsLoaded = true;
     return this.results;
+  }
+
+  clearResults() {
+    this.results = [];
+    this._resultsLoaded = false;
   }
 
   getStats(): EvaluateStats {
