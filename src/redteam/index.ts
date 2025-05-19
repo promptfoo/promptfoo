@@ -447,24 +447,20 @@ export async function synthesize({
     logger.warn('Delay is enabled, setting max concurrency to 1.');
   }
 
-  // Expand strategy aliases
   const expandedStrategies: typeof strategies = [];
   strategies.forEach((strategy) => {
     if (STRATEGY_COLLECTIONS.includes(strategy.id as any)) {
-      // If this is a strategy collection, expand it to its component strategies
       const aliasedStrategies =
         STRATEGY_COLLECTION_MAPPINGS[strategy.id as keyof typeof STRATEGY_COLLECTION_MAPPINGS];
       if (aliasedStrategies) {
         aliasedStrategies.forEach((strategyId) => {
           expandedStrategies.push({
             id: strategyId,
-            // Propagate the configuration from the alias to all component strategies
             ...(strategy.config ? { config: strategy.config } : {}),
           });
         });
       }
     } else {
-      // Not an alias, keep as is
       expandedStrategies.push(strategy);
     }
   });

@@ -859,11 +859,9 @@ export const ADDITIONAL_STRATEGIES = [
 ] as const;
 export type AdditionalStrategy = (typeof ADDITIONAL_STRATEGIES)[number];
 
-// Strategy aliases - collections of strategies that can be referenced by a single name
 export const STRATEGY_COLLECTIONS = ['other-encodings'] as const;
 export type StrategyCollection = (typeof STRATEGY_COLLECTIONS)[number];
 
-// Mapping from strategy collection to included strategies
 export const STRATEGY_COLLECTION_MAPPINGS: Record<StrategyCollection, string[]> = {
   'other-encodings': ['morse', 'piglatin'],
 };
@@ -977,9 +975,9 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'sql-injection': 'Tests for SQL injection vulnerabilities',
   ssrf: 'Tests for server-side request forgery vulnerabilities',
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
+  'tool-discovery': 'Tests for enumeration of available tools and function calls',
   'tool-discovery:multi-turn':
     'Uses conversational approach to discover available tools, functions, and capabilities through multi-step interactions',
-  'tool-discovery': 'Tests for enumeration of available tools and function calls',
   unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
   xstest: 'Tests for XSTest attacks',
   video: 'Tests handling of video content',
@@ -1059,7 +1057,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'math-prompt': 'Mathematical Notation Attack',
   morse: 'Morse Code Encoding',
   multilingual: 'Cross-Language Attack',
-  'other-encodings': 'Alternative Text Encodings',
+  'other-encodings': 'Collection of Text Encodings',
   overreliance: 'Overreliance',
   pandamonium: '[Experimental] Pandamonium',
   piglatin: 'Pig Latin Encoding',
@@ -1492,6 +1490,8 @@ export const strategyDescriptions: Record<Strategy, string> = {
   morse:
     'Tests detection and handling of text encoded in Morse code where letters are converted to dots and dashes to potentially bypass content filters',
   multilingual: 'Evaluates cross-language attack vector handling',
+  'other-encodings':
+    'Collection of alternative text transformation strategies (Morse code and Pig Latin) for testing evasion techniques',
   pandamonium:
     "Promptfoo's exclusive dynamic jailbreak strategy currently in development. Note: This is an expensive jailbreak strategy with no limit on probes.",
   piglatin:
@@ -1500,8 +1500,6 @@ export const strategyDescriptions: Record<Strategy, string> = {
   retry: 'Automatically incorporates previously failed test cases to prevent regression',
   rot13: 'Assesses handling of ROT13-encoded malicious payloads',
   video: 'Tests detection and handling of video-based malicious payloads',
-  'other-encodings':
-    'Collection of alternative text transformation strategies (Morse code and Pig Latin) for testing evasion techniques',
 };
 
 export const strategyDisplayNames: Record<Strategy, string> = {
@@ -1525,13 +1523,13 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   'math-prompt': 'Mathematical Encoding',
   morse: 'Morse Code',
   multilingual: 'Multilingual Translation',
+  'other-encodings': 'Collection of Text Encodings',
   pandamonium: 'Pandamonium',
   piglatin: 'Pig Latin',
   'prompt-injection': 'Prompt Injection',
   retry: 'Regression Testing',
   rot13: 'ROT13 Encoding',
   video: 'Video',
-  'other-encodings': 'Alternative Text Encodings',
 };
 
 export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
