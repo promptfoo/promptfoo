@@ -3,8 +3,6 @@ import { ArgsSchema } from '../../../src/redteam/commands/discover';
 
 jest.mock('../../../src/fetch');
 
-jest.mock('cli-progress');
-
 describe('ArgsSchema', () => {
   it('`config` and `target` are mutually exclusive', () => {
     const args = {
