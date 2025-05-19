@@ -189,6 +189,19 @@ function generateMetadataSearchString(metadata: Record<string, any> | undefined)
     .join(' ');
 }
 
+async function fetchEval(
+  evalId: string,
+  pageIndex: number,
+  pageSize: number,
+  filter: FilterMode,
+  compareTo: string | null,
+) {
+  const url = `/eval/${evalId}/table?offset=${pageIndex * pageSize}&limit=${pageSize}&filter=${filter}${
+    compareTo ? `&comparisonEvalId=${compareTo}` : ''
+  }`;
+  return await callApi(url);
+}
+
 function ResultsTable({
   maxTextLength,
   columnVisibility,
@@ -203,7 +216,8 @@ function ResultsTable({
   setFilterMode,
 }: ResultsTableProps) {
   const { evalId, table, setTable, config, version, rowCount, setRowCount } = useMainStore();
-  const { inComparisonMode } = useResultsViewSettingsStore();
+  const { inComparisonMode, comparisonEvalId } = useResultsViewSettingsStore();
+
   const { showToast } = useToast();
 
   invariant(table, 'Table should be defined');
@@ -211,6 +225,10 @@ function ResultsTable({
 
   const [lightboxOpen, setLightboxOpen] = React.useState(false);
   const [lightboxImage, setLightboxImage] = React.useState<string | null>(null);
+  const [pagination, setPagination] = React.useState<{ pageIndex: number; pageSize: number }>({
+    pageIndex: 0,
+    pageSize: 50,
+  });
 
   const toggleLightbox = (url?: string) => {
     setLightboxImage(url || null);
@@ -403,13 +421,12 @@ function ResultsTable({
     searchRegex,
   ]);
 
-  const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: 50 });
   const parseQueryParams = (queryString: string) => {
     return Object.fromEntries(new URLSearchParams(queryString));
   };
 
   React.useEffect(() => {
-    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+    setPagination({ ...pagination, pageIndex: 0 });
   }, [failureFilter, filterMode, debouncedSearchText]);
 
   React.useEffect(() => {
@@ -417,8 +434,13 @@ function ResultsTable({
       return;
     }
     const fetchPage = async () => {
-      const resp = await callApi(
-        `/eval/${evalId}/table?offset=${pagination.pageIndex * pagination.pageSize}&limit=${pagination.pageSize}&filter=${filterMode}`,
+      const compareTo = inComparisonMode ? comparisonEvalId : null;
+      const resp = await fetchEval(
+        evalId,
+        pagination.pageIndex,
+        pagination.pageSize,
+        filterMode,
+        compareTo,
       );
       if (resp.ok) {
         const body = await resp.json();
@@ -427,7 +449,14 @@ function ResultsTable({
       }
     };
     fetchPage();
-  }, [evalId, pagination.pageIndex, pagination.pageSize, filterMode]);
+  }, [
+    evalId,
+    pagination.pageIndex,
+    pagination.pageSize,
+    filterMode,
+    inComparisonMode,
+    comparisonEvalId,
+  ]);
 
   // TODO(ian): Switch this to use prompt.metrics field once most clients have updated.
   const numGoodTests = React.useMemo(
@@ -831,7 +860,7 @@ function ResultsTable({
       const safeRowPageIndex = Math.min(rowPageIndex, maxPageIndex);
 
       if (pagination.pageIndex !== safeRowPageIndex) {
-        setPagination((prev) => ({ ...prev, pageIndex: safeRowPageIndex }));
+        setPagination({ ...pagination, pageIndex: safeRowPageIndex });
       }
 
       const scrollToRow = () => {
@@ -1030,7 +1059,10 @@ function ResultsTable({
         <Box className="pagination" mx={1} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <Button
             onClick={() => {
-              setPagination((prev) => ({ ...prev, pageIndex: Math.max(prev.pageIndex - 1, 0) }));
+              setPagination((prev) => ({
+                ...prev,
+                pageIndex: Math.max(prev.pageIndex - 1, 0),
+              }));
               clearRowIdFromUrl();
               window.scrollTo(0, 0);
             }}
@@ -1078,7 +1110,10 @@ function ResultsTable({
             <Select
               value={pagination.pageSize}
               onChange={(e) => {
-                setPagination({ pageIndex: 0, pageSize: Number(e.target.value) });
+                setPagination((prev) => ({
+                  ...prev,
+                  pageSize: Number(e.target.value),
+                }));
                 window.scrollTo(0, 0);
               }}
               displayEmpty

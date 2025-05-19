@@ -412,11 +412,19 @@ export default class Eval {
     return await EvalResult.findManyByEvalId(this.id, { testIdx });
   }
 
-  async getTablePage(opts: { offset?: number; limit?: number; filterMode?: string }) {
+  async getTablePage(opts: {
+    offset?: number;
+    limit?: number;
+    filterMode?: string;
+    testIndices?: number[];
+  }) {
     const db = getDb();
-    const offset = opts.offset ?? 0;
-    const limit = opts.limit ?? 50;
-    const filter = opts.filterMode ?? 'all';
+    const hasTestIndices = opts.testIndices && opts.testIndices.length > 0;
+    // If we have test indices, we need to fetch all results
+    const offset = hasTestIndices ? 0 : (opts.offset ?? 0);
+    const limit = hasTestIndices ? (opts.testIndices?.length ?? 1000) : (opts.limit ?? 50);
+    const filter = hasTestIndices ? 'all' : (opts.filterMode ?? 'all');
+    const testIndices = opts.testIndices;
 
     const conditions = [`eval_id = '${this.id}'`];
     if (filter === 'errors') {
@@ -427,6 +435,10 @@ export default class Eval {
       conditions.push(`success = 1`);
     } else if (filter === 'highlights') {
       conditions.push(`json_extract(grading_result, '$.comment') LIKE '!highlight%'`);
+    }
+
+    if (testIndices && testIndices.length > 0) {
+      conditions.push(`test_idx IN (${testIndices.join(',')})`);
     }
 
     const whereSql = conditions.join(' AND ');
@@ -441,9 +453,16 @@ export default class Eval {
     logger.debug(`Count query took ${countEnd - countStart}ms`);
     const totalCount = countResult?.count || 0;
 
-    const idxQuery = sql.raw(
-      `SELECT DISTINCT test_idx FROM eval_results WHERE ${whereSql} ORDER BY test_idx LIMIT ${limit} OFFSET ${offset}`,
-    );
+    let idxQuery;
+    if (testIndices && testIndices.length > 0) {
+      idxQuery = sql.raw(
+        `SELECT DISTINCT test_idx FROM eval_results WHERE ${whereSql} ORDER BY test_idx`,
+      );
+    } else {
+      idxQuery = sql.raw(
+        `SELECT DISTINCT test_idx FROM eval_results WHERE ${whereSql} ORDER BY test_idx LIMIT ${limit} OFFSET ${offset}`,
+      );
+    }
     const idxStart = Date.now();
     // @ts-ignore
     const rows: { test_idx: number }[] = await db.all(idxQuery);

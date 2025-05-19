@@ -9,6 +9,11 @@ interface ColumnState {
   columnVisibility: VisibilityState;
 }
 
+export interface PaginationState {
+  pageIndex: number;
+  pageSize: number;
+}
+
 interface TableState {
   evalId: string | null;
   setEvalId: (evalId: string) => void;
@@ -48,6 +53,8 @@ interface SettingsState {
 
   inComparisonMode: boolean;
   setInComparisonMode: (inComparisonMode: boolean) => void;
+  comparisonEvalId: string | null;
+  setComparisonEvalId: (comparisonEvalId: string | null) => void;
   stickyHeader: boolean;
   setStickyHeader: (stickyHeader: boolean) => void;
 
@@ -108,6 +115,8 @@ export const useResultsViewSettingsStore = create<SettingsState>()(
 
       inComparisonMode: false,
       setInComparisonMode: (inComparisonMode: boolean) => set(() => ({ inComparisonMode })),
+      comparisonEvalId: null,
+      setComparisonEvalId: (comparisonEvalId: string | null) => set(() => ({ comparisonEvalId })),
       stickyHeader: true,
       setStickyHeader: (stickyHeader: boolean) => set(() => ({ stickyHeader })),
 

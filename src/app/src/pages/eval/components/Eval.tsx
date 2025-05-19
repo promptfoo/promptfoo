@@ -49,7 +49,7 @@ export default function Eval({
     setRowCount,
   } = useStore();
 
-  const { setInComparisonMode } = useResultsViewSettingsStore();
+  const { setInComparisonMode, setComparisonEvalId } = useResultsViewSettingsStore();
 
   const [loaded, setLoaded] = React.useState(false);
   const [failed, setFailed] = React.useState(false);
@@ -76,7 +76,13 @@ export default function Eval({
         return;
       }
       const body = (await resp.json()) as {
-        data: { table: EvaluateTable; totalCount: number; config: Partial<UnifiedConfig>; author: string | null; version: number };
+        data: {
+          table: EvaluateTable;
+          totalCount: number;
+          config: Partial<UnifiedConfig>;
+          author: string | null;
+          version: number;
+        };
       };
 
       setTable(body.data.table);
@@ -187,7 +193,9 @@ export default function Eval({
       };
       run();
     }
+    console.log('Eval init: Resetting comparison mode');
     setInComparisonMode(false);
+    setComparisonEvalId(null);
   }, [
     apiBaseUrl,
     fetchId,

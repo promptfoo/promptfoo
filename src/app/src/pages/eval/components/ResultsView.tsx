@@ -159,7 +159,15 @@ export default function ResultsView({
 }: ResultsViewProps) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { author, table, setTable, config, setConfig, evalId, setAuthor } = useResultsViewStore();
+  const {
+    author,
+    table,
+
+    config,
+    setConfig,
+    evalId,
+    setAuthor,
+  } = useResultsViewStore();
 
   const {
     setInComparisonMode,
@@ -168,6 +176,8 @@ export default function ResultsView({
     maxTextLength,
     wordBreak,
     showInferenceDetails,
+
+    setComparisonEvalId,
   } = useResultsViewSettingsStore();
 
   const { setStateFromConfig } = useMainStore();
@@ -264,50 +274,9 @@ export default function ResultsView({
 
   const handleComparisonEvalSelected = async (compareEvalId: string) => {
     setAnchorEl(null);
-    try {
-      const response = await callApi(`/results/${compareEvalId}`, {
-        cache: 'no-store',
-      });
-      const body = await response.json();
-      const comparisonTable =
-        body.data.version < 4
-          ? (body.data.results.table as EvaluateTable)
-          : convertResultsToTable(body.data);
 
-      // Combine the comparison table with the current table
-      const combinedTable: EvaluateTable = {
-        head: {
-          prompts: [
-            ...table.head.prompts.map((prompt) => ({
-              ...prompt,
-              label: `[${evalId || defaultEvalId || 'Eval A'}] ${prompt.label || ''}`,
-            })),
-            ...comparisonTable.head.prompts.map((prompt) => ({
-              ...prompt,
-              label: `[${compareEvalId}] ${prompt.label || ''}`,
-            })),
-          ],
-          vars: table.head.vars, // Assuming vars are the same
-        },
-        body: table.body.map((row, index) => ({
-          ...row,
-          outputs: [...row.outputs, ...(comparisonTable.body[index]?.outputs || [])],
-        })),
-      };
-      // Update the state with the combined table
-      setTable(combinedTable);
-
-      // Update other relevant state if needed
-      setConfig({
-        ...config,
-        ...body.data.config,
-        description: `Combined: "${config?.description || 'Eval A'}" and "${body.data.config?.description || 'Eval B'}"`,
-      });
-      setInComparisonMode(true);
-    } catch (error) {
-      console.error('Error fetching comparison eval:', error);
-      alert('Failed to load comparison eval. Please try again.');
-    }
+    setInComparisonMode(true);
+    setComparisonEvalId(compareEvalId);
   };
 
   const hasAnyDescriptions = React.useMemo(

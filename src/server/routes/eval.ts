@@ -168,6 +168,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
   const limit = Number(req.query.limit) || 50;
   const offset = Number(req.query.offset) || 0;
   const filter = String(req.query.filter || 'all');
+  const comparisonEvalId = req.query.comparisonEvalId ? String(req.query.comparisonEvalId) : null;
 
   const eval_ = await Eval.findById(id);
   if (!eval_) {
@@ -177,9 +178,57 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
 
   const table = await eval_.getTablePage({ offset, limit, filterMode: filter as any });
 
+  const indices = table.body.map((row) => row.testIdx);
+
+  let returnTable = { head: table.head, body: table.body };
+
+  if (comparisonEvalId) {
+    const comparisonEval_ = await Eval.findById(comparisonEvalId);
+    if (!comparisonEval_) {
+      res.status(404).json({ error: 'Comparison eval not found' });
+      return;
+    }
+
+    const comparisonTable = await comparisonEval_.getTablePage({
+      offset: 0,
+      limit: indices.length,
+      filterMode: 'all',
+      testIndices: indices,
+    });
+
+    returnTable = {
+      head: {
+        prompts: [
+          ...table.head.prompts.map((prompt) => ({
+            ...prompt,
+            label: `[${id}] ${prompt.label || ''}`,
+          })),
+          ...comparisonTable.head.prompts.map((prompt) => ({
+            ...prompt,
+            label: `[${comparisonEvalId}] ${prompt.label || ''}`,
+          })),
+        ],
+        vars: table.head.vars, // Assuming vars are the same
+      },
+      body: table.body.map((row, index) => {
+        // Find matching row in comparison table by test index
+        const testIdx = row.testIdx;
+        const matchingRow = comparisonTable.body.find((compRow) => {
+          const compTestIdx = compRow.testIdx;
+          return compTestIdx === testIdx;
+        });
+
+        return {
+          ...row,
+          outputs: [...row.outputs, ...(matchingRow?.outputs || [])],
+        };
+      }),
+    };
+  }
+
   res.json({
     data: {
-      table: { head: table.head, body: table.body },
+      table: returnTable,
       totalCount: table.totalCount,
       config: eval_.config,
       author: eval_.author || null,
