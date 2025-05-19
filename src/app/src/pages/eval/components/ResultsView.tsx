@@ -29,7 +29,6 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import { styled } from '@mui/material/styles';
-import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import invariant from '@promptfoo/util/invariant';
 import type { VisibilityState } from '@tanstack/table-core';
 import { useDebounce } from 'use-debounce';
@@ -47,7 +46,7 @@ import ResultsTable from './ResultsTable';
 import ShareModal from './ShareModal';
 import SettingsModal from './TableSettings/TableSettingsModal';
 import { useStore as useResultsViewStore, useResultsViewSettingsStore } from './store';
-import type { EvaluateTable, FilterMode, ResultLightweightWithLabel } from './types';
+import type { FilterMode, ResultLightweightWithLabel } from './types';
 import './ResultsView.css';
 
 const ResponsiveStack = styled(Stack)(({ theme }) => ({
@@ -176,8 +175,8 @@ export default function ResultsView({
     maxTextLength,
     wordBreak,
     showInferenceDetails,
-
-    setComparisonEvalId,
+    comparisonEvalIds,
+    setComparisonEvalIds,
   } = useResultsViewSettingsStore();
 
   const { setStateFromConfig } = useMainStore();
@@ -276,7 +275,7 @@ export default function ResultsView({
     setAnchorEl(null);
 
     setInComparisonMode(true);
-    setComparisonEvalId(compareEvalId);
+    setComparisonEvalIds([...comparisonEvalIds, compareEvalId]);
   };
 
   const hasAnyDescriptions = React.useMemo(

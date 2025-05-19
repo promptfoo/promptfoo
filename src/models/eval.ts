@@ -145,7 +145,7 @@ export default class Eval {
       prompts: eval_.prompts || [],
       datasetId,
       persisted: true,
-      vars: eval_.vars || [],
+      vars: new Set(eval_.vars || []),
     });
     if (eval_.results && 'table' in eval_.results) {
       evalInstance.oldResults = eval_.results as EvaluateSummaryV2;
@@ -481,7 +481,7 @@ export default class Eval {
     const bodyEnd = Date.now();
     logger.debug(`Body query took ${bodyEnd - bodyStart}ms`);
 
-    return { head: { prompts: this.prompts, vars }, body, totalCount };
+    return { head: { prompts: this.prompts, vars }, body, totalCount, id: this.id };
   }
 
   async addPrompts(prompts: CompletedPrompt[]) {

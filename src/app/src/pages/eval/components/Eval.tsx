@@ -49,7 +49,7 @@ export default function Eval({
     setRowCount,
   } = useStore();
 
-  const { setInComparisonMode, setComparisonEvalId } = useResultsViewSettingsStore();
+  const { setInComparisonMode, setComparisonEvalIds } = useResultsViewSettingsStore();
 
   const [loaded, setLoaded] = React.useState(false);
   const [failed, setFailed] = React.useState(false);
@@ -195,7 +195,7 @@ export default function Eval({
     }
     console.log('Eval init: Resetting comparison mode');
     setInComparisonMode(false);
-    setComparisonEvalId(null);
+    setComparisonEvalIds([]);
   }, [
     apiBaseUrl,
     fetchId,

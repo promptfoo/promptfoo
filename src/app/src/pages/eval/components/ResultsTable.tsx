@@ -194,11 +194,12 @@ async function fetchEval(
   pageIndex: number,
   pageSize: number,
   filter: FilterMode,
-  compareTo: string | null,
+  compareTo: string[],
 ) {
   const url = `/eval/${evalId}/table?offset=${pageIndex * pageSize}&limit=${pageSize}&filter=${filter}${
-    compareTo ? `&comparisonEvalId=${compareTo}` : ''
+    compareTo.length > 0 ? `&comparisonEvalIds=${compareTo.join('&comparisonEvalIds=')}` : ''
   }`;
+  console.log('fetchEval', url);
   return await callApi(url);
 }
 
@@ -216,7 +217,7 @@ function ResultsTable({
   setFilterMode,
 }: ResultsTableProps) {
   const { evalId, table, setTable, config, version, rowCount, setRowCount } = useMainStore();
-  const { inComparisonMode, comparisonEvalId } = useResultsViewSettingsStore();
+  const { inComparisonMode, comparisonEvalIds } = useResultsViewSettingsStore();
 
   const { showToast } = useToast();
 
@@ -433,14 +434,14 @@ function ResultsTable({
     if (!evalId) {
       return;
     }
+    console.log('comparisonEvalIds', comparisonEvalIds);
     const fetchPage = async () => {
-      const compareTo = inComparisonMode ? comparisonEvalId : null;
       const resp = await fetchEval(
         evalId,
         pagination.pageIndex,
         pagination.pageSize,
         filterMode,
-        compareTo,
+        comparisonEvalIds,
       );
       if (resp.ok) {
         const body = await resp.json();
@@ -449,14 +450,7 @@ function ResultsTable({
       }
     };
     fetchPage();
-  }, [
-    evalId,
-    pagination.pageIndex,
-    pagination.pageSize,
-    filterMode,
-    inComparisonMode,
-    comparisonEvalId,
-  ]);
+  }, [evalId, pagination.pageIndex, pagination.pageSize, filterMode, comparisonEvalIds]);
 
   // TODO(ian): Switch this to use prompt.metrics field once most clients have updated.
   const numGoodTests = React.useMemo(

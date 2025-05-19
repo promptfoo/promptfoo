@@ -168,7 +168,12 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
   const limit = Number(req.query.limit) || 50;
   const offset = Number(req.query.offset) || 0;
   const filter = String(req.query.filter || 'all');
-  const comparisonEvalId = req.query.comparisonEvalId ? String(req.query.comparisonEvalId) : null;
+
+  const comparisonEvalIds = Array.isArray(req.query.comparisonEvalIds)
+    ? req.query.comparisonEvalIds
+    : typeof req.query.comparisonEvalIds === 'string'
+      ? [req.query.comparisonEvalIds]
+      : [];
 
   const eval_ = await Eval.findById(id);
   if (!eval_) {
@@ -182,19 +187,31 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
 
   let returnTable = { head: table.head, body: table.body };
 
-  if (comparisonEvalId) {
-    const comparisonEval_ = await Eval.findById(comparisonEvalId);
-    if (!comparisonEval_) {
+  if (comparisonEvalIds.length > 0) {
+    console.log('comparisonEvalIds', comparisonEvalIds);
+    const comparisonEvals = await Promise.all(
+      comparisonEvalIds.map(async (comparisonEvalId) => {
+        const comparisonEval_ = await Eval.findById(comparisonEvalId as string);
+        return comparisonEval_;
+      }),
+    );
+
+    if (comparisonEvals.some((comparisonEval_) => !comparisonEval_)) {
       res.status(404).json({ error: 'Comparison eval not found' });
       return;
     }
 
-    const comparisonTable = await comparisonEval_.getTablePage({
-      offset: 0,
-      limit: indices.length,
-      filterMode: 'all',
-      testIndices: indices,
-    });
+    const comparisonTables = await Promise.all(
+      comparisonEvals.map(async (comparisonEval_) => {
+        invariant(comparisonEval_, 'Comparison eval not found');
+        return comparisonEval_.getTablePage({
+          offset: 0,
+          limit: indices.length,
+          filterMode: 'all',
+          testIndices: indices,
+        });
+      }),
+    );
 
     returnTable = {
       head: {
@@ -203,24 +220,31 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
             ...prompt,
             label: `[${id}] ${prompt.label || ''}`,
           })),
-          ...comparisonTable.head.prompts.map((prompt) => ({
-            ...prompt,
-            label: `[${comparisonEvalId}] ${prompt.label || ''}`,
-          })),
+          ...comparisonTables.flatMap((table) =>
+            table.head.prompts.map((prompt) => ({
+              ...prompt,
+              label: `[${table.id}] ${prompt.label || ''}`,
+            })),
+          ),
         ],
         vars: table.head.vars, // Assuming vars are the same
       },
       body: table.body.map((row, index) => {
         // Find matching row in comparison table by test index
         const testIdx = row.testIdx;
-        const matchingRow = comparisonTable.body.find((compRow) => {
-          const compTestIdx = compRow.testIdx;
-          return compTestIdx === testIdx;
-        });
+        const matchingRows = comparisonTables
+          .map((table) => {
+            const compRow = table.body.find((compRow) => {
+              const compTestIdx = compRow.testIdx;
+              return compTestIdx === testIdx;
+            });
+            return compRow;
+          })
+          .filter((r) => r !== undefined);
 
         return {
           ...row,
-          outputs: [...row.outputs, ...(matchingRow?.outputs || [])],
+          outputs: [...row.outputs, ...(matchingRows.flatMap((r) => r?.outputs) || [])],
         };
       }),
     };
