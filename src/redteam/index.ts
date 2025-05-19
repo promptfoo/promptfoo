@@ -14,11 +14,13 @@ import { extractVariablesFromTemplates } from '../util/templates';
 import type { StrategyExemptPlugin } from './constants';
 import {
   ALIASED_PLUGIN_MAPPINGS,
+  ALIASED_STRATEGY_MAPPINGS,
   FOUNDATION_PLUGINS,
   HARM_PLUGINS,
   PII_PLUGINS,
   riskCategorySeverityMap,
   Severity,
+  STRATEGY_ALIASES,
   STRATEGY_EXEMPT_PLUGINS,
 } from './constants';
 import { extractEntities } from './extraction/entities';
@@ -444,6 +446,30 @@ export async function synthesize({
     maxConcurrency = 1;
     logger.warn('Delay is enabled, setting max concurrency to 1.');
   }
+
+  // Expand strategy aliases
+  const expandedStrategies: typeof strategies = [];
+  strategies.forEach((strategy) => {
+    if (STRATEGY_ALIASES.includes(strategy.id as any)) {
+      // If this is a strategy alias, expand it to its component strategies
+      const aliasedStrategies =
+        ALIASED_STRATEGY_MAPPINGS[strategy.id as keyof typeof ALIASED_STRATEGY_MAPPINGS];
+      if (aliasedStrategies) {
+        aliasedStrategies.forEach((strategyId) => {
+          expandedStrategies.push({
+            id: strategyId,
+            // Propagate the configuration from the alias to all component strategies
+            ...(strategy.config ? { config: strategy.config } : {}),
+          });
+        });
+      }
+    } else {
+      // Not an alias, keep as is
+      expandedStrategies.push(strategy);
+    }
+  });
+  strategies = expandedStrategies;
+
   validateStrategies(strategies);
 
   const redteamProvider = await redteamProviderManager.getProvider({ provider });

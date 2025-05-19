@@ -863,7 +863,16 @@ const _ALL_STRATEGIES = ['default', ...DEFAULT_STRATEGIES, ...ADDITIONAL_STRATEG
 export const ALL_STRATEGIES = [..._ALL_STRATEGIES].sort();
 export type Strategy = (typeof ALL_STRATEGIES)[number];
 
-export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
+// Strategy aliases - collections of strategies that can be referenced by a single name
+export const STRATEGY_ALIASES = ['other-encodings'] as const;
+export type StrategyAlias = (typeof STRATEGY_ALIASES)[number];
+
+// Mapping from strategy alias to included strategies
+export const ALIASED_STRATEGY_MAPPINGS: Record<StrategyAlias, string[]> = {
+  'other-encodings': ['morse', 'piglatin'],
+};
+
+export const subCategoryDescriptions: Record<Plugin | Strategy | StrategyAlias, string> = {
   [MEMORY_POISONING_PLUGIN_ID]: 'Tests whether an agent is vulnerable to memory poisoning attacks',
   'ascii-smuggling': 'Tests vulnerability to Unicode tag-based instruction smuggling attacks',
   audio: 'Tests handling of audio content',
@@ -963,12 +972,14 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'sql-injection': 'Tests for SQL injection vulnerabilities',
   ssrf: 'Tests for server-side request forgery vulnerabilities',
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
-  'tool-discovery': 'Tests for enumeration of available tools and function calls',
   'tool-discovery:multi-turn':
     'Uses conversational approach to discover available tools, functions, and capabilities through multi-step interactions',
+  'tool-discovery': 'Tests for enumeration of available tools and function calls',
   unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
   xstest: 'Tests for XSTest attacks',
   video: 'Tests handling of video content',
+  'other-encodings':
+    'Collection of alternative text transformation strategies (Morse code and Pig Latin) for testing evasion techniques',
 };
 
 // These names are displayed in risk cards and in the table
@@ -1058,19 +1069,17 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'prompt-injection': 'Direct Prompt Injection',
   'rag-document-exfiltration': 'RAG Document Exfiltration',
   'rag-poisoning': 'RAG Poisoning',
-  rbac: 'RBAC Implementation',
+  rbac: 'RbacEnforcement',
   'reasoning-dos': 'Reasoning DoS',
-  religion: 'Religious Bias',
-  retry: 'Regression Testing',
-  rot13: 'ROT13 Payload Encoding',
-  'shell-injection': 'Command Injection',
-  'sql-injection': 'SQL Injection',
-  ssrf: 'SSRF Vulnerability',
+  religion: 'Religion',
+  'shell-injection': 'ShellInjection',
+  'sql-injection': 'SqlInjection',
+  ssrf: 'SSRFEnforcement',
   'system-prompt-override': 'System Prompt Override',
   'tool-discovery': 'Tool Discovery',
   'tool-discovery:multi-turn': 'Multi-turn Tool Discovery',
-  unsafebench: 'UnsafeBench Dataset',
-  xstest: 'XSTest Dataset',
+  unsafebench: 'UnsafeBench',
+  xstest: 'XSTest',
   video: 'Video Content',
 };
 
@@ -1452,7 +1461,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests how models handle ambiguous terms related to potentially harmful topics like violence and drugs',
 };
 
-export const strategyDescriptions: Record<Strategy, string> = {
+export const strategyDescriptions: Record<Strategy | StrategyAlias, string> = {
   audio: 'Tests detection and handling of audio-based malicious payloads',
   base64: 'Tests detection and handling of Base64-encoded malicious payloads',
   basic: 'Equivalent to no strategy. Always included. Can be disabled in configuration.',
@@ -1475,6 +1484,8 @@ export const strategyDescriptions: Record<Strategy, string> = {
   morse:
     'Tests detection and handling of text encoded in Morse code where letters are converted to dots and dashes to potentially bypass content filters',
   multilingual: 'Evaluates cross-language attack vector handling',
+  'other-encodings':
+    'Collection of alternative text transformation strategies (Morse code and Pig Latin) for testing evasion techniques',
   pandamonium:
     "Promptfoo's exclusive dynamic jailbreak strategy currently in development. Note: This is an expensive jailbreak strategy with no limit on probes.",
   piglatin:
@@ -1485,7 +1496,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
   video: 'Tests detection and handling of video-based malicious payloads',
 };
 
-export const strategyDisplayNames: Record<Strategy, string> = {
+export const strategyDisplayNames: Record<Strategy | StrategyAlias, string> = {
   audio: 'Audio',
   base64: 'Base64 Encoding',
   basic: 'Basic',
@@ -1506,6 +1517,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   'math-prompt': 'Mathematical Encoding',
   morse: 'Morse Code',
   multilingual: 'Multilingual Translation',
+  'other-encodings': 'Alternative Text Encodings',
   pandamonium: 'Pandamonium',
   piglatin: 'Pig Latin',
   'prompt-injection': 'Prompt Injection',
