@@ -1371,6 +1371,7 @@ class Evaluator {
 
     await runExtensionHook(testSuite.extensions, 'afterAll', {
       prompts: this.evalRecord.prompts,
+      results: this.evalRecord.results,
       suite: testSuite,
     });
 
