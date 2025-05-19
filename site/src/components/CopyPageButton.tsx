@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useLocation } from '@docusaurus/router';
+import { useColorMode } from '@docusaurus/theme-common';
 import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 
@@ -30,6 +31,8 @@ const fetchMarkdown = async (pathname: string) => {
 const CopyPageButton: React.FC = () => {
   const location = useLocation();
   const [copied, setCopied] = useState(false);
+  const { colorMode } = useColorMode();
+  const isDarkTheme = colorMode === 'dark';
 
   const handleCopy = async () => {
     if (copied) {
@@ -49,26 +52,30 @@ const CopyPageButton: React.FC = () => {
     }
   };
 
+  // Define theme-specific styles
+  const buttonStyle = {
+    display: 'flex',
+    alignItems: 'center',
+    border: `1px solid ${isDarkTheme ? '#4a4a4a' : '#e5e7eb'}`,
+    borderRadius: '18px',
+    background: isDarkTheme ? '#2d2d2d' : '#fff',
+    boxShadow: isDarkTheme ? '0 1px 2px rgba(0,0,0,0.1)' : '0 1px 2px rgba(0,0,0,0.03)',
+    padding: '0 14px',
+    fontSize: 15,
+    fontWeight: 500,
+    cursor: 'pointer',
+    height: 36,
+    minWidth: 110, // Fixed minimum width instead of dynamic measurement
+    color: isDarkTheme ? '#e6e6e6' : 'inherit',
+  };
+
   return (
     <div style={{ width: '100%', display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
       <button
         onClick={handleCopy}
         aria-label={copied ? 'Copied markdown to clipboard' : 'Copy markdown to clipboard'}
         aria-live="polite"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          border: '1px solid #e5e7eb',
-          borderRadius: '18px',
-          background: '#fff',
-          boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
-          padding: '0 14px',
-          fontSize: 15,
-          fontWeight: 500,
-          cursor: 'pointer',
-          height: 36,
-          minWidth: 110, // Fixed minimum width instead of dynamic measurement
-        }}
+        style={buttonStyle}
       >
         <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
           <span
@@ -87,6 +94,7 @@ const CopyPageButton: React.FC = () => {
                 opacity: copied ? 0 : 1,
                 position: 'absolute',
                 transition: 'all 0.2s ease-in-out',
+                color: isDarkTheme ? '#e6e6e6' : 'inherit',
               }}
             />
             <CheckIcon
