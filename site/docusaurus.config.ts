@@ -1,6 +1,7 @@
 import { themes } from 'prism-react-renderer';
 import type * as Preset from '@docusaurus/preset-classic';
 import type { Config } from '@docusaurus/types';
+import type { ConfigureWebpackResult } from '@docusaurus/types/src/plugin';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -395,7 +396,7 @@ const config: Config = {
       },
     ],
     // Plugin to serve markdown files for CopyPageButton
-    async function markdownServePlugin(context) {
+    function markdownServePlugin(context) {
       return {
         name: 'markdown-serve-plugin',
         loadContent: async () => {
@@ -427,7 +428,84 @@ const config: Config = {
           await getMdFiles(docsDir);
           return { mdFiles };
         },
-        postBuild: async ({ content, outDir }) => {
+
+        // Configure webpack for dev server middleware
+        configureWebpack(config, isServer) {
+          if (isServer) {
+            return {};
+          }
+
+          // This is our fallback approach in case extendDevServer doesn't work
+          const { siteDir } = context;
+          const docsDir = path.join(siteDir, 'docs');
+
+          return {
+            devServer: {
+              setupMiddlewares: (middlewares, devServer) => {
+                if (!devServer) {
+                  throw new Error('webpack-dev-server is not defined');
+                }
+
+                devServer.app.get('/markdown/*', async (req, res) => {
+                  const requestPath = req.path.replace(/^\/markdown\//, '');
+
+                  // Try both with and without file extension
+                  let filePath = path.join(docsDir, requestPath);
+                  let foundFile = false;
+
+                  // Try direct match first
+                  try {
+                    const stat = await fs.promises.stat(filePath);
+                    if (stat.isFile()) {
+                      foundFile = true;
+                    }
+                  } catch (err) {
+                    // File doesn't exist, try with extensions
+                    const extensions = ['.md', '.mdx'];
+                    for (const ext of extensions) {
+                      try {
+                        const filePathWithExt = `${filePath}${ext}`;
+                        const stat = await fs.promises.stat(filePathWithExt);
+                        if (stat.isFile()) {
+                          filePath = filePathWithExt;
+                          foundFile = true;
+                          break;
+                        }
+                      } catch (err) {
+                        // Ignore errors
+                      }
+                    }
+                  }
+
+                  if (foundFile) {
+                    try {
+                      // Read the file directly from the filesystem
+                      let content = await fs.promises.readFile(filePath, 'utf8');
+
+                      // Remove frontmatter
+                      content = content.replace(/^---[\s\S]*?---\s*/m, '');
+
+                      // Set appropriate headers for raw markdown content
+                      res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+                      res.setHeader('Cache-Control', 'no-cache');
+                      res.setHeader('X-Content-Type-Options', 'nosniff');
+                      res.send(content);
+                    } catch (error) {
+                      res.status(500).send('Error reading markdown file');
+                    }
+                  } else {
+                    res.status(404).send('Markdown file not found');
+                  }
+                });
+
+                return middlewares;
+              },
+            },
+          } as ConfigureWebpackResult;
+        },
+
+        // Build process - generate static files for production
+        async postBuild({ content, outDir }) {
           // Type assertion to handle TypeScript type checking
           const pluginContent = content as { mdFiles: { [path: string]: string } };
           const { mdFiles } = pluginContent;
@@ -454,8 +532,6 @@ const config: Config = {
               console.error(`Error writing markdown file ${filePath}:`, err);
             }
           }
-
-          console.log('Successfully copied markdown files for CopyPageButton.');
         },
       };
     },
