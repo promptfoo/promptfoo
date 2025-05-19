@@ -190,7 +190,7 @@ export async function runEval({
 
   // Collect file metadata for the test case before rendering the prompt.
   const fileMetadata = collectFileMetadata(test.vars || vars);
-  console.log('fileMetadata', fileMetadata);
+
   const conversationKey = `${provider.label || provider.id()}:${prompt.id}${test.metadata?.conversationId ? `:${test.metadata.conversationId}` : ''}`;
   const usesConversation = prompt.raw.includes('_conversation');
   if (
