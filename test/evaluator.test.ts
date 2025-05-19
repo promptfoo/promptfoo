@@ -33,6 +33,7 @@ jest.mock('../src/util/time', () => ({
 }));
 
 jest.mock('../src/util/fileExtensions', () => ({
+  ...jest.requireActual('../src/util/fileExtensions'),
   isImageFile: jest
     .fn()
     .mockImplementation((filePath) => filePath.endsWith('.jpg') || filePath.endsWith('.png')),
