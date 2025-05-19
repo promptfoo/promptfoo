@@ -1201,11 +1201,11 @@ describe('resolveConfigs', () => {
     jest.mocked(globSync).mockReturnValueOnce(['config.json']);
 
     await expect(resolveConfigs(cmdObj, defaultConfig)).rejects.toThrow(
-      'You must specify at least 1 provider (for example, openai:gpt-4o)',
+      'You must specify at least 1 provider (for example, openai:gpt-4.1)',
     );
 
     expect(logger.error).toHaveBeenCalledWith(
-      expect.stringContaining('You must specify at least 1 provider (for example, openai:gpt-4o)'),
+      expect.stringContaining('You must specify at least 1 provider (for example, openai:gpt-4.1)'),
     );
   });
 
