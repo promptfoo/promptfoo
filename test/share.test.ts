@@ -356,22 +356,21 @@ describe('createShareableUrl', () => {
         getTable: jest.fn().mockResolvedValue([]),
         id: randomUUID(),
         getResultsCount: jest.fn().mockResolvedValue(2),
-        fetchSampleResults: jest.fn().mockResolvedValue([{ id: '1' }, { id: '2' }] as EvalResult[]),
         fetchResultsBatched: jest.fn().mockImplementation(() => {
-          return {
-            [Symbol.asyncIterator]: () => {
-              let called = false;
-              return {
-                next: async () => {
-                  if (!called) {
-                    called = true;
-                    return { done: false, value: [{ id: '1' }, { id: '2' }] as EvalResult[] };
-                  }
-                  return { done: true, value: undefined };
-                },
-              };
+          const iterator = {
+            called: false,
+            next: async () => {
+              if (!iterator.called) {
+                iterator.called = true;
+                return { done: false, value: [{ id: '1' }, { id: '2' }] as EvalResult[] };
+              }
+              return { done: true, value: undefined };
+            },
+            [Symbol.asyncIterator]() {
+              return this;
             },
           };
+          return iterator;
         }),
       };
 
@@ -486,7 +485,6 @@ describe('createShareableUrl', () => {
       getTable: jest.fn().mockResolvedValue([]),
       id: randomUUID(),
       getResultsCount: jest.fn().mockResolvedValue(2),
-      fetchSampleResults: jest.fn().mockResolvedValue([{ id: '1' }, { id: '2' }] as EvalResult[]),
       fetchResultsBatched: jest.fn().mockImplementation(() => {
         return {
           [Symbol.asyncIterator]: () => {

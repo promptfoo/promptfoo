@@ -108,7 +108,8 @@ function findLargestResultSize(results: any[], sampleSize: number = 1000): numbe
   return maxSize;
 }
 
-async function sendInitialEvalData(
+// This sends the eval record to the remote server
+async function sendEvalRecord(
   evalRecord: Eval,
   url: string,
   headers: Record<string, string>,
@@ -183,7 +184,11 @@ async function rollbackEval(url: string, evalId: string, headers: Record<string,
 }
 
 async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string | null> {
-  const sampleResults = await evalRecord.fetchSampleResults(100);
+  const sampleResults = (await evalRecord.fetchResultsBatched(100).next()).value ?? [];
+  if (sampleResults.length === 0) {
+    logger.debug(`No results found`);
+    return null;
+  }
   logger.debug(`Loaded ${sampleResults.length} sample results to determine chunk size`);
 
   // Calculate chunk sizes based on sample
@@ -220,7 +225,7 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
   let evalId: string | undefined;
   try {
     // Send initial data and get eval ID
-    evalId = await sendInitialEvalData(evalRecord, url, headers);
+    evalId = await sendEvalRecord(evalRecord, url, headers);
     logger.debug(`Initial eval data sent successfully - ${evalId}`);
 
     // Send chunks using batched cursor
@@ -244,6 +249,7 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
     return evalId;
   } catch (e) {
     logger.error(`Upload failed: ${e}`);
+    console.error(e);
     if (evalId) {
       logger.info(`Upload failed, rolling back...`);
       await rollbackEval(url, evalId, headers);

@@ -64,12 +64,11 @@ export default class Eval {
   config: Partial<UnifiedConfig>;
   // If these are empty, you need to call loadResults(). We don't load them by default to save memory.
   results: EvalResult[];
-  resultsCount: number; // Fast way to get the number of results
   datasetId?: string;
   prompts: CompletedPrompt[];
   oldResults?: EvaluateSummaryV2;
   persisted: boolean;
-  _resultsLoaded: boolean;
+  _resultsLoaded: boolean = false;
 
   static async latest() {
     const db = getDb();
@@ -272,7 +271,6 @@ export default class Eval {
     this.author = opts?.author;
     this.config = config;
     this.results = [];
-    this.resultsCount = 0;
     this.prompts = opts?.prompts || [];
     this.datasetId = opts?.datasetId;
     this.persisted = opts?.persisted || false;
@@ -353,7 +351,6 @@ export default class Eval {
       // This is to avoid memory issues when running large evaluations
       this.results.push(newResult);
     }
-    this.resultsCount++;
   }
 
   async *fetchResultsBatched(batchSize: number = 100) {
@@ -362,27 +359,9 @@ export default class Eval {
     }
   }
 
-  async fetchSampleResults(sampleSize: number = 100): Promise<EvalResult[]> {
-    const results: EvalResult[] = [];
-    let remaining = sampleSize;
-    for await (const batch of this.fetchResultsBatched(sampleSize)) {
-      if (batch.length >= remaining) {
-        results.push(...batch.slice(0, remaining));
-        break;
-      } else {
-        results.push(...batch);
-        remaining -= batch.length;
-      }
-      if (remaining <= 0) {
-        break;
-      }
-    }
-    return results;
-  }
-
   async getResultsCount(): Promise<number> {
     const db = getDb();
-    const result = await db
+    const result = db
       .select({ count: sql<number>`count(*)` })
       .from(evalResultsTable)
       .where(eq(evalResultsTable.evalId, this.id))
@@ -405,7 +384,6 @@ export default class Eval {
 
   async setResults(results: EvalResult[]) {
     this.results = results;
-    this.resultsCount = results.length;
     if (this.persisted) {
       const db = getDb();
       await db.insert(evalResultsTable).values(results.map((r) => ({ ...r, evalId: this.id })));
@@ -415,7 +393,6 @@ export default class Eval {
 
   async loadResults() {
     this.results = await EvalResult.findManyByEvalId(this.id);
-    this.resultsCount = this.results.length;
     this._resultsLoaded = true;
   }
 

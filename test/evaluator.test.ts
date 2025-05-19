@@ -2121,7 +2121,6 @@ describe('evaluator', () => {
       id: 'mock-eval-id',
       results: [],
       prompts: [],
-      resultsCount: 0,
       persisted: false,
       config: {},
       addResult: mockAddResult,

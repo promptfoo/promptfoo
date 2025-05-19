@@ -268,6 +268,7 @@ export async function doEval(
       abortSignal: evaluateOptions.abortSignal,
     });
 
+    // Clear results from memory to avoid memory issues
     evalRecord.clearResults();
 
     const wantsToShare = cmdObj.share && config.sharing;
