@@ -863,6 +863,15 @@ const _ALL_STRATEGIES = ['default', ...DEFAULT_STRATEGIES, ...ADDITIONAL_STRATEG
 export const ALL_STRATEGIES = [..._ALL_STRATEGIES].sort();
 export type Strategy = (typeof ALL_STRATEGIES)[number];
 
+// Strategy aliases - collections of strategies that can be referenced by a single name
+export const STRATEGY_ALIASES = ['other-encodings'] as const;
+export type StrategyAlias = (typeof STRATEGY_ALIASES)[number];
+
+// Mapping from strategy alias to included strategies
+export const ALIASED_STRATEGY_MAPPINGS: Record<StrategyAlias, string[]> = {
+  'other-encodings': ['morse', 'piglatin'],
+};
+
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   [MEMORY_POISONING_PLUGIN_ID]: 'Tests whether an agent is vulnerable to memory poisoning attacks',
   'ascii-smuggling': 'Tests vulnerability to Unicode tag-based instruction smuggling attacks',
@@ -963,9 +972,9 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'sql-injection': 'Tests for SQL injection vulnerabilities',
   ssrf: 'Tests for server-side request forgery vulnerabilities',
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
-  'tool-discovery': 'Tests for enumeration of available tools and function calls',
   'tool-discovery:multi-turn':
     'Uses conversational approach to discover available tools, functions, and capabilities through multi-step interactions',
+  'tool-discovery': 'Tests for enumeration of available tools and function calls',
   unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
   xstest: 'Tests for XSTest attacks',
   video: 'Tests handling of video content',
