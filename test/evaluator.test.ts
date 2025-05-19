@@ -1242,17 +1242,23 @@ describe('evaluator', () => {
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
-    expect(summary.results.length).toBe(1);
+    expect(summary.results).toHaveLength(1);
     const result = summary.results[0];
-    const promptMetrics = evalRecord.prompts.find(
-      (p) => p.provider === result.provider.id,
-    )?.metrics;
 
-    expect(promptMetrics).toBeDefined();
-    if (promptMetrics) {
-      expect(promptMetrics.namedScoresCount['Accuracy']).toBe(2);
-      expect(promptMetrics.namedScoresCount['Completeness']).toBe(1);
-    }
+    // Use toMatchObject pattern to avoid conditional expects
+    expect(evalRecord.prompts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          provider: result.provider.id,
+          metrics: expect.objectContaining({
+            namedScoresCount: expect.objectContaining({
+              Accuracy: 2,
+              Completeness: 1,
+            }),
+          }),
+        }),
+      ]),
+    );
   });
 
   it('merges metadata correctly for regular tests', async () => {
