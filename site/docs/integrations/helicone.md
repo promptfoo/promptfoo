@@ -19,7 +19,7 @@ To reference prompts in Helicone:
      - 'helicone://my-cool-prompt:5.2'
 
    providers:
-     - openai:gpt-4o-mini
+     - openai:gpt-4.1-mini
 
    tests:
      - vars:

@@ -1,4 +1,10 @@
-# Simple CSV Example
+# simple-csv (Simple CSV Example)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example simple-csv
+```
 
 This example demonstrates how to use CSV files for test cases in promptfoo, including working with JSON fields for language translation tasks.
 

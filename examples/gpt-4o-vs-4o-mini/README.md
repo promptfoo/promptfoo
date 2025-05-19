@@ -1,5 +1,11 @@
 # gpt-4o-vs-4o-mini (Comparing GPT-4o and GPT-4o-Mini)
 
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example gpt-4o-vs-4o-mini
+```
+
 ## Quick Start
 
 1. Initialize this example by running:

@@ -186,6 +186,16 @@ describe('calculateOpenAICost', () => {
     expect(cost).toBeCloseTo((1000 * 0.5 + 500 * 1.5) / 1e6, 6);
   });
 
+  it('should calculate cost correctly for o4-mini', () => {
+    const cost = calculateOpenAICost('o4-mini', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 1.1 + 500 * 4.4) / 1e6, 6);
+  });
+
+  it('should calculate cost correctly for codex-mini-latest', () => {
+    const cost = calculateOpenAICost('codex-mini-latest', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 1.5 + 500 * 6.0) / 1e6, 6);
+  });
+
   it('should handle undefined token counts', () => {
     const cost = calculateOpenAICost('gpt-4', {}, undefined, undefined);
     expect(cost).toBeUndefined();

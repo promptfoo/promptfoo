@@ -1,4 +1,10 @@
-# JSON Lines (JSONL) Test Cases Example
+# jsonl-test-cases (JSON Lines (JSONL) Test Cases Example)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example jsonl-test-cases
+```
 
 This example demonstrates how to define test cases using the JSON Lines text file format.
 
