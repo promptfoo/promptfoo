@@ -1,6 +1,9 @@
+import chalk from 'chalk';
+import dedent from 'dedent';
 import { createRequire } from 'node:module';
 import path from 'path';
 import { importModule } from '../../src/esm';
+import logger from '../../src/logger';
 import {
   parsePackageProvider,
   loadFromPackage,
@@ -80,6 +83,33 @@ describe('loadFromPackage', () => {
     await expect(loadFromPackage(mockProviderPath, mockBasePath)).rejects.toThrow(
       `Package not found: ${mockPackageName}. Make sure it's installed in ${mockBasePath}`,
     );
+  });
+
+  it('should throw an error if entity is not found in the module', async () => {
+    // Spy on console.error to verify it was called
+    const errorLogSpy = jest.spyOn(logger, 'error');
+
+    const mockFunction = jest.fn();
+    const mockPackagePath = path.join(mockBasePath, 'node_modules', mockPackageName, 'index.js');
+
+    // Use same setup pattern as successful tests
+    jest.mocked(mockRequire.resolve).mockReturnValue(mockPackagePath);
+    jest.mocked(createRequire).mockReturnValue(mockRequire);
+
+    // Instead of providing the entity, provide something else
+    jest.mocked(importModule).mockResolvedValue({ someOtherFunction: mockFunction });
+
+    // Expect the properly formatted error
+    const promise = loadFromPackage(mockProviderPath, mockBasePath);
+    await expect(promise).rejects.toThrow(
+      `Entity '${mockFunctionName}' not found in module: ${mockPackagePath}`,
+    );
+
+    // Verify logger.error was called
+    expect(errorLogSpy).toHaveBeenCalledWith(dedent`
+      Could not find entity: ${chalk.bold(mockFunctionName)} in module: ${chalk.bold(mockPackagePath)}.
+    `);
+    errorLogSpy.mockRestore();
   });
 
   it('should handle nested provider names', async () => {
