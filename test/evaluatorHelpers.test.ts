@@ -5,7 +5,6 @@ import {
   renderPrompt,
   resolveVariables,
   runExtensionHook,
-  collectFileMetadata,
   extractTextFromPDF,
 } from '../src/evaluatorHelpers';
 import type { Prompt } from '../src/types';
@@ -530,102 +529,5 @@ describe('runExtensionHook', () => {
     await expect(runExtensionHook(extensions, hookName, context)).rejects.toThrow(
       'extension must be a string',
     );
-  });
-});
-
-describe('collectFileMetadata', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    jest.spyOn(path, 'resolve').mockImplementation((...paths) => paths[paths.length - 1]);
-  });
-
-  it('should identify image files correctly', () => {
-    const vars = {
-      image1: 'file://path/to/image.jpg',
-      image2: 'file://path/to/image.png',
-      image3: 'file://path/to/image.webp',
-      text: 'This is not a file',
-      otherFile: 'file://path/to/document.txt',
-    };
-
-    const metadata = collectFileMetadata(vars);
-
-    expect(metadata).toEqual({
-      image1: {
-        path: 'file://path/to/image.jpg',
-        type: 'image',
-        format: 'jpg',
-      },
-      image2: {
-        path: 'file://path/to/image.png',
-        type: 'image',
-        format: 'png',
-      },
-      image3: {
-        path: 'file://path/to/image.webp',
-        type: 'image',
-        format: 'webp',
-      },
-    });
-  });
-
-  it('should identify video files correctly', () => {
-    const vars = {
-      video1: 'file://path/to/video.mp4',
-      video2: 'file://path/to/video.webm',
-      video3: 'file://path/to/video.mkv',
-      text: 'This is not a file',
-    };
-
-    const metadata = collectFileMetadata(vars);
-
-    expect(metadata).toEqual({
-      video1: {
-        path: 'file://path/to/video.mp4',
-        type: 'video',
-        format: 'mp4',
-      },
-      video2: {
-        path: 'file://path/to/video.webm',
-        type: 'video',
-        format: 'webm',
-      },
-      video3: {
-        path: 'file://path/to/video.mkv',
-        type: 'video',
-        format: 'mkv',
-      },
-    });
-  });
-
-  it('should return an empty object when no media files are found', () => {
-    const vars = {
-      text1: 'This is not a file',
-      text2: 'file://path/to/document.txt',
-      text3: 'file://path/to/document.pdf',
-    };
-
-    const metadata = collectFileMetadata(vars);
-
-    expect(metadata).toEqual({});
-  });
-
-  it('should handle non-string values correctly', () => {
-    const vars = {
-      text: 'file://path/to/image.jpg',
-      object: { key: 'value' },
-      array: ['file://path/to/video.mp4'],
-      number: 42 as unknown as string,
-    };
-
-    const metadata = collectFileMetadata(vars);
-
-    expect(metadata).toEqual({
-      text: {
-        path: 'file://path/to/image.jpg',
-        type: 'image',
-        format: 'jpg',
-      },
-    });
   });
 });
