@@ -36,11 +36,6 @@ export const ArgsSchema = z
     message: 'Cannot specify both config and target!',
     path: ['config', 'target'],
   })
-  // Either config or target must be provided:
-  .refine((data) => data.config || data.target, {
-    message: 'Either config or target must be provided!',
-    path: ['config', 'target'],
-  })
   // `output` and `preview` are mutually exclusive:
   .refine((data) => !(data.output && data.preview), {
     message: 'Cannot specify both output and preview!',
