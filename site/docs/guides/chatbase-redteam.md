@@ -83,6 +83,9 @@ strategies:
   - id: 'crescendo'
     config:
       stateful: true
+  - id: 'tau'
+    config:
+      stateful: true
 ```
 
 ## Test Execution

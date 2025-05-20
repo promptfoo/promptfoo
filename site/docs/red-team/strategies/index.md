@@ -98,6 +98,7 @@ redteam:
   strategies:
     - goat
     - crescendo
+    - tau
 ```
 
 ## Implementation Guide
