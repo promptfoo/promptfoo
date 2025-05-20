@@ -108,7 +108,12 @@ export async function doGenerateRedteam(
       );
       const providers = await loadApiProviders(resolved.config.providers);
       try {
-        discoveredPurpose = await doTargetPurposeDiscovery(providers[0]);
+        if (testSuite.prompts.length > 1) {
+          logger.warn(
+            'More than one prompt provided, only the first prompt will be used for purpose discovery',
+          );
+        }
+        discoveredPurpose = await doTargetPurposeDiscovery(providers[0], testSuite.prompts[0]);
       } catch (error) {
         logger.error(
           `Discovery failed from error, skipping: ${error instanceof Error ? error.message : String(error)}`,

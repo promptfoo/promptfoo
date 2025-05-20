@@ -7,13 +7,14 @@ import * as fs from 'fs';
 import path from 'path';
 import { z } from 'zod';
 import { VERSION } from '../../constants';
+import { renderPrompt } from '../../evaluatorHelpers';
 import { fetchWithProxy } from '../../fetch';
 import { getUserEmail } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import { loadApiProvider, loadApiProviders } from '../../providers';
 import telemetry from '../../telemetry';
-import type { ApiProvider, UnifiedConfig } from '../../types';
+import type { ApiProvider, Prompt, UnifiedConfig } from '../../types';
 import { getProviderFromCloud } from '../../util/cloud';
 import { readConfig } from '../../util/config/load';
 import invariant from '../../util/invariant';
@@ -29,7 +30,7 @@ export const TargetPurposeDiscoveryRequestSchema = z.object({
   state: TargetPurposeDiscoveryStateSchema,
   task: z.literal('target-purpose-discovery'),
   version: z.string(),
-  email: z.string(),
+  email: z.string().optional().nullable(),
 });
 export const DiscoveredPurposeSchema = z.object({
   purpose: z.string().nullable(),
@@ -80,16 +81,16 @@ export const DEFAULT_TURN_COUNT = 5;
  */
 export async function doTargetPurposeDiscovery(
   target: ApiProvider,
-  maxTurns: number = DEFAULT_TURN_COUNT,
+  prompt?: Prompt,
 ): Promise<DiscoveredPurpose | undefined> {
   const pbar = new cliProgress.SingleBar({
-    format: `Discovery phase - probing the target {bar} {percentage}% | {value}${maxTurns ? '/{total}' : ''} turns`,
+    format: `Discovery phase - probing the target {bar} {percentage}% | {value}${DEFAULT_TURN_COUNT ? '/{total}' : ''} turns`,
     barCompleteChar: '\u2588',
     barIncompleteChar: '\u2591',
     hideCursor: true,
   });
 
-  pbar.start(maxTurns, 0);
+  pbar.start(DEFAULT_TURN_COUNT, 0);
 
   let done = false;
   let question: string | undefined = undefined;
@@ -153,7 +154,10 @@ export async function doTargetPurposeDiscovery(
         question,
         'If its not done, then a quesation should always be defined, something is terribely wrong.',
       );
-      const targetResponse = await target.callApi(question, {
+      const renderedPrompt = prompt
+        ? await renderPrompt(prompt, { prompt: question }, {}, target)
+        : question;
+      const targetResponse = await target.callApi(renderedPrompt, {
         prompt: { raw: question, label: 'Target Purpose Discovery Question' },
         vars: { sessionId: randomUUID() },
       });
