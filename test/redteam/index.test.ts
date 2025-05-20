@@ -387,18 +387,20 @@ describe('synthesize', () => {
       };
 
       // Mock Plugins.find to return a plugin with a validate method that throws for fail-plugin
-      jest.spyOn(Plugins, 'find').mockReturnValueOnce({
-        key: 'fail-plugin',
-        action: jest.fn().mockResolvedValue([{ test: 'fail-case' }]),
-        validate: () => {
-          throw new Error('Validation failed!');
-        },
-      });
-      jest.spyOn(Plugins, 'find').mockReturnValue({
-        key: 'pass-plugin',
-        action: jest.fn().mockResolvedValue([{ test: 'pass-case' }]),
-        validate: jest.fn(),
-      });
+      jest
+        .spyOn(Plugins, 'find')
+        .mockReturnValueOnce({
+          key: 'fail-plugin',
+          action: jest.fn().mockResolvedValue([{ test: 'fail-case' }]),
+          validate: () => {
+            throw new Error('Validation failed!');
+          },
+        })
+        .mockReturnValue({
+          key: 'pass-plugin',
+          action: jest.fn().mockResolvedValue([{ test: 'pass-case' }]),
+          validate: jest.fn(),
+        });
 
       const result = await synthesize({
         language: 'en',
