@@ -669,14 +669,15 @@ describe('doGenerateRedteam', () => {
       write: true,
     };
 
-    jest.mocked(doTargetPurposeDiscovery).mockResolvedValue({
+    const mockedPurpose = {
       purpose: 'Generated purpose',
       limitations: 'Generated limitations',
       tools: [],
       user: 'Generated user',
-    });
+    };
 
     jest.mocked(doTargetPurposeDiscovery).mockResolvedValue(mockedPurpose);
+
     jest.mocked(synthesize).mockResolvedValue({
       testCases: [],
       purpose: 'CLI purpose merged with Generated purpose',
@@ -750,6 +751,7 @@ describe('doGenerateRedteam', () => {
       purpose: 'Generated purpose',
       limitations: 'Generated limitations',
       tools: [],
+      user: 'Generated user',
     };
     jest.mocked(doTargetPurposeDiscovery).mockResolvedValue(mockedPurpose);
     jest.mocked(mergePurposes).mockImplementation((a, b) => `${a} + ${JSON.stringify(b)}`);
@@ -795,6 +797,7 @@ describe('doGenerateRedteam', () => {
       purpose: 'Generated purpose',
       limitations: 'Generated limitations',
       tools: [],
+      user: 'Generated user',
     };
     jest.mocked(doTargetPurposeDiscovery).mockResolvedValue(mockedPurpose);
     jest.mocked(synthesize).mockResolvedValue({
@@ -809,9 +812,7 @@ describe('doGenerateRedteam', () => {
     expect(mergePurposes).toHaveBeenCalledWith(undefined, mockedPurpose);
     expect(synthesize).toHaveBeenCalledWith(
       expect.objectContaining({
-        purpose: expect.stringContaining(
-          'undefined + {\"purpose\":\"Generated purpose\",\"limitations\":\"Generated limitations\",\"tools\":[]}',
-        ),
+        purpose: expect.stringContaining(`undefined + ${JSON.stringify(mockedPurpose)}`),
       }),
     );
   });
