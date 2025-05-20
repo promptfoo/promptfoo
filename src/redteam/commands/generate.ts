@@ -89,6 +89,7 @@ export async function doGenerateRedteam(
     );
     testSuite = resolved.testSuite;
     redteamConfig = resolved.config.redteam;
+    finalPurpose = redteamConfig?.purpose ?? options.purpose;
 
     // If automatic purpose discovery is enabled, remote generation is enabled, and a config is provided that contains at least one target,
     // discover the purpose from the target:
