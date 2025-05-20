@@ -108,13 +108,11 @@ export async function doGenerateRedteam(
       const providers = await loadApiProviders(resolved.config.providers);
       try {
         const generatedPurpose = await doTargetPurposeDiscovery(providers[0]);
-        // Append the discovered purpose to the purpose if it exists:
-        finalPurpose = finalPurpose
-          ? mergePurposes(finalPurpose, generatedPurpose)
-          : generatedPurpose;
+
+        finalPurpose = mergePurposes(finalPurpose, generatedPurpose);
       } catch (error) {
         logger.error(
-          `Failed to auto-discover purpose: ${error instanceof Error ? error.message : String(error)}`,
+          `Discovery failed from error, skipping: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
     }
@@ -125,6 +123,7 @@ export async function doGenerateRedteam(
       providers: [],
       tests: [],
     };
+    finalPurpose = options.purpose;
   } else {
     logger.info(
       chalk.red(
