@@ -47,6 +47,11 @@ export default defineConfig({
     alias: {
       '@app': path.resolve(__dirname, './src'),
       '@promptfoo': path.resolve(__dirname, '../'),
+      react: path.resolve(__dirname, './node_modules/react'),
+      'react-dom': path.resolve(__dirname, './node_modules/react-dom'),
+      'react-dom/client': path.resolve(__dirname, './node_modules/react-dom/client.js'),
+      'react/jsx-runtime': path.resolve(__dirname, './node_modules/react/jsx-runtime.js'),
+      'react/jsx-dev-runtime': path.resolve(__dirname, './node_modules/react/jsx-dev-runtime.js'),
     },
   },
   build: {
