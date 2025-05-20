@@ -57,6 +57,8 @@ jobs:
 
   build:
     name: Build on Node ${{ matrix.node }}
+    env:
+      PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
     timeout-minutes: 3
     runs-on: ubuntu-latest
     strategy:
