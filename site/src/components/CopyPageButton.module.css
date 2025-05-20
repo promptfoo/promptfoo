@@ -1,0 +1,76 @@
+.buttonContainer {
+  width: 100%;
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+.copyButton {
+  display: flex;
+  align-items: center;
+  border: 1px solid #e5e7eb;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  padding: 0 14px;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  height: 36px;
+  min-width: 110px;
+}
+
+.buttonContent {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.iconContainer {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+}
+
+.copyIcon {
+  font-size: 14px !important;
+  opacity: 1;
+  position: absolute;
+  transition: all 0.2s ease-in-out;
+  width: 14px !important;
+  height: 14px !important;
+}
+
+.checkIcon {
+  font-size: 14px !important;
+  opacity: 0;
+  position: absolute;
+  color: #22c55e;
+  transition: all 0.2s ease-in-out;
+  width: 14px !important;
+  height: 14px !important;
+}
+
+.copied .copyIcon {
+  opacity: 0;
+}
+
+.copied .checkIcon {
+  opacity: 1;
+}
+
+/* Dark theme styles */
+[data-theme='dark'] .copyButton {
+  border-color: #4a4a4a;
+  background: #2d2d2d;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  color: #e6e6e6;
+}
+
+[data-theme='dark'] .copyIcon {
+  color: #e6e6e6;
+}

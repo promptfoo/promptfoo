@@ -6,7 +6,24 @@ description: Learn how to test LLM resilience using Morse code and Pig Latin tex
 
 # Other Encodings
 
-The other encodings strategies provide additional text transformation methods to test model resilience against evasion techniques that use alternative text representations.
+The other-encodings strategy collection provides multiple text transformation methods to test model resilience against evasion techniques that use alternative text representations. This collection automatically includes both Morse code and Pig Latin encodings.
+
+## Strategy Collection
+
+You can use the `other-encodings` collection in your configuration to automatically include all encoding strategies in this collection:
+
+```yaml title="promptfooconfig.yaml"
+strategies:
+  - other-encodings # Includes both Morse code and Pig Latin transformations
+```
+
+This is equivalent to specifying each strategy individually:
+
+```yaml title="promptfooconfig.yaml"
+strategies:
+  - morse
+  - piglatin
+```
 
 ## Morse Code
 
@@ -28,7 +45,7 @@ For example, "Hello World" becomes:
 
 ### Configuration
 
-Add the Morse code strategy to your red team configuration:
+Add the Morse code strategy individually to your red team configuration:
 
 ```yaml title="promptfooconfig.yaml"
 strategies:
@@ -55,7 +72,7 @@ elloHay orldWay
 
 ### Configuration
 
-Add the Pig Latin strategy to your red team configuration:
+Add the Pig Latin strategy individually to your red team configuration:
 
 ```yaml title="promptfooconfig.yaml"
 strategies:
@@ -64,7 +81,7 @@ strategies:
 
 ## Example
 
-Here's a complete example that applies these encoding transformations to test cases:
+Here's a complete example that applies the encoding collection to test cases:
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -80,8 +97,7 @@ redteam:
     - owasp:llm
   strategies:
     - basic # Include original prompts
-    - morse # Apply Morse code transformation
-    - piglatin # Apply Pig Latin transformation
+    - other-encodings # Includes both Morse code and Pig Latin
 ```
 
 ## Technical Details

@@ -859,7 +859,19 @@ export const ADDITIONAL_STRATEGIES = [
 ] as const;
 export type AdditionalStrategy = (typeof ADDITIONAL_STRATEGIES)[number];
 
-const _ALL_STRATEGIES = ['default', ...DEFAULT_STRATEGIES, ...ADDITIONAL_STRATEGIES] as const;
+export const STRATEGY_COLLECTIONS = ['other-encodings'] as const;
+export type StrategyCollection = (typeof STRATEGY_COLLECTIONS)[number];
+
+export const STRATEGY_COLLECTION_MAPPINGS: Record<StrategyCollection, string[]> = {
+  'other-encodings': ['morse', 'piglatin'],
+};
+
+const _ALL_STRATEGIES = [
+  'default',
+  ...DEFAULT_STRATEGIES,
+  ...ADDITIONAL_STRATEGIES,
+  ...STRATEGY_COLLECTIONS,
+] as const;
 export const ALL_STRATEGIES = [..._ALL_STRATEGIES].sort();
 export type Strategy = (typeof ALL_STRATEGIES)[number];
 
@@ -969,6 +981,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
   xstest: 'Tests for XSTest attacks',
   video: 'Tests handling of video content',
+  'other-encodings':
+    'Collection of alternative text transformation strategies (Morse code and Pig Latin) for testing evasion techniques',
 };
 
 // These names are displayed in risk cards and in the table
@@ -1043,6 +1057,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'math-prompt': 'Mathematical Notation Attack',
   morse: 'Morse Code Encoding',
   multilingual: 'Cross-Language Attack',
+  'other-encodings': 'Collection of Text Encodings',
   overreliance: 'Overreliance',
   pandamonium: '[Experimental] Pandamonium',
   piglatin: 'Pig Latin Encoding',
@@ -1475,6 +1490,8 @@ export const strategyDescriptions: Record<Strategy, string> = {
   morse:
     'Tests detection and handling of text encoded in Morse code where letters are converted to dots and dashes to potentially bypass content filters',
   multilingual: 'Evaluates cross-language attack vector handling',
+  'other-encodings':
+    'Collection of alternative text transformation strategies (Morse code and Pig Latin) for testing evasion techniques',
   pandamonium:
     "Promptfoo's exclusive dynamic jailbreak strategy currently in development. Note: This is an expensive jailbreak strategy with no limit on probes.",
   piglatin:
@@ -1506,6 +1523,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   'math-prompt': 'Mathematical Encoding',
   morse: 'Morse Code',
   multilingual: 'Multilingual Translation',
+  'other-encodings': 'Collection of Text Encodings',
   pandamonium: 'Pandamonium',
   piglatin: 'Pig Latin',
   'prompt-injection': 'Prompt Injection',

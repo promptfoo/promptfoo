@@ -25,6 +25,11 @@ import {
   categoryAliases,
   pluginDescriptions,
   subCategoryDescriptions,
+  STRATEGY_COLLECTIONS,
+  STRATEGY_COLLECTION_MAPPINGS,
+  ALL_STRATEGIES,
+  strategyDescriptions,
+  strategyDisplayNames,
 } from '../../src/redteam/constants';
 
 describe('constants', () => {
@@ -194,6 +199,34 @@ describe('constants', () => {
   it('should have correct subcategory description for MCP plugin', () => {
     expect(subCategoryDescriptions['mcp']).toBe(
       'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
+    );
+  });
+
+  it('STRATEGY_COLLECTIONS should contain expected collections', () => {
+    expect(STRATEGY_COLLECTIONS).toEqual(['other-encodings']);
+  });
+
+  it('STRATEGY_COLLECTION_MAPPINGS should have correct mappings', () => {
+    expect(STRATEGY_COLLECTION_MAPPINGS['other-encodings']).toEqual(['morse', 'piglatin']);
+  });
+
+  it('ALL_STRATEGIES should include strategy collections', () => {
+    expect(ALL_STRATEGIES).toContain('other-encodings');
+  });
+
+  it('strategy collections should have proper descriptions', () => {
+    expect(strategyDescriptions['other-encodings']).toBe(
+      'Collection of alternative text transformation strategies (Morse code and Pig Latin) for testing evasion techniques',
+    );
+  });
+
+  it('strategy collections should have proper display names', () => {
+    expect(strategyDisplayNames['other-encodings']).toBe('Collection of Text Encodings');
+  });
+
+  it('strategy collections should have proper subcategory descriptions', () => {
+    expect(subCategoryDescriptions['other-encodings']).toBe(
+      'Collection of alternative text transformation strategies (Morse code and Pig Latin) for testing evasion techniques',
     );
   });
 });

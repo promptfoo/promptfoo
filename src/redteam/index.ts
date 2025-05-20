@@ -14,11 +14,13 @@ import { extractVariablesFromTemplates } from '../util/templates';
 import type { StrategyExemptPlugin } from './constants';
 import {
   ALIASED_PLUGIN_MAPPINGS,
+  STRATEGY_COLLECTION_MAPPINGS,
   FOUNDATION_PLUGINS,
   HARM_PLUGINS,
   PII_PLUGINS,
   riskCategorySeverityMap,
   Severity,
+  STRATEGY_COLLECTIONS,
   STRATEGY_EXEMPT_PLUGINS,
 } from './constants';
 import { extractEntities } from './extraction/entities';
@@ -402,6 +404,13 @@ export function calculateTotalTests(
 }
 
 /**
+ * Type guard to check if a strategy ID is a strategy collection
+ */
+function isStrategyCollection(id: string): id is keyof typeof STRATEGY_COLLECTION_MAPPINGS {
+  return STRATEGY_COLLECTIONS.includes(id as keyof typeof STRATEGY_COLLECTION_MAPPINGS);
+}
+
+/**
  * Synthesizes test cases based on provided options.
  * @param options - The options for test case synthesis.
  * @returns A promise that resolves to an object containing the purpose, entities, and test cases.
@@ -444,6 +453,36 @@ export async function synthesize({
     maxConcurrency = 1;
     logger.warn('Delay is enabled, setting max concurrency to 1.');
   }
+
+  const expandedStrategies: typeof strategies = [];
+  strategies.forEach((strategy) => {
+    if (isStrategyCollection(strategy.id)) {
+      const aliasedStrategies = STRATEGY_COLLECTION_MAPPINGS[strategy.id];
+      if (aliasedStrategies) {
+        aliasedStrategies.forEach((strategyId) => {
+          expandedStrategies.push({
+            ...strategy,
+            id: strategyId,
+          });
+        });
+      } else {
+        logger.warn(`Strategy collection ${strategy.id} has no mappings, skipping`);
+      }
+    } else {
+      expandedStrategies.push(strategy);
+    }
+  });
+
+  // Deduplicate strategies by id
+  const seen = new Set<string>();
+  strategies = expandedStrategies.filter((strategy) => {
+    if (seen.has(strategy.id)) {
+      return false;
+    }
+    seen.add(strategy.id);
+    return true;
+  });
+
   validateStrategies(strategies);
 
   const redteamProvider = await redteamProviderManager.getProvider({ provider });
