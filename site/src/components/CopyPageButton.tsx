@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useLocation } from '@docusaurus/router';
 import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import Tooltip from '@mui/material/Tooltip';
 import styles from './CopyPageButton.module.css';
 
 const getMarkdownUrl = (pathname: string) => {
@@ -53,20 +54,44 @@ const CopyPageButton: React.FC = () => {
 
   return (
     <div className={styles.buttonContainer}>
-      <button
-        onClick={handleCopy}
-        aria-label={copied ? 'Copied markdown to clipboard' : 'Copy markdown to clipboard'}
-        aria-live="polite"
-        className={styles.copyButton}
+      <Tooltip
+        title="Copy this page's Markdown for your favorite LLM"
+        enterDelay={500}
+        enterNextDelay={500}
+        arrow
+        componentsProps={{
+          tooltip: {
+            sx: {
+              bgcolor: '#3b3b3b',
+              color: 'white',
+              fontSize: 13,
+              borderRadius: 1,
+              px: 1.5,
+              py: 0.5,
+            },
+          },
+          arrow: {
+            sx: {
+              color: '#3b3b3b',
+            },
+          },
+        }}
       >
-        <span className={styles.buttonContent}>
-          <span className={`${styles.iconContainer} ${copied ? styles.copied : ''}`}>
-            <ContentCopyIcon className={styles.copyIcon} />
-            <CheckIcon className={styles.checkIcon} />
+        <button
+          onClick={handleCopy}
+          aria-label={copied ? 'Copied markdown to clipboard' : 'Copy markdown to clipboard'}
+          aria-live="polite"
+          className={styles.copyButton}
+        >
+          <span className={styles.buttonContent}>
+            <span className={`${styles.iconContainer} ${copied ? styles.copied : ''}`}>
+              <ContentCopyIcon className={styles.copyIcon} />
+              <CheckIcon className={styles.checkIcon} />
+            </span>
+            <span>Copy page</span>
           </span>
-          <span>Copy page</span>
-        </span>
-      </button>
+        </button>
+      </Tooltip>
     </div>
   );
 };
