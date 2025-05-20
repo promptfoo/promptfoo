@@ -1,3 +1,4 @@
+import Database from 'better-sqlite3';
 import fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -15,16 +16,57 @@ describe('database WAL mode', () => {
     delete process.env.IS_TESTING;
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     process.env = ORIGINAL_ENV;
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    // Close the database connection if it exists
+    try {
+      const database = await import('../src/database');
+      database.closeDb();
+    } catch (err) {
+      console.error('Error closing database:', err);
+    }
+
+    // Add a small delay to ensure connections are fully closed on Windows
+    if (process.platform === 'win32') {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
+    try {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    } catch (err) {
+      console.warn(`Could not remove temp directory ${tempDir}:`, err);
+      // On Windows, sometimes we need multiple attempts
+      if (process.platform === 'win32') {
+        try {
+          // Try a second time after a short delay
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          fs.rmSync(tempDir, { recursive: true, force: true });
+        } catch {
+          console.error(`Failed to remove temp directory after retry: ${tempDir}`);
+        }
+      }
+    }
   });
 
-  it('enables WAL journal mode', () => {
-    // Import after env vars are set
-    const { getDb } = require('../src/database');
-    const db = getDb();
-    const journalMode = db.session.client.pragma('journal_mode', { simple: true });
-    expect(journalMode.toLowerCase()).toBe('wal');
+  it('enables WAL journal mode', async () => {
+    // First import and initialize the database to trigger WAL mode configuration
+    const database = await import('../src/database');
+    database.getDb();
+
+    // Close it to ensure we don't get resource conflicts
+    database.closeDb();
+
+    // Then independently verify the journal mode using a direct connection
+    const dbPath = database.getDbPath();
+    const directDb = new Database(dbPath);
+
+    try {
+      // Using run() function with a well-typed return value
+      const result = directDb.prepare('PRAGMA journal_mode;').get() as { journal_mode: string };
+      expect(result.journal_mode.toLowerCase()).toBe('wal');
+    } finally {
+      // Make sure to close this connection too
+      directDb.close();
+    }
   });
 });

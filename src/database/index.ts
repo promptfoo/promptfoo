@@ -15,6 +15,7 @@ class DrizzleLogWriter implements LogWriter {
 }
 
 let dbInstance: ReturnType<typeof drizzle> | null = null;
+let sqliteInstance: Database.Database | null = null;
 
 export function getDbPath() {
   return path.resolve(getConfigDirectoryPath(true /* createIfNotExists */), 'promptfoo.db');
@@ -26,12 +27,24 @@ export function getDbSignalPath() {
 
 export function getDb() {
   if (!dbInstance) {
-    const sqlite = new Database(getEnvBool('IS_TESTING') ? ':memory:' : getDbPath());
+    sqliteInstance = new Database(getEnvBool('IS_TESTING') ? ':memory:' : getDbPath());
     try {
-      sqlite.pragma('journal_mode = WAL');
+      sqliteInstance.pragma('journal_mode = WAL');
     } catch {}
     const logger = new DefaultLogger({ writer: new DrizzleLogWriter() });
-    dbInstance = drizzle(sqlite, { logger });
+    dbInstance = drizzle(sqliteInstance, { logger });
   }
   return dbInstance;
+}
+
+export function closeDb() {
+  if (sqliteInstance) {
+    try {
+      sqliteInstance.close();
+      sqliteInstance = null;
+      dbInstance = null;
+    } catch (err) {
+      logger.error(`Error closing database connection: ${err}`);
+    }
+  }
 }
