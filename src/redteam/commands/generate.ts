@@ -55,7 +55,6 @@ export async function doGenerateRedteam(
   let redteamConfig: RedteamFileConfig | undefined;
   const configPath = options.config || options.defaultConfigPath;
   const outputPath = options.output || 'redteam.yaml';
-  let finalPurpose = options.purpose;
 
   // Check for updates to the config file and decide whether to generate
   let shouldGenerate = options.force;
@@ -90,9 +89,6 @@ export async function doGenerateRedteam(
     );
     testSuite = resolved.testSuite;
     redteamConfig = resolved.config.redteam;
-    if (redteamConfig?.purpose) {
-      finalPurpose = redteamConfig.purpose;
-    }
 
     // If automatic purpose discovery is enabled, remote generation is enabled, and a config is provided that contains at least one target,
     // discover the purpose from the target:
