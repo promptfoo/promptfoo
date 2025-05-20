@@ -4,6 +4,7 @@ import dedent from 'dedent';
 import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
+import { createRequire } from 'node:module';
 import * as path from 'path';
 import { parse as parsePath } from 'path';
 import { testCaseFromCsvRow } from '../csv';
@@ -23,6 +24,8 @@ import type {
   TestSuiteConfig,
 } from '../types';
 import { isJavascriptFile } from './fileExtensions';
+
+const cjsRequire = createRequire(import.meta.url);
 
 export async function readTestFiles(
   pathOrGlobs: string | string[],
@@ -345,8 +348,7 @@ export async function loadTestsFromGlob(
         .map((line) => JSON.parse(line));
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.json')) {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      testCases = await _deref(require(testFile), testFile);
+      testCases = await _deref(cjsRequire(testFile), testFile);
     } else {
       throw new Error(`Unsupported file type for test file: ${testFile}`);
     }

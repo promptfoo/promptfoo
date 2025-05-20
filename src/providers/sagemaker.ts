@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
@@ -13,6 +14,8 @@ import type { EnvOverrides } from '../types/env';
 import { transform } from '../util/transform';
 import type { TransformContext } from '../util/transform';
 import { parseChatPrompt } from './shared';
+
+const cjsRequire = createRequire(import.meta.url);
 
 /**
  * Sleep utility function for implementing delays
@@ -655,9 +658,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
 
     // Use crypto to hash the prompt and config for a shorter, more efficient key
     try {
-      // Use require for crypto to match our jsonpath approach
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const cryptoModule = require('crypto');
+      const cryptoModule = cjsRequire('crypto');
       const promptHash = cryptoModule
         .createHash('sha256')
         .update(prompt)
@@ -867,9 +868,7 @@ export class SageMakerEmbeddingProvider
 
     // Use crypto to hash the text and config for a shorter, more efficient key
     try {
-      // Use require for crypto to match our jsonpath approach
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const cryptoModule = require('crypto');
+      const cryptoModule = cjsRequire('crypto');
       const textHash = cryptoModule
         .createHash('sha256')
         .update(text)
