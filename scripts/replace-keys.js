@@ -1,7 +1,8 @@
-/* eslint-disable-next-line @typescript-eslint/no-require-imports */
-const fs = require('fs');
-/* eslint-disable-next-line @typescript-eslint/no-require-imports */
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const filePath = path.join(__dirname, '../dist/src/telemetry.js');
 

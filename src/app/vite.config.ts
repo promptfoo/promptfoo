@@ -1,10 +1,13 @@
 /// <reference types="vitest" />
 import react from '@vitejs/plugin-react';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import type { PluginOption } from 'vite';
 import { defineConfig } from 'vite';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import packageJson from '../../package.json';
+
+const DIRNAME = path.dirname(fileURLToPath(import.meta.url));
 
 const API_PORT = process.env.API_PORT || '15500';
 
@@ -28,8 +31,8 @@ export default defineConfig({
   plugins: [react(), nodePolyfills()] as PluginOption[],
   resolve: {
     alias: {
-      '@app': path.resolve(__dirname, './src'),
-      '@promptfoo': path.resolve(__dirname, '../'),
+      '@app': path.resolve(DIRNAME, './src'),
+      '@promptfoo': path.resolve(DIRNAME, '../'),
     },
   },
   build: {

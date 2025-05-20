@@ -1,6 +1,11 @@
-import { pathToFileURL } from 'node:url';
+import { createRequire } from 'node:module';
+import path from 'node:path';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 import logger from './logger';
 import { safeResolve } from './util/file.node';
+
+const DIRNAME = path.dirname(fileURLToPath(import.meta.url));
+const cjsRequire = createRequire(import.meta.url);
 
 // esm-specific crap that needs to get mocked out in tests
 
@@ -13,7 +18,7 @@ export function getDirectory(): string {
   const __filename = fileURLToPath(import.meta.url);
   return path.dirname(__filename);
  */
-  return __dirname;
+  return DIRNAME;
 }
 
 export async function importModule(modulePath: string, functionName?: string) {
@@ -45,8 +50,7 @@ export async function importModule(modulePath: string, functionName?: string) {
     logger.debug(`ESM import failed: ${err}`);
     logger.debug('Attempting CommonJS require fallback...');
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const importedModule = require(safeResolve(modulePath));
+      const importedModule = cjsRequire(safeResolve(modulePath));
       const mod = importedModule?.default?.default || importedModule?.default || importedModule;
       logger.debug(
         `Successfully required module: ${JSON.stringify({ resolvedPath: safeResolve(modulePath), moduleId: modulePath })}`,

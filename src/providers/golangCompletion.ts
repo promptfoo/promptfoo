@@ -2,6 +2,7 @@ import { exec } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import util from 'util';
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
@@ -18,6 +19,7 @@ import { sha256 } from '../util/createHash';
 import { safeJsonStringify } from '../util/json';
 
 const execAsync = util.promisify(exec);
+const DIRNAME = path.dirname(fileURLToPath(import.meta.url));
 
 interface GolangProviderConfig {
   goExecutable?: string;
@@ -127,7 +129,7 @@ export class GolangProvider implements ApiProvider {
         // Copy wrapper.go to the same directory as the script
         const tempWrapperPath = path.join(scriptDir, 'wrapper.go');
         fs.mkdirSync(scriptDir, { recursive: true });
-        fs.copyFileSync(path.join(__dirname, '../golang/wrapper.go'), tempWrapperPath);
+        fs.copyFileSync(path.join(DIRNAME, '../golang/wrapper.go'), tempWrapperPath);
 
         const executablePath = path.join(tempDir, 'golang_wrapper');
         const tempScriptPath = path.join(tempDir, relativeScriptPath);

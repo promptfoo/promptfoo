@@ -3,10 +3,13 @@ import os from 'os';
 import path from 'path';
 import type { Options as PythonShellOptions } from 'python-shell';
 import { PythonShell } from 'python-shell';
+import { fileURLToPath } from 'url';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
 import { execAsync } from './execAsync';
+
+const DIRNAME = path.dirname(fileURLToPath(import.meta.url));
 
 export const state: { cachedPythonPath: string | null } = { cachedPythonPath: null };
 
@@ -109,7 +112,7 @@ export async function runPython(
     env: process.env,
     mode: 'binary',
     pythonPath,
-    scriptPath: __dirname,
+    scriptPath: DIRNAME,
   };
 
   try {
