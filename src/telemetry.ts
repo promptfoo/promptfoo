@@ -24,7 +24,10 @@ export type TelemetryEvent = z.infer<typeof TelemetryEventSchema>;
 export type TelemetryEventTypes = TelemetryEvent['event'];
 export type EventProperties = TelemetryEvent['properties'];
 
-export const POSTHOG_KEY = getEnvString('PROMPTFOO_POSTHOG_KEY');
+export const POSTHOG_KEY = getEnvString(
+  'PROMPTFOO_POSTHOG_KEY',
+  'phc_E5n5uHnDo2eREJL1uqX1cIlbkoRby4yFWt3V94HqRRg',
+);
 const CONSENT_ENDPOINT = 'https://api.promptfoo.dev/consent';
 const EVENTS_ENDPOINT = 'https://a.promptfoo.app';
 const KA_ENDPOINT = 'https://ka.promptfoo.app/';
@@ -36,7 +39,13 @@ try {
         host: getEnvString('PROMPTFOO_POSTHOG_HOST', EVENTS_ENDPOINT),
       })
     : null;
-} catch {
+  if (posthogClient) {
+    logger.debug('Initialized PostHog client');
+  } else {
+    logger.debug('Could not initialize PostHog client');
+  }
+} catch (err) {
+  logger.debug(`Could not initialize PostHog client: ${err}`);
   posthogClient = null;
 }
 
