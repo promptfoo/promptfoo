@@ -99,9 +99,11 @@ export async function doTargetPurposeDiscovery(
     currentQuestionIndex: 0,
     answers: [],
   });
-  let tries = 0;
+  let turn = 0;
 
-  while (!done) {
+  while (!done && turn < 10) {
+    turn++;
+    logger.debug(`[TargetPurposeDiscovery] Starting the purpose discovery loop, turn: ${turn}`);
     const request = TargetPurposeDiscoveryRequestSchema.parse({
       state: {
         currentQuestionIndex: state.currentQuestionIndex,
@@ -120,17 +122,12 @@ export async function doTargetPurposeDiscovery(
       },
       body: JSON.stringify(request),
     });
-    tries++;
 
     if (!response.ok) {
       const error = await response.text();
       logger.error(
         `[TargetPurposeDiscovery] Error getting the next question from remote server: ${error}`,
       );
-      if (tries > 10) {
-        logger.error('[TargetPurposeDiscovery] Too many retries, giving up.');
-        return undefined;
-      }
       continue;
     }
 
@@ -163,7 +160,7 @@ export async function doTargetPurposeDiscovery(
       });
       if (targetResponse.error) {
         logger.error(`[TargetPurposeDiscovery] Error from target: ${targetResponse.error}`);
-        if (tries > 10) {
+        if (turn > 10) {
           logger.error('[TargetPurposeDiscovery] Too many retries, giving up.');
           return undefined;
         }
