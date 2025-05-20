@@ -1,0 +1,103 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: SiliconFlow models evaluation with chat, reasoning, and function calling
+
+providers:
+  # Standard chat model - Qwen series
+  - label: qwen-large
+    id: siliconflow:Qwen/Qwen2.5-72B-Instruct
+    config:
+      temperature: 0.7
+      max_tokens: 2000
+      top_p: 0.9
+      frequency_penalty: 0.5
+
+  # Advanced AI with reasoning capabilities - Qwen3 series
+  - label: qwen3
+    id: siliconflow:Qwen/Qwen3-32B
+    config:
+      temperature: 0.8
+      max_tokens: 4000
+      enable_thinking: true
+      thinking_budget: 4096
+      min_p: 0.05
+
+  # Model with function calling - DeepSeek series
+  - label: deepseek
+    id: siliconflow:deepseek-ai/DeepSeek-V2.5
+    config:
+      temperature: 0.1
+      max_tokens: 2000
+      tools:
+        - type: function
+          function:
+            name: get_weather
+            description: Get the current weather for a given city
+            parameters:
+              type: object
+              properties:
+                city:
+                  type: string
+                  description: The name of the city to query weather for
+              required:
+                - city
+
+prompts:
+  - '请解释什么是大型语言模型? (Please explain what is a large language model?)'
+  - '请编写一个Python函数，用于计算斐波那契数列的第n个数。 (Please write a Python function to calculate the nth number in the Fibonacci sequence.)'
+  - |
+    请列出三个中国的城市及其最著名的景点。以JSON格式输出。 
+    (Please list three cities in China and their most famous attractions. Output in JSON format.)
+  - |
+    我需要知道北京明天的天气怎么样。我应该带伞出门吗？
+    (I need to know what the weather will be like in Beijing tomorrow. Should I take an umbrella?)
+
+defaultTest:
+  options:
+    provider: qwen-large # Default to standard model if not specified
+
+tests:
+  # Test basic question across different models
+  - vars:
+      prompt: '请解释什么是大型语言模型? (Please explain what is a large language model?)'
+    assert:
+      - type: contains-any
+        value: ['大型语言模型', 'LLM', '语言模型', 'Large Language Model']
+
+  # Test code generation capability
+  - vars:
+      prompt: '请编写一个Python函数，用于计算斐波那契数列的第n个数。 (Please write a Python function to calculate the nth number in the Fibonacci sequence.)'
+    assert:
+      - type: contains-any
+        value: ['def fibonacci', 'def fib', '递归', '迭代']
+      - type: javascript
+        value: |
+          return output.includes('def') && output.includes('return') ? 'pass' : 'Code does not contain Python function'
+
+  # Test JSON structure output
+  - vars:
+      prompt: '请列出三个中国的城市及其最著名的景点。以JSON格式输出。 (Please list three cities in China and their most famous attractions. Output in JSON format.)'
+    options:
+      provider:
+        id: qwen-large
+        config:
+          response_format:
+            type: json_object
+    assert:
+      - type: valid-json
+      - type: javascript
+        value: |
+          try {
+            const parsed = JSON.parse(output);
+            return Array.isArray(parsed) || Object.keys(parsed).length >= 3 ? 'pass' : 'Not enough city data';
+          } catch (e) {
+            return 'Invalid JSON format';
+          }
+
+  # Test function calling capability
+  - vars:
+      prompt: 'I need to know what the weather will be like in Beijing tomorrow. Should I take an umbrella?'
+    options:
+      provider: deepseek
+    assert:
+      - type: contains-any
+        value: ['北京', 'Beijing', '天气', 'weather', '雨', 'rain', 'umbrella', '伞']

@@ -285,6 +285,9 @@ export type EnvVars = {
 
   // Pi Labs
   WITHPI_API_KEY?: string;
+
+  // SiliconFlow
+  SILICONFLOW_API_KEY?: string;
 } & EnvOverrides;
 
 // Allow string access to any key for environment variables not explicitly listed

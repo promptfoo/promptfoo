@@ -1,0 +1,97 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: SiliconFlow chat model comparison example
+
+env:
+  # Get your API key from https://cloud.siliconflow.cn/account/ak
+  SILICONFLOW_API_KEY: ${SILICONFLOW_API_KEY}
+
+providers:
+  - id: qwen-large
+    provider: siliconflow:Qwen/Qwen2.5-72B-Instruct
+    config:
+      temperature: 0.7
+      max_tokens: 2000
+      top_p: 0.7
+      top_k: 50
+      frequency_penalty: 0.5
+
+  - id: qwen3
+    provider: siliconflow:Qwen/Qwen3-32B
+    config:
+      temperature: 0.8
+      max_tokens: 4000
+      enable_thinking: true
+      thinking_budget: 4096
+      min_p: 0.05
+
+  - id: glm
+    provider: siliconflow:THUDM/GLM-4-32B-0414
+    config:
+      temperature: 0.7
+      max_tokens: 2000
+
+prompts:
+  - '请用简单的语言解释量子纠缠现象。(Please explain quantum entanglement in simple terms.)'
+
+  - '如果你是一位厨师，请创建一道融合中国和意大利烹饪元素的新菜品，并提供制作方法。(If you were a chef, create a new dish that fuses Chinese and Italian cooking elements, and provide instructions for making it.)'
+
+  - '分析人工智能在未来10年可能对就业市场产生的影响。(Analyze the potential impact of artificial intelligence on the job market in the next 10 years.)'
+
+  - |
+    请为一家科技初创公司撰写一份简短的使命宣言，该公司专注于开发可持续能源解决方案。
+    (Please write a brief mission statement for a tech startup focused on developing sustainable energy solutions.)
+
+defaultTest:
+  options:
+    provider: qwen-large
+
+tests:
+  # Test responses across different models
+  - vars:
+      prompt: '请用简单的语言解释量子纠缠现象。(Please explain quantum entanglement in simple terms.)'
+    options:
+      provider: [qwen-large, qwen3, glm]
+    assert:
+      - type: contains-any
+        value: ['量子', '纠缠', 'quantum', 'entanglement', '粒子', 'particles']
+      - type: llm-rubric
+        value: 'Rate this explanation on clarity and simplicity for a non-scientific audience on a scale of 1-10'
+
+  # Test creative culinary output
+  - vars:
+      prompt: '如果你是一位厨师，请创建一道融合中国和意大利烹饪元素的新菜品，并提供制作方法。(If you were a chef, create a new dish that fuses Chinese and Italian cooking elements, and provide instructions for making it.)'
+    options:
+      provider: qwen-large
+    assert:
+      - type: contains-any
+        value: ['食材', '步骤', 'ingredients', 'instructions', '中国', '意大利', 'China', 'Italy']
+      - type: llm-rubric
+        value: |
+          Rate this recipe based on the following criteria:
+          1. Creativity (1-10)
+          2. Clear fusion of Chinese and Italian elements (1-10)
+          3. Clarity of instructions (1-10)
+          Provide an overall score that is the average of these three scores.
+
+  # Test analytical thinking
+  - vars:
+      prompt: '分析人工智能在未来10年可能对就业市场产生的影响。(Analyze the potential impact of artificial intelligence on the job market in the next 10 years.)'
+    options:
+      provider: qwen3
+    assert:
+      - type: contains-any
+        value: ['就业', '工作', '自动化', '技能', 'job', 'employment', 'automation', 'skills']
+      - type: max-tokens
+        value: 1500
+
+  # Test business writing with Qwen model using JSON output
+  - vars:
+      prompt: '请为一家科技初创公司撰写一份简短的使命宣言，该公司专注于开发可持续能源解决方案。(Please write a brief mission statement for a tech startup focused on developing sustainable energy solutions.)'
+    options:
+      provider:
+        id: qwen-large
+        config:
+          response_format:
+            type: json_object
+    assert:
+      - type: valid-json

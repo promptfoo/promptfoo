@@ -81,6 +81,7 @@ import {
 import { createScriptBasedProviderFactory } from './scriptBasedProvider';
 import { ScriptCompletionProvider } from './scriptCompletion';
 import { SequenceProvider } from './sequence';
+import { createSiliconFlowProvider } from './siliconflow';
 import { SimulatedUser } from './simulatedUser';
 import { createTogetherAiProvider } from './togetherai';
 import { VoyageEmbeddingProvider } from './voyage';
@@ -1148,6 +1149,19 @@ export const providerMap: ProviderFactory[] = [
       context: LoadApiProviderContext,
     ) => {
       return new ServerToolDiscoveryMultiProvider(providerOptions.config);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('siliconflow:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createSiliconFlowProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
     },
   },
   {

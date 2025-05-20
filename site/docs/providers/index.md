@@ -52,8 +52,10 @@ providers:
 | [OpenRouter](./openrouter.md)                       | Unified API for multiple providers                | `openrouter:mistral/7b-instruct`                   |
 | [Perplexity AI](./perplexity.md)                    | Search-augmented chat with citations              | `perplexity:sonar-pro`                             |
 | [Replicate](./replicate.md)                         | Various hosted models                             | `replicate:stability-ai/sdxl`                      |
-| [Together AI](./togetherai.md)                      | Various hosted models                             | Compatible with OpenAI syntax                      |
-| [Voyage AI](./voyage.md)                            | Specialized embedding models                      | `voyage:voyage-3`                                  |
+| [SageMaker](./sagemaker.md)                         | Models deployed on SageMaker endpoints            | `sagemaker:my-endpoint-name`                       |
+| [SiliconFlow](./siliconflow.md)                     | Various Chinese and global models                 | `siliconflow:Qwen/Qwen2.5-72B-Instruct`            |
+| [TogetherAI](./togetherai.md)                       | Various hosted models                             | Compatible with OpenAI syntax                      |
+| [Vertex AI](./vertex.md)                            | Google Cloud's AI platform                        | `vertex:gemini-2.5-flash-preview-04-17`            |
 | [vLLM](./vllm.md)                                   | Local                                             | Compatible with OpenAI syntax                      |
 | [Ollama](./ollama.md)                               | Local                                             | `ollama:llama3.2:latest`                           |
 | [LocalAI](./localai.md)                             | Local                                             | `localai:gpt4all-j`                                |
