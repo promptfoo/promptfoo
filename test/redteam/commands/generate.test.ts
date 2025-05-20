@@ -239,16 +239,12 @@ describe('doGenerateRedteam', () => {
       injectVar: 'input',
     });
 
-    jest.mocked(mergePurposes).mockReturnValue('MERGED(Test purpose)');
-
     await doGenerateRedteam(options);
-
-    expect(mergePurposes).toHaveBeenCalledWith('Test purpose', undefined);
 
     expect(synthesize).toHaveBeenCalledWith({
       language: undefined,
       numTests: undefined,
-      purpose: 'MERGED(Test purpose)',
+      purpose: 'Test purpose',
       plugins: expect.any(Array),
       prompts: expect.any(Array),
       strategies: expect.any(Array),
@@ -921,14 +917,15 @@ describe('doGenerateRedteam', () => {
       }),
     );
 
-    jest.mocked(doTargetPurposeDiscovery).mockResolvedValue({
-      purpose: 'Generated purpose',
-      limitations: 'Generated limitations',
+    const mockedPurpose = {
+      purpose: 'Gen',
+      limitations: 'Gen limitations',
       tools: [],
-    });
+    };
+    jest.mocked(doTargetPurposeDiscovery).mockResolvedValue(mockedPurpose);
     jest.mocked(synthesize).mockResolvedValue({
       testCases: [],
-      purpose: 'Generated purpose',
+      purpose: 'Gen',
       entities: [],
       injectVar: 'input',
     });
