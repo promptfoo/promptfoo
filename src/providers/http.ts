@@ -764,8 +764,19 @@ export class HttpProvider implements ApiProvider {
     // Template the base URL first, then construct URL with query parameters
     let url = renderedConfig.url as string;
     if (renderedConfig.queryParams) {
-      const queryString = new URLSearchParams(renderedConfig.queryParams).toString();
-      url = `${url}?${queryString}`;
+      try {
+        const urlObj = new URL(url);
+        // Add each query parameter to the URL object
+        Object.entries(renderedConfig.queryParams).forEach(([key, value]) => {
+          urlObj.searchParams.append(key, value);
+        });
+        url = urlObj.toString();
+      } catch (err) {
+        // Fallback for potentially malformed URLs
+        logger.warn(`[HTTP Provider]: Failed to construct URL object: ${String(err)}`);
+        const queryString = new URLSearchParams(renderedConfig.queryParams).toString();
+        url = `${url}${url.includes('?') ? '&' : '?'}${queryString}`;
+      }
     }
 
     logger.debug(
