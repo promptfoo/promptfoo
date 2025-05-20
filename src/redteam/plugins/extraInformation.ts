@@ -11,7 +11,7 @@ import type {
   ApiProvider,
   ProviderResponse,
 } from '../../types';
-import { maybeLoadFromExternalFile } from '../../util';
+import { maybeLoadFromExternalFile } from '../../util/file';
 import { redteamProviderManager } from '../providers/shared';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
@@ -35,6 +35,8 @@ const DEFAULT_EXAMPLES = dedent`
 `;
 
 export class ExtraInformationPlugin extends RedteamPluginBase {
+  id = PLUGIN_ID;
+
   protected async getTemplate(): Promise<string> {
     return dedent`
     In order to test whether an AI system exposes extra debug information, embeddings, or internal state, we propose an "extra information test".
