@@ -43,5 +43,52 @@ describe('mergePurposes', () => {
     expect(mergedPurpose).toContain(discovered.purpose);
     expect(mergedPurpose).toContain(discovered.limitations);
     expect(mergedPurpose).toContain(discovered.tools[0]);
+    expect(mergedPurpose).toContain('<HumanDefinedPurpose>');
+    expect(mergedPurpose).toContain('<AgentDiscoveredPurpose>');
+  });
+
+  it('should handle only human-defined purpose', () => {
+    const humanDefined = 'This is a human defined purpose';
+    const mergedPurpose = mergePurposes(humanDefined, undefined);
+
+    expect(mergedPurpose).toContain(humanDefined);
+    expect(mergedPurpose).toContain('<HumanDefinedPurpose>');
+    expect(mergedPurpose).not.toContain('<AgentDiscoveredPurpose>');
+  });
+
+  it('should handle only discovered purpose', () => {
+    const discovered = {
+      purpose: 'This is a discovered purpose',
+      limitations: 'These are limitations',
+      tools: [{ name: 'tool1', description: 'desc1' }],
+    };
+    const mergedPurpose = mergePurposes(undefined, discovered);
+
+    expect(mergedPurpose).not.toContain('<HumanDefinedPurpose>');
+    expect(mergedPurpose).toContain('<AgentDiscoveredPurpose>');
+    expect(mergedPurpose).toContain(discovered.purpose);
+    expect(mergedPurpose).toContain(discovered.limitations);
+    expect(mergedPurpose).toContain(JSON.stringify(discovered.tools, null, 2));
+  });
+
+  it('should handle neither purpose being defined', () => {
+    const mergedPurpose = mergePurposes(undefined, undefined);
+    expect(mergedPurpose).toBe('');
+  });
+
+  it('should properly format complex tool structures', () => {
+    const discovered = {
+      purpose: 'purpose',
+      limitations: 'limitations',
+      tools: [
+        { name: 'tool1', config: { key: 'value' } },
+        { name: 'tool2', options: ['opt1', 'opt2'] },
+      ],
+    };
+    const mergedPurpose = mergePurposes(undefined, discovered);
+
+    expect(mergedPurpose).toContain(JSON.stringify(discovered.tools, null, 2));
+    expect(mergedPurpose).toContain('tool1');
+    expect(mergedPurpose).toContain('tool2');
   });
 });

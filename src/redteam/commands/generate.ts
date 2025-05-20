@@ -35,7 +35,7 @@ import type {
   RedteamStrategyObject,
   SynthesizeOptions,
 } from '../types';
-import { doTargetPurposeDiscovery, mergePurposes } from './discover';
+import { type DiscoveredPurpose, doTargetPurposeDiscovery, mergePurposes } from './discover';
 
 function getConfigHash(configPath: string): string {
   const content = fs.readFileSync(configPath, 'utf8');
@@ -80,6 +80,7 @@ export async function doGenerateRedteam(
     shouldGenerate = true;
   }
 
+  let discoveredPurpose: DiscoveredPurpose | undefined;
   if (configPath) {
     const resolved = await resolveConfigs(
       {
@@ -107,9 +108,7 @@ export async function doGenerateRedteam(
       );
       const providers = await loadApiProviders(resolved.config.providers);
       try {
-        const generatedPurpose = await doTargetPurposeDiscovery(providers[0]);
-
-        finalPurpose = mergePurposes(finalPurpose, generatedPurpose);
+        discoveredPurpose = await doTargetPurposeDiscovery(providers[0]);
       } catch (error) {
         logger.error(
           `Discovery failed from error, skipping: ${error instanceof Error ? error.message : String(error)}`,
@@ -123,7 +122,6 @@ export async function doGenerateRedteam(
       providers: [],
       tests: [],
     };
-    finalPurpose = options.purpose;
   } else {
     logger.info(
       chalk.red(
@@ -134,6 +132,8 @@ export async function doGenerateRedteam(
     );
     return null;
   }
+
+  const mergedPurpose = mergePurposes(redteamConfig?.purpose ?? options.purpose, discoveredPurpose);
 
   const startTime = Date.now();
   telemetry.record('command_used', {
@@ -214,7 +214,7 @@ export async function doGenerateRedteam(
     entities: redteamConfig?.entities,
     plugins,
     provider: redteamConfig?.provider || options.provider,
-    purpose: finalPurpose,
+    purpose: mergedPurpose,
     strategies: strategyObjs,
     delay: redteamConfig?.delay || options.delay,
     sharing: redteamConfig?.sharing || options.sharing,
