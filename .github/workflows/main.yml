@@ -79,6 +79,16 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Check Telemetry
+        run: |
+          if ! grep -q "exports\.POSTHOG_KEY = 'phc_" dist/src/telemetry.js; then
+            echo "Error: PostHog key not properly replaced in telemetry.js"
+            echo "Content of telemetry.js:"
+            cat dist/src/telemetry.js
+            exit 1
+          fi
+          echo "PostHog key replacement verified successfully"
+
   style-check:
     name: Style Check
     timeout-minutes: 5
