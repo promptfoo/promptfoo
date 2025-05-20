@@ -1477,7 +1477,10 @@ describe('HttpProvider', () => {
     };
     jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
-    await provider.callApi('test prompt', { vars: { var: 'test' } });
+    await provider.callApi('test prompt', {
+      prompt: { raw: 'test prompt', label: 'test' },
+      vars: { var: 'test' },
+    });
 
     // Should use the fallback mechanism to append query parameters
     expect(fetchWithCache).toHaveBeenCalledWith(
