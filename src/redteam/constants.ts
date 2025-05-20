@@ -2,7 +2,7 @@ import { MEMORY_POISONING_PLUGIN_ID } from './plugins/agentic/constants';
 
 export const DEFAULT_NUM_TESTS_PER_PLUGIN = 5;
 
-export const REDTEAM_MODEL = 'openai:chat:gpt-4o';
+export const REDTEAM_MODEL = 'openai:chat:gpt-4.1-2025-04-14';
 
 export const LLAMA_GUARD_REPLICATE_PROVIDER =
   'replicate:moderation:meta/llama-guard-3-8b:146d1220d447cdcc639bc17c5f6137416042abee6ae153a2615e6ef5749205c8';

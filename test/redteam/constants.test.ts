@@ -40,7 +40,7 @@ describe('constants', () => {
 
   it('REDTEAM_MODEL should be defined', () => {
     expect(REDTEAM_MODEL).toBeDefined();
-    expect(REDTEAM_MODEL).toBe('openai:chat:gpt-4o');
+    expect(REDTEAM_MODEL).toBe('openai:chat:gpt-4.1-2025-04-14');
   });
 
   it('LLAMA_GUARD_REPLICATE_PROVIDER should be defined', () => {
