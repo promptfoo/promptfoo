@@ -1,5 +1,4 @@
 import fs from 'fs';
-import { getEnvBool } from '../../../src/envars';
 import logger from '../../../src/logger';
 import { synthesize } from '../../../src/redteam';
 import { doTargetPurposeDiscovery, mergePurposes } from '../../../src/redteam/commands/discover';
@@ -639,7 +638,7 @@ describe('doGenerateRedteam', () => {
     await doGenerateRedteam(options);
 
     expect(logger.error).toHaveBeenCalledWith(
-      'Failed to auto-discover purpose: Purpose discovery failed',
+      'Discovery failed from error, skipping: Purpose discovery failed',
     );
   });
 
@@ -707,7 +706,7 @@ describe('doGenerateRedteam', () => {
     await doGenerateRedteam(options);
 
     expect(logger.error).toHaveBeenCalledWith(
-      'Failed to auto-discover purpose: Custom purpose discovery error',
+      'Discovery failed from error, skipping: Custom purpose discovery error',
     );
   });
 
@@ -736,8 +735,13 @@ describe('doGenerateRedteam', () => {
       write: true,
     };
 
-    jest.mocked(doTargetPurposeDiscovery).mockResolvedValue('Generated purpose');
-    jest.mocked(mergePurposes).mockImplementation((a, b) => `${a} + ${b}`);
+    const mockedPurpose = {
+      purpose: 'Generated purpose',
+      limitations: 'Generated limitations',
+      tools: [],
+    };
+    jest.mocked(doTargetPurposeDiscovery).mockResolvedValue(mockedPurpose);
+    jest.mocked(mergePurposes).mockImplementation((a, b) => `${a} + ${JSON.stringify(b)}`);
     jest.mocked(synthesize).mockResolvedValue({
       testCases: [],
       purpose: 'CLI purpose + Generated purpose',
@@ -747,15 +751,15 @@ describe('doGenerateRedteam', () => {
 
     await doGenerateRedteam(options);
 
-    expect(mergePurposes).toHaveBeenCalledWith('CLI purpose', 'Generated purpose');
+    expect(mergePurposes).toHaveBeenCalledWith('Config purpose', mockedPurpose);
     expect(synthesize).toHaveBeenCalledWith(
       expect.objectContaining({
-        purpose: 'CLI purpose + Generated purpose',
+        purpose: `Config purpose + ${JSON.stringify(mockedPurpose)}`,
       }),
     );
   });
 
-  it('should not call mergePurposes if no existing purpose', async () => {
+  it('should call mergePurposes even if no existing purpose', async () => {
     jest.mocked(configModule.resolveConfigs).mockResolvedValue({
       basePath: '/mock/path',
       testSuite: {
@@ -776,8 +780,12 @@ describe('doGenerateRedteam', () => {
       defaultConfig: {},
       write: true,
     };
-
-    jest.mocked(doTargetPurposeDiscovery).mockResolvedValue('Generated purpose');
+    const mockedPurpose = {
+      purpose: 'Generated purpose',
+      limitations: 'Generated limitations',
+      tools: [],
+    };
+    jest.mocked(doTargetPurposeDiscovery).mockResolvedValue(mockedPurpose);
     jest.mocked(synthesize).mockResolvedValue({
       testCases: [],
       purpose: 'Generated purpose',
@@ -787,10 +795,12 @@ describe('doGenerateRedteam', () => {
 
     await doGenerateRedteam(options);
 
-    expect(mergePurposes).not.toHaveBeenCalledWith(undefined, 'Generated purpose');
+    expect(mergePurposes).toHaveBeenCalledWith(undefined, mockedPurpose);
     expect(synthesize).toHaveBeenCalledWith(
       expect.objectContaining({
-        purpose: 'Generated purpose',
+        purpose: expect.stringContaining(
+          'undefined + {\"purpose\":\"Generated purpose\",\"limitations\":\"Generated limitations\",\"tools\":[]}',
+        ),
       }),
     );
   });
@@ -827,7 +837,9 @@ describe('doGenerateRedteam', () => {
 
     await doGenerateRedteam(options);
 
-    expect(logger.error).toHaveBeenCalledWith('Failed to auto-discover purpose: Some string error');
+    expect(logger.error).toHaveBeenCalledWith(
+      'Discovery failed from error, skipping: Some string error',
+    );
   });
 
   it('should merge CLI, config, and generated purpose, CLI taking precedence, merge with generated', async () => {
@@ -854,9 +866,13 @@ describe('doGenerateRedteam', () => {
       write: true,
       purpose: 'CLI purpose',
     };
-
-    jest.mocked(doTargetPurposeDiscovery).mockResolvedValue('Generated purpose');
-    jest.mocked(mergePurposes).mockImplementation((a, b) => `MERGED(${a} && ${b})`);
+    const mockedPurpose = {
+      purpose: 'Generated purpose',
+      limitations: 'Generated limitations',
+      tools: [],
+    };
+    jest.mocked(doTargetPurposeDiscovery).mockResolvedValue(mockedPurpose);
+    jest.mocked(mergePurposes).mockImplementation((a, b) => `MERGED(${a} && ${JSON.stringify(b)})`);
     jest.mocked(synthesize).mockResolvedValue({
       testCases: [],
       purpose: 'MERGED(CLI purpose && Generated purpose)',
@@ -866,10 +882,10 @@ describe('doGenerateRedteam', () => {
 
     await doGenerateRedteam(options);
 
-    expect(mergePurposes).toHaveBeenCalledWith('CLI purpose', 'Generated purpose');
+    expect(mergePurposes).toHaveBeenCalledWith('Config purpose', mockedPurpose);
     expect(synthesize).toHaveBeenCalledWith(
       expect.objectContaining({
-        purpose: 'MERGED(CLI purpose && Generated purpose)',
+        purpose: expect.stringContaining('MERGED(Config purpose && '),
       }),
     );
   });

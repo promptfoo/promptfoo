@@ -59,6 +59,7 @@ export function redteamRunCommand(program: Command) {
           throw new Error('Invalid target ID, it must be a valid UUID');
         }
         const configObj = await getConfigFromCloud(opts.config, opts.target);
+
         // backwards compatible for old cloud servers
         if (
           opts.target &&
