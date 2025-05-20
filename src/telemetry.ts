@@ -24,7 +24,7 @@ export type TelemetryEvent = z.infer<typeof TelemetryEventSchema>;
 export type TelemetryEventTypes = TelemetryEvent['event'];
 export type EventProperties = TelemetryEvent['properties'];
 
-// NEVER change this to getEnvString
+// NEVER change this to getEnvString - `replace-keys` depends on it directly referencing process.env
 export const POSTHOG_KEY = process.env.PROMPTFOO_POSTHOG_KEY;
 const CONSENT_ENDPOINT = 'https://api.promptfoo.dev/consent';
 const EVENTS_ENDPOINT = 'https://a.promptfoo.app';
