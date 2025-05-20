@@ -1,8 +1,9 @@
 import { PostHog } from 'posthog-node';
+import { getEnvBool } from '../src/envars';
 import { fetchWithTimeout } from '../src/fetch';
+import logger from '../src/logger';
 import { Telemetry } from '../src/telemetry';
 
-// Mock PostHog
 jest.mock('posthog-node', () => {
   const mockCapture = jest.fn();
   const mockIdentify = jest.fn();
@@ -15,47 +16,46 @@ jest.mock('posthog-node', () => {
   };
 });
 
-// Mock fetch
 jest.mock('../src/fetch', () => ({
   fetchWithTimeout: jest.fn(),
 }));
 
-// Mock crypto
 jest.mock('crypto', () => ({
   randomUUID: jest.fn().mockReturnValue('test-uuid'),
 }));
 
-// Mock globalConfig
 jest.mock('../src/globalConfig/globalConfig', () => ({
   readGlobalConfig: jest
     .fn()
     .mockReturnValue({ id: 'test-user-id', account: { email: 'test@example.com' } }),
 }));
 
-// Mock constants
 jest.mock('../src/constants', () => ({
   VERSION: '1.0.0',
 }));
 
-// Mock envars
+jest.mock('../src/logger', () => ({
+  debug: jest.fn(),
+}));
+
 jest.mock('../src/envars', () => ({
-  getEnvBool: jest.fn().mockImplementation((key) => {
+  getEnvBool: jest.fn().mockImplementation((key: string) => {
     if (key === 'PROMPTFOO_DISABLE_TELEMETRY') {
-      return process.env.PROMPTFOO_DISABLE_TELEMETRY === '1';
+      return false;
+    }
+    if (key === 'IS_TESTING') {
+      return false;
     }
     return false;
   }),
-  getEnvString: jest.fn().mockImplementation((key) => {
+  getEnvString: jest.fn().mockImplementation((key: string, defaultValue?: string) => {
     if (key === 'PROMPTFOO_POSTHOG_KEY') {
-      return process.env.PROMPTFOO_POSTHOG_KEY || undefined;
+      return process.env.PROMPTFOO_POSTHOG_KEY || defaultValue;
     }
     if (key === 'PROMPTFOO_POSTHOG_HOST') {
-      return process.env.PROMPTFOO_POSTHOG_HOST || undefined;
+      return process.env.PROMPTFOO_POSTHOG_HOST || defaultValue;
     }
-    if (key === 'NODE_ENV') {
-      return process.env.NODE_ENV || undefined;
-    }
-    return undefined;
+    return defaultValue;
   }),
 }));
 
@@ -69,37 +69,41 @@ describe('Telemetry', () => {
     process.env = { ...originalEnv };
     process.env.PROMPTFOO_POSTHOG_KEY = 'test-key';
 
-    // Setup fetch mock
-    mockFetch = jest.fn().mockResolvedValue({ ok: true });
+    mockFetch = jest.fn().mockResolvedValue({ ok: true } as any);
     global.fetch = mockFetch;
 
-    // Reset PostHog mock
     jest.mocked(PostHog).mockClear();
     mockPostHogInstance = {
       capture: jest.fn(),
       identify: jest.fn(),
     };
-    jest.mocked(PostHog).mockImplementation(() => mockPostHogInstance);
-
-    // Reset fetchWithTimeout mock
+    jest.mocked(PostHog).mockReturnValue(mockPostHogInstance);
+    jest.mocked(logger.debug).mockClear();
     jest.mocked(fetchWithTimeout).mockClear();
+
+    const { readGlobalConfig } = jest.requireMock('../src/globalConfig/globalConfig');
+    readGlobalConfig.mockReturnValue({
+      id: 'test-user-id',
+      account: { email: 'test@example.com' },
+    });
   });
 
   afterEach(() => {
     process.env = originalEnv;
     jest.resetAllMocks();
+    jest.resetModules();
   });
 
   it('should not track events with PostHog when telemetry is disabled', () => {
-    process.env.PROMPTFOO_DISABLE_TELEMETRY = '1';
+    jest.mocked(getEnvBool).mockImplementation((key: string) => {
+      if (key === 'PROMPTFOO_DISABLE_TELEMETRY') {
+        return true;
+      }
+      return false;
+    });
 
-    // Create telemetry instance with telemetry disabled
     const _telemetry = new Telemetry();
-
-    // Record an event
     _telemetry.record('eval_ran', { foo: 'bar' });
-
-    // PostHog capture should not be called
     expect(mockPostHogInstance.capture).not.toHaveBeenCalled();
   });
 
@@ -128,13 +132,35 @@ describe('Telemetry', () => {
 
     await _telemetry.saveConsent('test@example.com');
 
-    expect(fetchWithTimeout).toHaveBeenCalledWith(
-      'https://api.promptfoo.dev/consent',
-      expect.objectContaining({
-        method: 'POST',
-        body: expect.any(String),
-      }),
-      expect.any(Number),
+    expect(jest.mocked(logger.debug).mock.calls).toEqual(
+      expect.arrayContaining([
+        ['Telemetry enabled: true'],
+        ['Failed to save consent: Failed to save consent: Not Found'],
+      ]),
     );
+  });
+
+  it('should call recordTelemetryDisabled only once when telemetry is disabled', () => {
+    jest.mocked(getEnvBool).mockImplementation((key: string) => {
+      if (key === 'PROMPTFOO_DISABLE_TELEMETRY') {
+        return true;
+      }
+      return false;
+    });
+
+    const { readGlobalConfig } = jest.requireMock('../src/globalConfig/globalConfig');
+    readGlobalConfig.mockReturnValue({
+      id: 'test-user-id',
+      account: { email: 'test@example.com' },
+    });
+
+    const _telemetry = new Telemetry();
+    const spy = jest.spyOn(_telemetry as any, 'sendEvent').mockImplementation(() => {});
+
+    _telemetry.record('eval_ran', { foo: 'bar' });
+    _telemetry.record('eval_ran', { foo: 'baz' });
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledWith('feature_used', { feature: 'telemetry disabled' });
   });
 });
