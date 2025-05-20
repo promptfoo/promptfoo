@@ -196,10 +196,10 @@ prompts:
     label: llama_completion_prompt
 
 providers:
-  - id: openai:gpt-4o-mini
+  - id: openai:gpt-4.1-mini
     prompts:
       - gpt_chat_prompt
-  - id: openai:gpt-4o
+  - id: openai:gpt-4.1
     prompts:
       - gpt_chat_prompt
   - id: replicate:meta/meta-llama-3.1-405b-instruct
@@ -274,7 +274,7 @@ import sys
 
 def my_prompt_function(context: dict) -> str:
     provider: dict = context['provider']
-    provider_id: str = provider['id']  # ex. openai:gpt-4o or bedrock:anthropic.claude-3-sonnet-20240229-v1:0
+    provider_id: str = provider['id']  # ex. openai:gpt-4.1 or bedrock:anthropic.claude-3-sonnet-20240229-v1:0
     provider_label: str | None = provider.get('label') # exists if set in promptfoo config.
 
     variables: dict = context['vars'] # access the test case variables
@@ -366,7 +366,7 @@ Register it in your configuration:
 prompts:
   - file://prompts.txt
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
 // highlight-start
 nunjucksFilters:
   allcaps: ./allcaps.js

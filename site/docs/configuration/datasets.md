@@ -107,7 +107,7 @@ You can customize the dataset generation process by providing additional options
 | `-w, --write`              | Write the generated test cases directly to the configuration file.      |
 | `--numPersonas`            | Number of personas to generate for the dataset.                         |
 | `--numTestCasesPerPersona` | Number of test cases to generate per persona.                           |
-| `--provider`               | Provider to use for the dataset generation. Eg: openai:chat:gpt-4o      |
+| `--provider`               | Provider to use for the dataset generation. Eg: openai:chat:gpt-4.1     |
 
 For example:
 

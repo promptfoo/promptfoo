@@ -32,6 +32,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'o3-mini',
     'gpt-4.5-preview',
     'gpt-4.5-preview-2025-02-27',
+    'codex-mini-latest',
   ];
 
   config: OpenAiCompletionOptions;
@@ -48,7 +49,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     return (
       this.modelName.startsWith('o1') ||
       this.modelName.startsWith('o3') ||
-      this.modelName.startsWith('o4')
+      this.modelName.startsWith('o4') ||
+      this.modelName === 'codex-mini-latest'
     );
   }
 

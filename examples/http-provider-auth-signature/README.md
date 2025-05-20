@@ -1,4 +1,10 @@
-# Setting up an HTTP provider with cryptographically signed requests
+# http-provider-auth-signature (Setting up an HTTP provider with cryptographically signed requests)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example http-provider-auth-signature
+```
 
 ## Introduction
 

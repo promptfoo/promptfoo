@@ -850,7 +850,6 @@ export const ADDITIONAL_STRATEGIES = [
   'math-prompt',
   'morse',
   'multilingual',
-  'other-encodings',
   'pandamonium',
   'piglatin',
   'prompt-injection',
@@ -860,7 +859,19 @@ export const ADDITIONAL_STRATEGIES = [
 ] as const;
 export type AdditionalStrategy = (typeof ADDITIONAL_STRATEGIES)[number];
 
-const _ALL_STRATEGIES = ['default', ...DEFAULT_STRATEGIES, ...ADDITIONAL_STRATEGIES] as const;
+export const STRATEGY_COLLECTIONS = ['other-encodings'] as const;
+export type StrategyCollection = (typeof STRATEGY_COLLECTIONS)[number];
+
+export const STRATEGY_COLLECTION_MAPPINGS: Record<StrategyCollection, string[]> = {
+  'other-encodings': ['morse', 'piglatin'],
+};
+
+const _ALL_STRATEGIES = [
+  'default',
+  ...DEFAULT_STRATEGIES,
+  ...ADDITIONAL_STRATEGIES,
+  ...STRATEGY_COLLECTIONS,
+] as const;
 export const ALL_STRATEGIES = [..._ALL_STRATEGIES].sort();
 export type Strategy = (typeof ALL_STRATEGIES)[number];
 
@@ -936,8 +947,6 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'math-prompt': 'Tests handling of mathematical notation-based attacks',
   morse: 'Tests handling of content encoded in Morse code to potentially bypass filters',
   multilingual: 'Tests handling of attacks across multiple languages',
-  'other-encodings':
-    'Tests handling of content encoded with various encodings to potentially bypass filters',
   mcp: 'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
   overreliance: 'Tests for overreliance on system assumptions',
   pandamonium:
@@ -972,6 +981,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
   xstest: 'Tests for XSTest attacks',
   video: 'Tests handling of video content',
+  'other-encodings':
+    'Collection of alternative text transformation strategies (Morse code and Pig Latin) for testing evasion techniques',
 };
 
 // These names are displayed in risk cards and in the table
@@ -1046,7 +1057,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'math-prompt': 'Mathematical Notation Attack',
   morse: 'Morse Code Encoding',
   multilingual: 'Cross-Language Attack',
-  'other-encodings': 'Alternative Encodings',
+  'other-encodings': 'Collection of Text Encodings',
   overreliance: 'Overreliance',
   pandamonium: '[Experimental] Pandamonium',
   piglatin: 'Pig Latin Encoding',
@@ -1476,12 +1487,15 @@ export const strategyDescriptions: Record<Strategy, string> = {
   'jailbreak:tree': 'Implements tree-based search for optimal attack paths',
   leetspeak: 'Assesses handling of leetspeak-encoded malicious content',
   'math-prompt': 'Tests resilience against mathematical notation-based attacks',
-  morse: 'Tests detection and handling of text encoded in Morse code',
+  morse:
+    'Tests detection and handling of text encoded in Morse code where letters are converted to dots and dashes to potentially bypass content filters',
   multilingual: 'Evaluates cross-language attack vector handling',
-  'other-encodings': 'Tests detection and handling of various alternative text encodings',
+  'other-encodings':
+    'Collection of alternative text transformation strategies (Morse code and Pig Latin) for testing evasion techniques',
   pandamonium:
     "Promptfoo's exclusive dynamic jailbreak strategy currently in development. Note: This is an expensive jailbreak strategy with no limit on probes.",
-  piglatin: 'Tests detection and handling of text transformed into Pig Latin',
+  piglatin:
+    'Tests detection and handling of text transformed into Pig Latin, a language game where initial consonant clusters are moved to the end of words with "ay" added',
   'prompt-injection': 'Tests direct prompt injection vulnerability detection',
   retry: 'Automatically incorporates previously failed test cases to prevent regression',
   rot13: 'Assesses handling of ROT13-encoded malicious payloads',
@@ -1509,7 +1523,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   'math-prompt': 'Mathematical Encoding',
   morse: 'Morse Code',
   multilingual: 'Multilingual Translation',
-  'other-encodings': 'Alternative Encodings',
+  'other-encodings': 'Collection of Text Encodings',
   pandamonium: 'Pandamonium',
   piglatin: 'Pig Latin',
   'prompt-injection': 'Prompt Injection',

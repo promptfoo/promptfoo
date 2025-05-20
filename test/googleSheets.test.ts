@@ -59,32 +59,23 @@ describe('Google Sheets Integration', () => {
 
   describe('checkGoogleSheetAccess', () => {
     it('should return public:true for accessible sheets', async () => {
-      const mockFetch = jest.spyOn(global, 'fetch').mockImplementation();
-      mockFetch.mockResolvedValue({
-        ok: true,
-        status: 200,
-      } as Response);
+      jest.mocked(fetchWithProxy).mockResolvedValue(createMockResponse({ status: 200 }));
 
       const result = await checkGoogleSheetAccess(TEST_SHEET_URL);
       expect(result).toEqual({ public: true, status: 200 });
-      expect(mockFetch).toHaveBeenCalledWith(TEST_SHEET_URL);
+      expect(fetchWithProxy).toHaveBeenCalledWith(TEST_SHEET_URL);
     });
 
     it('should return public:false for inaccessible sheets', async () => {
-      const mockFetch = jest.spyOn(global, 'fetch').mockImplementation();
-      mockFetch.mockResolvedValue({
-        ok: false,
-        status: 403,
-      } as Response);
+      jest.mocked(fetchWithProxy).mockResolvedValue(createMockResponse({ status: 403 }));
 
       const result = await checkGoogleSheetAccess(TEST_SHEET_URL);
       expect(result).toEqual({ public: false, status: 403 });
-      expect(mockFetch).toHaveBeenCalledWith(TEST_SHEET_URL);
+      expect(fetchWithProxy).toHaveBeenCalledWith(TEST_SHEET_URL);
     });
 
     it('should handle network errors gracefully', async () => {
-      const mockFetch = jest.spyOn(global, 'fetch').mockImplementation();
-      mockFetch.mockRejectedValue(new Error('Network error'));
+      jest.mocked(fetchWithProxy).mockRejectedValue(new Error('Network error'));
 
       const result = await checkGoogleSheetAccess(TEST_SHEET_URL);
       expect(result).toEqual({ public: false });

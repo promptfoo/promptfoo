@@ -4,7 +4,7 @@ import type { CsvRow } from './types';
 
 export async function checkGoogleSheetAccess(url: string) {
   try {
-    const response = await fetch(url);
+    const response = await fetchWithProxy(url);
     if (response.ok) {
       return { public: true, status: response.status };
     } else {

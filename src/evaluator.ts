@@ -1038,13 +1038,7 @@ class Evaluator {
         });
 
         if (options.progressCallback) {
-          options.progressCallback(
-            this.evalRecord.resultsCount,
-            runEvalOptions.length,
-            index,
-            evalStep,
-            metrics,
-          );
+          options.progressCallback(numComplete, runEvalOptions.length, index, evalStep, metrics);
         }
       }
     };
@@ -1136,7 +1130,7 @@ class Evaluator {
         // Progress callback
         if (options.progressCallback) {
           options.progressCallback(
-            this.evalRecord.resultsCount,
+            numComplete,
             runEvalOptions.length,
             typeof index === 'number' ? index : 0,
             evalStep,
@@ -1421,6 +1415,7 @@ class Evaluator {
 
     await runExtensionHook(testSuite.extensions, 'afterAll', {
       prompts: this.evalRecord.prompts,
+      results: this.evalRecord.results,
       suite: testSuite,
     });
 

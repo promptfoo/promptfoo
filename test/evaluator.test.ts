@@ -32,6 +32,16 @@ jest.mock('../src/util/time', () => ({
   sleep: jest.fn(),
 }));
 
+jest.mock('../src/util/fileExtensions', () => ({
+  ...jest.requireActual('../src/util/fileExtensions'),
+  isImageFile: jest
+    .fn()
+    .mockImplementation((filePath) => filePath.endsWith('.jpg') || filePath.endsWith('.png')),
+  isVideoFile: jest.fn().mockImplementation((filePath) => filePath.endsWith('.mp4')),
+  isAudioFile: jest.fn().mockImplementation((filePath) => filePath.endsWith('.mp3')),
+  isJavascriptFile: jest.fn().mockReturnValue(false),
+}));
+
 jest.mock('../src/util/functions/loadFunction', () => ({
   ...jest.requireActual('../src/util/functions/loadFunction'),
   loadFunction: jest.fn().mockImplementation((options) => {
@@ -1242,17 +1252,23 @@ describe('evaluator', () => {
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
-    expect(summary.results.length).toBe(1);
+    expect(summary.results).toHaveLength(1);
     const result = summary.results[0];
-    const promptMetrics = evalRecord.prompts.find(
-      (p) => p.provider === result.provider.id,
-    )?.metrics;
 
-    expect(promptMetrics).toBeDefined();
-    if (promptMetrics) {
-      expect(promptMetrics.namedScoresCount['Accuracy']).toBe(2);
-      expect(promptMetrics.namedScoresCount['Completeness']).toBe(1);
-    }
+    // Use toMatchObject pattern to avoid conditional expects
+    expect(evalRecord.prompts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          provider: result.provider.id,
+          metrics: expect.objectContaining({
+            namedScoresCount: expect.objectContaining({
+              Accuracy: 2,
+              Completeness: 1,
+            }),
+          }),
+        }),
+      ]),
+    );
   });
 
   it('merges metadata correctly for regular tests', async () => {
@@ -1771,6 +1787,7 @@ describe('evaluator', () => {
             }),
           }),
         ]),
+        results: expect.any(Array),
         suite: testSuite,
       }),
     );
@@ -2121,7 +2138,6 @@ describe('evaluator', () => {
       id: 'mock-eval-id',
       results: [],
       prompts: [],
-      resultsCount: 0,
       persisted: false,
       config: {},
       addResult: mockAddResult,

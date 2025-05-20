@@ -1,3 +1,11 @@
+# standalone-assertions (Standalone Assertions)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example standalone-assertions
+```
+
 To get started, have a look at `asserts.yaml`
 
 If you use a model-graded eval, you must set your OPENAI_API_KEY environment variable or override the provider (see https://promptfoo.dev/docs/configuration/expected-outputs/model-graded/#overriding-the-llm-grader).

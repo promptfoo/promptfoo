@@ -671,7 +671,7 @@ export const providerMap: ProviderFactory[] = [
       const modelName = splits.slice(2).join(':');
 
       if (modelType === 'chat') {
-        return new OpenAiChatCompletionProvider(modelName || 'gpt-4o-mini', providerOptions);
+        return new OpenAiChatCompletionProvider(modelName || 'gpt-4.1-2025-04-14', providerOptions);
       }
       if (modelType === 'embedding' || modelType === 'embeddings') {
         return new OpenAiEmbeddingProvider(modelName || 'text-embedding-3-large', providerOptions);
@@ -689,7 +689,7 @@ export const providerMap: ProviderFactory[] = [
         );
       }
       if (modelType === 'responses') {
-        return new OpenAiResponsesProvider(modelName || 'gpt-4o', providerOptions);
+        return new OpenAiResponsesProvider(modelName || 'gpt-4.1-2025-04-14', providerOptions);
       }
       if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType)) {
         return new OpenAiChatCompletionProvider(modelType, providerOptions);

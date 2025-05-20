@@ -19,7 +19,7 @@ To reference prompts in Langfuse:
      - 'langfuse://foo-bar-prompt:3'
 
    providers:
-     - openai:gpt-4o-mini
+     - openai:gpt-4.1-mini
 
    tests:
      - vars:
