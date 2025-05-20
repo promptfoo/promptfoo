@@ -589,18 +589,15 @@ export async function synthesize({
     }
   });
 
-  plugins = [...new Set(expandedPlugins)]
-    .filter((p) => !Object.keys(categories).includes(p.id))
-    .sort();
-
-  // Validate all plugins upfront
-  logger.debug('Validating plugins...');
-  for (const plugin of plugins) {
+  const validatePlugin: (plugin: (typeof plugins)[0]) => boolean = (plugin) => {
+    if (Object.keys(categories).includes(plugin.id)) {
+      return false;
+    }
     const registeredPlugin = Plugins.find((p) => p.key === plugin.id);
+
     if (!registeredPlugin) {
       if (!plugin.id.startsWith('file://')) {
         logger.debug(`Plugin ${plugin.id} not registered, skipping validation`);
-        continue;
       }
     } else if (registeredPlugin.validate) {
       try {
@@ -609,10 +606,17 @@ export async function synthesize({
           ...resolvePluginConfig(plugin.config),
         });
       } catch (error) {
-        throw new Error(`Validation failed for plugin ${plugin.id}: ${error}`);
+        logger.warn(`Validation failed for plugin ${plugin.id}: ${error}, skipping plugin.`);
+        return false;
       }
     }
-  }
+
+    return true;
+  };
+
+  // Validate all plugins upfront
+  logger.debug('Validating plugins...');
+  plugins = [...new Set(expandedPlugins)].filter(validatePlugin).sort();
 
   // Check API health before proceeding
   if (shouldGenerateRemote()) {
