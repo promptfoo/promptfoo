@@ -32,10 +32,10 @@ export const TargetPurposeDiscoveryRequestSchema = z.object({
   email: z.string(),
 });
 export const DiscoveredPurposeSchema = z.object({
-  purpose: z.string(),
-  limitations: z.string(),
-  user: z.string(),
-  tools: z.array(z.record(z.any())),
+  purpose: z.string().nullable(),
+  limitations: z.string().nullable(),
+  user: z.string().nullable(),
+  tools: z.array(z.record(z.any())).nullable(),
 });
 
 export const TargetPurposeDiscoveryResponseSchema = z.object({
