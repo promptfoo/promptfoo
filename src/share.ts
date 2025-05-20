@@ -5,13 +5,12 @@ import { URL } from 'url';
 import { getShareApiBaseUrl, getDefaultShareViewBaseUrl, getShareViewBaseUrl } from './constants';
 import { getEnvBool, getEnvInt, isCI, getEnvString } from './envars';
 import { fetchWithProxy } from './fetch';
-import { getAuthor, getUserEmail, setUserEmail } from './globalConfig/accounts';
+import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
 import logger from './logger';
 import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
-import type { SharedResults } from './types';
-import { cloudCanAcceptChunkedResults, makeRequest as makeCloudRequest } from './util/cloud';
+import { makeRequest as makeCloudRequest } from './util/cloud';
 
 export interface ShareDomainResult {
   domain: string;
@@ -61,37 +60,6 @@ export function determineShareDomain(eval_: Eval): ShareDomainResult {
 
   logger.debug(`Share domain determined: domain=${domain}, isPublic=${isPublicShare}`);
   return { domain, isPublicShare };
-}
-
-const VERSION_SUPPORTS_CHUNKS = '0.103.8';
-
-function isVersionGreaterOrEqual(a: string, b: string) {
-  return a.localeCompare(b, undefined, { numeric: true }) !== -1;
-}
-
-async function getTargetOpenSourceServerVersion(apiHost: string): Promise<string | undefined> {
-  const response = await fetchWithProxy(`${apiHost}/health`, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
-  if (!response.ok) {
-    logger.debug(`Failed to get server version from ${apiHost}/health: ${response.statusText}`);
-    return;
-  }
-  const { version } = await response.json();
-  return version;
-}
-
-async function targetOpenSourceServerCanAcceptChunks(apiHost: string): Promise<boolean> {
-  const version = await getTargetOpenSourceServerVersion(apiHost);
-  return version != null && isVersionGreaterOrEqual(version, VERSION_SUPPORTS_CHUNKS);
-}
-
-async function targetHostCanUseNewResults(apiHost: string): Promise<boolean> {
-  const version = await getTargetOpenSourceServerVersion(apiHost);
-  return version != null;
 }
 
 // Helper functions
@@ -249,7 +217,7 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
     return evalId;
   } catch (e) {
     logger.error(`Upload failed: ${e}`);
-    console.error(e);
+
     if (evalId) {
       logger.info(`Upload failed, rolling back...`);
       await rollbackEval(url, evalId, headers);
@@ -258,32 +226,6 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
   } finally {
     progressBar.stop();
   }
-}
-
-async function sendEvalResults(evalRecord: Eval, url: string): Promise<string | null> {
-  await evalRecord.loadResults();
-  const numResults = await evalRecord.getResultsCount();
-  logger.debug(`Sending eval results to ${url} with ${numResults} results`);
-
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-  if (cloudConfig.isEnabled()) {
-    headers['Authorization'] = `Bearer ${cloudConfig.getApiKey()}`;
-  }
-
-  const response = await fetchWithProxy(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(evalRecord),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to send eval results to ${url}: ${response.statusText}`);
-  }
-
-  const evalId = (await response.json()).id;
-  return evalId;
 }
 
 /**
@@ -328,16 +270,12 @@ async function handleEmailCollection(evalRecord: Eval): Promise<void> {
 }
 
 async function getApiConfig(evalRecord: Eval): Promise<{
-  apiBaseUrl: string;
   url: string;
-  sendInChunks: boolean;
 }> {
   if (cloudConfig.isEnabled()) {
     const apiBaseUrl = cloudConfig.getApiHost();
     return {
-      apiBaseUrl,
       url: `${apiBaseUrl}/results`,
-      sendInChunks: await cloudCanAcceptChunkedResults(),
     };
   }
 
@@ -347,54 +285,8 @@ async function getApiConfig(evalRecord: Eval): Promise<{
       : getShareApiBaseUrl();
 
   return {
-    apiBaseUrl,
     url: `${apiBaseUrl}/api/eval`,
-    sendInChunks: await targetOpenSourceServerCanAcceptChunks(apiBaseUrl),
   };
-}
-
-async function handleLegacyResults(evalRecord: Eval, url: string): Promise<string | null> {
-  logger.debug(`Using legacy results format for sharing to ${url}`);
-  const summary = await evalRecord.toEvaluateSummary();
-  const table = await evalRecord.getTable();
-
-  const sharedResults: SharedResults = {
-    data: {
-      version: 3,
-      createdAt: new Date().toISOString(),
-      author: getAuthor(),
-      results: { ...summary, table, version: 2 },
-      config: evalRecord.config,
-    },
-  };
-
-  const headers = {
-    'Content-Type': 'application/json',
-    ...(cloudConfig.isEnabled() && { Authorization: `Bearer ${cloudConfig.getApiKey()}` }),
-  };
-
-  const response = await fetchWithProxy(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(sharedResults),
-  });
-
-  if (!response.ok) {
-    logger.error(
-      `Failed to create shareable URL (${url}): ${response.statusText}. Check your API endpoint configuration.`,
-    );
-    return null;
-  }
-
-  const responseJson = (await response.json()) as { id?: string; error?: string };
-  if (responseJson.error) {
-    logger.error(
-      `Failed to create shareable URL (${url}): ${responseJson.error}. Check your API endpoint configuration.`,
-    );
-    return null;
-  }
-
-  return responseJson.id ?? null;
 }
 
 /**
@@ -436,24 +328,15 @@ export async function createShareableUrl(
   await handleEmailCollection(evalRecord);
 
   // 2. Get API configuration
-  const { apiBaseUrl, url, sendInChunks } = await getApiConfig(evalRecord);
+  const { url } = await getApiConfig(evalRecord);
 
   // 3. Determine if we can use new results format
-  const canUseNewResults =
-    cloudConfig.isEnabled() || (await targetHostCanUseNewResults(apiBaseUrl));
+  const canUseNewResults = cloudConfig.isEnabled();
   logger.debug(
     `Sharing with ${url} canUseNewResults: ${canUseNewResults} Use old results: ${evalRecord.useOldResults()}`,
   );
 
-  // 4. Process and send results
-  let evalId: string | null;
-  if (!canUseNewResults || evalRecord.useOldResults()) {
-    evalId = await handleLegacyResults(evalRecord, url);
-  } else if (sendInChunks) {
-    evalId = await sendChunkedResults(evalRecord, url);
-  } else {
-    evalId = await sendEvalResults(evalRecord, url);
-  }
+  const evalId = await sendChunkedResults(evalRecord, url);
 
   if (!evalId) {
     return null;
