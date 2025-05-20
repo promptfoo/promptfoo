@@ -1,14 +1,5 @@
 import dedent from 'dedent';
-import type {
-  ApiProvider,
-  Assertion,
-  AssertionValue,
-  AtomicTestCase,
-  GradingResult,
-  ProviderResponse,
-  ResultSuggestion,
-  TestCase,
-} from '../../types';
+import type { ApiProvider, Assertion, TestCase } from '../../types';
 import { RedteamPluginBase, RedteamGraderBase } from './base';
 
 export const PLUGIN_ID = 'promptfoo:redteam:prompt-extraction';
