@@ -1,5 +1,5 @@
 import type { Cache } from 'cache-manager';
-import Replicate from 'replicate';
+import type Replicate from 'replicate';
 import { getCache, isCacheEnabled } from '../cache';
 import { getEnvString, getEnvFloat, getEnvInt } from '../envars';
 import logger from '../logger';
@@ -16,6 +16,16 @@ import type { EnvOverrides } from '../types/env';
 import { safeJsonStringify } from '../util/json';
 import { ellipsize } from '../util/text';
 import { parseChatPrompt } from './shared';
+
+async function getReplicateClient(): Promise<typeof Replicate> {
+  try {
+    return (await import('replicate')).default;
+  } catch (err) {
+    throw new Error(
+      `Failed to import Replicate. Make sure it is installed: npm install replicate. Error: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
 
 interface ReplicateCompletionOptions {
   apiKey?: string;
@@ -42,7 +52,6 @@ interface ReplicateCompletionOptions {
 export class ReplicateProvider implements ApiProvider {
   modelName: string;
   apiKey?: string;
-  replicate: any;
   config: ReplicateCompletionOptions;
 
   constructor(
@@ -98,7 +107,8 @@ export class ReplicateProvider implements ApiProvider {
       }
     }
 
-    const replicate = new Replicate({
+    const ReplicateClient = await getReplicateClient();
+    const replicate = new ReplicateClient({
       auth: this.apiKey,
       fetch: fetch as any,
     });
@@ -170,7 +180,7 @@ export class ReplicateProvider implements ApiProvider {
   }
 }
 
-const LLAMAGUARD_DESCRIPTIONS: { [key: string]: string } = {
+export const LLAMAGUARD_DESCRIPTIONS: { [key: string]: string } = {
   S1: 'Violent Crimes',
   S2: 'Non-Violent Crimes',
   S3: 'Sex Crimes',
@@ -214,7 +224,8 @@ export class ReplicateModerationProvider
       }
     }
 
-    const replicate = new Replicate({
+    const ReplicateClient = await getReplicateClient();
+    const replicate = new ReplicateClient({
       auth: this.apiKey,
       fetch: fetch as any,
     });
@@ -309,7 +320,8 @@ export class ReplicateImageProvider extends ReplicateProvider {
       );
     }
 
-    const replicate = new Replicate({
+    const ReplicateClient = await getReplicateClient();
+    const replicate = new ReplicateClient({
       auth: this.apiKey,
     });
 
@@ -361,5 +373,3 @@ export class ReplicateImageProvider extends ReplicateProvider {
     };
   }
 }
-
-export { LLAMAGUARD_DESCRIPTIONS };

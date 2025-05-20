@@ -1,4 +1,10 @@
-# Python Test Cases Example
+# python-test-cases (Python Test Cases Example)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example python-test-cases
+```
 
 This example demonstrates how to generate test cases using Python. It showcases three methods for generating test cases:
 

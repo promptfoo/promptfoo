@@ -1,0 +1,44 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Mathematical Reasoning with OpenAI Responses API
+prompts:
+  - |
+    Please solve this math problem step-by-step, showing all your work and explaining your reasoning at each step:
+    {{math_problem}}
+
+providers:
+  - id: openai:responses:o3-mini
+    label: o3-mini-reasoning
+    config:
+      max_output_tokens: 1000
+      reasoning_effort: 'high'
+
+  - id: openai:responses:o3
+    label: o3-reasoning
+    config:
+      max_output_tokens: 2000
+      reasoning_effort: 'high'
+
+  - id: openai:responses:o4-mini
+    label: o4-mini-reasoning
+    config:
+      max_output_tokens: 1000
+      reasoning_effort: 'medium'
+
+tests:
+  - vars:
+      math_problem: 'A bag contains 5 red marbles, 3 blue marbles, and 7 green marbles. Two marbles are drawn from the bag without replacement. What is the probability that both marbles are the same color? Express your answer as a fraction in its simplest form.'
+    assert:
+      - type: contains
+        value: '34/105'
+
+  - vars:
+      math_problem: 'Find all values of x that satisfy the equation: log₂(x+3) + log₂(x-1) = 3. Show all steps of your solution and verify your answers.'
+    assert:
+      - type: llm-rubric
+        value: 'Answer: -1 + 2√3'
+
+  - vars:
+      math_problem: 'In a right triangle, the hypotenuse is 13 cm, and one of the legs is 5 cm. A circle is inscribed in the triangle (touching all three sides). What is the radius of this inscribed circle? Show your complete solution with all geometric reasoning.'
+    assert:
+      - type: contains
+        value: '2 cm'

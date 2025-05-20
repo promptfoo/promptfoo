@@ -35,7 +35,7 @@ providers:
 
 tests:
   - vars:
-      model: 'gpt-4o-mini'
+      model: 'gpt-4.1-mini'
       language: 'French'
 ```
 
@@ -74,6 +74,7 @@ Here's an example of how to use the raw HTTP request feature:
 providers:
   - id: https
     config:
+      useHttps: true
       request: |
         POST /v1/completions HTTP/1.1
         Host: api.example.com
@@ -91,8 +92,9 @@ providers:
 In this example:
 
 1. The `request` property contains a raw HTTP request, including the method, path, headers, and body.
-2. You can use template variables like `{{api_key}}` and `{{prompt}}` within the raw request. These will be replaced with actual values when the request is sent.
-3. The `transformResponse` property is used to extract the desired information from the JSON response.
+2. The `useHttps` property is set to `true`, so the request will be sent over HTTPS.
+3. You can use template variables like `{{api_key}}` and `{{prompt}}` within the raw request. These will be replaced with actual values when the request is sent.
+4. The `transformResponse` property is used to extract the desired information from the JSON response.
 
 You can also load the raw request from an external file using the `file://` prefix:
 
@@ -141,7 +143,7 @@ tests:
         - role: 'assistant'
           content: 'baz'
       // highlight-end
-      model: 'gpt-4o-mini'
+      model: 'gpt-4.1-mini'
       language: 'French'
 ```
 
@@ -286,7 +288,7 @@ Extracts the message content from this response:
   "id": "chatcmpl-abc123",
   "object": "chat.completion",
   "created": 1677858242,
-  "model": "gpt-4o-mini",
+  "model": "gpt-4.1-mini",
   "usage": {
     "prompt_tokens": 13,
     "completion_tokens": 7,
@@ -356,22 +358,92 @@ This expression will be evaluated with three variables available:
 
 #### Function parser
 
-When using promptfoo as a Node.js library, you can provide a function as the response parser:
+When using promptfoo as a Node.js library, you can provide a function as the response. You may return a string or an object of type `ProviderResponse`.
+
+parser:
 
 ```javascript
 {
   providers: [{
     id: 'https',
     config: {
-      url: 'https://example.com/generate',
+      url: 'https://example.com/generate_response',
       transformResponse: (json, text) => {
-        // Custom parsing logic
+        // Custom parsing logic that returns string
         return json.choices[0].message.content;
+      },
+    }
+  },
+  {
+    id: 'https',
+    config: {
+      url: 'https://example.com/generate_with_tokens',
+      transformResponse: (json, text) => {
+        // Custom parsing logic that returns object
+        return {
+          output: json.output,
+          tokenUsage: {
+            prompt: json.usage.input_tokens,
+            completion: json.usage.output_tokens,
+            total: json.usage.input_tokens + json.usage.output_tokens,
+          }
+        }
       },
     }
   }],
 }
 ```
+
+<details>
+<summary>Type definition</summary>
+
+```typescript
+interface ProviderResponse {
+  cached?: boolean;
+  cost?: number;
+  error?: string;
+  logProbs?: number[];
+  metadata?: {
+    redteamFinalPrompt?: string;
+    [key: string]: any;
+  };
+  raw?: string | any;
+  output?: string | any;
+  tokenUsage?: TokenUsage;
+  isRefusal?: boolean;
+  sessionId?: string;
+  guardrails?: GuardrailResponse;
+  audio?: {
+    id?: string;
+    expiresAt?: number;
+    data?: string; // base64 encoded audio data
+    transcript?: string;
+    format?: string;
+  };
+}
+
+export type TokenUsage = z.infer<typeof TokenUsageSchema>;
+
+export const TokenUsageSchema = BaseTokenUsageSchema.extend({
+  assertions: BaseTokenUsageSchema.optional(),
+});
+
+export const BaseTokenUsageSchema = z.object({
+  // Core token counts
+  prompt: z.number().optional(),
+  completion: z.number().optional(),
+  cached: z.number().optional(),
+  total: z.number().optional(),
+
+  // Request metadata
+  numRequests: z.number().optional(),
+
+  // Detailed completion information
+  completionDetails: CompletionTokenDetailsSchema.optional(),
+});
+```
+
+</details>
 
 #### File-based parser
 
@@ -588,9 +660,13 @@ providers:
         # Optional fields with defaults shown
         signatureValidityMs: 300000 # 5 minutes
         signatureAlgorithm: 'SHA256'
-        signatureDataTemplate: '{{clientId}}{{timestamp}}\n' # \n is interpreted as a newline
+        signatureDataTemplate: '{{clientId}}{{timestamp}}\n' # \n is interpreted as a newline character
         signatureRefreshBufferMs: 30000 # Optional: custom refresh buffer
 ```
+
+:::note
+You can use environment variables throughout your HTTP provider configuration using the `{{env.VARIABLE_NAME}}` syntax.
+:::
 
 When signature authentication is enabled, the following variables are available for use in headers or other templated fields:
 

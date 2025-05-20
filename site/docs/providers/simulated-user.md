@@ -62,7 +62,7 @@ prompts:
   - file://agent_policy.txt
 
 providers:
-  - 'openai:gpt-4o-mini'
+  - 'openai:gpt-4.1-mini'
 
 defaultTest:
   provider:
@@ -108,6 +108,19 @@ When using promptfoo as a Node library, provide the equivalent configuration:
   ];
 }
 ```
+
+## Limitations
+
+The simulated user provider assumes that the target endpoint accepts messages in OpenAI chat format:
+
+```ts
+type Messages = {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}[];
+```
+
+The original prompt (agent_policy.txt in the example above) is sent as a system message.
 
 ## Debugging
 

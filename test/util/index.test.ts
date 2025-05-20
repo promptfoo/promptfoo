@@ -1,7 +1,7 @@
+import dotenv from 'dotenv';
 import * as fs from 'fs';
 import { globSync } from 'glob';
 import * as path from 'path';
-import cliState from '../../src/cliState';
 import { getDb } from '../../src/database';
 import * as googleSheets from '../../src/googleSheets';
 import Eval from '../../src/models/eval';
@@ -12,15 +12,16 @@ import {
   type TestCase,
 } from '../../src/types';
 import {
-  maybeLoadFromExternalFile,
   parsePathOrGlob,
   providerToIdentifier,
   readFilters,
   readOutput,
   resultIsForTestCase,
+  setupEnv,
   varsMatch,
   writeMultipleOutputs,
   writeOutput,
+  maybeLoadToolsFromExternalFile,
 } from '../../src/util';
 import { TestGrader } from './utils';
 
@@ -52,10 +53,11 @@ jest.mock('../../src/googleSheets', () => ({
   writeCsvToGoogleSheet: jest.fn(),
 }));
 
-describe('maybeLoadFromExternalFile', () => {
-  const mockFileContent = 'test content';
-  const mockJsonContent = '{"key": "value"}';
-  const mockYamlContent = 'key: value';
+describe('maybeLoadToolsFromExternalFile', () => {
+  const mockFileContent = '{"name": "calculator", "parameters": {"type": "object"}}';
+  const mockToolsArray = [
+    { type: 'function', function: { name: 'calculator', parameters: { type: 'object' } } },
+  ];
 
   beforeEach(() => {
     jest.resetAllMocks();
@@ -63,112 +65,62 @@ describe('maybeLoadFromExternalFile', () => {
     jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
   });
 
-  it('should return the input if it is not a string', () => {
-    const input = { key: 'value' };
-    expect(maybeLoadFromExternalFile(input)).toBe(input);
+  it('should process tool objects directly', () => {
+    const tools = mockToolsArray;
+    const vars = { api_key: '123456' };
+    expect(maybeLoadToolsFromExternalFile(tools, vars)).toEqual(tools);
   });
 
-  it('should return the input if it does not start with "file://"', () => {
-    const input = 'not a file path';
-    expect(maybeLoadFromExternalFile(input)).toBe(input);
+  it('should load tools from external file', () => {
+    const tools = 'file://tools.json';
+    expect(maybeLoadToolsFromExternalFile(tools)).toEqual(JSON.parse(mockFileContent));
   });
 
-  it('should throw an error if the file does not exist', () => {
-    jest.mocked(fs.existsSync).mockReturnValue(false);
-    expect(() => maybeLoadFromExternalFile('file://nonexistent.txt')).toThrow(
-      'File does not exist',
-    );
+  it('should render variables in tools object', () => {
+    const tools = [
+      {
+        type: 'function',
+        function: {
+          name: 'calculator',
+          parameters: { type: 'object' },
+          apiKey: '{{ api_key }}',
+        },
+      },
+    ];
+    const vars = { api_key: '123456' };
+
+    const expected = [
+      {
+        type: 'function',
+        function: {
+          name: 'calculator',
+          parameters: { type: 'object' },
+          apiKey: '123456',
+        },
+      },
+    ];
+
+    expect(maybeLoadToolsFromExternalFile(tools, vars)).toEqual(expected);
   });
 
-  it('should return the file contents for a non-JSON, non-YAML file', () => {
-    expect(maybeLoadFromExternalFile('file://test.txt')).toBe(mockFileContent);
+  it('should render variables and load from external file', () => {
+    const tools = 'file://{{ file_path }}.json';
+    const vars = { file_path: 'tools' };
+
+    maybeLoadToolsFromExternalFile(tools, vars);
+
+    // Should resolve the file path with variables first
+    expect(fs.existsSync).toHaveBeenCalledWith(expect.stringContaining('tools.json'));
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('tools.json'), 'utf8');
   });
 
-  it('should parse and return JSON content for a .json file', () => {
-    jest.mocked(fs.readFileSync).mockReturnValue(mockJsonContent);
-    expect(maybeLoadFromExternalFile('file://test.json')).toEqual({ key: 'value' });
-  });
+  it('should handle array of file paths', () => {
+    const tools = ['file://tools1.json', 'file://tools2.json'];
 
-  it('should parse and return YAML content for a .yaml file', () => {
-    jest.mocked(fs.readFileSync).mockReturnValue(mockYamlContent);
-    expect(maybeLoadFromExternalFile('file://test.yaml')).toEqual({ key: 'value' });
-  });
+    maybeLoadToolsFromExternalFile(tools);
 
-  it('should parse and return YAML content for a .yml file', () => {
-    jest.mocked(fs.readFileSync).mockReturnValue(mockYamlContent);
-    expect(maybeLoadFromExternalFile('file://test.yml')).toEqual({ key: 'value' });
-  });
-
-  it('should use basePath when resolving file paths', () => {
-    const basePath = '/base/path';
-    cliState.basePath = basePath;
-    jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
-
-    maybeLoadFromExternalFile('file://test.txt');
-
-    const expectedPath = path.resolve(basePath, 'test.txt');
-    expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
-    expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
-
-    cliState.basePath = undefined;
-  });
-
-  it('should handle relative paths correctly', () => {
-    const basePath = './relative/path';
-    cliState.basePath = basePath;
-    jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
-
-    maybeLoadFromExternalFile('file://test.txt');
-
-    const expectedPath = path.resolve(basePath, 'test.txt');
-    expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
-    expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
-
-    cliState.basePath = undefined;
-  });
-
-  it('should handle a path with environment variables in Nunjucks template', () => {
-    process.env.TEST_ROOT_PATH = '/root/dir';
-    const input = 'file://{{ env.TEST_ROOT_PATH }}/test.txt';
-
-    jest.mocked(fs.existsSync).mockReturnValue(true);
-
-    const expectedPath = path.resolve(`${process.env.TEST_ROOT_PATH}/test.txt`);
-    maybeLoadFromExternalFile(input);
-
-    expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
-    expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
-
-    delete process.env.TEST_ROOT_PATH;
-  });
-
-  it('should ignore basePath when file path is absolute', () => {
-    const basePath = '/base/path';
-    cliState.basePath = basePath;
-    jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
-
-    maybeLoadFromExternalFile('file:///absolute/path/test.txt');
-
-    const expectedPath = path.resolve('/absolute/path/test.txt');
-    expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
-    expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
-
-    cliState.basePath = undefined;
-  });
-
-  it('should handle list of paths', () => {
-    const basePath = './relative/path';
-    cliState.basePath = basePath;
-    jest.mocked(fs.readFileSync).mockReturnValue(mockJsonContent);
-
-    maybeLoadFromExternalFile(['file://test1.txt', 'file://test2.txt', 'file://test3.txt']);
-
-    expect(fs.existsSync).toHaveBeenCalledTimes(3);
-    expect(fs.existsSync).toHaveBeenNthCalledWith(1, path.resolve(basePath, 'test1.txt'));
-    expect(fs.existsSync).toHaveBeenNthCalledWith(2, path.resolve(basePath, 'test2.txt'));
-    expect(fs.existsSync).toHaveBeenNthCalledWith(3, path.resolve(basePath, 'test3.txt'));
-
-    cliState.basePath = undefined;
+    expect(fs.existsSync).toHaveBeenCalledTimes(2);
+    expect(fs.readFileSync).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -434,6 +386,16 @@ describe('util', () => {
       });
     });
 
+    it('should parse a Go file path with function name', () => {
+      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      expect(parsePathOrGlob('/base', 'script.go:CallApi')).toEqual({
+        extension: '.go',
+        functionName: 'CallApi',
+        isPathPattern: false,
+        filePath: path.join('/base', 'script.go'),
+      });
+    });
+
     it('should parse a directory path', () => {
       jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => true } as fs.Stats);
       expect(parsePathOrGlob('/base', 'dir')).toEqual({
@@ -463,6 +425,12 @@ describe('util', () => {
       });
       expect(() => parsePathOrGlob('/base', 'nonexistent.js')).toThrow('File does not exist');
       delete process.env.PROMPTFOO_STRICT_FILES;
+    });
+
+    it('should properly test file existence when function name in the path', () => {
+      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      parsePathOrGlob('/base', 'script.py:myFunction');
+      expect(fs.statSync).toHaveBeenCalledWith(path.join('/base', 'script.py'));
     });
 
     it('should return empty extension for files without extension', () => {
@@ -599,22 +567,109 @@ describe('util', () => {
       });
     });
 
-    describe('Grader', () => {
-      it('should have an id and callApi attributes', async () => {
-        const Grader = new TestGrader();
-        expect(Grader.id()).toBe('TestGradingProvider');
-        await expect(Grader.callApi()).resolves.toEqual({
-          output: JSON.stringify({
-            pass: true,
-            reason: 'Test grading output',
-          }),
-          tokenUsage: {
-            completion: 5,
-            prompt: 5,
-            total: 10,
-          },
-        });
+    it('should handle file:// prefix with Go function', () => {
+      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      expect(parsePathOrGlob('/base', 'file://script.go:CallApi')).toEqual({
+        extension: '.go',
+        functionName: 'CallApi',
+        isPathPattern: false,
+        filePath: path.join('/base', 'script.go'),
       });
     });
+
+    it('should handle file:// prefix with absolute path and Go function', () => {
+      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      expect(parsePathOrGlob('/base', 'file:///absolute/path/script.go:CallApi')).toEqual({
+        extension: '.go',
+        functionName: 'CallApi',
+        isPathPattern: false,
+        filePath: expect.stringMatching(/^[/\\]absolute[/\\]path[/\\]script\.go$/),
+      });
+    });
+  });
+
+  describe('Grader', () => {
+    it('should have an id and callApi attributes', async () => {
+      const Grader = new TestGrader();
+      expect(Grader.id()).toBe('TestGradingProvider');
+      await expect(Grader.callApi()).resolves.toEqual({
+        output: JSON.stringify({
+          pass: true,
+          reason: 'Test grading output',
+        }),
+        tokenUsage: {
+          completion: 5,
+          prompt: 5,
+          total: 10,
+        },
+      });
+    });
+  });
+});
+
+describe('setupEnv', () => {
+  let originalEnv: typeof process.env;
+  let dotenvConfigSpy: jest.SpyInstance<
+    dotenv.DotenvConfigOutput,
+    [options?: dotenv.DotenvConfigOptions]
+  >;
+
+  beforeEach(() => {
+    originalEnv = { ...process.env };
+    // Ensure NODE_ENV is not set at the start of each test
+    delete process.env.NODE_ENV;
+    // Spy on dotenv.config to verify it's called with the right parameters
+    dotenvConfigSpy = jest.spyOn(dotenv, 'config').mockImplementation(() => ({ parsed: {} }));
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+    jest.resetAllMocks();
+  });
+
+  it('should call dotenv.config without parameters when envPath is undefined', () => {
+    setupEnv(undefined);
+
+    expect(dotenvConfigSpy).toHaveBeenCalledTimes(1);
+    expect(dotenvConfigSpy).toHaveBeenCalledWith();
+  });
+
+  it('should call dotenv.config with path and override=true when envPath is specified', () => {
+    const testEnvPath = '.env.test';
+
+    setupEnv(testEnvPath);
+
+    expect(dotenvConfigSpy).toHaveBeenCalledTimes(1);
+    expect(dotenvConfigSpy).toHaveBeenCalledWith({
+      path: testEnvPath,
+      override: true,
+    });
+  });
+
+  it('should load environment variables with override when specified env file has conflicting values', () => {
+    // Mock dotenv.config to simulate loading variables
+    dotenvConfigSpy.mockImplementation((options?: dotenv.DotenvConfigOptions) => {
+      if (options?.path === '.env.production') {
+        if (options.override) {
+          process.env.NODE_ENV = 'production';
+        } else if (!process.env.NODE_ENV) {
+          process.env.NODE_ENV = 'production';
+        }
+      } else {
+        // Default .env file
+        if (!process.env.NODE_ENV) {
+          process.env.NODE_ENV = 'development';
+        }
+      }
+      return { parsed: {} };
+    });
+
+    // First load the default .env (setting NODE_ENV to 'development')
+    setupEnv(undefined);
+    expect(process.env.NODE_ENV).toBe('development');
+
+    // Then load .env.production with override (should change NODE_ENV to 'production')
+    setupEnv('.env.production');
+    expect(process.env.NODE_ENV).toBe('production');
   });
 });

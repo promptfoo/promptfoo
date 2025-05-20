@@ -1,9 +1,12 @@
+import { REDTEAM_MEMORY_POISONING_PLUGIN_ID } from './plugins/agentic/constants';
+import { MemoryPoisoningPluginGrader } from './plugins/agentic/memoryPoisoning';
 import { AsciiSmugglingGrader } from './plugins/asciiSmuggling';
 import type { RedteamGraderBase } from './plugins/base';
 import { BeavertailsGrader } from './plugins/beavertails';
 import { BflaGrader } from './plugins/bfla';
 import { BolaGrader } from './plugins/bola';
 import { CompetitorsGrader } from './plugins/competitors';
+import { CcaGrader } from './plugins/contextComplianceAttack';
 import { ContractsGrader } from './plugins/contracts';
 import { CrossSessionLeakGrader } from './plugins/crossSessionLeak';
 import { DebugAccessGrader } from './plugins/debugAccess';
@@ -16,6 +19,7 @@ import {
   ChildExploitationGrader,
   CopyrightViolationGrader,
   CybercrimeGrader,
+  GenderBiasGrader,
   GraphicContentGrader,
   HarmfulGrader,
   HarmfulPrivacyGrader,
@@ -38,8 +42,10 @@ import { HijackingGrader } from './plugins/hijacking';
 import { ImitationGrader } from './plugins/imitation';
 import { IndirectPromptInjectionGrader } from './plugins/indirectPromptInjection';
 import { IntentGrader } from './plugins/intent';
+import { MCPPluginGrader } from './plugins/mcp';
 import { OverrelianceGrader } from './plugins/overreliance';
 import { PiiGrader } from './plugins/pii';
+import { PlinyGrader } from './plugins/pliny';
 import { PolicyViolationGrader } from './plugins/policy';
 import { PoliticsGrader } from './plugins/politics';
 import { PromptExtractionGrader } from './plugins/promptExtraction';
@@ -50,13 +56,20 @@ import { ReligionGrader } from './plugins/religion';
 import { ShellInjectionGrader } from './plugins/shellInjection';
 import { SqlInjectionGrader } from './plugins/sqlInjection';
 import { SsrfGrader } from './plugins/ssrf';
+import { ToolDiscoveryGrader } from './plugins/toolDiscovery';
+import { ToolDiscoveryMultiTurnGrader } from './plugins/toolDiscoveryMultiTurn';
+import { UnsafeBenchGrader } from './plugins/unsafebench';
 import type { RedteamAssertionTypes } from './types';
 
 export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
+  [REDTEAM_MEMORY_POISONING_PLUGIN_ID]: new MemoryPoisoningPluginGrader(),
+  'promptfoo:redteam:mcp': new MCPPluginGrader(),
   'promptfoo:redteam:ascii-smuggling': new AsciiSmugglingGrader(),
   'promptfoo:redteam:beavertails': new BeavertailsGrader(),
+  'promptfoo:redteam:bias:gender': new GenderBiasGrader(),
   'promptfoo:redteam:bfla': new BflaGrader(),
   'promptfoo:redteam:bola': new BolaGrader(),
+  'promptfoo:redteam:cca': new CcaGrader(),
   'promptfoo:redteam:competitors': new CompetitorsGrader(),
   'promptfoo:redteam:contracts': new ContractsGrader(),
   'promptfoo:redteam:cross-session-leak': new CrossSessionLeakGrader(),
@@ -64,8 +77,11 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:divergent-repetition': new DivergentRepetitionGrader(),
   'promptfoo:redteam:excessive-agency': new ExcessiveAgencyGrader(),
   'promptfoo:redteam:extra-information': new ExtraInformationGrader(),
+  'promptfoo:redteam:tool-discovery': new ToolDiscoveryGrader(),
+  'promptfoo:redteam:tool-discovery:multi-turn': new ToolDiscoveryMultiTurnGrader(),
   'promptfoo:redteam:hallucination': new HallucinationGrader(),
   'promptfoo:redteam:harmbench': new HarmbenchGrader(),
+  'promptfoo:redteam:harmful': new HarmfulGrader(),
   'promptfoo:redteam:harmful:chemical-biological-weapons': new HarmfulGrader(),
   'promptfoo:redteam:harmful:child-exploitation': new ChildExploitationGrader(),
   'promptfoo:redteam:harmful:copyright-violations': new CopyrightViolationGrader(),
@@ -92,29 +108,38 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:harmful:unsafe-practices': new UnsafePracticesGrader(),
   'promptfoo:redteam:harmful:violent-crime': new ViolentCrimeGrader(),
   'promptfoo:redteam:harmful:weapons:ied': new HarmfulGrader(),
-  'promptfoo:redteam:harmful': new HarmfulGrader(),
   'promptfoo:redteam:hijacking': new HijackingGrader(),
   'promptfoo:redteam:imitation': new ImitationGrader(),
   'promptfoo:redteam:indirect-prompt-injection': new IndirectPromptInjectionGrader(),
   'promptfoo:redteam:intent': new IntentGrader(),
   'promptfoo:redteam:overreliance': new OverrelianceGrader(),
-  'promptfoo:redteam:rag-document-exfiltration': new RagDocumentExfiltrationGrader(),
+  'promptfoo:redteam:pii': new PiiGrader(),
   'promptfoo:redteam:pii:api-db': new PiiGrader(),
   'promptfoo:redteam:pii:direct': new PiiGrader(),
   'promptfoo:redteam:pii:session': new PiiGrader(),
   'promptfoo:redteam:pii:social': new PiiGrader(),
-  'promptfoo:redteam:pii': new PiiGrader(),
+  'promptfoo:redteam:pliny': new PlinyGrader(),
   'promptfoo:redteam:policy': new PolicyViolationGrader(),
   'promptfoo:redteam:politics': new PoliticsGrader(),
   'promptfoo:redteam:prompt-extraction': new PromptExtractionGrader(),
+  'promptfoo:redteam:rag-document-exfiltration': new RagDocumentExfiltrationGrader(),
   'promptfoo:redteam:rbac': new RbacGrader(),
   'promptfoo:redteam:reasoning-dos': new ReasoningDosGrader(),
   'promptfoo:redteam:religion': new ReligionGrader(),
   'promptfoo:redteam:shell-injection': new ShellInjectionGrader(),
   'promptfoo:redteam:sql-injection': new SqlInjectionGrader(),
   'promptfoo:redteam:ssrf': new SsrfGrader(),
+  'promptfoo:redteam:unsafebench': new UnsafeBenchGrader(),
 };
 
 export function getGraderById(id: string): RedteamGraderBase | undefined {
-  return GRADERS[id as keyof typeof GRADERS];
+  // First try to get the exact grader
+  const grader = id in GRADERS ? GRADERS[id as keyof typeof GRADERS] : undefined;
+
+  // If not found but the ID starts with 'promptfoo:redteam:harmful', use the general harmful grader
+  if (!grader && id.startsWith('promptfoo:redteam:harmful')) {
+    return GRADERS['promptfoo:redteam:harmful'];
+  }
+
+  return grader;
 }

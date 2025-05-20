@@ -22,6 +22,7 @@ Here is the main structure of the promptfoo configuration file:
 | evaluateOptions.delay           | number                                                                                           | No       | Force the test runner to wait after each API call (milliseconds)                                                                                                                                            |
 | evaluateOptions.showProgressBar | boolean                                                                                          | No       | Whether to display the progress bar                                                                                                                                                                         |
 | extensions                      | string[]                                                                                         | No       | List of extension files to load. Each extension is a file path with a function name. Can be Python (.py) or JavaScript (.js) files. Supported hooks are 'beforeAll', 'afterAll', 'beforeEach', 'afterEach'. |
+| env                             | Record\<string, string \| number \| boolean\>                                                    | No       | Environment variables to set for the test run. These values will override existing environment variables. Can be used to set API keys and other configuration values needed by providers.                   |
 
 ### Test Case
 
@@ -175,6 +176,18 @@ These hooks provide powerful extensibility to your promptfoo evaluations, allowi
 
 ## Provider-related types
 
+### Guardrails
+
+GuardrailResponse is an object that represents the GuardrailResponse from a provider. It includes flags indicating if prompt or output failed guardrails.
+
+```typescript
+interface GuardrailResponse {
+  flagged?: boolean;
+  flaggedInput?: boolean;
+  flaggedOutput?: boolean;
+}
+```
+
 ### ProviderFunction
 
 A ProviderFunction is a function that takes a prompt as an argument and returns a Promise that resolves to a ProviderResponse. It allows you to define custom logic for calling an API.
@@ -195,7 +208,7 @@ interface ProviderOptions {
   id?: ProviderId;
   config?: any;
 
-  // A label is required when running a redteam
+  // A label is required when running a red team
   // It can be used to uniquely identify targets even if the provider id changes.
   label?: string;
 
@@ -207,18 +220,6 @@ interface ProviderOptions {
 
   // Sleep this long before each request
   delay?: number;
-}
-```
-
-### Guardrails
-
-GuardrailResponse is an object that represents the GuardrailResponse from a provider. It includes flags indicating if prompt or output failed guardrails.
-
-```typescript
-interface GuardrailResponse {
-  flagged?: boolean;
-  flaggedInput?: boolean;
-  flaggedOutput?: boolean;
 }
 ```
 
@@ -265,7 +266,7 @@ interface TestSuiteConfig {
   // Optional description of what you're trying to test
   description?: string;
 
-  // One or more LLM APIs to use, for example: openai:gpt-4o-mini, openai:gpt-4o, localai:chat:vicuna
+  // One or more LLM APIs to use, for example: openai:gpt-4.1-mini, openai:gpt-4.1, localai:chat:vicuna
   providers: ProviderId | ProviderFunction | (ProviderId | ProviderOptionsMap | ProviderOptions)[];
 
   // One or more prompts

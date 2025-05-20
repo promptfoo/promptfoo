@@ -13,17 +13,26 @@ import type {
   ResultSuggestion,
 } from '../../../src/types';
 import type { AtomicTestCase, GradingResult } from '../../../src/types';
-import { maybeLoadFromExternalFile } from '../../../src/util';
+import { maybeLoadFromExternalFile } from '../../../src/util/file';
 
 jest.mock('../../../src/matchers', () => ({
   matchesLlmRubric: jest.fn(),
 }));
 
-jest.mock('../../../src/util', () => ({
+jest.mock('../../../src/util/file', () => ({
   maybeLoadFromExternalFile: jest.fn(),
+  maybeLoadToolsFromExternalFile: jest.fn().mockImplementation((tools) => {
+    if (tools === 'file://tools.json') {
+      return [{ name: 'tool1' }, { name: 'tool2' }];
+    }
+    return tools;
+  }),
+  renderVarsInObject: jest.fn(),
 }));
 
 class TestPlugin extends RedteamPluginBase {
+  readonly id = 'test-plugin-id';
+
   protected async getTemplate(): Promise<string> {
     return 'Test template with {{ purpose }} for {{ n }} prompts';
   }
@@ -58,10 +67,12 @@ describe('RedteamPluginBase', () => {
         {
           vars: { testVar: 'another prompt' },
           assert: [{ type: 'contains', value: 'another prompt' }],
+          metadata: { pluginId: 'test-plugin-id' },
         },
         {
           vars: { testVar: 'test prompt' },
           assert: [{ type: 'contains', value: 'test prompt' }],
+          metadata: { pluginId: 'test-plugin-id' },
         },
       ]),
     );
@@ -87,8 +98,13 @@ describe('RedteamPluginBase', () => {
         {
           assert: [{ type: 'contains', value: 'another prompt' }],
           vars: { testVar: 'another prompt' },
+          metadata: { pluginId: 'test-plugin-id' },
         },
-        { assert: [{ type: 'contains', value: 'test prompt' }], vars: { testVar: 'test prompt' } },
+        {
+          assert: [{ type: 'contains', value: 'test prompt' }],
+          vars: { testVar: 'test prompt' },
+          metadata: { pluginId: 'test-plugin-id' },
+        },
       ]),
     );
   });
@@ -139,8 +155,16 @@ describe('RedteamPluginBase', () => {
 
     expect(result).toEqual(
       expect.arrayContaining([
-        { vars: { testVar: 'duplicate' }, assert: expect.any(Array) },
-        { vars: { testVar: 'unique' }, assert: expect.any(Array) },
+        {
+          vars: { testVar: 'duplicate' },
+          assert: expect.any(Array),
+          metadata: { pluginId: 'test-plugin-id' },
+        },
+        {
+          vars: { testVar: 'unique' },
+          assert: expect.any(Array),
+          metadata: { pluginId: 'test-plugin-id' },
+        },
       ]),
     );
     expect(result).toHaveLength(2);

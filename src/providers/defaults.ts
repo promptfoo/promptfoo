@@ -1,40 +1,25 @@
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import type { ApiProvider } from '../types';
+import type { ApiProvider, DefaultProviders } from '../types';
 import type { EnvOverrides } from '../types/env';
+import { getAnthropicProviders } from './anthropic/defaults';
+import { AzureChatCompletionProvider } from './azure/chat';
+import { AzureEmbeddingProvider } from './azure/embedding';
+import { AzureModerationProvider } from './azure/moderation';
+import { hasGoogleDefaultCredentials } from './google/util';
 import {
-  DefaultGradingProvider as AnthropicGradingProvider,
-  DefaultGradingJsonProvider as AnthropicGradingJsonProvider,
-  DefaultSuggestionsProvider as AnthropicSuggestionsProvider,
-  DefaultLlmRubricProvider as AnthropicLlmRubricProvider,
-} from './anthropic';
-import { AzureChatCompletionProvider, AzureEmbeddingProvider } from './azure';
+  DefaultEmbeddingProvider as GeminiEmbeddingProvider,
+  DefaultGradingProvider as GeminiGradingProvider,
+} from './google/vertex';
 import {
   DefaultEmbeddingProvider as OpenAiEmbeddingProvider,
   DefaultGradingJsonProvider as OpenAiGradingJsonProvider,
   DefaultGradingProvider as OpenAiGradingProvider,
-  DefaultSuggestionsProvider as OpenAiSuggestionsProvider,
   DefaultModerationProvider as OpenAiModerationProvider,
+  DefaultSuggestionsProvider as OpenAiSuggestionsProvider,
 } from './openai/defaults';
-import {
-  DefaultGradingProvider as GeminiGradingProvider,
-  DefaultEmbeddingProvider as GeminiEmbeddingProvider,
-} from './vertex';
-import { hasGoogleDefaultCredentials } from './vertexUtil';
-
-interface DefaultProviders {
-  datasetGenerationProvider: ApiProvider;
-  embeddingProvider: ApiProvider;
-  gradingJsonProvider: ApiProvider;
-  gradingProvider: ApiProvider;
-  llmRubricProvider?: ApiProvider;
-  moderationProvider: ApiProvider;
-  suggestionsProvider: ApiProvider;
-  synthesizeProvider: ApiProvider;
-}
 
 const COMPLETION_PROVIDERS: (keyof DefaultProviders)[] = [
-  'datasetGenerationProvider',
   'gradingJsonProvider',
   'gradingProvider',
   'llmRubricProvider',
@@ -60,10 +45,12 @@ export async function setDefaultEmbeddingProviders(provider: ApiProvider) {
 }
 
 export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultProviders> {
-  const preferAnthropic =
-    !getEnvString('OPENAI_API_KEY') &&
-    !env?.OPENAI_API_KEY &&
-    (getEnvString('ANTHROPIC_API_KEY') || env?.ANTHROPIC_API_KEY);
+  // Check for provider credentials
+  const hasAnthropicCredentials = Boolean(
+    getEnvString('ANTHROPIC_API_KEY') || env?.ANTHROPIC_API_KEY,
+  );
+  const hasOpenAiCredentials = Boolean(getEnvString('OPENAI_API_KEY') || env?.OPENAI_API_KEY);
+  const preferAnthropic = !hasOpenAiCredentials && hasAnthropicCredentials;
 
   const hasAzureApiKey =
     getEnvString('AZURE_OPENAI_API_KEY') ||
@@ -103,7 +90,6 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     });
 
     providers = {
-      datasetGenerationProvider: azureProvider,
       embeddingProvider: azureEmbeddingProvider,
       gradingJsonProvider: azureProvider,
       gradingProvider: azureProvider,
@@ -113,15 +99,15 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     };
   } else if (preferAnthropic) {
     logger.debug('Using Anthropic default providers');
+    const anthropicProviders = getAnthropicProviders(env);
     providers = {
-      datasetGenerationProvider: AnthropicGradingProvider,
       embeddingProvider: OpenAiEmbeddingProvider, // TODO(ian): Voyager instead?
-      gradingJsonProvider: AnthropicGradingJsonProvider,
-      gradingProvider: AnthropicGradingProvider,
-      llmRubricProvider: AnthropicLlmRubricProvider,
+      gradingJsonProvider: anthropicProviders.gradingJsonProvider,
+      gradingProvider: anthropicProviders.gradingProvider,
+      llmRubricProvider: anthropicProviders.llmRubricProvider,
       moderationProvider: OpenAiModerationProvider,
-      suggestionsProvider: AnthropicSuggestionsProvider,
-      synthesizeProvider: AnthropicGradingJsonProvider,
+      suggestionsProvider: anthropicProviders.suggestionsProvider,
+      synthesizeProvider: anthropicProviders.synthesizeProvider,
     };
   } else if (
     !getEnvString('OPENAI_API_KEY') &&
@@ -130,7 +116,6 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
   ) {
     logger.debug('Using Google default providers');
     providers = {
-      datasetGenerationProvider: GeminiGradingProvider,
       embeddingProvider: GeminiEmbeddingProvider,
       gradingJsonProvider: GeminiGradingProvider,
       gradingProvider: GeminiGradingProvider,
@@ -141,7 +126,6 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
   } else {
     logger.debug('Using OpenAI default providers');
     providers = {
-      datasetGenerationProvider: OpenAiGradingProvider,
       embeddingProvider: OpenAiEmbeddingProvider,
       gradingJsonProvider: OpenAiGradingJsonProvider,
       gradingProvider: OpenAiGradingProvider,
@@ -150,6 +134,12 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       synthesizeProvider: OpenAiGradingJsonProvider,
     };
   }
+
+  // If Azure Content Safety endpoint is available, use it for moderation
+  if (getEnvString('AZURE_CONTENT_SAFETY_ENDPOINT') || env?.AZURE_CONTENT_SAFETY_ENDPOINT) {
+    providers.moderationProvider = new AzureModerationProvider('text-content-safety', { env });
+  }
+
   if (defaultCompletionProvider) {
     logger.debug(`Overriding default completion provider: ${defaultCompletionProvider.id()}`);
     COMPLETION_PROVIDERS.forEach((provider) => {

@@ -58,7 +58,7 @@ Like other model-graded assertions, you can override the default grader:
 1. Using the CLI:
 
    ```sh
-   promptfoo eval --grader openai:gpt-4o-mini
+   promptfoo eval --grader openai:gpt-4.1-mini
    ```
 
 2. Using test options:
@@ -66,7 +66,7 @@ Like other model-graded assertions, you can override the default grader:
    ```yaml
    defaultTest:
      options:
-       provider: openai:gpt-4o-mini
+       provider: openai:gpt-4.1-mini
    ```
 
 3. Using assertion-level override:
@@ -74,7 +74,7 @@ Like other model-graded assertions, you can override the default grader:
    assert:
      - type: context-relevance
        threshold: 0.8
-       provider: openai:gpt-4o-mini
+       provider: openai:gpt-4.1-mini
    ```
 
 ### Customizing the Prompt

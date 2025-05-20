@@ -37,6 +37,7 @@ type TestCase = {
 export type RedteamPluginObject = ConfigurableObject &
   WithNumTests & {
     severity?: Severity;
+    config?: PluginConfig;
   };
 export type RedteamPlugin = string | RedteamPluginObject;
 
@@ -71,6 +72,7 @@ type CommonOptions = {
   delay?: number;
   remote?: boolean;
   sharing?: boolean;
+  excludeTargetOutputFromAgenticAttackGeneration?: boolean;
 };
 
 // NOTE: Remember to edit validators/redteam.ts:RedteamGenerateOptionsSchema if you edit this schema
@@ -94,6 +96,7 @@ export interface RedteamCliGenerateOptions extends CommonOptions {
 export interface RedteamFileConfig extends CommonOptions {
   entities?: string[];
   severity?: Record<Plugin, Severity>;
+  excludeTargetOutputFromAgenticAttackGeneration?: boolean;
 }
 
 export interface SynthesizeOptions extends CommonOptions {
@@ -114,6 +117,7 @@ export type RedteamAssertionTypes = `promptfoo:redteam:${string}`;
 export interface RedteamRunOptions {
   id?: string;
   config?: string;
+  target?: string;
   output?: string;
   cache?: boolean;
   envPath?: string;

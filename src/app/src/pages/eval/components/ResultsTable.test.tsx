@@ -1,16 +1,18 @@
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsTable from './ResultsTable';
-import { useStore } from './store';
+import { useResultsViewSettingsStore, useStore } from './store';
 
 vi.mock('./store', () => ({
   useStore: vi.fn(() => ({
     config: {},
     evalId: '123',
-    inComparisonMode: false,
     setTable: vi.fn(),
     table: null,
     version: 4,
+  })),
+  useResultsViewSettingsStore: vi.fn(() => ({
+    inComparisonMode: false,
     renderMarkdown: true,
   })),
 }));
@@ -208,11 +210,15 @@ describe('ResultsTable Metrics Display', () => {
       vi.mocked(useStore).mockImplementation(() => ({
         config: {},
         evalId: '123',
-        inComparisonMode: false,
+
         setTable: vi.fn(),
         table: mockTableWithObjectVar,
         version: 4,
+      }));
+
+      vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
         renderMarkdown: false,
+        inComparisonMode: false,
       }));
 
       renderWithProviders(<ResultsTable {...defaultProps} />);
@@ -228,11 +234,14 @@ describe('ResultsTable Metrics Display', () => {
       vi.mocked(useStore).mockImplementation(() => ({
         config: {},
         evalId: '123',
-        inComparisonMode: false,
         setTable: vi.fn(),
         table: mockTableWithLongVar,
         version: 4,
+      }));
+
+      vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
         renderMarkdown: true,
+        inComparisonMode: false,
       }));
 
       renderWithProviders(<ResultsTable {...defaultProps} maxTextLength={50} />);
@@ -259,6 +268,133 @@ describe('ResultsTable Metrics Display', () => {
 
       const element = screen.getByText('null');
       expect(element).toBeInTheDocument();
+    });
+  });
+});
+
+describe('ResultsTable Metadata Search', () => {
+  it('includes metadata in search', () => {
+    // Mock a row with metadata
+    const row = {
+      outputs: [
+        {
+          text: 'test output',
+          pass: true,
+          score: 1,
+          metadata: {
+            model: 'gpt-4',
+            temperature: 0.7,
+            custom_tag: 'important',
+          },
+          namedScores: {},
+        },
+      ],
+      test: {},
+      vars: [],
+    };
+
+    // Test that metadata is included in the searchable text
+    const vars = row.outputs.map((v) => `var=${v}`).join(' ');
+    const output = row.outputs[0];
+    const namedScores = output.namedScores || {};
+    const stringifiedOutput = `${output.text} ${Object.keys(namedScores)
+      .map((k) => `metric=${k}:${namedScores[k as keyof typeof namedScores]}`)
+      .join(' ')}`;
+
+    // Create metadata string
+    const metadataString = output.metadata
+      ? Object.entries(output.metadata)
+          .map(([key, value]) => {
+            const valueStr =
+              typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value);
+            return `metadata=${key}:${valueStr}`;
+          })
+          .join(' ')
+      : '';
+
+    const searchString = `${vars} ${stringifiedOutput} ${metadataString}`;
+
+    // Verify metadata is in the search string
+    expect(searchString).toContain('metadata=model:gpt-4');
+    expect(searchString).toContain('metadata=temperature:0.7');
+    expect(searchString).toContain('metadata=custom_tag:important');
+
+    // Verify we can match on it
+    expect(/metadata=model:gpt-4/i.test(searchString)).toBe(true);
+    expect(/metadata=model:gpt-3/i.test(searchString)).toBe(false);
+  });
+
+  it('includes complex nested metadata in search', () => {
+    // Mock a row with nested metadata
+    const row = {
+      outputs: [
+        {
+          text: 'test output',
+          pass: true,
+          score: 1,
+          metadata: {
+            nested: {
+              property: 'nested-value',
+              array: [1, 2, 3],
+            },
+          },
+          namedScores: {},
+        },
+      ],
+      test: {},
+      vars: [],
+    };
+
+    // Get the metadata string
+    const output = row.outputs[0];
+    const metadataString = output.metadata
+      ? Object.entries(output.metadata)
+          .map(([key, value]) => {
+            const valueStr =
+              typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value);
+            return `metadata=${key}:${valueStr}`;
+          })
+          .join(' ')
+      : '';
+
+    // Verify the nested object is included correctly
+    expect(metadataString).toContain('metadata=nested:{"property":"nested-value","array":[1,2,3]}');
+
+    // Verify we can match on the nested values
+    expect(/property":"nested-value/i.test(metadataString)).toBe(true);
+    expect(/\[1,2,3\]/i.test(metadataString)).toBe(true);
+    expect(/unknown/i.test(metadataString)).toBe(false);
+  });
+});
+
+describe('ResultsTable Row Navigation', () => {
+  it('clears row-id URL parameter when changing pages', () => {
+    const mockURL = new URL('http://localhost/?rowId=3');
+
+    const mockReplaceState = vi.fn();
+    const originalHistory = window.history;
+    Object.defineProperty(window, 'history', {
+      value: { ...originalHistory, replaceState: mockReplaceState },
+      configurable: true,
+      writable: true,
+    });
+
+    const clearRowIdFromUrl = () => {
+      const url = new URL(mockURL);
+      if (url.searchParams.has('rowId')) {
+        url.searchParams.delete('rowId');
+        window.history.replaceState({}, '', url);
+      }
+    };
+
+    clearRowIdFromUrl();
+
+    expect(mockReplaceState).toHaveBeenCalled();
+
+    Object.defineProperty(window, 'history', {
+      value: originalHistory,
+      configurable: true,
+      writable: true,
     });
   });
 });

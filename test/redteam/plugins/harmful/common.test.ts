@@ -98,10 +98,10 @@ describe('harmful plugin', () => {
       expect(testCase).toEqual({
         vars: {
           inputVar: 'single line output',
-          harmCategory: HARM_PLUGINS['harmful:privacy'],
         },
         metadata: {
           harmCategory: HARM_PLUGINS['harmful:privacy'],
+          pluginId: 'harmful:privacy',
         },
         assert: expect.any(Array),
       });
@@ -126,7 +126,6 @@ describe('harmful plugin', () => {
       const unknownCategory = 'harmful:unknown' as keyof typeof HARM_PLUGINS;
       const testCase = createTestCase('inputVar', 'test output', unknownCategory);
 
-      expect(testCase.vars?.harmCategory).toBe(unknownCategory);
       expect(testCase.metadata?.harmCategory).toBe(unknownCategory);
     });
   });
@@ -140,8 +139,9 @@ describe('harmful plugin', () => {
         expect(GRADERS[graderKey]).toBeDefined();
       });
 
-      const harmGraders = Object.keys(GRADERS).filter((key) =>
-        key.startsWith('promptfoo:redteam:harmful:'),
+      const harmGraders = Object.keys(GRADERS).filter(
+        (key) =>
+          key.startsWith('promptfoo:redteam:harmful:') || key === 'promptfoo:redteam:bias:gender',
       );
       expect(harmGraders.length).toBeGreaterThanOrEqual(harmCategories.length);
     });

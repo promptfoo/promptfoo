@@ -5,17 +5,55 @@ import { evalResultsTable } from '../database/tables';
 import { getEnvBool } from '../envars';
 import { hashPrompt } from '../prompts/utils';
 import type {
-  ApiProvider,
   AtomicTestCase,
   GradingResult,
   Prompt,
   ProviderOptions,
   ProviderResponse,
   ResultFailureReason,
+  ApiProvider,
 } from '../types';
 import { type EvaluateResult } from '../types';
+import { isApiProvider, isProviderOptions } from '../types/providers';
 import { safeJsonStringify } from '../util/json';
 import { getCurrentTimestamp } from '../util/time';
+
+// Removes circular references from the provider object and ensures consistent format
+export function sanitizeProvider(
+  provider: ApiProvider | ProviderOptions | string,
+): ProviderOptions {
+  try {
+    if (isApiProvider(provider)) {
+      return {
+        id: provider.id(),
+        label: provider.label,
+        ...(provider.config && {
+          config: JSON.parse(safeJsonStringify(provider.config) as string),
+        }),
+      };
+    }
+    if (isProviderOptions(provider)) {
+      return {
+        id: provider.id,
+        label: provider.label,
+        ...(provider.config && {
+          config: JSON.parse(safeJsonStringify(provider.config) as string),
+        }),
+      };
+    }
+    if (typeof provider === 'object' && provider) {
+      const providerObj = provider as { id: string | (() => string); label?: string; config?: any };
+      return {
+        id: typeof providerObj.id === 'function' ? providerObj.id() : providerObj.id,
+        label: providerObj.label,
+        ...(providerObj.config && {
+          config: JSON.parse(safeJsonStringify(providerObj.config) as string),
+        }),
+      };
+    }
+  } catch {}
+  return JSON.parse(safeJsonStringify(provider) as string);
+}
 
 export default class EvalResult {
   static async createFromEvaluateResult(
@@ -38,21 +76,14 @@ export default class EvalResult {
       failureReason,
       testCase,
     } = result;
+
     const args = {
       id: randomUUID(),
       evalId,
-      // Maybe stringify provider to avoid circular references
       testCase: {
         ...testCase,
         ...(testCase.provider && {
-          provider: (() => {
-            try {
-              if (typeof testCase.provider === 'object' && (testCase.provider as ApiProvider)?.id) {
-                return (testCase.provider as ApiProvider).id();
-              }
-            } catch {}
-            return JSON.parse(safeJsonStringify(testCase.provider) as string);
-          })(),
+          provider: sanitizeProvider(testCase.provider),
         }),
       },
       promptIdx: result.promptIdx,
@@ -65,7 +96,7 @@ export default class EvalResult {
       response: result.response || null,
       gradingResult: gradingResult || null,
       namedScores,
-      provider,
+      provider: sanitizeProvider(provider),
       latencyMs,
       cost,
       metadata,

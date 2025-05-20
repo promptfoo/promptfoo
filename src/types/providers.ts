@@ -21,8 +21,8 @@ interface AtomicTestCase {
   success?: boolean;
   score?: number;
   failureReason?: string;
+  metadata?: Record<string, any>;
 }
-
 export interface ProviderModerationResponse {
   error?: string;
   flags?: ModerationFlag[];
@@ -60,6 +60,10 @@ export interface CallApiContextParams {
 
 export interface CallApiOptionsParams {
   includeLogProbs?: boolean;
+  /**
+   * Signal that can be used to abort the request
+   */
+  abortSignal?: AbortSignal;
 }
 
 export interface ApiProvider {
@@ -73,6 +77,12 @@ export interface ApiProvider {
   label?: ProviderLabel;
   transform?: string;
   toJSON?: () => any;
+  /**
+   * Cleanup method called when a provider call is aborted (e.g., due to timeout)
+   * Providers should implement this to clean up any resources they might have
+   * allocated, such as file handles, network connections, etc.
+   */
+  cleanup?: () => void | Promise<void>;
 }
 
 export interface ApiEmbeddingProvider extends ApiProvider {
@@ -112,6 +122,13 @@ export interface ProviderResponse {
   isRefusal?: boolean;
   sessionId?: string;
   guardrails?: GuardrailResponse;
+  audio?: {
+    id?: string;
+    expiresAt?: number;
+    data?: string; // base64 encoded audio data
+    transcript?: string;
+    format?: string;
+  };
 }
 
 export interface ProviderEmbeddingResponse {
@@ -119,6 +136,11 @@ export interface ProviderEmbeddingResponse {
   error?: string;
   embedding?: number[];
   tokenUsage?: Partial<TokenUsage>;
+  metadata?: {
+    transformed?: boolean;
+    originalText?: string;
+    [key: string]: any;
+  };
 }
 
 export interface ProviderSimilarityResponse {
@@ -171,4 +193,17 @@ export interface ProviderTestResponse {
   providerResponse: ProviderResponse;
   unalignedProviderResult?: ProviderResponse;
   redteamProviderResult?: ProviderResponse;
+}
+
+/**
+ * Interface defining the default providers used by the application
+ */
+export interface DefaultProviders {
+  embeddingProvider: ApiProvider;
+  gradingJsonProvider: ApiProvider;
+  gradingProvider: ApiProvider;
+  llmRubricProvider?: ApiProvider;
+  moderationProvider: ApiProvider;
+  suggestionsProvider: ApiProvider;
+  synthesizeProvider: ApiProvider;
 }

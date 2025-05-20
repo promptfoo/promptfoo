@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { and, desc, eq, like, sql } from 'drizzle-orm';
+import { desc, eq, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
 import { getDb } from '../database';
 import {
@@ -26,6 +26,7 @@ import type {
   Prompt,
   ResultsFile,
   UnifiedConfig,
+  EvalSummary,
 } from '../types';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
@@ -63,11 +64,11 @@ export default class Eval {
   config: Partial<UnifiedConfig>;
   // If these are empty, you need to call loadResults(). We don't load them by default to save memory.
   results: EvalResult[];
-  resultsCount: number; // Fast way to get the number of results
   datasetId?: string;
   prompts: CompletedPrompt[];
   oldResults?: EvaluateSummaryV2;
   persisted: boolean;
+  _resultsLoaded: boolean = false;
 
   static async latest() {
     const db = getDb();
@@ -89,24 +90,22 @@ export default class Eval {
   static async findById(id: string) {
     const db = getDb();
 
-    const { evals, datasetResults } = await db.transaction(async (tx) => {
-      const evals = await tx.select().from(evalsTable).where(eq(evalsTable.id, id));
-      const datasetResults = await tx
-        .select({
-          datasetId: evalsToDatasetsTable.datasetId,
-        })
-        .from(evalsToDatasetsTable)
-        .where(eq(evalsToDatasetsTable.evalId, id))
-        .limit(1);
+    const evalData = db.select().from(evalsTable).where(eq(evalsTable.id, id)).all();
 
-      return { evals, datasetResults };
-    });
-
-    if (evals.length === 0) {
+    if (evalData.length === 0) {
       return undefined;
     }
-    const eval_ = evals[0];
 
+    const datasetResults = db
+      .select({
+        datasetId: evalsToDatasetsTable.datasetId,
+      })
+      .from(evalsToDatasetsTable)
+      .where(eq(evalsToDatasetsTable.evalId, id))
+      .limit(1)
+      .all();
+
+    const eval_ = evalData[0];
     const datasetId = datasetResults[0]?.datasetId;
 
     const evalInstance = new Eval(eval_.config, {
@@ -125,7 +124,7 @@ export default class Eval {
     return evalInstance;
   }
 
-  static async getMany(limit: number = DEFAULT_QUERY_LIMIT) {
+  static async getMany(limit: number = DEFAULT_QUERY_LIMIT): Promise<Eval[]> {
     const db = getDb();
     const evals = await db
       .select()
@@ -161,9 +160,11 @@ export default class Eval {
     const evalId = opts?.id || createEvalId(createdAt);
     const author = opts?.author || getUserEmail();
     const db = getDb();
-    await db.transaction(async (tx) => {
-      await tx
-        .insert(evalsTable)
+
+    const datasetId = sha256(JSON.stringify(config.tests || []));
+
+    db.transaction(() => {
+      db.insert(evalsTable)
         .values({
           id: evalId,
           createdAt: createdAt.getTime(),
@@ -178,8 +179,7 @@ export default class Eval {
         const label = prompt.label || prompt.display || prompt.raw;
         const promptId = hashPrompt(prompt);
 
-        await tx
-          .insert(promptsTable)
+        db.insert(promptsTable)
           .values({
             id: promptId,
             prompt: label,
@@ -187,8 +187,7 @@ export default class Eval {
           .onConflictDoNothing()
           .run();
 
-        await tx
-          .insert(evalsToPromptsTable)
+        db.insert(evalsToPromptsTable)
           .values({
             evalId,
             promptId,
@@ -198,18 +197,16 @@ export default class Eval {
 
         logger.debug(`Inserting prompt ${promptId}`);
       }
+
       if (opts?.results && opts.results.length > 0) {
-        const res = await tx
+        const res = db
           .insert(evalResultsTable)
           .values(opts.results?.map((r) => ({ ...r, evalId, id: randomUUID() })))
           .run();
         logger.debug(`Inserted ${res.changes} eval results`);
       }
 
-      // Record dataset relation
-      const datasetId = sha256(JSON.stringify(config.tests || []));
-      await tx
-        .insert(datasetsTable)
+      db.insert(datasetsTable)
         .values({
           id: datasetId,
           tests: config.tests,
@@ -217,8 +214,7 @@ export default class Eval {
         .onConflictDoNothing()
         .run();
 
-      await tx
-        .insert(evalsToDatasetsTable)
+      db.insert(evalsToDatasetsTable)
         .values({
           evalId,
           datasetId,
@@ -228,13 +224,11 @@ export default class Eval {
 
       logger.debug(`Inserting dataset ${datasetId}`);
 
-      // Record tags
       if (config.tags) {
         for (const [tagKey, tagValue] of Object.entries(config.tags)) {
           const tagId = sha256(`${tagKey}:${tagValue}`);
 
-          await tx
-            .insert(tagsTable)
+          db.insert(tagsTable)
             .values({
               id: tagId,
               name: tagKey,
@@ -243,8 +237,7 @@ export default class Eval {
             .onConflictDoNothing()
             .run();
 
-          await tx
-            .insert(evalsToTagsTable)
+          db.insert(evalsToTagsTable)
             .values({
               evalId,
               tagId,
@@ -256,6 +249,7 @@ export default class Eval {
         }
       }
     });
+
     return new Eval(config, { id: evalId, author: opts?.author, createdAt, persisted: true });
   }
 
@@ -277,10 +271,10 @@ export default class Eval {
     this.author = opts?.author;
     this.config = config;
     this.results = [];
-    this.resultsCount = 0;
     this.prompts = opts?.prompts || [];
     this.datasetId = opts?.datasetId;
     this.persisted = opts?.persisted || false;
+    this._resultsLoaded = false;
   }
 
   version() {
@@ -357,13 +351,23 @@ export default class Eval {
       // This is to avoid memory issues when running large evaluations
       this.results.push(newResult);
     }
-    this.resultsCount++;
   }
 
   async *fetchResultsBatched(batchSize: number = 100) {
     for await (const batch of EvalResult.findManyByEvalIdBatched(this.id, { batchSize })) {
       yield batch;
     }
+  }
+
+  async getResultsCount(): Promise<number> {
+    const db = getDb();
+    const result = db
+      .select({ count: sql<number>`count(*)` })
+      .from(evalResultsTable)
+      .where(eq(evalResultsTable.evalId, this.id))
+      .all();
+    const count = result[0]?.count ?? 0;
+    return Number(count);
   }
 
   async fetchResultsByTestIdx(testIdx: number) {
@@ -380,16 +384,16 @@ export default class Eval {
 
   async setResults(results: EvalResult[]) {
     this.results = results;
-    this.resultsCount = results.length;
     if (this.persisted) {
       const db = getDb();
       await db.insert(evalResultsTable).values(results.map((r) => ({ ...r, evalId: this.id })));
     }
+    this._resultsLoaded = true;
   }
 
   async loadResults() {
     this.results = await EvalResult.findManyByEvalId(this.id);
-    this.resultsCount = this.results.length;
+    this._resultsLoaded = true;
   }
 
   async getResults(): Promise<EvaluateResult[] | EvalResult[]> {
@@ -398,7 +402,13 @@ export default class Eval {
       return this.oldResults.results;
     }
     await this.loadResults();
+    this._resultsLoaded = true;
     return this.results;
+  }
+
+  clearResults() {
+    this.results = [];
+    this._resultsLoaded = false;
   }
 
   getStats(): EvaluateStats {
@@ -416,6 +426,12 @@ export default class Eval {
           reasoning: 0,
           acceptedPrediction: 0,
           rejectedPrediction: 0,
+        },
+        assertions: {
+          total: 0,
+          prompt: 0,
+          completion: 0,
+          cached: 0,
         },
       },
     };
@@ -436,6 +452,15 @@ export default class Eval {
         prompt.metrics?.tokenUsage.completionDetails?.acceptedPrediction || 0;
       stats.tokenUsage.completionDetails.rejectedPrediction! +=
         prompt.metrics?.tokenUsage.completionDetails?.rejectedPrediction || 0;
+
+      // Add assertion token usage from prompt metrics
+      if (prompt.metrics?.tokenUsage.assertions) {
+        stats.tokenUsage.assertions.total! += prompt.metrics.tokenUsage.assertions.total || 0;
+        stats.tokenUsage.assertions.prompt! += prompt.metrics.tokenUsage.assertions.prompt || 0;
+        stats.tokenUsage.assertions.completion! +=
+          prompt.metrics.tokenUsage.assertions.completion || 0;
+        stats.tokenUsage.assertions.cached! += prompt.metrics.tokenUsage.assertions.cached || 0;
+      }
     }
 
     return stats;
@@ -491,59 +516,83 @@ export default class Eval {
 
   async delete() {
     const db = getDb();
-    await db.transaction(() => {
+    db.transaction(() => {
       db.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, this.id)).run();
       db.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, this.id)).run();
       db.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, this.id)).run();
-
       db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, this.id)).run();
       db.delete(evalsTable).where(eq(evalsTable.id, this.id)).run();
     });
   }
 }
 
-export async function getSummaryOfLatestEvals(
-  limit: number = DEFAULT_QUERY_LIMIT,
-  filterDescription?: string,
-  datasetId?: string,
-) {
+/**
+ * Queries summaries of all evals, optionally for a given dataset.
+ *
+ * @param datasetId - An optional dataset ID to filter by.
+ * @returns A list of eval summaries.
+ */
+export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[]> {
   const db = getDb();
-  const startTime = performance.now();
-  const query = db
+
+  const results = db
     .select({
       evalId: evalsTable.id,
       createdAt: evalsTable.createdAt,
       description: evalsTable.description,
-      numTests: sql`COUNT(DISTINCT ${evalResultsTable.testIdx})`.as('numTests'),
       datasetId: evalsToDatasetsTable.datasetId,
       isRedteam: sql<boolean>`json_type(${evalsTable.config}, '$.redteam') IS NOT NULL`,
+      prompts: evalsTable.prompts,
     })
     .from(evalsTable)
     .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
-    .leftJoin(evalResultsTable, eq(evalsTable.id, evalResultsTable.evalId))
-    .where(
-      and(
-        datasetId ? eq(evalsToDatasetsTable.datasetId, datasetId) : undefined,
-        filterDescription ? like(evalsTable.description, `%${filterDescription}%`) : undefined,
-        eq(evalsTable.results, {}),
-      ),
-    )
-    .groupBy(evalsTable.id);
+    .where(datasetId ? eq(evalsToDatasetsTable.datasetId, datasetId) : undefined)
+    .orderBy(desc(evalsTable.createdAt))
+    .all();
 
-  const results = query.orderBy(desc(evalsTable.createdAt)).limit(limit).all();
+  /**
+   * Deserialize the evals. A few things to note:
+   *
+   * - Test statistics are derived from the prompt metrics as this is the only reliable source of truth
+   * that's written to the evals table.
+   */
+  return results.map((result) => {
+    const passCount =
+      result.prompts?.reduce((memo, prompt) => {
+        // TODO(will): Verify whether prompt.metrics *should* be required.
+        invariant(!!prompt.metrics, 'Prompt metrics are required');
+        return memo + prompt.metrics!.testPassCount;
+      }, 0) ?? 0;
 
-  const mappedResults = results.map((result) => ({
-    evalId: result.evalId,
-    createdAt: result.createdAt,
-    description: result.description,
-    numTests: (result.numTests as number) || 0,
-    datasetId: result.datasetId,
-    isRedteam: result.isRedteam,
-  }));
+    // All prompts should have the same number of test cases:
+    const testCounts = result.prompts?.map((p) => {
+      return (
+        (p.metrics?.testPassCount ?? 0) +
+        (p.metrics?.testFailCount ?? 0) +
+        (p.metrics?.testErrorCount ?? 0)
+      );
+    }) ?? [0];
 
-  const endTime = performance.now();
-  const executionTime = endTime - startTime;
-  logger.debug(`listPreviousResults execution time: ${executionTime.toFixed(2)}ms`);
+    invariant(
+      testCounts.every((t) => t === testCounts[0]),
+      'All prompts must have the same number of test cases',
+    );
 
-  return mappedResults;
+    // Derive the number of tests from the first prompt.
+    const testCount = testCounts.length > 0 ? testCounts[0] : 0;
+
+    // Test count * prompt count
+    const testRunCount = testCount * (result.prompts?.length ?? 0);
+
+    return {
+      evalId: result.evalId,
+      createdAt: result.createdAt,
+      description: result.description,
+      numTests: testCount,
+      datasetId: result.datasetId,
+      isRedteam: result.isRedteam,
+      passRate: testRunCount > 0 ? (passCount / testRunCount) * 100 : 0,
+      label: result.description ? `${result.description} (${result.evalId})` : result.evalId,
+    };
+  });
 }

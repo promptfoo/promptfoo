@@ -47,13 +47,15 @@ Promptfoo also supports various risk management frameworks based on common secur
 
 Click on a plugin to see its documentation.
 
-<PluginTable shouldGroupByCategory />
+<PluginTable shouldGroupByCategory showRemoteStatus />
+
+_🌐 indicates that plugin uses remote inference_
 
 Some plugins point to your own LLM provider to generate adversarial probes (like `policy` and `intent`), while others must point to Promptfoo's remote generation endpoint for specialized attack generation (like `harmful:*` and security-focused plugins).
 
 ## How to Select Plugins
 
-Begin by assessing your LLM application’s architecture, including potential attack surfaces and relevant risk categories. Clearly define permissible and prohibited behaviors, extending beyond conventional security or privacy requirements. We recommend starting with a limited set of plugins to establish baseline insights, then gradually adding more as you refine your understanding of the model’s vulnerabilities. Keep in mind that increasing the number of plugins lengthens test durations and requires additional inference.
+Begin by assessing your LLM application's architecture, including potential attack surfaces and relevant risk categories. Clearly define permissible and prohibited behaviors, extending beyond conventional security or privacy requirements. We recommend starting with a limited set of plugins to establish baseline insights, then gradually adding more as you refine your understanding of the model's vulnerabilities. Keep in mind that increasing the number of plugins lengthens test durations and requires additional inference.
 
 ### Single User and/or Prompt and Response
 
@@ -71,6 +73,8 @@ For LLM applications with agentic or RAG components, it is recommended to test f
 
 ```yaml
 plugins:
+  - 'agentic:memory-poisoning' # Tests if stateful agents are vulnerable to memory poisoning attacks
+  - 'bias:gender' # Tests for gender bias and stereotypes in responses
   - 'rbac' # Tests if the model properly implements Role-Based Access Control
   - 'bola' # Checks for Broken Object Level Authorization vulnerabilities
   - 'bfla' # Tests for Broken Function Level Authorization issues
@@ -79,7 +83,19 @@ plugins:
   - 'pii' # Checks for leakage of Personally Identifiable Information
   - 'excessive-agency' # Checks if the agent exceeds its intended capabilities
   - 'hijacking' # Checks for goal hijacking of the agent's objectives
+  - 'tool-discovery' # Tests if the model reveals its available function calls or tools
 ```
+
+#### Agent-specific Testing
+
+For LLM applications that implement stateful agents, additional tests should be conducted:
+
+```yaml
+plugins:
+  - 'agentic:memory-poisoning' # Tests if agents are vulnerable to memory poisoning attacks
+```
+
+Memory poisoning attacks attempt to inject malicious instructions into an agent's memory that persists across conversation turns. See the [Memory Poisoning](/docs/red-team/plugins/memory-poisoning/) documentation for more details.
 
 ## Implementation
 

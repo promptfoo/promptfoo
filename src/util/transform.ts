@@ -3,8 +3,8 @@ import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
 import type { Prompt, Vars } from '../types';
-import { isJavascriptFile } from './file';
 import { safeJoin } from './file.node';
+import { isJavascriptFile } from './fileExtensions';
 
 export type TransformContext = {
   vars?: Vars;
@@ -158,7 +158,7 @@ export async function transform(
 
   const ret = await Promise.resolve(postprocessFn(transformInput, context));
 
-  if (validateReturn && ret == null) {
+  if (validateReturn && (ret === null || ret === undefined)) {
     throw new Error(`Transform function did not return a value\n\n${codeOrFilepath}`);
   }
 

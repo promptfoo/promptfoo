@@ -1,4 +1,10 @@
-# Google AI Studio (Gemini) Example
+# google-aistudio-gemini (Google AI Studio (Gemini) Example)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example google-aistudio-gemini
+```
 
 This example demonstrates using Google's Gemini models with promptfoo to evaluate math puzzle solving capabilities.
 
@@ -11,6 +17,7 @@ This example demonstrates using Google's Gemini models with promptfoo to evaluat
 
 The example tests across multiple Gemini models:
 
+- Gemini 2.5 Pro Experimental
 - Gemini 2.0 Flash
 - Gemini 2.0 Flash Thinking
 - Gemini 1.5 Flash

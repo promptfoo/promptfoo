@@ -1,8 +1,12 @@
-import { assertionFromString, testCaseFromCsvRow } from '../src/csv';
+import { assertionFromString, serializeObjectArrayAsCSV, testCaseFromCsvRow } from '../src/csv';
 import logger from '../src/logger';
 import type { Assertion, CsvRow, TestCase } from '../src/types';
 
 describe('testCaseFromCsvRow', () => {
+  afterEach(() => {
+    jest.resetAllMocks();
+  });
+
   it('should create a TestCase with assertions and options from a CSV row', () => {
     const row: CsvRow = {
       __expected1: 'equals:Expected output',
@@ -33,6 +37,28 @@ describe('testCaseFromCsvRow', () => {
       description: 'Test description',
       providerOutput: 'Provider output',
       threshold: 0.8,
+    };
+
+    const result = testCaseFromCsvRow(row);
+    expect(result).toEqual(expectedTestCase);
+  });
+
+  it('should properly trim whitespace and newlines from assertion values', () => {
+    const row: CsvRow = {
+      __expected1: 'equals:Expected output\n',
+      __expected2: ' contains:part of output  ',
+      var1: 'value1',
+    };
+
+    const expectedTestCase: TestCase = {
+      vars: {
+        var1: 'value1',
+      },
+      assert: [
+        { type: 'equals', value: 'Expected output' },
+        { type: 'contains', value: 'part of output' },
+      ],
+      options: {},
     };
 
     const result = testCaseFromCsvRow(row);
@@ -71,9 +97,104 @@ describe('testCaseFromCsvRow', () => {
     );
     expect(logger.warn).toHaveBeenCalledTimes(1);
   });
+
+  it('should handle array metadata with comma splitting', () => {
+    const row: CsvRow = {
+      '__metadata:tags[]': 'tag1,tag2,tag3',
+      var1: 'value1',
+    };
+
+    const expectedTestCase: TestCase = {
+      vars: {
+        var1: 'value1',
+      },
+      assert: [],
+      options: {},
+      metadata: {
+        tags: ['tag1', 'tag2', 'tag3'],
+      },
+    };
+
+    const result = testCaseFromCsvRow(row);
+    expect(result).toEqual(expectedTestCase);
+  });
+
+  it('should handle escaped commas in array metadata', () => {
+    const row: CsvRow = {
+      '__metadata:tags[]': 'tag1,tag with\\, comma,tag3',
+      var1: 'value1',
+    };
+
+    const expectedTestCase: TestCase = {
+      vars: {
+        var1: 'value1',
+      },
+      assert: [],
+      options: {},
+      metadata: {
+        tags: ['tag1', 'tag with, comma', 'tag3'],
+      },
+    };
+
+    const result = testCaseFromCsvRow(row);
+    expect(result).toEqual(expectedTestCase);
+  });
+
+  it('should handle single value metadata', () => {
+    const row: CsvRow = {
+      '__metadata:category': 'test-category',
+      '__metadata:priority': 'high',
+      var1: 'value1',
+    };
+
+    const expectedTestCase: TestCase = {
+      vars: {
+        var1: 'value1',
+      },
+      assert: [],
+      options: {},
+      metadata: {
+        category: 'test-category',
+        priority: 'high',
+      },
+    };
+
+    const result = testCaseFromCsvRow(row);
+    expect(result).toEqual(expectedTestCase);
+  });
+
+  it('should properly trim whitespace from keys', () => {
+    const row: CsvRow = {
+      '  var1  ': 'value1',
+      ' __expected1 ': 'equals:Expected output',
+      __expected2: 'contains:part of output',
+      '  __metadata:category  ': 'test-category',
+    };
+
+    const expectedTestCase: TestCase = {
+      vars: {
+        var1: 'value1',
+      },
+      assert: [
+        { type: 'equals', value: 'Expected output' },
+        { type: 'contains', value: 'part of output' },
+      ],
+      options: {},
+      metadata: {
+        category: 'test-category',
+      },
+    };
+
+    const result = testCaseFromCsvRow(row);
+    expect(result).toEqual(expectedTestCase);
+  });
 });
 
 describe('assertionFromString', () => {
+  afterEach(() => {
+    jest.resetAllMocks();
+  });
+
   it('should create an equality assertion', () => {
     const expected = 'Expected output';
 
@@ -291,6 +412,13 @@ describe('assertionFromString', () => {
     expect(result.threshold).toBe(0.001);
   });
 
+  it('should create a function call assertion', () => {
+    const expected = 'is-valid-function-call';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('is-valid-function-call');
+  });
+
   it('should create an openai function call assertion', () => {
     const expected = 'is-valid-openai-function-call';
 
@@ -419,5 +547,85 @@ describe('assertionFromString', () => {
     expect(result.type).toBe('similar');
     expect(result.value).toBe('Expected output');
     expect(result.threshold).toBe(0.9);
+  });
+
+  it('should preserve zero threshold when explicitly specified', () => {
+    const expected = 'levenshtein(0):Expected output';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('levenshtein');
+    expect(result.value).toBe('Expected output');
+    expect(result.threshold).toBe(0);
+    // This is especially important to test with the nullish coalescing operator (??),
+    // since it behaves differently than logical OR (||) for the value 0
+  });
+});
+
+describe('serializeObjectArrayAsCSV', () => {
+  it('should serialize an array of objects as a CSV string', () => {
+    expect(
+      serializeObjectArrayAsCSV([
+        { name: 'John', age: 30 },
+        { name: 'Jane', age: 25 },
+      ]),
+    ).toBe('name,age\n"John","30"\n"Jane","25"\n');
+  });
+
+  it('should escape commas in values', () => {
+    expect(
+      serializeObjectArrayAsCSV([
+        { name: 'John, Smith', age: 30 },
+        { name: 'Jane, Doe', age: 25 },
+      ]),
+    ).toBe('name,age\n"John, Smith","30"\n"Jane, Doe","25"\n');
+  });
+
+  it('should escape double quotes in values', () => {
+    expect(
+      serializeObjectArrayAsCSV([
+        { name: 'John "Smithy" Smith', age: 30 },
+        { name: 'Jane "Doge" Doe', age: 25 },
+      ]),
+    ).toBe('name,age\n"John ""Smithy"" Smith","30"\n"Jane ""Doge"" Doe","25"\n');
+  });
+
+  it('should handle multiline values', () => {
+    expect(serializeObjectArrayAsCSV([{ name: 'John Smith\nSmithy', age: 30 }])).toBe(
+      'name,age\n"John Smith\nSmithy","30"\n',
+    );
+  });
+
+  it('should serialize vars to CSV format', () => {
+    const vars = [
+      { name: 'John', age: '30' },
+      { name: 'Jane', age: '25' },
+    ];
+
+    const expected = 'name,age\n"John","30"\n"Jane","25"\n';
+    expect(serializeObjectArrayAsCSV(vars)).toBe(expected);
+  });
+
+  it('should handle empty vars array', () => {
+    const vars: any[] = [];
+    expect(() => serializeObjectArrayAsCSV(vars)).toThrow(
+      'Invariant failed: No variables to serialize',
+    );
+  });
+
+  it('should handle single var mapping', () => {
+    const vars = [{ name: 'John', age: '30' }];
+    const expected = 'name,age\n"John","30"\n';
+    expect(serializeObjectArrayAsCSV(vars)).toBe(expected);
+  });
+
+  it('should handle vars with different properties', () => {
+    const vars = [
+      { name: 'John', age: '30' },
+      { name: 'Jane', age: '25', city: 'NY' },
+    ];
+
+    // Note: The actual implementation includes quotes around values and a trailing newline
+    const expected = 'name,age\n"John","30"\n"Jane","25","NY"\n';
+    expect(serializeObjectArrayAsCSV(vars)).toBe(expected);
   });
 });

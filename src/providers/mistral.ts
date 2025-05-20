@@ -1,4 +1,5 @@
 import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
+import type { EnvVarKey } from '../envars';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import type {
@@ -190,15 +191,15 @@ export class MistralChatCompletionProvider implements ApiProvider {
 
   getApiKey(): string | undefined {
     logger.debug(`Mistral apiKeyenvar: ${this.config.apiKeyEnvar}`);
-    return (
-      this.config.apiKey ||
+    const apiKeyCandidate =
+      this.config?.apiKey ||
       (this.config?.apiKeyEnvar
-        ? process.env[this.config.apiKeyEnvar] ||
+        ? getEnvString(this.config.apiKeyEnvar as EnvVarKey) ||
           this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
         : undefined) ||
       this.env?.MISTRAL_API_KEY ||
-      getEnvString('MISTRAL_API_KEY')
-    );
+      getEnvString('MISTRAL_API_KEY');
+    return apiKeyCandidate;
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {
@@ -343,15 +344,15 @@ export class MistralEmbeddingProvider implements ApiProvider {
 
   getApiKey(): string | undefined {
     logger.debug(`Mistral apiKeyenvar: ${this.config.apiKeyEnvar}`);
-    return (
-      this.config.apiKey ||
+    const apiKeyCandidate =
+      this.config?.apiKey ||
       (this.config?.apiKeyEnvar
-        ? process.env[this.config.apiKeyEnvar] ||
+        ? getEnvString(this.config.apiKeyEnvar as EnvVarKey) ||
           this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
         : undefined) ||
       this.env?.MISTRAL_API_KEY ||
-      getEnvString('MISTRAL_API_KEY')
-    );
+      getEnvString('MISTRAL_API_KEY');
+    return apiKeyCandidate;
   }
 
   async callApi(text: string): Promise<ProviderResponse> {

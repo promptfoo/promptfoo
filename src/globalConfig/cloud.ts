@@ -1,8 +1,10 @@
+import chalk from 'chalk';
+import { getEnvString } from '../envars';
 import { fetchWithProxy } from '../fetch';
 import logger from '../logger';
 import { readGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
 
-const API_HOST = process.env.API_HOST || 'https://api.promptfoo.app';
+export const API_HOST = getEnvString('API_HOST', 'https://api.promptfoo.app');
 
 interface CloudUser {
   id: string;
@@ -92,34 +94,47 @@ export class CloudConfig {
     token: string,
     apiHost: string,
   ): Promise<{ user: CloudUser; organization: CloudOrganization; app: CloudApp }> {
-    const response = await fetchWithProxy(`${apiHost}/users/me`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
+    try {
+      const response = await fetchWithProxy(`${apiHost}/users/me`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
-    if (!response.ok) {
-      throw new Error('Failed to validate API token: ' + response.statusText);
+      if (!response.ok) {
+        const errorMessage = await response.text();
+        logger.error(
+          `[Cloud] Failed to validate API token: ${errorMessage}. HTTP Status: ${response.status} - ${response.statusText}.`,
+        );
+        throw new Error('Failed to validate API token: ' + response.statusText);
+      }
+
+      const { user, organization, app } = await response.json();
+      this.setApiKey(token);
+      this.setApiHost(apiHost);
+      this.setAppUrl(app.url);
+
+      logger.info(chalk.green.bold('Successfully logged in'));
+      logger.info(chalk.dim('Logged in as:'));
+      logger.info(`User: ${chalk.cyan(user.email)}`);
+      logger.info(`Organization: ${chalk.cyan(organization.name)}`);
+      logger.info(`Access the app at ${chalk.cyan(app.url)}`);
+
+      return {
+        user,
+        organization,
+        app,
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error(`[Cloud] Failed to validate API token with host ${apiHost}: ${errorMessage}`);
+      if ((error as any).cause) {
+        logger.error(`Cause: ${(error as any).cause}`);
+      }
+      throw error;
     }
-
-    logger.info('You are logged in successfully.');
-    const { user, organization, app } = await response.json();
-    this.setApiKey(token);
-    this.setApiHost(apiHost);
-    this.setAppUrl(app.url);
-
-    logger.info('Logged in as:');
-    logger.info(`User: ${user.email}`);
-    logger.info(`Organization: ${organization.name}`);
-    logger.info(`Access the app at ${app.url}`);
-
-    return {
-      user,
-      organization,
-      app,
-    };
   }
 }
 
-// Export a singleton instance
+// singleton instance
 export const cloudConfig = new CloudConfig();

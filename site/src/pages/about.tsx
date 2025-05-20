@@ -5,7 +5,7 @@ import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
 import Divider from '@mui/material/Divider';
-import Grid from '@mui/material/Grid';
+import Grid from '@mui/material/Grid2';
 import Typography from '@mui/material/Typography';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import Layout from '@theme/Layout';
@@ -37,21 +37,21 @@ const AboutPageContent = () => {
 
         <Box mb={8}>
           <Grid container spacing={4}>
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Typography variant="h4" component="h3" gutterBottom fontWeight="medium">
                 About Us
               </Typography>
               <Typography variant="body1" paragraph>
                 We are security and engineering practitioners who have scaled generative AI products
-                100s of millions of users. We're building the tools that we wished we had when we
-                were on the front lines.
+                to hundreds of millions of users. We're building the tools that we wished we had
+                when we were on the front lines.
               </Typography>
               <Typography variant="body1" paragraph>
                 Based in San Mateo, California, we're backed by Andreessen Horowitz and top leaders
                 in the technology and security industries.
               </Typography>
             </Grid>
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Box display="flex" justifyContent="center" alignItems="center" height="100%">
                 <img
                   src="/img/logo-panda.svg"
@@ -90,16 +90,22 @@ const AboutPageContent = () => {
                 bio: `Steve brings decades of expertise in engineering, product, and cybersecurity. He has led technical and product teams, and conducted pentests at companies like Microsoft, Shopify, Intercom, and PwC. Most recently he was scaling AI products at Discord.`,
               },
               {
+                name: 'Matthew Bou',
+                title: 'Enterprise GTM Lead',
+                image: '/img/team/matt.jpeg',
+                bio: "Matt's a three-time founding sales team member with a track record of building GTM from scratch. He's helped startups land and grow Fortune 500 accounts, leading to three exits. At Promptfoo, he leads enterprise sales, helping teams accelerate and secure LLMs.",
+              },
+              {
+                name: 'Ben Shipley',
+                title: 'Enterprise GTM Lead',
+                image: '/img/team/ben.jpeg',
+                bio: 'Ben brings go-to-market expertise as an early GTM hire at multiple high-growth startups including Windsurf, Applied Intuition, and Amplitude. He specializes in building strategic relationships and helping enterprises implement and secure their AI solutions.',
+              },
+              {
                 name: 'Vanessa Sauter',
                 title: 'Principal Solutions Architect',
                 image: '/img/team/vanessa.jpeg',
                 bio: 'Vanessa led hundreds of security and privacy reviews for customers at Gong. She has also pentested dozens of enterprises and launched hundreds of bug bounty programs for a leading crowdsourced security company and is published in Forbes, Lawfare, and Dark Reading.',
-              },
-              {
-                name: 'Vedant Radhakrishnan',
-                title: 'Staff Engineer',
-                image: '/img/team/vedant.jpeg',
-                bio: 'Vedant is a seasoned engineer with a strong background in software engineering, infrastrucure and security. He has broad experience leading teams and building products at companies like Pinterest, Microsoft, and Amazon.',
               },
               {
                 name: 'Guangshuo Zang',
@@ -107,8 +113,26 @@ const AboutPageContent = () => {
                 image: '/img/team/shuo.jpeg',
                 bio: 'Guangshuo brings technical expertise from Meta, ChipperCash, and Smile Identity. Specializes in GenAI systems, product engineering, and building scalable client solutions.',
               },
+              {
+                name: 'Faizan Minhas',
+                title: 'Senior Engineer',
+                image: '/img/team/faizan.jpeg',
+                bio: 'Faizan brings a wealth of experience in building products across a range of industries. He has led and contributed to projects at companies like Faire, Intercom, and a range of startups.',
+              },
+              {
+                name: 'Will Holley',
+                title: 'Senior Engineer',
+                image: '/img/team/will.jpg',
+                bio: 'Will has a passion for building secure and reliable systems. He brings experience leading teams that develop AI for the financial services industry.',
+              },
+              {
+                name: 'Asmi Gulati',
+                title: 'AI Red Team',
+                image: '/img/team/asmi.jpeg',
+                bio: 'Asmi specializes in prompt hacking and develops educational content for Promptfoo. In her free time she maintains https://aisimplyexplained.com/',
+              },
             ].map((leader) => (
-              <Grid item xs={12} sm={6} md={4} key={leader.name}>
+              <Grid size={{ xs: 12, sm: 6, md: 4 }} key={leader.name}>
                 <Box textAlign="center">
                   <Avatar
                     alt={leader.name}
@@ -171,7 +195,7 @@ const AboutPageContent = () => {
                 description: 'EVP, Head of Digital Products, Fidelity\nCISO, Fidelity',
               },
             ].map((investor) => (
-              <Grid item xs={12} sm={6} md={4} key={investor.name}>
+              <Grid size={{ xs: 12, sm: 6, md: 4 }} key={investor.name}>
                 <Box textAlign="center">
                   <Avatar
                     alt={investor.name}
@@ -203,7 +227,7 @@ const AboutPageContent = () => {
             An Incredible Open Source Community
           </Typography>
           <Typography variant="body1" paragraph align="center">
-            Promptfoo is proud to be supported by a vibrant community of over 100 open source
+            Promptfoo is proud to be supported by a vibrant community of over 150 open source
             contributors.
           </Typography>
           <Box display="flex" justifyContent="center" mt={4}>

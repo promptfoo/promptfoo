@@ -109,6 +109,10 @@ describe('IntentPlugin', () => {
       });
     }).toThrow(expect.any(Error));
   });
+
+  it('should set canGenerateRemote to false', () => {
+    expect(IntentPlugin.canGenerateRemote).toBe(false);
+  });
 });
 
 describe('IntentGrader', () => {

@@ -1,7 +1,7 @@
 import { getDb } from '../../src/database';
 import { getUserEmail } from '../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../src/migrate';
-import Eval, { getSummaryOfLatestEvals } from '../../src/models/eval';
+import Eval, { getEvalSummaries } from '../../src/models/eval';
 import type { Prompt } from '../../src/types';
 import EvalFactory from '../factories/evalFactory';
 
@@ -31,25 +31,50 @@ describe('evaluator', () => {
     it('should return all evaluations', async () => {
       const eval1 = await EvalFactory.create();
       const eval2 = await EvalFactory.create();
-      await EvalFactory.createOldResult();
-      const evaluations = await getSummaryOfLatestEvals();
+      const eval3 = await EvalFactory.createOldResult();
 
-      expect(evaluations).toHaveLength(2);
+      const evaluations = await getEvalSummaries();
+
+      expect(evaluations).toHaveLength(3);
+
       expect(evaluations).toContainEqual(
         expect.objectContaining({
           evalId: eval1.id,
           createdAt: eval1.createdAt,
+          description: null,
           numTests: 2,
+          isRedteam: 0,
+          passRate: 50,
+          label: eval1.id,
         }),
       );
+
       expect(evaluations).toContainEqual(
         expect.objectContaining({
           evalId: eval2.id,
           createdAt: eval2.createdAt,
-          description: eval2.description || null,
+          description: null,
           numTests: 2,
+          isRedteam: 0,
+          passRate: 50,
+          label: eval2.id,
         }),
       );
+
+      expect(evaluations).toContainEqual(expect.objectContaining({ evalId: eval3.id }));
+    });
+
+    it('should return evaluations in descending order by createdAt', async () => {
+      const eval1 = await EvalFactory.create();
+      const eval2 = await EvalFactory.create();
+      const eval3 = await EvalFactory.create();
+
+      const evaluations = await getEvalSummaries();
+
+      expect(evaluations).toHaveLength(3);
+      expect(evaluations[0].evalId).toBe(eval3.id);
+      expect(evaluations[1].evalId).toBe(eval2.id);
+      expect(evaluations[2].evalId).toBe(eval1.id);
     });
   });
 
@@ -72,7 +97,7 @@ describe('evaluator', () => {
       const providedAuthor = 'provided@example.com';
       const config = { description: 'Test eval' };
       const renderedPrompts: Prompt[] = [
-        { raw: 'Test prompt', display: 'Test prompt', label: 'Test label' },
+        { raw: 'Test prompt', display: 'Test prompt', label: 'Test label' } as Prompt,
       ];
       const evaluation = await Eval.create(config, renderedPrompts, { author: providedAuthor });
       expect(evaluation.author).toBe(providedAuthor);
@@ -85,11 +110,171 @@ describe('evaluator', () => {
       jest.mocked(getUserEmail).mockReturnValue(mockEmail);
       const config = { description: 'Test eval' };
       const renderedPrompts: Prompt[] = [
-        { raw: 'Test prompt', display: 'Test prompt', label: 'Test label' },
+        { raw: 'Test prompt', display: 'Test prompt', label: 'Test label' } as Prompt,
       ];
       const evaluation = await Eval.create(config, renderedPrompts);
       const persistedEval = await Eval.findById(evaluation.id);
       expect(persistedEval?.author).toBe(mockEmail);
+    });
+  });
+
+  describe('getStats', () => {
+    it('should accumulate assertion token usage correctly', () => {
+      const eval1 = new Eval({});
+      eval1.prompts = [
+        {
+          raw: 'test',
+          metrics: {
+            tokenUsage: {
+              prompt: 10,
+              completion: 20,
+              cached: 5,
+              total: 35,
+              numRequests: 1,
+              assertions: {
+                total: 100,
+                prompt: 40,
+                completion: 50,
+                cached: 10,
+              },
+            },
+          },
+        } as any,
+        {
+          raw: 'test2',
+          metrics: {
+            tokenUsage: {
+              prompt: 15,
+              completion: 25,
+              cached: 10,
+              total: 50,
+              numRequests: 1,
+              assertions: {
+                total: 200,
+                prompt: 80,
+                completion: 100,
+                cached: 20,
+              },
+            },
+          },
+        } as any,
+      ];
+
+      const stats = eval1.getStats();
+      expect(stats.tokenUsage.assertions).toEqual({
+        total: 300,
+        prompt: 120,
+        completion: 150,
+        cached: 30,
+      });
+    });
+
+    it('should handle missing assertion token usage', () => {
+      const eval1 = new Eval({});
+      eval1.prompts = [
+        {
+          raw: 'test',
+          metrics: {
+            tokenUsage: {
+              prompt: 10,
+              completion: 20,
+              cached: 5,
+              total: 35,
+              numRequests: 1,
+            },
+          },
+        } as any,
+      ];
+
+      const stats = eval1.getStats();
+      expect(stats.tokenUsage.assertions).toEqual({
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
+      });
+    });
+
+    it('should handle mix of prompts with and without assertion usage', () => {
+      const eval1 = new Eval({});
+      eval1.prompts = [
+        {
+          raw: 'test1',
+          metrics: {
+            tokenUsage: {
+              prompt: 10,
+              completion: 20,
+              cached: 5,
+              total: 35,
+              numRequests: 1,
+              assertions: {
+                total: 100,
+                prompt: 40,
+                completion: 50,
+                cached: 10,
+              },
+            },
+          },
+        } as any,
+        {
+          raw: 'test2',
+          metrics: {
+            tokenUsage: {
+              prompt: 15,
+              completion: 25,
+              cached: 10,
+              total: 50,
+              numRequests: 1,
+            },
+          },
+        } as any,
+      ];
+
+      const stats = eval1.getStats();
+      expect(stats.tokenUsage.assertions).toEqual({
+        total: 100,
+        prompt: 40,
+        completion: 50,
+        cached: 10,
+      });
+    });
+  });
+
+  describe('toResultsFile', () => {
+    it('should return results file with correct version', async () => {
+      const eval1 = await EvalFactory.create();
+      const results = await eval1.toResultsFile();
+      expect(results.version).toBe(eval1.version());
+    });
+
+    it('should return results file with all required fields', async () => {
+      const eval1 = await EvalFactory.create();
+      const results = await eval1.toResultsFile();
+
+      expect(results).toEqual({
+        version: eval1.version(),
+        createdAt: new Date(eval1.createdAt).toISOString(),
+        config: eval1.config,
+        author: null,
+        prompts: eval1.getPrompts(),
+        datasetId: null,
+        results: await eval1.toEvaluateSummary(),
+      });
+    });
+
+    it('should handle null author and datasetId', async () => {
+      const eval1 = new Eval({});
+      const results = await eval1.toResultsFile();
+
+      expect(results.author).toBeNull();
+      expect(results.datasetId).toBeNull();
+    });
+
+    it('should include correct results summary', async () => {
+      const eval1 = await EvalFactory.create();
+      const results = await eval1.toResultsFile();
+
+      expect(results.results).toEqual(await eval1.toEvaluateSummary());
     });
   });
 });

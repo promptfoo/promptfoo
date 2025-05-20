@@ -15,7 +15,7 @@ import { RedteamPluginBase, RedteamGraderBase } from './base';
 export const PLUGIN_ID = 'promptfoo:redteam:policy';
 
 export class PolicyPlugin extends RedteamPluginBase {
-  readonly id = 'policy';
+  readonly id = PLUGIN_ID;
   private policy: string;
 
   constructor(
@@ -78,7 +78,7 @@ export class PolicyPlugin extends RedteamPluginBase {
 }
 
 export class PolicyViolationGrader extends RedteamGraderBase {
-  id = PLUGIN_ID;
+  readonly id = PLUGIN_ID;
   rubric = dedent`
     <system_purpose>
       {{purpose}}

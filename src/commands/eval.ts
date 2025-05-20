@@ -11,11 +11,12 @@ import cliState from '../cliState';
 import { getEnvFloat, getEnvInt } from '../envars';
 import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
 import { checkEmailStatusOrExit, promptForEmailUnverified } from '../globalConfig/accounts';
-import logger, { getLogLevel, setLogLevel } from '../logger';
+import { cloudConfig } from '../globalConfig/cloud';
+import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
 import { loadApiProvider } from '../providers';
-import { createShareableUrl } from '../share';
+import { createShareableUrl, isSharingEnabled } from '../share';
 import { generateTable } from '../table';
 import telemetry from '../telemetry';
 import type {
@@ -23,17 +24,23 @@ import type {
   EvaluateOptions,
   Scenario,
   TestSuite,
+  TokenUsage,
   UnifiedConfig,
 } from '../types';
 import { OutputFileExtension, TestSuiteSchema } from '../types';
 import { CommandLineOptionsSchema } from '../types';
-import { isRunningUnderNpx, maybeLoadFromExternalFile } from '../util';
+import { isApiProvider } from '../types/providers';
+import { isRunningUnderNpx } from '../util';
 import { printBorder, setupEnv, writeMultipleOutputs } from '../util';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
+import { maybeLoadFromExternalFile } from '../util/file';
+import { formatDuration } from '../util/formatDuration';
 import invariant from '../util/invariant';
 import { filterProviders } from './eval/filterProviders';
+import type { FilterOptions } from './eval/filterTests';
 import { filterTests } from './eval/filterTests';
+import { notCloudEnabledShareInstructions } from './share';
 
 const EvalCommandSchema = CommandLineOptionsSchema.extend({
   help: z.boolean().optional(),
@@ -43,7 +50,7 @@ const EvalCommandSchema = CommandLineOptionsSchema.extend({
 
 type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
 
-function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
+export function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
   const hasProviderWithoutLabel = testSuite.providers.some((p) => !p.label);
   if (hasProviderWithoutLabel) {
     logger.warn(
@@ -58,6 +65,35 @@ function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
   }
 }
 
+/**
+ * Format token usage for display in CLI output
+ */
+export function formatTokenUsage(type: string, usage: Partial<TokenUsage>): string {
+  const parts = [];
+
+  if (usage.total !== undefined) {
+    parts.push(`${type} tokens: ${usage.total.toLocaleString()}`);
+  }
+
+  if (usage.prompt !== undefined) {
+    parts.push(`Prompt tokens: ${usage.prompt.toLocaleString()}`);
+  }
+
+  if (usage.completion !== undefined) {
+    parts.push(`Completion tokens: ${usage.completion.toLocaleString()}`);
+  }
+
+  if (usage.cached !== undefined) {
+    parts.push(`Cached tokens: ${usage.cached.toLocaleString()}`);
+  }
+
+  if (usage.completionDetails?.reasoning !== undefined) {
+    parts.push(`Reasoning tokens: ${usage.completionDetails.reasoning.toLocaleString()}`);
+  }
+
+  return parts.join(' / ');
+}
+
 export async function doEval(
   cmdObj: Partial<CommandLineOptions & Command>,
   defaultConfig: Partial<UnifiedConfig>,
@@ -65,9 +101,6 @@ export async function doEval(
   evaluateOptions: EvaluateOptions,
 ): Promise<Eval> {
   setupEnv(cmdObj.envPath);
-  if (cmdObj.verbose) {
-    setLogLevel('debug');
-  }
 
   let config: Partial<UnifiedConfig> | undefined = undefined;
   let testSuite: TestSuite | undefined = undefined;
@@ -81,7 +114,6 @@ export async function doEval(
       // Only set when redteam is enabled for sure, because we don't know if config is loaded yet
       ...(Boolean(config?.redteam) && { isRedteam: true }),
     });
-    await telemetry.send();
 
     if (cmdObj.write) {
       await runDbMigrations();
@@ -123,6 +155,28 @@ export async function doEval(
 
     ({ config, testSuite, basePath: _basePath } = await resolveConfigs(cmdObj, defaultConfig));
 
+    // Check if config has redteam section but no test cases
+    if (
+      config.redteam &&
+      (!testSuite.tests || testSuite.tests.length === 0) &&
+      (!testSuite.scenarios || testSuite.scenarios.length === 0)
+    ) {
+      logger.warn(
+        chalk.yellow(dedent`
+        Warning: Config file has a redteam section but no test cases.
+        Did you mean to run ${chalk.bold('promptfoo redteam generate')} instead?
+        `),
+      );
+    }
+
+    // Ensure evaluateOptions from the config file are applied
+    if (config.evaluateOptions) {
+      evaluateOptions = {
+        ...config.evaluateOptions,
+        ...evaluateOptions,
+      };
+    }
+
     let maxConcurrency = cmdObj.maxConcurrency;
     const delay = cmdObj.delay ?? 0;
 
@@ -133,13 +187,16 @@ export async function doEval(
       );
     }
 
-    testSuite.tests = await filterTests(testSuite, {
+    const filterOptions: FilterOptions = {
       failing: cmdObj.filterFailing,
+      errorsOnly: cmdObj.filterErrorsOnly,
       firstN: cmdObj.filterFirstN,
       metadata: cmdObj.filterMetadata,
       pattern: cmdObj.filterPattern,
       sample: cmdObj.filterSample,
-    });
+    };
+
+    testSuite.tests = await filterTests(testSuite, filterOptions);
 
     if (
       config.redteam &&
@@ -158,11 +215,11 @@ export async function doEval(
     );
 
     const options: EvaluateOptions = {
+      ...evaluateOptions,
       showProgressBar: getLogLevel() === 'debug' ? false : cmdObj.progressBar,
-      maxConcurrency,
       repeat,
       delay: !Number.isNaN(delay) && delay > 0 ? delay : undefined,
-      ...evaluateOptions,
+      maxConcurrency,
     };
 
     if (cmdObj.grader) {
@@ -211,8 +268,13 @@ export async function doEval(
       abortSignal: evaluateOptions.abortSignal,
     });
 
+    // Clear results from memory to avoid memory issues
+    evalRecord.clearResults();
+
+    const wantsToShare = cmdObj.share && config.sharing;
+
     const shareableUrl =
-      cmdObj.share && config.sharing ? await createShareableUrl(evalRecord) : null;
+      wantsToShare && isSharingEnabled(evalRecord) ? await createShareableUrl(evalRecord) : null;
 
     let successes = 0;
     let failures = 0;
@@ -227,6 +289,17 @@ export async function doEval(
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
+      },
+      assertions: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       },
     };
 
@@ -253,6 +326,21 @@ export async function doEval(
           prompt.metrics.tokenUsage.completionDetails.acceptedPrediction || 0;
         tokenUsage.completionDetails.rejectedPrediction +=
           prompt.metrics.tokenUsage.completionDetails.rejectedPrediction || 0;
+      }
+      if (prompt.metrics?.tokenUsage?.assertions) {
+        tokenUsage.assertions.total += prompt.metrics.tokenUsage.assertions.total || 0;
+        tokenUsage.assertions.prompt += prompt.metrics.tokenUsage.assertions.prompt || 0;
+        tokenUsage.assertions.completion += prompt.metrics.tokenUsage.assertions.completion || 0;
+        tokenUsage.assertions.cached += prompt.metrics.tokenUsage.assertions.cached || 0;
+
+        if (prompt.metrics.tokenUsage.assertions.completionDetails) {
+          tokenUsage.assertions.completionDetails.reasoning +=
+            prompt.metrics.tokenUsage.assertions.completionDetails.reasoning || 0;
+          tokenUsage.assertions.completionDetails.acceptedPrediction +=
+            prompt.metrics.tokenUsage.assertions.completionDetails.acceptedPrediction || 0;
+          tokenUsage.assertions.completionDetails.rejectedPrediction +=
+            prompt.metrics.tokenUsage.assertions.completionDetails.rejectedPrediction || 0;
+        }
       }
     }
     const totalTests = successes + failures + errors;
@@ -295,12 +383,23 @@ export async function doEval(
     if (cmdObj.write) {
       if (shareableUrl) {
         logger.info(`${chalk.green('✔')} Evaluation complete: ${shareableUrl}`);
+      } else if (wantsToShare && !isSharingEnabled(evalRecord)) {
+        notCloudEnabledShareInstructions();
       } else {
-        logger.info(`${chalk.green('✔')} Evaluation complete.\n`);
+        logger.info(`${chalk.green('✔')} Evaluation complete. ID: ${chalk.cyan(evalRecord.id)}\n`);
         logger.info(
           `» Run ${chalk.greenBright.bold('promptfoo view')} to use the local web viewer`,
         );
-        logger.info(`» Run ${chalk.greenBright.bold('promptfoo share')} to create a shareable URL`);
+        if (cloudConfig.isEnabled()) {
+          logger.info(
+            `» Run ${chalk.greenBright.bold('promptfoo share')} to create a shareable URL`,
+          );
+        } else {
+          logger.info(
+            `» Do you want to share this with your team? Sign up for free at ${chalk.greenBright.bold('https://promptfoo.app')}`,
+          );
+        }
+
         logger.info(
           `» This project needs your feedback. What's one thing we can improve? ${chalk.greenBright.bold(
             'https://forms.gle/YFLgTe1dKJKNSCsU7',
@@ -313,6 +412,10 @@ export async function doEval(
 
     printBorder();
 
+    // Format and display duration
+    const duration = Math.round((Date.now() - startTime) / 1000);
+    const durationDisplay = formatDuration(duration);
+
     const isRedteam = Boolean(config.redteam);
 
     logger.info(chalk.green.bold(`Successes: ${successes}`));
@@ -323,9 +426,32 @@ export async function doEval(
     if (!Number.isNaN(passRate)) {
       logger.info(chalk.blue.bold(`Pass Rate: ${passRate.toFixed(2)}%`));
     }
+    logger.info(chalk.blue.bold(`Duration: ${durationDisplay} (concurrency: ${maxConcurrency})`));
+
     if (tokenUsage.total > 0) {
+      const evalTokens = {
+        total: tokenUsage.total,
+        prompt: tokenUsage.prompt,
+        completion: tokenUsage.completion,
+        cached: tokenUsage.cached,
+        completionDetails: tokenUsage.completionDetails,
+      };
+
+      if (isRedteam) {
+        logger.info(
+          `Model probes: ${tokenUsage.numRequests.toLocaleString()} / ${formatTokenUsage('eval', evalTokens)}`,
+        );
+      } else {
+        logger.info(formatTokenUsage('Eval', evalTokens));
+      }
+
+      if (tokenUsage.assertions.total > 0) {
+        logger.info(formatTokenUsage('Grading', tokenUsage.assertions));
+      }
+
+      const combinedTotal = evalTokens.total + tokenUsage.assertions.total;
       logger.info(
-        `${isRedteam ? `Total probes: ${tokenUsage.numRequests.toLocaleString()} / ` : ''}Total tokens: ${tokenUsage.total.toLocaleString()} / Prompt tokens: ${tokenUsage.prompt.toLocaleString()} / Completion tokens: ${tokenUsage.completion.toLocaleString()} / Cached tokens: ${tokenUsage.cached.toLocaleString()}${tokenUsage.completionDetails?.reasoning ? ` / Reasoning tokens: ${tokenUsage.completionDetails.reasoning.toLocaleString()}` : ''}`,
+        `Total tokens: ${combinedTotal.toLocaleString()} (eval: ${evalTokens.total.toLocaleString()} + Grading: ${tokenUsage.assertions.total.toLocaleString()})`,
       );
     }
 
@@ -335,7 +461,6 @@ export async function doEval(
       duration: Math.round((Date.now() - startTime) / 1000),
       isRedteam,
     });
-    await telemetry.send();
 
     if (cmdObj.watch) {
       if (initialization) {
@@ -426,6 +551,19 @@ export async function doEval(
     if (testSuite.redteam) {
       showRedteamProviderLabelMissingWarning(testSuite);
     }
+
+    // Clean up any WebSocket connections
+    if (testSuite.providers.length > 0) {
+      for (const provider of testSuite.providers) {
+        if (isApiProvider(provider)) {
+          const cleanup = provider?.cleanup?.();
+          if (cleanup instanceof Promise) {
+            await cleanup;
+          }
+        }
+      }
+    }
+
     return ret;
   };
 
@@ -453,7 +591,6 @@ export function evalCommand(
       '-c, --config <paths...>',
       'Path to configuration file. Automatically loads promptfooconfig.yaml',
     )
-    .option('--env-file, --env-path <path>', 'Path to .env file')
 
     // Input sources
     .option('-a, --assertions <path>', 'Path to assertions file')
@@ -478,7 +615,7 @@ export function evalCommand(
     )
     .option(
       '--prompt-suffix <path>',
-      'This suffix is append to every prompt',
+      'This suffix is appended to every prompt.',
       defaultConfig.defaultTest?.options?.suffix,
     )
     .option(
@@ -530,8 +667,14 @@ export function evalCommand(
       'Only run tests with these providers (regex match)',
     )
     .option('--filter-sample <number>', 'Only run a random sample of N tests')
-    .option('--filter-failing <path>', 'Path to json output file')
-    .option('--filter-errors-only <path>', 'Path to json output file with error tests')
+    .option(
+      '--filter-failing <path or id>',
+      'Path to json output file or eval ID to filter failing tests from',
+    )
+    .option(
+      '--filter-errors-only <path or id>',
+      'Path to json output file or eval ID to filter error tests from',
+    )
     .option(
       '--filter-metadata <key=value>',
       'Only run tests whose metadata matches the key=value pair (e.g. --filter-metadata pluginId=debug-access)',
@@ -570,7 +713,6 @@ export function evalCommand(
 
     // Miscellaneous
     .option('--description <description>', 'Description of the eval run')
-    .option('--verbose', 'Show debug logs', defaultConfig?.commandLineOptions?.verbose)
     .option('--no-progress-bar', 'Do not show progress bar')
     .action(async (opts: EvalCommandOptions, command: Command) => {
       let validatedOpts: z.infer<typeof EvalCommandSchema>;

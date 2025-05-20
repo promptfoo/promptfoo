@@ -1,7 +1,7 @@
 import type {
   EnvOverrides,
   EvaluateOptions,
-  EvaluateTestSuite,
+  EvaluateTestSuiteWithEvaluateOptions,
   ProviderOptions,
   TestCase,
   UnifiedConfig,
@@ -15,7 +15,7 @@ export interface State {
   testCases: TestCase[];
   description: string;
   providers: ProviderOptions[];
-  prompts: string[];
+  prompts: any[];
   defaultTest: TestCase;
   evaluateOptions: EvaluateOptions;
   scenarios: Scenario[];
@@ -24,12 +24,12 @@ export interface State {
   setTestCases: (testCases: TestCase[]) => void;
   setDescription: (description: string) => void;
   setProviders: (providers: ProviderOptions[]) => void;
-  setPrompts: (prompts: string[]) => void;
+  setPrompts: (prompts: any[]) => void;
   setDefaultTest: (testCase: TestCase) => void;
   setEvaluateOptions: (options: EvaluateOptions) => void;
   setScenarios: (scenarios: Scenario[]) => void;
   setStateFromConfig: (config: Partial<UnifiedConfig>) => void;
-  getTestSuite: () => EvaluateTestSuite;
+  getTestSuite: () => EvaluateTestSuiteWithEvaluateOptions;
   setExtensions: (extensions: string[]) => void;
 }
 
@@ -69,14 +69,7 @@ export const useStore = create<State>()(
           if (typeof config.prompts === 'string') {
             updates.prompts = [config.prompts];
           } else if (Array.isArray(config.prompts)) {
-            // If it looks like a file path, don't set it.
-            updates.prompts = config.prompts.filter(
-              (p): p is string =>
-                typeof p === 'string' &&
-                !p.endsWith('.txt') &&
-                !p.endsWith('.json') &&
-                !p.endsWith('.yaml'),
-            );
+            updates.prompts = config.prompts;
           } else {
             console.warn('Invalid prompts config', config.prompts);
           }
@@ -96,7 +89,16 @@ export const useStore = create<State>()(
         set(updates);
       },
       getTestSuite: () => {
-        const { description, env, extensions, prompts, providers, scenarios, testCases } = get();
+        const {
+          description,
+          env,
+          extensions,
+          prompts,
+          providers,
+          scenarios,
+          testCases,
+          evaluateOptions,
+        } = get();
         return {
           description,
           env,
@@ -105,6 +107,7 @@ export const useStore = create<State>()(
           providers,
           scenarios,
           tests: testCases,
+          evaluateOptions,
         };
       },
     }),

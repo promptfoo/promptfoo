@@ -168,6 +168,10 @@ export async function addMathPrompt(
           ...testCase.vars,
           [injectVar]: encodedText,
         },
+        metadata: {
+          ...testCase.metadata,
+          strategyId: 'math-prompt',
+        },
       });
 
       if (progressBar) {

@@ -16,7 +16,7 @@ import promptfoo from '../../index';
 import logger from '../../logger';
 import Eval from '../../models/eval';
 import EvalResult from '../../models/evalResult';
-import { updateResult, deleteEval, writeResultsToDatabase } from '../../util';
+import { updateResult, deleteEval, writeResultsToDatabase } from '../../util/database';
 import invariant from '../../util/invariant';
 import { ApiSchemas } from '../apiSchemas';
 
@@ -61,6 +61,18 @@ evalRouter.post('/job', (req: Request, res: Response): void => {
       job.result = await result.toEvaluateSummary();
       job.evalId = result.id;
       console.log(`[${id}] Complete`);
+    })
+    .catch((error) => {
+      logger.error(dedent`Failed to eval tests:
+        Error: ${error}
+        Body: ${JSON.stringify(req.body, null, 2)}`);
+
+      const job = evalJobs.get(id);
+      invariant(job, 'Job not found');
+      job.status = 'error';
+      job.result = null;
+      job.evalId = null;
+      job.logs = [String(error)];
     });
 
   res.json({ id });
@@ -78,6 +90,11 @@ evalRouter.get('/job/:id', (req: Request, res: Response): void => {
       status: 'complete',
       result: job.result,
       evalId: job.evalId,
+      logs: job.logs,
+    });
+  } else if (job.status === 'error') {
+    res.json({
+      status: 'error',
       logs: job.logs,
     });
   } else {

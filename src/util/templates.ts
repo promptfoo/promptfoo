@@ -1,4 +1,5 @@
 import nunjucks from 'nunjucks';
+import cliState from '../cliState';
 import { getEnvBool } from '../envars';
 import type { NunjucksFilterMap } from '../types';
 
@@ -30,7 +31,10 @@ export function getNunjucksEngine(
   if (
     !getEnvBool('PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS', getEnvBool('PROMPTFOO_SELF_HOSTED', false))
   ) {
-    env.addGlobal('env', process.env);
+    env.addGlobal('env', {
+      ...process.env,
+      ...cliState.config?.env,
+    });
   }
 
   env.addFilter('load', function (str) {
@@ -90,4 +94,20 @@ export function extractVariablesFromTemplates(templates: string[]): string[] {
     variables.forEach((variable) => variableSet.add(variable));
   }
   return Array.from(variableSet);
+}
+
+export function getTemplateContext(additionalContext: Record<string, any> = {}) {
+  if (getEnvBool('PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS', false)) {
+    return additionalContext;
+  }
+
+  return {
+    ...additionalContext,
+    // Add environment variables with config.env taking precedence
+    env: {
+      ...process.env,
+      ...(cliState.config?.env || {}),
+      ...additionalContext.env,
+    },
+  };
 }

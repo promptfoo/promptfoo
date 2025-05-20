@@ -9,6 +9,7 @@ import Typography from '@mui/material/Typography';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import Layout from '@theme/Layout';
 import LogoPanda from '../../static/img/logo-panda.svg';
+import { scrollToTop } from '../utils/navigation';
 import styles from './press.module.css';
 
 const PressContent = () => {
@@ -47,9 +48,9 @@ const PressContent = () => {
             security industries.
           </Typography>
           <Typography variant="body1" paragraph>
-            Our core product is an open-source pentesting and evaluation framework used by tens of
-            thousands of developers. Promptfoo is among the most popular evaluation frameworks and
-            is the first product to adapt AI-specific pentesting techniques to your application.
+            Our core product is an open-source pentesting and evaluation framework used by 80,000+
+            developers. Promptfoo is among the most popular evaluation frameworks and is the first
+            product to adapt AI-specific pentesting techniques to your application.
           </Typography>
         </Box>
 
@@ -61,19 +62,24 @@ const PressContent = () => {
             Recent Coverage
           </Typography>
 
-          {/* Featured Research */}
+          {/* DeepSeek Research Coverage */}
           <Grid container spacing={4} mb={6}>
             <Grid item xs={12}>
               <Box className={styles.coverageItem} p={3}>
                 <Typography variant="h6" component="h4" gutterBottom>
                   DeepSeek AI Censorship Research
                 </Typography>
+                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                  January 2025
+                </Typography>
                 <Typography variant="body1" paragraph>
                   Our groundbreaking research on AI censorship and content filtering in DeepSeek
                   models has been widely covered by major technology and news publications.
                 </Typography>
                 <Typography variant="body2" paragraph>
-                  <Link to="/blog/deepseek-censorship/">Read the original research →</Link>
+                  <Link to="/blog/deepseek-censorship/" onClick={scrollToTop}>
+                    Read the original research →
+                  </Link>
                 </Typography>
                 <Grid container spacing={2} mt={2}>
                   {[
@@ -100,8 +106,14 @@ const PressContent = () => {
                       link: 'http://gizmodo.com/the-knives-are-coming-out-for-deepseek-ai-2000556375',
                     },
                     {
+                      publication: 'Stanford Cyber Policy Center',
+                      title: 'Taking Stock of the DeepSeek Shock',
+                      link: 'https://cyber.fsi.stanford.edu/publication/taking-stock-deepseek-shock',
+                    },
+                    {
                       publication: 'The Independent',
-                      title: 'DeepSeek AI China censorship Tiananmen Square',
+                      title:
+                        'How DeepSeek users are forcing the AI to reveal the truth about Chinese executions',
                       link: 'https://www.the-independent.com/tech/deepseek-ai-china-censorship-tiananmen-square-b2688390.html',
                     },
                     {
@@ -110,18 +122,18 @@ const PressContent = () => {
                       link: 'https://www.washingtontimes.com/news/2025/jan/29/inside-ring-deepseek-toes-chinese-party-line-xi-ta/',
                     },
                     {
-                      publication: 'Yahoo Finance',
-                      title: 'DeepSeek Users Forcing AI to Reveal Censorship',
-                      link: 'https://finance.yahoo.com/news/deepseek-users-forcing-ai-reveal-151950834.html',
-                    },
-                    {
                       publication: 'MSN',
                       title: 'DeepSeek AI censors most prompts on sensitive topics for China',
                       link: 'https://www.msn.com/en-us/news/technology/deepseek-ai-censors-most-prompts-on-sensitive-topics-for-china/ar-AA1ycVkf',
                     },
                     {
+                      publication: 'Yahoo Finance',
+                      title: 'DeepSeek Users Forcing AI to Reveal Censorship',
+                      link: 'https://finance.yahoo.com/news/deepseek-users-forcing-ai-reveal-151950834.html',
+                    },
+                    {
                       publication: 'Hacker News',
-                      title: 'Discussion: DeepSeek Censorship Research',
+                      title: 'Questions censored by DeepSeek (200+ comments)',
                       link: 'https://news.ycombinator.com/item?id=42858552',
                     },
                   ].map((article) => (
@@ -143,16 +155,48 @@ const PressContent = () => {
           <Typography variant="h5" component="h4" gutterBottom mt={6}>
             Featured Podcasts
           </Typography>
-          <Grid container spacing={4}>
+          <Grid container spacing={4} mb={6}>
             <Grid item xs={12} md={6}>
-              <Box className={styles.coverageItem} p={3}>
+              <Box
+                className={styles.coverageItem}
+                p={3}
+                sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+              >
+                <Typography variant="h6" component="h4" gutterBottom>
+                  What DeepSeek Means for Cybersecurity
+                </Typography>
+                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                  AI + a16z • February 28, 2025
+                </Typography>
+                <Typography variant="body2" paragraph sx={{ flex: 1 }}>
+                  In this episode, a16z partner Joel de la Garza speaks with a trio of security
+                  experts, including Promptfoo founder Ian Webster, about the security implications
+                  of the DeepSeek reasoning model. Ian's segment focuses on vulnerabilities within
+                  DeepSeek itself, and how users can protect themselves against backdoors,
+                  jailbreaks, and censorship.
+                </Typography>
+                <Link
+                  href="https://open.spotify.com/episode/6dgcEOdie8Mtl5COJjjHFy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Listen on Spotify →
+                </Link>
+              </Box>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <Box
+                className={styles.coverageItem}
+                p={3}
+                sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+              >
                 <Typography variant="h6" component="h4" gutterBottom>
                   Securing AI by Democratizing Red Teams
                 </Typography>
                 <Typography variant="subtitle2" color="text.secondary" gutterBottom>
                   a16z Podcast • August 2, 2024
                 </Typography>
-                <Typography variant="body2" paragraph>
+                <Typography variant="body2" paragraph sx={{ flex: 1 }}>
                   a16z General Partner Anjney Midha speaks with Promptfoo founder and CEO Ian
                   Webster about the importance of red-teaming for AI safety and security, and how
                   bringing those capabilities to more organizations will lead to safer, more
@@ -164,20 +208,180 @@ const PressContent = () => {
               </Box>
             </Grid>
             <Grid item xs={12} md={6}>
-              <Box className={styles.coverageItem} p={3}>
+              <Box
+                className={styles.coverageItem}
+                p={3}
+                sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+              >
                 <Typography variant="h6" component="h4" gutterBottom>
                   The Future of AI Security
                 </Typography>
                 <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                  CyberBytes with Steffen Foley • 2024
+                  CyberBytes with Steffen Foley • December 5, 2024
                 </Typography>
-                <Typography variant="body2" paragraph>
+                <Typography variant="body2" paragraph sx={{ flex: 1 }}>
                   A deep dive into Ian's evolution from shipping Gen AI products as an engineer to
                   launching a cybersecurity company, the fascinating origin of Promptfoo, and key
                   insights on the latest AI security trends.
                 </Typography>
                 <Link href="https://open.spotify.com/episode/6bdzElwFgZoBHjRrYyqHoN">
                   Listen on Spotify →
+                </Link>
+              </Box>
+            </Grid>
+          </Grid>
+
+          {/* Educational Resources Section */}
+          <Typography variant="h5" component="h4" gutterBottom mt={6}>
+            Educational Resources
+          </Typography>
+          <Typography variant="body1" paragraph>
+            Leading AI platforms have integrated Promptfoo into their official educational
+            materials, recognizing it as an essential tool for LLM application development,
+            evaluation, and security. These courses and workshops, developed in partnership with
+            industry leaders, provide comprehensive training on building reliable AI applications.
+          </Typography>
+          <Grid container spacing={4} mb={6}>
+            {/* OpenAI Build Hour */}
+            <Grid item xs={12} md={6}>
+              <Box
+                className={styles.coverageItem}
+                p={3}
+                sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+              >
+                <Typography variant="h6" component="h4" gutterBottom>
+                  OpenAI Build Hour: Prompt Testing & Evaluation
+                </Typography>
+                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                  OpenAI • 2024
+                </Typography>
+                <Typography variant="body2" paragraph sx={{ flex: 1 }}>
+                  Featured in OpenAI's Build Hour series, where they highlight that "Promptfoo is
+                  really powerful because you can iterate on prompts, configure tests in YAML, and
+                  view everything locally... it's faster and more straightforward."
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mt: 'auto' }}>
+                  <Typography variant="caption" color="text.secondary">
+                    60 Minutes
+                  </Typography>
+                  <Link href="https://vimeo.com/1023317525">Watch video →</Link>
+                </Box>
+              </Box>
+            </Grid>
+
+            {/* Anthropic Course */}
+            <Grid item xs={12} md={6}>
+              <Box
+                className={styles.coverageItem}
+                p={3}
+                sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+              >
+                <Typography variant="h6" component="h4" gutterBottom>
+                  Anthropic Prompt Evaluations Course
+                </Typography>
+                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                  Anthropic • 2024
+                </Typography>
+                <Typography variant="body2" paragraph sx={{ flex: 1 }}>
+                  A comprehensive nine-lesson course covering everything from basic evaluations to
+                  advanced model-graded techniques. Anthropic notes that "Promptfoo offers a
+                  streamlined, out-of-the-box solution that can significantly reduce the time and
+                  effort required for comprehensive prompt testing."
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mt: 'auto' }}>
+                  <Typography variant="caption" color="text.secondary">
+                    6 Hours
+                  </Typography>
+                  <Link href="https://github.com/anthropics/courses/tree/master/prompt_evaluations">
+                    View course →
+                  </Link>
+                </Box>
+              </Box>
+            </Grid>
+
+            {/* AWS Workshop */}
+            <Grid item xs={12} md={6}>
+              <Box
+                className={styles.coverageItem}
+                p={3}
+                sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+              >
+                <Typography variant="h6" component="h4" gutterBottom>
+                  AWS Workshop Studio: Mastering LLM Evaluation
+                </Typography>
+                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                  Amazon Web Services • 2025
+                </Typography>
+                <Typography variant="body2" paragraph sx={{ flex: 1 }}>
+                  A comprehensive workshop designed to equip you with the knowledge and practical
+                  skills needed to effectively evaluate and improve Large Language Model (LLM)
+                  applications using Amazon Bedrock and Promptfoo. The course covers everything from
+                  basic setup to advanced evaluation techniques.
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mt: 'auto' }}>
+                  <Typography variant="caption" color="text.secondary">
+                    3 Hours
+                  </Typography>
+                  <Link href="https://catalog.us-east-1.prod.workshops.aws/promptfoo/en-US">
+                    View course →
+                  </Link>
+                </Box>
+              </Box>
+            </Grid>
+
+            {/* IBM Course */}
+            <Grid item xs={12} md={6}>
+              <Box
+                className={styles.coverageItem}
+                p={3}
+                sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+              >
+                <Typography variant="h6" component="h4" gutterBottom>
+                  Move to the Best LLM Model for Your App
+                </Typography>
+                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                  IBM Skills Network • 2024
+                </Typography>
+                <Typography variant="body2" paragraph sx={{ flex: 1 }}>
+                  A hands-on guided project that teaches developers how to master model selection
+                  using Promptfoo. Learn to adapt to new models, handle pricing changes effectively,
+                  and perform regression testing through practical scenarios.
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mt: 'auto' }}>
+                  <Typography variant="caption" color="text.secondary">
+                    2 Hours
+                  </Typography>
+                  <Link href="https://cognitiveclass.ai/courses/move-to-the-best-llm-model-for-your-app">
+                    View course →
+                  </Link>
+                </Box>
+              </Box>
+            </Grid>
+          </Grid>
+
+          {/* Technical Content Section */}
+          <Typography variant="h5" component="h4" gutterBottom mt={6}>
+            Technical Content & Guides
+          </Typography>
+          <Grid container spacing={4} mb={6}>
+            <Grid item xs={12} md={6}>
+              <Box
+                className={styles.coverageItem}
+                p={3}
+                sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+              >
+                <Typography variant="h6" component="h4" gutterBottom>
+                  Does your LLM thing work? (& how we use promptfoo)
+                </Typography>
+                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                  Semgrep Engineering Blog • September 6, 2024
+                </Typography>
+                <Typography variant="body2" paragraph sx={{ flex: 1 }}>
+                  A detailed blog post by Semgrep's AI team explains their approach to evaluating
+                  LLM features and why they adopted Promptfoo as part of their workflow.
+                </Typography>
+                <Link href="http://semgrep.dev/blog/2024/does-your-llm-thing-work-how-we-use-promptfoo/">
+                  Read article →
                 </Link>
               </Box>
             </Grid>

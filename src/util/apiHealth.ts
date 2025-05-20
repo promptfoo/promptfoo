@@ -1,3 +1,4 @@
+import { getEnvString } from '../envars';
 import { fetchWithTimeout } from '../fetch';
 import { CloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
@@ -18,12 +19,12 @@ export async function checkRemoteHealth(url: string): Promise<HealthResponse> {
       url,
       // Log environment variables that might affect network requests
       env: {
-        httpProxy: process.env.HTTP_PROXY || process.env.http_proxy,
-        httpsProxy: process.env.HTTPS_PROXY || process.env.https_proxy,
-        allProxy: process.env.ALL_PROXY || process.env.all_proxy,
-        noProxy: process.env.NO_PROXY || process.env.no_proxy,
-        nodeExtra: process.env.NODE_EXTRA_CA_CERTS,
-        nodeTls: process.env.NODE_TLS_REJECT_UNAUTHORIZED,
+        httpProxy: getEnvString('HTTP_PROXY') || getEnvString('http_proxy'),
+        httpsProxy: getEnvString('HTTPS_PROXY') || getEnvString('https_proxy'),
+        allProxy: getEnvString('ALL_PROXY') || getEnvString('all_proxy'),
+        noProxy: getEnvString('NO_PROXY') || getEnvString('no_proxy'),
+        nodeExtra: getEnvString('NODE_EXTRA_CA_CERTS'),
+        nodeTls: getEnvString('NODE_TLS_REJECT_UNAUTHORIZED'),
       },
     })}`,
   );

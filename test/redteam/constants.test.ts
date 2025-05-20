@@ -13,9 +13,23 @@ import {
   CONFIG_REQUIRED_PLUGINS,
   DEFAULT_PLUGINS,
   ALL_PLUGINS,
+  DATASET_PLUGINS,
   Severity,
   severityDisplayNames,
   PLUGIN_PRESET_DESCRIPTIONS,
+  AGENTIC_PLUGINS,
+  riskCategories,
+  categoryDescriptions,
+  displayNameOverrides,
+  riskCategorySeverityMap,
+  categoryAliases,
+  pluginDescriptions,
+  subCategoryDescriptions,
+  STRATEGY_COLLECTIONS,
+  STRATEGY_COLLECTION_MAPPINGS,
+  ALL_STRATEGIES,
+  strategyDescriptions,
+  strategyDisplayNames,
 } from '../../src/redteam/constants';
 
 describe('constants', () => {
@@ -80,6 +94,10 @@ describe('constants', () => {
     expect(BASE_PLUGINS).toContain('hallucination');
   });
 
+  it('ADDITIONAL_PLUGINS should contain MCP plugin', () => {
+    expect(ADDITIONAL_PLUGINS).toContain('mcp');
+  });
+
   it('DEFAULT_PLUGINS should be a Set containing base plugins, harm plugins and PII plugins', () => {
     expect(DEFAULT_PLUGINS).toBeInstanceOf(Set);
     expect(DEFAULT_PLUGINS.has('contracts')).toBe(true);
@@ -88,8 +106,34 @@ describe('constants', () => {
 
   it('ALL_PLUGINS should contain all plugins sorted', () => {
     expect(ALL_PLUGINS).toEqual(
-      [...new Set([...DEFAULT_PLUGINS, ...ADDITIONAL_PLUGINS, ...CONFIG_REQUIRED_PLUGINS])].sort(),
+      [
+        ...new Set([
+          ...DEFAULT_PLUGINS,
+          ...ADDITIONAL_PLUGINS,
+          ...CONFIG_REQUIRED_PLUGINS,
+          ...AGENTIC_PLUGINS,
+        ]),
+      ].sort(),
     );
+  });
+
+  it('DATASET_PLUGINS should contain expected plugins', () => {
+    const expectedPlugins = [
+      'beavertails',
+      'cyberseceval',
+      'donotanswer',
+      'harmbench',
+      'pliny',
+      'unsafebench',
+      'xstest',
+    ];
+
+    expect(DATASET_PLUGINS).toEqual(expectedPlugins);
+    expect(DATASET_PLUGINS).toHaveLength(7);
+
+    expectedPlugins.forEach((plugin) => {
+      expect(DATASET_PLUGINS).toContain(plugin);
+    });
   });
 
   it('Severity enum should have expected values', () => {
@@ -115,6 +159,74 @@ describe('constants', () => {
     );
     expect(PLUGIN_PRESET_DESCRIPTIONS['Minimal Test']).toBe(
       'Minimal set of plugins to validate your setup',
+    );
+    expect(PLUGIN_PRESET_DESCRIPTIONS['OWASP Agentic AI Top 10']).toBe(
+      'OWASP Agentic AI Top 10 Threats and Mitigations',
+    );
+  });
+
+  it('should have MEMORY_POISONING_PLUGIN_ID in Security & Access Control category', () => {
+    expect(riskCategories['Security & Access Control']).toBeDefined();
+    expect(riskCategories['Security & Access Control']).toContain('agentic:memory-poisoning');
+  });
+
+  it('should have descriptions for all risk categories', () => {
+    const categories = Object.keys(riskCategories) as (keyof typeof categoryDescriptions)[];
+    categories.forEach((category) => {
+      expect(categoryDescriptions[category]).toBeDefined();
+      expect(typeof categoryDescriptions[category]).toBe('string');
+    });
+  });
+
+  it('should have correct display name for MCP plugin', () => {
+    expect(displayNameOverrides['mcp']).toBe('Model Context Protocol');
+  });
+
+  it('should have correct severity for MCP plugin', () => {
+    expect(riskCategorySeverityMap['mcp']).toBe(Severity.High);
+  });
+
+  it('should have correct alias for MCP plugin', () => {
+    expect(categoryAliases['mcp']).toBe('MCP');
+  });
+
+  it('should have correct plugin description for MCP plugin', () => {
+    expect(pluginDescriptions['mcp']).toBe(
+      'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
+    );
+  });
+
+  it('should have correct subcategory description for MCP plugin', () => {
+    expect(subCategoryDescriptions['mcp']).toBe(
+      'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
+    );
+  });
+
+  it('STRATEGY_COLLECTIONS should contain expected collections', () => {
+    expect(STRATEGY_COLLECTIONS).toEqual(['other-encodings']);
+  });
+
+  it('STRATEGY_COLLECTION_MAPPINGS should have correct mappings', () => {
+    expect(STRATEGY_COLLECTION_MAPPINGS['other-encodings']).toEqual(['morse', 'piglatin']);
+  });
+
+  it('ALL_STRATEGIES should include strategy collections', () => {
+    expect(ALL_STRATEGIES).toContain('other-encodings');
+  });
+
+  it('strategy collections should have proper descriptions', () => {
+    expect(strategyDescriptions['other-encodings']).toBe(
+      'Collection of alternative text transformation strategies (Morse code and Pig Latin) for testing evasion techniques',
+    );
+  });
+
+  it('strategy collections should have proper display names', () => {
+    expect(strategyDisplayNames['other-encodings']).toBe('Collection of Text Encodings');
+  });
+
+  it('strategy collections should have proper subcategory descriptions', () => {
+    expect(subCategoryDescriptions['other-encodings']).toBe(
+      'Collection of alternative text transformation strategies (Morse code and Pig Latin) for testing evasion techniques',
     );
   });
 });

@@ -201,7 +201,9 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
     if (typeof selectedTarget === 'object') {
       const updatedTarget = { ...selectedTarget } as ProviderOptions;
 
-      if (field === 'url') {
+      if (field === 'id') {
+        updatedTarget.id = value;
+      } else if (field === 'url') {
         updatedTarget.config.url = value;
         if (validateUrl(value)) {
           setUrlError(null);

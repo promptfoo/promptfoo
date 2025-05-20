@@ -1,11 +1,13 @@
 import { OpenAiGenericProvider } from '.';
 import { fetchWithCache } from '../../cache';
-import { getEnvFloat, getEnvInt } from '../../envars';
+import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
-import { renderVarsInObject } from '../../util';
-import { maybeLoadFromExternalFile } from '../../util';
+import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util';
+import { maybeLoadFromExternalFile } from '../../util/file';
+import { MCPClient } from '../mcp/client';
+import { transformMCPToolsToOpenAi } from '../mcp/transform';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from '../shared';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
 import { calculateOpenAICost } from './util';
@@ -17,6 +19,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   static OPENAI_CHAT_MODEL_NAMES = OPENAI_CHAT_MODELS.map((model) => model.id);
 
   config: OpenAiCompletionOptions;
+  private mcpClient: MCPClient | null = null;
+  private initializationPromise: Promise<void> | null = null;
 
   constructor(
     modelName: string,
@@ -27,10 +31,31 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
     super(modelName, options);
     this.config = options.config || {};
+
+    if (this.config.mcp?.enabled) {
+      this.initializationPromise = this.initializeMCP();
+    }
+  }
+
+  private async initializeMCP(): Promise<void> {
+    this.mcpClient = new MCPClient(this.config.mcp!);
+    await this.mcpClient.initialize();
+  }
+
+  async cleanup(): Promise<void> {
+    if (this.mcpClient) {
+      await this.initializationPromise;
+      await this.mcpClient.cleanup();
+      this.mcpClient = null;
+    }
   }
 
   protected isReasoningModel(): boolean {
-    return this.modelName.startsWith('o1') || this.modelName.startsWith('o3');
+    return (
+      this.modelName.startsWith('o1') ||
+      this.modelName.startsWith('o3') ||
+      this.modelName.startsWith('o4')
+    );
   }
 
   protected supportsTemperature(): boolean {
@@ -67,6 +92,14 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
       : undefined;
 
+    // --- MCP tool injection logic ---
+    const mcpTools = this.mcpClient ? transformMCPToolsToOpenAi(this.mcpClient.getAllTools()) : [];
+    const fileTools = config.tools
+      ? maybeLoadToolsFromExternalFile(config.tools, context?.vars) || []
+      : [];
+    const allTools = [...mcpTools, ...fileTools];
+    // --- End MCP tool injection logic ---
+
     const body = {
       model: this.modelName,
       messages,
@@ -75,21 +108,18 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       ...(maxCompletionTokens ? { max_completion_tokens: maxCompletionTokens } : {}),
       ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
       ...(temperature ? { temperature } : {}),
-      ...(config.top_p !== undefined || process.env.OPENAI_TOP_P
-        ? { top_p: config.top_p ?? Number.parseFloat(process.env.OPENAI_TOP_P || '1') }
+      ...(config.top_p !== undefined || getEnvString('OPENAI_TOP_P')
+        ? { top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1) }
         : {}),
-      ...(config.presence_penalty !== undefined || process.env.OPENAI_PRESENCE_PENALTY
+      ...(config.presence_penalty !== undefined || getEnvString('OPENAI_PRESENCE_PENALTY')
         ? {
-            presence_penalty:
-              config.presence_penalty ??
-              Number.parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
+            presence_penalty: config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY', 0),
           }
         : {}),
-      ...(config.frequency_penalty !== undefined || process.env.OPENAI_FREQUENCY_PENALTY
+      ...(config.frequency_penalty !== undefined || getEnvString('OPENAI_FREQUENCY_PENALTY')
         ? {
             frequency_penalty:
-              config.frequency_penalty ??
-              Number.parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
+              config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0),
           }
         : {}),
       ...(config.functions
@@ -100,9 +130,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           }
         : {}),
       ...(config.function_call ? { function_call: config.function_call } : {}),
-      ...(config.tools
-        ? { tools: maybeLoadFromExternalFile(renderVarsInObject(config.tools, context?.vars)) }
-        : {}),
+      ...(allTools.length > 0 ? { tools: allTools } : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.tool_resources ? { tool_resources: config.tool_resources } : {}),
       ...(config.response_format
@@ -115,6 +143,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(config.stop ? { stop: config.stop } : {}),
       ...(config.passthrough || {}),
+      ...(this.modelName.includes('audio')
+        ? {
+            modalities: config.modalities || ['text', 'audio'],
+            audio: config.audio || { voice: 'alloy', format: 'wav' },
+          }
+        : {}),
     };
 
     return { body, config };
@@ -125,7 +159,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    if (!this.getApiKey()) {
+    if (this.initializationPromise) {
+      await this.initializationPromise;
+    }
+    if (this.requiresApiKey() && !this.getApiKey()) {
       throw new Error(
         'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
       );
@@ -191,7 +228,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         } else {
           output = message;
         }
-      } else if (message.content === null || message.content === undefined) {
+      } else if (
+        message.content === null ||
+        message.content === undefined ||
+        (message.content === '' && message.tool_calls)
+      ) {
         output = message.function_call || message.tool_calls;
       } else {
         output = message.content;
@@ -237,9 +278,44 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
               config,
               data.usage?.prompt_tokens,
               data.usage?.completion_tokens,
+              data.usage?.audio_prompt_tokens,
+              data.usage?.audio_completion_tokens,
             ),
           };
         }
+      }
+
+      // Handle DeepSeek reasoning model's reasoning_content by prepending it to the output
+      if (
+        message.reasoning_content &&
+        typeof message.reasoning_content === 'string' &&
+        typeof output === 'string' &&
+        (this.config.showThinking ?? true)
+      ) {
+        output = `Thinking: ${message.reasoning_content}\n\n${output}`;
+      }
+      if (message.audio) {
+        return {
+          output: message.audio.transcript || '',
+          audio: {
+            id: message.audio.id,
+            expiresAt: message.audio.expires_at,
+            data: message.audio.data,
+            transcript: message.audio.transcript,
+            format: message.audio.format || 'wav',
+          },
+          tokenUsage: getTokenUsage(data, cached),
+          cached,
+          logProbs,
+          cost: calculateOpenAICost(
+            this.modelName,
+            config,
+            data.usage?.prompt_tokens,
+            data.usage?.completion_tokens,
+            data.usage?.audio_prompt_tokens,
+            data.usage?.audio_completion_tokens,
+          ),
+        };
       }
 
       return {
@@ -252,6 +328,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           config,
           data.usage?.prompt_tokens,
           data.usage?.completion_tokens,
+          data.usage?.audio_prompt_tokens,
+          data.usage?.audio_completion_tokens,
         ),
       };
     } catch (err) {

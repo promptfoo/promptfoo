@@ -20,7 +20,7 @@ export async function tryPath(path: string): Promise<string | null> {
     const result = await Promise.race([
       execAsync(`${path} --version`),
       new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Command timed out')), 250),
+        setTimeout(() => reject(new Error('Command timed out')), 2500),
       ),
     ]);
     const versionOutput = (result as { stdout: string }).stdout.trim();
@@ -146,6 +146,9 @@ export async function runPython(
     let result: { type: 'final_result'; data: any } | undefined;
     try {
       result = JSON.parse(output);
+      logger.debug(
+        `Python script ${absPath} parsed output type: ${typeof result}, structure: ${result ? JSON.stringify(Object.keys(result)) : 'undefined'}`,
+      );
     } catch (error) {
       throw new Error(
         `Invalid JSON: ${(error as Error).message} when parsing result: ${
@@ -156,6 +159,14 @@ export async function runPython(
     if (result?.type !== 'final_result') {
       throw new Error('The Python script `call_api` function must return a dict with an `output`');
     }
+
+    // Add helpful logging about the data structure
+    if (result.data) {
+      logger.debug(
+        `Python script result data type: ${typeof result.data}, structure: ${result.data ? JSON.stringify(Object.keys(result.data)) : 'undefined'}`,
+      );
+    }
+
     return result.data;
   } catch (error) {
     logger.error(

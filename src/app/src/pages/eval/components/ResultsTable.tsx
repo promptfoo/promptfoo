@@ -34,15 +34,14 @@ import invariant from '@promptfoo/util/invariant';
 import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
 import yaml from 'js-yaml';
 import remarkGfm from 'remark-gfm';
+import { useDebounce } from 'use-debounce';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
-import GenerateTestCases from './GenerateTestCases';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
 import type { TruncatedTextProps } from './TruncatedText';
 import TruncatedText from './TruncatedText';
-import { useStore as useMainStore } from './store';
-import { useStore as useResultsViewStore } from './store';
+import { useStore as useMainStore, useResultsViewSettingsStore } from './store';
 import './ResultsTable.css';
 
 function formatRowOutput(output: EvaluateTableOutput | string) {
@@ -90,11 +89,13 @@ function TableHeader({
               🔎
             </span>
           </Tooltip>
-          <EvalOutputPromptDialog
-            open={promptOpen}
-            onClose={handlePromptClose}
-            prompt={expandedText}
-          />
+          {promptOpen && (
+            <EvalOutputPromptDialog
+              open={promptOpen}
+              onClose={handlePromptClose}
+              prompt={expandedText}
+            />
+          )}
           {resourceId && (
             <Tooltip title="View other evals and datasets for this prompt">
               <span className="action">
@@ -117,6 +118,7 @@ interface ResultsTableProps {
   filterMode: FilterMode;
   failureFilter: { [key: string]: boolean };
   searchText: string;
+  debouncedSearchText?: string;
   showStats: boolean;
   onFailureFilterToggle: (columnId: string, checked: boolean) => void;
   onSearchTextChange: (text: string) => void;
@@ -134,7 +136,7 @@ interface ExtendedEvaluateTableRow extends EvaluateTableRow {
 
 function useScrollHandler() {
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const { stickyHeader } = useResultsViewStore();
+  const { stickyHeader } = useResultsViewSettingsStore();
   const lastScrollY = useRef(0);
 
   useEffect(() => {
@@ -158,6 +160,36 @@ function useScrollHandler() {
   return { isCollapsed };
 }
 
+function stringifyMetadataValue(value: any): string {
+  try {
+    if (value === null || value === undefined) {
+      return '';
+    }
+    return typeof value === 'object' ? JSON.stringify(value) : String(value);
+  } catch (err) {
+    console.error('Error stringifying metadata value:', err);
+    return '';
+  }
+}
+
+function generateMetadataSearchString(metadata: Record<string, any> | undefined): string {
+  if (!metadata) {
+    return '';
+  }
+
+  return Object.entries(metadata)
+    .map(([key, value]) => {
+      try {
+        const valueStr = stringifyMetadataValue(value);
+        return `metadata=${key}:${valueStr}`;
+      } catch (err) {
+        console.error('Error processing metadata entry:', err);
+        return '';
+      }
+    })
+    .join(' ');
+}
+
 function ResultsTable({
   maxTextLength,
   columnVisibility,
@@ -165,12 +197,14 @@ function ResultsTable({
   filterMode,
   failureFilter,
   searchText,
+  debouncedSearchText: externalDebouncedSearchText,
   showStats,
   onFailureFilterToggle,
   onSearchTextChange,
   setFilterMode,
 }: ResultsTableProps) {
-  const { evalId, table, setTable, config, inComparisonMode, version } = useMainStore();
+  const { evalId, table, setTable, config, version } = useMainStore();
+  const { inComparisonMode } = useResultsViewSettingsStore();
   const { showToast } = useToast();
 
   invariant(table, 'Table should be defined');
@@ -203,7 +237,6 @@ function ResultsTable({
 
       const componentResults = updatedOutputs[promptIndex].gradingResult?.componentResults || [];
       if (typeof isPass !== 'undefined') {
-        // Add component result for manual grading
         const humanResultIndex = componentResults.findIndex(
           (result) => result.assertion?.type === 'human',
         );
@@ -275,14 +308,27 @@ function ResultsTable({
   );
 
   const columnVisibilityIsSet = Object.keys(columnVisibility).length > 0;
+
+  const [localDebouncedSearchText] = useDebounce(searchText, 200);
+  const debouncedSearchText = externalDebouncedSearchText || localDebouncedSearchText;
+  const [isSearching, setIsSearching] = useState(false);
+
+  React.useEffect(() => {
+    setIsSearching(searchText !== debouncedSearchText && searchText !== '');
+  }, [searchText, debouncedSearchText]);
+
   const searchRegex = React.useMemo(() => {
+    if (!debouncedSearchText) {
+      return null;
+    }
     try {
-      return new RegExp(searchText, 'i');
+      return new RegExp(debouncedSearchText, 'i');
     } catch (err) {
       console.error('Invalid regular expression:', (err as Error).message);
       return null;
     }
-  }, [searchText]);
+  }, [debouncedSearchText]);
+
   const filteredBody = React.useMemo(() => {
     try {
       return body
@@ -322,16 +368,24 @@ function ResultsTable({
             return false;
           }
 
-          return searchText && searchRegex
+          return debouncedSearchText && searchRegex
             ? row.outputs.some((output) => {
                 const vars = row.vars.map((v) => `var=${v}`).join(' ');
-                const stringifiedOutput = `${output.text} ${Object.keys(output.namedScores)
-                  .map((k) => `metric=${k}:${output.namedScores[k]}`)
+                const stringifiedOutput = `${output.text} ${Object.keys(output.namedScores || {})
+                  .map((k) => {
+                    const namedScores = output.namedScores || {};
+                    const score = namedScores[k as keyof typeof namedScores];
+                    return `metric=${k}:${score}`;
+                  })
                   .join(' ')} ${
                   output.gradingResult?.reason || ''
                 } ${output.gradingResult?.comment || ''}`;
 
-                const searchString = `${vars} ${stringifiedOutput}`;
+                const outputMetadataString = generateMetadataSearchString(output.metadata);
+                const testCaseMetadataString = generateMetadataSearchString(
+                  output.testCase?.metadata,
+                );
+                const searchString = `${vars} ${stringifiedOutput} ${outputMetadataString} ${testCaseMetadataString}`;
                 return searchRegex.test(searchString);
               })
             : true;
@@ -344,17 +398,20 @@ function ResultsTable({
     body,
     failureFilter,
     filterMode,
-    searchText,
+    debouncedSearchText,
     columnVisibility,
     columnVisibilityIsSet,
     searchRegex,
   ]);
 
   const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: 50 });
+  const parseQueryParams = (queryString: string) => {
+    return Object.fromEntries(new URLSearchParams(queryString));
+  };
 
   React.useEffect(() => {
     setPagination((prev) => ({ ...prev, pageIndex: 0 }));
-  }, [failureFilter, filterMode, searchText]);
+  }, [failureFilter, filterMode, debouncedSearchText]);
 
   // TODO(ian): Switch this to use prompt.metrics field once most clients have updated.
   const numGoodTests = React.useMemo(
@@ -398,7 +455,7 @@ function ResultsTable({
 
   const columnHelper = React.useMemo(() => createColumnHelper<EvaluateTableRow>(), []);
 
-  const { renderMarkdown } = useResultsViewStore();
+  const { renderMarkdown } = useResultsViewSettingsStore();
   const variableColumns = React.useMemo(() => {
     if (head.vars.length > 0) {
       return [
@@ -430,7 +487,7 @@ function ResultsTable({
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>{truncatedValue}</ReactMarkdown>
                       </MarkdownErrorBoundary>
                     ) : (
-                      <>{value}</>
+                      <TruncatedText text={value} maxLength={maxTextLength} />
                     )}
                   </div>
                 );
@@ -563,7 +620,24 @@ function ResultsTable({
               const providerConfig = Array.isArray(config?.providers)
                 ? config.providers[idx]
                 : undefined;
-              const providerParts = prompt.provider ? prompt.provider.split(':') : [];
+
+              let providerParts: string[] = [];
+              try {
+                if (prompt.provider && typeof prompt.provider === 'string') {
+                  providerParts = prompt.provider.split(':');
+                } else if (prompt.provider) {
+                  const providerObj = prompt.provider as any; // Use any for flexible typing
+                  const providerId =
+                    typeof providerObj === 'object' && providerObj !== null
+                      ? providerObj.id || JSON.stringify(providerObj)
+                      : String(providerObj);
+                  providerParts = [providerId];
+                }
+              } catch (error) {
+                console.error('Error parsing provider:', error);
+                providerParts = ['Error parsing provider'];
+              }
+
               const providerDisplay = (
                 <Tooltip title={providerConfig ? <pre>{yaml.dump(providerConfig)}</pre> : ''}>
                   {providerParts.length > 1 ? (
@@ -571,7 +645,7 @@ function ResultsTable({
                       {providerParts[0]}:<strong>{providerParts.slice(1).join(':')}</strong>
                     </>
                   ) : (
-                    <strong>{prompt.provider}</strong>
+                    <strong>{providerParts[0] || 'Unknown provider'}</strong>
                   )}
                 </Tooltip>
               );
@@ -653,7 +727,7 @@ function ResultsTable({
                   )}
                   firstOutput={getFirstOutput(info.row.index)}
                   showDiffs={filterMode === 'different'}
-                  searchText={searchText}
+                  searchText={debouncedSearchText}
                   showStats={showStats}
                 />
               ) : (
@@ -682,7 +756,7 @@ function ResultsTable({
     numGoodTests,
     onFailureFilterToggle,
     onSearchTextChange,
-    searchText,
+    debouncedSearchText,
     showStats,
   ]);
 
@@ -726,10 +800,113 @@ function ResultsTable({
   });
 
   const { isCollapsed } = useScrollHandler();
-  const { stickyHeader, setStickyHeader } = useResultsViewStore();
+  const { stickyHeader, setStickyHeader } = useResultsViewSettingsStore();
+
+  const clearRowIdFromUrl = React.useCallback(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.has('rowId')) {
+      url.searchParams.delete('rowId');
+      window.history.replaceState({}, '', url);
+    }
+  }, []);
+
+  useEffect(() => {
+    const params = parseQueryParams(window.location.search);
+    const rowId = params['rowId'];
+
+    if (rowId) {
+      const parsedRowId = Number(rowId);
+      const rowIndex = Math.max(0, Math.min(parsedRowId - 1, filteredBody.length - 1));
+
+      let hasScrolled = false;
+
+      const rowPageIndex = Math.floor(rowIndex / pagination.pageSize);
+
+      const maxPageIndex = reactTable.getPageCount() - 1;
+      const safeRowPageIndex = Math.min(rowPageIndex, maxPageIndex);
+
+      if (pagination.pageIndex !== safeRowPageIndex) {
+        setPagination((prev) => ({ ...prev, pageIndex: safeRowPageIndex }));
+      }
+
+      const scrollToRow = () => {
+        if (hasScrolled) {
+          return;
+        }
+
+        const localRowIndex = rowIndex % pagination.pageSize;
+        const rowElement = document.querySelector(`#row-${localRowIndex}`);
+
+        if (rowElement) {
+          hasScrolled = true;
+
+          requestAnimationFrame(() => {
+            rowElement.scrollIntoView({
+              behavior: 'smooth',
+              block: 'nearest',
+            });
+          });
+        }
+      };
+
+      const tableContainer =
+        document.querySelector('.results-table')?.parentElement || document.body;
+
+      const observer = new MutationObserver(() => {
+        if (hasScrolled) {
+          observer.disconnect();
+          return;
+        }
+
+        const localRowIndex = rowIndex % pagination.pageSize;
+        const rowElement = document.querySelector(`#row-${localRowIndex}`);
+        if (rowElement) {
+          scrollToRow();
+          observer.disconnect();
+        }
+      });
+
+      observer.observe(tableContainer, {
+        childList: true,
+        subtree: true,
+      });
+
+      const timeoutId = setTimeout(() => {
+        if (!hasScrolled) {
+          console.warn('Timeout reached while waiting for row to be rendered');
+          observer.disconnect();
+        }
+      }, 5000);
+
+      return () => {
+        observer.disconnect();
+        clearTimeout(timeoutId);
+      };
+    }
+  }, [pagination.pageIndex, pagination.pageSize, reactTable, filteredBody.length]);
 
   return (
     <div>
+      {isSearching && searchText && (
+        <Box
+          sx={{
+            position: 'fixed',
+            top: '60px',
+            right: '20px',
+            zIndex: 1000,
+            backgroundColor: 'rgba(25, 118, 210, 0.1)',
+            padding: '5px 10px',
+            borderRadius: '4px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          <Typography variant="body2" color="primary">
+            Searching...
+          </Typography>
+        </Box>
+      )}
       <table
         className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
         style={{
@@ -774,8 +951,9 @@ function ResultsTable({
         <tbody>
           {reactTable.getRowModel().rows.map((row, rowIndex) => {
             let colBorderDrawn = false;
+
             return (
-              <tr key={row.id}>
+              <tr key={row.id} id={`row-${row.index % pagination.pageSize}`}>
                 {row.getVisibleCells().map((cell) => {
                   const isMetadataCol =
                     cell.column.id.startsWith('Variable') || cell.column.id === 'description';
@@ -847,7 +1025,8 @@ function ResultsTable({
         <Box className="pagination" mx={1} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <Button
             onClick={() => {
-              setPagination((old) => ({ ...old, pageIndex: Math.max(old.pageIndex - 1, 0) }));
+              setPagination((prev) => ({ ...prev, pageIndex: Math.max(prev.pageIndex - 1, 0) }));
+              clearRowIdFromUrl();
               window.scrollTo(0, 0);
             }}
             disabled={reactTable.getState().pagination.pageIndex === 0}
@@ -863,10 +1042,11 @@ function ResultsTable({
               value={reactTable.getState().pagination.pageIndex + 1}
               onChange={(e) => {
                 const page = e.target.value ? Number(e.target.value) - 1 : 0;
-                setPagination((old) => ({
-                  ...old,
+                setPagination((prev) => ({
+                  ...prev,
                   pageIndex: Math.min(Math.max(page, 0), reactTable.getPageCount() - 1),
                 }));
+                clearRowIdFromUrl();
               }}
               InputProps={{
                 style: { width: '60px', textAlign: 'center' },
@@ -877,10 +1057,11 @@ function ResultsTable({
           </Typography>
           <Button
             onClick={() => {
-              setPagination((old) => ({
-                ...old,
-                pageIndex: Math.min(old.pageIndex + 1, reactTable.getPageCount() - 1),
+              setPagination((prev) => ({
+                ...prev,
+                pageIndex: Math.min(prev.pageIndex + 1, reactTable.getPageCount() - 1),
               }));
+              clearRowIdFromUrl();
               window.scrollTo(0, 0);
             }}
             disabled={reactTable.getState().pagination.pageIndex + 1 >= reactTable.getPageCount()}
@@ -910,7 +1091,6 @@ function ResultsTable({
           </Typography>
         </Box>
       )}
-      <GenerateTestCases />
     </div>
   );
 }

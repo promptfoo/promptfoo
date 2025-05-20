@@ -1,15 +1,6 @@
 import dedent from 'dedent';
-import type {
-  ApiProvider,
-  Assertion,
-  AssertionValue,
-  AtomicTestCase,
-  GradingResult,
-  ProviderResponse,
-  ResultSuggestion,
-  TestCase,
-} from '../../types';
-import { maybeLoadFromExternalFile } from '../../util';
+import type { ApiProvider, Assertion, AssertionValue, AtomicTestCase, GradingResult, ProviderResponse, ResultSuggestion, TestCase } from '../../types';
+import { maybeLoadFromExternalFile } from '../../util/file';
 import invariant from '../../util/invariant';
 import { RedteamPluginBase, RedteamGraderBase } from './base';
 
@@ -23,6 +14,7 @@ interface IntentPluginConfig {
 
 export class IntentPlugin extends RedteamPluginBase {
   readonly id = PLUGIN_ID;
+  static readonly canGenerateRemote = false;
   private intents: Intent[];
 
   constructor(

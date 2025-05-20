@@ -6,7 +6,7 @@ sidebar_position: 2
 
 This provider supports the [Anthropic Claude](https://www.anthropic.com/claude) series of models.
 
-> **Note:** Anthropic models can also be accessed through Amazon Bedrock. For information on using Anthropic models via Bedrock, please refer to our [AWS Bedrock documentation](/docs/providers/aws-bedrock).
+> **Note:** Anthropic models can also be accessed through [AWS Bedrock](/docs/providers/aws-bedrock/) and [Google Vertex](/docs/providers/vertex/).
 
 ## Setup
 
@@ -26,9 +26,9 @@ The `anthropic` provider supports the following models via the messages API:
 
 | Model ID                                                                   | Description                      |
 | -------------------------------------------------------------------------- | -------------------------------- |
+| `anthropic:messages:claude-3-7-sonnet-20250219` (claude-3-7-sonnet-latest) | Latest Claude 3.7 Sonnet model   |
 | `anthropic:messages:claude-3-5-sonnet-20241022` (claude-3-5-sonnet-latest) | Latest Claude 3.5 Sonnet model   |
 | `anthropic:messages:claude-3-5-sonnet-20240620`                            | Previous Claude 3.5 Sonnet model |
-| `anthropic:messages:claude-3-5-haiku-20241022` (claude-3-5-haiku-latest)   | Latest Claude 3.5 Haiku model    |
 | `anthropic:messages:claude-3-5-haiku-20241022` (claude-3-5-haiku-latest)   | Latest Claude 3.5 Haiku model    |
 | `anthropic:messages:claude-3-opus-20240229` (claude-3-opus-latest)         | Claude 3 Opus model              |
 | `anthropic:messages:claude-3-sonnet-20240229`                              | Claude 3 Sonnet model            |
@@ -40,6 +40,7 @@ Claude models are available across multiple platforms. Here's how the model name
 
 | Model             | Anthropic API                                         | AWS Bedrock ([documentation](/docs/providers/aws-bedrock)) | GCP Vertex AI ([documentation](/docs/providers/vertex)) |
 | ----------------- | ----------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------- |
+| Claude 3.7 Sonnet | claude-3-7-sonnet-20250219 (claude-3-7-sonnet-latest) | anthropic.claude-3-7-sonnet-20250219-v1:0                  | claude-3-7-sonnet@20250219                              |
 | Claude 3.5 Sonnet | claude-3-5-sonnet-20241022 (claude-3-5-sonnet-latest) | anthropic.claude-3-5-sonnet-20241022-v2:0                  | claude-3-5-sonnet-v2@20241022                           |
 | Claude 3.5 Haiku  | claude-3-5-haiku-20241022 (claude-3-5-haiku-latest)   | anthropic.claude-3-5-haiku-20241022-v1:0                   | claude-3-5-haiku@20241022                               |
 | Claude 3 Opus     | claude-3-opus-20240229 (claude-3-opus-latest)         | anthropic.claude-3-opus-20240229-v1:0                      | claude-3-opus@20240229                                  |
@@ -58,6 +59,8 @@ Claude models are available across multiple platforms. Here's how the model name
 | top_k           | -                     | Only sample from the top K options for each subsequent token      |
 | tools           | -                     | An array of tool or function definitions for the model to call    |
 | tool_choice     | -                     | An object specifying the tool to call                             |
+| thinking        | -                     | Configuration for enabling Claude's extended thinking capability  |
+| showThinking    | -                     | Whether to include thinking content in the output (default: true) |
 | headers         | -                     | Additional headers to be sent with the API request                |
 | extra_body      | -                     | Additional parameters to be included in the API request body      |
 
@@ -213,6 +216,125 @@ prompts:
 
 See [Anthropic's Citations Guide](https://docs.anthropic.com/en/docs/build-with-claude/citations) for more details.
 
+### Extended Thinking
+
+Claude supports an extended thinking capability that allows you to see the model's internal reasoning process before it provides the final answer. This can be configured using the `thinking` parameter:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: anthropic:messages:claude-3-7-sonnet-20250219
+    config:
+      max_tokens: 20000
+      thinking:
+        type: 'enabled'
+        budget_tokens: 16000 # Must be ≥1024 and less than max_tokens
+```
+
+The thinking configuration has two possible values:
+
+1. Enabled thinking:
+
+```yaml
+thinking:
+  type: 'enabled'
+  budget_tokens: number # Must be ≥1024 and less than max_tokens
+```
+
+2. Disabled thinking:
+
+```yaml
+thinking:
+  type: 'disabled'
+```
+
+When thinking is enabled:
+
+- Responses will include `thinking` content blocks showing Claude's reasoning process
+- Requires a minimum budget of 1,024 tokens
+- The budget_tokens value must be less than the max_tokens parameter
+- The tokens used for thinking count towards your max_tokens limit
+- A specialized 28 or 29 token system prompt is automatically included
+- Previous turn thinking blocks are ignored and not counted as input tokens
+- Thinking is not compatible with temperature, top_p, or top_k modifications
+
+Example response with thinking enabled:
+
+```json
+{
+  "content": [
+    {
+      "type": "thinking",
+      "thinking": "Let me analyze this step by step...",
+      "signature": "WaUjzkypQ2mUEVM36O2TxuC06KN8xyfbJwyem2dw3URve/op91XWHOEBLLqIOMfFG/UvLEczmEsUjavL...."
+    },
+    {
+      "type": "text",
+      "text": "Based on my analysis, here is the answer..."
+    }
+  ]
+}
+```
+
+#### Controlling Thinking Output
+
+By default, thinking content is included in the response output. You can control this behavior using the `showThinking` parameter:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: anthropic:messages:claude-3-7-sonnet-20250219
+    config:
+      thinking:
+        type: 'enabled'
+        budget_tokens: 16000
+      showThinking: false # Exclude thinking content from the output
+```
+
+When `showThinking` is set to `false`, the thinking content will be excluded from the output, and only the final response will be returned. This is useful when you want to use thinking for better reasoning but don't want to expose the thinking process to end users.
+
+#### Redacted Thinking
+
+Sometimes Claude's internal reasoning may be flagged by safety systems. When this occurs, the thinking block will be encrypted and returned as a `redacted_thinking` block:
+
+```json
+{
+  "content": [
+    {
+      "type": "redacted_thinking",
+      "data": "EmwKAhgBEgy3va3pzix/LafPsn4aDFIT2Xlxh0L5L8rLVyIwxtE3rAFBa8cr3qpP..."
+    },
+    {
+      "type": "text",
+      "text": "Based on my analysis..."
+    }
+  ]
+}
+```
+
+Redacted thinking blocks are automatically decrypted when passed back to the API, allowing Claude to maintain context without compromising safety guardrails.
+
+#### Extended Output with Thinking (Beta)
+
+Claude 3.7 Sonnet supports up to 128K output tokens when using the `output-128k-2025-02-19` beta feature. To enable this:
+
+```yaml
+providers:
+  - id: anthropic:messages:claude-3-7-sonnet-20250219
+    config:
+      max_tokens: 128000
+      thinking:
+        type: 'enabled'
+        budget_tokens: 32000
+      beta: ['output-128k-2025-02-19']
+```
+
+When using extended output:
+
+- Streaming is required when max_tokens is greater than 21,333
+- For thinking budgets above 32K, batch processing is recommended
+- The model may not use the entire allocated thinking budget
+
+See [Anthropic's Extended Thinking Guide](https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking) for more details on requirements and best practices.
+
 ## Model-Graded Tests
 
 [Model-graded assertions](/docs/configuration/expected-outputs/model-graded/) such as `factuality` or `llm-rubric` will automatically use Anthropic as the grading provider if `ANTHROPIC_API_KEY` is set and `OPENAI_API_KEY` is not set.
@@ -225,7 +347,7 @@ You can override the grading provider in several ways:
 
 1. For all test cases using `defaultTest`:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 defaultTest:
   options:
     provider: anthropic:messages:claude-3-5-sonnet-20241022
