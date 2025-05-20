@@ -736,7 +736,7 @@ export class HttpProvider implements ApiProvider {
     );
 
     const renderedConfig: Partial<HttpProviderConfig> = {
-      url: this.url,
+      url: getNunjucksEngine().renderString(this.url, vars),
       method: getNunjucksEngine().renderString(this.config.method || 'GET', vars),
       headers,
       body: determineRequestBody(
@@ -762,7 +762,7 @@ export class HttpProvider implements ApiProvider {
     invariant(typeof headers === 'object', 'Expected headers to be an object');
 
     // Template the base URL first, then construct URL with query parameters
-    let url = getNunjucksEngine().renderString(this.url, vars);
+    let url = renderedConfig.url as string;
     if (renderedConfig.queryParams) {
       const queryString = new URLSearchParams(renderedConfig.queryParams).toString();
       url = `${url}?${queryString}`;
