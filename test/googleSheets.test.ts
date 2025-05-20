@@ -59,9 +59,7 @@ describe('Google Sheets Integration', () => {
 
   describe('checkGoogleSheetAccess', () => {
     it('should return public:true for accessible sheets', async () => {
-      jest.mocked(fetchWithProxy).mockResolvedValue(
-        createMockResponse({ status: 200 }),
-      );
+      jest.mocked(fetchWithProxy).mockResolvedValue(createMockResponse({ status: 200 }));
 
       const result = await checkGoogleSheetAccess(TEST_SHEET_URL);
       expect(result).toEqual({ public: true, status: 200 });
@@ -69,9 +67,7 @@ describe('Google Sheets Integration', () => {
     });
 
     it('should return public:false for inaccessible sheets', async () => {
-      jest.mocked(fetchWithProxy).mockResolvedValue(
-        createMockResponse({ status: 403 }),
-      );
+      jest.mocked(fetchWithProxy).mockResolvedValue(createMockResponse({ status: 403 }));
 
       const result = await checkGoogleSheetAccess(TEST_SHEET_URL);
       expect(result).toEqual({ public: false, status: 403 });
