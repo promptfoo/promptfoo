@@ -14,18 +14,13 @@ export type CompletionTokenDetails = z.infer<typeof CompletionTokenDetailsSchema
  */
 export const BaseTokenUsageSchema = z.object({
   // Core token counts
+  total: z.number().optional(),
   prompt: z.number().optional(),
   completion: z.number().optional(),
   cached: z.number().optional(),
-  total: z.number().optional(),
 
   // Request metadata
   numRequests: z.number().optional(),
-
-  // Character counts
-  promptChars: z.number().optional(),
-  completionChars: z.number().optional(),
-  totalChars: z.number().optional(),
 
   // Detailed completion information
   completionDetails: CompletionTokenDetailsSchema.optional(),

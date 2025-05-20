@@ -39,43 +39,6 @@ export class TokenUsageTracker {
   }
 
   /**
-   * Track character usage for a provider
-   * @param providerId Provider ID
-   * @param promptText The prompt text
-   * @param completionText The completion text
-   */
-  public trackCharUsage(providerId: string, promptText?: string, completionText?: string): void {
-    if (!promptText && !completionText) {
-      return;
-    }
-
-    const current = this.providersMap.get(providerId) || {};
-    const usage: TokenUsage = { ...current };
-
-    // Count bytes rather than JavaScript string length for more accurate measurement
-    if (promptText) {
-      const promptBytes = Buffer.byteLength(promptText, 'utf8');
-      usage.promptChars = (usage.promptChars || 0) + promptBytes;
-    }
-
-    if (completionText) {
-      const completionBytes = Buffer.byteLength(completionText, 'utf8');
-      usage.completionChars = (usage.completionChars || 0) + completionBytes;
-    }
-
-    if (promptText || completionText) {
-      const promptCharsToAdd = promptText ? Buffer.byteLength(promptText, 'utf8') : 0;
-      const completionCharsToAdd = completionText ? Buffer.byteLength(completionText, 'utf8') : 0;
-      usage.totalChars = (usage.totalChars || 0) + promptCharsToAdd + completionCharsToAdd;
-    }
-
-    // Always increment the request count when tracking usage
-    usage.numRequests = (usage.numRequests || 0) + 1;
-
-    this.providersMap.set(providerId, usage);
-  }
-
-  /**
    * Get the cumulative token usage for a specific provider
    * @param providerId The ID of the provider to get usage for
    * @returns The token usage for the provider
@@ -97,66 +60,90 @@ export class TokenUsageTracker {
    * @returns Aggregated token usage
    */
   public getTotalUsage(): TokenUsage {
+    // Create a new result object with all properties explicitly initialized
     const result: TokenUsage = {
       total: 0,
       prompt: 0,
       completion: 0,
       cached: 0,
       numRequests: 0,
-      promptChars: 0,
-      completionChars: 0,
-      totalChars: 0,
       completionDetails: {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
       },
+      assertions: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
+      },
     };
 
     // Explicitly accumulate totals from all providers
     for (const usage of this.providersMap.values()) {
-      // Add token counts
-      result.total += usage.total || 0;
-      result.prompt += usage.prompt || 0;
-      result.completion += usage.completion || 0;
-      result.cached += usage.cached || 0;
-      result.numRequests += usage.numRequests || 0;
+      // Add token counts with safe, non-mutating assignments
+      if (result.total !== undefined) {
+        result.total += typeof usage.total === 'number' ? usage.total : 0;
+      }
+      if (result.prompt !== undefined) {
+        result.prompt += typeof usage.prompt === 'number' ? usage.prompt : 0;
+      }
+      if (result.completion !== undefined) {
+        result.completion += typeof usage.completion === 'number' ? usage.completion : 0;
+      }
+      if (result.cached !== undefined) {
+        result.cached += typeof usage.cached === 'number' ? usage.cached : 0;
+      }
+      if (result.numRequests !== undefined) {
+        result.numRequests += typeof usage.numRequests === 'number' ? usage.numRequests : 0;
+      }
 
-      // Add character counts
-      result.promptChars += usage.promptChars || 0;
-      result.completionChars += usage.completionChars || 0;
-      result.totalChars += usage.totalChars || 0;
+      // Add completion details with safe assignments
+      if (usage.completionDetails && result.completionDetails) {
+        if (result.completionDetails.reasoning !== undefined) {
+          result.completionDetails.reasoning +=
+            typeof usage.completionDetails.reasoning === 'number'
+              ? usage.completionDetails.reasoning
+              : 0;
+        }
 
-      // Add completion details
-      if (usage.completionDetails) {
-        result.completionDetails.reasoning += usage.completionDetails.reasoning || 0;
-        result.completionDetails.acceptedPrediction +=
-          usage.completionDetails.acceptedPrediction || 0;
-        result.completionDetails.rejectedPrediction +=
-          usage.completionDetails.rejectedPrediction || 0;
+        if (result.completionDetails.acceptedPrediction !== undefined) {
+          result.completionDetails.acceptedPrediction +=
+            typeof usage.completionDetails.acceptedPrediction === 'number'
+              ? usage.completionDetails.acceptedPrediction
+              : 0;
+        }
+
+        if (result.completionDetails.rejectedPrediction !== undefined) {
+          result.completionDetails.rejectedPrediction +=
+            typeof usage.completionDetails.rejectedPrediction === 'number'
+              ? usage.completionDetails.rejectedPrediction
+              : 0;
+        }
       }
 
       // Add assertion statistics if present
-      if (usage.assertions) {
-        if (!result.assertions) {
-          result.assertions = {
-            total: 0,
-            prompt: 0,
-            completion: 0,
-            cached: 0,
-            promptChars: 0,
-            completionChars: 0,
-            totalChars: 0,
-          };
+      if (usage.assertions && result.assertions) {
+        if (result.assertions.total !== undefined) {
+          result.assertions.total +=
+            typeof usage.assertions.total === 'number' ? usage.assertions.total : 0;
         }
 
-        result.assertions.total += usage.assertions.total || 0;
-        result.assertions.prompt += usage.assertions.prompt || 0;
-        result.assertions.completion += usage.assertions.completion || 0;
-        result.assertions.cached += usage.assertions.cached || 0;
-        result.assertions.promptChars += usage.assertions.promptChars || 0;
-        result.assertions.completionChars += usage.assertions.completionChars || 0;
-        result.assertions.totalChars += usage.assertions.totalChars || 0;
+        if (result.assertions.prompt !== undefined) {
+          result.assertions.prompt +=
+            typeof usage.assertions.prompt === 'number' ? usage.assertions.prompt : 0;
+        }
+
+        if (result.assertions.completion !== undefined) {
+          result.assertions.completion +=
+            typeof usage.assertions.completion === 'number' ? usage.assertions.completion : 0;
+        }
+
+        if (result.assertions.cached !== undefined) {
+          result.assertions.cached +=
+            typeof usage.assertions.cached === 'number' ? usage.assertions.cached : 0;
+        }
       }
     }
 
@@ -186,15 +173,12 @@ export class TokenUsageTracker {
    */
   private mergeUsage(current: TokenUsage, update: TokenUsage): TokenUsage {
     // Create a result object with all properties initialized
-    const result: TokenUsage = { 
-      prompt: 0, 
-      completion: 0, 
-      cached: 0, 
-      total: 0, 
+    const result: TokenUsage = {
+      prompt: 0,
+      completion: 0,
+      cached: 0,
+      total: 0,
       numRequests: 0,
-      promptChars: 0,
-      completionChars: 0,
-      totalChars: 0,
       completionDetails: {
         reasoning: 0,
         acceptedPrediction: 0,
@@ -205,24 +189,33 @@ export class TokenUsageTracker {
         prompt: 0,
         completion: 0,
         cached: 0,
-        promptChars: 0,
-        completionChars: 0,
-        totalChars: 0,
       },
-      ...current
+      ...current,
     };
 
-    // Add basic fields
-    result.prompt = (result.prompt || 0) + (update.prompt || 0);
-    result.completion = (result.completion || 0) + (update.completion || 0);
-    result.cached = (result.cached || 0) + (update.cached || 0);
-    result.total = (result.total || 0) + (update.total || 0);
-    result.numRequests = (result.numRequests || 0) + (update.numRequests || 1);
+    // Add basic fields safely
+    if (typeof update.prompt === 'number') {
+      result.prompt = (result.prompt || 0) + update.prompt;
+    }
 
-    // Add character counts
-    result.promptChars = (result.promptChars || 0) + (update.promptChars || 0);
-    result.completionChars = (result.completionChars || 0) + (update.completionChars || 0);
-    result.totalChars = (result.totalChars || 0) + (update.totalChars || 0);
+    if (typeof update.completion === 'number') {
+      result.completion = (result.completion || 0) + update.completion;
+    }
+
+    if (typeof update.cached === 'number') {
+      result.cached = (result.cached || 0) + update.cached;
+    }
+
+    if (typeof update.total === 'number') {
+      result.total = (result.total || 0) + update.total;
+    }
+
+    if (typeof update.numRequests === 'number') {
+      result.numRequests = (result.numRequests || 0) + update.numRequests;
+    } else {
+      // Default to incrementing by 1 if numRequests not provided
+      result.numRequests = (result.numRequests || 0) + 1;
+    }
 
     // Handle completion details
     if (update.completionDetails) {
@@ -234,16 +227,22 @@ export class TokenUsageTracker {
         };
       }
 
-      result.completionDetails.reasoning =
-        (result.completionDetails.reasoning || 0) + (update.completionDetails.reasoning || 0);
+      if (typeof update.completionDetails.reasoning === 'number') {
+        result.completionDetails.reasoning =
+          (result.completionDetails.reasoning || 0) + update.completionDetails.reasoning;
+      }
 
-      result.completionDetails.acceptedPrediction =
-        (result.completionDetails.acceptedPrediction || 0) +
-        (update.completionDetails.acceptedPrediction || 0);
+      if (typeof update.completionDetails.acceptedPrediction === 'number') {
+        result.completionDetails.acceptedPrediction =
+          (result.completionDetails.acceptedPrediction || 0) +
+          update.completionDetails.acceptedPrediction;
+      }
 
-      result.completionDetails.rejectedPrediction =
-        (result.completionDetails.rejectedPrediction || 0) +
-        (update.completionDetails.rejectedPrediction || 0);
+      if (typeof update.completionDetails.rejectedPrediction === 'number') {
+        result.completionDetails.rejectedPrediction =
+          (result.completionDetails.rejectedPrediction || 0) +
+          update.completionDetails.rejectedPrediction;
+      }
     }
 
     // Handle assertions
@@ -254,19 +253,25 @@ export class TokenUsageTracker {
           prompt: 0,
           completion: 0,
           cached: 0,
-          promptChars: 0,
-          completionChars: 0,
-          totalChars: 0,
         };
       }
 
-      result.assertions.prompt = (result.assertions.prompt || 0) + (update.assertions.prompt || 0);
-      result.assertions.completion = (result.assertions.completion || 0) + (update.assertions.completion || 0);
-      result.assertions.cached = (result.assertions.cached || 0) + (update.assertions.cached || 0);
-      result.assertions.total = (result.assertions.total || 0) + (update.assertions.total || 0);
-      result.assertions.promptChars = (result.assertions.promptChars || 0) + (update.assertions.promptChars || 0);
-      result.assertions.completionChars = (result.assertions.completionChars || 0) + (update.assertions.completionChars || 0);
-      result.assertions.totalChars = (result.assertions.totalChars || 0) + (update.assertions.totalChars || 0);
+      if (typeof update.assertions.prompt === 'number') {
+        result.assertions.prompt = (result.assertions.prompt || 0) + update.assertions.prompt;
+      }
+
+      if (typeof update.assertions.completion === 'number') {
+        result.assertions.completion =
+          (result.assertions.completion || 0) + update.assertions.completion;
+      }
+
+      if (typeof update.assertions.cached === 'number') {
+        result.assertions.cached = (result.assertions.cached || 0) + update.assertions.cached;
+      }
+
+      if (typeof update.assertions.total === 'number') {
+        result.assertions.total = (result.assertions.total || 0) + update.assertions.total;
+      }
     }
 
     return result;
@@ -291,8 +296,6 @@ export function withTokenTracking<T extends ApiProvider>(provider: T): T {
         : providerId;
 
       TokenUsageTracker.getInstance().trackUsage(trackingId, response.tokenUsage);
-
-      // Character counting is now handled in evaluator.ts to avoid double-counting
     }
     return response;
   };

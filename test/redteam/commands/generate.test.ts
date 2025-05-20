@@ -1,5 +1,4 @@
 import fs from 'fs';
-import { getEnvBool } from '../../../src/envars';
 import logger from '../../../src/logger';
 import { synthesize } from '../../../src/redteam';
 import { doTargetPurposeDiscovery, mergePurposes } from '../../../src/redteam/commands/discover';

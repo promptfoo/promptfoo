@@ -1,6 +1,5 @@
 import chalk from 'chalk';
 import chokidar from 'chokidar';
-import Table from 'cli-table3';
 import type { Command } from 'commander';
 import dedent from 'dedent';
 import fs from 'fs';
@@ -38,7 +37,6 @@ import { resolveConfigs } from '../util/config/load';
 import { maybeLoadFromExternalFile } from '../util/file';
 import { formatDuration } from '../util/formatDuration';
 import invariant from '../util/invariant';
-import { TokenUsageTracker } from '../util/tokenUsage';
 import { filterProviders } from './eval/filterProviders';
 import type { FilterOptions } from './eval/filterTests';
 import { filterTests } from './eval/filterTests';
@@ -67,140 +65,30 @@ export function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
   }
 }
 
-// Add this function to display the token usage summary using cli-table3
-function displayTokenUsageSummary() {
-  const tracker = TokenUsageTracker.getInstance();
-  const providers = tracker.getProviderIds().sort();
-
-  // Create header
-  logger.info('\n==== Token & Byte Usage Summary ====');
-
-  if (providers.length === 0) {
-    logger.info('No token or byte usage recorded.');
-    logger.info('==============================\n');
-    return;
-  }
-
-  // Create the provider details table with fewer columns
-  const providersTable = new Table({
-    head: [
-      chalk.blue('Provider'),
-      chalk.blue('Tokens (In/Out)'),
-      chalk.blue('Bytes (In/Out)'),
-      chalk.blue('Requests'),
-    ],
-    colWidths: [30, 26, 26, 12],
-    style: {
-      head: [], // Don't add the default styling as we've already colored the header text
-      border: [], // No border color
-    },
-  });
-
-  // Add a row for each provider
-  providers.forEach((providerId) => {
-    const usage = tracker.getProviderUsage(providerId);
-    if (!usage) {
-      return;
-    }
-
-    const promptTokens = usage.prompt || 0;
-    const completionTokens = usage.completion || 0;
-    const totalTokens = usage.total || promptTokens + completionTokens;
-    const numRequests = usage.numRequests || 0;
-
-    // Get character counts
-    const promptChars = usage.promptChars || 0;
-    const completionChars = usage.completionChars || 0;
-    const totalChars = usage.totalChars || promptChars + completionChars;
-
-    // Create a combined tokens column: total (in/out)
-    const tokensDisplay = `${totalTokens.toLocaleString()} (${promptTokens.toLocaleString()}/${completionTokens.toLocaleString()})`;
-
-    // Create a combined bytes column: total (in/out)
-    const bytesDisplay = `${totalChars.toLocaleString()} (${promptChars.toLocaleString()}/${completionChars.toLocaleString()})`;
-
-    // Only add rows that have some activity
-    if (totalChars > 0 || promptChars > 0 || completionChars > 0 || numRequests > 0) {
-      providersTable.push([
-        providerId.length > 28 ? providerId.substring(0, 25) + '...' : providerId,
-        tokensDisplay,
-        bytesDisplay,
-        numRequests.toLocaleString(),
-      ]);
-    }
-  });
-
-  if (providersTable.length > 0) {
-    logger.info(providersTable.toString());
-  }
-
-  // Create the totals table with fewer columns
-  const totalUsage = tracker.getTotalUsage();
-  const totalPrompt = totalUsage.prompt || 0;
-  const totalCompletion = totalUsage.completion || 0;
-  const grandTotal = totalUsage.total || totalPrompt + totalCompletion;
-  const totalRequests = totalUsage.numRequests || 0;
-
-  // Get total character counts
-  const totalPromptChars = totalUsage.promptChars || 0;
-  const totalCompletionChars = totalUsage.completionChars || 0;
-  const grandTotalChars = totalUsage.totalChars || totalPromptChars + totalCompletionChars;
-
-  // Create a combined tokens column for totals
-  const totalsTokensDisplay = `${grandTotal.toLocaleString()} (${totalPrompt.toLocaleString()}/${totalCompletion.toLocaleString()})`;
-
-  // Create a combined bytes column for totals
-  const totalsBytesDisplay = `${grandTotalChars.toLocaleString()} (${totalPromptChars.toLocaleString()}/${totalCompletionChars.toLocaleString()})`;
-
-  const totalsTable = new Table({
-    head: [
-      chalk.blue.bold('TOTAL'),
-      chalk.blue.bold('Tokens (In/Out)'),
-      chalk.blue.bold('Bytes (In/Out)'),
-      chalk.blue.bold('Requests'),
-    ],
-    colWidths: [30, 26, 26, 12],
-    style: {
-      head: [], // Don't add the default styling as we've already colored the header text
-      border: [], // No border color
-    },
-  });
-
-  totalsTable.push([
-    chalk.bold('All Providers'),
-    chalk.bold(totalsTokensDisplay),
-    chalk.bold(totalsBytesDisplay),
-    chalk.bold(totalRequests.toLocaleString()),
-  ]);
-
-  logger.info(totalsTable.toString());
-  logger.info('==============================\n');
-}
-
 /**
  * Format token usage for display in CLI output
  */
-export function formatTokenUsage(type: string, usage: Partial<TokenUsage>): string {
+export function formatTokenUsage(usage: TokenUsage): string {
   const parts = [];
 
   if (usage.total !== undefined) {
-    parts.push(`${type} tokens: ${usage.total.toLocaleString()}`);
+    parts.push(`${usage.total.toLocaleString()} total`);
   }
 
   if (usage.prompt !== undefined) {
-    parts.push(`Prompt tokens: ${usage.prompt.toLocaleString()}`);
+    parts.push(`${usage.prompt.toLocaleString()} prompt`);
   }
 
   if (usage.completion !== undefined) {
-    parts.push(`Completion tokens: ${usage.completion.toLocaleString()}`);
+    parts.push(`${usage.completion.toLocaleString()} completion`);
   }
 
   if (usage.cached !== undefined) {
-    parts.push(`Cached tokens: ${usage.cached.toLocaleString()}`);
+    parts.push(`${usage.cached.toLocaleString()} cached`);
   }
 
   if (usage.completionDetails?.reasoning !== undefined) {
-    parts.push(`Reasoning tokens: ${usage.completionDetails.reasoning.toLocaleString()}`);
+    parts.push(`${usage.completionDetails.reasoning.toLocaleString()} reasoning`);
   }
 
   return parts.join(' / ');
@@ -540,33 +428,20 @@ export async function doEval(
     }
     logger.info(chalk.blue.bold(`Duration: ${durationDisplay} (concurrency: ${maxConcurrency})`));
 
-    if (tokenUsage.total > 0) {
+    // Handle token usage display
+    if (tokenUsage.prompt) {
+      const combinedTotal = tokenUsage.prompt + tokenUsage.completion;
       const evalTokens = {
-        total: tokenUsage.total,
         prompt: tokenUsage.prompt,
         completion: tokenUsage.completion,
-        cached: tokenUsage.cached,
-        completionDetails: tokenUsage.completionDetails,
+        total: combinedTotal,
       };
-
-      if (isRedteam) {
-        logger.info(
-          `Model probes: ${tokenUsage.numRequests.toLocaleString()} / ${formatTokenUsage('eval', evalTokens)}`,
-        );
-      } else {
-        logger.info(formatTokenUsage('Eval', evalTokens));
-      }
-
-      if (tokenUsage.assertions.total > 0) {
-        logger.info(formatTokenUsage('Grading', tokenUsage.assertions));
-      }
-
-      const combinedTotal = evalTokens.total + tokenUsage.assertions.total;
+      logger.info(
+        `Token usage: ${tokenUsage.prompt.toLocaleString()} prompt + ${tokenUsage.completion.toLocaleString()} completion = ${combinedTotal.toLocaleString()} total`,
+      );
       logger.info(
         `Total tokens: ${combinedTotal.toLocaleString()} (eval: ${evalTokens.total.toLocaleString()} + Grading: ${tokenUsage.assertions.total.toLocaleString()})`,
       );
-      // Display token usage summary
-      displayTokenUsageSummary();
     }
 
     telemetry.record('command_used', {

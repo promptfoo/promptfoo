@@ -67,24 +67,6 @@ function updateAssertionMetrics(
     metrics.tokenUsage.assertions.total =
       (metrics.tokenUsage.assertions.total || 0) +
       (assertionTokens.total || (assertionTokens.prompt || 0) + (assertionTokens.completion || 0));
-
-    // Add character counts if available
-    metrics.tokenUsage.assertions.promptChars =
-      (metrics.tokenUsage.assertions.promptChars || 0) + (assertionTokens.promptChars || 0);
-    metrics.tokenUsage.assertions.completionChars =
-      (metrics.tokenUsage.assertions.completionChars || 0) + (assertionTokens.completionChars || 0);
-    metrics.tokenUsage.assertions.totalChars =
-      (metrics.tokenUsage.assertions.totalChars || 0) + (assertionTokens.totalChars || 0);
-
-    // If no totalChars but we have the other counts, calculate it
-    if (
-      !assertionTokens.totalChars &&
-      (assertionTokens.promptChars || assertionTokens.completionChars)
-    ) {
-      metrics.tokenUsage.assertions.totalChars =
-        (metrics.tokenUsage.assertions.totalChars || 0) +
-        ((assertionTokens.promptChars || 0) + (assertionTokens.completionChars || 0));
-    }
   }
 }
 
@@ -120,9 +102,6 @@ export function newTokenUsage(): Required<TokenUsage> {
     total: 0,
     cached: 0,
     numRequests: 0,
-    promptChars: 0,
-    completionChars: 0,
-    totalChars: 0,
     completionDetails: {
       reasoning: 0,
       acceptedPrediction: 0,
@@ -133,9 +112,6 @@ export function newTokenUsage(): Required<TokenUsage> {
       prompt: 0,
       completion: 0,
       cached: 0,
-      promptChars: 0,
-      completionChars: 0,
-      totalChars: 0,
     },
   };
 }
@@ -334,27 +310,15 @@ export async function runEval({
 
     invariant(ret.tokenUsage, 'This is always defined, just doing this to shut TS up');
 
-    // Always count bytes, even if token usage isn't present
-    // Update character counts - normalize all inputs to strings before counting
-    const promptCharsToAdd = renderedPrompt ? Buffer.byteLength(renderedPrompt, 'utf8') : 0;
-    const outputText =
-      response.output !== null && response.output !== undefined ? String(response.output) : '';
-    const completionCharsToAdd = Buffer.byteLength(outputText, 'utf8');
-
-    // Update individual counts
-    ret.tokenUsage.promptChars += promptCharsToAdd;
-    ret.tokenUsage.completionChars += completionCharsToAdd;
-    ret.tokenUsage.totalChars += promptCharsToAdd + completionCharsToAdd;
-
     // Always increment the request count
     ret.tokenUsage.numRequests += 1;
 
-    // Track character usage at the provider level too
+    // Track token usage at the provider level
     const providerId = provider.id();
     const trackingId = provider.constructor?.name
       ? `${providerId} (${provider.constructor.name})`
       : providerId;
-    TokenUsageTracker.getInstance().trackCharUsage(trackingId, renderedPrompt, outputText);
+    TokenUsageTracker.getInstance().trackUsage(trackingId, response.tokenUsage);
 
     if (response.error) {
       ret.error = response.error;
@@ -643,9 +607,6 @@ class Evaluator {
               completion: 0,
               cached: 0,
               numRequests: 0,
-              promptChars: 0,
-              completionChars: 0,
-              totalChars: 0,
               completionDetails: {
                 reasoning: 0,
                 acceptedPrediction: 0,
@@ -656,9 +617,6 @@ class Evaluator {
                 prompt: 0,
                 completion: 0,
                 cached: 0,
-                promptChars: 0,
-                completionChars: 0,
-                totalChars: 0,
               },
             },
             namedScores: {},

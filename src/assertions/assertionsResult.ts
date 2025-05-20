@@ -7,9 +7,6 @@ export const DEFAULT_TOKENS_USED = {
   prompt: 0,
   completion: 0,
   cached: 0,
-  promptChars: 0,
-  completionChars: 0,
-  totalChars: 0,
 };
 
 interface ParentAssertionSet {
@@ -95,20 +92,6 @@ export class AssertionsResult {
       this.tokensUsed.prompt += result.tokensUsed.prompt || 0;
       this.tokensUsed.completion += result.tokensUsed.completion || 0;
       this.tokensUsed.cached += result.tokensUsed.cached || 0;
-
-      // Add character counts
-      this.tokensUsed.promptChars += result.tokensUsed.promptChars || 0;
-      this.tokensUsed.completionChars += result.tokensUsed.completionChars || 0;
-      this.tokensUsed.totalChars += result.tokensUsed.totalChars || 0;
-
-      // If we don't have totalChars but have component counts, calculate it
-      if (
-        !result.tokensUsed.totalChars &&
-        (result.tokensUsed.promptChars || result.tokensUsed.completionChars)
-      ) {
-        this.tokensUsed.totalChars +=
-          (result.tokensUsed.promptChars || 0) + (result.tokensUsed.completionChars || 0);
-      }
     }
 
     if (result.pass) {
