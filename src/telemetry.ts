@@ -170,12 +170,3 @@ export class Telemetry {
 
 const telemetry = new Telemetry();
 export default telemetry;
-
-export {
-  CONSENT_ENDPOINT,
-  EVENTS_ENDPOINT,
-  KA_ENDPOINT,
-  posthogClient,
-  TELEMETRY_TIMEOUT_MS,
-  telemetry,
-};
