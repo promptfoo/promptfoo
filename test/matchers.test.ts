@@ -323,6 +323,27 @@ describe('matchesLlmRubric', () => {
     });
   });
 
+  it('should render rubric when provided as an object', async () => {
+    const rubric = { prompt: 'Describe the image' };
+    const output = 'Sample output';
+    const options: GradingConfig = {
+      rubricPrompt: 'Grade: {{ rubric }}',
+      provider: {
+        id: () => 'test-provider',
+        callApi: jest.fn().mockResolvedValue({
+          output: JSON.stringify({ pass: true, score: 1, reason: 'ok' }),
+          tokenUsage: { total: 1, prompt: 1, completion: 1 },
+        }),
+      },
+    };
+
+    await matchesLlmRubric(rubric, output, options);
+
+    expect(options.provider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining(JSON.stringify(rubric)),
+    );
+  });
+
   it('should fail when output is neither string nor object', async () => {
     const expected = 'Expected output';
     const output = 'Sample output';
