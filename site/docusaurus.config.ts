@@ -420,7 +420,16 @@ const config: Config = {
                 // Remove frontmatter (content between --- delimiters)
                 content = content.replace(/^---[\s\S]*?---\s*/m, '');
 
-                mdFiles[relativePath] = content;
+                // If this is an index.md file, also store it with the directory path
+                // to make it accessible via the directory URL
+                if (entry.name === 'index.md' || entry.name === 'index.mdx') {
+                  if (basePath) {
+                    mdFiles[`${basePath}.md`] = content;
+                  }
+                } else {
+                  // Store the file using its relativePath
+                  mdFiles[relativePath] = content;
+                }
               }
             }
           };
@@ -472,7 +481,18 @@ const config: Config = {
                           break;
                         }
                       } catch (err) {
-                        // Ignore errors
+                        // Try index.md in the directory
+                        try {
+                          const indexPath = path.join(filePath.split('.')[0], `index${ext}`);
+                          const stat = await fs.promises.stat(indexPath);
+                          if (stat.isFile()) {
+                            filePath = indexPath;
+                            foundFile = true;
+                            break;
+                          }
+                        } catch (indexErr) {
+                          // Ignore errors for index files
+                        }
                       }
                     }
                   }
