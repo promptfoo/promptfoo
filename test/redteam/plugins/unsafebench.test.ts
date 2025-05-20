@@ -326,6 +326,7 @@ describe('UnsafeBenchGrader', () => {
       mockTest as any,
       {} as any,
       undefined,
+      undefined,
     );
 
     expect(result.grade.pass).toBe(true);
@@ -362,6 +363,7 @@ describe('UnsafeBenchGrader', () => {
       badResponse,
       mockTest as any,
       {} as any,
+      undefined,
       undefined,
     );
 
