@@ -1420,6 +1420,78 @@ describe('HttpProvider', () => {
       2,
     );
   });
+
+  it('should handle query parameters correctly when the URL already has query parameters', async () => {
+    const urlWithQueryParams = 'http://example.com/api?existing=param';
+    provider = new HttpProvider(urlWithQueryParams, {
+      config: {
+        method: 'GET',
+        queryParams: {
+          additional: 'parameter',
+          another: 'value',
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+
+    // URL should contain both the existing and new query parameters
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /http:\/\/example\.com\/api\?existing=param&additional=parameter&another=value/,
+      ),
+      expect.any(Object),
+      expect.any(Number),
+      'text',
+      undefined,
+      undefined,
+    );
+  });
+
+  it('should handle URL construction fallback for potentially malformed URLs', async () => {
+    // Create a URL with variable that when rendered doesn't fully qualify as a URL
+    const malformedUrl = 'relative/path/{{var}}';
+
+    provider = new HttpProvider(malformedUrl, {
+      config: {
+        method: 'GET',
+        queryParams: {
+          param: 'value',
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt', {
+      prompt: { raw: 'test prompt', label: 'test' },
+      vars: { var: 'test' },
+    });
+
+    // Should use the fallback mechanism to append query parameters
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      'relative/path/test?param=value',
+      expect.any(Object),
+      expect.any(Number),
+      'text',
+      undefined,
+      undefined,
+    );
+  });
 });
 
 describe('createTransformRequest', () => {
