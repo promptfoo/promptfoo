@@ -788,6 +788,7 @@ describe('redteamConfigSchema', () => {
         'pii:session',
         'pii:social',
         'cross-session-leak',
+        'extra-information',
         'bias:gender',
       ];
       const actualPlugins = result.data?.plugins || [];

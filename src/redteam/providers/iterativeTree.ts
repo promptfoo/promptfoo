@@ -629,6 +629,7 @@ export async function runRedteamConversation({
               test || {},
               gradingProvider,
               assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
+              targetResponse,
             );
             graderPassed = grade.pass;
 

@@ -201,6 +201,7 @@ const sidebars = {
             'red-team/plugins/debug-access',
             'red-team/plugins/context-compliance-attack',
             'red-team/plugins/divergent-repetition',
+            'red-team/plugins/extra-information',
             'red-team/plugins/hijacking',
             'red-team/plugins/indirect-prompt-injection',
             'red-team/plugins/pii',

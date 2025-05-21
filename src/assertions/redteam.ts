@@ -10,6 +10,7 @@ export const handleRedteam = async ({
   outputString,
   provider,
   renderedValue,
+  providerResponse,
 }: AssertionParams): Promise<GradingResult> => {
   const grader = getGraderById(assertion.type);
   invariant(grader, `Unknown grader: ${baseType}`);
@@ -20,6 +21,7 @@ export const handleRedteam = async ({
     test,
     provider,
     renderedValue,
+    providerResponse,
   );
   return {
     assertion: {

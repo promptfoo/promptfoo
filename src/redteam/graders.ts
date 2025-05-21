@@ -12,6 +12,7 @@ import { CrossSessionLeakGrader } from './plugins/crossSessionLeak';
 import { DebugAccessGrader } from './plugins/debugAccess';
 import { DivergentRepetitionGrader } from './plugins/divergentRepetition';
 import { ExcessiveAgencyGrader } from './plugins/excessiveAgency';
+import { ExtraInformationGrader } from './plugins/extraInformation';
 import { HallucinationGrader } from './plugins/hallucination';
 import { HarmbenchGrader } from './plugins/harmbench';
 import {
@@ -75,6 +76,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:debug-access': new DebugAccessGrader(),
   'promptfoo:redteam:divergent-repetition': new DivergentRepetitionGrader(),
   'promptfoo:redteam:excessive-agency': new ExcessiveAgencyGrader(),
+  'promptfoo:redteam:extra-information': new ExtraInformationGrader(),
   'promptfoo:redteam:tool-discovery': new ToolDiscoveryGrader(),
   'promptfoo:redteam:tool-discovery:multi-turn': new ToolDiscoveryMultiTurnGrader(),
   'promptfoo:redteam:hallucination': new HallucinationGrader(),

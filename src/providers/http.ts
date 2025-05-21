@@ -151,6 +151,7 @@ export const HttpProviderConfigSchema = z.object({
       message: 'Either privateKeyPath or privateKey must be provided',
     })
     .optional(),
+  includeRawResponse: z.boolean().optional(),
 });
 
 export type HttpProviderConfig = z.infer<typeof HttpProviderConfigSchema>;
@@ -800,7 +801,7 @@ export class HttpProvider implements ApiProvider {
     );
 
     const ret: ProviderResponse = {};
-    if (context?.debug) {
+    if (context?.debug || this.config.includeRawResponse) {
       ret.raw = response.data;
       ret.metadata = {
         headers: response.headers,
