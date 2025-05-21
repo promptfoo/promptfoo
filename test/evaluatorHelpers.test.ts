@@ -51,8 +51,12 @@ jest.mock('../src/esm');
 jest.mock('../src/database', () => ({
   getDb: jest.fn(),
 }));
+
+// Mock `transform` to return a tuple of the extension name and hook name
 jest.mock('../src/util/transform', () => ({
-  transform: jest.fn(),
+  transform: jest.fn().mockImplementation((ext, hookName, context, isLast) => {
+    return [ext, hookName];
+  }),
 }));
 
 function toPrompt(text: string): Prompt {
@@ -505,8 +509,9 @@ describe('runExtensionHook', () => {
   });
 
   it('should not be called if extensions array is empty', async () => {
-    await runExtensionHook([], 'testHook', { data: 'test' });
-    expect(transform).not.toThrow('extensions must be an array');
+    await expect(runExtensionHook([], 'testHook', { data: 'test' })).rejects.toThrow(
+      'Invariant failed: extensions must be an array',
+    );
   });
 
   it('should call transform for each extension', async () => {
@@ -522,13 +527,49 @@ describe('runExtensionHook', () => {
     expect(transform).toHaveBeenNthCalledWith(3, 'ext3', hookName, context, false);
   });
 
-  // TODO: Wire together this test:
-  // it('should return the results of all extensions', async () => {
-  //   const extensions = ['ext1', 'ext2', 'ext3'];
-  //   const hookName = 'testHook';
-  //   const context = { data: 'test' };
+  describe('returns hook results', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
 
-  //   const results = await runExtensionHook(extensions, hookName, context);
-  //   expect(results).toEqual(['ext1', 'ext2', 'ext3']);
-  // });
+    it('beforeEach', async () => {
+      const results = await runExtensionHook(['ext1', 'ext2', 'ext3'], 'beforeEach', {});
+      expect(transform).toHaveBeenCalledTimes(3);
+      expect(results).toEqual([
+        ['ext1', 'beforeEach'],
+        ['ext2', 'beforeEach'],
+        ['ext3', 'beforeEach'],
+      ]);
+    });
+
+    it('beforeAll', async () => {
+      const results = await runExtensionHook(['ext4', 'ext5', 'ext6'], 'beforeAll', {});
+      expect(transform).toHaveBeenCalledTimes(3);
+      expect(results).toEqual([
+        ['ext4', 'beforeAll'],
+        ['ext5', 'beforeAll'],
+        ['ext6', 'beforeAll'],
+      ]);
+    });
+
+    it('afterAll', async () => {
+      const results = await runExtensionHook(['ext7', 'ext8', 'ext9'], 'afterAll', {});
+      expect(transform).toHaveBeenCalledTimes(3);
+      expect(results).toEqual([
+        ['ext7', 'afterAll'],
+        ['ext8', 'afterAll'],
+        ['ext9', 'afterAll'],
+      ]);
+    });
+
+    it('afterEach', async () => {
+      const results = await runExtensionHook(['ext10', 'ext11', 'ext12'], 'afterEach', {});
+      expect(transform).toHaveBeenCalledTimes(3);
+      expect(results).toEqual([
+        ['ext10', 'afterEach'],
+        ['ext11', 'afterEach'],
+        ['ext12', 'afterEach'],
+      ]);
+    });
+  });
 });
