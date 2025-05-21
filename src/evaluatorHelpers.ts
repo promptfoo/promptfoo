@@ -321,7 +321,8 @@ export async function runExtensionHook(
     logger.debug(`Running extension hook ${hookName} with context ${JSON.stringify(context)}`);
     const output = await transform(extension, hookName, context, false);
 
-    if (output) {
+    // Allow falsy outputs:
+    if (output !== undefined) {
       logger.debug(`Extension hook ${hookName} returned ${JSON.stringify(output)}`);
       outs.push(output);
     }
