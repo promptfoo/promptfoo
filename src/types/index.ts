@@ -569,7 +569,14 @@ const ProviderPromptMapSchema = z.record(
 );
 
 // Metadata is a key-value store for arbitrary data
-const MetadataSchema = z.record(z.string(), z.any());
+const MetadataSchema = z.record(z.string(), z.any()).and(
+  z.object({
+    intent: z.union([z.string(), z.array(z.string())]).optional(),
+    purpose: z.string().optional(),
+    entities: z.array(z.any()).optional(),
+    pluginId: z.string().optional(),
+  }),
+);
 
 export const VarsSchema = z.record(
   z.union([

@@ -340,7 +340,7 @@ export class CrescendoProvider implements ApiProvider {
           const grader = getGraderById(assertToUse.type);
           if (grader) {
             const { grade } = await grader.getResult(
-              this.userGoal as string,
+              attackPrompt,
               lastResponse.output,
               test,
               provider,
