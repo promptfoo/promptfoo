@@ -665,7 +665,7 @@ describe('call provider apis', () => {
           inputArgs.concat([
             'Test prompt',
             '{"config":{"some_config_val":42}}',
-            '{"prompt":{"label":"Test prompt","raw":"Test prompt"},"vars":{"var1":"value 1","var2":"value 2 \\"with some double \\"quotes\\"\\""}}',
+            '{"prompt":{"label":"Test prompt","raw":"Test prompt"},"vars":{"var1":"value 1","var2":"value 2 \\"with some double \\"quotes\\"\\""},"extensionHookOutputs":{"beforeAll":[],"beforeEach":[]}}',
           ]),
         ),
         expect.any(Object),
