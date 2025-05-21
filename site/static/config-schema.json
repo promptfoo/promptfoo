@@ -1171,6 +1171,7 @@
                           "tool-discovery",
                           "tool-discovery:multi-turn",
                           "toxicity",
+                          "aegis",
                           "unsafebench",
                           "xstest"
                         ]
@@ -1339,6 +1340,7 @@
                               "tool-discovery",
                               "tool-discovery:multi-turn",
                               "toxicity",
+                              "aegis",
                               "unsafebench",
                               "xstest"
                             ]
