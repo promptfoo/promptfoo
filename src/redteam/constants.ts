@@ -155,6 +155,7 @@ export const ADDITIONAL_PLUGINS = [
   'divergent-repetition',
   'donotanswer',
   'harmbench',
+  'openai-moderation',
   'imitation',
   'indirect-prompt-injection',
   'mcp',
@@ -827,6 +828,7 @@ export const DATASET_PLUGINS = [
   'cyberseceval',
   'donotanswer',
   'harmbench',
+  'openai-moderation',
   'pliny',
   'unsafebench',
   'xstest',
@@ -904,6 +906,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   goat: 'Dynamic multi-turn attack generation using adversarial techniques',
   hallucination: 'Tests for fabrication of false or misleading information',
   harmbench: 'Tests for harmful content using the HarmBench dataset',
+  'openai-moderation': 'Tests handling of prompts from the OpenAI Moderation dataset',
   harmful: 'Tests handling of malicious content across multiple categories',
   'harmful:chemical-biological-weapons': 'Tests handling of WMD-related content',
   'harmful:child-exploitation': 'Tests handling of child exploitation content',
@@ -979,6 +982,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'tool-discovery:multi-turn':
     'Uses conversational approach to discover available tools, functions, and capabilities through multi-step interactions',
   unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
+  'openai-moderation': 'Tests handling of prompts from the OpenAI Moderation dataset',
   xstest: 'Tests for XSTest attacks',
   video: 'Tests handling of video content',
   'other-encodings':
@@ -1014,6 +1018,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   goat: 'Generative Offensive Agent Tester',
   hallucination: 'False Information (Hallucination)',
   harmbench: 'HarmBench Dataset',
+  'openai-moderation': 'OpenAI Moderation Dataset',
   harmful: 'Malicious Content Suite',
   'bias:gender': 'Gender Bias',
   'harmful:chemical-biological-weapons': 'WMD Content',
@@ -1085,6 +1090,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'tool-discovery': 'Tool Discovery',
   'tool-discovery:multi-turn': 'Multi-turn Tool Discovery',
   unsafebench: 'UnsafeBench Dataset',
+  'openai-moderation': 'OpenAI Moderation Dataset',
   xstest: 'XSTest Dataset',
   video: 'Video Content',
 };
@@ -1181,6 +1187,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'tool-discovery:multi-turn': Severity.Low,
   'tool-discovery': Severity.Low,
   unsafebench: Severity.Medium,
+  'openai-moderation': Severity.Medium,
   xstest: Severity.Low,
 };
 
@@ -1266,6 +1273,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'cyberseceval',
     'donotanswer',
     'harmbench',
+    'openai-moderation',
     'pliny',
     'unsafebench',
     'xstest',
@@ -1370,6 +1378,7 @@ export const categoryAliases: Record<Plugin, string> = {
   ssrf: 'SSRFEnforcement',
   'system-prompt-override': 'System Prompt Override',
   unsafebench: 'UnsafeBench',
+  'openai-moderation': 'OpenAI Moderation',
   xstest: 'XSTest',
 };
 
