@@ -57,11 +57,6 @@ export const ArgsSchema = z
   .refine((data) => !(data.config && data.target), {
     message: 'Cannot specify both config and target!',
     path: ['config', 'target'],
-  })
-  // Either config or target must be provided:
-  .refine((data) => data.config || data.target, {
-    message: 'Either config or target must be provided!',
-    path: ['config', 'target'],
   });
 
 type Args = z.infer<typeof ArgsSchema>;
@@ -102,81 +97,89 @@ export async function doTargetPurposeDiscovery(
   let turn = 0;
 
   while (!done && turn < 10) {
-    turn++;
-    logger.debug(`[TargetPurposeDiscovery] Starting the purpose discovery loop, turn: ${turn}`);
-    const request = TargetPurposeDiscoveryRequestSchema.parse({
-      state: {
-        currentQuestionIndex: state.currentQuestionIndex,
-        answers: state.answers,
-      },
-      task: 'target-purpose-discovery',
-      version: VERSION,
-      email: getUserEmail(),
-    });
-
-    const response = await fetchWithProxy(getRemoteGenerationUrl(), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${cloudConfig.getApiKey()}`,
-      },
-      body: JSON.stringify(request),
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      logger.error(
-        `[TargetPurposeDiscovery] Error getting the next question from remote server: ${error}`,
-      );
-      continue;
-    }
-
-    const responseData = await response.json();
-    const response_ = TargetPurposeDiscoveryResponseSchema.parse(responseData);
-
-    logger.debug(
-      `[TargetPurposeDiscovery] Received response from remote server: ${JSON.stringify(
-        response_,
-        null,
-        2,
-      )}`,
-    );
-    done = response_.done;
-    question = response_.question;
-    purpose = response_.purpose;
-    state = response_.state;
-
-    if (!done) {
-      invariant(
-        question,
-        'If its not done, then a quesation should always be defined, something is terribely wrong.',
-      );
-      const renderedPrompt = prompt
-        ? await renderPrompt(prompt, { prompt: question }, {}, target)
-        : question;
-      const targetResponse = await target.callApi(renderedPrompt, {
-        prompt: { raw: question, label: 'Target Purpose Discovery Question' },
-        vars: { sessionId: randomUUID() },
+    try {
+      turn++;
+      logger.debug(`[TargetPurposeDiscovery] Starting the purpose discovery loop, turn: ${turn}`);
+      const request = TargetPurposeDiscoveryRequestSchema.parse({
+        state: {
+          currentQuestionIndex: state.currentQuestionIndex,
+          answers: state.answers,
+        },
+        task: 'target-purpose-discovery',
+        version: VERSION,
+        email: getUserEmail(),
       });
-      if (targetResponse.error) {
-        logger.error(`[TargetPurposeDiscovery] Error from target: ${targetResponse.error}`);
-        if (turn > 10) {
-          logger.error('[TargetPurposeDiscovery] Too many retries, giving up.');
-          return undefined;
-        }
+
+      const response = await fetchWithProxy(getRemoteGenerationUrl(), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${cloudConfig.getApiKey()}`,
+        },
+        body: JSON.stringify(request),
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        logger.error(
+          `[TargetPurposeDiscovery] Error getting the next question from remote server: ${error}`,
+        );
         continue;
       }
+
+      const responseData = await response.json();
+      const response_ = TargetPurposeDiscoveryResponseSchema.parse(responseData);
+
       logger.debug(
-        `[TargetPurposeDiscovery] Received response from target: ${JSON.stringify(
-          targetResponse,
+        `[TargetPurposeDiscovery] Received response from remote server: ${JSON.stringify(
+          response_,
           null,
           2,
         )}`,
       );
-      state.answers.push(targetResponse.output);
-    }
+      done = response_.done;
+      question = response_.question;
+      purpose = response_.purpose;
+      state = response_.state;
 
-    pbar.increment(1);
+      if (!done) {
+        invariant(
+          question,
+          'If its not done, then a quesation should always be defined, something is terribely wrong.',
+        );
+        const renderedPrompt = prompt
+          ? await renderPrompt(prompt, { prompt: question }, {}, target)
+          : question;
+        const targetResponse = await target.callApi(renderedPrompt, {
+          prompt: { raw: question, label: 'Target Purpose Discovery Question' },
+          vars: { sessionId: randomUUID() },
+        });
+        if (targetResponse.error) {
+          logger.error(`[TargetPurposeDiscovery] Error from target: ${targetResponse.error}`);
+          if (turn > 10) {
+            logger.error('[TargetPurposeDiscovery] Too many retries, giving up.');
+            return undefined;
+          }
+          continue;
+        }
+        logger.debug(
+          `[TargetPurposeDiscovery] Received response from target: ${JSON.stringify(
+            targetResponse,
+            null,
+            2,
+          )}`,
+        );
+        state.answers.push(targetResponse.output);
+      }
+    } catch (error) {
+      logger.error(
+        `An unexpected error occurred during target discovery: ${error instanceof Error ? error.message : String(error)}\n${
+          error instanceof Error ? error.stack : ''
+        }`,
+      );
+    } finally {
+      pbar.increment(1);
+    }
   }
   pbar.stop();
 
@@ -211,7 +214,11 @@ export function mergePurposes(
 /**
  * Registers the `discover` command with the CLI.
  */
-export function discoverCommand(program: Command) {
+export function discoverCommand(
+  program: Command,
+  defaultConfig: Partial<UnifiedConfig>,
+  defaultConfigPath: string | undefined,
+) {
   program
     .command('discover')
     .description(
@@ -256,7 +263,6 @@ export function discoverCommand(program: Command) {
       // a single target at a time.
       let target: ApiProvider | undefined = undefined;
       // Fallback to the default config path:
-      const fallbackConfigPath = path.join(process.cwd(), 'promptfooconfig.yaml');
 
       // If user provides a config, read the target from it:
       if (args.config) {
@@ -272,10 +278,11 @@ export function discoverCommand(program: Command) {
         }
 
         if (!config.providers) {
-          throw new Error('Config must contain at least one target or provider');
+          throw new Error('Config must contain a target');
         }
 
         const providers = await loadApiProviders(config.providers);
+
         target = providers[0];
       }
       // If the target flag is provided, load it from Cloud:
@@ -285,26 +292,27 @@ export function discoverCommand(program: Command) {
         target = await loadApiProvider(providerOptions.id, { options: providerOptions });
       }
       // Check the current working directory for a promptfooconfig.yaml file:
-      else if (fs.existsSync(fallbackConfigPath)) {
-        config = await readConfig(fallbackConfigPath);
-
-        if (!config) {
-          throw new Error(`Config is invalid at ${fallbackConfigPath}`);
+      else if (defaultConfig) {
+        if (!defaultConfig) {
+          throw new Error(`Config is invalid at ${defaultConfigPath}`);
         }
 
-        if (!config.providers) {
-          throw new Error('Config must contain at least one target or provider');
+        if (!defaultConfig.providers) {
+          throw new Error('Config must contain a target or provider');
         }
 
-        const providers = await loadApiProviders(config.providers);
+        const providers = await loadApiProviders(defaultConfig.providers);
         target = providers[0];
 
         // Alert the user that we're using a config from the current working directory:
-        logger.info(`Using config from ${chalk.italic(fallbackConfigPath)}`);
+        logger.info(`Using config from ${chalk.italic(defaultConfigPath)}`);
+      } else {
+        logger.error(
+          'No config found, please specify a config file with the --config flag, a target with the --target flag, or run this command from a directory with a promptfooconfig.yaml file.',
+        );
+        process.exitCode = 1;
+        return;
       }
-
-      // At this point, we should have at least one target:
-      invariant(target != undefined, 'An error occurred loading the target config');
 
       // Discover the purpose for the target:
       let purpose: Record<string, any> | undefined = undefined;
