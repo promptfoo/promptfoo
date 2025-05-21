@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import { PostHog } from 'posthog-node';
 import { z } from 'zod';
 import { VERSION } from './constants';
-import { getEnvBool, getEnvString } from './envars';
+import { getEnvBool, getEnvString, isCI } from './envars';
 import { fetchWithTimeout } from './fetch';
 import { readGlobalConfig } from './globalConfig/globalConfig';
 import logger from './logger';
@@ -100,12 +100,18 @@ export class Telemetry {
   }
 
   private sendEvent(eventName: TelemetryEventTypes, properties: EventProperties): void {
+    const propertiesWithMetadata = {
+      ...properties,
+      packageVersion: VERSION,
+      isRunningInCi: isCI(),
+    };
+
     if (posthogClient && !getEnvBool('IS_TESTING')) {
       const globalConfig = readGlobalConfig();
       posthogClient.capture({
         distinctId: globalConfig.id,
         event: eventName,
-        properties: { ...properties, packageVersion: VERSION },
+        properties: propertiesWithMetadata,
       });
     }
     const kaBody = {
@@ -116,7 +122,7 @@ export class Telemetry {
           message_id: randomUUID(),
           type: 'track',
           event: eventName,
-          properties,
+          properties: propertiesWithMetadata,
           sent_at: new Date().toISOString(),
         },
       ],

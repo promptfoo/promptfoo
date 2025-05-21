@@ -1,19 +1,5 @@
-import { PostHog } from 'posthog-node';
 import { fetchWithTimeout } from '../src/fetch';
 import { Telemetry } from '../src/telemetry';
-
-// Mock PostHog
-jest.mock('posthog-node', () => {
-  const mockCapture = jest.fn();
-  const mockIdentify = jest.fn();
-
-  return {
-    PostHog: jest.fn().mockImplementation(() => ({
-      capture: mockCapture,
-      identify: mockIdentify,
-    })),
-  };
-});
 
 // Mock fetch
 jest.mock('../src/fetch', () => ({
@@ -39,15 +25,19 @@ jest.mock('../src/constants', () => ({
 
 // Mock envars
 jest.mock('../src/envars', () => ({
+  ...jest.requireActual('../src/envars'),
   getEnvBool: jest.fn().mockImplementation((key) => {
     if (key === 'PROMPTFOO_DISABLE_TELEMETRY') {
       return process.env.PROMPTFOO_DISABLE_TELEMETRY === '1';
+    }
+    if (key === 'IS_TESTING') {
+      return false;
     }
     return false;
   }),
   getEnvString: jest.fn().mockImplementation((key) => {
     if (key === 'PROMPTFOO_POSTHOG_KEY') {
-      return process.env.PROMPTFOO_POSTHOG_KEY || undefined;
+      return process.env.PROMPTFOO_POSTHOG_KEY || 'test-key';
     }
     if (key === 'PROMPTFOO_POSTHOG_HOST') {
       return process.env.PROMPTFOO_POSTHOG_HOST || undefined;
@@ -57,37 +47,36 @@ jest.mock('../src/envars', () => ({
     }
     return undefined;
   }),
+  isCI: jest.fn().mockReturnValue(false),
 }));
 
 describe('Telemetry', () => {
   let originalEnv: NodeJS.ProcessEnv;
-  let mockPostHogInstance: any;
-  let mockFetch: jest.Mock;
+  let fetchSpy: jest.SpyInstance;
+  let sendEventSpy: jest.SpyInstance;
 
   beforeEach(() => {
     originalEnv = process.env;
     process.env = { ...originalEnv };
     process.env.PROMPTFOO_POSTHOG_KEY = 'test-key';
 
-    // Setup fetch mock
-    mockFetch = jest.fn().mockResolvedValue({ ok: true });
-    global.fetch = mockFetch;
+    // Setup fetch spy
+    fetchSpy = jest
+      .spyOn(global, 'fetch')
+      .mockImplementation(() => Promise.resolve({ ok: true } as Response));
 
-    // Reset PostHog mock
-    jest.mocked(PostHog).mockClear();
-    mockPostHogInstance = {
-      capture: jest.fn(),
-      identify: jest.fn(),
-    };
-    jest.mocked(PostHog).mockImplementation(() => mockPostHogInstance);
+    // Mock the private sendEvent method
+    sendEventSpy = jest.spyOn(Telemetry.prototype, 'sendEvent' as any);
 
-    // Reset fetchWithTimeout mock
-    jest.mocked(fetchWithTimeout).mockClear();
+    // Reset mocks before each test
+    jest.clearAllMocks();
   });
 
   afterEach(() => {
     process.env = originalEnv;
     jest.resetAllMocks();
+    fetchSpy.mockRestore();
+    sendEventSpy.mockRestore();
   });
 
   it('should not track events with PostHog when telemetry is disabled', () => {
@@ -99,8 +88,48 @@ describe('Telemetry', () => {
     // Record an event
     _telemetry.record('eval_ran', { foo: 'bar' });
 
-    // PostHog capture should not be called
-    expect(mockPostHogInstance.capture).not.toHaveBeenCalled();
+    // sendEvent should not be called with the eval_ran event
+    expect(sendEventSpy).not.toHaveBeenCalledWith('eval_ran', expect.anything());
+  });
+
+  it('should include version in telemetry events', () => {
+    // Ensure telemetry is not disabled
+    process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
+
+    // Create telemetry instance
+    const _telemetry = new Telemetry();
+
+    // Record an event
+    _telemetry.record('eval_ran', { foo: 'bar' });
+
+    // Check that sendEvent was called with the expected metadata
+    expect(sendEventSpy).toHaveBeenCalledWith('eval_ran', { foo: 'bar' });
+
+    // Verify fetch was called
+    expect(fetchSpy).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        method: 'POST',
+      }),
+    );
+
+    // Verify packageVersion is included in the events
+    const fetchCalls = fetchSpy.mock.calls;
+    let foundVersion = false;
+
+    for (const call of fetchCalls) {
+      if (
+        call[1] &&
+        call[1].body &&
+        typeof call[1].body === 'string' &&
+        call[1].body.includes('packageVersion')
+      ) {
+        foundVersion = true;
+        break;
+      }
+    }
+
+    expect(foundVersion).toBe(true);
   });
 
   it('should save consent successfully', async () => {
