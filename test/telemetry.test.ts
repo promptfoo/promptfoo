@@ -48,111 +48,85 @@ jest.mock('../src/envars', () => ({
 describe('Telemetry', () => {
   let originalEnv: NodeJS.ProcessEnv;
   let fetchSpy: jest.SpyInstance;
-  let sendEventSpy: jest.SpyInstance;
+  let originalDate: DateConstructor;
 
   beforeEach(() => {
     originalEnv = process.env;
     process.env = { ...originalEnv };
     process.env.PROMPTFOO_POSTHOG_KEY = 'test-key';
 
+    originalDate = global.Date;
+    const mockDate = new Date('2025-05-21T20:47:30.981Z');
+    global.Date = class extends Date {
+      constructor() {
+        super();
+        return mockDate;
+      }
+    } as DateConstructor;
+
     fetchSpy = jest
       .spyOn(global, 'fetch')
       .mockImplementation(() => Promise.resolve({ ok: true } as Response));
-
-    sendEventSpy = jest.spyOn(Telemetry.prototype, 'sendEvent' as any);
 
     jest.clearAllMocks();
   });
 
   afterEach(() => {
     process.env = originalEnv;
+    global.Date = originalDate;
     jest.resetAllMocks();
     fetchSpy.mockRestore();
-    sendEventSpy.mockRestore();
   });
 
   it('should not track events with PostHog when telemetry is disabled', () => {
     process.env.PROMPTFOO_DISABLE_TELEMETRY = '1';
     const _telemetry = new Telemetry();
+    fetchSpy.mockClear();
     _telemetry.record('eval_ran', { foo: 'bar' });
-    expect(sendEventSpy).not.toHaveBeenCalledWith('eval_ran', expect.anything());
+
+    const calls = fetchSpy.mock.calls;
+    expect(calls).toHaveLength(1);
+    const body = JSON.parse(calls[0][1].body as string);
+    expect(body.events[0].event).toBe('feature_used');
+    expect(body.events[0].properties.feature).toBe('telemetry disabled');
   });
 
   it('should include version in telemetry events', () => {
     process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
     const _telemetry = new Telemetry();
+    fetchSpy.mockClear();
+
     _telemetry.record('eval_ran', { foo: 'bar' });
 
-    expect(sendEventSpy).toHaveBeenCalledWith('eval_ran', { foo: 'bar' });
-    expect(fetchSpy).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({
-        method: 'POST',
-      }),
-    );
-
-    const fetchCalls = fetchSpy.mock.calls;
-    let foundVersion = false;
-
-    for (const call of fetchCalls) {
-      if (
-        call[1] &&
-        call[1].body &&
-        typeof call[1].body === 'string' &&
-        call[1].body.includes('packageVersion')
-      ) {
-        foundVersion = true;
-        break;
-      }
-    }
-
-    expect(foundVersion).toBe(true);
+    const calls = fetchSpy.mock.calls;
+    expect(calls).toHaveLength(1);
+    const body = JSON.parse(calls[0][1].body as string);
+    expect(body.events[0].properties.packageVersion).toBe('1.0.0');
   });
 
   it('should include version and CI status in telemetry events', () => {
     process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
     const isCI = jest.requireMock('../src/envars').isCI;
     isCI.mockReturnValue(true);
-    fetchSpy.mockClear();
 
     const _telemetry = new Telemetry();
-    _telemetry.record('feature_used', { test: 'value' });
+    fetchSpy.mockClear();
+    _telemetry.record('eval_ran', { test: 'value' });
 
-    const fetchCalls = fetchSpy.mock.calls;
-    expect(fetchCalls.length).toBeGreaterThan(0);
-
-    let foundExpectedProperties = false;
-
-    for (const call of fetchCalls) {
-      if (call[1] && call[1].body && typeof call[1].body === 'string') {
-        try {
-          const data = JSON.parse(call[1].body);
-
-          if (data.events && data.events.length > 0) {
-            const properties = data.events[0].properties;
-
-            if (
-              properties &&
-              properties.test === 'value' &&
-              properties.packageVersion === '1.0.0' &&
-              properties.isRunningInCi === true
-            ) {
-              foundExpectedProperties = true;
-              break;
-            }
-          }
-        } catch {
-          // Skip JSON parse errors
-        }
-      }
-    }
-
-    expect(foundExpectedProperties).toBe(true);
-    isCI.mockReset();
+    const calls = fetchSpy.mock.calls;
+    expect(calls).toHaveLength(1);
+    const body = JSON.parse(calls[0][1].body as string);
+    expect(body.events[0].properties).toEqual(
+      expect.objectContaining({
+        test: 'value',
+        packageVersion: '1.0.0',
+        isRunningInCi: true,
+      }),
+    );
   });
 
   it('should save consent successfully', async () => {
-    jest.mocked(fetchWithTimeout).mockResolvedValue({ ok: true } as any);
+    jest.mocked(fetchWithTimeout).mockResolvedValue({ ok: true } as Response);
     const _telemetry = new Telemetry();
 
     await _telemetry.saveConsent('test@example.com', { source: 'test' });
@@ -171,7 +145,10 @@ describe('Telemetry', () => {
   });
 
   it('should handle failed consent save', async () => {
-    jest.mocked(fetchWithTimeout).mockResolvedValue({ ok: false, statusText: 'Not Found' } as any);
+    jest.mocked(fetchWithTimeout).mockResolvedValue({
+      ok: false,
+      statusText: 'Not Found',
+    } as Response);
     const _telemetry = new Telemetry();
 
     await _telemetry.saveConsent('test@example.com');
@@ -180,9 +157,15 @@ describe('Telemetry', () => {
       'https://api.promptfoo.dev/consent',
       expect.objectContaining({
         method: 'POST',
-        body: expect.any(String),
+        body: JSON.stringify({ email: 'test@example.com', metadata: undefined }),
       }),
-      expect.any(Number),
+      1000,
     );
+  });
+
+  it('should handle error in saveConsent', async () => {
+    jest.mocked(fetchWithTimeout).mockRejectedValueOnce(new Error('timeout'));
+    const _telemetry = new Telemetry();
+    await expect(_telemetry.saveConsent('test@example.com')).resolves.toBeUndefined();
   });
 });
