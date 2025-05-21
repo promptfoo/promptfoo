@@ -498,10 +498,15 @@ export class CrescendoProvider implements ApiProvider {
           : response.output;
     const expectedKeys = ['generatedQuestion', 'rationaleBehindJailbreak', 'lastResponseSummary'];
 
+    const missingKeys: string[] = [];
     for (const key of expectedKeys) {
       if (!(key in parsedOutput)) {
-        logger.warn(`[Crescendo] Missing key in response: ${key}`);
+        missingKeys.push(key);
       }
+    }
+    if (missingKeys.length > 0) {
+      logger.warn(`[Crescendo] Missing keys in response: ${missingKeys.join(', ')}`);
+      logger.warn(`[Crescendo] Response: ${response.output}`);
     }
 
     logger.debug(dedent`
