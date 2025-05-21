@@ -1,29 +1,24 @@
 import { fetchWithTimeout } from '../src/fetch';
 import { Telemetry } from '../src/telemetry';
 
-// Mock fetch
 jest.mock('../src/fetch', () => ({
   fetchWithTimeout: jest.fn(),
 }));
 
-// Mock crypto
 jest.mock('crypto', () => ({
   randomUUID: jest.fn().mockReturnValue('test-uuid'),
 }));
 
-// Mock globalConfig
 jest.mock('../src/globalConfig/globalConfig', () => ({
   readGlobalConfig: jest
     .fn()
     .mockReturnValue({ id: 'test-user-id', account: { email: 'test@example.com' } }),
 }));
 
-// Mock constants
 jest.mock('../src/constants', () => ({
   VERSION: '1.0.0',
 }));
 
-// Mock envars
 jest.mock('../src/envars', () => ({
   ...jest.requireActual('../src/envars'),
   getEnvBool: jest.fn().mockImplementation((key) => {
@@ -60,15 +55,12 @@ describe('Telemetry', () => {
     process.env = { ...originalEnv };
     process.env.PROMPTFOO_POSTHOG_KEY = 'test-key';
 
-    // Setup fetch spy
     fetchSpy = jest
       .spyOn(global, 'fetch')
       .mockImplementation(() => Promise.resolve({ ok: true } as Response));
 
-    // Mock the private sendEvent method
     sendEventSpy = jest.spyOn(Telemetry.prototype, 'sendEvent' as any);
 
-    // Reset mocks before each test
     jest.clearAllMocks();
   });
 
@@ -81,31 +73,17 @@ describe('Telemetry', () => {
 
   it('should not track events with PostHog when telemetry is disabled', () => {
     process.env.PROMPTFOO_DISABLE_TELEMETRY = '1';
-
-    // Create telemetry instance with telemetry disabled
     const _telemetry = new Telemetry();
-
-    // Record an event
     _telemetry.record('eval_ran', { foo: 'bar' });
-
-    // sendEvent should not be called with the eval_ran event
     expect(sendEventSpy).not.toHaveBeenCalledWith('eval_ran', expect.anything());
   });
 
   it('should include version in telemetry events', () => {
-    // Ensure telemetry is not disabled
     process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
-
-    // Create telemetry instance
     const _telemetry = new Telemetry();
-
-    // Record an event
     _telemetry.record('eval_ran', { foo: 'bar' });
 
-    // Check that sendEvent was called with the expected metadata
     expect(sendEventSpy).toHaveBeenCalledWith('eval_ran', { foo: 'bar' });
-
-    // Verify fetch was called
     expect(fetchSpy).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
@@ -113,7 +91,6 @@ describe('Telemetry', () => {
       }),
     );
 
-    // Verify packageVersion is included in the events
     const fetchCalls = fetchSpy.mock.calls;
     let foundVersion = false;
 
@@ -133,28 +110,17 @@ describe('Telemetry', () => {
   });
 
   it('should include version and CI status in telemetry events', () => {
-    // Ensure telemetry is not disabled
     process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
-
-    // Mock the isCI function to return true for this test
     const isCI = jest.requireMock('../src/envars').isCI;
     isCI.mockReturnValue(true);
-
-    // Spy on fetch to see what data is actually sent
     fetchSpy.mockClear();
 
-    // Create telemetry instance
     const _telemetry = new Telemetry();
-
-    // Call sendEvent directly with our own properties
-    // @ts-ignore - accessing private method for testing
     _telemetry.sendEvent('test_event', { test: 'value' });
 
-    // Check the fetch calls to see the actual data sent to the server
     const fetchCalls = fetchSpy.mock.calls;
     expect(fetchCalls.length).toBeGreaterThan(0);
 
-    // Parse the fetch request body to check for properties
     let foundExpectedProperties = false;
 
     for (const call of fetchCalls) {
@@ -182,8 +148,6 @@ describe('Telemetry', () => {
     }
 
     expect(foundExpectedProperties).toBe(true);
-
-    // Reset mocks
     isCI.mockReset();
   });
 
