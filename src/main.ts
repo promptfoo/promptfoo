@@ -117,7 +117,7 @@ async function main() {
     redteamConfig ?? defaultConfig,
     redteamConfigPath ?? defaultConfigPath,
   );
-  redteamDiscoverCommand(redteamBaseCommand);
+  redteamDiscoverCommand(redteamBaseCommand, defaultConfig, defaultConfigPath);
   redteamGenerateCommand(redteamBaseCommand, 'generate', defaultConfig, defaultConfigPath);
   redteamRunCommand(redteamBaseCommand);
   redteamReportCommand(redteamBaseCommand);

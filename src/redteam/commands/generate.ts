@@ -35,7 +35,7 @@ import type {
   RedteamStrategyObject,
   SynthesizeOptions,
 } from '../types';
-import { doTargetPurposeDiscovery, mergePurposes } from './discover';
+import { type DiscoveredPurpose, doTargetPurposeDiscovery, mergePurposes } from './discover';
 
 function getConfigHash(configPath: string): string {
   const content = fs.readFileSync(configPath, 'utf8');
@@ -55,7 +55,6 @@ export async function doGenerateRedteam(
   let redteamConfig: RedteamFileConfig | undefined;
   const configPath = options.config || options.defaultConfigPath;
   const outputPath = options.output || 'redteam.yaml';
-  let finalPurpose = options.purpose;
 
   // Check for updates to the config file and decide whether to generate
   let shouldGenerate = options.force;
@@ -80,6 +79,7 @@ export async function doGenerateRedteam(
     shouldGenerate = true;
   }
 
+  let discoveredPurpose: DiscoveredPurpose | undefined;
   if (configPath) {
     const resolved = await resolveConfigs(
       {
@@ -89,9 +89,6 @@ export async function doGenerateRedteam(
     );
     testSuite = resolved.testSuite;
     redteamConfig = resolved.config.redteam;
-    if (redteamConfig?.purpose) {
-      finalPurpose = redteamConfig.purpose;
-    }
 
     // If automatic purpose discovery is enabled, remote generation is enabled, and a config is provided that contains at least one target,
     // discover the purpose from the target:
@@ -107,14 +104,15 @@ export async function doGenerateRedteam(
       );
       const providers = await loadApiProviders(resolved.config.providers);
       try {
-        const generatedPurpose = await doTargetPurposeDiscovery(providers[0]);
-        // Append the discovered purpose to the purpose if it exists:
-        finalPurpose = finalPurpose
-          ? mergePurposes(finalPurpose, generatedPurpose)
-          : generatedPurpose;
+        if (testSuite.prompts.length > 1) {
+          logger.warn(
+            'More than one prompt provided, only the first prompt will be used for purpose discovery',
+          );
+        }
+        discoveredPurpose = await doTargetPurposeDiscovery(providers[0], testSuite.prompts[0]);
       } catch (error) {
         logger.error(
-          `Failed to auto-discover purpose: ${error instanceof Error ? error.message : String(error)}`,
+          `Discovery failed from error, skipping: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
     }
@@ -135,6 +133,8 @@ export async function doGenerateRedteam(
     );
     return null;
   }
+
+  const mergedPurpose = mergePurposes(redteamConfig?.purpose ?? options.purpose, discoveredPurpose);
 
   const startTime = Date.now();
   telemetry.record('command_used', {
@@ -215,7 +215,7 @@ export async function doGenerateRedteam(
     entities: redteamConfig?.entities,
     plugins,
     provider: redteamConfig?.provider || options.provider,
-    purpose: finalPurpose,
+    purpose: mergedPurpose,
     strategies: strategyObjs,
     delay: redteamConfig?.delay || options.delay,
     sharing: redteamConfig?.sharing || options.sharing,

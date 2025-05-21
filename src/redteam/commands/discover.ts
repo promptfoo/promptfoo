@@ -1,60 +1,61 @@
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
-import { type Command, Option } from 'commander';
+import { type Command } from 'commander';
+import { randomUUID } from 'crypto';
 import dedent from 'dedent';
 import * as fs from 'fs';
-import yaml from 'js-yaml';
-import path from 'path';
 import { z } from 'zod';
 import { VERSION } from '../../constants';
+import { renderPrompt } from '../../evaluatorHelpers';
 import { fetchWithProxy } from '../../fetch';
 import { getUserEmail } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import { loadApiProvider, loadApiProviders } from '../../providers';
 import telemetry from '../../telemetry';
-import type { ApiProvider, UnifiedConfig } from '../../types';
+import type { ApiProvider, Prompt, UnifiedConfig } from '../../types';
 import { getProviderFromCloud } from '../../util/cloud';
 import { readConfig } from '../../util/config/load';
-import { writePromptfooConfig } from '../../util/config/manage';
 import invariant from '../../util/invariant';
-import { DEFAULT_OUTPUT_PATH } from '../constants';
 import { getRemoteGenerationUrl } from '../remoteGeneration';
 import { neverGenerateRemote } from '../remoteGeneration';
+
+export const TargetPurposeDiscoveryStateSchema = z.object({
+  currentQuestionIndex: z.number(),
+  answers: z.array(z.string()),
+});
+
+export const TargetPurposeDiscoveryRequestSchema = z.object({
+  state: TargetPurposeDiscoveryStateSchema,
+  task: z.literal('target-purpose-discovery'),
+  version: z.string(),
+  email: z.string().optional().nullable(),
+});
+export const DiscoveredPurposeSchema = z.object({
+  purpose: z.string().nullable(),
+  limitations: z.string().nullable(),
+  user: z.string().nullable(),
+  tools: z.array(z.record(z.any())).nullable(),
+});
+
+export const TargetPurposeDiscoveryResponseSchema = z.object({
+  done: z.boolean(),
+  question: z.string().optional(),
+  purpose: DiscoveredPurposeSchema.optional(),
+  state: TargetPurposeDiscoveryStateSchema,
+});
+
+export type DiscoveredPurpose = z.infer<typeof DiscoveredPurposeSchema>;
 
 export const ArgsSchema = z
   .object({
     config: z.string().optional(),
-    output: z.string().optional(),
     target: z.string().optional(),
-    preview: z.boolean(),
-    turns: z.number().optional(),
-    overwrite: z.boolean(),
   })
   // Config and target are mutually exclusive:
   .refine((data) => !(data.config && data.target), {
     message: 'Cannot specify both config and target!',
     path: ['config', 'target'],
-  })
-  // Either config or target must be provided:
-  .refine((data) => data.config || data.target, {
-    message: 'Either config or target must be provided!',
-    path: ['config', 'target'],
-  })
-  // `output` and `preview` are mutually exclusive:
-  .refine((data) => !(data.output && data.preview), {
-    message: 'Cannot specify both output and preview!',
-    path: ['output', 'preview'],
-  })
-  // `overwrite` can only be used if `output` is provided:
-  .refine((data) => !(data.overwrite && !data.output), {
-    message: 'Cannot specify overwrite without output!',
-    path: ['overwrite', 'output'],
-  })
-  // if `preview` is false, `output` must be provided:
-  .refine((data) => !(data.preview === false && !data.output), {
-    message: 'If preview is false, output must be provided!',
-    path: ['preview', 'output'],
   });
 
 type Args = z.infer<typeof ArgsSchema>;
@@ -74,131 +75,149 @@ export const DEFAULT_TURN_COUNT = 5;
  */
 export async function doTargetPurposeDiscovery(
   target: ApiProvider,
-  maxTurns: number = DEFAULT_TURN_COUNT,
-): Promise<string> {
-  const conversationHistory: { type: 'promptfoo' | 'target'; content: string }[] = [];
-
-  let turnCounter = 0;
-
+  prompt?: Prompt,
+): Promise<DiscoveredPurpose | undefined> {
   const pbar = new cliProgress.SingleBar({
-    format: `Discovering purpose {bar} {percentage}% | {value}${maxTurns ? '/{total}' : ''} turns`,
+    format: `Discovery phase - probing the target {bar} {percentage}% | {value}${DEFAULT_TURN_COUNT ? '/{total}' : ''} turns`,
     barCompleteChar: '\u2588',
     barIncompleteChar: '\u2591',
     hideCursor: true,
   });
 
-  pbar.start(maxTurns, turnCounter);
+  pbar.start(DEFAULT_TURN_COUNT, 0);
 
-  try {
-    for (turnCounter = 0; turnCounter < maxTurns; turnCounter++) {
-      const res = await fetchWithProxy(getRemoteGenerationUrl(), {
-        body: JSON.stringify({
-          task: 'target-purpose-discovery',
-          conversationHistory,
-          maxTurns,
-          version: VERSION,
-          email: getUserEmail(),
-        }),
-        headers: { 'Content-Type': 'application/json' },
-        method: 'POST',
-      });
+  let done = false;
+  let question: string | undefined = undefined;
+  let purpose: DiscoveredPurpose | undefined = undefined;
+  let state = TargetPurposeDiscoveryStateSchema.parse({
+    currentQuestionIndex: 0,
+    answers: [],
+  });
+  let turn = 0;
 
-      const { done, question, purpose } = (await res.json()) as {
-        done: boolean;
-        question?: string;
-        purpose?: string;
-      };
-
-      if (done) {
-        pbar.increment();
-        pbar.stop();
-        logger.info(`\nPurpose:\n\n${chalk.green(purpose)}\n`);
-        return purpose as string;
-      } else {
-        if (!question) {
-          throw new Error(`Failed to discover purpose: ${res.statusText}`);
-        }
-        conversationHistory.push({ type: 'promptfoo', content: question as string });
-      }
-
-      // Call the target with the question:
-      const response = await target.callApi(question as string);
-      logger.debug(JSON.stringify({ question, output: response.output }, null, 2));
-      conversationHistory.push({ type: 'target', content: response.output });
-
-      pbar.increment();
-    }
-
-    // If we've exhausted all turns, assume the last purpose is available
-    // This will only be reached if done=false for all turns
-    const res = await fetchWithProxy(getRemoteGenerationUrl(), {
-      body: JSON.stringify({
+  while (!done && turn < 10) {
+    try {
+      turn++;
+      logger.debug(`[TargetPurposeDiscovery] Starting the purpose discovery loop, turn: ${turn}`);
+      const request = TargetPurposeDiscoveryRequestSchema.parse({
+        state: {
+          currentQuestionIndex: state.currentQuestionIndex,
+          answers: state.answers,
+        },
         task: 'target-purpose-discovery',
-        conversationHistory,
-        maxTurns,
         version: VERSION,
         email: getUserEmail(),
-        forceReturn: true,
-      }),
-      headers: { 'Content-Type': 'application/json' },
-      method: 'POST',
-    });
+      });
 
-    const { purpose } = (await res.json()) as { purpose?: string };
+      const response = await fetchWithProxy(getRemoteGenerationUrl(), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${cloudConfig.getApiKey()}`,
+        },
+        body: JSON.stringify(request),
+      });
 
-    if (purpose) {
-      return purpose;
-    }
+      if (!response.ok) {
+        const error = await response.text();
+        logger.error(
+          `[TargetPurposeDiscovery] Error getting the next question from remote server: ${error}`,
+        );
+        continue;
+      }
 
-    throw new Error('Failed to discover purpose after exhausting maximum turns');
-  } finally {
-    // Ensure progress bar is always stopped, even if an exception occurs
-    if (pbar) {
-      pbar.stop();
+      const responseData = await response.json();
+      const response_ = TargetPurposeDiscoveryResponseSchema.parse(responseData);
+
+      logger.debug(
+        `[TargetPurposeDiscovery] Received response from remote server: ${JSON.stringify(
+          response_,
+          null,
+          2,
+        )}`,
+      );
+      done = response_.done;
+      question = response_.question;
+      purpose = response_.purpose;
+      state = response_.state;
+
+      if (!done) {
+        invariant(
+          question,
+          'If its not done, then a quesation should always be defined, something is terribely wrong.',
+        );
+        const renderedPrompt = prompt
+          ? await renderPrompt(prompt, { prompt: question }, {}, target)
+          : question;
+        const targetResponse = await target.callApi(renderedPrompt, {
+          prompt: { raw: question, label: 'Target Purpose Discovery Question' },
+          vars: { sessionId: randomUUID() },
+        });
+        if (targetResponse.error) {
+          logger.error(`[TargetPurposeDiscovery] Error from target: ${targetResponse.error}`);
+          if (turn > 10) {
+            logger.error('[TargetPurposeDiscovery] Too many retries, giving up.');
+            return undefined;
+          }
+          continue;
+        }
+        logger.debug(
+          `[TargetPurposeDiscovery] Received response from target: ${JSON.stringify(
+            targetResponse,
+            null,
+            2,
+          )}`,
+        );
+        state.answers.push(targetResponse.output);
+      }
+    } catch (error) {
+      logger.error(
+        `An unexpected error occurred during target discovery: ${error instanceof Error ? error.message : String(error)}\n${
+          error instanceof Error ? error.stack : ''
+        }`,
+      );
+    } finally {
+      pbar.increment(1);
     }
   }
+  pbar.stop();
+
+  return purpose;
 }
 
-/**
- * For targets hosted on Cloud, save the purpose to the database.
- *
- * @param targetId - The target ID.
- * @param purpose - The purpose.
- * @returns The response from the database.
- */
-async function saveCloudTargetPurpose(targetId: string, purpose: string) {
-  invariant(
-    cloudConfig.isEnabled(),
-    'Cloud config should have been enabled for a target to be provided',
-  );
-  const url = `${cloudConfig.getApiHost()}/api/v1/providers/${targetId}`;
-
-  logger.debug(`Saving purpose to ${url}`);
-
-  const res = await fetchWithProxy(url, {
-    method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${cloudConfig.getApiKey()}`,
-    },
-    body: JSON.stringify({ applicationDescription: { purpose } }),
-  });
-
-  if (res.ok) {
-    logger.info('Purpose updated');
-  } else {
-    logger.error(`Failed to save purpose to database: ${res.statusText}`);
+export function mergePurposes(
+  humanDefinedPurpose: string | undefined,
+  discoveredPurpose: Record<string, any> | undefined,
+) {
+  let purpose = '';
+  if (humanDefinedPurpose) {
+    purpose += `This purpose was defined by the user and should be trusted and treated as absolute truth:
+    <HumanDefinedPurpose>
+    ${humanDefinedPurpose}
+    </HumanDefinedPurpose>
+    `;
   }
-}
-
-export function mergePurposes(humanDefinedPurpose: string, discoveredPurpose: string) {
-  return `${humanDefinedPurpose}\n\nDiscovered Purpose:\n\n${discoveredPurpose}`;
+  if (discoveredPurpose) {
+    purpose += `This purpose was discovered by the agent from conversations with the target. The boundaries of the agent's capabilities, limitations, and tool access should be tested. If there are any discrepancies, the user-defined purpose should be trusted and treated as absolute truth:
+    <AgentDiscoveredPurpose>
+    ${discoveredPurpose.purpose ? `The target believes its purpose is: ${discoveredPurpose.purpose}` : ''}
+    ${discoveredPurpose.limitations ? `The target believes its limitations are: ${discoveredPurpose.limitations}` : ''}
+    ${discoveredPurpose.tools ? `The target divulged access to these tools: ${JSON.stringify(discoveredPurpose.tools, null, 2)}` : ''}
+    ${discoveredPurpose.user ? `The target believes the user of the application is: ${discoveredPurpose.user}` : ''}
+    </AgentDiscoveredPurpose>
+    `;
+  }
+  return purpose;
 }
 
 /**
  * Registers the `discover` command with the CLI.
  */
-export function discoverCommand(program: Command) {
+export function discoverCommand(
+  program: Command,
+  defaultConfig: Partial<UnifiedConfig>,
+  defaultConfigPath: string | undefined,
+) {
   program
     .command('discover')
     .description(
@@ -210,31 +229,8 @@ export function discoverCommand(program: Command) {
       `,
     )
     .option('-c, --config <path>', 'Path to `promptfooconfig.yaml` configuration file.')
-    .option(
-      '-o, --output <path>',
-      'Path to output file. Discovered purpose will be appended to the file if it already exists.',
-      DEFAULT_OUTPUT_PATH,
-    )
-    .option('--overwrite', 'Overwrite the existing purpose if it already exists.', false)
     .option('-t, --target <id>', 'UUID of a Cloud-defined target to run the discovery on')
-    .option('--preview', 'Preview discovery results without writing to an output file', false)
-    .addOption(
-      new Option(
-        '--turns <turns>',
-        'A maximum number of turns to run the discovery process. Lower is faster but less accurate.',
-      )
-        .argParser(Number.parseInt)
-        .default(DEFAULT_TURN_COUNT),
-    )
     .action(async (rawArgs: Args) => {
-      // If preview is true and output is DEFAULT_OUTPUT_PATH, set output to undefined to satisfy
-      // the schema. Defaults are defined within the `option` definitions to include them within the
-      // help message; however the schema enforces combinations of options that are mutually exclusive,
-      // such as `output` and `preview`.
-      if (rawArgs.preview && rawArgs.output === DEFAULT_OUTPUT_PATH) {
-        rawArgs.output = undefined;
-      }
-
       // Check that remote generation is enabled:
       if (neverGenerateRemote()) {
         logger.error(dedent`
@@ -266,7 +262,6 @@ export function discoverCommand(program: Command) {
       // a single target at a time.
       let target: ApiProvider | undefined = undefined;
       // Fallback to the default config path:
-      const fallbackConfigPath = path.join(process.cwd(), 'promptfooconfig.yaml');
 
       // If user provides a config, read the target from it:
       if (args.config) {
@@ -282,10 +277,11 @@ export function discoverCommand(program: Command) {
         }
 
         if (!config.providers) {
-          throw new Error('Config must contain at least one target or provider');
+          throw new Error('Config must contain a target');
         }
 
         const providers = await loadApiProviders(config.providers);
+
         target = providers[0];
       }
       // If the target flag is provided, load it from Cloud:
@@ -295,31 +291,32 @@ export function discoverCommand(program: Command) {
         target = await loadApiProvider(providerOptions.id, { options: providerOptions });
       }
       // Check the current working directory for a promptfooconfig.yaml file:
-      else if (fs.existsSync(fallbackConfigPath)) {
-        config = await readConfig(fallbackConfigPath);
-
-        if (!config) {
-          throw new Error(`Config is invalid at ${fallbackConfigPath}`);
+      else if (defaultConfig) {
+        if (!defaultConfig) {
+          throw new Error(`Config is invalid at ${defaultConfigPath}`);
         }
 
-        if (!config.providers) {
-          throw new Error('Config must contain at least one target or provider');
+        if (!defaultConfig.providers) {
+          throw new Error('Config must contain a target or provider');
         }
 
-        const providers = await loadApiProviders(config.providers);
+        const providers = await loadApiProviders(defaultConfig.providers);
         target = providers[0];
 
         // Alert the user that we're using a config from the current working directory:
-        logger.info(`Using config from ${chalk.italic(fallbackConfigPath)}`);
+        logger.info(`Using config from ${chalk.italic(defaultConfigPath)}`);
+      } else {
+        logger.error(
+          'No config found, please specify a config file with the --config flag, a target with the --target flag, or run this command from a directory with a promptfooconfig.yaml file.',
+        );
+        process.exitCode = 1;
+        return;
       }
 
-      // At this point, we should have at least one target:
-      invariant(target != undefined, 'An error occurred loading the target config');
-
       // Discover the purpose for the target:
-      let purpose: string | undefined = undefined;
+      let purpose: Record<string, any> | undefined = undefined;
       try {
-        purpose = await doTargetPurposeDiscovery(target, args.turns);
+        purpose = await doTargetPurposeDiscovery(target);
       } catch (error) {
         logger.error(
           `An unexpected error occurred during target discovery: ${error instanceof Error ? error.message : String(error)}\n${
@@ -329,57 +326,27 @@ export function discoverCommand(program: Command) {
         process.exit(1);
       }
 
-      // If not previewing, persist the purposes:
-      if (!args.preview) {
-        // Persist the purposes:
-        if (args.target) {
-          await saveCloudTargetPurpose(args.target, purpose);
-        } else {
-          invariant(config, 'Config is required');
-
-          if (args.output === DEFAULT_OUTPUT_PATH) {
-            args.output = path.relative(process.cwd(), DEFAULT_OUTPUT_PATH);
-          }
-
-          logger.debug(`Writing purpose to ${args.output}`);
-
-          if (fs.existsSync(args.output!)) {
-            const existingYaml = yaml.load(
-              fs.readFileSync(args.output!, 'utf8'),
-            ) as Partial<UnifiedConfig>;
-
-            // Either append or overwrite the existing purpose:
-            const existingPurpose = existingYaml['redteam']?.purpose;
-
-            if (existingPurpose) {
-              if (args.overwrite) {
-                logger.warn(dedent`
-                  Output file already contains a value at \`redteam.purpose\`; overwriting it.
-                `);
-              } else {
-                logger.warn(dedent`
-                  Output file already contains a value at \`redteam.purpose\`; appending discovered purpose to it.
-
-                  To overwrite the existing purpose, use the \`--overwrite\` flag.
-                `);
-              }
-            }
-
-            existingYaml['redteam'] = {
-              ...(existingYaml['redteam'] || {}),
-              purpose:
-                existingPurpose && !args.overwrite
-                  ? mergePurposes(existingPurpose, purpose)
-                  : purpose,
-            };
-            writePromptfooConfig(existingYaml as UnifiedConfig, args.output!);
-          } else {
-            // Create a new config file with the purpose.
-            writePromptfooConfig({ redteam: { purpose } } as UnifiedConfig, args.output!);
-          }
-
-          logger.info(`\nPurpose written to ${chalk.italic(args.output)}`);
+      if (purpose) {
+        if (purpose.purpose) {
+          logger.info(chalk.bold(chalk.green('The target believes its purpose is:')));
+          logger.info(chalk.bold(purpose.purpose + '\n\n'));
+        }
+        if (purpose.limitations) {
+          logger.info(chalk.bold(chalk.green('The target believes its limitations to be:')));
+          logger.info(purpose.limitations + '\n\n');
+        }
+        if (purpose.tools) {
+          logger.info(chalk.bold(chalk.green('The target divulged access to these tools:')));
+          logger.info(JSON.stringify(purpose.tools, null, 2));
+        }
+        if (purpose.user) {
+          logger.info(
+            chalk.bold(chalk.green('The target believes the user of the application is:')),
+          );
+          logger.info(purpose.user + '\n\n');
         }
       }
+
+      process.exit();
     });
 }
