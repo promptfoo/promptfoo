@@ -1,7 +1,7 @@
 import type winston from 'winston';
 import type { EnvOverrides } from './env';
 import type { Prompt } from './prompts';
-import type { NunjucksFilterMap, TokenUsage, ExtensionHookOutput } from './shared';
+import type { NunjucksFilterMap, TokenUsage, ExtensionHookOutputs } from './shared';
 
 export type ProviderId = string;
 export type ProviderLabel = string;
