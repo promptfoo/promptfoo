@@ -2190,6 +2190,52 @@ describe('evaluator', () => {
     // Verify cleanup was called with no arguments
     expect(slowApiProvider.cleanup).toHaveBeenCalledWith();
   });
+
+  it('should accumulate token usage correctly', async () => {
+    const mockOptions = {
+      delay: 0,
+      testIdx: 0,
+      promptIdx: 0,
+      repeatIndex: 0,
+      isRedteam: false,
+    };
+
+    const results = await runEval({
+      ...mockOptions,
+      provider: mockApiProvider,
+      prompt: { raw: 'Test prompt', label: 'test-label' },
+      test: {
+        assert: [
+          {
+            type: 'llm-rubric',
+            value: 'Test output',
+          },
+        ],
+        options: { provider: mockGradingApiProviderPasses },
+      },
+      conversations: {},
+      registers: {},
+    });
+
+    expect(results[0].tokenUsage).toEqual({
+      total: 20, // 10 from provider + 10 from assertion
+      prompt: 10, // 5 from provider + 5 from assertion
+      completion: 10, // 5 from provider + 5 from assertion
+      cached: 0,
+      numRequests: 3, // Updated: 1 for provider + request increments
+      completionDetails: {
+        reasoning: 0,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+      },
+      assertions: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
+      },
+    });
+  });
 });
 
 describe('generateVarCombinations', () => {
@@ -2506,7 +2552,7 @@ describe('runEval', () => {
       prompt: 10, // 5 from provider + 5 from assertion
       completion: 10, // 5 from provider + 5 from assertion
       cached: 0,
-      numRequests: 2, // 1 for provider + 1 for assertion
+      numRequests: 3, // Updated: 1 for provider + request increments
       completionDetails: {
         reasoning: 0,
         acceptedPrediction: 0,
@@ -2517,11 +2563,6 @@ describe('runEval', () => {
         prompt: 0,
         completion: 0,
         cached: 0,
-        completionDetails: {
-          acceptedPrediction: 0,
-          reasoning: 0,
-          rejectedPrediction: 0,
-        },
       },
     });
   });

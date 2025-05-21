@@ -68,27 +68,27 @@ export function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
 /**
  * Format token usage for display in CLI output
  */
-export function formatTokenUsage(type: string, usage: Partial<TokenUsage>): string {
+export function formatTokenUsage(usage: TokenUsage): string {
   const parts = [];
 
   if (usage.total !== undefined) {
-    parts.push(`${type} tokens: ${usage.total.toLocaleString()}`);
+    parts.push(`${usage.total.toLocaleString()} total`);
   }
 
   if (usage.prompt !== undefined) {
-    parts.push(`Prompt tokens: ${usage.prompt.toLocaleString()}`);
+    parts.push(`${usage.prompt.toLocaleString()} prompt`);
   }
 
   if (usage.completion !== undefined) {
-    parts.push(`Completion tokens: ${usage.completion.toLocaleString()}`);
+    parts.push(`${usage.completion.toLocaleString()} completion`);
   }
 
   if (usage.cached !== undefined) {
-    parts.push(`Cached tokens: ${usage.cached.toLocaleString()}`);
+    parts.push(`${usage.cached.toLocaleString()} cached`);
   }
 
   if (usage.completionDetails?.reasoning !== undefined) {
-    parts.push(`Reasoning tokens: ${usage.completionDetails.reasoning.toLocaleString()}`);
+    parts.push(`${usage.completionDetails.reasoning.toLocaleString()} reasoning`);
   }
 
   return parts.join(' / ');
@@ -428,28 +428,17 @@ export async function doEval(
     }
     logger.info(chalk.blue.bold(`Duration: ${durationDisplay} (concurrency: ${maxConcurrency})`));
 
-    if (tokenUsage.total > 0) {
+    // Handle token usage display
+    if (tokenUsage.prompt) {
+      const combinedTotal = tokenUsage.prompt + tokenUsage.completion;
       const evalTokens = {
-        total: tokenUsage.total,
         prompt: tokenUsage.prompt,
         completion: tokenUsage.completion,
-        cached: tokenUsage.cached,
-        completionDetails: tokenUsage.completionDetails,
+        total: combinedTotal,
       };
-
-      if (isRedteam) {
-        logger.info(
-          `Model probes: ${tokenUsage.numRequests.toLocaleString()} / ${formatTokenUsage('eval', evalTokens)}`,
-        );
-      } else {
-        logger.info(formatTokenUsage('Eval', evalTokens));
-      }
-
-      if (tokenUsage.assertions.total > 0) {
-        logger.info(formatTokenUsage('Grading', tokenUsage.assertions));
-      }
-
-      const combinedTotal = evalTokens.total + tokenUsage.assertions.total;
+      logger.info(
+        `Token usage: ${tokenUsage.prompt.toLocaleString()} prompt + ${tokenUsage.completion.toLocaleString()} completion = ${combinedTotal.toLocaleString()} total`,
+      );
       logger.info(
         `Total tokens: ${combinedTotal.toLocaleString()} (eval: ${evalTokens.total.toLocaleString()} + Grading: ${tokenUsage.assertions.total.toLocaleString()})`,
       );
