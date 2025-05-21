@@ -501,7 +501,6 @@ export class CrescendoProvider implements ApiProvider {
     const missingKeys: string[] = [];
     for (const key of expectedKeys) {
       if (!(key in parsedOutput)) {
-        logger.warn(`[Crescendo] Missing key in response: ${key}`);
         missingKeys.push(key);
       }
     }
