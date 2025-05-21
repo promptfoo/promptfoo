@@ -137,6 +137,7 @@ export async function runRedteamConversation({
         label: 'history',
       },
       vars: {},
+      extensionHookOutputs: { beforeAll: [], beforeEach: [] },
     });
     if (redteamProvider.delay) {
       logger.debug(`[Iterative] Sleeping for ${redteamProvider.delay}ms`);
@@ -207,6 +208,7 @@ export async function runRedteamConversation({
         label: 'on-topic',
       },
       vars: {},
+      extensionHookOutputs: { beforeAll: [], beforeEach: [] },
     });
     if (gradingProvider.delay) {
       logger.debug(`[Iterative] Sleeping for ${gradingProvider.delay}ms`);
@@ -307,6 +309,7 @@ export async function runRedteamConversation({
         label: 'judge',
       },
       vars: {},
+      extensionHookOutputs: { beforeAll: [], beforeEach: [] },
     });
     if (gradingProvider.delay) {
       logger.debug(`[Iterative] Sleeping for ${gradingProvider.delay}ms`);

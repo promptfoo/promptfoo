@@ -654,6 +654,7 @@ describe('call provider apis', () => {
           var1: 'value 1',
           var2: 'value 2 "with some double "quotes""',
         },
+        extensionHookOutputs: { beforeAll: [], beforeEach: [] },
       });
 
       expect(result.output).toBe(mockResponse);

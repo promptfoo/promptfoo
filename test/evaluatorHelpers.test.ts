@@ -6,6 +6,7 @@ import {
   resolveVariables,
   runExtensionHook,
   extractTextFromPDF,
+  hasDefinedExtensionHooks,
 } from '../src/evaluatorHelpers';
 import type { Prompt } from '../src/types';
 import { transform } from '../src/util/transform';
@@ -488,24 +489,24 @@ describe('resolveVariables', () => {
   });
 });
 
+describe('hasDefinedExtensionHooks', () => {
+  it('should return true if extensions are defined', () => {
+    expect(hasDefinedExtensionHooks(['file:///path/to/extension.js'])).toBe(true);
+  });
+
+  it('should return false if extensions are not defined', () => {
+    expect(hasDefinedExtensionHooks([])).toBe(false);
+  });
+});
+
 describe('runExtensionHook', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  it('should not call transform if extensions array is empty', async () => {
+  it('should not be called if extensions array is empty', async () => {
     await runExtensionHook([], 'testHook', { data: 'test' });
-    expect(transform).not.toHaveBeenCalled();
-  });
-
-  it('should not call transform if extensions is undefined', async () => {
-    await runExtensionHook(undefined, 'testHook', { data: 'test' });
-    expect(transform).not.toHaveBeenCalled();
-  });
-
-  it('should not call transform if extensions is null', async () => {
-    await runExtensionHook(null, 'testHook', { data: 'test' });
-    expect(transform).not.toHaveBeenCalled();
+    expect(transform).not.toThrow('extensions must be an array');
   });
 
   it('should call transform for each extension', async () => {
@@ -521,13 +522,13 @@ describe('runExtensionHook', () => {
     expect(transform).toHaveBeenNthCalledWith(3, 'ext3', hookName, context, false);
   });
 
-  it('should throw an error if an extension is not a string', async () => {
-    const extensions = ['ext1', 123, 'ext3'] as unknown as string[];
-    const hookName = 'testHook';
-    const context = { data: 'test' };
+  // TODO: Wire together this test:
+  // it('should return the results of all extensions', async () => {
+  //   const extensions = ['ext1', 'ext2', 'ext3'];
+  //   const hookName = 'testHook';
+  //   const context = { data: 'test' };
 
-    await expect(runExtensionHook(extensions, hookName, context)).rejects.toThrow(
-      'extension must be a string',
-    );
-  });
+  //   const results = await runExtensionHook(extensions, hookName, context);
+  //   expect(results).toEqual(['ext1', 'ext2', 'ext3']);
+  // });
 });

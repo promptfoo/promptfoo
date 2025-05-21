@@ -435,6 +435,7 @@ describe('RedteamIterativeProvider', () => {
       const context: CallApiContextParams = {
         prompt: { label: 'test', raw: targetPrompt },
         vars: {},
+        extensionHookOutputs: { beforeAll: [], beforeEach: [] },
       };
       const options: CallApiOptionsParams = {};
       const result = await getTargetResponse(mockTargetProvider, targetPrompt, context, options);

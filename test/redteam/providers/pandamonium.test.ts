@@ -36,6 +36,7 @@ describe('RedteamPandamoniumProvider', () => {
         promptIdx: 0,
         repeatIndex: 0,
         isRedteam: true,
+        extensionHookOutputs: { beforeAll: [], beforeEach: [] },
       },
     ];
 
@@ -95,6 +96,7 @@ describe('RedteamPandamoniumProvider', () => {
         promptIdx: 0,
         repeatIndex: 0,
         isRedteam: true,
+        extensionHookOutputs: { beforeAll: [], beforeEach: [] },
       },
     ];
 
@@ -218,6 +220,7 @@ describe('RedteamPandamoniumProvider', () => {
         promptIdx: 0,
         repeatIndex: 0,
         isRedteam: true,
+        extensionHookOutputs: { beforeAll: [], beforeEach: [] },
       },
     ];
 

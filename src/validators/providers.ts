@@ -35,6 +35,10 @@ export const CallApiContextParamsSchema = z.object({
   originalProvider: z.optional(z.any()),
   prompt: PromptSchema,
   vars: z.record(z.union([z.string(), z.object({})])),
+  extensionHookOutputs: z.object({
+    beforeAll: z.array(z.any()),
+    beforeEach: z.array(z.any()),
+  }),
 });
 
 export const CallApiOptionsParamsSchema = z.object({

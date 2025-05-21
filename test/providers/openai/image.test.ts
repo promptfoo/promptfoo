@@ -436,6 +436,7 @@ describe('OpenAiImageProvider', () => {
           label: 'test',
         },
         vars: {},
+        extensionHookOutputs: { beforeAll: [], beforeEach: [] },
       };
 
       await provider.callApi('test prompt', context);

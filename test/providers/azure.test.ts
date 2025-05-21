@@ -585,6 +585,7 @@ describe('AzureOpenAiChatCompletionProvider', () => {
           raw: 'test prompt',
         },
         vars: {},
+        extensionHookOutputs: { beforeAll: [], beforeEach: [] },
       });
 
       expect(result.output).toEqual({
@@ -632,6 +633,7 @@ describe('AzureOpenAiChatCompletionProvider', () => {
           raw: 'test prompt',
         },
         vars: {},
+        extensionHookOutputs: { beforeAll: [], beforeEach: [] },
       });
 
       // Should still return the original string if JSON parsing fails
@@ -669,6 +671,7 @@ describe('AzureOpenAiChatCompletionProvider', () => {
           raw: 'test prompt',
         },
         vars: {},
+        extensionHookOutputs: { beforeAll: [], beforeEach: [] },
       });
 
       // Verify the URL includes extensions and uses the custom API version

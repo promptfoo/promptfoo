@@ -121,7 +121,11 @@ describe('RedteamIterativeProvider', () => {
         }));
 
       const result = await runRedteamConversation({
-        context: { prompt: { raw: '', label: '' }, vars: {} },
+        context: {
+          prompt: { raw: '', label: '' },
+          vars: {},
+          extensionHookOutputs: { beforeAll: [], beforeEach: [] },
+        },
         filters: undefined,
         injectVar: 'test',
         numIterations: 5,

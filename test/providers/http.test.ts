@@ -160,6 +160,7 @@ describe('HttpProvider', () => {
     await provider.callApi('test prompt', {
       vars: { userId: '12345' },
       prompt: { raw: 'foo', label: 'bar' },
+      extensionHookOutputs: { beforeAll: [], beforeEach: [] },
     });
     expect(fetchWithCache).toHaveBeenCalledWith(
       'http://example.com/users/12345/profile',
@@ -390,6 +391,7 @@ describe('HttpProvider', () => {
       const result = await provider.callApi('test prompt', {
         vars: { userId: '12345' },
         prompt: { raw: 'foo', label: 'bar' },
+        extensionHookOutputs: { beforeAll: [], beforeEach: [] },
       });
 
       expect(fetchWithCache).toHaveBeenCalledWith(
@@ -1233,7 +1235,11 @@ describe('HttpProvider', () => {
         ],
       };
 
-      await provider.callApi('test', { vars, prompt: { raw: 'test', label: 'test' } });
+      await provider.callApi('test', {
+        vars,
+        prompt: { raw: 'test', label: 'test' },
+        extensionHookOutputs: { beforeAll: [], beforeEach: [] },
+      });
 
       expect(fetchWithCache).toHaveBeenCalledWith(
         mockUrl,
@@ -1289,7 +1295,11 @@ describe('HttpProvider', () => {
         ],
       };
 
-      await provider.callApi('test', { vars, prompt: { raw: 'test', label: 'test' } });
+      await provider.callApi('test', {
+        vars,
+        prompt: { raw: 'test', label: 'test' },
+        extensionHookOutputs: { beforeAll: [], beforeEach: [] },
+      });
 
       expect(fetchWithCache).toHaveBeenCalledWith(
         mockUrl,
@@ -1852,6 +1862,7 @@ describe('response handling', () => {
       debug: true,
       prompt: { raw: 'test', label: 'test' },
       vars: {},
+      extensionHookOutputs: { beforeAll: [], beforeEach: [] },
     });
 
     expect(result.metadata).toEqual({
@@ -1908,6 +1919,7 @@ describe('response handling', () => {
       debug: true,
       prompt: { raw: 'test', label: 'test' },
       vars: {},
+      extensionHookOutputs: { beforeAll: [], beforeEach: [] },
     });
 
     expect(result.raw).toEqual(mockData);
@@ -1971,6 +1983,7 @@ describe('response handling', () => {
       debug: true,
       prompt: { raw: 'test', label: 'test' },
       vars: {},
+      extensionHookOutputs: { beforeAll: [], beforeEach: [] },
     });
 
     // Verify transformed response and debug info

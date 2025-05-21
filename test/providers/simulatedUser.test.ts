@@ -72,6 +72,7 @@ describe('SimulatedUser', () => {
         originalProvider,
         vars: { instructions: 'test instructions' },
         prompt: { raw: 'test', display: 'test', label: 'test' },
+        extensionHookOutputs: { beforeAll: [], beforeEach: [] },
       });
 
       expect(result.output).toBeDefined();
@@ -96,6 +97,7 @@ describe('SimulatedUser', () => {
         originalProvider,
         vars: { instructions: 'test instructions' },
         prompt: { raw: 'test', display: 'test', label: 'test' },
+        extensionHookOutputs: { beforeAll: [], beforeEach: [] },
       });
 
       const messageCount = result.output?.split('---').length;
@@ -124,6 +126,7 @@ describe('SimulatedUser', () => {
         originalProvider,
         vars: { instructions: 'test instructions' },
         prompt: { raw: 'test', display: 'test', label: 'test' },
+        extensionHookOutputs: { beforeAll: [], beforeEach: [] },
       });
 
       expect(result.output).not.toContain('stopping now ###STOP###');
@@ -137,6 +140,7 @@ describe('SimulatedUser', () => {
         simulatedUser.callApi('test', {
           vars: {},
           prompt: { raw: 'test', display: 'test', label: 'test' },
+          extensionHookOutputs: { beforeAll: [], beforeEach: [] },
         }),
       ).rejects.toThrow('Expected originalProvider to be set');
     });
@@ -153,6 +157,7 @@ describe('SimulatedUser', () => {
           originalProvider: providerWithDelay,
           vars: { instructions: 'test instructions' },
           prompt: { raw: 'test', display: 'test', label: 'test' },
+          extensionHookOutputs: { beforeAll: [], beforeEach: [] },
         },
         { includeLogProbs: false },
       );
