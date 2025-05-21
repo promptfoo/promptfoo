@@ -53,7 +53,6 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
   );
   // first we need to get our prompts, we can get that from any of the results in each column
   const results = eval_.results;
-  const completedPrompts: CompletedPrompt[] = [];
   const varsForHeader = new Set<string>();
   const varValuesForRow = new Map<number, Record<string, string>>();
 

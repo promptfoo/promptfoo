@@ -16,7 +16,7 @@ Object.assign(navigator, {
 });
 
 vi.mock('./store', () => ({
-  useStore: vi.fn(),
+  useTableStore: vi.fn(),
   useResultsViewSettingsStore: vi.fn(),
 }));
 

@@ -4,12 +4,13 @@ import ResultsTable from './ResultsTable';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 
 vi.mock('./store', () => ({
-  useStore: vi.fn(() => ({
+  useTableStore: vi.fn(() => ({
     config: {},
     evalId: '123',
     setTable: vi.fn(),
     table: null,
     version: 4,
+    fetchEvalData: vi.fn(),
   })),
   useResultsViewSettingsStore: vi.fn(() => ({
     inComparisonMode: false,
@@ -89,6 +90,7 @@ describe('ResultsTable Metrics Display', () => {
       table: mockTable,
       version: 4,
       renderMarkdown: true,
+      fetchEvalData: vi.fn(),
     }));
   });
 
@@ -149,6 +151,7 @@ describe('ResultsTable Metrics Display', () => {
       table: mockTableNoMetrics,
       version: 4,
       renderMarkdown: true,
+      fetchEvalData: vi.fn(),
     }));
 
     renderWithProviders(<ResultsTable {...defaultProps} />);
@@ -195,6 +198,7 @@ describe('ResultsTable Metrics Display', () => {
         table: mockTableWithObjectVar,
         version: 4,
         renderMarkdown: true,
+        fetchEvalData: vi.fn(),
       }));
 
       renderWithProviders(<ResultsTable {...defaultProps} />);
@@ -214,6 +218,7 @@ describe('ResultsTable Metrics Display', () => {
         setTable: vi.fn(),
         table: mockTableWithObjectVar,
         version: 4,
+        fetchEvalData: vi.fn(),
       }));
 
       vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
@@ -237,6 +242,7 @@ describe('ResultsTable Metrics Display', () => {
         setTable: vi.fn(),
         table: mockTableWithLongVar,
         version: 4,
+        fetchEvalData: vi.fn(),
       }));
 
       vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
@@ -262,6 +268,7 @@ describe('ResultsTable Metrics Display', () => {
         table: mockTableWithNullVar,
         version: 4,
         renderMarkdown: true,
+        fetchEvalData: vi.fn(),
       }));
 
       renderWithProviders(<ResultsTable {...defaultProps} />);

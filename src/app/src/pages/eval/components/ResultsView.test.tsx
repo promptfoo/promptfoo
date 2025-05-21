@@ -59,7 +59,7 @@ vi.mock('@app/utils/api', async (importOriginal) => ({
 }));
 
 vi.mock('./store', () => ({
-  useStore: vi.fn().mockImplementation(() => ({
+  useTableStore: vi.fn().mockImplementation(() => ({
     table: {
       head: { prompts: [], vars: [] },
       body: [],
@@ -70,6 +70,7 @@ vi.mock('./store', () => ({
     evalId: '1',
     author: '',
     recentEvals: mockRecentEvals,
+    fetchEvalData: vi.fn(),
     evals: mockRecentEvals,
   })),
   useResultsViewSettingsStore: vi.fn().mockImplementation(() => ({
