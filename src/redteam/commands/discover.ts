@@ -4,7 +4,6 @@ import { type Command } from 'commander';
 import { randomUUID } from 'crypto';
 import dedent from 'dedent';
 import * as fs from 'fs';
-import path from 'path';
 import { z } from 'zod';
 import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
