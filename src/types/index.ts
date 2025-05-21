@@ -17,7 +17,7 @@ import { RedteamConfigSchema } from '../validators/redteam';
 import { NunjucksFilterMapSchema } from '../validators/shared';
 import type { Prompt, PromptFunction } from './prompts';
 import type { ApiProvider, ProviderOptions, ProviderResponse } from './providers';
-import type { NunjucksFilterMap, TokenUsage } from './shared';
+import type { NunjucksFilterMap, TokenUsage, ExtensionHookOutputs } from './shared';
 
 export * from './prompts';
 export * from './providers';
@@ -154,6 +154,11 @@ export interface RunEvalOptions {
    * This is passed to the provider's callApi function
    */
   abortSignal?: AbortSignal;
+
+  /**
+   * Output from extension hooks
+   */
+  extensionHookOutputs: ExtensionHookOutputs;
 }
 
 const EvaluateOptionsSchema = z.object({

@@ -11,7 +11,7 @@ import logger from './logger';
 import { isPackagePath, loadFromPackage } from './providers/packageParser';
 import { runPython } from './python/pythonUtils';
 import telemetry from './telemetry';
-import type { ApiProvider, NunjucksFilterMap, Prompt } from './types';
+import type { ApiProvider, NunjucksFilterMap, Prompt, ExtensionHookOutput } from './types';
 import { renderVarsInObject } from './util';
 import { isJavascriptFile, isImageFile, isVideoFile, isAudioFile } from './util/fileExtensions';
 import invariant from './util/invariant';
@@ -285,28 +285,47 @@ export async function renderPrompt(
 }
 
 /**
- * Runs extension hooks for the given hook name and context.
+ * Returns true if the extensions array is defined and has at least one element.
  * @param extensions - An array of extension paths, or null.
+ * @returns True if the extensions array is defined and has at least one element.
+ */
+export function hasDefinedExtensionHooks(extensions: string[] | null | undefined): boolean {
+  if (!extensions || !Array.isArray(extensions) || extensions.length === 0) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Runs extension hooks for the given hook name and context.
+ * @param extensions - An array of extension paths.
  * @param hookName - The name of the hook to run.
  * @param context - The context object to pass to the hook.
- * @returns A Promise that resolves when all hooks have been run.
+ * @returns Promise that resolves to an array of records returned by each extension hook.
  */
 export async function runExtensionHook(
-  extensions: string[] | null | undefined,
+  extensions: string[],
   hookName: string,
   context: any,
-) {
-  if (!extensions || !Array.isArray(extensions) || extensions.length === 0) {
-    return;
-  }
+): Promise<ExtensionHookOutput[]> {
+  invariant(hasDefinedExtensionHooks(extensions), 'extensions must be an array');
 
+  // TODO(Will): It would be nice if this only ran when `hookName` is defined in >=1 extension(s).
   telemetry.record('feature_used', {
     feature: 'extension_hook',
   });
 
+  const outs: any[] = [];
+
   for (const extension of extensions) {
-    invariant(typeof extension === 'string', 'extension must be a string');
     logger.debug(`Running extension hook ${hookName} with context ${JSON.stringify(context)}`);
-    await transform(extension, hookName, context, false);
+    const output = await transform(extension, hookName, context, false);
+
+    if (output) {
+      logger.debug(`Extension hook ${hookName} returned ${JSON.stringify(output)}`);
+      outs.push(output);
+    }
   }
+
+  return outs;
 }

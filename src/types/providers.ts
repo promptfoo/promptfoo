@@ -1,7 +1,7 @@
 import type winston from 'winston';
 import type { EnvOverrides } from './env';
 import type { Prompt } from './prompts';
-import type { NunjucksFilterMap, TokenUsage } from './shared';
+import type { NunjucksFilterMap, TokenUsage, ExtensionHookOutput } from './shared';
 
 export type ProviderId = string;
 export type ProviderLabel = string;
@@ -56,6 +56,7 @@ export interface CallApiContextParams {
   // This was added so we have access to the grader inside the provider.
   // Vars and prompts should be access using the arguments above.
   test?: AtomicTestCase;
+  extensionHookOutputs: ExtensionHookOutputs;
 }
 
 export interface CallApiOptionsParams {
