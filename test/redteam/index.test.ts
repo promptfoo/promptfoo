@@ -373,6 +373,52 @@ describe('synthesize', () => {
         expect.stringContaining('unknown-collection not registered'),
       );
     });
+
+    it('should skip plugins that fail validation and not throw', async () => {
+      // Plugin 1: will fail validation
+      const failingPlugin = {
+        id: 'fail-plugin',
+        numTests: 1,
+      };
+      // Plugin 2: will succeed
+      const passingPlugin = {
+        id: 'pass-plugin',
+        numTests: 1,
+      };
+
+      // Mock Plugins.find to return a plugin with a validate method that throws for fail-plugin
+      jest
+        .spyOn(Plugins, 'find')
+        .mockReturnValueOnce({
+          key: 'fail-plugin',
+          action: jest.fn().mockResolvedValue([{ test: 'fail-case' }]),
+          validate: () => {
+            throw new Error('Validation failed!');
+          },
+        })
+        .mockReturnValue({
+          key: 'pass-plugin',
+          action: jest.fn().mockResolvedValue([{ test: 'pass-case' }]),
+          validate: jest.fn(),
+        });
+
+      const result = await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [failingPlugin, passingPlugin],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetLabels: ['test-provider'],
+      });
+
+      expect(result.testCases).toHaveLength(1);
+      expect(result.testCases[0].metadata.pluginId).toBe('pass-plugin');
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'Validation failed for plugin fail-plugin: Error: Validation failed!, skipping plugin',
+        ),
+      );
+    });
   });
 
   describe('Logger', () => {
