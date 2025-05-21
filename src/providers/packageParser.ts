@@ -35,11 +35,16 @@ export async function loadFromPackage(packageInstancePath: string, basePath: str
       logger.error(dedent`
         Could not find entity: ${chalk.bold(entityName)} in module: ${chalk.bold(filePath)}.
       `);
-      process.exit(1);
+      throw new Error(`Entity '${entityName}' not found in module: ${filePath}`);
     }
 
     return entity;
-  } catch {
+  } catch (error: any) {
+    // If the error is about the entity not found, rethrow it
+    if (error.message && error.message.includes(`Entity '${entityName}' not found`)) {
+      throw error;
+    }
+    // Otherwise, it's a package not found error
     throw new Error(`Package not found: ${packageName}. Make sure it's installed in ${basePath}`);
   }
 }

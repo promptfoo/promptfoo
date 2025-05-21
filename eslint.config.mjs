@@ -35,6 +35,8 @@ export default [
       'site/build/**/*',
       '**/venv/**/*',
       'examples/redteam-medical-agent/src/**/*',
+      'examples/huggingface-dataset-factuality/dataset_loader.ts',
+      'scripts/replace-keys.js',
     ],
   },
   {

@@ -1177,18 +1177,13 @@ describe('resolveConfigs', () => {
   });
 
   it('should warn and exit when no config file, no prompts, no providers, and not in CI', async () => {
-    jest.spyOn(process, 'exit').mockImplementation((code) => {
-      throw new Error(`Process exited with code ${code}`);
-    });
     jest.mocked(isCI).mockReturnValue(false);
     jest.mocked(isRunningUnderNpx).mockReturnValue(true);
 
     const cmdObj = {};
     const defaultConfig = {};
 
-    await expect(resolveConfigs(cmdObj, defaultConfig)).rejects.toThrow(
-      'Process exited with code 1',
-    );
+    await expect(resolveConfigs(cmdObj, defaultConfig)).rejects.toThrow('No promptfooconfig found');
 
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('No promptfooconfig found'));
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('npx promptfoo eval -c'));
@@ -1203,13 +1198,14 @@ describe('resolveConfigs', () => {
     };
 
     jest.mocked(fs.readFileSync).mockReturnValueOnce(JSON.stringify(promptfooConfig));
+    jest.mocked(globSync).mockReturnValueOnce(['config.json']);
 
     await expect(resolveConfigs(cmdObj, defaultConfig)).rejects.toThrow(
-      'Process exited with code 1',
+      'You must specify at least 1 provider (for example, openai:gpt-4.1)',
     );
 
     expect(logger.error).toHaveBeenCalledWith(
-      expect.stringContaining('You must specify at least 1 provider (for example, openai:gpt-4o)'),
+      expect.stringContaining('You must specify at least 1 provider (for example, openai:gpt-4.1)'),
     );
   });
 

@@ -165,6 +165,6 @@ if (require.main === module) {
     })
     .catch((err) => {
       console.error('Failed to generate tests:', err);
-      process.exit(1);
+      process.exitCode = 1;
     });
 }

@@ -294,7 +294,8 @@ export async function validateStrategies(strategies: RedteamStrategyObject[]): P
 
         ${chalk.green(`Valid strategies are: ${validStrategiesString}`)}`,
     );
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 }
 

@@ -465,7 +465,7 @@ export async function resolveConfigs(
     });
     if (!cmdObj.modelOutputs) {
       logger.error('You must provide --model-outputs when using --assertions');
-      process.exit(1);
+      throw new Error('You must provide --model-outputs when using --assertions');
     }
     const modelOutputs = JSON.parse(
       fs.readFileSync(path.join(process.cwd(), cmdObj.modelOutputs), 'utf8'),
@@ -535,12 +535,12 @@ export async function resolveConfigs(
 
       ${chalk.green(`${runCommand} init`)}
     `);
-    process.exit(1);
+    throw new Error('No promptfooconfig found');
   }
 
   if (!hasPrompts) {
     logger.error('You must provide at least 1 prompt');
-    process.exit(1);
+    throw new Error('You must provide at least 1 prompt');
   }
 
   if (
@@ -548,8 +548,8 @@ export async function resolveConfigs(
     type !== 'DatasetGeneration' &&
     !hasProviders
   ) {
-    logger.error('You must specify at least 1 provider (for example, openai:gpt-4o)');
-    process.exit(1);
+    logger.error('You must specify at least 1 provider (for example, openai:gpt-4.1)');
+    throw new Error('You must specify at least 1 provider (for example, openai:gpt-4.1)');
   }
 
   invariant(Array.isArray(config.providers), 'providers must be an array');
@@ -603,7 +603,7 @@ export async function resolveConfigs(
 
   if (parsedPrompts.length === 0) {
     logger.error('No prompts found');
-    process.exit(1);
+    throw new Error('No prompts found');
   }
 
   const defaultTest: TestCase = {

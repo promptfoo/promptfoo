@@ -18,5 +18,5 @@ try {
   console.log('replace-keys.js: Successfully run');
 } catch (error) {
   console.error('Error replacing PostHog key:', error);
-  process.exit(1);
+  process.exitCode = 1;
 }

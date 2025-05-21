@@ -647,7 +647,7 @@ export async function initializeProject(directory: string | null, interactive: b
           chalk.green('https://www.promptfoo.dev/contact/'),
       );
       await recordOnboardingStep('early exit');
-      process.exit(130);
+      process.exitCode = 130;
     } else {
       throw err;
     }

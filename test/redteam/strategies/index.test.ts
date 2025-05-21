@@ -46,13 +46,17 @@ describe('validateStrategies', () => {
   });
 
   it('should exit for invalid strategies', async () => {
-    const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    const originalExitCode = process.exitCode;
+    process.exitCode = undefined;
+
     const invalidStrategies: RedteamStrategyObject[] = [{ id: 'invalid-strategy' }];
 
     await validateStrategies(invalidStrategies);
 
     expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Invalid strategy(s)'));
-    expect(mockExit).toHaveBeenCalledWith(1);
+    expect(process.exitCode).toBe(1);
+
+    process.exitCode = originalExitCode;
   });
 });
 

@@ -20,7 +20,8 @@ export function exportCommand(program: Command) {
 
         if (!result) {
           logger.error(`No eval found with ID ${evalId}`);
-          process.exit(1);
+          process.exitCode = 1;
+          return;
         }
         const summary = await result.toEvaluateSummary();
         const jsonData = JSON.stringify(summary, null, 2);
@@ -38,7 +39,7 @@ export function exportCommand(program: Command) {
         });
       } catch (error) {
         logger.error(`Failed to export eval: ${error}`);
-        process.exit(1);
+        process.exitCode = 1;
       }
     });
 }

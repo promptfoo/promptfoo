@@ -69,7 +69,8 @@ export async function checkEmailStatusOrExit() {
       logger.error(
         'You have exceeded the maximum cloud inference limit. Please contact inquiries@promptfoo.dev to upgrade your account.',
       );
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
     if (data?.status === 'show_usage_warning' && data?.message) {
       const border = '='.repeat(TERMINAL_MAX_WIDTH);
