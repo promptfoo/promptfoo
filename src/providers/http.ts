@@ -671,7 +671,7 @@ export class HttpProvider implements ApiProvider {
           'Content-Type is application/json, but body is a string. This is likely to cause unexpected results. It should be an object or array.',
         );
       }
-      logger.debug(`[HTTP Provider] Body: ${body} headers: ${safeJsonStringify(headers)}`);
+      logger.warn(`[HTTP Provider] Body: ${body} headers: ${safeJsonStringify(headers)}`);
     }
   }
 
