@@ -116,7 +116,7 @@ describe('Telemetry', () => {
     fetchSpy.mockClear();
 
     const _telemetry = new Telemetry();
-    _telemetry.sendEvent('test_event', { test: 'value' });
+    _telemetry.record('feature_used', { test: 'value' });
 
     const fetchCalls = fetchSpy.mock.calls;
     expect(fetchCalls.length).toBeGreaterThan(0);
