@@ -132,6 +132,61 @@ describe('Telemetry', () => {
     expect(foundVersion).toBe(true);
   });
 
+  it('should include version and CI status in telemetry events', () => {
+    // Ensure telemetry is not disabled
+    process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
+
+    // Mock the isCI function to return true for this test
+    const isCI = jest.requireMock('../src/envars').isCI;
+    isCI.mockReturnValue(true);
+
+    // Spy on fetch to see what data is actually sent
+    fetchSpy.mockClear();
+
+    // Create telemetry instance
+    const _telemetry = new Telemetry();
+
+    // Call sendEvent directly with our own properties
+    // @ts-ignore - accessing private method for testing
+    _telemetry.sendEvent('test_event', { test: 'value' });
+
+    // Check the fetch calls to see the actual data sent to the server
+    const fetchCalls = fetchSpy.mock.calls;
+    expect(fetchCalls.length).toBeGreaterThan(0);
+
+    // Parse the fetch request body to check for properties
+    let foundExpectedProperties = false;
+
+    for (const call of fetchCalls) {
+      if (call[1] && call[1].body && typeof call[1].body === 'string') {
+        try {
+          const data = JSON.parse(call[1].body);
+
+          if (data.events && data.events.length > 0) {
+            const properties = data.events[0].properties;
+
+            if (
+              properties &&
+              properties.test === 'value' &&
+              properties.packageVersion === '1.0.0' &&
+              properties.isRunningInCi === true
+            ) {
+              foundExpectedProperties = true;
+              break;
+            }
+          }
+        } catch {
+          // Skip JSON parse errors
+        }
+      }
+    }
+
+    expect(foundExpectedProperties).toBe(true);
+
+    // Reset mocks
+    isCI.mockReset();
+  });
+
   it('should save consent successfully', async () => {
     jest.mocked(fetchWithTimeout).mockResolvedValue({ ok: true } as any);
     const _telemetry = new Telemetry();
