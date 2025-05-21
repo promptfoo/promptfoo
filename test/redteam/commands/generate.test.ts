@@ -672,7 +672,7 @@ describe('doGenerateRedteam', () => {
     const mockedPurpose = {
       purpose: 'Generated purpose',
       limitations: 'Generated limitations',
-      tools: [],
+      tools: 'search(query: string)',
       user: 'Generated user',
     };
 
@@ -716,7 +716,7 @@ describe('doGenerateRedteam', () => {
     const mockedPurpose = {
       purpose: 'Generated purpose',
       limitations: 'Generated limitations',
-      tools: [],
+      tools: 'search(query: string)',
       user: 'Generated user',
     };
     jest.mocked(doTargetPurposeDiscovery).mockResolvedValue(mockedPurpose);
@@ -795,7 +795,7 @@ describe('doGenerateRedteam', () => {
     const mockedPurpose = {
       purpose: 'Generated purpose',
       limitations: 'Generated limitations',
-      tools: [],
+      tools: 'search(query: string)',
       user: 'Generated user',
     };
     jest.mocked(doTargetPurposeDiscovery).mockResolvedValue(mockedPurpose);
@@ -841,7 +841,7 @@ describe('doGenerateRedteam', () => {
     const mockedPurpose = {
       purpose: 'Generated purpose',
       limitations: 'Generated limitations',
-      tools: [],
+      tools: 'search(query: string)',
       user: 'Generated user',
     };
     jest.mocked(doTargetPurposeDiscovery).mockResolvedValue(mockedPurpose);
@@ -924,7 +924,7 @@ describe('doGenerateRedteam', () => {
     jest.mocked(doTargetPurposeDiscovery).mockResolvedValue({
       purpose: 'Generated purpose',
       limitations: 'Generated limitations',
-      tools: [],
+      tools: 'search(query: string)',
       user: 'Generated user',
     });
     jest.mocked(synthesize).mockResolvedValue({

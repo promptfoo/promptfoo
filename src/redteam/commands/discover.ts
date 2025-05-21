@@ -186,7 +186,7 @@ export async function doTargetPurposeDiscovery(
 }
 
 /**
- * Merges the human-defined purpose with the discovered purpose, structuring these as JSON to be used by test generation / rendered in UI reporting.
+ * Merges the human-defined purpose with the discovered purpose, structuring these as XML to be used by test generation / rendered in UI reporting.
  * @param humanDefinedPurpose - The human-defined purpose.
  * @param discoveredPurpose - The discovered purpose.
  * @returns The merged purpose.
