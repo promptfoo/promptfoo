@@ -1,5 +1,4 @@
 import {
-  type CompletedPrompt,
   type EvaluateTable,
   type EvaluateTableRow,
   type ResultsFile,
