@@ -18,11 +18,14 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
+import FormControl from '@mui/material/FormControl';
 import IconButton from '@mui/material/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
+import InputLabel from '@mui/material/InputLabel';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
+import Select from '@mui/material/Select';
 import type { SelectChangeEvent } from '@mui/material/Select';
 import type { StackProps } from '@mui/material/Stack';
 import Stack from '@mui/material/Stack';
@@ -182,7 +185,7 @@ export default function ResultsView({
   const { setStateFromConfig } = useMainStore();
   const { showToast } = useToast();
   const [searchText, setSearchText] = React.useState(searchParams.get('search') || '');
-  const [debouncedSearchText] = useDebounce(searchText, 200);
+  const [debouncedSearchText] = useDebounce(searchText, 1000);
   const handleSearchTextChange = React.useCallback(
     (text: string) => {
       setSearchParams((prev) => ({ ...prev, search: text }));
@@ -443,6 +446,28 @@ export default function ResultsView({
     [handleSearchTextChange],
   );
 
+  // Add state for metric filter and available metrics
+  const [selectedMetric, setSelectedMetric] = React.useState<string | null>(null);
+  const [availableMetrics, setAvailableMetrics] = React.useState<string[]>([]);
+
+  // Add effect to extract unique metrics from all prompts
+  React.useEffect(() => {
+    if (table && table.head?.prompts) {
+      const metrics = new Set<string>();
+      table.head.prompts.forEach((prompt) => {
+        if (prompt.metrics?.namedScores) {
+          Object.keys(prompt.metrics.namedScores).forEach((metric) => metrics.add(metric));
+        }
+      });
+      setAvailableMetrics(Array.from(metrics).sort());
+    }
+  }, [table]);
+
+  // Make the function a callback that can be passed to CustomMetrics
+  const handleMetricFilterChange = React.useCallback((metric: string | null) => {
+    setSelectedMetric(metric);
+  }, []);
+
   return (
     <div style={{ marginLeft: '1rem', marginRight: '1rem' }}>
       <ResponsiveStack
@@ -516,6 +541,32 @@ export default function ResultsView({
             placeholder="Text or regex"
           />
         </Box>
+        {availableMetrics.length > 0 && (
+          <Box>
+            <FormControl variant="outlined" size="small" sx={{ minWidth: 180 }}>
+              <InputLabel id="metric-filter-label">Filter by Metric</InputLabel>
+              <Select
+                labelId="metric-filter-label"
+                id="metric-filter-select"
+                value={selectedMetric || ''}
+                onChange={(event) =>
+                  handleMetricFilterChange(event.target.value === '' ? null : event.target.value)
+                }
+                label="Filter by Metric"
+                displayEmpty
+              >
+                <MenuItem value="">
+                  <em>None</em>
+                </MenuItem>
+                {availableMetrics.map((metric) => (
+                  <MenuItem key={metric} value={metric}>
+                    {metric}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
+        )}
         <Box flexGrow={1} />
         <Box display="flex" justifyContent="flex-end">
           <ResponsiveStack direction="row" spacing={2}>
@@ -634,6 +685,8 @@ export default function ResultsView({
         onFailureFilterToggle={handleFailureFilterToggle}
         onSearchTextChange={handleSearchTextChange}
         setFilterMode={setFilterMode}
+        selectedMetric={selectedMetric}
+        onMetricFilter={handleMetricFilterChange}
       />
       <ConfigModal open={configModalOpen} onClose={() => setConfigModalOpen(false)} />
       <ShareModal

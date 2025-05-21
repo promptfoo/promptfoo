@@ -168,6 +168,8 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
   const limit = Number(req.query.limit) || 50;
   const offset = Number(req.query.offset) || 0;
   const filter = String(req.query.filter || 'all');
+  const searchText = req.query.search ? String(req.query.search) : '';
+  const metricFilter = req.query.metric ? String(req.query.metric) : '';
 
   const comparisonEvalIds = Array.isArray(req.query.comparisonEvalIds)
     ? req.query.comparisonEvalIds
@@ -181,7 +183,13 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     return;
   }
 
-  const table = await eval_.getTablePage({ offset, limit, filterMode: filter as any });
+  const table = await eval_.getTablePage({
+    offset,
+    limit,
+    filterMode: filter as any,
+    searchQuery: searchText,
+    metricFilter,
+  });
 
   const indices = table.body.map((row) => row.testIdx);
 
@@ -209,6 +217,8 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
           limit: indices.length,
           filterMode: 'all',
           testIndices: indices,
+          searchQuery: searchText,
+          metricFilter,
         });
       }),
     );

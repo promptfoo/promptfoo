@@ -417,6 +417,8 @@ export default class Eval {
     limit?: number;
     filterMode?: string;
     testIndices?: number[];
+    searchQuery?: string;
+    metricFilter?: string;
   }) {
     const db = getDb();
     const hasTestIndices = opts.testIndices && opts.testIndices.length > 0;
@@ -425,6 +427,8 @@ export default class Eval {
     const limit = hasTestIndices ? (opts.testIndices?.length ?? 1000) : (opts.limit ?? 50);
     const filter = hasTestIndices ? 'all' : (opts.filterMode ?? 'all');
     const testIndices = opts.testIndices;
+    const searchQuery = opts.searchQuery;
+    const metricFilter = opts.metricFilter;
 
     const conditions = [`eval_id = '${this.id}'`];
     if (filter === 'errors') {
@@ -439,6 +443,34 @@ export default class Eval {
 
     if (testIndices && testIndices.length > 0) {
       conditions.push(`test_idx IN (${testIndices.join(',')})`);
+    }
+
+    // Add specific metric filter if provided
+    if (metricFilter && metricFilter.trim() !== '') {
+      const sanitizedMetric = metricFilter.replace(/'/g, "''");
+      conditions.push(`json_extract(named_scores, '$.${sanitizedMetric}') IS NOT NULL`);
+    }
+
+    // Add search condition if searchQuery is provided
+    if (searchQuery && searchQuery.trim() !== '') {
+      const sanitizedSearch = searchQuery.replace(/'/g, "''");
+      const searchConditions = [
+        // Search in response text
+        `json_extract(response, '$.text') LIKE '%${sanitizedSearch}%'`,
+        // Search in grading result reason
+        `json_extract(grading_result, '$.reason') LIKE '%${sanitizedSearch}%'`,
+        // Search in grading result comment
+        `json_extract(grading_result, '$.comment') LIKE '%${sanitizedSearch}%'`,
+        // Search in named scores
+        `json_extract(named_scores, '$') LIKE '%${sanitizedSearch}%'`,
+        // Search in metadata
+        `json_extract(metadata, '$') LIKE '%${sanitizedSearch}%'`,
+        // Search in test case vars
+        `json_extract(test_case, '$.vars') LIKE '%${sanitizedSearch}%'`,
+        // Search in test case metadata
+        `json_extract(test_case, '$.metadata') LIKE '%${sanitizedSearch}%'`,
+      ];
+      conditions.push(`(${searchConditions.join(' OR ')})`);
     }
 
     const whereSql = conditions.join(' AND ');

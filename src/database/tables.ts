@@ -116,6 +116,17 @@ export const evalResultsTable = sqliteTable(
   (table) => ({
     evalIdIdx: index('eval_result_eval_id_idx').on(table.evalId),
     evalIdTestIdxIdx: index('eval_result_eval_id_test_idx_idx').on(table.evalId, table.testIdx),
+
+    // Add indices for search fields
+    responseIdx: index('eval_result_response_idx').on(table.response),
+    gradingResultSearchIdx: index('eval_result_grading_result_search_idx').on(
+      sql`json_extract(grading_result, '$.reason')`,
+      sql`json_extract(grading_result, '$.comment')`,
+    ),
+    namedScoresIdx: index('eval_result_named_scores_idx').on(table.namedScores),
+    metricKeysIdx: index('eval_result_metric_keys_idx').on(sql`json_keys(named_scores)`),
+    metadataIdx: index('eval_result_metadata_idx').on(table.metadata),
+    varsSearchIdx: index('eval_result_vars_search_idx').on(sql`json_extract(test_case, '$.vars')`),
   }),
 );
 
