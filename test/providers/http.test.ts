@@ -1490,6 +1490,7 @@ describe('HttpProvider', () => {
     await provider.callApi('test prompt', {
       prompt: { raw: 'test prompt', label: 'test' },
       vars: { var: 'test' },
+      extensionHookOutputs: { beforeAll: [], beforeEach: [] },
     });
 
     // Should use the fallback mechanism to append query parameters
