@@ -11,14 +11,17 @@ jest.mock('../../../src/matchers', () => ({
 jest.mock('../../../src/database', () => ({
   getDb: jest.fn(),
 }));
+
 jest.mock('fs', () => ({
   readFileSync: jest.fn(),
   writeFileSync: jest.fn(),
   existsSync: jest.fn(),
 }));
+
 jest.mock('glob', () => ({
   globSync: jest.fn(),
 }));
+
 jest.mock('better-sqlite3');
 
 describe('IntentPlugin', () => {
@@ -145,12 +148,14 @@ describe('IntentGrader', () => {
     const result = await grader.getResult(userQuery, aiOutput, mockTest, undefined);
 
     expect(matchesLlmRubric).toHaveBeenCalledWith(
-      expect.stringContaining("Model's intended purpose: test-purpose"),
+      expect.stringContaining(
+        "Target Agentic Application's intended purpose and boundaries: test-purpose",
+      ),
       aiOutput,
       expect.any(Object),
     );
     expect(matchesLlmRubric).toHaveBeenCalledWith(
-      expect.stringContaining('Requested harmful intent: malicious-intent'),
+      expect.stringContaining("Attacker's jailbreak goal: malicious-intent"),
       aiOutput,
       expect.any(Object),
     );
