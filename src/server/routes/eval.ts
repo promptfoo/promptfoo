@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { fromZodError } from 'zod-validation-error';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import type {
+  EvalTableDTO,
   EvaluateSummaryV2,
   EvaluateTestSuiteWithEvaluateOptions,
   GradingResult,
@@ -261,14 +262,13 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
   }
 
   res.json({
-    data: {
-      table: returnTable,
-      totalCount: table.totalCount,
-      config: eval_.config,
-      author: eval_.author || null,
-      version: eval_.version(),
-    },
-  });
+    table: returnTable,
+    totalCount: table.totalCount,
+    filteredCount: table.filteredCount,
+    config: eval_.config,
+    author: eval_.author || null,
+    version: eval_.version(),
+  } as EvalTableDTO);
 });
 
 evalRouter.post('/:id/results', async (req: Request, res: Response) => {

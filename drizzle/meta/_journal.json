@@ -92,6 +92,13 @@
       "when": 1747540425042,
       "tag": "0012_late_marten_broadcloak",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1747870608216,
+      "tag": "0013_faithful_night_thrasher",
+      "breakpoints": true
     }
   ]
 }

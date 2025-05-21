@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsTable from './ResultsTable';
-import { useResultsViewSettingsStore, useStore } from './store';
+import { useResultsViewSettingsStore, useTableStore } from './store';
 
 vi.mock('./store', () => ({
   useStore: vi.fn(() => ({
@@ -81,7 +81,7 @@ describe('ResultsTable Metrics Display', () => {
   };
 
   beforeEach(() => {
-    vi.mocked(useStore).mockImplementation(() => ({
+    vi.mocked(useTableStore).mockImplementation(() => ({
       config: {},
       evalId: '123',
       inComparisonMode: false,
@@ -141,7 +141,7 @@ describe('ResultsTable Metrics Display', () => {
       },
     };
 
-    vi.mocked(useStore).mockImplementation(() => ({
+    vi.mocked(useTableStore).mockImplementation(() => ({
       config: {},
       evalId: '123',
       inComparisonMode: false,
@@ -187,7 +187,7 @@ describe('ResultsTable Metrics Display', () => {
     it('renders object variables as formatted JSON with markdown enabled', () => {
       const mockTableWithObjectVar = createMockTableWithVar(complexObject);
 
-      vi.mocked(useStore).mockImplementation(() => ({
+      vi.mocked(useTableStore).mockImplementation(() => ({
         config: {},
         evalId: '123',
         inComparisonMode: false,
@@ -207,7 +207,7 @@ describe('ResultsTable Metrics Display', () => {
     it('renders object variables as plain JSON with markdown disabled', () => {
       const mockTableWithObjectVar = createMockTableWithVar(complexObject);
 
-      vi.mocked(useStore).mockImplementation(() => ({
+      vi.mocked(useTableStore).mockImplementation(() => ({
         config: {},
         evalId: '123',
 
@@ -231,7 +231,7 @@ describe('ResultsTable Metrics Display', () => {
     it('truncates long object representations', () => {
       const mockTableWithLongVar = createMockTableWithVar(longObject);
 
-      vi.mocked(useStore).mockImplementation(() => ({
+      vi.mocked(useTableStore).mockImplementation(() => ({
         config: {},
         evalId: '123',
         setTable: vi.fn(),
@@ -254,7 +254,7 @@ describe('ResultsTable Metrics Display', () => {
     it('handles null values correctly', () => {
       const mockTableWithNullVar = createMockTableWithVar(null);
 
-      vi.mocked(useStore).mockImplementation(() => ({
+      vi.mocked(useTableStore).mockImplementation(() => ({
         config: {},
         evalId: '123',
         inComparisonMode: false,

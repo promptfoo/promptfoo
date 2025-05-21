@@ -7,17 +7,11 @@ import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
-import type {
-  SharedResults,
-  ResultLightweightWithLabel,
-  ResultsFile,
-  EvaluateTable,
-  UnifiedConfig,
-} from '@promptfoo/types';
+import type { SharedResults, ResultLightweightWithLabel } from '@promptfoo/types';
 import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
-import { useResultsViewSettingsStore, useStore } from './store';
+import { useResultsViewSettingsStore, useTableStore } from './store';
 import './Eval.css';
 
 interface EvalOptions {
@@ -38,16 +32,14 @@ export default function Eval({
 
   const {
     table,
-    setTable,
     setTableFromResultsFile,
     config,
     setConfig,
     evalId,
     setEvalId,
-    setVersion,
     setAuthor,
-    setRowCount,
-  } = useStore();
+    fetchEvalData,
+  } = useTableStore();
 
   const { setInComparisonMode, setComparisonEvalIds } = useResultsViewSettingsStore();
 
@@ -68,32 +60,27 @@ export default function Eval({
     return body.data;
   };
 
-  const fetchEvalById = React.useCallback(
+  const loadEvalById = React.useCallback(
     async (id: string) => {
-      const resp = await callApi(`/eval/${id}/table?offset=0&limit=50`);
-      if (!resp.ok) {
-        setFailed(true);
-        return;
-      }
-      const body = (await resp.json()) as {
-        data: {
-          table: EvaluateTable;
-          totalCount: number;
-          config: Partial<UnifiedConfig>;
-          author: string | null;
-          version: number;
-        };
-      };
+      try {
+        setEvalId(id);
 
-      setTable(body.data.table);
-      setRowCount(body.data.totalCount);
-      setConfig(body.data.config);
-      setVersion(body.data.version);
-      setAuthor(body.data.author);
-      setEvalId(id);
+        const data = await fetchEvalData(id, { skipSettingEvalId: true });
+
+        if (!data) {
+          setFailed(true);
+          return false;
+        }
+        return true;
+      } catch (error) {
+        console.error('Error loading eval:', error);
+        setFailed(true);
+        return false;
+      }
     },
-    [setTable, setConfig, setEvalId, setAuthor, setRowCount, setVersion],
+    [fetchEvalData, setFailed, setEvalId],
   );
+
   const [searchParams] = useSearchParams();
 
   const handleRecentEvalSelection = useCallback(
@@ -114,11 +101,13 @@ export default function Eval({
     if (fetchId) {
       console.log('Eval init: Fetching eval by id', { fetchId });
       const run = async () => {
-        await fetchEvalById(fetchId);
-        setLoaded(true);
-        setDefaultEvalId(fetchId);
-        // Load other recent eval runs
-        fetchRecentFileEvals();
+        const success = await loadEvalById(fetchId);
+        if (success) {
+          setLoaded(true);
+          setDefaultEvalId(fetchId);
+          // Load other recent eval runs
+          fetchRecentFileEvals();
+        }
       };
       run();
     } else if (preloadedData) {
@@ -173,16 +162,11 @@ export default function Eval({
         const evals = await fetchRecentFileEvals();
         if (evals && evals.length > 0) {
           const defaultEvalId = evals[0].evalId;
-          const resp = await callApi(`/eval/${defaultEvalId}/table?offset=0&limit=50`);
-          const body = await resp.json();
-          setTable(body.data.table);
-          setRowCount(body.data.totalCount);
-          setConfig(body.data.config);
-          setVersion(body.data.version);
-          setAuthor(body.data.author || null);
-          setLoaded(true);
-          setDefaultEvalId(defaultEvalId);
-          setEvalId(defaultEvalId);
+          const success = await loadEvalById(defaultEvalId);
+          if (success) {
+            setLoaded(true);
+            setDefaultEvalId(defaultEvalId);
+          }
         } else {
           return (
             <div className="notice">
@@ -199,16 +183,15 @@ export default function Eval({
   }, [
     apiBaseUrl,
     fetchId,
-    setTable,
+    loadEvalById,
+    setTableFromResultsFile,
     setConfig,
     setAuthor,
     setEvalId,
-    fetchEvalById,
-    preloadedData,
     setDefaultEvalId,
     setInComparisonMode,
-    setRowCount,
-    setVersion,
+    setComparisonEvalIds,
+    preloadedData,
   ]);
 
   React.useEffect(() => {

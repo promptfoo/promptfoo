@@ -2,7 +2,6 @@ import {
   type CompletedPrompt,
   type EvaluateTable,
   type EvaluateTableRow,
-  ResultFailureReason,
   type ResultsFile,
   type TokenUsage,
 } from '../types';

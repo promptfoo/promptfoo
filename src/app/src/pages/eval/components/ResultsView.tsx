@@ -18,14 +18,11 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
-import FormControl from '@mui/material/FormControl';
 import IconButton from '@mui/material/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
-import InputLabel from '@mui/material/InputLabel';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
-import Select from '@mui/material/Select';
 import type { SelectChangeEvent } from '@mui/material/Select';
 import type { StackProps } from '@mui/material/Stack';
 import Stack from '@mui/material/Stack';
@@ -44,11 +41,12 @@ import { EvalIdChip } from './EvalIdChip';
 import EvalSelectorDialog from './EvalSelectorDialog';
 import EvalSelectorKeyboardShortcut from './EvalSelectorKeyboardShortcut';
 import { FilterModeSelector } from './FilterModeSelector';
+import { MetricFilterSelector } from './MetricFilterSelector';
 import ResultsCharts from './ResultsCharts';
 import ResultsTable from './ResultsTable';
 import ShareModal from './ShareModal';
 import SettingsModal from './TableSettings/TableSettingsModal';
-import { useStore as useResultsViewStore, useResultsViewSettingsStore } from './store';
+import { useTableStore, useResultsViewSettingsStore } from './store';
 import type { FilterMode, ResultLightweightWithLabel } from './types';
 import './ResultsView.css';
 
@@ -71,11 +69,13 @@ const SearchInputField = React.memo(
     value,
     onChange,
     onKeyDown,
+    onEnterPress,
     placeholder = 'Search...',
   }: {
     value: string;
     onChange: (value: string) => void;
     onKeyDown?: React.KeyboardEventHandler;
+    onEnterPress?: (value: string) => void;
     placeholder?: string;
   }) => {
     // Use local state to handle immediate updates
@@ -97,6 +97,19 @@ const SearchInputField = React.memo(
     const handleClear = () => {
       setLocalValue('');
       onChange('');
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+      // If Enter is pressed, bypass debounce and search immediately
+      if (e.key === 'Enter' && onEnterPress) {
+        e.preventDefault();
+        onEnterPress(localValue);
+      }
+
+      // Call the original onKeyDown handler if provided
+      if (onKeyDown) {
+        onKeyDown(e);
+      }
     };
 
     return (
@@ -124,7 +137,7 @@ const SearchInputField = React.memo(
         placeholder={placeholder}
         value={localValue}
         onChange={handleChange}
-        onKeyDown={onKeyDown}
+        onKeyDown={handleKeyDown}
         InputProps={{
           startAdornment: (
             <InputAdornment position="start">
@@ -169,7 +182,9 @@ export default function ResultsView({
     setConfig,
     evalId,
     setAuthor,
-  } = useResultsViewStore();
+    filteredResultsCount,
+    totalResultsCount,
+  } = useTableStore();
 
   const {
     setInComparisonMode,
@@ -185,7 +200,13 @@ export default function ResultsView({
   const { setStateFromConfig } = useMainStore();
   const { showToast } = useToast();
   const [searchText, setSearchText] = React.useState(searchParams.get('search') || '');
-  const [debouncedSearchText] = useDebounce(searchText, 1000);
+  const [autoDebounced] = useDebounce(searchText, 1000);
+  const [debouncedSearchValue, setDebouncedSearchValue] = React.useState(searchText);
+
+  React.useEffect(() => {
+    setDebouncedSearchValue(autoDebounced);
+  }, [autoDebounced]);
+
   const handleSearchTextChange = React.useCallback(
     (text: string) => {
       setSearchParams((prev) => ({ ...prev, search: text }));
@@ -468,6 +489,12 @@ export default function ResultsView({
     setSelectedMetric(metric);
   }, []);
 
+  // Add this function to handle immediate search on Enter
+  const handleSearchEnterPress = React.useCallback((text: string) => {
+    // Force update the debounced value immediately when Enter is pressed
+    setDebouncedSearchValue(text);
+  }, []);
+
   return (
     <div style={{ marginLeft: '1rem', marginRight: '1rem' }}>
       <ResponsiveStack
@@ -538,35 +565,60 @@ export default function ResultsView({
             value={searchText}
             onChange={handleSearchTextChange}
             onKeyDown={handleSearchKeyDown}
+            onEnterPress={handleSearchEnterPress}
             placeholder="Text or regex"
           />
         </Box>
-        {availableMetrics.length > 0 && (
-          <Box>
-            <FormControl variant="outlined" size="small" sx={{ minWidth: 180 }}>
-              <InputLabel id="metric-filter-label">Filter by Metric</InputLabel>
-              <Select
-                labelId="metric-filter-label"
-                id="metric-filter-select"
-                value={selectedMetric || ''}
-                onChange={(event) =>
-                  handleMetricFilterChange(event.target.value === '' ? null : event.target.value)
-                }
-                label="Filter by Metric"
-                displayEmpty
-              >
-                <MenuItem value="">
-                  <em>None</em>
-                </MenuItem>
-                {availableMetrics.map((metric) => (
-                  <MenuItem key={metric} value={metric}>
-                    {metric}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </Box>
-        )}
+        <MetricFilterSelector
+          selectedMetric={selectedMetric}
+          availableMetrics={availableMetrics}
+          onChange={handleMetricFilterChange}
+        />
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            backgroundColor: 'rgba(0, 0, 0, 0.04)',
+            borderRadius: '16px',
+            padding: '4px 12px',
+            fontSize: '0.875rem',
+          }}
+        >
+          {searchText || filterMode !== 'all' || selectedMetric ? (
+            <>
+              <strong>{filteredResultsCount}</strong>
+              <span style={{ margin: '0 4px' }}>of</span>
+              <strong>{totalResultsCount}</strong>
+              <span style={{ margin: '0 4px' }}>results</span>
+              {searchText && (
+                <Chip
+                  size="small"
+                  label={`Search: ${searchText.length > 4 ? searchText.substring(0, 5) + '...' : searchText}`}
+                  onDelete={() => handleSearchTextChange('')}
+                  sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
+                />
+              )}
+              {filterMode !== 'all' && (
+                <Chip
+                  size="small"
+                  label={`Filter: ${filterMode}`}
+                  onDelete={() => setFilterMode('all')}
+                  sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
+                />
+              )}
+              {selectedMetric && (
+                <Chip
+                  size="small"
+                  label={`Metric: ${selectedMetric}`}
+                  onDelete={() => handleMetricFilterChange(null)}
+                  sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
+                />
+              )}
+            </>
+          ) : (
+            <>{filteredResultsCount} results</>
+          )}
+        </Box>
         <Box flexGrow={1} />
         <Box display="flex" justifyContent="flex-end">
           <ResponsiveStack direction="row" spacing={2}>
@@ -681,7 +733,7 @@ export default function ResultsView({
         filterMode={filterMode}
         failureFilter={failureFilter}
         searchText={searchText}
-        debouncedSearchText={debouncedSearchText}
+        debouncedSearchText={debouncedSearchValue}
         onFailureFilterToggle={handleFailureFilterToggle}
         onSearchTextChange={handleSearchTextChange}
         setFilterMode={setFilterMode}

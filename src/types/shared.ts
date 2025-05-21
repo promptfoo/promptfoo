@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { UnifiedConfig, EvaluateTable } from '../types';
 
 // for reasoning models
 export const CompletionTokenDetailsSchema = z.object({
@@ -38,3 +39,13 @@ export type BaseTokenUsage = z.infer<typeof BaseTokenUsageSchema>;
 export type TokenUsage = z.infer<typeof TokenUsageSchema>;
 
 export type NunjucksFilterMap = Record<string, (...args: any[]) => string>;
+
+export type EvalTableDTO = {
+  table: EvaluateTable;
+  totalCount: number;
+  filteredCount: number;
+  config: Partial<UnifiedConfig>;
+  author: string | null;
+  version: number;
+  id: string;
+};

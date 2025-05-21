@@ -39,7 +39,7 @@ import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
 import type { TruncatedTextProps } from './TruncatedText';
 import TruncatedText from './TruncatedText';
-import { useStore as useMainStore, useResultsViewSettingsStore } from './store';
+import { useTableStore, useResultsViewSettingsStore } from './store';
 import './ResultsTable.css';
 
 function formatRowOutput(output: EvaluateTableOutput | string) {
@@ -160,23 +160,6 @@ function useScrollHandler() {
   return { isCollapsed };
 }
 
-async function fetchEval(
-  evalId: string,
-  pageIndex: number,
-  pageSize: number,
-  filter: FilterMode,
-  compareTo: string[],
-  searchText: string,
-  selectedMetric: string | null | undefined,
-) {
-  const url = `/eval/${evalId}/table?offset=${pageIndex * pageSize}&limit=${pageSize}&filter=${filter}${
-    compareTo.length > 0 ? `&comparisonEvalIds=${compareTo.join('&comparisonEvalIds=')}` : ''
-  }${searchText ? `&search=${encodeURIComponent(searchText)}` : ''}${
-    selectedMetric ? `&metric=${encodeURIComponent(selectedMetric)}` : ''
-  }`;
-  return await callApi(url);
-}
-
 function ResultsTable({
   maxTextLength,
   columnVisibility,
@@ -192,7 +175,8 @@ function ResultsTable({
   selectedMetric,
   onMetricFilter,
 }: ResultsTableProps) {
-  const { evalId, table, setTable, config, version, rowCount, setRowCount } = useMainStore();
+  const { evalId, table, setTable, config, version, filteredResultsCount, fetchEvalData } =
+    useTableStore();
   const { inComparisonMode, comparisonEvalIds } = useResultsViewSettingsStore();
 
   const { showToast } = useToast();
@@ -328,36 +312,52 @@ function ResultsTable({
     setPagination({ ...pagination, pageIndex: 0 });
   }, [failureFilter, filterMode, debouncedSearchText, selectedMetric]);
 
+  // Add a ref to track the current evalId to compare with new values
+  const previousEvalIdRef = useRef<string | null>(null);
+
+  // Reset pagination when evalId changes
+  React.useEffect(() => {
+    if (evalId !== previousEvalIdRef.current) {
+      setPagination({ pageIndex: 0, pageSize: pagination.pageSize });
+      previousEvalIdRef.current = evalId;
+
+      // Don't fetch here - the parent component (Eval.tsx) is responsible
+      // for the initial data load when changing evalId
+    }
+  }, [evalId]);
+
+  // Only fetch data when pagination or filters change, but not when evalId changes
   React.useEffect(() => {
     if (!evalId) {
       return;
     }
-    console.log('comparisonEvalIds', comparisonEvalIds);
-    const fetchPage = async () => {
-      const resp = await fetchEval(
-        evalId,
-        pagination.pageIndex,
-        pagination.pageSize,
-        filterMode,
-        comparisonEvalIds,
-        debouncedSearchText,
-        selectedMetric,
-      );
-      if (resp.ok) {
-        const body = await resp.json();
-        setTable(body.data.table);
-        setRowCount(body.data.totalCount);
-      }
-    };
-    fetchPage();
+
+    // Skip fetching if this is the first render for a new evalId
+    // Data should already be loaded by Eval.tsx
+    if (pagination.pageIndex === 0 && evalId !== previousEvalIdRef.current) {
+      previousEvalIdRef.current = evalId;
+      return;
+    }
+
+    console.log('Fetching data for filtering/pagination', evalId);
+
+    fetchEvalData(evalId, {
+      pageIndex: pagination.pageIndex,
+      pageSize: pagination.pageSize,
+      filterMode,
+      searchText: debouncedSearchText,
+      selectedMetric,
+      skipSettingEvalId: true, // Don't change evalId when paginating or filtering
+    });
   }, [
-    evalId,
+    // evalId is NOT in the dependency array
     pagination.pageIndex,
     pagination.pageSize,
     filterMode,
     comparisonEvalIds,
     debouncedSearchText,
     selectedMetric,
+    fetchEvalData,
   ]);
 
   // TODO(ian): Switch this to use prompt.metrics field once most clients have updated.
@@ -476,42 +476,6 @@ function ResultsTable({
     },
     [onMetricFilter],
   );
-
-  React.useEffect(() => {
-    setPagination({ ...pagination, pageIndex: 0 });
-  }, [failureFilter, filterMode, debouncedSearchText, selectedMetric]);
-
-  React.useEffect(() => {
-    if (!evalId) {
-      return;
-    }
-    console.log('comparisonEvalIds', comparisonEvalIds);
-    const fetchPage = async () => {
-      const resp = await fetchEval(
-        evalId,
-        pagination.pageIndex,
-        pagination.pageSize,
-        filterMode,
-        comparisonEvalIds,
-        debouncedSearchText,
-        selectedMetric,
-      );
-      if (resp.ok) {
-        const body = await resp.json();
-        setTable(body.data.table);
-        setRowCount(body.data.totalCount);
-      }
-    };
-    fetchPage();
-  }, [
-    evalId,
-    pagination.pageIndex,
-    pagination.pageSize,
-    filterMode,
-    comparisonEvalIds,
-    debouncedSearchText,
-    selectedMetric,
-  ]);
 
   const promptColumns = React.useMemo(() => {
     return [
@@ -767,7 +731,7 @@ function ResultsTable({
     return cols;
   }, [descriptionColumn, variableColumns, promptColumns]);
 
-  const pageCount = Math.ceil(rowCount / pagination.pageSize);
+  const pageCount = Math.ceil(filteredResultsCount / pagination.pageSize);
   const reactTable = useReactTable({
     data: filteredBody,
     columns,
@@ -892,6 +856,22 @@ function ResultsTable({
           </Typography>
         </Box>
       )}
+
+      {filteredResultsCount === 0 &&
+        (debouncedSearchText || filterMode !== 'all' || selectedMetric) && (
+          <Box
+            sx={{
+              padding: '20px',
+              textAlign: 'center',
+              backgroundColor: 'rgba(0, 0, 0, 0.03)',
+              borderRadius: '4px',
+              marginTop: '20px',
+              marginBottom: '20px',
+            }}
+          >
+            <Typography variant="body1">No results found for the current filters.</Typography>
+          </Box>
+        )}
 
       <table
         className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
@@ -1048,6 +1028,7 @@ function ResultsTable({
             />
             <span>of {pageCount}</span>
           </Typography>
+
           <Button
             onClick={() => {
               setPagination((prev) => ({

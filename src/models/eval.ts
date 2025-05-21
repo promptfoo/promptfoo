@@ -28,6 +28,7 @@ import {
   type ResultsFile,
   type UnifiedConfig,
   type EvalSummary,
+  type EvaluateTableRow,
 } from '../types';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
@@ -419,7 +420,13 @@ export default class Eval {
     testIndices?: number[];
     searchQuery?: string;
     metricFilter?: string;
-  }) {
+  }): Promise<{
+    head: { prompts: Prompt[]; vars: string[] };
+    body: EvaluateTableRow[];
+    totalCount: number;
+    filteredCount: number;
+    id: string;
+  }> {
     const db = getDb();
     const hasTestIndices = opts.testIndices && opts.testIndices.length > 0;
     // If we have test indices, we need to fetch all results
@@ -456,7 +463,7 @@ export default class Eval {
       const sanitizedSearch = searchQuery.replace(/'/g, "''");
       const searchConditions = [
         // Search in response text
-        `json_extract(response, '$.text') LIKE '%${sanitizedSearch}%'`,
+        `response LIKE '%${sanitizedSearch}%'`,
         // Search in grading result reason
         `json_extract(grading_result, '$.reason') LIKE '%${sanitizedSearch}%'`,
         // Search in grading result comment
@@ -475,15 +482,17 @@ export default class Eval {
 
     const whereSql = conditions.join(' AND ');
 
-    const countQuery = sql.raw(
+    const filteredCountQuery = sql.raw(
       `SELECT COUNT(DISTINCT test_idx) as count FROM eval_results WHERE ${whereSql}`,
     );
     const countStart = Date.now();
     // @ts-ignore
-    const countResult: { count: number } = await db.get(countQuery);
+    const countResult: { count: number } = await db.get(filteredCountQuery);
     const countEnd = Date.now();
     logger.debug(`Count query took ${countEnd - countStart}ms`);
-    const totalCount = countResult?.count || 0;
+    const filteredCount = countResult?.count || 0;
+
+    const totalCount = await this.getResultsCount();
 
     let idxQuery;
     if (testIndices && testIndices.length > 0) {
@@ -513,7 +522,7 @@ export default class Eval {
     const bodyEnd = Date.now();
     logger.debug(`Body query took ${bodyEnd - bodyStart}ms`);
 
-    return { head: { prompts: this.prompts, vars }, body, totalCount, id: this.id };
+    return { head: { prompts: this.prompts, vars }, body, totalCount, filteredCount, id: this.id };
   }
 
   async addPrompts(prompts: CompletedPrompt[]) {
