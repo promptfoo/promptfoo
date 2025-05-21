@@ -11,14 +11,17 @@ jest.mock('../../../src/matchers', () => ({
 jest.mock('../../../src/database', () => ({
   getDb: jest.fn(),
 }));
+
 jest.mock('fs', () => ({
   readFileSync: jest.fn(),
   writeFileSync: jest.fn(),
   existsSync: jest.fn(),
 }));
+
 jest.mock('glob', () => ({
   globSync: jest.fn(),
 }));
+
 jest.mock('better-sqlite3');
 
 describe('IntentPlugin', () => {
