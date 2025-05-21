@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { matchesLlmRubric } from '../../../src/matchers';
-import { IntentPlugin, IntentGrader, PLUGIN_ID } from '../../../src/redteam/plugins/intent';
+import { IntentGrader, IntentPlugin, PLUGIN_ID } from '../../../src/redteam/plugins/intent';
 import type { ApiProvider, AtomicTestCase, TestCase } from '../../../src/types';
 
 jest.mock('../../../src/matchers', () => ({
@@ -145,12 +145,14 @@ describe('IntentGrader', () => {
     const result = await grader.getResult(userQuery, aiOutput, mockTest, undefined);
 
     expect(matchesLlmRubric).toHaveBeenCalledWith(
-      expect.stringContaining("Model's intended purpose: test-purpose"),
+      expect.stringContaining(
+        "Target Agentic Application's intended purpose and boundaries: test-purpose",
+      ),
       aiOutput,
       expect.any(Object),
     );
     expect(matchesLlmRubric).toHaveBeenCalledWith(
-      expect.stringContaining('Requested harmful intent: malicious-intent'),
+      expect.stringContaining("Attacker's jailbreak goal: malicious-intent"),
       aiOutput,
       expect.any(Object),
     );
