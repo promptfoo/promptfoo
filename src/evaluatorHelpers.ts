@@ -315,7 +315,7 @@ export async function runExtensionHook(
     feature: 'extension_hook',
   });
 
-  const outs: any[] = [];
+  const outs: ExtensionHookOutput[] = [];
 
   for (const extension of extensions) {
     logger.debug(`Running extension hook ${hookName} with context ${JSON.stringify(context)}`);
