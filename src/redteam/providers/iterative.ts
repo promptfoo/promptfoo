@@ -267,7 +267,7 @@ export async function runRedteamConversation({
       const grader = getGraderById(assertToUse.type);
       if (grader) {
         const { grade } = await grader.getResult(
-          goal as string,
+          newInjectVar,
           targetResponse.output,
           test,
           gradingProvider,
