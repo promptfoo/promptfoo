@@ -9,6 +9,7 @@ jest.mock('../../../src/cliState', () => ({
 
 jest.mock('../../../src/telemetry', () => ({
   record: jest.fn(),
+  send: jest.fn(),
 }));
 
 jest.mock('../../../src/util', () => ({

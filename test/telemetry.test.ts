@@ -69,7 +69,7 @@ describe('Telemetry', () => {
     expect(telemetry['events'][0]).toEqual({
       event: 'eval_ran',
       packageVersion: packageJson.version,
-      properties: { foo: 'bar' },
+      properties: { foo: 'bar', isRunningInCi: false },
     });
   });
 
@@ -89,7 +89,11 @@ describe('Telemetry', () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify([
-          { event: 'eval_ran', packageVersion: '1.0.0', properties: { foo: 'bar' } },
+          {
+            event: 'eval_ran',
+            packageVersion: '1.0.0',
+            properties: { foo: 'bar', isRunningInCi: false },
+          },
         ]),
       },
       1000,
