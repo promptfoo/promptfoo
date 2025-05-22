@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { VERSION } from './constants';
-import { getEnvBool, isCI } from './envars';
+import { getEnvBool } from './envars';
 import { fetchWithTimeout } from './fetch';
 import logger from './logger';
 
