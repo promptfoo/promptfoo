@@ -20,6 +20,10 @@ import invariant from '../../util/invariant';
 import { getRemoteGenerationUrl } from '../remoteGeneration';
 import { neverGenerateRemote } from '../remoteGeneration';
 
+// ========================================================
+// Schemas
+// ========================================================
+
 export const TargetPurposeDiscoveryStateSchema = z.object({
   currentQuestionIndex: z.number(),
   answers: z.array(z.string()),
@@ -31,21 +35,35 @@ export const TargetPurposeDiscoveryRequestSchema = z.object({
   version: z.string(),
   email: z.string().optional().nullable(),
 });
-export const DiscoveredPurposeSchema = z.object({
+
+export const DiscoveryResultSchema = z.object({
   purpose: z.string().nullable(),
   limitations: z.string().nullable(),
   user: z.string().nullable(),
-  tools: z.string().nullable(),
+  tools: z.array(
+    z
+      .object({
+        name: z.string(),
+        description: z.string(),
+        arguments: z.array(
+          z.object({
+            name: z.string(),
+            description: z.string(),
+            type: z.string(),
+          }),
+        ),
+      })
+      .nullable(),
+  ),
 });
 
 export const TargetPurposeDiscoveryResponseSchema = z.object({
   done: z.boolean(),
+  failed: z.boolean().optional().default(false),
   question: z.string().optional(),
-  purpose: DiscoveredPurposeSchema.optional(),
+  purpose: DiscoveryResultSchema.optional(),
   state: TargetPurposeDiscoveryStateSchema,
 });
-
-export type DiscoveredPurpose = z.infer<typeof DiscoveredPurposeSchema>;
 
 export const ArgsSchema = z
   .object({
@@ -58,12 +76,24 @@ export const ArgsSchema = z
     path: ['config', 'target'],
   });
 
+// ========================================================
+// Types
+// ========================================================
+
+export type DiscoveryResult = z.infer<typeof DiscoveryResultSchema>;
+
 type Args = z.infer<typeof ArgsSchema>;
 
-// A larger turn count is more accurate (b/c more probes) but slower.
-// TODO: Optimize this default to balance quality/runtime using the Discover eval.
-// NOTE: Set to 5 because UI lacks ability to set the count.
+// ========================================================
+// Constants
+// ========================================================
+
 export const DEFAULT_TURN_COUNT = 5;
+export const MAX_TURN_COUNT = 10;
+
+// ========================================================
+// Utils
+// ========================================================
 
 /**
  * Queries Cloud for the purpose-discovery logic, sends each logic to the target,
@@ -71,12 +101,15 @@ export const DEFAULT_TURN_COUNT = 5;
  *
  * @param target - The target API provider.
  * @param maxTurns - The maximum number of turns to run the discovery process.
- * @returns The purpose of the target.
+ * @returns The discovery result.
  */
 export async function doTargetPurposeDiscovery(
   target: ApiProvider,
   prompt?: Prompt,
-): Promise<DiscoveredPurpose | undefined> {
+): Promise<DiscoveryResult | undefined> {
+  // Generate a unique session id to pass to the target across all turns.
+  const sessionId = randomUUID();
+
   const pbar = new cliProgress.SingleBar({
     format: `Discovery phase - probing the target {bar} {percentage}% | {value}${DEFAULT_TURN_COUNT ? '/{total}' : ''} turns`,
     barCompleteChar: '\u2588',
@@ -88,26 +121,18 @@ export async function doTargetPurposeDiscovery(
 
   let done = false;
   let question: string | undefined = undefined;
-  let purpose: DiscoveredPurpose | undefined = undefined;
+  let discoveryResult: DiscoveryResult | undefined = undefined;
   let state = TargetPurposeDiscoveryStateSchema.parse({
     currentQuestionIndex: 0,
     answers: [],
   });
   let turn = 0;
 
-  while (!done && turn < 10) {
+  while (!done && turn < MAX_TURN_COUNT) {
     try {
       turn++;
+
       logger.debug(`[TargetPurposeDiscovery] Starting the purpose discovery loop, turn: ${turn}`);
-      const request = TargetPurposeDiscoveryRequestSchema.parse({
-        state: {
-          currentQuestionIndex: state.currentQuestionIndex,
-          answers: state.answers,
-        },
-        task: 'target-purpose-discovery',
-        version: VERSION,
-        email: getUserEmail(),
-      });
 
       const response = await fetchWithProxy(getRemoteGenerationUrl(), {
         method: 'POST',
@@ -115,7 +140,17 @@ export async function doTargetPurposeDiscovery(
           'Content-Type': 'application/json',
           Authorization: `Bearer ${cloudConfig.getApiKey()}`,
         },
-        body: JSON.stringify(request),
+        body: JSON.stringify(
+          TargetPurposeDiscoveryRequestSchema.parse({
+            state: {
+              currentQuestionIndex: state.currentQuestionIndex,
+              answers: state.answers,
+            },
+            task: 'target-purpose-discovery',
+            version: VERSION,
+            email: getUserEmail(),
+          }),
+        ),
       });
 
       if (!response.ok) {
@@ -127,40 +162,52 @@ export async function doTargetPurposeDiscovery(
       }
 
       const responseData = await response.json();
-      const response_ = TargetPurposeDiscoveryResponseSchema.parse(responseData);
+      const data = TargetPurposeDiscoveryResponseSchema.parse(responseData);
 
       logger.debug(
         `[TargetPurposeDiscovery] Received response from remote server: ${JSON.stringify(
-          response_,
+          data,
           null,
           2,
         )}`,
       );
-      done = response_.done;
-      question = response_.question;
-      purpose = response_.purpose;
-      state = response_.state;
 
-      if (!done) {
-        invariant(
-          question,
-          'If its not done, then a quesation should always be defined, something is terribely wrong.',
+      done = data.done;
+      question = data.question;
+      discoveryResult = data.purpose;
+      state = data.state;
+
+      if (data.failed) {
+        logger.error(
+          `[TargetPurposeDiscovery] Failed to discover the target purpose: ${JSON.stringify(
+            data,
+            null,
+            2,
+          )}`,
         );
+      }
+      // Should another question be asked?
+      else if (!done) {
+        invariant(question, 'Question should always be defined if `done` is falsy.');
+
         const renderedPrompt = prompt
           ? await renderPrompt(prompt, { prompt: question }, {}, target)
           : question;
+
         const targetResponse = await target.callApi(renderedPrompt, {
           prompt: { raw: question, label: 'Target Purpose Discovery Question' },
-          vars: { sessionId: randomUUID() },
+          vars: { sessionId },
         });
+
         if (targetResponse.error) {
           logger.error(`[TargetPurposeDiscovery] Error from target: ${targetResponse.error}`);
-          if (turn > 10) {
+          if (turn > MAX_TURN_COUNT) {
             logger.error('[TargetPurposeDiscovery] Too many retries, giving up.');
             return undefined;
           }
           continue;
         }
+
         logger.debug(
           `[TargetPurposeDiscovery] Received response from target: ${JSON.stringify(
             targetResponse,
@@ -168,6 +215,7 @@ export async function doTargetPurposeDiscovery(
             2,
           )}`,
         );
+
         state.answers.push(targetResponse.output);
       }
     } catch (error) {
@@ -182,18 +230,18 @@ export async function doTargetPurposeDiscovery(
   }
   pbar.stop();
 
-  return purpose;
+  return discoveryResult;
 }
 
 /**
  * Merges the human-defined purpose with the discovered purpose, structuring these as XML to be used by test generation / rendered in UI reporting.
  * @param humanDefinedPurpose - The human-defined purpose.
- * @param discoveredPurpose - The discovered purpose.
+ * @param discoveryResult - The discovery result.
  * @returns The merged purpose.
  */
 export function mergePurposes(
   humanDefinedPurpose: string | undefined,
-  discoveredPurpose: Record<string, any> | undefined,
+  discoveryResult: DiscoveryResult | undefined,
 ): string {
   const purpose: any = [];
 
@@ -203,32 +251,32 @@ export function mergePurposes(
     );
   }
 
-  if (discoveredPurpose) {
+  if (discoveryResult) {
     const discoveredPurposeXML = [
       `<AgentDiscoveredPurpose explanation="This purpose was discovered by the agent from conversations with the target. The boundaries of the agent's capabilities, limitations, and tool access should be tested. If there are any discrepancies, the user-defined purpose should be trusted and treated as absolute truth">`,
     ];
 
-    if (discoveredPurpose.purpose) {
+    if (discoveryResult.purpose) {
       discoveredPurposeXML.push(
-        `<Purpose explanation="The target believes its purpose is">${discoveredPurpose.purpose}</Purpose>`,
+        `<Purpose explanation="The target believes its purpose is">${discoveryResult.purpose}</Purpose>`,
       );
     }
 
-    if (discoveredPurpose.limitations) {
+    if (discoveryResult.limitations) {
       discoveredPurposeXML.push(
-        `<Limitations explanation="The target believes its limitations are">${discoveredPurpose.limitations}</Limitations>`,
+        `<Limitations explanation="The target believes its limitations are">${discoveryResult.limitations}</Limitations>`,
       );
     }
 
-    if (discoveredPurpose.tools) {
+    if (discoveryResult.tools) {
       discoveredPurposeXML.push(
-        `<Tools explanation="The target divulged access to these tools">${discoveredPurpose.tools}</Tools>`,
+        `<Tools explanation="The target divulged access to these tools">${discoveryResult.tools}</Tools>`,
       );
     }
 
-    if (discoveredPurpose.user) {
+    if (discoveryResult.user) {
       discoveredPurposeXML.push(
-        `<User explanation="The target believes the user of the application is">${discoveredPurpose.user}</User>`,
+        `<User explanation="The target believes the user of the application is">${discoveryResult.user}</User>`,
       );
     }
     discoveredPurposeXML.push('</AgentDiscoveredPurpose>');
@@ -237,6 +285,10 @@ export function mergePurposes(
 
   return purpose.join('\n');
 }
+
+// ========================================================
+// Command
+// ========================================================
 
 /**
  * Registers the `discover` command with the CLI.
@@ -341,10 +393,29 @@ export function discoverCommand(
         return;
       }
 
-      // Discover the purpose for the target:
-      let purpose: Record<string, any> | undefined = undefined;
       try {
-        purpose = await doTargetPurposeDiscovery(target);
+        const discoveryResult = await doTargetPurposeDiscovery(target);
+
+        if (discoveryResult) {
+          if (discoveryResult.purpose) {
+            logger.info(chalk.bold(chalk.green('\nThe target believes its purpose is:\n')));
+            logger.info(discoveryResult.purpose);
+          }
+          if (discoveryResult.limitations) {
+            logger.info(chalk.bold(chalk.green('\nThe target believes its limitations to be:\n')));
+            logger.info(discoveryResult.limitations);
+          }
+          if (discoveryResult.tools) {
+            logger.info(chalk.bold(chalk.green('\nThe target divulged access to these tools:\n')));
+            logger.info(JSON.stringify(discoveryResult.tools, null, 2));
+          }
+          if (discoveryResult.user) {
+            logger.info(
+              chalk.bold(chalk.green('\nThe target believes the user of the application is:\n')),
+            );
+            logger.info(discoveryResult.user);
+          }
+        }
       } catch (error) {
         logger.error(
           `An unexpected error occurred during target discovery: ${error instanceof Error ? error.message : String(error)}\n${
@@ -352,27 +423,6 @@ export function discoverCommand(
           }`,
         );
         process.exit(1);
-      }
-
-      if (purpose) {
-        if (purpose.purpose) {
-          logger.info(chalk.bold(chalk.green('The target believes its purpose is:')));
-          logger.info(chalk.bold(purpose.purpose + '\n\n'));
-        }
-        if (purpose.limitations) {
-          logger.info(chalk.bold(chalk.green('The target believes its limitations to be:')));
-          logger.info(purpose.limitations + '\n\n');
-        }
-        if (purpose.tools) {
-          logger.info(chalk.bold(chalk.green('The target divulged access to these tools:')));
-          logger.info(JSON.stringify(purpose.tools, null, 2));
-        }
-        if (purpose.user) {
-          logger.info(
-            chalk.bold(chalk.green('The target believes the user of the application is:')),
-          );
-          logger.info(purpose.user + '\n\n');
-        }
       }
 
       process.exit();
