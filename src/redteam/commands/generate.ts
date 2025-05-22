@@ -144,6 +144,7 @@ export async function doGenerateRedteam(
     plugins: redteamConfig?.plugins?.map((p) => (typeof p === 'string' ? p : p.id)) || [],
     strategies: redteamConfig?.strategies?.map((s) => (typeof s === 'string' ? s : s.id)) || [],
   });
+  await telemetry.send();
 
   let plugins;
 
@@ -374,7 +375,7 @@ export async function doGenerateRedteam(
     plugins: plugins.map((p) => p.id),
     strategies: strategies.map((s) => (typeof s === 'string' ? s : s.id)),
   });
-
+  await telemetry.send();
   return ret;
 }
 
