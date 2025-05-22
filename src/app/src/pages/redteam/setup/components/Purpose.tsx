@@ -12,6 +12,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import Grid from '@mui/material/Grid';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
+import TextareaAutosize from '@mui/material/TextareaAutosize';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Typography from '@mui/material/Typography';
@@ -283,9 +284,10 @@ export default function Purpose({ onNext }: PromptsProps) {
                   placeholder="Describe your application purpose at the minimum, other application context like features, roles, security requirements, and any example identifiers can further help improve the quality of the redteam attacks and grading"
                   multiline
                   variant="outlined"
-                  minRows={4}
-                  maxRows={15}
+                  minRows={8}
+                  maxRows={20}
                   InputProps={{
+                    inputComponent: TextareaAutosize,
                     sx: {
                       fontFamily: (theme) => theme.typography.fontFamily,
                       fontSize: '0.9rem',
