@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { and, eq, gte, lt } from 'drizzle-orm';
+import { and, eq, gte, lt, inArray } from 'drizzle-orm';
 import { getDb } from '../database';
 import { evalResultsTable } from '../database/tables';
 import { getEnvBool } from '../envars';
@@ -160,7 +160,7 @@ export default class EvalResult {
           eq(evalResultsTable.evalId, evalId),
           testIndices.length === 1
             ? eq(evalResultsTable.testIdx, testIndices[0])
-            : evalResultsTable.testIdx.in(testIndices),
+            : inArray(evalResultsTable.testIdx, testIndices),
         ),
       );
 
