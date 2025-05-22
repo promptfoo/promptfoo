@@ -6,12 +6,12 @@ import { z } from 'zod';
 import { fromZodError } from 'zod-validation-error';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import type {
-  EvalTableDTO,
   EvaluateSummaryV2,
   EvaluateTestSuiteWithEvaluateOptions,
   GradingResult,
   Job,
   ResultsFile,
+  EvalTableDTO,
 } from '../../index';
 import promptfoo from '../../index';
 import logger from '../../logger';
