@@ -173,6 +173,7 @@ export default function ResultsView({
   defaultEvalId,
 }: ResultsViewProps) {
   const navigate = useNavigate();
+
   const [searchParams, setSearchParams] = useSearchParams();
   const {
     author,
@@ -198,14 +199,10 @@ export default function ResultsView({
   } = useResultsViewSettingsStore();
 
   const { setStateFromConfig } = useMainStore();
+
   const { showToast } = useToast();
   const [searchText, setSearchText] = React.useState(searchParams.get('search') || '');
-  const [autoDebounced] = useDebounce(searchText, 1000);
-  const [debouncedSearchValue, setDebouncedSearchValue] = React.useState(searchText);
-
-  React.useEffect(() => {
-    setDebouncedSearchValue(autoDebounced);
-  }, [autoDebounced]);
+  const [debouncedSearchValue] = useDebounce(searchText, 1000);
 
   const handleSearchTextChange = React.useCallback(
     (text: string) => {
@@ -469,10 +466,8 @@ export default function ResultsView({
 
   // Add state for metric filter and available metrics
   const [selectedMetric, setSelectedMetric] = React.useState<string | null>(null);
-  const [availableMetrics, setAvailableMetrics] = React.useState<string[]>([]);
 
-  // Add effect to extract unique metrics from all prompts
-  React.useEffect(() => {
+  const availableMetrics = React.useMemo(() => {
     if (table && table.head?.prompts) {
       const metrics = new Set<string>();
       table.head.prompts.forEach((prompt) => {
@@ -480,8 +475,9 @@ export default function ResultsView({
           Object.keys(prompt.metrics.namedScores).forEach((metric) => metrics.add(metric));
         }
       });
-      setAvailableMetrics(Array.from(metrics).sort());
+      return Array.from(metrics).sort();
     }
+    return [];
   }, [table]);
 
   // Make the function a callback that can be passed to CustomMetrics
