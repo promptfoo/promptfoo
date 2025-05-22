@@ -244,7 +244,8 @@ export function mergeTargetPurposeDiscoveryResults(
   discoveryResult?: TargetPurposeDiscoveryResult,
 ): string {
   return [
-    dedent`
+    humanDefinedPurpose &&
+      dedent`
       # Human Defined Target Purpose
 
       This purpose was defined by the user and should be trusted and treated as absolute truth:
