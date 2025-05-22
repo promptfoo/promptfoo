@@ -243,7 +243,7 @@ export function mergePurposes(
   humanDefinedPurpose: string | undefined,
   discoveryResult: DiscoveryResult | undefined,
 ): string {
-  const purpose: any = [];
+  const purpose: string[] = [];
 
   if (humanDefinedPurpose) {
     purpose.push(
