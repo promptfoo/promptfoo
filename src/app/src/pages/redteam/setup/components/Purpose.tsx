@@ -12,7 +12,6 @@ import DialogTitle from '@mui/material/DialogTitle';
 import Grid from '@mui/material/Grid';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
-import TextareaAutosize from '@mui/material/TextareaAutosize';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Typography from '@mui/material/Typography';
@@ -309,20 +308,17 @@ export default function Purpose({ onNext }: PromptsProps) {
                   variant="outlined"
                   minRows={8}
                   maxRows={20}
-                  InputProps={{
-                    inputComponent: TextareaAutosize,
-                    sx: {
-                      fontFamily: (theme) => theme.typography.fontFamily,
-                      fontSize: '0.9rem',
-                      lineHeight: 1.7,
-                    },
-                  }}
                   sx={{
                     '& .MuiOutlinedInput-root': {
                       '&.Mui-focused fieldset': {
                         borderColor: 'primary.main',
                         borderWidth: '2px',
                       },
+                    },
+                    '& .MuiInputBase-input': {
+                      fontFamily: (theme) => theme.typography.fontFamily,
+                      fontSize: '0.9rem',
+                      lineHeight: 1.7,
                     },
                   }}
                 />
