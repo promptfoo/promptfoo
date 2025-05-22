@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { VERSION } from './constants';
-import { getEnvBool } from './envars';
+import { getEnvBool, isCI } from './envars';
 import { fetchWithTimeout } from './fetch';
 import logger from './logger';
 
@@ -52,7 +52,10 @@ export class Telemetry {
       const event: TelemetryEvent = {
         event: eventName,
         packageVersion: VERSION,
-        properties,
+        properties: {
+          ...properties,
+          isRunningInCi: isCI(),
+        },
       };
 
       const result = TelemetryEventSchema.safeParse(event);
