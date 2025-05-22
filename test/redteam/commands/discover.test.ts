@@ -41,8 +41,8 @@ describe('mergePurposes', () => {
     expect(mergedPurpose).toContain(discovered.limitations);
     expect(mergedPurpose).toContain(discovered.tools[0]);
     expect(mergedPurpose).toContain(discovered.user);
-    expect(mergedPurpose).toContain('<HumanDefinedPurpose>');
-    expect(mergedPurpose).toContain('<AgentDiscoveredPurpose>');
+    expect(mergedPurpose).toMatch(/<HumanDefinedPurpose[^>]*>/);
+    expect(mergedPurpose).toMatch(/<AgentDiscoveredPurpose[^>]*>/);
   });
 
   it('should handle only human-defined purpose', () => {
@@ -50,24 +50,24 @@ describe('mergePurposes', () => {
     const mergedPurpose = mergePurposes(humanDefined, undefined);
 
     expect(mergedPurpose).toContain(humanDefined);
-    expect(mergedPurpose).toContain('<HumanDefinedPurpose>');
-    expect(mergedPurpose).not.toContain('<AgentDiscoveredPurpose>');
+    expect(mergedPurpose).toMatch(/<HumanDefinedPurpose[^>]*>/);
+    expect(mergedPurpose).not.toMatch(/<AgentDiscoveredPurpose[^>]*>/);
   });
 
   it('should handle only discovered purpose', () => {
     const discovered = {
       purpose: 'This is a discovered purpose',
       limitations: 'These are limitations',
-      tools: [{ name: 'tool1', description: 'desc1' }],
+      tools: JSON.stringify([{ name: 'tool1', description: 'desc1' }]),
       user: 'This is a discovered user',
     };
     const mergedPurpose = mergePurposes(undefined, discovered);
 
-    expect(mergedPurpose).not.toContain('<HumanDefinedPurpose>');
-    expect(mergedPurpose).toContain('<AgentDiscoveredPurpose>');
+    expect(mergedPurpose).not.toMatch(/<HumanDefinedPurpose[^>]*>/);
+    expect(mergedPurpose).toMatch(/<AgentDiscoveredPurpose[^>]*>/);
     expect(mergedPurpose).toContain(discovered.purpose);
     expect(mergedPurpose).toContain(discovered.limitations);
-    expect(mergedPurpose).toContain(JSON.stringify(discovered.tools, null, 2));
+    expect(mergedPurpose).toContain(discovered.tools);
     expect(mergedPurpose).toContain(discovered.user);
   });
 
@@ -80,14 +80,14 @@ describe('mergePurposes', () => {
     const discovered = {
       purpose: 'purpose',
       limitations: 'limitations',
-      tools: [
+      tools: JSON.stringify([
         { name: 'tool1', config: { key: 'value' } },
         { name: 'tool2', options: ['opt1', 'opt2'] },
-      ],
+      ]),
     };
     const mergedPurpose = mergePurposes(undefined, discovered);
 
-    expect(mergedPurpose).toContain(JSON.stringify(discovered.tools, null, 2));
+    expect(mergedPurpose).toContain(discovered.tools);
     expect(mergedPurpose).toContain('tool1');
     expect(mergedPurpose).toContain('tool2');
   });
@@ -113,7 +113,7 @@ describe('doTargetPurposeDiscovery', () => {
         purpose: {
           purpose: 'Test purpose',
           limitations: 'Test limitations',
-          tools: [],
+          tools: '',
           user: 'Test user',
         },
         state: {
@@ -152,7 +152,7 @@ describe('doTargetPurposeDiscovery', () => {
     expect(discoveredPurpose).toEqual({
       purpose: 'Test purpose',
       limitations: 'Test limitations',
-      tools: [],
+      tools: '',
       user: 'Test user',
     });
   });
@@ -172,7 +172,7 @@ describe('doTargetPurposeDiscovery', () => {
         purpose: {
           purpose: 'Test purpose',
           limitations: 'Test limitations',
-          tools: [],
+          tools: '',
           user: 'Test user',
         },
         state: {
@@ -214,7 +214,7 @@ describe('doTargetPurposeDiscovery', () => {
     expect(discoveredPurpose).toEqual({
       purpose: 'Test purpose',
       limitations: 'Test limitations',
-      tools: [],
+      tools: '',
       user: 'Test user',
     });
   });
