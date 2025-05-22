@@ -283,7 +283,10 @@ export function mergePurposes(
     purpose.push(discoveredPurposeXML.join('\n'));
   }
 
-  return purpose.join('\n');
+  // Wrap XML fragments in a single root element to ensure valid XML
+  return `<Purposes>
+${purpose.join('\n')}
+</Purposes>`;
 }
 
 // ========================================================
