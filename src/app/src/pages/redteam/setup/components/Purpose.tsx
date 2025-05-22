@@ -166,7 +166,7 @@ export default function Purpose({ onNext }: PromptsProps) {
                     borderRadius: 1,
                     cursor: 'pointer',
                     position: 'relative',
-                    transition: 'all 0.1s ease',
+                    transition: 'background-color 0.1s ease',
                     boxShadow: 'none',
                     '& .MuiAlert-icon': {
                       color: 'info.main',
