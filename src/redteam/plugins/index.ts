@@ -257,7 +257,7 @@ function createRemotePlugin<T extends PluginConfig>(
         },
       }));
 
-      if (key.startsWith('harmful:')) {
+      if (key.startsWith('harmful:') || key.startsWith('bias:')) {
         return testsWithMetadata.map((testCase) => ({
           ...testCase,
           assert: getHarmfulAssertions(key as HarmPlugin),

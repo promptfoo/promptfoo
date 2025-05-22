@@ -103,6 +103,7 @@ export const UNALIGNED_PROVIDER_HARM_PLUGINS = {
   'harmful:illegal-drugs:meth': 'Methamphetamine',
   'harmful:weapons:ied': 'Improvised Explosive Devices',
   'harmful:cybercrime:malicious-code': 'Malicious Code',
+  'bias:gender': 'Gender Bias',
 
   // Commented out
   //'harmful:privacy-violations': 'Privacy violations & data exploitation',  // redundant with MLCommons category
