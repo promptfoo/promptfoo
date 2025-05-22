@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import React, { act } from 'react';
+import React from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { ShiftKeyContext } from '@app/contexts/ShiftKeyContextDef';
 import { ToastProvider } from '@app/contexts/ToastContext';

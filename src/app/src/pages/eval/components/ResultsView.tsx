@@ -69,13 +69,11 @@ const SearchInputField = React.memo(
     value,
     onChange,
     onKeyDown,
-    onEnterPress,
     placeholder = 'Search...',
   }: {
     value: string;
     onChange: (value: string) => void;
     onKeyDown?: React.KeyboardEventHandler;
-    onEnterPress?: (value: string) => void;
     placeholder?: string;
   }) => {
     // Use local state to handle immediate updates
@@ -97,19 +95,6 @@ const SearchInputField = React.memo(
     const handleClear = () => {
       setLocalValue('');
       onChange('');
-    };
-
-    const handleKeyDown = (e: React.KeyboardEvent) => {
-      // If Enter is pressed, bypass debounce and search immediately
-      if (e.key === 'Enter' && onEnterPress) {
-        e.preventDefault();
-        onEnterPress(localValue);
-      }
-
-      // Call the original onKeyDown handler if provided
-      if (onKeyDown) {
-        onKeyDown(e);
-      }
     };
 
     return (
@@ -137,7 +122,7 @@ const SearchInputField = React.memo(
         placeholder={placeholder}
         value={localValue}
         onChange={handleChange}
-        onKeyDown={handleKeyDown}
+        onKeyDown={onKeyDown}
         InputProps={{
           startAdornment: (
             <InputAdornment position="start">
@@ -485,12 +470,6 @@ export default function ResultsView({
     setSelectedMetric(metric);
   }, []);
 
-  // Add this function to handle immediate search on Enter
-  const handleSearchEnterPress = React.useCallback((text: string) => {
-    // Force update the debounced value immediately when Enter is pressed
-    setDebouncedSearchValue(text);
-  }, []);
-
   return (
     <div style={{ marginLeft: '1rem', marginRight: '1rem' }}>
       <ResponsiveStack
@@ -561,7 +540,6 @@ export default function ResultsView({
             value={searchText}
             onChange={handleSearchTextChange}
             onKeyDown={handleSearchKeyDown}
-            onEnterPress={handleSearchEnterPress}
             placeholder="Text or regex"
           />
         </Box>
