@@ -88,6 +88,7 @@ import { WatsonXProvider } from './watsonx';
 import { WebhookProvider } from './webhook';
 import { WebSocketProvider } from './websocket';
 import { createXAIProvider } from './xai';
+import { createXAIImageProvider } from './xai-image';
 
 interface ProviderFactory {
   test: (providerPath: string) => boolean;
@@ -869,6 +870,19 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       const webhookUrl = providerPath.substring('webhook:'.length);
       return new WebhookProvider(webhookUrl, providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('xai:image:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createXAIImageProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
     },
   },
   {

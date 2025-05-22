@@ -114,6 +114,27 @@ tests:
 
 For more information on the available models and API usage, refer to the [xAI documentation](https://docs.x.ai/docs).
 
+### Generating images
+
+xAI supports image generation via `xai:image:grok-2-image`. See the [xAI image example](https://github.com/promptfoo/promptfoo/tree/main/examples/xai-images).
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+prompts:
+  - "A cat in a tree"
+
+providers:
+  - xai:image:grok-2-image
+```
+
+To display images in the web viewer, wrap outputs or vars in markdown image tags:
+
+```markdown
+![](/path/to/image.png)
+```
+
+Then enable 'Render markdown' in Table Settings.
+
 ## See Also
 
 - [OpenAI Provider](/docs/providers/openai)
