@@ -115,14 +115,26 @@ export const evalResultsTable = sqliteTable(
   },
   (table) => ({
     evalIdIdx: index('eval_result_eval_id_idx').on(table.evalId),
-    evalIdTestIdxIdx: index('eval_result_eval_id_test_idx_idx').on(table.evalId, table.testIdx),
+    testIdxIdx: index('eval_result_test_idx_idx').on(table.testIdx),
 
     responseIdx: index('eval_result_response_idx').on(table.response),
-    gradingResultSearchIdx: index('eval_result_grading_result_search_idx').on(table.gradingResult),
-    namedScoresIdx: index('eval_result_named_scores_idx').on(table.namedScores),
-    metricKeysIdx: index('eval_result_metric_keys_idx').on(table.namedScores),
-    metadataIdx: index('eval_result_metadata_idx').on(table.metadata),
-    varsSearchIdx: index('eval_result_vars_search_idx').on(table.testCase),
+
+    gradingResultReasonIdx: index('eval_result_grading_result_reason_idx').on(
+      sql`json_extract(${table.gradingResult}, '$.reason')`,
+    ),
+    gradingResultCommentIdx: index('eval_result_grading_result_comment_idx').on(
+      sql`json_extract(${table.gradingResult}, '$.comment')`,
+    ),
+    testCaseVarsIdx: index('eval_result_test_case_vars_idx').on(
+      sql`json_extract(${table.testCase}, '$.vars')`,
+    ),
+    testCaseMetadataIdx: index('eval_result_test_case_metadata_idx').on(
+      sql`json_extract(${table.metadata}, '$')`,
+    ),
+    namedScoresIdx: index('eval_result_named_scores_idx').on(
+      sql`json_extract(${table.namedScores}, '$')`,
+    ),
+    metadataIdx: index('eval_result_metadata_idx').on(sql`json_extract(${table.metadata}, '$')`),
   }),
 );
 

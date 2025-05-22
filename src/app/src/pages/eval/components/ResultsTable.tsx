@@ -175,8 +175,16 @@ function ResultsTable({
   selectedMetric,
   onMetricFilter,
 }: ResultsTableProps) {
-  const { evalId, table, setTable, config, version, filteredResultsCount, fetchEvalData } =
-    useTableStore();
+  const {
+    evalId,
+    table,
+    setTable,
+    config,
+    version,
+    filteredResultsCount,
+    fetchEvalData,
+    isFetching,
+  } = useTableStore();
   const { inComparisonMode, comparisonEvalIds } = useResultsViewSettingsStore();
 
   const { showToast } = useToast();
@@ -293,7 +301,7 @@ function ResultsTable({
     setIsSearching(searchText !== debouncedSearchText && searchText !== '');
   }, [searchText, debouncedSearchText]);
 
-  const filteredBody = React.useMemo(() => {
+  const tableBody = React.useMemo(() => {
     return body.map((row, rowIndex) => ({
       ...row,
       outputs: row.outputs.map((output, promptIndex) => ({
@@ -437,16 +445,16 @@ function ResultsTable({
 
   const getOutput = React.useCallback(
     (rowIndex: number, promptIndex: number) => {
-      return filteredBody[rowIndex].outputs[promptIndex];
+      return tableBody[rowIndex].outputs[promptIndex];
     },
-    [filteredBody],
+    [tableBody],
   );
 
   const getFirstOutput = React.useCallback(
     (rowIndex: number) => {
-      return filteredBody[rowIndex].outputs[0];
+      return tableBody[rowIndex].outputs[0];
     },
-    [filteredBody],
+    [tableBody],
   );
 
   const metricTotals = React.useMemo(() => {
@@ -733,7 +741,7 @@ function ResultsTable({
 
   const pageCount = Math.ceil(filteredResultsCount / pagination.pageSize);
   const reactTable = useReactTable({
-    data: filteredBody,
+    data: tableBody,
     columns,
     columnResizeMode: 'onChange',
     getCoreRowModel: getCoreRowModel(),
@@ -762,7 +770,7 @@ function ResultsTable({
 
     if (rowId) {
       const parsedRowId = Number(rowId);
-      const rowIndex = Math.max(0, Math.min(parsedRowId - 1, filteredBody.length - 1));
+      const rowIndex = Math.max(0, Math.min(parsedRowId - 1, tableBody.length - 1));
 
       let hasScrolled = false;
 
@@ -832,7 +840,7 @@ function ResultsTable({
         clearTimeout(timeoutId);
       };
     }
-  }, [pagination.pageIndex, pagination.pageSize, reactTable, filteredBody.length]);
+  }, [pagination.pageIndex, pagination.pageSize, reactTable, tableBody.length]);
 
   return (
     <div>
@@ -858,6 +866,7 @@ function ResultsTable({
       )}
 
       {filteredResultsCount === 0 &&
+        !isFetching &&
         (debouncedSearchText || filterMode !== 'all' || selectedMetric) && (
           <Box
             sx={{

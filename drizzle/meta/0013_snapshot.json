@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "54af34b4-0d71-4037-93a9-5fd125337b33",
+  "id": "3039b69c-b45b-4117-bcd2-ac649e4c8da8",
   "prevId": "65aafa75-a63d-4e68-b726-24534a5909c9",
   "tables": {
     "configs": {
@@ -268,10 +268,9 @@
           ],
           "isUnique": false
         },
-        "eval_result_eval_id_test_idx_idx": {
-          "name": "eval_result_eval_id_test_idx_idx",
+        "eval_result_test_idx_idx": {
+          "name": "eval_result_test_idx_idx",
           "columns": [
-            "eval_id",
             "test_idx"
           ],
           "isUnique": false
@@ -283,38 +282,45 @@
           ],
           "isUnique": false
         },
-        "eval_result_grading_result_search_idx": {
-          "name": "eval_result_grading_result_search_idx",
+        "eval_result_grading_result_reason_idx": {
+          "name": "eval_result_grading_result_reason_idx",
           "columns": [
-            "grading_result"
+            "json_extract(\"grading_result\", '$.reason')"
+          ],
+          "isUnique": false
+        },
+        "eval_result_grading_result_comment_idx": {
+          "name": "eval_result_grading_result_comment_idx",
+          "columns": [
+            "json_extract(\"grading_result\", '$.comment')"
+          ],
+          "isUnique": false
+        },
+        "eval_result_test_case_vars_idx": {
+          "name": "eval_result_test_case_vars_idx",
+          "columns": [
+            "json_extract(\"test_case\", '$.vars')"
+          ],
+          "isUnique": false
+        },
+        "eval_result_test_case_metadata_idx": {
+          "name": "eval_result_test_case_metadata_idx",
+          "columns": [
+            "json_extract(\"metadata\", '$')"
           ],
           "isUnique": false
         },
         "eval_result_named_scores_idx": {
           "name": "eval_result_named_scores_idx",
           "columns": [
-            "named_scores"
-          ],
-          "isUnique": false
-        },
-        "eval_result_metric_keys_idx": {
-          "name": "eval_result_metric_keys_idx",
-          "columns": [
-            "named_scores"
+            "json_extract(\"named_scores\", '$')"
           ],
           "isUnique": false
         },
         "eval_result_metadata_idx": {
           "name": "eval_result_metadata_idx",
           "columns": [
-            "metadata"
-          ],
-          "isUnique": false
-        },
-        "eval_result_vars_search_idx": {
-          "name": "eval_result_vars_search_idx",
-          "columns": [
-            "test_case"
+            "json_extract(\"metadata\", '$')"
           ],
           "isUnique": false
         }
@@ -751,6 +757,49 @@
     "columns": {}
   },
   "internal": {
-    "indexes": {}
+    "indexes": {
+      "eval_result_grading_result_reason_idx": {
+        "columns": {
+          "json_extract(\"grading_result\", '$.reason')": {
+            "isExpression": true
+          }
+        }
+      },
+      "eval_result_grading_result_comment_idx": {
+        "columns": {
+          "json_extract(\"grading_result\", '$.comment')": {
+            "isExpression": true
+          }
+        }
+      },
+      "eval_result_test_case_vars_idx": {
+        "columns": {
+          "json_extract(\"test_case\", '$.vars')": {
+            "isExpression": true
+          }
+        }
+      },
+      "eval_result_test_case_metadata_idx": {
+        "columns": {
+          "json_extract(\"metadata\", '$')": {
+            "isExpression": true
+          }
+        }
+      },
+      "eval_result_named_scores_idx": {
+        "columns": {
+          "json_extract(\"named_scores\", '$')": {
+            "isExpression": true
+          }
+        }
+      },
+      "eval_result_metadata_idx": {
+        "columns": {
+          "json_extract(\"metadata\", '$')": {
+            "isExpression": true
+          }
+        }
+      }
+    }
   }
 }

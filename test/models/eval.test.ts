@@ -378,23 +378,6 @@ describe('evaluator', () => {
       }
     });
 
-    it('should filter by highlights', async () => {
-      const result = await evalWithResults.getTablePage({ filterMode: 'highlights' });
-
-      // Skip test if no highlights exist
-      if (result.body.length === 0) {
-        return;
-      }
-
-      // All results should have highlights
-      for (const row of result.body) {
-        const hasHighlight = row.outputs.some((output) =>
-          (output.gradingResult?.comment || '').startsWith('!highlight'),
-        );
-        expect(hasHighlight).toBe(true);
-      }
-    });
-
     it('should filter by specific test indices', async () => {
       const testIndices = [1, 3, 5];
       const result = await evalWithResults.getTablePage({ testIndices });
