@@ -17,7 +17,6 @@ export function getUserEmail(): string | null {
 export function setUserEmail(email: string) {
   const config: Partial<GlobalConfig> = { account: { email } };
   writeGlobalConfigPartial(config);
-  telemetry.identify();
 }
 
 export function getAuthor(): string | null {

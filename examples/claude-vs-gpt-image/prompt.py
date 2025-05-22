@@ -74,7 +74,7 @@ def format_image_prompt(context: PromptFunctionContext) -> list[dict[str, typing
             },
         ]
     # label might not exist
-    if context["provider"].get("label") == "custom label for gpt-4o":
+    if context["provider"].get("label") == "custom label for gpt-4.1":
         return [
             {
                 "role": "system",

@@ -36,6 +36,7 @@ export function exportCommand(program: Command) {
           name: 'export',
           evalId,
         });
+        await telemetry.send();
       } catch (error) {
         logger.error(`Failed to export eval: ${error}`);
         process.exit(1);

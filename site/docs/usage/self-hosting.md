@@ -27,6 +27,10 @@ Self-hosting enables you to:
 - Run evals in your CI/CD pipeline and aggregate results
 - Keep sensitive data off your local machine
 
+:::caution Enterprise Customers
+If you are an enterprise customer, please do not install this version. Contact us instead for credentials for the enterprise image.
+:::
+
 The self-hosted app is an Express server serving the web UI and API.
 
 :::warning

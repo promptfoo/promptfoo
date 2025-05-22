@@ -120,11 +120,12 @@ export function toPigLatin(text: string): string {
     .join(' ');
 }
 
-// Define the enum for encoding types
-export enum EncodingType {
-  MORSE = 'morse',
-  PIG_LATIN = 'pig-latin',
-}
+export const EncodingType = {
+  MORSE: 'morse',
+  PIG_LATIN: 'piglatin',
+} as const;
+
+export type EncodingType = (typeof EncodingType)[keyof typeof EncodingType];
 
 /**
  * Apply the specified encoding transformation to test cases
@@ -170,7 +171,8 @@ export function addOtherEncodings(
     },
     metadata: {
       ...testCase.metadata,
-      strategyId: 'other-encodings',
+      // Use the specific strategy ID based on encoding type
+      strategyId: encodingType === EncodingType.MORSE ? 'morse' : 'piglatin',
       encodingType,
     },
   }));

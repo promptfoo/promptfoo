@@ -1,12 +1,18 @@
-# Image Analysis Example
+# claude-vs-gpt-image (Image Analysis Example)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example claude-vs-gpt-image
+```
 
 This example compares an image analysis task using:
 
-- gpt-4o via OpenAI
+- gpt-4.1 via OpenAI
 - claude-3 via Amazon Bedrock
 - claude-3.5 via Anthropic
 
-GPT-4o and Claude have different prompt formats. We use custom provider functions in Python and JavaScript to dynamically format the prompt based on context about the provider.
+GPT-4.1 and Claude have different prompt formats. We use custom provider functions in Python and JavaScript to dynamically format the prompt based on context about the provider. The responses are scored using `llm-rubric` with a vision-capable OpenAI model.
 
 To get started, set your environment variables:
 

@@ -50,7 +50,7 @@ const EvalCommandSchema = CommandLineOptionsSchema.extend({
 
 type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
 
-function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
+export function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
   const hasProviderWithoutLabel = testSuite.providers.some((p) => !p.label);
   if (hasProviderWithoutLabel) {
     logger.warn(
@@ -68,7 +68,7 @@ function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
 /**
  * Format token usage for display in CLI output
  */
-function formatTokenUsage(type: string, usage: Partial<TokenUsage>): string {
+export function formatTokenUsage(type: string, usage: Partial<TokenUsage>): string {
   const parts = [];
 
   if (usage.total !== undefined) {
@@ -114,6 +114,7 @@ export async function doEval(
       // Only set when redteam is enabled for sure, because we don't know if config is loaded yet
       ...(Boolean(config?.redteam) && { isRedteam: true }),
     });
+    await telemetry.send();
 
     if (cmdObj.write) {
       await runDbMigrations();
@@ -267,6 +268,9 @@ export async function doEval(
       eventSource: 'cli',
       abortSignal: evaluateOptions.abortSignal,
     });
+
+    // Clear results from memory to avoid memory issues
+    evalRecord.clearResults();
 
     const wantsToShare = cmdObj.share && config.sharing;
 
@@ -458,6 +462,7 @@ export async function doEval(
       duration: Math.round((Date.now() - startTime) / 1000),
       isRedteam,
     });
+    await telemetry.send();
 
     if (cmdObj.watch) {
       if (initialization) {
@@ -612,7 +617,7 @@ export function evalCommand(
     )
     .option(
       '--prompt-suffix <path>',
-      'This suffix is append to every prompt',
+      'This suffix is appended to every prompt.',
       defaultConfig.defaultTest?.options?.suffix,
     )
     .option(

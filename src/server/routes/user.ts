@@ -38,7 +38,7 @@ userRouter.post('/email', async (req: Request, res: Response): Promise<void> => 
         message: `Email updated`,
       }),
     );
-    await telemetry.record('webui_api', {
+    await telemetry.recordAndSend('webui_api', {
       event: 'email_set',
       email,
       selfHosted: getEnvBool('PROMPTFOO_SELF_HOSTED'),

@@ -154,7 +154,40 @@ describe('MCPClient', () => {
 
       await mcpClient.initialize();
 
-      expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(expect.any(URL));
+      expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(expect.any(URL), undefined);
+      expect(mockClient.connect).toHaveBeenCalledWith(mockStreamableHTTPTransport);
+    });
+
+    it('should initialize with remote server using StreamableHTTPClientTransport with headers', async () => {
+      // Reset mocks for this test
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+
+      const customHeaders = {
+        'X-Custom-Header': 'custom-value',
+        Authorization: 'Bearer test-token',
+      };
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: {
+          url: 'http://localhost:3000',
+          headers: customHeaders,
+        },
+      });
+
+      await mcpClient.initialize();
+
+      expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(
+        expect.any(URL),
+        expect.objectContaining({
+          requestInit: expect.objectContaining({
+            headers: expect.objectContaining(customHeaders),
+          }),
+        }),
+      );
       expect(mockClient.connect).toHaveBeenCalledWith(mockStreamableHTTPTransport);
     });
 
@@ -179,8 +212,54 @@ describe('MCPClient', () => {
 
       await mcpClient.initialize();
 
-      expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(expect.any(URL));
-      expect(SSEClientTransport).toHaveBeenCalledWith(expect.any(URL));
+      expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(expect.any(URL), undefined);
+      expect(SSEClientTransport).toHaveBeenCalledWith(expect.any(URL), undefined);
+      expect(mockClient.connect).toHaveBeenCalledTimes(2);
+    });
+
+    it('should fall back to SSEClientTransport with headers if StreamableHTTPClientTransport fails', async () => {
+      // Reset mocks for this test
+      mockClient.connect
+        .mockImplementationOnce(() => {
+          throw new Error('Connection failed');
+        })
+        .mockResolvedValueOnce(undefined);
+
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+
+      const customHeaders = {
+        'X-Custom-Header': 'custom-value',
+        Authorization: 'Bearer test-token',
+      };
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: {
+          url: 'http://localhost:3000',
+          headers: customHeaders,
+        },
+      });
+
+      await mcpClient.initialize();
+
+      expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(
+        expect.any(URL),
+        expect.objectContaining({
+          requestInit: expect.objectContaining({
+            headers: expect.objectContaining(customHeaders),
+          }),
+        }),
+      );
+      expect(SSEClientTransport).toHaveBeenCalledWith(
+        expect.any(URL),
+        expect.objectContaining({
+          requestInit: expect.objectContaining({
+            headers: expect.objectContaining(customHeaders),
+          }),
+        }),
+      );
       expect(mockClient.connect).toHaveBeenCalledTimes(2);
     });
 

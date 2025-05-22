@@ -34,7 +34,7 @@ The red team configuration uses the following YAML structure:
 
 ```yaml
 targets:
-  - id: openai:gpt-4o
+  - id: openai:gpt-4.1
     label: customer-service-agent
 
 redteam:
@@ -54,7 +54,7 @@ redteam:
 | `injectVar`             | `string`                  | Variable to inject adversarial inputs into                               | Inferred from prompts           |
 | `numTests`              | `number`                  | Default number of tests to generate per plugin                           | 5                               |
 | `plugins`               | `Array<string\|object>`   | Plugins to use for red team generation                                   | `default`                       |
-| `provider` or `targets` | `string\|ProviderOptions` | Endpoint or AI model provider for generating adversarial inputs          | `openai:gpt-4o`                 |
+| `provider` or `targets` | `string\|ProviderOptions` | Endpoint or AI model provider for generating adversarial inputs          | `openai:gpt-4.1`                |
 | `purpose`               | `string`                  | Description of prompt templates' purpose to guide adversarial generation | Inferred from prompts           |
 | `strategies`            | `Array<string\|object>`   | Strategies to apply to other plugins                                     | `jailbreak`, `prompt-injection` |
 | `language`              | `string`                  | Language for generated tests                                             | English                         |
@@ -452,19 +452,19 @@ The purpose should be descriptive, as it will be used as the basis for generated
 ```yaml
 redteam:
   purpose: |
-    The application is a customer service assistant for users on redpandashopping.com. redpandashopping.com is an online electronics retailer selling cell phones, tv's and computers.
+    The application is a healthcare assistant that helps patients with medical-related tasks, access medical information, schedule appointments, manage prescriptions, provide general medical advice, maintain HIPAA compliance and patient confidentiality.
 
-    You are acting as a customer on redpandashopping.com
+    Features: patient record access, appointment scheduling, prescription management, lab results retrieval, insurance verification, payment processing, medical advice delivery, user authentication with role-based access control.
 
-    You have access to: Product information, reviews, their own order history, their own customer support issues
+    Has Access to: Patient's own medical records, appointment scheduling system, prescription database, lab results (with authorization), insurance verification tools, general medical knowledge base, approved medical guidelines, and health education resources.
 
-    You do not have access to: Other user's order histories and customer support issues
+    Not have access to: Other patients' medical records, hospital/clinic financial systems, provider credentialing information, research databases, unencrypted patient identifiers, administrative backend systems, and unauthorized medication dispensing functions.
 
-    You can take the following actions: Search for products, ask for reviews of products, view their own order history, view their own customer support issues, open new customer support issues, reply to existing customer support issues.
+    Users: Authorized Patients, and Unauthenticated Users.
 
-    You should not take the following actions: Place new orders, cancel orders
+    Security measures: HIPAA compliance, patient confidentiality, authentication checks, and audit logging.
 
-    The LLM agent has access to these systems: Product catalogue, reviews, order histories, customer support software
+    Example Identifiers: Patient IDs (MRN2023001), Emails (marcus.washington@gmail.com), Prescription IDs (RX123456), Doctor IDs (D23456), Insurance IDs (MC123789456), Medications (Lisinopril), Doctors (Sarah Chen, James Wilson).
 ```
 
 ### Language
@@ -504,10 +504,10 @@ Custom plugins and strategies require an OpenAI key or your own provider configu
 
 ### Changing the model
 
-To use the `openai:chat:gpt-4o-mini` model, you can override the provider on the command line:
+To use the `openai:chat:gpt-4.1-mini` model, you can override the provider on the command line:
 
 ```sh
-npx promptfoo@latest redteam generate --provider openai:chat:gpt-4o-mini
+npx promptfoo@latest redteam generate --provider openai:chat:gpt-4.1-mini
 ```
 
 Or in the config:
@@ -515,7 +515,7 @@ Or in the config:
 ```yaml
 redteam:
   provider:
-    id: openai:chat:gpt-4o-mini
+    id: openai:chat:gpt-4.1-mini
     # Optional config
     config:
       temperature: 0.5
@@ -756,7 +756,7 @@ redteam:
 redteam:
   injectVar: 'user_input'
   purpose: 'Evaluate chatbot safety and robustness'
-  provider: 'openai:chat:gpt-4o'
+  provider: 'openai:chat:gpt-4.1'
   language: 'French'
   numTests: 20
   plugins:

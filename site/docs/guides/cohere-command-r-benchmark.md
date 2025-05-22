@@ -32,10 +32,10 @@ cd cohere-benchmark
 
 Edit `promptfooconfig.yaml` to specify the models to compare:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: cohere:command-r # or command-r-plus
-  - id: openai:gpt-4o
+  - id: openai:gpt-4.1
   - id: anthropic:messages:claude-3-5-sonnet-20241022
 ```
 
@@ -54,7 +54,7 @@ providers:
   - id: cohere:command-r
     config:
       temperature: 0
-  - id: openai:gpt-4o
+  - id: openai:gpt-4.1
     config:
       temperature: 0
   - id: anthropic:messages:claude-3-5-sonnet-20241022
@@ -70,7 +70,7 @@ Define the prompt to test. Get creative - this is your chance to see how the mod
 
 For example, let's see how well each model can summarize key points from a legal contract:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 prompts:
   - |
     Extract the 3 most important clauses from this contract,

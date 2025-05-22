@@ -1,4 +1,10 @@
-# Getting Started with Promptfoo and llama.cpp
+# llama-cpp (Getting Started with Promptfoo and llama.cpp)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example llama-cpp
+```
 
 ## Install llama.cpp
 

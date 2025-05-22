@@ -242,7 +242,7 @@ Afterwards, you can view the results by running \`promptfoo view\`
 `;
 
 function recordOnboardingStep(step: string, properties: EventProperties = {}) {
-  telemetry.record('funnel', {
+  telemetry.recordAndSend('funnel', {
     type: 'eval onboarding',
     step,
     ...properties,

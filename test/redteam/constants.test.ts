@@ -25,7 +25,12 @@ import {
   categoryAliases,
   pluginDescriptions,
   subCategoryDescriptions,
+  STRATEGY_COLLECTIONS,
+  STRATEGY_COLLECTION_MAPPINGS,
   STRATEGY_EXEMPT_PLUGINS,
+  ALL_STRATEGIES,
+  strategyDescriptions,
+  strategyDisplayNames,
 } from '../../src/redteam/constants';
 
 describe('constants', () => {
@@ -36,7 +41,7 @@ describe('constants', () => {
 
   it('REDTEAM_MODEL should be defined', () => {
     expect(REDTEAM_MODEL).toBeDefined();
-    expect(REDTEAM_MODEL).toBe('openai:chat:gpt-4o');
+    expect(REDTEAM_MODEL).toBe('openai:chat:gpt-4.1-2025-04-14');
   });
 
   it('LLAMA_GUARD_REPLICATE_PROVIDER should be defined', () => {
@@ -187,7 +192,7 @@ describe('constants', () => {
   });
 
   it('should have correct severity for plugins', () => {
-    expect(riskCategorySeverityMap['mcp']).toBe(Severity.Low);
+    expect(riskCategorySeverityMap['mcp']).toBe(Severity.High);
     expect(riskCategorySeverityMap['off-topic']).toBe(Severity.Low);
   });
 
@@ -208,5 +213,33 @@ describe('constants', () => {
       'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
     );
     expect(subCategoryDescriptions['off-topic']).toBe('Off-topic conversation detection');
+  });
+
+  it('STRATEGY_COLLECTIONS should contain expected collections', () => {
+    expect(STRATEGY_COLLECTIONS).toEqual(['other-encodings']);
+  });
+
+  it('STRATEGY_COLLECTION_MAPPINGS should have correct mappings', () => {
+    expect(STRATEGY_COLLECTION_MAPPINGS['other-encodings']).toEqual(['morse', 'piglatin']);
+  });
+
+  it('ALL_STRATEGIES should include strategy collections', () => {
+    expect(ALL_STRATEGIES).toContain('other-encodings');
+  });
+
+  it('strategy collections should have proper descriptions', () => {
+    expect(strategyDescriptions['other-encodings']).toBe(
+      'Collection of alternative text transformation strategies (Morse code and Pig Latin) for testing evasion techniques',
+    );
+  });
+
+  it('strategy collections should have proper display names', () => {
+    expect(strategyDisplayNames['other-encodings']).toBe('Collection of Text Encodings');
+  });
+
+  it('strategy collections should have proper subcategory descriptions', () => {
+    expect(subCategoryDescriptions['other-encodings']).toBe(
+      'Collection of alternative text transformation strategies (Morse code and Pig Latin) for testing evasion techniques',
+    );
   });
 });

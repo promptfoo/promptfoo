@@ -9,8 +9,10 @@ export const handleLlmRubric = ({
   test,
 }: AssertionParams): Promise<GradingResult> => {
   invariant(
-    typeof renderedValue === 'string' || typeof renderedValue === 'undefined',
-    '"llm-rubric" assertion type must have a string value',
+    typeof renderedValue === 'string' ||
+      typeof renderedValue === 'object' ||
+      typeof renderedValue === 'undefined',
+    '"llm-rubric" assertion type must have a string or object value',
   );
   if (test.options?.rubricPrompt && typeof test.options.rubricPrompt === 'object') {
     test.options.rubricPrompt = JSON.stringify(test.options.rubricPrompt);

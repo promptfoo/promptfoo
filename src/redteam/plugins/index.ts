@@ -295,7 +295,7 @@ remotePlugins.push(
     (config: { indirectInjectionVar: string }) =>
       invariant(
         config.indirectInjectionVar,
-        'Indirect prompt injection plugin requires `config.indirectInjectionVar` to be set',
+        'Indirect prompt injection plugin requires `config.indirectInjectionVar` to be set. If using this plugin in a plugin collection, configure this plugin separately.',
       ),
   ),
 );

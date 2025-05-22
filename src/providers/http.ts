@@ -668,7 +668,7 @@ export class HttpProvider implements ApiProvider {
       }
       if (typeof body === 'string' && contentTypeIsJson(headers)) {
         logger.warn(
-          'Content-Type is application/json, but body is a string. This is likely to cause unexpected results. It should be an object or array.',
+          `[HTTP Provider] Content-Type is application/json, but body is a string. This is likely to cause unexpected results. It should be an object or array. Body: ${body} headers: ${safeJsonStringify(headers)}`,
         );
       }
     }
@@ -736,7 +736,7 @@ export class HttpProvider implements ApiProvider {
     );
 
     const renderedConfig: Partial<HttpProviderConfig> = {
-      url: this.url,
+      url: getNunjucksEngine().renderString(this.url, vars),
       method: getNunjucksEngine().renderString(this.config.method || 'GET', vars),
       headers,
       body: determineRequestBody(
@@ -762,10 +762,21 @@ export class HttpProvider implements ApiProvider {
     invariant(typeof headers === 'object', 'Expected headers to be an object');
 
     // Template the base URL first, then construct URL with query parameters
-    let url = getNunjucksEngine().renderString(this.url, vars);
+    let url = renderedConfig.url as string;
     if (renderedConfig.queryParams) {
-      const queryString = new URLSearchParams(renderedConfig.queryParams).toString();
-      url = `${url}?${queryString}`;
+      try {
+        const urlObj = new URL(url);
+        // Add each query parameter to the URL object
+        Object.entries(renderedConfig.queryParams).forEach(([key, value]) => {
+          urlObj.searchParams.append(key, value);
+        });
+        url = urlObj.toString();
+      } catch (err) {
+        // Fallback for potentially malformed URLs
+        logger.warn(`[HTTP Provider]: Failed to construct URL object: ${String(err)}`);
+        const queryString = new URLSearchParams(renderedConfig.queryParams).toString();
+        url = `${url}${url.includes('?') ? '&' : '?'}${queryString}`;
+      }
     }
 
     logger.debug(
