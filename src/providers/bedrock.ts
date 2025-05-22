@@ -1433,7 +1433,7 @@ export abstract class AwsBedrockGenericProvider {
     this.id = id ? () => id : this.id;
 
     if (this.config.guardrailIdentifier) {
-      telemetry.record('feature_used', {
+      telemetry.recordAndSendOnce('feature_used', {
         feature: 'guardrail',
         provider: 'bedrock',
       });
