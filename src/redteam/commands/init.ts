@@ -313,6 +313,14 @@ export async function redteamInit(directory: string | undefined) {
       { name: 'openai:gpt-4o-mini', value: 'openai:gpt-4o-mini' },
       { name: 'openai:gpt-4o', value: 'openai:gpt-4o' },
       {
+        name: 'anthropic:claude-sonnet-4-20250514',
+        value: 'anthropic:messages:claude-sonnet-4-20250514',
+      },
+      {
+        name: 'anthropic:claude-opus-4-20250514',
+        value: 'anthropic:messages:claude-opus-4-20250514',
+      },
+      {
         name: 'anthropic:claude-3-7-sonnet-20250219',
         value: 'anthropic:messages:claude-3-7-sonnet-20250219',
       },
