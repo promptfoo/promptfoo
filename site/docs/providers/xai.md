@@ -81,6 +81,29 @@ providers:
 
 This is equivalent to setting `base_url="https://us-west-1.api.x.ai/v1"` in the Python client.
 
+### Live Search (Beta)
+
+You can optionally enable Grok's **Live Search** feature to let the model pull in real-time information from the web or X. Pass a `search_parameters` object in your provider config. The `mode` field controls how search is used:
+
+- `off` – Disable search
+- `auto` – Model decides when to search (default)
+- `on` – Always perform live search
+
+Additional fields like `sources`, `from_date`, `to_date`, and `return_citations` may also be provided.
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: xai:grok-3-beta
+    config:
+      search_parameters:
+        mode: auto
+        return_citations: true
+        sources:
+          - type: web
+```
+
+For a full list of options see the [xAI documentation](https://docs.x.ai/docs).
+
 ### Vision Support
 
 For models with vision capabilities, you can include images in your prompts using the same format as OpenAI. Create a `prompt.yaml` file:

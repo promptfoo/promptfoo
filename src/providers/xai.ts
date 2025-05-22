@@ -1,5 +1,6 @@
 import logger from '../logger';
 import type { ApiProvider, ProviderOptions } from '../types';
+import { renderVarsInObject } from '../util';
 import invariant from '../util/invariant';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import type { OpenAiCompletionOptions } from './openai/types';
@@ -7,6 +8,7 @@ import type { OpenAiCompletionOptions } from './openai/types';
 type XAIConfig = {
   region?: string;
   reasoning_effort?: 'low' | 'high';
+  search_parameters?: Record<string, any>;
 } & OpenAiCompletionOptions;
 
 type XAIProviderOptions = Omit<ProviderOptions, 'config'> & {
@@ -133,6 +135,15 @@ export class XAIProvider extends OpenAiChatCompletionProvider {
 
   protected supportsTemperature(): boolean {
     return true;
+  }
+
+  protected getOpenAiBody(prompt: string, context?: any, callApiOptions?: any) {
+    const result = super.getOpenAiBody(prompt, context, callApiOptions);
+    const searchParams = (this.config as XAIConfig).search_parameters;
+    if (searchParams) {
+      result.body.search_parameters = renderVarsInObject(searchParams, context?.vars);
+    }
+    return result;
   }
 
   constructor(modelName: string, providerOptions: XAIProviderOptions) {
