@@ -284,9 +284,11 @@ export function mergePurposes(
   }
 
   // Wrap XML fragments in a single root element to ensure valid XML
-  return `<Purposes>
-${purpose.join('\n')}
-</Purposes>`;
+  return dedent`
+    <Purposes>
+      ${purpose.join('\n')}
+    </Purposes>
+  `;
 }
 
 // ========================================================
