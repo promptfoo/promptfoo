@@ -58,6 +58,7 @@ export function deleteCommand(program: Command) {
         name: 'delete eval',
         evalId,
       });
+      await telemetry.send();
 
       if (evalId === 'latest') {
         const latestResults = await getLatestEval();
