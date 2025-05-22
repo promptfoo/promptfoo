@@ -163,12 +163,16 @@ export default function Purpose({ onNext }: PromptsProps) {
                   sx={{
                     mt: 2,
                     mb: 2,
-                    borderRadius: 2,
+                    borderRadius: 1,
                     cursor: 'pointer',
+                    position: 'relative',
+                    transition: 'all 0.1s ease',
+                    boxShadow: 'none',
                     '& .MuiAlert-icon': {
                       color: 'info.main',
                       paddingTop: '14px',
                       alignSelf: 'flex-start',
+                      fontSize: '1.1rem',
                     },
                     backgroundColor: (theme) =>
                       theme.palette.mode === 'dark'
@@ -183,12 +187,14 @@ export default function Purpose({ onNext }: PromptsProps) {
                     '& .MuiAlert-message': {
                       color: 'text.primary',
                       width: '100%',
+                      py: 0.5,
                     },
                     '&:hover': {
                       backgroundColor: (theme) =>
                         theme.palette.mode === 'dark'
                           ? alpha(theme.palette.info.main, 0.15)
                           : alpha(theme.palette.info.main, 0.1),
+                      boxShadow: 'none',
                     },
                   }}
                   onClick={() => setExpandAlert(!expandAlert)}
@@ -201,22 +207,39 @@ export default function Purpose({ onNext }: PromptsProps) {
                         alignItems: 'center',
                       }}
                     >
-                      <Typography>
-                        The more information you provide, the better the redteam attacks will be.
-                      </Typography>
+                      <Box>
+                        <Typography
+                          variant="subtitle2"
+                          fontWeight="500"
+                          sx={{
+                            color: 'text.primary',
+                            mb: 0.5,
+                          }}
+                        >
+                          Provide Detailed Information
+                        </Typography>
+                        <Typography variant="body2">
+                          The more information you provide, the better the redteam attacks will be.
+                        </Typography>
+                      </Box>
                       <IconButton
                         size="small"
+                        color="info"
                         onClick={(e) => {
                           e.stopPropagation();
                           setExpandAlert(!expandAlert);
                         }}
-                        sx={{ ml: 1 }}
+                        sx={{
+                          ml: 1,
+                          transition: 'transform 0.2s ease',
+                          transform: expandAlert ? 'rotate(180deg)' : 'rotate(0deg)',
+                          bgcolor: 'transparent',
+                          '&:hover': {
+                            bgcolor: (theme) => alpha(theme.palette.info.main, 0.1),
+                          },
+                        }}
                       >
-                        {expandAlert ? (
-                          <ExpandMoreIcon sx={{ transform: 'rotate(180deg)' }} />
-                        ) : (
-                          <ExpandMoreIcon />
-                        )}
+                        <ExpandMoreIcon />
                       </IconButton>
                     </Box>
 
