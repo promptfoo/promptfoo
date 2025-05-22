@@ -36,7 +36,7 @@ export const TargetPurposeDiscoveryRequestSchema = z.object({
   email: z.string().optional().nullable(),
 });
 
-export const DiscoveryResultSchema = z.object({
+export const TargetPurposeDiscoveryResultSchema = z.object({
   purpose: z.string().nullable(),
   limitations: z.string().nullable(),
   user: z.string().nullable(),
@@ -57,11 +57,11 @@ export const DiscoveryResultSchema = z.object({
   ),
 });
 
-export const TargetPurposeDiscoveryResponseSchema = z.object({
+export const TargetPurposeDiscoveryTaskResponseSchema = z.object({
   done: z.boolean(),
   failed: z.boolean().optional().default(false),
   question: z.string().optional(),
-  purpose: DiscoveryResultSchema.optional(),
+  purpose: TargetPurposeDiscoveryResultSchema.optional(),
   state: TargetPurposeDiscoveryStateSchema,
 });
 
@@ -80,7 +80,7 @@ export const ArgsSchema = z
 // Types
 // ========================================================
 
-export type DiscoveryResult = z.infer<typeof DiscoveryResultSchema>;
+export type TargetPurposeDiscoveryResult = z.infer<typeof TargetPurposeDiscoveryResultSchema>;
 
 type Args = z.infer<typeof ArgsSchema>;
 
@@ -100,13 +100,13 @@ export const MAX_TURN_COUNT = 10;
  * and summarizes the results.
  *
  * @param target - The target API provider.
- * @param maxTurns - The maximum number of turns to run the discovery process.
+ * @param prompt - The prompt to use for the discovery.
  * @returns The discovery result.
  */
 export async function doTargetPurposeDiscovery(
   target: ApiProvider,
   prompt?: Prompt,
-): Promise<DiscoveryResult | undefined> {
+): Promise<TargetPurposeDiscoveryResult | undefined> {
   // Generate a unique session id to pass to the target across all turns.
   const sessionId = randomUUID();
 
@@ -120,8 +120,8 @@ export async function doTargetPurposeDiscovery(
   pbar.start(DEFAULT_TURN_COUNT, 0);
 
   let done = false;
-  let question: string | undefined = undefined;
-  let discoveryResult: DiscoveryResult | undefined = undefined;
+  let question: string | undefined;
+  let discoveryResult: TargetPurposeDiscoveryResult | undefined;
   let state = TargetPurposeDiscoveryStateSchema.parse({
     currentQuestionIndex: 0,
     answers: [],
@@ -162,7 +162,7 @@ export async function doTargetPurposeDiscovery(
       }
 
       const responseData = await response.json();
-      const data = TargetPurposeDiscoveryResponseSchema.parse(responseData);
+      const data = TargetPurposeDiscoveryTaskResponseSchema.parse(responseData);
 
       logger.debug(
         `[TargetPurposeDiscovery] Received response from remote server: ${JSON.stringify(
@@ -234,61 +234,68 @@ export async function doTargetPurposeDiscovery(
 }
 
 /**
- * Merges the human-defined purpose with the discovered purpose, structuring these as XML to be used by test generation / rendered in UI reporting.
+ * Merges the human-defined purpose with the discovered information, structuring these as markdown to be used by test generation.
  * @param humanDefinedPurpose - The human-defined purpose.
  * @param discoveryResult - The discovery result.
- * @returns The merged purpose.
+ * @returns The merged purpose as markdown.
  */
-export function mergePurposes(
-  humanDefinedPurpose: string | undefined,
-  discoveryResult: DiscoveryResult | undefined,
+export function mergeTargetPurposeDiscoveryResults(
+  humanDefinedPurpose?: string,
+  discoveryResult?: TargetPurposeDiscoveryResult,
 ): string {
-  const purpose: string[] = [];
+  return [
+    dedent`
+      # Human Defined Target Purpose
 
-  if (humanDefinedPurpose) {
-    purpose.push(
-      `<HumanDefinedPurpose explanation="This purpose was defined by the user and should be trusted and treated as absolute truth">${humanDefinedPurpose}</HumanDefinedPurpose>`,
-    );
-  }
+      This purpose was defined by the user and should be trusted and treated as absolute truth:
 
-  if (discoveryResult) {
-    const discoveredPurposeXML = [
-      `<AgentDiscoveredPurpose explanation="This purpose was discovered by the agent from conversations with the target. The boundaries of the agent's capabilities, limitations, and tool access should be tested. If there are any discrepancies, the user-defined purpose should be trusted and treated as absolute truth">`,
-    ];
+      ${humanDefinedPurpose}
+    `,
+    discoveryResult &&
+      dedent`
+      # Agent Discovered Target Purpose
 
-    if (discoveryResult.purpose) {
-      discoveredPurposeXML.push(
-        `<Purpose explanation="The target believes its purpose is">${discoveryResult.purpose}</Purpose>`,
-      );
-    }
+      The following information was discovered by the agent through conversations with the target.
+      
+      The boundaries of the agent's capabilities, limitations, and tool access should be tested.
+      
+      If there are any discrepancies, the Human Defined Purpose should be trusted and treated as absolute truth.
+    `,
+    discoveryResult?.purpose &&
+      dedent`
+      ## Purpose
 
-    if (discoveryResult.limitations) {
-      discoveredPurposeXML.push(
-        `<Limitations explanation="The target believes its limitations are">${discoveryResult.limitations}</Limitations>`,
-      );
-    }
+      The target believes its purpose is:
 
-    if (discoveryResult.tools) {
-      discoveredPurposeXML.push(
-        `<Tools explanation="The target divulged access to these tools">${discoveryResult.tools}</Tools>`,
-      );
-    }
+      ${discoveryResult.purpose}
+    `,
+    discoveryResult?.limitations &&
+      dedent`
+      ## Limitations
 
-    if (discoveryResult.user) {
-      discoveredPurposeXML.push(
-        `<User explanation="The target believes the user of the application is">${discoveryResult.user}</User>`,
-      );
-    }
-    discoveredPurposeXML.push('</AgentDiscoveredPurpose>');
-    purpose.push(discoveredPurposeXML.join('\n'));
-  }
+      The target believes its limitations are:
+      
+      ${discoveryResult.limitations}
+    `,
+    discoveryResult?.tools &&
+      dedent`
+      ## Tools
 
-  // Wrap XML fragments in a single root element to ensure valid XML
-  return dedent`
-    <Purposes>
-      ${purpose.join('\n')}
-    </Purposes>
-  `;
+      The target believes it has access to these tools:
+
+      ${JSON.stringify(discoveryResult.tools, null)}
+    `,
+    discoveryResult?.user &&
+      dedent`
+      ## User
+
+      The target believes the user of the application is:
+
+      ${discoveryResult.user}
+    `,
+  ]
+    .filter(Boolean)
+    .join('');
 }
 
 // ========================================================
