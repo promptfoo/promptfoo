@@ -5,6 +5,7 @@ This document summarizes the changes made to support Claude 4 models in Amazon B
 ## What's New
 
 Added support for Claude 4 models in Amazon Bedrock:
+
 - **Claude Opus 4** (`anthropic.claude-opus-4-20250514-v1:0`)
 - **Claude Sonnet 4** (`anthropic.claude-sonnet-4-20250514-v1:0`)
 
@@ -13,6 +14,7 @@ Added support for Claude 4 models in Amazon Bedrock:
 ### 1. Core Provider Updates (`src/providers/bedrock.ts`)
 
 Added Claude 4 model IDs to `AWS_BEDROCK_MODELS`:
+
 - Base models: `anthropic.claude-opus-4-20250514-v1:0`, `anthropic.claude-sonnet-4-20250514-v1:0`
 - Regional models:
   - US: `us.anthropic.claude-opus-4-20250514-v1:0`, `us.anthropic.claude-sonnet-4-20250514-v1:0`
@@ -29,6 +31,7 @@ Added Claude 4 model IDs to `AWS_BEDROCK_MODELS`:
 ### 3. Example Updates
 
 Updated all Bedrock examples to showcase Claude 4:
+
 - **Main example** (`examples/amazon-bedrock/promptfooconfig.yaml`): Added Claude 4 models at the top
 - **Claude example** (`examples/amazon-bedrock/promptfooconfig.claude.yaml`): Features Claude 4 models with thinking
 - **Knowledge Base** (`examples/amazon-bedrock/promptfooconfig.kb.yaml`): Shows Claude 4 with RAG
@@ -38,10 +41,12 @@ Updated all Bedrock examples to showcase Claude 4:
 ## Regional Availability
 
 ### Claude Opus 4
+
 - US East (Ohio, N. Virginia)
 - US West (Oregon)
 
-### Claude Sonnet 4  
+### Claude Sonnet 4
+
 - US East (Ohio, N. Virginia)
 - US West (Oregon)
 - Asia Pacific (Hyderabad, Mumbai, Osaka, Seoul, Singapore, Sydney, Tokyo)
@@ -50,6 +55,7 @@ Updated all Bedrock examples to showcase Claude 4:
 ## Usage Examples
 
 ### Basic Configuration
+
 ```yaml
 providers:
   - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0
@@ -60,6 +66,7 @@ providers:
 ```
 
 ### With Extended Thinking
+
 ```yaml
 providers:
   - id: bedrock:us.anthropic.claude-opus-4-20250514-v1:0
@@ -74,12 +81,14 @@ providers:
 ## Testing
 
 To test the Claude 4 Bedrock integration:
+
 ```bash
 cd examples/amazon-bedrock
 npx promptfoo@latest eval
 ```
 
 Ensure you have:
+
 1. AWS credentials configured
 2. Model access enabled in AWS Bedrock console
-3. AWS SDK installed: `npm install -g @aws-sdk/client-bedrock-runtime` 
+3. AWS SDK installed: `npm install -g @aws-sdk/client-bedrock-runtime`

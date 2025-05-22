@@ -5,6 +5,7 @@ This guide helps you migrate from previous Claude models to the new Claude 4 mod
 ## What's New
 
 Promptfoo now supports the latest Claude 4 models:
+
 - **Claude Opus 4** (`claude-opus-4-20250514`) - Most capable and intelligent model
 - **Claude Sonnet 4** (`claude-sonnet-4-20250514`) - High-performance model with exceptional reasoning
 
@@ -34,8 +35,8 @@ You can use aliases that automatically point to the latest versions:
 
 ```yaml
 providers:
-  - anthropic:claude-opus-4-latest    # Points to claude-opus-4-20250514
-  - anthropic:claude-sonnet-4-latest  # Points to claude-sonnet-4-20250514
+  - anthropic:claude-opus-4-latest # Points to claude-opus-4-20250514
+  - anthropic:claude-sonnet-4-latest # Points to claude-sonnet-4-20250514
 ```
 
 ### 3. Update Cross-Platform Configurations
@@ -51,6 +52,7 @@ If using Claude models across different platforms:
 ### 4. Key Differences
 
 #### Extended Thinking
+
 Claude 4 supports summarized thinking for better reasoning:
 
 ```yaml
@@ -64,12 +66,15 @@ providers:
 ```
 
 #### Output Capabilities
+
 - Claude Opus 4: Max 32,000 output tokens
 - Claude Sonnet 4: Max 64,000 output tokens
 - The `output-128k-2025-02-19` beta feature is no longer needed for Claude 4
 
 #### Pricing
+
 Claude 4 models have updated pricing:
+
 - **Claude Opus 4**: $15/MTok input, $75/MTok output
 - **Claude Sonnet 4**: $3/MTok input, $15/MTok output
 
@@ -97,4 +102,4 @@ promptfoo eval -c your-config.yaml
 
 - Check the [Anthropic documentation](site/docs/providers/anthropic.md)
 - Run tests with `promptfoo eval --verbose` for detailed debugging
-- File issues at https://github.com/promptfoo/promptfoo/issues 
+- File issues at https://github.com/promptfoo/promptfoo/issues
