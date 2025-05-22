@@ -146,6 +146,27 @@ export default class EvalResult {
     return results.map((result) => new EvalResult({ ...result, persisted: true }));
   }
 
+  static async findManyByEvalIdAndTestIndices(evalId: string, testIndices: number[]) {
+    if (!testIndices.length) {
+      return [];
+    }
+
+    const db = getDb();
+    const results = await db
+      .select()
+      .from(evalResultsTable)
+      .where(
+        and(
+          eq(evalResultsTable.evalId, evalId),
+          testIndices.length === 1
+            ? eq(evalResultsTable.testIdx, testIndices[0])
+            : evalResultsTable.testIdx.in(testIndices),
+        ),
+      );
+
+    return results.map((result) => new EvalResult({ ...result, persisted: true }));
+  }
+
   // This is a generator that yields batches of results from the database
   // These are batched by test Id, not just results to ensure we get all results for a given test
   static async *findManyByEvalIdBatched(

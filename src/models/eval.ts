@@ -413,30 +413,22 @@ export default class Eval {
     return await EvalResult.findManyByEvalId(this.id, { testIdx });
   }
 
-  async getTablePage(opts: {
+  /**
+   * Private helper method to build filter conditions and query for test indices
+   */
+  private async queryTestIndices(opts: {
     offset?: number;
     limit?: number;
     filterMode?: string;
-    testIndices?: number[];
     searchQuery?: string;
     metricFilter?: string;
-  }): Promise<{
-    head: { prompts: Prompt[]; vars: string[] };
-    body: EvaluateTableRow[];
-    totalCount: number;
-    filteredCount: number;
-    id: string;
-  }> {
+  }): Promise<{ testIndices: number[]; filteredCount: number }> {
     const db = getDb();
-    const hasTestIndices = opts.testIndices && opts.testIndices.length > 0;
-    // If we have test indices, we need to fetch all results
-    const offset = hasTestIndices ? 0 : (opts.offset ?? 0);
-    const limit = hasTestIndices ? (opts.testIndices?.length ?? 1000) : (opts.limit ?? 50);
-    const filter = hasTestIndices ? 'all' : (opts.filterMode ?? 'all');
-    const testIndices = opts.testIndices;
-    const searchQuery = opts.searchQuery;
-    const metricFilter = opts.metricFilter;
+    const offset = opts.offset ?? 0;
+    const limit = opts.limit ?? 50;
+    const filter = opts.filterMode ?? 'all';
 
+    // Build filter conditions
     const conditions = [`eval_id = '${this.id}'`];
     if (filter === 'errors') {
       conditions.push(`failure_reason = ${ResultFailureReason.ERROR}`);
@@ -444,23 +436,17 @@ export default class Eval {
       conditions.push(`success = 0 AND failure_reason != ${ResultFailureReason.ERROR}`);
     } else if (filter === 'passes') {
       conditions.push(`success = 1`);
-    } else if (filter === 'highlights') {
-      conditions.push(`json_extract(grading_result, '$.comment') LIKE '!highlight%'`);
-    }
-
-    if (testIndices && testIndices.length > 0) {
-      conditions.push(`test_idx IN (${testIndices.join(',')})`);
     }
 
     // Add specific metric filter if provided
-    if (metricFilter && metricFilter.trim() !== '') {
-      const sanitizedMetric = metricFilter.replace(/'/g, "''");
+    if (opts.metricFilter && opts.metricFilter.trim() !== '') {
+      const sanitizedMetric = opts.metricFilter.replace(/'/g, "''");
       conditions.push(`json_extract(named_scores, '$.${sanitizedMetric}') IS NOT NULL`);
     }
 
     // Add search condition if searchQuery is provided
-    if (searchQuery && searchQuery.trim() !== '') {
-      const sanitizedSearch = searchQuery.replace(/'/g, "''");
+    if (opts.searchQuery && opts.searchQuery.trim() !== '') {
+      const sanitizedSearch = opts.searchQuery.replace(/'/g, "''");
       const searchConditions = [
         // Search in response text
         `response LIKE '%${sanitizedSearch}%'`,
@@ -482,6 +468,7 @@ export default class Eval {
 
     const whereSql = conditions.join(' AND ');
 
+    // Get filtered count
     const filteredCountQuery = sql.raw(
       `SELECT COUNT(DISTINCT test_idx) as count FROM eval_results WHERE ${whereSql}`,
     );
@@ -492,33 +479,104 @@ export default class Eval {
     logger.debug(`Count query took ${countEnd - countStart}ms`);
     const filteredCount = countResult?.count || 0;
 
-    const totalCount = await this.getResultsCount();
-
-    let idxQuery;
-    if (testIndices && testIndices.length > 0) {
-      idxQuery = sql.raw(
-        `SELECT DISTINCT test_idx FROM eval_results WHERE ${whereSql} ORDER BY test_idx`,
-      );
-    } else {
-      idxQuery = sql.raw(
-        `SELECT DISTINCT test_idx FROM eval_results WHERE ${whereSql} ORDER BY test_idx LIMIT ${limit} OFFSET ${offset}`,
-      );
-    }
+    // Query for test indices based on filters
+    const idxQuery = sql.raw(
+      `SELECT DISTINCT test_idx FROM eval_results WHERE ${whereSql} ORDER BY test_idx LIMIT ${limit} OFFSET ${offset}`,
+    );
     const idxStart = Date.now();
     // @ts-ignore
     const rows: { test_idx: number }[] = await db.all(idxQuery);
     const idxEnd = Date.now();
     logger.debug(`Index query took ${idxEnd - idxStart}ms`);
+
+    // Get all test indices from the rows
+    const testIndices = rows.map((row) => row.test_idx);
+
+    return { testIndices, filteredCount };
+  }
+
+  async getTablePage(opts: {
+    offset?: number;
+    limit?: number;
+    filterMode?: string;
+    testIndices?: number[];
+    searchQuery?: string;
+    metricFilter?: string;
+  }): Promise<{
+    head: { prompts: Prompt[]; vars: string[] };
+    body: EvaluateTableRow[];
+    totalCount: number;
+    filteredCount: number;
+    id: string;
+  }> {
+    // Get total count of tests for this eval
+    const totalCount = await this.getResultsCount();
+
+    // Determine test indices to use
+    let testIndices: number[];
+    let filteredCount: number;
+
+    if (opts.testIndices && opts.testIndices.length > 0) {
+      // Use the provided test indices directly
+      testIndices = opts.testIndices;
+      filteredCount = testIndices.length;
+    } else {
+      // Query for test indices based on filters
+      const queryResult = await this.queryTestIndices({
+        offset: opts.offset,
+        limit: opts.limit,
+        filterMode: opts.filterMode,
+        searchQuery: opts.searchQuery,
+        metricFilter: opts.metricFilter,
+      });
+
+      testIndices = queryResult.testIndices;
+      filteredCount = queryResult.filteredCount;
+    }
+
+    // Get vars for this eval
     const varsStart = Date.now();
     const vars = Array.from(this.vars);
     const varsEnd = Date.now();
     logger.debug(`Vars query took ${varsEnd - varsStart}ms`);
-    const body = [];
+
+    // Initialize the body array that will hold table rows
+    const body: EvaluateTableRow[] = [];
     const bodyStart = Date.now();
-    for (const row of rows) {
-      const results = await this.fetchResultsByTestIdx(row.test_idx);
-      body.push(convertTestResultsToTableRow(results as EvalResult[], vars));
+
+    // Early return if no test indices found
+    if (testIndices.length === 0) {
+      const bodyEnd = Date.now();
+      logger.debug(`Body query took ${bodyEnd - bodyStart}ms`);
+      return {
+        head: { prompts: this.prompts, vars },
+        body,
+        totalCount,
+        filteredCount,
+        id: this.id,
+      };
     }
+
+    // Fetch all results for these test indices in a single query
+    const allResults = await EvalResult.findManyByEvalIdAndTestIndices(this.id, testIndices);
+
+    // Group results by test index
+    const resultsByTestIdx = new Map<number, EvalResult[]>();
+    for (const result of allResults) {
+      if (!resultsByTestIdx.has(result.testIdx)) {
+        resultsByTestIdx.set(result.testIdx, []);
+      }
+      resultsByTestIdx.get(result.testIdx)!.push(result);
+    }
+
+    // Create table rows in the same order as the original query
+    for (const testIdx of testIndices) {
+      const results = resultsByTestIdx.get(testIdx) || [];
+      if (results.length > 0) {
+        body.push(convertTestResultsToTableRow(results, vars));
+      }
+    }
+
     const bodyEnd = Date.now();
     logger.debug(`Body query took ${bodyEnd - bodyStart}ms`);
 
