@@ -295,7 +295,7 @@ export function mergeTargetPurposeDiscoveryResults(
     `,
   ]
     .filter(Boolean)
-    .join('');
+    .join('\n');
 }
 
 // ========================================================
