@@ -59,10 +59,10 @@ export const TargetPurposeDiscoveryResultSchema = z.object({
 
 export const TargetPurposeDiscoveryTaskResponseSchema = z.object({
   done: z.boolean(),
-  failed: z.boolean().optional().default(false),
   question: z.string().optional(),
   purpose: TargetPurposeDiscoveryResultSchema.optional(),
   state: TargetPurposeDiscoveryStateSchema,
+  error: z.string().optional(),
 });
 
 export const ArgsSchema = z
@@ -177,14 +177,8 @@ export async function doTargetPurposeDiscovery(
       discoveryResult = data.purpose;
       state = data.state;
 
-      if (data.failed) {
-        logger.error(
-          `[TargetPurposeDiscovery] Failed to discover the target purpose: ${JSON.stringify(
-            data,
-            null,
-            2,
-          )}`,
-        );
+      if (data.error) {
+        logger.error(`[TargetPurposeDiscovery] Error from remote server: ${data.error}`);
       }
       // Should another question be asked?
       else if (!done) {
