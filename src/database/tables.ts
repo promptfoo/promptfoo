@@ -115,7 +115,7 @@ export const evalResultsTable = sqliteTable(
   },
   (table) => ({
     evalIdIdx: index('eval_result_eval_id_idx').on(table.evalId),
-    testIdxIdx: index('eval_result_test_idx_idx').on(table.testIdx),
+    testIdxIdx: index('eval_result_test_idx').on(table.testIdx),
 
     responseIdx: index('eval_result_response_idx').on(table.response),
 
