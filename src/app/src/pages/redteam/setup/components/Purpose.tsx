@@ -172,7 +172,7 @@ export default function Purpose({ onNext }: PromptsProps) {
                       color: 'info.main',
                       paddingTop: '14px',
                       alignSelf: 'flex-start',
-                      fontSize: '1.1rem',
+                      fontSize: (theme) => theme.typography.subtitle1.fontSize,
                     },
                     backgroundColor: (theme) =>
                       theme.palette.mode === 'dark'
