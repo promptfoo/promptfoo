@@ -365,6 +365,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
     const response = await provider.callGeminiApi('test prompt', {
       vars: { location: 'San Francisco' },
       prompt: { raw: 'test prompt', label: 'test' },
+      extensionHookOutputs: { beforeAll: [], beforeEach: [] },
     });
 
     expect(response).toEqual({

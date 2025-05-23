@@ -101,12 +101,12 @@ promptfoo supports extension hooks that allow you to run custom code at specific
 
 ### Available Hooks
 
-| Hook Name  | Description                                   | Arguments                                         |
-| ---------- | --------------------------------------------- | ------------------------------------------------- |
-| beforeAll  | Runs before the entire test suite begins      | `{ suite: TestSuite }`                            |
-| afterAll   | Runs after the entire test suite has finished | `{ results: EvaluateResult[], suite: TestSuite }` |
-| beforeEach | Runs before each individual test              | `{ test: TestCase }`                              |
-| afterEach  | Runs after each individual test               | `{ test: TestCase, result: EvaluateResult }`      |
+| Hook Name  | Description                                   | Arguments                                         | Can Return Values |
+| ---------- | --------------------------------------------- | ------------------------------------------------- | ----------------- |
+| beforeAll  | Runs before the entire test suite begins      | `{ suite: TestSuite }`                            | Yes               |
+| afterAll   | Runs after the entire test suite has finished | `{ results: EvaluateResult[], suite: TestSuite }` | No                |
+| beforeEach | Runs before each individual test              | `{ test: TestCase }`                              | Yes               |
+| afterEach  | Runs after each individual test               | `{ test: TestCase, result: EvaluateResult }`      | No                |
 
 ### Implementing Hooks
 
@@ -128,23 +128,45 @@ extensions:
 When specifying an extension in the configuration, you must include the function name after the file path, separated by a colon (`:`). This tells promptfoo which function to call in the extension file.
 :::
 
+### Hook Return Values
+
+The `beforeAll` and `beforeEach` hooks can return values that are accessible to custom providers. This enables powerful patterns like:
+
+- Sharing authentication tokens or API keys obtained during setup
+- Passing correlation IDs for request tracing
+- Providing dynamic configuration values
+- Managing state between different parts of the evaluation
+
+#### Returning Values from Hooks
+
+To return values from a hook, simply return an object containing your data:
+
 Example extension file (Python):
 
 ```python
 def extension_hook(hook_name, context):
     if hook_name == 'beforeAll':
         print(f"Setting up test suite: {context['suite'].get('description', '')}")
-        # Perform any necessary setup
+        # Return values that will be available to providers
+        return {
+            'trace_id': 'test-run-12345',
+            'api_token': fetch_auth_token(),
+            'config': {'timeout': 30}
+        }
+    elif hook_name == 'beforeEach':
+        print(f"Running test: {context['test'].get('description', '')}")
+        # Return test-specific values
+        return {
+            'test_id': generate_test_id(),
+            'timestamp': datetime.now().isoformat()
+        }
     elif hook_name == 'afterAll':
         print(f"Test suite completed: {context['suite'].get('description', '')}")
         print(f"Total tests: {len(context['results'])}")
-        # Perform any necessary teardown or reporting
-    elif hook_name == 'beforeEach':
-        print(f"Running test: {context['test'].get('description', '')}")
-        # Prepare for individual test
+        # afterAll cannot return values
     elif hook_name == 'afterEach':
         print(f"Test completed: {context['test'].get('description', '')}. Pass: {context['result'].get('success', False)}")
-        # Clean up after individual test or log results
+        # afterEach cannot return values
 ```
 
 Example extension file (JavaScript):
@@ -153,24 +175,71 @@ Example extension file (JavaScript):
 async function extensionHook(hookName, context) {
   if (hookName === 'beforeAll') {
     console.log(`Setting up test suite: ${context.suite.description || ''}`);
-    // Perform any necessary setup
+    // Return values that will be available to providers
+    return {
+      traceId: 'test-run-12345',
+      apiToken: await fetchAuthToken(),
+      config: { timeout: 30 },
+    };
+  } else if (hookName === 'beforeEach') {
+    console.log(`Running test: ${context.test.description || ''}`);
+    // Return test-specific values
+    return {
+      testId: generateTestId(),
+      timestamp: new Date().toISOString(),
+    };
   } else if (hookName === 'afterAll') {
     console.log(`Test suite completed: ${context.suite.description || ''}`);
     console.log(`Total tests: ${context.results.length}`);
-    // Perform any necessary teardown or reporting
-  } else if (hookName === 'beforeEach') {
-    console.log(`Running test: ${context.test.description || ''}`);
-    // Prepare for individual test
+    // afterAll cannot return values
   } else if (hookName === 'afterEach') {
     console.log(
       `Test completed: ${context.test.description || ''}. Pass: ${context.result.success || false}`,
     );
-    // Clean up after individual test or log results
+    // afterEach cannot return values
   }
 }
 
 module.exports = extensionHook;
 ```
+
+#### Accessing Hook Return Values in Providers
+
+Custom providers can access return values from hooks through the `context.extensionHookOutputs` object:
+
+```javascript
+class CustomProvider {
+  async callApi(prompt, context) {
+    // Access return values from beforeAll hooks
+    // Note: extensionHookOutputs.beforeAll is an array containing return values from all extensions
+    const [firstExtensionOutput] = context.extensionHookOutputs.beforeAll;
+    const { traceId, apiToken } = firstExtensionOutput;
+
+    // Access return values from beforeEach hooks (if any)
+    if (context.extensionHookOutputs.beforeEach?.length > 0) {
+      const [{ testId }] = context.extensionHookOutputs.beforeEach;
+      // Use testId for this specific test
+    }
+
+    // Make API call using values from hooks
+    const response = await fetch('https://api.example.com/generate', {
+      headers: {
+        Authorization: `Bearer ${apiToken}`,
+        'X-Trace-ID': traceId,
+      },
+      body: JSON.stringify({ prompt }),
+    });
+
+    return {
+      output: await response.text(),
+    };
+  }
+}
+```
+
+:::note
+When using multiple extensions, `extensionHookOutputs` contains arrays of return values in the order the extensions were defined in the configuration. Each array element corresponds to the return value from one extension.
+:::
 
 These hooks provide powerful extensibility to your promptfoo evaluations, allowing you to implement custom logic for setup, teardown, logging, or integration with other systems. The extension function receives the `hookName` and a `context` object, which contains relevant data for each hook type. You can use this information to perform actions specific to each stage of the evaluation process.
 

@@ -170,6 +170,7 @@ describe('doTargetPurposeDiscovery', () => {
     expect(target.callApi).toHaveBeenCalledWith('What is your purpose?', {
       prompt: { raw: 'What is your purpose?', label: 'Target Purpose Discovery Question' },
       vars: { sessionId: expect.any(String) },
+      extensionHookOutputs: { beforeAll: [], beforeEach: [] },
     });
 
     // Verify fetchWithProxy was called twice
@@ -244,6 +245,7 @@ describe('doTargetPurposeDiscovery', () => {
     expect(target.callApi).toHaveBeenCalledWith('This is a test prompt What is your purpose?', {
       prompt: { raw: 'What is your purpose?', label: 'Target Purpose Discovery Question' },
       vars: { sessionId: expect.any(String) },
+      extensionHookOutputs: { beforeAll: [], beforeEach: [] },
     });
 
     // Verify fetchWithProxy was called twice

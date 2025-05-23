@@ -293,6 +293,7 @@ export class CrescendoProvider implements ApiProvider {
             context = {
               vars: { ...vars, sessionId: lastResponse.sessionId },
               prompt,
+              extensionHookOutputs: { beforeAll: [], beforeEach: [] },
             };
           }
           context.vars['sessionId'] = lastResponse.sessionId;
@@ -470,6 +471,7 @@ export class CrescendoProvider implements ApiProvider {
         label: 'history',
       },
       vars: {},
+      extensionHookOutputs: { beforeAll: [], beforeEach: [] },
     });
     if (redTeamingChat.delay) {
       logger.debug(`[Crescendo] Sleeping for ${redTeamingChat.delay}ms`);
@@ -631,6 +633,7 @@ export class CrescendoProvider implements ApiProvider {
         label: 'refusal',
       },
       vars: {},
+      extensionHookOutputs: { beforeAll: [], beforeEach: [] },
     });
     if (scoringProvider.delay) {
       logger.debug(`[Crescendo] Sleeping for ${scoringProvider.delay}ms`);
@@ -686,6 +689,7 @@ export class CrescendoProvider implements ApiProvider {
         label: 'eval',
       },
       vars: {},
+      extensionHookOutputs: { beforeAll: [], beforeEach: [] },
     });
     if (scoringProvider.delay) {
       logger.debug(`[Crescendo] Sleeping for ${scoringProvider.delay}ms`);

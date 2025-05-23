@@ -661,6 +661,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
             response_format: promptResponseFormat,
           },
         },
+        extensionHookOutputs: { beforeAll: [], beforeEach: [] },
       });
 
       const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
@@ -698,6 +699,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
           raw: 'Test prompt',
           label: 'Test prompt',
         },
+        extensionHookOutputs: { beforeAll: [], beforeEach: [] },
       });
 
       const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];

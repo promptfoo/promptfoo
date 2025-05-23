@@ -127,6 +127,7 @@ export async function evaluateResponse(
       label: 'judge',
     },
     vars: {},
+    extensionHookOutputs: { beforeAll: [], beforeEach: [] },
   });
   if (provider.delay) {
     logger.debug(`[IterativeTree] Sleeping for ${provider.delay}ms`);
@@ -184,6 +185,7 @@ export async function getNewPrompt(
       label: 'history',
     },
     vars: {},
+    extensionHookOutputs: { beforeAll: [], beforeEach: [] },
   });
   if (redteamProvider.delay) {
     logger.debug(`[IterativeTree] Sleeping for ${redteamProvider.delay}ms`);
@@ -231,6 +233,7 @@ export async function checkIfOnTopic(
       label: 'on-topic',
     },
     vars: {},
+    extensionHookOutputs: { beforeAll: [], beforeEach: [] },
   });
   if (provider.delay) {
     logger.debug(`[IterativeTree] Sleeping for ${provider.delay}ms`);

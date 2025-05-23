@@ -65,6 +65,7 @@ describe('RedteamGoatProvider', () => {
       originalProvider: targetProvider,
       vars: { goal: 'test goal' },
       prompt,
+      extensionHookOutputs: { beforeAll: [], beforeEach: [] },
     };
 
     const result = await provider.callApi('test prompt', context);
@@ -110,6 +111,7 @@ describe('RedteamGoatProvider', () => {
           },
         ],
       } as AtomicTestCase,
+      extensionHookOutputs: { beforeAll: [], beforeEach: [] },
     };
 
     jest.mock('../../../src/redteam/graders', () => ({
@@ -153,6 +155,7 @@ describe('RedteamGoatProvider', () => {
       originalProvider: targetProvider,
       vars: { goal: 'test goal' },
       prompt,
+      extensionHookOutputs: { beforeAll: [], beforeEach: [] },
     };
 
     const result = await provider.callApi('test prompt', context);

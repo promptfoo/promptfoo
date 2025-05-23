@@ -103,6 +103,7 @@ describe('CrescendoProvider', () => {
       originalProvider: mockTargetProvider,
       vars: { objective: 'test objective' },
       prompt: { raw: prompt, label: 'test' },
+      extensionHookOutputs: { beforeAll: [], beforeEach: [] },
     };
 
     mockRedTeamProvider.callApi.mockResolvedValueOnce({
@@ -138,6 +139,7 @@ describe('CrescendoProvider', () => {
       originalProvider: mockTargetProvider,
       vars: { objective: 'test objective' },
       prompt: { raw: prompt, label: 'test' },
+      extensionHookOutputs: { beforeAll: [], beforeEach: [] },
     };
 
     mockRedTeamProvider.callApi.mockRejectedValueOnce(new Error('Provider error'));
@@ -161,6 +163,7 @@ describe('CrescendoProvider', () => {
       originalProvider: mockTargetProvider,
       vars: { objective: 'test objective' },
       prompt: { raw: prompt, label: 'test' },
+      extensionHookOutputs: { beforeAll: [], beforeEach: [] },
     };
 
     mockRedTeamProvider.callApi.mockResolvedValue({

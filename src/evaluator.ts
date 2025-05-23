@@ -12,7 +12,7 @@ import { fetchWithCache, getCache } from './cache';
 import cliState from './cliState';
 import { updateSignalFile } from './database/signal';
 import { getEnvBool, getEnvInt, isCI, getEvalTimeoutMs } from './envars';
-import { renderPrompt, runExtensionHook } from './evaluatorHelpers';
+import { renderPrompt, runExtensionHook, hasDefinedExtensionHooks } from './evaluatorHelpers';
 import logger from './logger';
 import type Eval from './models/eval';
 import { generateIdFromPrompt } from './models/prompt';
@@ -174,6 +174,7 @@ export async function runEval({
   allTests,
   concurrency,
   abortSignal,
+  extensionHookOutputs,
 }: RunEvalOptions): Promise<EvaluateResult[]> {
   // Use the original prompt to set the label, not renderedPrompt
   const promptLabel = prompt.label;
@@ -264,6 +265,8 @@ export async function runEval({
           logger: logger as unknown as winston.Logger,
           fetchWithCache,
           getCache,
+
+          extensionHookOutputs,
         },
         abortSignal ? { abortSignal } : undefined,
       );
@@ -536,7 +539,11 @@ class Evaluator {
     const assertionTypes = new Set<string>();
     const rowsWithSelectBestAssertion = new Set<number>();
 
-    await runExtensionHook(testSuite.extensions, 'beforeAll', { suite: testSuite });
+    const beforeAllExtensionOutputs = hasDefinedExtensionHooks(testSuite.extensions)
+      ? await runExtensionHook(testSuite.extensions!, 'beforeAll', {
+          suite: testSuite,
+        })
+      : [];
 
     if (options.generateSuggestions) {
       // TODO(ian): Move this into its own command/file
@@ -790,6 +797,10 @@ class Evaluator {
                 allTests: runEvalOptions,
                 concurrency,
                 abortSignal: options.abortSignal,
+                extensionHookOutputs: {
+                  beforeAll: beforeAllExtensionOutputs,
+                  beforeEach: [],
+                },
               });
               promptIdx++;
             }
@@ -822,9 +833,12 @@ class Evaluator {
         throw new Error('Expected index to be a number');
       }
 
-      await runExtensionHook(testSuite.extensions, 'beforeEach', {
-        test: evalStep.test,
-      });
+      if (hasDefinedExtensionHooks(testSuite.extensions)) {
+        const output = await runExtensionHook(testSuite.extensions!, 'beforeEach', {
+          test: evalStep.test,
+        });
+        evalStep['extensionHookOutputs']['beforeEach'] = output;
+      }
 
       const rows = await runEval(evalStep);
       for (const row of rows) {
@@ -982,10 +996,12 @@ class Evaluator {
 
         metrics.cost += row.cost || 0;
 
-        await runExtensionHook(testSuite.extensions, 'afterEach', {
-          test: evalStep.test,
-          result: row,
-        });
+        if (hasDefinedExtensionHooks(testSuite.extensions)) {
+          await runExtensionHook(testSuite.extensions!, 'afterEach', {
+            test: evalStep.test,
+            result: row,
+          });
+        }
 
         if (options.progressCallback) {
           options.progressCallback(numComplete, runEvalOptions.length, index, evalStep, metrics);
@@ -1363,11 +1379,13 @@ class Evaluator {
       progressBar.stop();
     }
 
-    await runExtensionHook(testSuite.extensions, 'afterAll', {
-      prompts: this.evalRecord.prompts,
-      results: this.evalRecord.results,
-      suite: testSuite,
-    });
+    if (hasDefinedExtensionHooks(testSuite.extensions)) {
+      await runExtensionHook(testSuite.extensions!, 'afterAll', {
+        prompts: this.evalRecord.prompts,
+        results: this.evalRecord.results,
+        suite: testSuite,
+      });
+    }
 
     telemetry.record('eval_ran', {
       numPrompts: prompts.length,

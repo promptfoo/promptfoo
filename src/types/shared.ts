@@ -38,3 +38,17 @@ export type BaseTokenUsage = z.infer<typeof BaseTokenUsageSchema>;
 export type TokenUsage = z.infer<typeof TokenUsageSchema>;
 
 export type NunjucksFilterMap = Record<string, (...args: any[]) => string>;
+
+/**
+ * Extension hooks can output arbitrary data.
+ */
+export type ExtensionHookOutput = any;
+
+/**
+ * Extension hooks can output arbitrary data, which is passed to custom providers
+ * via the `extensionHookOutputs` parameter.
+ */
+export interface ExtensionHookOutputs {
+  beforeAll: ExtensionHookOutput[];
+  beforeEach: ExtensionHookOutput[];
+}

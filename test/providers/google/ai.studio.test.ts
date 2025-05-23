@@ -794,6 +794,7 @@ describe('AIStudioChatProvider', () => {
       const response = await provider.callGemini('What is the weather in San Francisco?', {
         vars: { location: 'San Francisco' },
         prompt: { raw: 'test prompt', label: 'test' },
+        extensionHookOutputs: { beforeAll: [], beforeEach: [] },
       });
 
       expect(response).toEqual({

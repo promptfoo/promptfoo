@@ -334,6 +334,7 @@ export default class RedteamPandamoniumProvider implements ApiProvider {
         promptIdx: 0,
         repeatIndex: 0,
         isRedteam: true,
+        extensionHookOutputs: { beforeAll: [], beforeEach: [] },
       });
       const result = evalResults[0];
       return { result, program: test.program, pluginId: test.pluginId };

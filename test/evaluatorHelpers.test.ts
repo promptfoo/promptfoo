@@ -6,6 +6,7 @@ import {
   resolveVariables,
   runExtensionHook,
   extractTextFromPDF,
+  hasDefinedExtensionHooks,
 } from '../src/evaluatorHelpers';
 import type { Prompt } from '../src/types';
 import { transform } from '../src/util/transform';
@@ -50,8 +51,12 @@ jest.mock('../src/esm');
 jest.mock('../src/database', () => ({
   getDb: jest.fn(),
 }));
+
+// Mock `transform` to return a tuple of the extension name and hook name
 jest.mock('../src/util/transform', () => ({
-  transform: jest.fn(),
+  transform: jest.fn().mockImplementation((ext, hookName, context, isLast) => {
+    return [ext, hookName];
+  }),
 }));
 
 function toPrompt(text: string): Prompt {
@@ -488,24 +493,25 @@ describe('resolveVariables', () => {
   });
 });
 
+describe('hasDefinedExtensionHooks', () => {
+  it('should return true if extensions are defined', () => {
+    expect(hasDefinedExtensionHooks(['file:///path/to/extension.js'])).toBe(true);
+  });
+
+  it('should return false if extensions are not defined', () => {
+    expect(hasDefinedExtensionHooks([])).toBe(false);
+  });
+});
+
 describe('runExtensionHook', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  it('should not call transform if extensions array is empty', async () => {
-    await runExtensionHook([], 'testHook', { data: 'test' });
-    expect(transform).not.toHaveBeenCalled();
-  });
-
-  it('should not call transform if extensions is undefined', async () => {
-    await runExtensionHook(undefined, 'testHook', { data: 'test' });
-    expect(transform).not.toHaveBeenCalled();
-  });
-
-  it('should not call transform if extensions is null', async () => {
-    await runExtensionHook(null, 'testHook', { data: 'test' });
-    expect(transform).not.toHaveBeenCalled();
+  it('should not be called if extensions array is empty', async () => {
+    await expect(runExtensionHook([], 'testHook', { data: 'test' })).rejects.toThrow(
+      'Invariant failed: extensions must be an array',
+    );
   });
 
   it('should call transform for each extension', async () => {
@@ -521,13 +527,49 @@ describe('runExtensionHook', () => {
     expect(transform).toHaveBeenNthCalledWith(3, 'ext3', hookName, context, false);
   });
 
-  it('should throw an error if an extension is not a string', async () => {
-    const extensions = ['ext1', 123, 'ext3'] as unknown as string[];
-    const hookName = 'testHook';
-    const context = { data: 'test' };
+  describe('returns hook results', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
 
-    await expect(runExtensionHook(extensions, hookName, context)).rejects.toThrow(
-      'extension must be a string',
-    );
+    it('beforeEach', async () => {
+      const results = await runExtensionHook(['ext1', 'ext2', 'ext3'], 'beforeEach', {});
+      expect(transform).toHaveBeenCalledTimes(3);
+      expect(results).toEqual([
+        ['ext1', 'beforeEach'],
+        ['ext2', 'beforeEach'],
+        ['ext3', 'beforeEach'],
+      ]);
+    });
+
+    it('beforeAll', async () => {
+      const results = await runExtensionHook(['ext4', 'ext5', 'ext6'], 'beforeAll', {});
+      expect(transform).toHaveBeenCalledTimes(3);
+      expect(results).toEqual([
+        ['ext4', 'beforeAll'],
+        ['ext5', 'beforeAll'],
+        ['ext6', 'beforeAll'],
+      ]);
+    });
+
+    it('afterAll', async () => {
+      const results = await runExtensionHook(['ext7', 'ext8', 'ext9'], 'afterAll', {});
+      expect(transform).toHaveBeenCalledTimes(3);
+      expect(results).toEqual([
+        ['ext7', 'afterAll'],
+        ['ext8', 'afterAll'],
+        ['ext9', 'afterAll'],
+      ]);
+    });
+
+    it('afterEach', async () => {
+      const results = await runExtensionHook(['ext10', 'ext11', 'ext12'], 'afterEach', {});
+      expect(transform).toHaveBeenCalledTimes(3);
+      expect(results).toEqual([
+        ['ext10', 'afterEach'],
+        ['ext11', 'afterEach'],
+        ['ext12', 'afterEach'],
+      ]);
+    });
   });
 });

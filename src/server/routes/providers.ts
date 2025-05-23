@@ -31,6 +31,7 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
       debug: true,
       prompt: { raw: 'Hello, world!', label: 'Hello, world!' },
       vars: {},
+      extensionHookOutputs: { beforeAll: [], beforeEach: [] },
     });
     logger.debug(
       dedent`[POST /providers/test] result from API provider

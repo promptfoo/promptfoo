@@ -289,6 +289,7 @@ describe('GolangProvider', () => {
           label: 'test',
         },
         vars: { circular: circularObj },
+        extensionHookOutputs: { beforeAll: [], beforeEach: [] },
       });
 
       expect(result).toEqual({ output: 'mocked result' });
@@ -589,6 +590,7 @@ describe('GolangProvider', () => {
           label: 'test',
         },
         vars: { circular: circularObj },
+        extensionHookOutputs: { beforeAll: [], beforeEach: [] },
       });
 
       // Verify the result and that executeGolangScript was called

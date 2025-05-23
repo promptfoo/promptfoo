@@ -5,11 +5,22 @@ prompts:
   - 'Rephrase this in {{language}}: {{body}}'
 
 providers:
-  - openai:gpt-4o-mini
+  - file://customOpenAIApiProvider.js
 
 extensions:
   - file://hooks.py:extension_hook
   # - file://hooks.js:extensionHook
+
+defaultTest:
+  assert:
+    - type: is-json
+      value:
+        required:
+          - content
+          - metadata
+        type: object
+    - type: contains
+      value: 'pf-trace-494949'
 
 tests:
   - vars:

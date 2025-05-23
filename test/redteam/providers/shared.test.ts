@@ -237,6 +237,7 @@ describe('shared redteam provider utilities', () => {
       const context: CallApiContextParams = {
         prompt,
         vars: { test: 'value' },
+        extensionHookOutputs: { beforeAll: [], beforeEach: [] },
       };
       const options: CallApiOptionsParams = {};
 

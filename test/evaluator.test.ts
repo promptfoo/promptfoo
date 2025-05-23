@@ -2308,6 +2308,7 @@ describe('runEval', () => {
       test: {},
       conversations: {},
       registers: {},
+      extensionHookOutputs: { beforeAll: [], beforeEach: [] },
     });
     const result = results[0];
     expect(result.success).toBe(true);
@@ -2326,6 +2327,7 @@ describe('runEval', () => {
       test: {},
       conversations,
       registers: {},
+      extensionHookOutputs: { beforeAll: [], beforeEach: [] },
     });
     const result = results[0];
     expect(result.success).toBe(true);
@@ -2348,6 +2350,7 @@ describe('runEval', () => {
       test: { metadata: { conversationId: 'conv1' } },
       conversations,
       registers: {},
+      extensionHookOutputs: { beforeAll: [], beforeEach: [] },
     });
     const result = results[0];
     expect(result.success).toBe(true);
@@ -2364,6 +2367,7 @@ describe('runEval', () => {
       test: {},
       conversations: {},
       registers,
+      extensionHookOutputs: { beforeAll: [], beforeEach: [] },
     });
     const result = results[0];
     expect(result.success).toBe(true);
@@ -2384,6 +2388,7 @@ describe('runEval', () => {
       test: { options: { storeOutputAs: 'myOutput' } },
       conversations: {},
       registers,
+      extensionHookOutputs: { beforeAll: [], beforeEach: [] },
     });
     const result = results[0];
     expect(result.success).toBe(true);
@@ -2412,6 +2417,7 @@ describe('runEval', () => {
       test: {},
       conversations: {},
       registers: {},
+      extensionHookOutputs: { beforeAll: [], beforeEach: [] },
     });
     const result = results[0];
     expect(result.success).toBe(false);
@@ -2437,6 +2443,7 @@ describe('runEval', () => {
       conversations: {},
       registers: {},
       isRedteam: false,
+      extensionHookOutputs: { beforeAll: [], beforeEach: [] },
     });
 
     expect(regularResults[0].success).toBe(false);
@@ -2451,6 +2458,7 @@ describe('runEval', () => {
       conversations: {},
       registers: {},
       isRedteam: true,
+      extensionHookOutputs: { beforeAll: [], beforeEach: [] },
     });
 
     expect(redTeamResults[0].success).toBe(true);
@@ -2476,6 +2484,7 @@ describe('runEval', () => {
       },
       conversations: {},
       registers: {},
+      extensionHookOutputs: { beforeAll: [], beforeEach: [] },
     });
 
     expect(results[0].success).toBe(true);
@@ -2499,6 +2508,7 @@ describe('runEval', () => {
       },
       conversations: {},
       registers: {},
+      extensionHookOutputs: { beforeAll: [], beforeEach: [] },
     });
 
     expect(results[0].tokenUsage).toEqual({
