@@ -38,7 +38,7 @@ describe('processTxtFile', () => {
   });
 
   it('should process a text file with multiple prompts and a label', () => {
-    const fileContent = `Prompt 1${PROMPT_DELIMITER}Prompt 2${PROMPT_DELIMITER}Prompt 3`;
+    const fileContent = `Prompt 1\n${PROMPT_DELIMITER}\nPrompt 2\n${PROMPT_DELIMITER}\nPrompt 3`;
     mockReadFileSync.mockReturnValue(fileContent);
     expect(processTxtFile('file.txt', { label: 'Label' })).toEqual([
       {
@@ -59,7 +59,7 @@ describe('processTxtFile', () => {
 
   it('should handle text file with leading and trailing delimiters', () => {
     const filePath = 'file.txt';
-    const fileContent = `${PROMPT_DELIMITER}Prompt 1${PROMPT_DELIMITER}Prompt 2${PROMPT_DELIMITER}`;
+    const fileContent = `${PROMPT_DELIMITER}\nPrompt 1\n${PROMPT_DELIMITER}\nPrompt 2\n${PROMPT_DELIMITER}`;
     mockReadFileSync.mockReturnValue(fileContent);
     expect(processTxtFile(filePath, {})).toEqual([
       {
@@ -76,7 +76,7 @@ describe('processTxtFile', () => {
 
   it('should return an empty array for a file with only delimiters', () => {
     const filePath = 'file.txt';
-    const fileContent = `${PROMPT_DELIMITER}${PROMPT_DELIMITER}`;
+    const fileContent = `${PROMPT_DELIMITER}\n${PROMPT_DELIMITER}`;
     mockReadFileSync.mockReturnValue(fileContent);
     expect(processTxtFile(filePath, {})).toEqual([]);
     expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf-8');
@@ -87,6 +87,19 @@ describe('processTxtFile', () => {
     const fileContent = '';
     mockReadFileSync.mockReturnValue(fileContent);
     expect(processTxtFile(filePath, {})).toEqual([]);
+    expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf-8');
+  });
+
+  it('should not split on lines that contain repeated hyphens', () => {
+    const filePath = 'file.txt';
+    const fileContent = 'Line 1\n-----------------------------------\nLine 2';
+    mockReadFileSync.mockReturnValue(fileContent);
+    expect(processTxtFile(filePath, {})).toEqual([
+      {
+        raw: 'Line 1\n-----------------------------------\nLine 2',
+        label: `${filePath}: Line 1\n-----------------------------------\nLine 2`,
+      },
+    ]);
     expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf-8');
   });
 });
