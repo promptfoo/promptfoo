@@ -127,6 +127,14 @@ providers:
   - xai:image:grok-2-image
 ```
 
+The xAI image generation API supports:
+
+- Generating 1-10 images per request (via `n` parameter)
+- Response formats: `url` (default) or `b64_json`
+- Automatic prompt revision by a chat model before image generation
+
+Note: `quality`, `size`, and `style` parameters are not yet supported by xAI.
+
 To display images in the web viewer, wrap outputs or vars in markdown image tags:
 
 ```markdown

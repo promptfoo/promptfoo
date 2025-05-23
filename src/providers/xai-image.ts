@@ -11,6 +11,8 @@ export type XaiImageOptions = {
   response_format?: 'url' | 'b64_json';
   user?: string;
   headers?: Record<string, string>;
+  apiKey?: string;
+  apiKeyEnvar?: string;
 };
 
 export class XAIImageProvider extends OpenAiImageProvider {
@@ -31,12 +33,29 @@ export class XAIImageProvider extends OpenAiImageProvider {
     this.config = options.config || {};
   }
 
+  getApiUrlDefault(): string {
+    return 'https://api.x.ai/v1';
+  }
+
   id(): string {
     return `xai:image:${this.modelName}`;
   }
 
   toString(): string {
     return `[xAI Image Provider ${this.modelName}]`;
+  }
+
+  // Map xAI model names to API-compatible model names
+  private getApiModelName(): string {
+    // xAI uses 'grok-2-image' as the model name for image generation
+    // We accept 'grok-2-image' or just 'grok-image' as aliases
+    const modelMap: Record<string, string> = {
+      'grok-2-image': 'grok-2-image',
+      'grok-image': 'grok-2-image',
+      // Add more mappings as needed
+    };
+
+    return modelMap[this.modelName] || 'grok-2-image';
   }
 
   async callApi(
@@ -55,7 +74,7 @@ export class XAIImageProvider extends OpenAiImageProvider {
       ...context?.prompt?.config,
     } as XaiImageOptions;
 
-    const model = this.modelName;
+    const model = this.getApiModelName(); // Use mapped model name
     const responseFormat = config.response_format || 'url';
     const endpoint = '/images/generations';
 

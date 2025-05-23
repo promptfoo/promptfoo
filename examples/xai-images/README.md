@@ -26,17 +26,20 @@ promptfoo view
 
 ## What's in this Example
 
-- Tests two artistic style prompts (Van Gogh vs. Dali)
+- Tests artistic style prompts with different artists
 - Generates images using the `grok-2-image` model
 - Shows how to request multiple images and different response formats
 - Tests with different subjects
 
 ## Key Notes
 
-- xAI currently supports the `grok-2-image` model
-- `response_format: b64_json` returns raw JSON with base64-encoded image data. Image links with the default format `url` expire after a short time.
+- xAI supports the `grok-2-image` model for image generation
+- `response_format: b64_json` returns raw JSON with base64-encoded image data. URLs are the default format.
+- xAI automatically revises prompts using a chat model before generating images
+- Currently supports `n` (1-10) and `response_format` parameters
+- `quality`, `size`, and `style` parameters are not yet supported
 
 ## Documentation
 
-- [xAI Image API Documentation](https://docs.x.ai/docs)
+- [xAI Image Generation Documentation](https://docs.x.ai/docs#image-generations)
 - [promptfoo xAI Provider Documentation](https://promptfoo.dev/docs/providers/xai)

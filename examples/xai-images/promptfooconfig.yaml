@@ -1,4 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: xAI image generation evaluation
 prompts:
   - 'In the style of {{artist}}: {{subject}}'
 
