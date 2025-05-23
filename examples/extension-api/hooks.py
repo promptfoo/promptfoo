@@ -21,7 +21,7 @@ if not logging.getLogger().handlers:
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-counter = 0
+TRACE_ID = "pf-trace-494949"
 
 
 def extension_hook(hook_name: str, context: dict) -> None:
@@ -39,15 +39,10 @@ def extension_hook(hook_name: str, context: dict) -> None:
     Returns:
         None
 
-    Global Variables:
-        counter (int): Keeps track of the number of tests completed.
-
     Logs:
         Information about the test suite and individual tests, including setup,
         completion, results, and token usage.
     """
-    global counter
-
     if hook_name == "beforeAll":
         suite = context.get("suite", {})
         logging.info(
@@ -57,8 +52,12 @@ def extension_hook(hook_name: str, context: dict) -> None:
         logging.info(f"Total providers: {len(suite.get('providers', []))}")
         logging.info(f"Total tests: {len(suite.get('tests', []))}")
 
+        return {
+            "trace_id": TRACE_ID,
+        }
+
     elif hook_name == "beforeEach":
-        logging.info("Preparing test")
+        logging.info(f"Preparing test")
 
     elif hook_name == "afterEach":
         result = context.get("result", {})
@@ -67,8 +66,7 @@ def extension_hook(hook_name: str, context: dict) -> None:
             success = "Pass" if result.get("success") else "Fail"
             score = result.get("score", 0)
             result_str = f", Result: {success}, Score: {score}"
-        logging.info(f"Completed test {counter}{result_str}")
-        counter += 1
+        logging.info(f"Completed test {result_str}")
 
     elif hook_name == "afterAll":
         results = context.get("results", [])

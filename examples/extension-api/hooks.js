@@ -1,15 +1,18 @@
-let counter = 0;
+const TRACE_ID = 'pf-trace-494949';
+
 async function extensionHook(hookName, context) {
   if (hookName === 'beforeAll') {
     console.log(`Setting up test suite: ${context.suite.description || 'Unnamed suite'}`);
     console.log(`Total prompts: ${context.suite.prompts?.length || 0}`);
     console.log(`Total providers: ${context.suite.providers?.length || 0}`);
     console.log(`Total tests: ${context.suite.tests?.length || 0}`);
+
+    return { trace_id: TRACE_ID };
   } else if (hookName === 'beforeEach') {
     console.log(`Preparing test`);
   } else if (hookName === 'afterEach') {
     console.log(
-      `Completed test ${counter++}${context.result ? `, Result: ${context.result.success ? 'Pass' : 'Fail'}, Score: ${context.result.score}` : ''}`,
+      `Completed test ${context.result ? `, Result: ${context.result.success ? 'Pass' : 'Fail'}, Score: ${context.result.score}` : ''}`,
     );
   } else if (hookName === 'afterAll') {
     console.log('Test suite completed');
