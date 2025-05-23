@@ -18,6 +18,8 @@ import invariant from './util/invariant';
 import { getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
 
+export type FileMetadata = Record<string, { path: string; type: string; format?: string }>;
+
 export async function extractTextFromPDF(pdfPath: string): Promise<string> {
   logger.debug(`Extracting text from PDF: ${pdfPath}`);
   try {
@@ -77,6 +79,44 @@ function autoWrapRawIfPartialNunjucks(prompt: string): string {
     return `{% raw %}${prompt}{% endraw %}`;
   }
   return prompt;
+}
+
+/**
+ * Collects metadata about file variables in the vars object.
+ * @param vars The variables object containing potential file references
+ * @returns An object mapping variable names to their file metadata
+ */
+export function collectFileMetadata(vars: Record<string, string | object>): FileMetadata {
+  const fileMetadata: FileMetadata = {};
+
+  for (const [varName, value] of Object.entries(vars)) {
+    if (typeof value === 'string' && value.startsWith('file://')) {
+      const filePath = path.resolve(cliState.basePath || '', value.slice('file://'.length));
+      const fileExtension = filePath.split('.').pop() || '';
+
+      if (isImageFile(filePath)) {
+        fileMetadata[varName] = {
+          path: value, // Keep the original file:// notation
+          type: 'image',
+          format: fileExtension,
+        };
+      } else if (isVideoFile(filePath)) {
+        fileMetadata[varName] = {
+          path: value,
+          type: 'video',
+          format: fileExtension,
+        };
+      } else if (isAudioFile(filePath)) {
+        fileMetadata[varName] = {
+          path: value,
+          type: 'audio',
+          format: fileExtension,
+        };
+      }
+    }
+  }
+
+  return fileMetadata;
 }
 
 export async function renderPrompt(

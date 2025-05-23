@@ -43,3 +43,5 @@ export const TERMINAL_MAX_WIDTH =
     : 120;
 
 export const CLOUD_PROVIDER_PREFIX = 'promptfoo://provider/';
+
+export const FILE_METADATA_KEY = '_promptfooFileMetadata';
