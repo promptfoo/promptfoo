@@ -34,9 +34,10 @@ describe('OffTopicPlugin', () => {
     }).toThrow('injectVar must be specified for off-topic plugin');
   });
 
-  it('should return empty template string', async () => {
-    const template = await plugin['getTemplate']();
-    expect(template).toBe('');
+  it('should throw error when getTemplate is called', async () => {
+    await expect(plugin['getTemplate']()).rejects.toThrow(
+      'getTemplate() is not implemented for OffTopicPlugin - uses static templates',
+    );
   });
 
   it('should return correct assertions', () => {
@@ -47,46 +48,6 @@ describe('OffTopicPlugin', () => {
         metric: 'OffTopic',
       },
     ]);
-  });
-
-  it('should call original provider in callApi', async () => {
-    const mockContext = {
-      originalProvider: {
-        id: () => 'test-provider',
-        callApi: jest.fn().mockResolvedValue({ output: 'test response' }),
-      },
-      prompt: {
-        raw: 'test prompt',
-        label: 'test',
-      },
-      vars: {},
-    };
-
-    const result = await plugin.callApi('test prompt', mockContext);
-    expect(mockContext.originalProvider.callApi).toHaveBeenCalledWith(
-      'test prompt',
-      mockContext,
-      undefined,
-    );
-    expect(result.output).toBe('test response');
-  });
-
-  it('should handle errors in callApi', async () => {
-    const mockContext = {
-      originalProvider: {
-        id: () => 'test-provider',
-        callApi: jest.fn().mockRejectedValue(new Error('test error')),
-      },
-      prompt: {
-        raw: 'test prompt',
-        label: 'test',
-      },
-      vars: {},
-    };
-
-    const result = await plugin.callApi('test prompt', mockContext);
-    expect(result.output).toBe('An error occurred during the off-topic test.');
-    expect(result.metadata?.error).toBe('Error: test error');
   });
 
   it('should generate correct number of test cases', async () => {

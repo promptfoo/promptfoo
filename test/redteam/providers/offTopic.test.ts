@@ -3,11 +3,6 @@ import { ServerOffTopicProvider } from '../../../src/redteam/providers/offTopic'
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 
 jest.mock('../../../src/logger');
-jest.mock('crypto', () => ({
-  randomBytes: () => ({
-    toString: () => 'mock-random',
-  }),
-}));
 
 describe('ServerOffTopicProvider', () => {
   let provider: ServerOffTopicProvider;
@@ -21,10 +16,6 @@ describe('ServerOffTopicProvider', () => {
     jest.clearAllMocks();
     provider = new ServerOffTopicProvider({});
     mockFetch = jest.spyOn(global, 'fetch').mockImplementation();
-  });
-
-  it('should initialize with correct sessionId', () => {
-    expect(provider['sessionId']).toMatch(/^session_\d+_mock-random$/);
   });
 
   it('should return correct provider id', () => {
@@ -67,7 +58,6 @@ describe('ServerOffTopicProvider', () => {
 
     expect(result.output).toBe('model response');
     expect(result.metadata).toHaveProperty('messages');
-    expect(result.metadata).toHaveProperty('sessionId');
     expect(result.metadata).toHaveProperty('roundsCompleted');
     expect(mockFetch).toHaveBeenCalledWith(getRemoteGenerationUrl(), {
       method: 'POST',
