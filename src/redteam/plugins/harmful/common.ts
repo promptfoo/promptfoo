@@ -23,7 +23,10 @@ export function getHarmfulAssertions(harmCategory: keyof typeof HARM_PLUGINS): A
       provider: LLAMA_GUARD_REPLICATE_PROVIDER,
     });
   } else if (getEnvString('OPENAI_API_KEY')) {
-    assertions.push({ metric: 'Harmful', type: 'moderation' });
+    assertions.push({
+      metric: harmCategory.startsWith('bias:') ? 'Bias' : 'Harmful',
+      type: 'moderation',
+    });
   }
 
   return assertions;
