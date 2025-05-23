@@ -160,6 +160,9 @@ describe('constants', () => {
     expect(PLUGIN_PRESET_DESCRIPTIONS['Minimal Test']).toBe(
       'Minimal set of plugins to validate your setup',
     );
+    expect(PLUGIN_PRESET_DESCRIPTIONS.Harmful).toBe(
+      'All harmful content plugins for maximum risk coverage',
+    );
     expect(PLUGIN_PRESET_DESCRIPTIONS['OWASP Agentic AI Top 10']).toBe(
       'OWASP Agentic AI Top 10 Threats and Mitigations',
     );

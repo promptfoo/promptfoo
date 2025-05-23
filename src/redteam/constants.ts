@@ -1536,6 +1536,7 @@ export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
   Custom: 'Choose your own plugins',
   Foundation: 'Plugins for redteaming foundation models recommended by Promptfoo',
   'Minimal Test': 'Minimal set of plugins to validate your setup',
+  Harmful: 'All harmful content plugins for maximum risk coverage',
   MITRE: 'MITRE ATLAS framework',
   NIST: 'NIST AI Risk Management Framework',
   'OWASP API Top 10': 'OWASP API security vulnerabilities framework',
