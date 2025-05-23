@@ -2,7 +2,6 @@ import * as fs from 'fs';
 import * as yaml from 'js-yaml';
 import * as os from 'os';
 import path from 'path';
-import logger from '../../src/logger';
 import { doGenerateRedteam } from '../../src/redteam/commands/generate';
 import { doRedteamRun } from '../../src/redteam/shared';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
@@ -30,7 +29,17 @@ jest.mock('../../src/commands/eval', () => ({
 }));
 jest.mock('../../src/util/apiHealth');
 jest.mock('../../src/util/config/default');
-jest.mock('../../src/logger');
+jest.mock('../../src/logger', () => ({
+  __esModule: true,
+  default: {
+    debug: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+  },
+  setLogCallback: jest.fn(),
+  setLogLevel: jest.fn(),
+}));
 jest.mock('../../src/globalConfig/accounts', () => ({
   getUserEmail: jest.fn(() => 'test@example.com'),
   setUserEmail: jest.fn(),
@@ -60,10 +69,6 @@ describe('doRedteamRun', () => {
 
   beforeEach(() => {
     jest.resetAllMocks();
-
-    // Set environment variables to avoid prompts
-    process.env.PROMPTFOO_DISABLE_TELEMETRY = '1';
-    process.env.CI = 'true';
 
     dateNowSpy = jest.spyOn(Date, 'now').mockReturnValue(mockDate.getTime());
     jest.mocked(checkRemoteHealth).mockResolvedValue({ status: 'OK', message: 'Healthy' });
@@ -273,7 +278,8 @@ describe('doRedteamRun', () => {
     });
 
     it('should log debug information when processing liveRedteamConfig', async () => {
-      const loggerSpy = jest.spyOn(logger, 'debug');
+      // Get the mocked logger
+      const mockLogger = jest.requireMock('../../src/logger').default;
 
       await doRedteamRun({
         liveRedteamConfig: mockConfig,
@@ -283,10 +289,10 @@ describe('doRedteamRun', () => {
       const expectedFilename = `redteam-${mockDate.getTime()}.yaml`;
       const expectedPath = path.join('', expectedFilename);
 
-      expect(loggerSpy).toHaveBeenCalledWith(`Using live config from ${expectedPath}`);
-      expect(loggerSpy).toHaveBeenCalledWith(`Live config: ${JSON.stringify(mockConfig, null, 2)}`);
-
-      loggerSpy.mockRestore();
+      expect(mockLogger.debug).toHaveBeenCalledWith(`Using live config from ${expectedPath}`);
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        `Live config: ${JSON.stringify(mockConfig, null, 2)}`,
+      );
     });
   });
 });
