@@ -14,15 +14,6 @@ interface ServerState {
 
 export class ServerOffTopicProvider implements ApiProvider {
   private sessionId: string;
-  private messages: Message[] = [];
-  private roundNum: number = 0;
-  private state: ServerState = {
-    originalTopic: '',
-    deviationAttempts: 0,
-    currentPhase: 0,
-    lastDeviationSuccess: false,
-  };
-  private originalPurpose: string = '';
   private maxRounds: number;
 
   constructor(public config: any) {
@@ -71,32 +62,43 @@ export class ServerOffTopicProvider implements ApiProvider {
       throw new Error('Expected originalProvider to be set');
     }
 
+    // Local state for this conversation
+    const messages: Message[] = [];
+    let roundNum = 0;
+    let state: ServerState = {
+      originalTopic: '',
+      deviationAttempts: 0,
+      currentPhase: 0,
+      lastDeviationSuccess: false,
+    };
+
+    // Store the purpose from the context if available
+    let originalPurpose = '';
+    if (context?.test?.metadata?.purpose) {
+      originalPurpose = context.test.metadata.purpose;
+    }
+
     try {
       let isComplete = false;
       let lastResponse = null;
       let metadata = {};
 
-      // Store the purpose from the context if available
-      if (context?.test?.metadata?.purpose) {
-        this.originalPurpose = context.test.metadata.purpose;
-      }
-
       // Continue conversation until max rounds or server indicates completion
-      while (!isComplete && this.roundNum < this.maxRounds) {
+      while (!isComplete && roundNum < this.maxRounds) {
         logger.debug(
-          `[ServerOffTopic] Round ${this.roundNum}, sending messages: ${JSON.stringify(this.messages)}`,
+          `[ServerOffTopic] Round ${roundNum}, sending messages: ${JSON.stringify(messages)}`,
         );
 
         const requestPayload = {
           task: 'off-topic',
-          i: this.roundNum,
-          messages: this.messages,
+          i: roundNum,
+          messages,
           maxRounds: this.maxRounds,
           state: {
-            currentPhase: this.state.currentPhase,
-            originalPurpose: this.originalPurpose,
-            deviationAttempts: this.state.deviationAttempts,
-            successfulDeviation: this.state.lastDeviationSuccess,
+            currentPhase: state.currentPhase,
+            originalPurpose,
+            deviationAttempts: state.deviationAttempts,
+            successfulDeviation: state.lastDeviationSuccess,
           },
         };
 
@@ -124,7 +126,7 @@ export class ServerOffTopicProvider implements ApiProvider {
         // Update state from server response
         if (data.state) {
           // Map server state back to our state format
-          this.state = {
+          state = {
             originalTopic: data.state.originalTopic || '',
             deviationAttempts: data.state.deviationAttempts || 0,
             currentPhase: data.state.currentPhase || 0,
@@ -139,7 +141,7 @@ export class ServerOffTopicProvider implements ApiProvider {
             role: 'user' as const,
             content: data.message.content,
           };
-          this.messages.push(attackerMessage);
+          messages.push(attackerMessage);
           logger.debug(
             `[ServerOffTopic] Added attacker message: ${JSON.stringify(attackerMessage)}`,
           );
@@ -148,9 +150,9 @@ export class ServerOffTopicProvider implements ApiProvider {
           const chatHistory = [
             {
               role: 'system',
-              content: this.originalPurpose,
+              content: originalPurpose,
             },
-            ...this.messages.map((msg) => ({
+            ...messages.map((msg) => ({
               role: msg.role,
               content: msg.content,
             })),
@@ -171,7 +173,7 @@ export class ServerOffTopicProvider implements ApiProvider {
             role: 'assistant' as const,
             content: this.formatMessageContent(targetResponse.output),
           };
-          this.messages.push(assistantMessage);
+          messages.push(assistantMessage);
           logger.debug(
             `[ServerOffTopic] Added assistant message: ${JSON.stringify(assistantMessage)}`,
           );
@@ -180,20 +182,20 @@ export class ServerOffTopicProvider implements ApiProvider {
         }
 
         // Update metadata and increment round number
-        this.roundNum++;
+        roundNum++;
         metadata = {
-          state: this.state,
-          messages: this.messages,
+          state,
+          messages,
           sessionId: this.sessionId,
-          roundsCompleted: this.roundNum,
-          redteamHistory: messagesToRedteamHistory(this.messages),
+          roundsCompleted: roundNum,
+          redteamHistory: messagesToRedteamHistory(messages),
         };
 
         // Check if conversation is complete
         isComplete =
           isComplete ||
-          this.state.currentPhase >= 3 || // End after phase 3
-          this.state.lastDeviationSuccess; // End if we've successfully deviated
+          state.currentPhase >= 3 || // End after phase 3
+          state.lastDeviationSuccess; // End if we've successfully deviated
       }
 
       return {
