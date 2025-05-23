@@ -295,10 +295,11 @@ export function hasDefinedExtensionHooks(extensions: string[] | null | undefined
 
 /**
  * Runs extension hooks for the given hook name and context.
+ * This function should be called after checking that extensions are defined.
  * @param extensions - An array of extension paths.
  * @param hookName - The name of the hook to run.
  * @param context - The context object to pass to the hook.
- * @returns Promise that resolves to an array of records returned by each extension hook.
+ * @returns Promise that resolves to an array of data returned by each extension hook.
  */
 export async function runExtensionHook(
   extensions: string[],
@@ -318,7 +319,7 @@ export async function runExtensionHook(
     logger.debug(`Running extension hook ${hookName} with context ${JSON.stringify(context)}`);
     const output = await transform(extension, hookName, context, false);
 
-    // Allow falsy outputs:
+    // Allow all outputs except `undefined`.
     if (output !== undefined) {
       logger.debug(`Extension hook ${hookName} returned ${JSON.stringify(output)}`);
       outs.push(output);
