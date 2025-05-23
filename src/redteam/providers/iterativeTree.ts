@@ -627,7 +627,7 @@ export async function runRedteamConversation({
           const grader = getGraderById(assertToUse.type);
           if (grader) {
             const { grade } = await grader.getResult(
-              goal as string,
+              test?.metadata?.pluginId === 'intent' ? newInjectVar : goal,
               targetResponse.output,
               test || {},
               gradingProvider,

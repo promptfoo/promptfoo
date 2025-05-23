@@ -2,7 +2,7 @@ import { fetchWithProxy } from '../../../src/fetch';
 import {
   ArgsSchema,
   doTargetPurposeDiscovery,
-  mergePurposes,
+  mergeTargetPurposeDiscoveryResults,
 } from '../../../src/redteam/commands/discover';
 
 jest.mock('../../../src/fetch');
@@ -24,55 +24,61 @@ describe('ArgsSchema', () => {
   });
 });
 
-describe('mergePurposes', () => {
+describe('mergeTargetPurposeDiscoveryResults', () => {
   it('should correctly merge human-defined and discovered purposes', () => {
     const humanDefined = 'This is a human defined purpose';
     const discovered = {
       purpose: 'This is a discovered purpose',
       limitations: 'This is a discovered limitation',
-      tools: ['This is a discovered tool'],
+      tools: [
+        {
+          name: 'tool1',
+          description: 'desc1',
+          arguments: [{ name: 'arg1', description: 'desc arg1', type: 'string' }],
+        },
+      ],
       user: 'This is a discovered user',
     };
 
-    const mergedPurpose = mergePurposes(humanDefined, discovered);
+    const mergedPurpose = mergeTargetPurposeDiscoveryResults(humanDefined, discovered);
 
     expect(mergedPurpose).toContain(humanDefined);
     expect(mergedPurpose).toContain(discovered.purpose);
     expect(mergedPurpose).toContain(discovered.limitations);
-    expect(mergedPurpose).toContain(discovered.tools[0]);
+    expect(mergedPurpose).toContain('tool1');
+    expect(mergedPurpose).toContain('desc1');
+    expect(mergedPurpose).toContain('arg1');
     expect(mergedPurpose).toContain(discovered.user);
-    expect(mergedPurpose).toContain('<HumanDefinedPurpose>');
-    expect(mergedPurpose).toContain('<AgentDiscoveredPurpose>');
   });
 
   it('should handle only human-defined purpose', () => {
     const humanDefined = 'This is a human defined purpose';
-    const mergedPurpose = mergePurposes(humanDefined, undefined);
+    const mergedPurpose = mergeTargetPurposeDiscoveryResults(humanDefined, undefined);
 
     expect(mergedPurpose).toContain(humanDefined);
-    expect(mergedPurpose).toContain('<HumanDefinedPurpose>');
-    expect(mergedPurpose).not.toContain('<AgentDiscoveredPurpose>');
   });
 
   it('should handle only discovered purpose', () => {
     const discovered = {
       purpose: 'This is a discovered purpose',
       limitations: 'These are limitations',
-      tools: [{ name: 'tool1', description: 'desc1' }],
+      tools: [
+        { name: 'tool1', description: 'desc1', arguments: [] },
+        { name: 'tool2', description: 'desc2', arguments: [] },
+      ],
       user: 'This is a discovered user',
     };
-    const mergedPurpose = mergePurposes(undefined, discovered);
+    const mergedPurpose = mergeTargetPurposeDiscoveryResults(undefined, discovered);
 
-    expect(mergedPurpose).not.toContain('<HumanDefinedPurpose>');
-    expect(mergedPurpose).toContain('<AgentDiscoveredPurpose>');
     expect(mergedPurpose).toContain(discovered.purpose);
     expect(mergedPurpose).toContain(discovered.limitations);
-    expect(mergedPurpose).toContain(JSON.stringify(discovered.tools, null, 2));
+    expect(mergedPurpose).toContain('tool1');
+    expect(mergedPurpose).toContain('tool2');
     expect(mergedPurpose).toContain(discovered.user);
   });
 
   it('should handle neither purpose being defined', () => {
-    const mergedPurpose = mergePurposes(undefined, undefined);
+    const mergedPurpose = mergeTargetPurposeDiscoveryResults(undefined, undefined);
     expect(mergedPurpose).toBe('');
   });
 
@@ -81,15 +87,30 @@ describe('mergePurposes', () => {
       purpose: 'purpose',
       limitations: 'limitations',
       tools: [
-        { name: 'tool1', config: { key: 'value' } },
-        { name: 'tool2', options: ['opt1', 'opt2'] },
+        {
+          name: 'tool1',
+          description: 'desc1',
+          arguments: [{ name: 'a', description: 'd', type: 'string' }],
+        },
+        {
+          name: 'tool2',
+          description: 'desc2',
+          arguments: [{ name: 'b', description: 'e', type: 'number' }],
+        },
       ],
+      user: 'user',
     };
-    const mergedPurpose = mergePurposes(undefined, discovered);
+    const mergedPurpose = mergeTargetPurposeDiscoveryResults(undefined, discovered);
 
-    expect(mergedPurpose).toContain(JSON.stringify(discovered.tools, null, 2));
+    expect(mergedPurpose).toContain('purpose');
+    expect(mergedPurpose).toContain('limitations');
     expect(mergedPurpose).toContain('tool1');
     expect(mergedPurpose).toContain('tool2');
+    expect(mergedPurpose).toContain('desc1');
+    expect(mergedPurpose).toContain('desc2');
+    expect(mergedPurpose).toContain('a');
+    expect(mergedPurpose).toContain('b');
+    expect(mergedPurpose).toContain('user');
   });
 });
 
@@ -113,7 +134,13 @@ describe('doTargetPurposeDiscovery', () => {
         purpose: {
           purpose: 'Test purpose',
           limitations: 'Test limitations',
-          tools: [],
+          tools: [
+            {
+              name: 'tool1',
+              description: 'desc1',
+              arguments: [{ name: 'a', description: 'd', type: 'string' }],
+            },
+          ],
           user: 'Test user',
         },
         state: {
@@ -153,7 +180,13 @@ describe('doTargetPurposeDiscovery', () => {
     expect(discoveredPurpose).toEqual({
       purpose: 'Test purpose',
       limitations: 'Test limitations',
-      tools: [],
+      tools: [
+        {
+          name: 'tool1',
+          description: 'desc1',
+          arguments: [{ name: 'a', description: 'd', type: 'string' }],
+        },
+      ],
       user: 'Test user',
     });
   });
@@ -173,7 +206,13 @@ describe('doTargetPurposeDiscovery', () => {
         purpose: {
           purpose: 'Test purpose',
           limitations: 'Test limitations',
-          tools: [],
+          tools: [
+            {
+              name: 'tool1',
+              description: 'desc1',
+              arguments: [{ name: 'a', description: 'd', type: 'string' }],
+            },
+          ],
           user: 'Test user',
         },
         state: {
@@ -216,7 +255,13 @@ describe('doTargetPurposeDiscovery', () => {
     expect(discoveredPurpose).toEqual({
       purpose: 'Test purpose',
       limitations: 'Test limitations',
-      tools: [],
+      tools: [
+        {
+          name: 'tool1',
+          description: 'desc1',
+          arguments: [{ name: 'a', description: 'd', type: 'string' }],
+        },
+      ],
       user: 'Test user',
     });
   });

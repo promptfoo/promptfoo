@@ -85,7 +85,7 @@ export class AwsBedrockKnowledgeBaseProvider
 
     this.kbConfig = options.config || { knowledgeBaseId: '' };
 
-    telemetry.record('feature_used', {
+    telemetry.recordAndSendOnce('feature_used', {
       feature: 'knowledge_base',
       provider: 'bedrock',
     });

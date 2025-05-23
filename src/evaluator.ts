@@ -641,7 +641,7 @@ class Evaluator {
 
     // Build scenarios and add to tests
     if (testSuite.scenarios && testSuite.scenarios.length > 0) {
-      telemetry.record('feature_used', {
+      telemetry.recordAndSendOnce('feature_used', {
         feature: 'scenarios',
       });
       for (const scenario of testSuite.scenarios) {

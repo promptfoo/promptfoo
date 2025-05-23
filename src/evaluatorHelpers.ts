@@ -135,7 +135,7 @@ export async function renderPrompt(
           yaml.load(fs.readFileSync(filePath, 'utf8')) as string | object,
         );
       } else if (fileExtension === 'pdf' && !getEnvBool('PROMPTFOO_DISABLE_PDF_AS_TEXT')) {
-        telemetry.record('feature_used', {
+        telemetry.recordOnce('feature_used', {
           feature: 'extract_text_from_pdf',
         });
         vars[varName] = await extractTextFromPDF(filePath);
@@ -149,7 +149,7 @@ export async function renderPrompt(
             ? 'video'
             : 'audio';
 
-        telemetry.record('feature_used', {
+        telemetry.recordOnce('feature_used', {
           feature: `load_${fileType}_as_base64`,
         });
 
@@ -290,7 +290,7 @@ export async function renderPrompt(
  * @returns True if the extensions array is defined and has at least one element.
  */
 export function hasDefinedExtensionHooks(extensions: string[] | null | undefined): boolean {
-  return extensions && Array.isArray(extensions) && extensions.length > 0);
+  return extensions && Array.isArray(extensions) && extensions.length > 0;
 }
 
 /**
@@ -308,7 +308,7 @@ export async function runExtensionHook(
   invariant(hasDefinedExtensionHooks(extensions), 'extensions must be an array');
 
   // TODO(Will): It would be nice if this only ran when `hookName` is defined in >=1 extension(s).
-  telemetry.record('feature_used', {
+  telemetry.recordOnce('feature_used', {
     feature: 'extension_hook',
   });
 

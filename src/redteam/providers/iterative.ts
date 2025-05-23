@@ -265,11 +265,12 @@ export async function runRedteamConversation({
     const assertToUse = test?.assert?.find((a: { type: string }) => a.type);
     const { getGraderById } = await import('../graders');
     let graderPassed: boolean | undefined;
+
     if (test && assertToUse) {
       const grader = getGraderById(assertToUse.type);
       if (grader) {
         const { grade } = await grader.getResult(
-          goal as string,
+          test?.metadata?.pluginId === 'intent' ? newInjectVar : goal,
           targetResponse.output,
           test,
           gradingProvider,
