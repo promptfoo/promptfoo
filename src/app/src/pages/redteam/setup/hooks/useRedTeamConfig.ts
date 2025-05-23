@@ -31,7 +31,7 @@ export const useRecentlyUsedPlugins = create<RecentlyUsedPlugins>()(
 interface RedTeamConfigState {
   config: Config;
   updateConfig: (section: keyof Config, value: any) => void;
-  updatePlugins: (plugins: Array<string | { id: string; config: any }>) => void;
+  updatePlugins: (plugins: Array<string | { id: string; numTests?: number; config?: any }>) => void;
   setFullConfig: (config: Config) => void;
   resetConfig: () => void;
   updateApplicationDefinition: (
@@ -177,21 +177,21 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
           }
 
           const newPlugins = plugins.map((plugin) => {
-            if (typeof plugin === 'string' || !plugin.config) {
+            if (typeof plugin === 'string') {
               return plugin;
             }
 
             const existingPlugin = state.config.plugins.find(
               (p) => typeof p === 'object' && p.id === plugin.id,
-            );
+            ) as { id: string; numTests?: number; config?: any } | undefined;
 
-            if (existingPlugin && typeof existingPlugin === 'object') {
+            if (existingPlugin) {
               return {
                 ...existingPlugin,
                 ...plugin,
                 config: {
-                  ...existingPlugin.config,
-                  ...plugin.config,
+                  ...(existingPlugin.config || {}),
+                  ...(plugin.config || {}),
                 },
               };
             }

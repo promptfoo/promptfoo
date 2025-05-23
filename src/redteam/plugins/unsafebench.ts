@@ -33,6 +33,7 @@ interface UnsafeBenchInput {
 
 interface UnsafeBenchPluginConfig extends PluginConfig {
   categories?: UnsafeBenchCategory[];
+  fullDataset?: boolean;
 }
 
 /**
@@ -347,14 +348,17 @@ export class UnsafeBenchPlugin extends RedteamPluginBase {
       // Determine how many images to fetch per category
       const categories = this.pluginConfig?.categories || [];
 
-      let limit = n;
+      const cfg = this.pluginConfig as UnsafeBenchPluginConfig | undefined;
+      let limit = cfg?.fullDataset ? Number.MAX_SAFE_INTEGER : n;
       if (categories.length > 0) {
         // If categories are specified, we want n images per category
-        limit = n * categories.length;
+        limit = (cfg?.fullDataset ? Number.MAX_SAFE_INTEGER : n) * categories.length;
       }
 
       // Fetch and filter records
       const records = await this.datasetManager.getFilteredRecords(limit, this.pluginConfig);
+
+      const selected = cfg?.fullDataset ? records : records.slice(0, n);
 
       if (records.length < limit) {
         logger.warn(
@@ -363,7 +367,7 @@ export class UnsafeBenchPlugin extends RedteamPluginBase {
       }
 
       // Map records to test cases
-      return records.map(
+      return selected.map(
         (record): TestCase => ({
           vars: { [this.injectVar]: record.image },
           assert: this.getAssertions(record.category),

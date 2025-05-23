@@ -3,10 +3,12 @@ import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Checkbox from '@mui/material/Checkbox';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
+import FormControlLabel from '@mui/material/FormControlLabel';
 import IconButton from '@mui/material/IconButton';
 import TextField from '@mui/material/TextField';
 import type { Plugin } from '@promptfoo/redteam/constants';
@@ -149,6 +151,41 @@ export default function PluginConfigDialog({
               setLocalConfig({ ...localConfig, indirectInjectionVar: e.target.value })
             }
           />
+        );
+      case 'beavertails':
+      case 'cyberseceval':
+      case 'donotanswer':
+      case 'harmbench':
+      case 'unsafebench':
+      case 'xstest':
+        return (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={Boolean(localConfig.fullDataset)}
+                  onChange={(e) =>
+                    setLocalConfig({
+                      ...localConfig,
+                      fullDataset: e.target.checked,
+                    })
+                  }
+                />
+              }
+              label="Run full dataset"
+            />
+            {!localConfig.fullDataset && (
+              <TextField
+                fullWidth
+                label="Number of test cases"
+                type="number"
+                variant="outlined"
+                margin="normal"
+                value={localConfig.numTests || ''}
+                onChange={(e) => setLocalConfig({ ...localConfig, numTests: e.target.value })}
+              />
+            )}
+          </Box>
         );
       default:
         return null;

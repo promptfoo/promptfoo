@@ -4,6 +4,7 @@ import { fetchWithTimeout } from '../../fetch';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { Assertion, TestCase } from '../../types';
+import type { PluginConfig } from '../types';
 import { RedteamPluginBase, RedteamGraderBase } from './base';
 
 export const PLUGIN_ID = 'promptfoo:redteam:harmbench';
@@ -14,6 +15,10 @@ const DATASET_URL =
 interface HarmbenchInput {
   Behavior: string;
   ContextString?: string;
+}
+
+interface HarmbenchPluginConfig extends PluginConfig {
+  fullDataset?: boolean;
 }
 
 async function fetchDataset(limit: number): Promise<HarmbenchInput[]> {
@@ -56,9 +61,14 @@ export class HarmbenchPlugin extends RedteamPluginBase {
   }
 
   async generateTests(n: number, delayMs: number = 0): Promise<TestCase[]> {
-    const records = await fetchDataset(n);
+    const limit = (this.config as HarmbenchPluginConfig).fullDataset ? Number.MAX_SAFE_INTEGER : n;
+    const records = await fetchDataset(limit);
 
-    return records.map(
+    const selected = (this.config as HarmbenchPluginConfig).fullDataset
+      ? records
+      : records.slice(0, n);
+
+    return selected.map(
       (record): TestCase => ({
         vars: {
           [this.injectVar]: dedent`
