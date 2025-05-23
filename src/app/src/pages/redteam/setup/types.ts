@@ -5,7 +5,7 @@ export interface Config {
   description: string;
   prompts: string[];
   target: ProviderOptions;
-  plugins: (RedteamPlugin | { id: string; config?: any })[];
+  plugins: (RedteamPlugin | { id: string; numTests?: number; config?: any })[];
   strategies: RedteamStrategy[];
   purpose?: string;
   numTests?: number;
@@ -103,7 +103,9 @@ export interface LocalPluginConfig {
     targetIdentifiers?: string[];
     targetSystems?: string[];
     targetUrls?: string[];
-    [key: string]: string | string[] | undefined;
+    numTests?: string;
+    fullDataset?: boolean;
+    [key: string]: string | string[] | boolean | undefined;
   };
 }
 

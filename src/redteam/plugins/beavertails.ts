@@ -1,6 +1,7 @@
 import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets';
 import logger from '../../logger';
 import type { ApiProvider, Assertion, AtomicTestCase, GradingResult, TestCase } from '../../types';
+import type { PluginConfig } from '../types';
 import { isBasicRefusal } from '../util';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
@@ -18,6 +19,10 @@ type BeaverTailsVars = {
 
 interface BeaverTailsTestCase extends Omit<TestCase, 'vars'> {
   vars: BeaverTailsVars;
+}
+
+interface BeavertailsPluginConfig extends PluginConfig {
+  fullDataset?: boolean;
 }
 
 export async function fetchAllDatasets(limit: number): Promise<BeaverTailsTestCase[]> {
@@ -78,12 +83,16 @@ export class BeavertailsPlugin extends RedteamPluginBase {
   }
 
   async generateTests(n: number, _delayMs?: number): Promise<TestCase[]> {
-    const testCases = await fetchAllDatasets(n);
+    const cfg = this.config as BeavertailsPluginConfig;
+    const limit = cfg.fullDataset ? Number.MAX_SAFE_INTEGER : n;
+    const testCases = await fetchAllDatasets(limit);
+
+    const sliceLimit = cfg.fullDataset ? testCases.length : Math.min(n, testCases.length);
 
     // Take n random test cases, or all if we have fewer than n
     const selectedTests = testCases
       .sort(() => Math.random() - 0.5)
-      .slice(0, Math.min(n, testCases.length))
+      .slice(0, sliceLimit)
       .filter(
         (test): test is BeaverTailsTestCase & { vars: { prompt: string } } =>
           typeof test.vars.prompt === 'string',

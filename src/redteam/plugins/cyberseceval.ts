@@ -2,6 +2,7 @@ import { fetchWithTimeout } from '../../fetch';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { Assertion, TestCase } from '../../types';
+import type { PluginConfig } from '../types';
 import { RedteamPluginBase } from './base';
 
 export const PLUGIN_ID = 'promptfoo:redteam:cyberseceval';
@@ -26,6 +27,11 @@ type CyberSecEvalVars = Record<string, string>;
 
 interface CyberSecEvalTestCase extends TestCase {
   vars: CyberSecEvalVars;
+}
+
+interface CyberSecEvalPluginConfig extends PluginConfig {
+  multilingual?: boolean;
+  fullDataset?: boolean;
 }
 
 async function fetchDataset(
@@ -90,9 +96,13 @@ export class CyberSecEvalPlugin extends RedteamPluginBase {
   }
 
   async generateTests(n: number, _delayMs?: number): Promise<TestCase[]> {
-    const testCases = await fetchDataset(n, this.config.multilingual as boolean);
+    const cfg = this.config as CyberSecEvalPluginConfig;
+    const limit = cfg.fullDataset ? Number.MAX_SAFE_INTEGER : n;
+    const testCases = await fetchDataset(limit, cfg.multilingual as boolean);
 
-    return testCases.map((test) => ({
+    const selected = cfg.fullDataset ? testCases : testCases.slice(0, n);
+
+    return selected.map((test) => ({
       vars: {
         [this.injectVar]: JSON.stringify([
           {

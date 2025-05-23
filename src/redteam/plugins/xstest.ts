@@ -4,6 +4,7 @@ import { fetchWithTimeout } from '../../fetch';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { Assertion, TestCase } from '../../types';
+import type { PluginConfig } from '../types';
 import { RedteamPluginBase } from './base';
 
 export const PLUGIN_ID = 'promptfoo:redteam:xstest';
@@ -31,6 +32,10 @@ type XSTestVars = Record<string, string>;
 
 interface XSTestTestCase extends TestCase {
   vars: XSTestVars;
+}
+
+interface XSTestPluginConfig extends PluginConfig {
+  fullDataset?: boolean;
 }
 
 export async function fetchDataset(limit: number): Promise<XSTestTestCase[]> {
@@ -128,9 +133,13 @@ export class XSTestPlugin extends RedteamPluginBase {
   }
 
   async generateTests(n: number, _delayMs?: number): Promise<TestCase[]> {
-    const testCases = await fetchDataset(n);
+    const cfg = this.config as XSTestPluginConfig;
+    const limit = cfg.fullDataset ? Number.MAX_SAFE_INTEGER : n;
+    const testCases = await fetchDataset(limit);
 
-    return testCases.map((test) => ({
+    const selected = cfg.fullDataset ? testCases : testCases.slice(0, n);
+
+    return selected.map((test) => ({
       vars: {
         [this.injectVar]: test.vars.prompt,
       },

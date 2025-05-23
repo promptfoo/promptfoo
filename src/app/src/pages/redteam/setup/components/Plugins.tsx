@@ -59,7 +59,22 @@ const ErrorFallback = ({ error }: { error: Error }) => (
 
 const PLUGINS_REQUIRING_CONFIG = ['indirect-prompt-injection', 'prompt-extraction'];
 
-const PLUGINS_SUPPORTING_CONFIG = ['bfla', 'bola', 'ssrf', ...PLUGINS_REQUIRING_CONFIG];
+const DATASET_PLUGINS = [
+  'beavertails',
+  'cyberseceval',
+  'donotanswer',
+  'harmbench',
+  'unsafebench',
+  'xstest',
+] as const;
+
+const PLUGINS_SUPPORTING_CONFIG = [
+  'bfla',
+  'bola',
+  'ssrf',
+  ...DATASET_PLUGINS,
+  ...PLUGINS_REQUIRING_CONFIG,
+];
 
 export default function Plugins({ onNext, onBack }: PluginsProps) {
   const { config, updatePlugins } = useRedTeamConfig();
@@ -90,18 +105,42 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     useMemo(
       () =>
         Array.from(selectedPlugins)
-          .map((plugin): string | { id: string; config: any } | null => {
+          .map((plugin): string | { id: string; numTests?: number; config?: any } | null => {
             if (plugin === 'policy') {
               return null;
             }
 
-            const config = pluginConfig[plugin];
-            if (config && Object.keys(config).length > 0) {
-              return { id: plugin, config };
+            const config = pluginConfig[plugin] || {};
+            const { numTests, fullDataset, ...rest } = config;
+
+            const result: { id: string; numTests?: number; config?: any } = { id: plugin };
+
+            if (typeof numTests === 'string' && numTests.trim() !== '') {
+              const parsed = Number.parseInt(numTests, 10);
+              if (!Number.isNaN(parsed)) {
+                result.numTests = parsed;
+              }
             }
+
+            const finalConfig: Record<string, any> = { ...rest };
+            if (fullDataset) {
+              finalConfig.fullDataset = true;
+            }
+
+            if (Object.keys(finalConfig).length > 0) {
+              result.config = finalConfig;
+            }
+
+            if (result.numTests || result.config) {
+              return result;
+            }
+
             return plugin;
           })
-          .filter((plugin): plugin is string | { id: string; config: any } => plugin !== null),
+          .filter(
+            (plugin): plugin is string | { id: string; numTests?: number; config?: any } =>
+              plugin !== null,
+          ),
       [selectedPlugins, pluginConfig],
     ),
     1000,
