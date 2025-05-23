@@ -1,4 +1,3 @@
-import { randomBytes } from 'crypto';
 import logger from '../../logger';
 import type { ApiProvider, CallApiContextParams, CallApiOptionsParams } from '../../types';
 import { getRemoteGenerationUrl } from '../remoteGeneration';
@@ -13,12 +12,10 @@ interface ServerState {
 }
 
 export class ServerOffTopicProvider implements ApiProvider {
-  private sessionId: string;
   private maxRounds: number;
 
   constructor(public config: any) {
     logger.debug(`[ServerOffTopic] Initialized with config: ${JSON.stringify(config)}`);
-    this.sessionId = `session_${Date.now()}_${randomBytes(16).toString('hex')}`;
     this.maxRounds = config?.maxRounds ?? 10; // Default to 10 if not specified
   }
 
@@ -186,7 +183,6 @@ export class ServerOffTopicProvider implements ApiProvider {
         metadata = {
           state,
           messages,
-          sessionId: this.sessionId,
           roundsCompleted: roundNum,
           redteamHistory: messagesToRedteamHistory(messages),
         };
