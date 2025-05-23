@@ -497,7 +497,10 @@ providers:
     config:
       guardrailIdentifier: 'test-guardrail'
       guardrailVersion: 1 # The version number for the guardrail. The value can also be DRAFT.
+      trace: 'enabled' # Optional: Enable trace for enhanced debugging
 ```
+
+When trace is enabled, the response will include detailed information about guardrail assessments, including what content was blocked or masked. This is useful for debugging guardrail behavior.
 
 ## Environment Variables
 

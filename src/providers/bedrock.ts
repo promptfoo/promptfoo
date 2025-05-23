@@ -1670,6 +1670,12 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
           ? {
               guardrails: {
                 flagged: output['amazon-bedrock-guardrailAction'] === 'INTERVENED',
+                ...(output['amazon-bedrock-assessments'] ? {
+                  assessments: output['amazon-bedrock-assessments']
+                } : {}),
+                ...(output['amazon-bedrock-outputs'] ? {
+                  outputs: output['amazon-bedrock-outputs']
+                } : {}),
               },
             }
           : {}),
