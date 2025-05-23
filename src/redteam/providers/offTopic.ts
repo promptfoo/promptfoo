@@ -46,6 +46,22 @@ export class ServerOffTopicProvider implements ApiProvider {
     }
   }
 
+  /**
+   * Executes an off-topic conversation attack by coordinating with a remote server.
+   *
+   * This method conducts a multi-turn conversation where the server attempts to get the
+   * target model to deviate from its original purpose through various off-topic prompts.
+   * The conversation continues until either:
+   * - The server signals completion (successful deviation)
+   * - Maximum rounds are reached
+   * - The model successfully deviates from its purpose
+   *
+   * @param prompt - Initial prompt (not used directly in off-topic attacks)
+   * @param context - Call context containing the original provider and test metadata
+   * @param options - Optional API call parameters
+   * @returns Promise resolving to provider response with conversation output and metadata
+   * @throws Error if originalProvider is not provided or server communication fails
+   */
   async callApi(
     prompt: string | unknown,
     context?: CallApiContextParams,
