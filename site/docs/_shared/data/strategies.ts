@@ -279,6 +279,17 @@ export const strategies: Strategy[] = [
     link: '/docs/red-team/strategies/other-encodings/#pig-latin',
   },
   {
+    category: 'Static (Single-Turn)',
+    strategy: 'camelcase',
+    displayName: 'camelCase',
+    description: 'camelCase transformation',
+    longDescription:
+      'Tests handling of text transformed into camelCase (removing spaces and capitalizing words) to potentially bypass content filters',
+    cost: 'Low',
+    asrIncrease: '20-30%',
+    link: '/docs/red-team/strategies/other-encodings/#camelcase',
+  },
+  {
     category: 'Regression',
     strategy: 'retry',
     displayName: 'Retry',

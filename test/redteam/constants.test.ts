@@ -207,7 +207,11 @@ describe('constants', () => {
   });
 
   it('STRATEGY_COLLECTION_MAPPINGS should have correct mappings', () => {
-    expect(STRATEGY_COLLECTION_MAPPINGS['other-encodings']).toEqual(['morse', 'piglatin']);
+    expect(STRATEGY_COLLECTION_MAPPINGS['other-encodings']).toEqual([
+      'morse',
+      'piglatin',
+      'camelcase',
+    ]);
   });
 
   it('ALL_STRATEGIES should include strategy collections', () => {
@@ -216,7 +220,7 @@ describe('constants', () => {
 
   it('strategy collections should have proper descriptions', () => {
     expect(strategyDescriptions['other-encodings']).toBe(
-      'Collection of alternative text transformation strategies (Morse code and Pig Latin) for testing evasion techniques',
+      'Collection of alternative text transformation strategies (Morse code, Pig Latin, and camelCase) for testing evasion techniques',
     );
   });
 
@@ -226,7 +230,7 @@ describe('constants', () => {
 
   it('strategy collections should have proper subcategory descriptions', () => {
     expect(subCategoryDescriptions['other-encodings']).toBe(
-      'Collection of alternative text transformation strategies (Morse code and Pig Latin) for testing evasion techniques',
+      'Collection of alternative text transformation strategies (Morse code, Pig Latin, and camelCase) for testing evasion techniques',
     );
   });
 });

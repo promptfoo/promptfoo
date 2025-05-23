@@ -30,6 +30,7 @@ export const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   'other-encodings': 1,
   pandamonium: 5,
   piglatin: 1,
+  camelcase: 1,
   'prompt-injection': 1,
   retry: 1,
   rot13: 1,

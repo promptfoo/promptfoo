@@ -1,12 +1,12 @@
 ---
 sidebar_position: 102
 title: Other Encodings - Alternative Text Transformation Strategies
-description: Learn how to test LLM resilience using Morse code and Pig Latin text transformations to bypass content filters and evaluate model security.
+description: Learn how to test LLM resilience using Morse code, Pig Latin, and camelCase text transformations to bypass content filters and evaluate model security.
 ---
 
 # Other Encodings
 
-The other-encodings strategy collection provides multiple text transformation methods to test model resilience against evasion techniques that use alternative text representations. This collection automatically includes both Morse code and Pig Latin encodings.
+The other-encodings strategy collection provides multiple text transformation methods to test model resilience against evasion techniques that use alternative text representations. This collection automatically includes Morse code, Pig Latin, and camelCase encodings.
 
 ## Strategy Collection
 
@@ -14,7 +14,7 @@ You can use the `other-encodings` collection in your configuration to automatica
 
 ```yaml title="promptfooconfig.yaml"
 strategies:
-  - other-encodings # Includes both Morse code and Pig Latin transformations
+  - other-encodings # Includes Morse code, Pig Latin, and camelCase transformations
 ```
 
 This is equivalent to specifying each strategy individually:
@@ -23,6 +23,7 @@ This is equivalent to specifying each strategy individually:
 strategies:
   - morse
   - piglatin
+  - camelcase
 ```
 
 ## Morse Code
@@ -79,6 +80,19 @@ strategies:
   - piglatin # Apply Pig Latin transformation
 ```
 
+## camelCase
+
+The camelCase strategy converts text to camelCase by removing spaces and capitalizing the first letter of each subsequent word.
+
+### Configuration
+
+Add the camelCase strategy individually to your red team configuration:
+
+```yaml title="promptfooconfig.yaml"
+strategies:
+  - camelcase # Apply camelCase transformation
+```
+
 ## Example
 
 Here's a complete example that applies the encoding collection to test cases:
@@ -97,7 +111,7 @@ redteam:
     - owasp:llm
   strategies:
     - basic # Include original prompts
-    - other-encodings # Includes both Morse code and Pig Latin
+    - other-encodings # Includes Morse code, Pig Latin, and camelCase
 ```
 
 ## Technical Details

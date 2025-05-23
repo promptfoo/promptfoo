@@ -120,9 +120,32 @@ export function toPigLatin(text: string): string {
     .join(' ');
 }
 
+/**
+ * Convert text to camelCase
+ */
+export function toCamelCase(text: string): string {
+  const words = text.split(' ');
+  return words
+    .map((word, index) => {
+      const match = word.match(/^([a-zA-Z0-9]+)(.*)$/);
+      if (!match) {
+        return word;
+      }
+      const baseWord = match[1];
+      const punctuation = match[2];
+      const transformed =
+        index === 0
+          ? baseWord.toLowerCase()
+          : baseWord.charAt(0).toUpperCase() + baseWord.slice(1).toLowerCase();
+      return transformed + punctuation;
+    })
+    .join('');
+}
+
 export const EncodingType = {
   MORSE: 'morse',
   PIG_LATIN: 'piglatin',
+  CAMEL_CASE: 'camelcase',
 } as const;
 
 export type EncodingType = (typeof EncodingType)[keyof typeof EncodingType];
@@ -142,6 +165,8 @@ export function addOtherEncodings(
         return toMorseCode;
       case EncodingType.PIG_LATIN:
         return toPigLatin;
+      case EncodingType.CAMEL_CASE:
+        return toCamelCase;
       default:
         return toMorseCode; // Default to Morse code
     }
@@ -154,6 +179,8 @@ export function addOtherEncodings(
         return 'Morse';
       case EncodingType.PIG_LATIN:
         return 'PigLatin';
+      case EncodingType.CAMEL_CASE:
+        return 'CamelCase';
       default:
         return encodingType;
     }
@@ -172,7 +199,12 @@ export function addOtherEncodings(
     metadata: {
       ...testCase.metadata,
       // Use the specific strategy ID based on encoding type
-      strategyId: encodingType === EncodingType.MORSE ? 'morse' : 'piglatin',
+      strategyId:
+        encodingType === EncodingType.MORSE
+          ? 'morse'
+          : encodingType === EncodingType.PIG_LATIN
+            ? 'piglatin'
+            : 'camelcase',
       encodingType,
     },
   }));
