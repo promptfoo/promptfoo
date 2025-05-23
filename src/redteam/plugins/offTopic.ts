@@ -1,14 +1,6 @@
 import dedent from 'dedent';
 import logger from '../../logger';
-import type {
-  Assertion,
-  ApiProvider,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  ProviderResponse,
-  RedteamObjectConfig,
-  TestCase,
-} from '../../types';
+import type { Assertion, ApiProvider, RedteamObjectConfig, TestCase } from '../../types';
 import invariant from '../../util/invariant';
 import { RedteamPluginBase, RedteamGraderBase } from './base';
 
@@ -84,28 +76,6 @@ export class OffTopicPlugin extends RedteamPluginBase {
         metric: 'OffTopic',
       },
     ];
-  }
-
-  async callApi(
-    prompt: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
-  ): Promise<ProviderResponse> {
-    logger.debug(`[OffTopic] Starting conversation`);
-    invariant(context?.originalProvider, 'Expected originalProvider to be set');
-
-    try {
-      // Pass the prompt to the original provider
-      return await context.originalProvider.callApi(prompt, context, options);
-    } catch (error) {
-      logger.error(`[OffTopic] Error in conversation: ${error}`);
-      return {
-        output: 'An error occurred during the off-topic test.',
-        metadata: {
-          error: String(error),
-        },
-      };
-    }
   }
 
   async generateTests(n: number): Promise<TestCase[]> {
