@@ -74,7 +74,7 @@ export class OffTopicPlugin extends RedteamPluginBase {
 
   // This is required by the abstract base class but isn't used in our implementation
   protected async getTemplate(): Promise<string> {
-    return ''; // Empty template since we're not using it
+    throw new Error('getTemplate() is not implemented for OffTopicPlugin - uses static templates');
   }
 
   protected getAssertions(): Assertion[] {
