@@ -22,7 +22,6 @@ import {
   Severity,
   STRATEGY_COLLECTIONS,
   STRATEGY_EXEMPT_PLUGINS,
-  BIAS_PLUGINS,
 } from './constants';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
@@ -143,7 +142,7 @@ export function resolvePluginConfig(config: Record<string, any> | undefined): Re
 const categories = {
   foundation: FOUNDATION_PLUGINS,
   harmful: Object.keys(HARM_PLUGINS),
-  bias: Object.keys(BIAS_PLUGINS),
+  bias: Object.keys(HARM_PLUGINS).filter((p) => p.startsWith('bias:')),
   pii: PII_PLUGINS,
 } as const;
 
