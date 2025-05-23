@@ -61,7 +61,8 @@ export default function Review() {
   const { showToast } = useToast();
   const [forceRegeneration /*, setForceRegeneration*/] = React.useState(true);
   const [debugMode, setDebugMode] = React.useState(false);
-  const [delay, setDelay] = React.useState('0');
+  const [maxConcurrency, setMaxConcurrency] = React.useState('1');
+  const [delayMs, setDelayMs] = React.useState('0');
   const [isJobStatusDialogOpen, setIsJobStatusDialogOpen] = useState(false);
   const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
   const [isRunSettingsDialogOpen, setIsRunSettingsDialogOpen] = useState(false);
@@ -202,7 +203,8 @@ export default function Review() {
           config: getUnifiedConfig(config),
           force: forceRegeneration,
           verbose: debugMode,
-          delay,
+          maxConcurrency,
+          delayMs,
         }),
       });
 
@@ -725,24 +727,70 @@ export default function Review() {
               />
             </Box>
             <Box>
-              <TextField
-                fullWidth
-                type="number"
-                label="Delay between API calls (ms)"
-                value={delay}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  // Ensure non-negative numbers only
-                  if (!Number.isNaN(Number(value)) && Number(value) >= 0) {
-                    setDelay(value);
-                  }
-                }}
-                disabled={isRunning}
-                InputProps={{
-                  endAdornment: <Typography variant="caption">ms</Typography>,
-                }}
-                helperText="Add a delay between API calls to avoid rate limits"
-              />
+              <Tooltip
+                title={
+                  Number(maxConcurrency) > 1
+                    ? 'Disabled because max concurrency is greater than 1'
+                    : ''
+                }
+                placement="top"
+              >
+                <span>
+                  <TextField
+                    fullWidth
+                    type="number"
+                    label="Delay between API calls (ms)"
+                    value={delayMs}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      // Ensure non-negative numbers only
+                      if (!Number.isNaN(Number(value)) && Number(value) >= 0) {
+                        setDelayMs(value);
+                        // If delay is set, disable concurrency by setting it to 1
+                        if (Number(value) > 0) {
+                          setMaxConcurrency('1');
+                        }
+                      }
+                    }}
+                    disabled={isRunning || Number(maxConcurrency) > 1}
+                    InputProps={{
+                      endAdornment: <Typography variant="caption">ms</Typography>,
+                    }}
+                    helperText="Add a delay between API calls to avoid rate limits"
+                  />
+                </span>
+              </Tooltip>
+            </Box>
+            <Box>
+              <Tooltip
+                title={Number(delayMs) > 0 ? 'Disabled because delay is set' : ''}
+                placement="top"
+              >
+                <span>
+                  <TextField
+                    fullWidth
+                    type="number"
+                    label="Max concurrency"
+                    value={maxConcurrency}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      // Ensure non-negative numbers only
+                      if (!Number.isNaN(Number(value)) && Number(value) >= 0) {
+                        setMaxConcurrency(value);
+                        // If concurrency > 1, disable delay by setting it to 0
+                        if (Number(value) > 1) {
+                          setDelayMs('0');
+                        }
+                      }
+                    }}
+                    disabled={isRunning || Number(delayMs) > 0}
+                    InputProps={{
+                      endAdornment: <Typography variant="caption">instances</Typography>,
+                    }}
+                    helperText="Maximum number of concurrent evaluations"
+                  />
+                </span>
+              </Tooltip>
             </Box>
             <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
               <Button onClick={() => setIsRunSettingsDialogOpen(false)}>Close</Button>
