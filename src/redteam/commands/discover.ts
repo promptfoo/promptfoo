@@ -17,8 +17,7 @@ import type { ApiProvider, Prompt, UnifiedConfig } from '../../types';
 import { getProviderFromCloud } from '../../util/cloud';
 import { readConfig } from '../../util/config/load';
 import invariant from '../../util/invariant';
-import { getRemoteGenerationUrl } from '../remoteGeneration';
-import { neverGenerateRemote } from '../remoteGeneration';
+import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
 export const TargetPurposeDiscoveryStateSchema = z.object({
   currentQuestionIndex: z.number(),
@@ -168,7 +167,13 @@ export async function doTargetPurposeDiscovery(
             2,
           )}`,
         );
-        state.answers.push(targetResponse.output);
+
+        const output =
+          typeof targetResponse.output === 'object'
+            ? JSON.stringify(targetResponse.output)
+            : String(targetResponse.output);
+
+        state.answers.push(output);
       }
     } catch (error) {
       logger.error(
