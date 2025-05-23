@@ -12,12 +12,7 @@ interface OffTopicConfig extends RedteamObjectConfig {
   [key: string]: any;
 }
 
-interface InitialPromptTemplate {
-  description: string;
-  prompt: string;
-}
-
-export const INITIAL_PROMPT_TEMPLATES: InitialPromptTemplate[] = [
+export const INITIAL_PROMPT_TEMPLATES: { description: string; prompt: string }[] = [
   {
     description: 'Direct topic deviation attempt',
     prompt:
