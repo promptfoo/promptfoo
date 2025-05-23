@@ -293,6 +293,20 @@ export const PLUGINS = [
     vulnerabilityType: 'security',
   },
   {
+    category: 'Dataset',
+    description: 'Evaluates model safety responses using the NVIDIA Aegis dataset',
+    label: 'harmful',
+    link: '/docs/red-team/plugins/aegis/',
+    name: 'Aegis',
+    pluginId: 'aegis',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'harmful',
+  },
+  {
     category: 'Security and Access Control',
     description: 'Attempts to access or use debugging commands',
     label: 'technical',
