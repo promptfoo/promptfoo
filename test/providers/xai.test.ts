@@ -171,6 +171,23 @@ describe('xAI Provider', () => {
       const json = provider.toJSON?.() || {};
       expect(json.config.apiKey).toBeUndefined();
     });
+
+    it('passes search_parameters through to OpenAI provider', () => {
+      createXAIProvider('xai:grok-3-beta', {
+        config: {
+          search_parameters: { mode: 'auto' },
+        } as any,
+      });
+
+      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
+        'grok-3-beta',
+        expect.objectContaining({
+          config: expect.objectContaining({
+            search_parameters: { mode: 'auto' },
+          }),
+        }),
+      );
+    });
   });
 
   // ========================================================================
