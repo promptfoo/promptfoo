@@ -5,9 +5,6 @@ import { getRemoteGenerationUrl } from '../remoteGeneration';
 import type { Message } from './shared';
 import { messagesToRedteamHistory } from './shared';
 
-// Match server's MAX_ROUNDS constant
-const MAX_ROUNDS = 10;
-
 interface ServerState {
   originalTopic: string;
   deviationAttempts: number;
@@ -26,10 +23,12 @@ export class ServerOffTopicProvider implements ApiProvider {
     lastDeviationSuccess: false,
   };
   private originalPurpose: string = '';
+  private maxRounds: number;
 
   constructor(public config: any) {
     logger.debug(`[ServerOffTopic] Initialized with config: ${JSON.stringify(config)}`);
     this.sessionId = `session_${Date.now()}_${randomBytes(16).toString('hex')}`;
+    this.maxRounds = config?.maxRounds ?? 10; // Default to 10 if not specified
   }
 
   id(): string {
@@ -67,7 +66,7 @@ export class ServerOffTopicProvider implements ApiProvider {
       }
 
       // Continue conversation until max rounds or server indicates completion
-      while (!isComplete && this.roundNum < MAX_ROUNDS) {
+      while (!isComplete && this.roundNum < this.maxRounds) {
         logger.debug(
           `[ServerOffTopic] Round ${this.roundNum}, sending messages: ${JSON.stringify(this.messages)}`,
         );
@@ -76,6 +75,7 @@ export class ServerOffTopicProvider implements ApiProvider {
           task: 'off-topic',
           i: this.roundNum,
           messages: this.messages,
+          maxRounds: this.maxRounds,
           state: {
             currentPhase: this.state.currentPhase,
             originalPurpose: this.originalPurpose,
