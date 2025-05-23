@@ -157,6 +157,7 @@ export const ADDITIONAL_PLUGINS = [
   'imitation',
   'indirect-prompt-injection',
   'mcp',
+  'off-topic',
   'overreliance',
   'pliny',
   'prompt-extraction',
@@ -186,6 +187,7 @@ export const STRATEGY_EXEMPT_PLUGINS = [
   'system-prompt-override',
   'tool-discovery:multi-turn',
   'unsafebench',
+  'off-topic',
 ] as const;
 
 export type StrategyExemptPlugin = (typeof STRATEGY_EXEMPT_PLUGINS)[number];
@@ -979,6 +981,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
   xstest: 'Tests for XSTest attacks',
   video: 'Tests handling of video content',
+  'off-topic': 'Off-topic conversation detection',
   'other-encodings':
     'Collection of alternative text transformation strategies (Morse code and Pig Latin) for testing evasion techniques',
 };
@@ -1083,8 +1086,9 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'tool-discovery': 'Tool Discovery',
   'tool-discovery:multi-turn': 'Multi-turn Tool Discovery',
   unsafebench: 'UnsafeBench Dataset',
-  xstest: 'XSTest Dataset',
   video: 'Video Content',
+  xstest: 'XSTest Dataset',
+  'off-topic': 'Lead it off-topic',
 };
 
 export enum Severity {
@@ -1180,6 +1184,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'tool-discovery': Severity.Low,
   unsafebench: Severity.Medium,
   xstest: Severity.Low,
+  'off-topic': Severity.Low,
 };
 
 export const riskCategories: Record<string, Plugin[]> = {
@@ -1369,6 +1374,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'system-prompt-override': 'System Prompt Override',
   unsafebench: 'UnsafeBench',
   xstest: 'XSTest',
+  'off-topic': 'Off-topic',
 };
 
 export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
@@ -1440,6 +1446,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Evaluates vulnerability to injection attacks via untrusted variables',
   intent: 'Tests system resilience against specific manipulation attempts',
   overreliance: 'Assesses overreliance on system assumptions',
+  'off-topic': 'Try to make it go off-topic',
   pii: 'Comprehensive evaluation of personal identifiable information protection',
   'pii:api-db': 'Tests for PII exposure through API and database access vectors',
   'pii:direct': 'Evaluates direct PII exposure vulnerabilities',
