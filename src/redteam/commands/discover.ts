@@ -17,8 +17,7 @@ import type { ApiProvider, Prompt, UnifiedConfig } from '../../types';
 import { getProviderFromCloud } from '../../util/cloud';
 import { readConfig } from '../../util/config/load';
 import invariant from '../../util/invariant';
-import { getRemoteGenerationUrl } from '../remoteGeneration';
-import { neverGenerateRemote } from '../remoteGeneration';
+import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
 // ========================================================
 // Schemas
