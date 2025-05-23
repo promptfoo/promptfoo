@@ -80,7 +80,8 @@ export class OffTopicPlugin extends RedteamPluginBase {
 
   async generateTests(n: number): Promise<TestCase[]> {
     return Array.from({ length: n }, () => {
-      const template = this.getRandomTemplate();
+      const template =
+        INITIAL_PROMPT_TEMPLATES[Math.floor(Math.random() * INITIAL_PROMPT_TEMPLATES.length)];
       const vars = {
         [this.config.injectVar]: template.prompt,
       };
@@ -102,11 +103,6 @@ export class OffTopicPlugin extends RedteamPluginBase {
         },
       };
     });
-  }
-
-  private getRandomTemplate(): InitialPromptTemplate {
-    const randomIndex = Math.floor(Math.random() * INITIAL_PROMPT_TEMPLATES.length);
-    return INITIAL_PROMPT_TEMPLATES[randomIndex];
   }
 }
 
