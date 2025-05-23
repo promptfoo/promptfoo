@@ -52,6 +52,7 @@ describe('Anthropic utilities', () => {
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
           server_tool_use: null,
+          service_tier: null,
         },
       };
 
@@ -74,6 +75,7 @@ describe('Anthropic utilities', () => {
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
           server_tool_use: null,
+          service_tier: null,
         },
       };
 
@@ -99,6 +101,7 @@ describe('Anthropic utilities', () => {
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
           server_tool_use: null,
+          service_tier: null,
         },
       };
 
@@ -134,6 +137,7 @@ describe('Anthropic utilities', () => {
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
           server_tool_use: null,
+          service_tier: null,
         },
       };
 
@@ -167,6 +171,7 @@ describe('Anthropic utilities', () => {
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
           server_tool_use: null,
+          service_tier: null,
         },
       };
 
@@ -206,6 +211,7 @@ describe('Anthropic utilities', () => {
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
           server_tool_use: null,
+          service_tier: null,
         },
       };
 
@@ -236,6 +242,7 @@ describe('Anthropic utilities', () => {
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
           server_tool_use: null,
+          service_tier: null,
         },
       };
 
@@ -268,6 +275,7 @@ describe('Anthropic utilities', () => {
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
           server_tool_use: null,
+          service_tier: null,
         },
       };
 
@@ -297,6 +305,7 @@ describe('Anthropic utilities', () => {
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
           server_tool_use: null,
+          service_tier: null,
         },
       };
 
@@ -326,6 +335,7 @@ describe('Anthropic utilities', () => {
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
           server_tool_use: null,
+          service_tier: null,
         },
       };
 
