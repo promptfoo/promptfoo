@@ -190,6 +190,7 @@ export async function doTargetPurposeDiscovery(
         const targetResponse = await target.callApi(renderedPrompt, {
           prompt: { raw: question, label: 'Target Purpose Discovery Question' },
           vars: { sessionId },
+          extensionHookOutputs: { beforeAll: [], beforeEach: [] },
         });
 
         if (targetResponse.error) {

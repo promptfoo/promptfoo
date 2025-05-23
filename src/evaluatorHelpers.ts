@@ -290,7 +290,7 @@ export async function renderPrompt(
  * @returns True if the extensions array is defined and has at least one element.
  */
 export function hasDefinedExtensionHooks(extensions: string[] | null | undefined): boolean {
-  return extensions && Array.isArray(extensions) && extensions.length > 0;
+  return !!(extensions && Array.isArray(extensions) && extensions.length > 0);
 }
 
 /**
