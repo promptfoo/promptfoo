@@ -161,7 +161,7 @@ describe('constants', () => {
       'Minimal set of plugins to validate your setup',
     );
     expect(PLUGIN_PRESET_DESCRIPTIONS.Harmful).toBe(
-      'All harmful content plugins for maximum risk coverage',
+      'Harmful content assessment using MLCommons and HarmBench taxonomies',
     );
     expect(PLUGIN_PRESET_DESCRIPTIONS['OWASP Agentic AI Top 10']).toBe(
       'OWASP Agentic AI Top 10 Threats and Mitigations',
