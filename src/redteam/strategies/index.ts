@@ -28,6 +28,7 @@ import { addAudioToBase64 } from './simpleAudio';
 import { addImageToBase64 } from './simpleImage';
 import { addVideoToBase64 } from './simpleVideo';
 import { addCompositeTestCases } from './singleTurnComposite';
+import { addTau } from './tau';
 
 export interface Strategy {
   id: string;
@@ -107,6 +108,15 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding GOAT to ${testCases.length} test cases`);
       const newTestCases = await addGoatTestCases(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} GOAT test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'tau',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding Tau to ${testCases.length} test cases`);
+      const newTestCases = addTau(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} Tau test cases`);
       return newTestCases;
     },
   },
