@@ -73,6 +73,12 @@ export function redteamRunCommand(program: Command) {
         opts.config = undefined;
 
         opts.loadedFromCloud = true;
+      } else if (opts.target) {
+        logger.error(
+          `Target ID (-t) can only used when -c is used. To use a cloud target inside of a config set the id of the target to ${CLOUD_PROVIDER_PREFIX}${opts.target}. `,
+        );
+        process.exitCode = 1;
+        return;
       }
 
       try {
