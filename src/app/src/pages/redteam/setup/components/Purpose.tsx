@@ -162,12 +162,16 @@ export default function Purpose({ onNext }: PromptsProps) {
                   sx={{
                     mt: 2,
                     mb: 2,
-                    borderRadius: 2,
+                    borderRadius: (theme) => theme.shape.borderRadius,
                     cursor: 'pointer',
+                    position: 'relative',
+                    transition: 'background-color 0.1s ease',
+                    boxShadow: 'none',
                     '& .MuiAlert-icon': {
                       color: 'info.main',
                       paddingTop: '14px',
                       alignSelf: 'flex-start',
+                      fontSize: (theme) => theme.typography.subtitle1.fontSize,
                     },
                     backgroundColor: (theme) =>
                       theme.palette.mode === 'dark'
@@ -182,12 +186,14 @@ export default function Purpose({ onNext }: PromptsProps) {
                     '& .MuiAlert-message': {
                       color: 'text.primary',
                       width: '100%',
+                      py: 0.5,
                     },
                     '&:hover': {
                       backgroundColor: (theme) =>
                         theme.palette.mode === 'dark'
                           ? alpha(theme.palette.info.main, 0.15)
                           : alpha(theme.palette.info.main, 0.1),
+                      boxShadow: 'none',
                     },
                   }}
                   onClick={() => setExpandAlert(!expandAlert)}
@@ -200,22 +206,39 @@ export default function Purpose({ onNext }: PromptsProps) {
                         alignItems: 'center',
                       }}
                     >
-                      <Typography>
-                        The more information you provide, the better the redteam attacks will be.
-                      </Typography>
+                      <Box>
+                        <Typography
+                          variant="subtitle2"
+                          fontWeight="500"
+                          sx={{
+                            color: 'text.primary',
+                            mb: 0.5,
+                          }}
+                        >
+                          Provide Detailed Information
+                        </Typography>
+                        <Typography variant="body2">
+                          The more information you provide, the better the redteam attacks will be.
+                        </Typography>
+                      </Box>
                       <IconButton
                         size="small"
+                        color="info"
                         onClick={(e) => {
                           e.stopPropagation();
                           setExpandAlert(!expandAlert);
                         }}
-                        sx={{ ml: 1 }}
+                        sx={{
+                          ml: 1,
+                          transition: 'transform 0.2s ease',
+                          transform: expandAlert ? 'rotate(180deg)' : 'rotate(0deg)',
+                          bgcolor: 'transparent',
+                          '&:hover': {
+                            bgcolor: (theme) => alpha(theme.palette.info.main, 0.1),
+                          },
+                        }}
                       >
-                        {expandAlert ? (
-                          <ExpandMoreIcon sx={{ transform: 'rotate(180deg)' }} />
-                        ) : (
-                          <ExpandMoreIcon />
-                        )}
+                        <ExpandMoreIcon />
                       </IconButton>
                     </Box>
 
@@ -283,21 +306,19 @@ export default function Purpose({ onNext }: PromptsProps) {
                   placeholder="Describe your application purpose at the minimum, other application context like features, roles, security requirements, and any example identifiers can further help improve the quality of the redteam attacks and grading"
                   multiline
                   variant="outlined"
-                  minRows={4}
-                  maxRows={15}
-                  InputProps={{
-                    sx: {
-                      fontFamily: (theme) => theme.typography.fontFamily,
-                      fontSize: '0.9rem',
-                      lineHeight: 1.7,
-                    },
-                  }}
+                  minRows={8}
+                  maxRows={20}
                   sx={{
                     '& .MuiOutlinedInput-root': {
                       '&.Mui-focused fieldset': {
                         borderColor: 'primary.main',
                         borderWidth: '2px',
                       },
+                    },
+                    '& .MuiInputBase-input': {
+                      fontFamily: (theme) => theme.typography.fontFamily,
+                      fontSize: '0.9rem',
+                      lineHeight: 1.7,
                     },
                   }}
                 />
