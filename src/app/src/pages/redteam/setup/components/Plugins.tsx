@@ -19,6 +19,7 @@ import Paper from '@mui/material/Paper';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { alpha } from '@mui/material/styles';
+import Chip from '@mui/material/Chip';
 import {
   ALL_PLUGINS,
   DEFAULT_PLUGINS,
@@ -36,6 +37,7 @@ import {
   riskCategories,
   OWASP_LLM_RED_TEAM_MAPPING,
   EU_AI_ACT_MAPPING,
+  STRATEGY_EXEMPT_PLUGINS,
 } from '@promptfoo/redteam/constants';
 import { useDebounce } from 'use-debounce';
 import { useRedTeamConfig, useRecentlyUsedPlugins } from '../hooks/useRedTeamConfig';
@@ -465,6 +467,18 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                           )}
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                             {displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
+                            {STRATEGY_EXEMPT_PLUGINS.includes(plugin as any) && (
+                              <Chip
+                                label="Agentic"
+                                size="small"
+                                sx={{
+                                  backgroundColor: (theme) => alpha(theme.palette.warning.main, 0.1),
+                                  color: 'warning.main',
+                                  borderColor: 'warning.main',
+                                  border: 1,
+                                }}
+                              />
+                            )}
                           </Box>
                           <Typography variant="body2" color="text.secondary">
                             {subCategoryDescriptions[plugin]}
