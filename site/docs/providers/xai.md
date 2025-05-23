@@ -121,7 +121,7 @@ xAI supports image generation via `xai:image:grok-2-image`. See the [xAI image e
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
-  - "A cat in a tree"
+  - 'A cat in a tree'
 
 providers:
   - xai:image:grok-2-image

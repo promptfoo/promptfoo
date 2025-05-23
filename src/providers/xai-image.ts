@@ -1,15 +1,16 @@
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../types';
-import type { ApiProvider } from '../types/providers';
-import type { EnvOverrides } from '../types/env';
 import logger from '../logger';
+import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../types';
+import type { EnvOverrides } from '../types/env';
+import type { ApiProvider } from '../types/providers';
 import invariant from '../util/invariant';
-import { REQUEST_TIMEOUT_MS } from './shared';
 import { OpenAiImageProvider, formatOutput, callOpenAiImageApi } from './openai/image';
+import { REQUEST_TIMEOUT_MS } from './shared';
 
 export type XaiImageOptions = {
   n?: number;
   response_format?: 'url' | 'b64_json';
   user?: string;
+  headers?: Record<string, string>;
 };
 
 export class XAIImageProvider extends OpenAiImageProvider {
@@ -140,4 +141,3 @@ export function createXAIImageProvider(
   invariant(modelName, 'Model name is required');
   return new XAIImageProvider(modelName, options);
 }
-
