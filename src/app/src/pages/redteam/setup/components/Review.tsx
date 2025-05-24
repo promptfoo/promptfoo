@@ -753,6 +753,7 @@ export default function Review() {
                       }
                     }}
                     disabled={isRunning || Number(maxConcurrency) > 1}
+                    inputProps={{ min: 0, step: 1 }}
                     InputProps={{
                       endAdornment: <Typography variant="caption">ms</Typography>,
                     }}
@@ -784,6 +785,7 @@ export default function Review() {
                       }
                     }}
                     disabled={isRunning || Number(delayMs) > 0}
+                    inputProps={{ min: 1, step: 1 }}
                     InputProps={{
                       endAdornment: <Typography variant="caption">instances</Typography>,
                     }}
