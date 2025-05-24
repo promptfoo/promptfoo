@@ -286,7 +286,7 @@ export const strategies: Strategy[] = [
     longDescription:
       'Tests handling of text transformed into camelCase (removing spaces and capitalizing words) to potentially bypass content filters',
     cost: 'Low',
-    asrIncrease: '20-30%',
+    asrIncrease: '0-5%',
     link: '/docs/red-team/strategies/other-encodings/#camelcase',
   },
   {
