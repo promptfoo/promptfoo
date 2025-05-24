@@ -422,6 +422,8 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       {
         name: '[Anthropic] Claude Opus, Sonnet, Haiku, ...',
         value: [
+          'anthropic:messages:claude-sonnet-4-20250514',
+          'anthropic:messages:claude-opus-4-20250514',
           'anthropic:messages:claude-3-7-sonnet-20250219',
           'anthropic:messages:claude-3-5-haiku-20241022',
         ],
@@ -452,7 +454,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       },
       {
         name: '[AWS Bedrock] Claude, Llama, Titan, ...',
-        value: ['bedrock:us.anthropic.claude-3-7-sonnet-20250219-v1:0'],
+        value: ['bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0'],
       },
       {
         name: '[Cohere] Command R, Command R+, ...',

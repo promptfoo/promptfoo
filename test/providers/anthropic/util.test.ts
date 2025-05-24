@@ -23,6 +23,31 @@ describe('Anthropic utilities', () => {
       expect(cost).toBe(6); // (0.004 * 100) + (0.02 * 200)
     });
 
+    it('should calculate cost for Claude Opus 4 model', () => {
+      const cost = calculateAnthropicCost('claude-opus-4-20250514', { cost: 0.02 }, 100, 200);
+      expect(cost).toBe(6); // (0.02 * 100) + (0.02 * 200) - when config.cost is provided, it's used for both
+    });
+
+    it('should calculate cost for Claude Sonnet 4 model', () => {
+      const cost = calculateAnthropicCost('claude-sonnet-4-20250514', { cost: 0.02 }, 100, 200);
+      expect(cost).toBe(6); // (0.02 * 100) + (0.02 * 200) - when config.cost is provided, it's used for both
+    });
+
+    it('should calculate cost for Claude Sonnet 4 latest model', () => {
+      const cost = calculateAnthropicCost('claude-sonnet-4-latest', { cost: 0.02 }, 100, 200);
+      expect(cost).toBe(6); // (0.02 * 100) + (0.02 * 200) - when config.cost is provided, it's used for both
+    });
+
+    it('should calculate default cost for Claude Opus 4 model', () => {
+      const cost = calculateAnthropicCost('claude-opus-4-20250514', {}, 100, 200);
+      expect(cost).toBe(0.0165); // (0.000015 * 100) + (0.000075 * 200) - using default model costs
+    });
+
+    it('should calculate default cost for Claude Sonnet 4 model', () => {
+      const cost = calculateAnthropicCost('claude-sonnet-4-20250514', {}, 100, 200);
+      expect(cost).toBe(0.0033); // (0.000003 * 100) + (0.000015 * 200) - using default model costs
+    });
+
     it('should return undefined for missing model', () => {
       const cost = calculateAnthropicCost('non-existent-model', { cost: 0.015 });
 

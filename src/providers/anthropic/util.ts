@@ -4,6 +4,22 @@ import { calculateCost as calculateCostBase } from '../shared';
 
 // Model definitions with cost information
 export const ANTHROPIC_MODELS = [
+  // Claude 4 models - Latest generation
+  ...['claude-opus-4-20250514', 'claude-opus-4-0', 'claude-opus-4-latest'].map((model) => ({
+    id: model,
+    cost: {
+      input: 15 / 1e6, // $15 / MTok
+      output: 75 / 1e6, // $75 / MTok
+    },
+  })),
+  ...['claude-sonnet-4-20250514', 'claude-sonnet-4-0', 'claude-sonnet-4-latest'].map((model) => ({
+    id: model,
+    cost: {
+      input: 3 / 1e6, // $3 / MTok
+      output: 15 / 1e6, // $15 / MTok
+    },
+  })),
+
   // NOTE: Claude 2.x models are deprecated and will be retired on July 21, 2025.
   ...['claude-2.0'].map((model) => ({
     id: model,
