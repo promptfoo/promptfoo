@@ -82,7 +82,8 @@ strategies:
 
 ## camelCase
 
-The camelCase strategy converts text to camelCase by removing spaces and capitalizing the first letter of each subsequent word.
+The camelCase strategy converts text to camelCase by removing spaces and capitalizing the first letter of each subsequent word, while ensuring that the first word starts with a lowercase letter.  
+For example, `"hello world example"` becomes `"helloWorldExample"`.
 
 ### Configuration
 
