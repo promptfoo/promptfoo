@@ -187,5 +187,13 @@ describe('other encodings strategy', () => {
       expect(toCamelCase('hello world')).toBe('helloWorld');
       expect(toCamelCase('Hello-World!')).toBe('hello-World!');
     });
+
+    it('should handle leading, trailing, and multiple spaces in toCamelCase', () => {
+      expect(toCamelCase('  hello world')).toBe('helloWorld');
+      expect(toCamelCase('hello world   ')).toBe('helloWorld');
+      expect(toCamelCase('  hello   world  ')).toBe('helloWorld');
+      expect(toCamelCase('hello    world')).toBe('helloWorld');
+      expect(toCamelCase('   multiple   spaces   here   ')).toBe('multipleSpacesHere');
+    });
   });
 });
