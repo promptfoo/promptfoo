@@ -168,7 +168,7 @@ export function addOtherEncodings(
       case EncodingType.CAMEL_CASE:
         return toCamelCase;
       default:
-        return toMorseCode; // Default to Morse code
+        throw new Error(`Unknown encoding type: ${encodingType}`);
     }
   })();
 
