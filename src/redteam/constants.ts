@@ -835,6 +835,7 @@ export const ADDITIONAL_STRATEGIES = [
   'audio',
   'base64',
   'best-of-n',
+  'camelcase',
   'citation',
   'crescendo',
   'gcg',
@@ -842,6 +843,8 @@ export const ADDITIONAL_STRATEGIES = [
   'hex',
   'homoglyph',
   'image',
+  'jailbreak',
+  'jailbreak:composite',
   'jailbreak:likert',
   'jailbreak:tree',
   'leetspeak',
@@ -861,7 +864,7 @@ export const STRATEGY_COLLECTIONS = ['other-encodings'] as const;
 export type StrategyCollection = (typeof STRATEGY_COLLECTIONS)[number];
 
 export const STRATEGY_COLLECTION_MAPPINGS: Record<StrategyCollection, string[]> = {
-  'other-encodings': ['morse', 'piglatin'],
+  'other-encodings': ['camelcase', 'morse', 'piglatin'],
 };
 
 const _ALL_STRATEGIES = [
@@ -934,7 +937,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   homoglyph:
     'Tests handling of homoglyph (visually similar Unicode characters) encoding to bypass filters',
   image: 'Tests handling of image content',
-  imitation: 'Tests for unauthorized impersonation of entities',
+  imitation: 'Tests handling of unauthorized impersonation of entities',
   'indirect-prompt-injection': 'Tests for injection vulnerabilities via untrusted variables',
   intent: 'Tests for manipulation of system behavior via specific prompts',
   jailbreak: 'Single-shot optimization of safety bypass techniques',
@@ -955,6 +958,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'pii:session': 'Tests for PII exposure in session data',
   'pii:social': 'Tests for PII exposure via social engineering',
   piglatin: 'Tests handling of content translated to Pig Latin to potentially bypass filters',
+  camelcase: 'Tests handling of text transformed into camelCase to potentially bypass filters',
   pliny: 'Tests handling of Pliny prompt injections',
   policy: 'Tests compliance with custom security policies',
   politics: 'Tests handling of political content and bias',
@@ -966,21 +970,20 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'reasoning-dos':
     'Tests for vulnerabilities to computational resource exhaustion through excessive reasoning patterns',
   religion: 'Tests handling of religious content and bias',
-  retry:
-    'Automatically incorporates previously failed test cases to build a regression testing suite',
-  rot13: 'Tests handling of ROT13-encoded malicious content',
-  'shell-injection': 'Tests for command injection vulnerabilities',
+  retry: 'Retry',
+  rot13: 'Rot13',
+  'shell-injection': 'ShellInjection',
   'sql-injection': 'Tests for SQL injection vulnerabilities',
   ssrf: 'Tests for server-side request forgery vulnerabilities',
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
-  'tool-discovery': 'Tests for enumeration of available tools and function calls',
   'tool-discovery:multi-turn':
     'Uses conversational approach to discover available tools, functions, and capabilities through multi-step interactions',
+  'tool-discovery': 'Tests for enumeration of available tools and function calls',
   unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
   xstest: 'Tests for XSTest attacks',
   video: 'Tests handling of video content',
   'other-encodings':
-    'Collection of alternative text transformation strategies (Morse code and Pig Latin) for testing evasion techniques',
+    'Collection of alternative text transformation strategies (Morse code, Pig Latin, and camelCase) for testing evasion techniques',
 };
 
 // These names are displayed in risk cards and in the table
@@ -1059,6 +1062,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   overreliance: 'Overreliance',
   pandamonium: '[Experimental] Pandamonium',
   piglatin: 'Pig Latin Encoding',
+  camelcase: 'CamelCase Encoding',
   pii: 'PII Protection Suite',
   'pii:api-db': 'PII via API/Database',
   'pii:direct': 'PII via Direct Exposure',
@@ -1073,18 +1077,10 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'rag-poisoning': 'RAG Poisoning',
   rbac: 'RBAC Implementation',
   'reasoning-dos': 'Reasoning DoS',
-  religion: 'Religious Bias',
-  retry: 'Regression Testing',
-  rot13: 'ROT13 Payload Encoding',
-  'shell-injection': 'Command Injection',
-  'sql-injection': 'SQL Injection',
-  ssrf: 'SSRF Vulnerability',
-  'system-prompt-override': 'System Prompt Override',
-  'tool-discovery': 'Tool Discovery',
-  'tool-discovery:multi-turn': 'Multi-turn Tool Discovery',
-  unsafebench: 'UnsafeBench Dataset',
-  xstest: 'XSTest Dataset',
-  video: 'Video Content',
+  religion: 'Religion',
+  retry: 'Retry',
+  rot13: 'Rot13',
+  'shell-injection': 'ShellInjection',
 };
 
 export enum Severity {
@@ -1172,14 +1168,9 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   rbac: Severity.High,
   'reasoning-dos': Severity.Low,
   religion: Severity.Low,
+  retry: Severity.Low,
+  rot13: Severity.Low,
   'shell-injection': Severity.High,
-  'sql-injection': Severity.High,
-  ssrf: Severity.High,
-  'system-prompt-override': Severity.High,
-  'tool-discovery:multi-turn': Severity.Low,
-  'tool-discovery': Severity.Low,
-  unsafebench: Severity.Medium,
-  xstest: Severity.Low,
 };
 
 export const riskCategories: Record<string, Plugin[]> = {
@@ -1367,6 +1358,8 @@ export const categoryAliases: Record<Plugin, string> = {
   'sql-injection': 'SqlInjection',
   ssrf: 'SSRFEnforcement',
   'system-prompt-override': 'System Prompt Override',
+  'tool-discovery:multi-turn': 'Multi-turn Tool Discovery',
+  'tool-discovery': 'ToolDiscovery',
   unsafebench: 'UnsafeBench',
   xstest: 'XSTest',
 };
@@ -1454,15 +1447,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   rbac: 'Tests implementation of role-based access control mechanisms',
   'reasoning-dos':
     'Tests for vulnerabilities to computational resource exhaustion through excessive reasoning patterns',
-  religion: 'Assesses handling of religious content and bias mitigation',
-  'shell-injection': 'Tests protection against command injection vulnerabilities',
-  'sql-injection': 'Evaluates resilience against SQL injection attacks',
-  ssrf: 'Tests for server-side request forgery vulnerabilities',
-  'system-prompt-override': 'Tests for system prompt override vulnerabilities',
-  unsafebench:
-    'Tests handling of unsafe image content through multi-modal model evaluation and safety filters',
-  xstest:
-    'Tests how models handle ambiguous terms related to potentially harmful topics like violence and drugs',
+  religion: 'Religion',
+  'shell-injection': 'ShellInjection',
 };
 
 export const strategyDescriptions: Record<Strategy, string> = {
@@ -1489,11 +1475,13 @@ export const strategyDescriptions: Record<Strategy, string> = {
     'Tests detection and handling of text encoded in Morse code where letters are converted to dots and dashes to potentially bypass content filters',
   multilingual: 'Evaluates cross-language attack vector handling',
   'other-encodings':
-    'Collection of alternative text transformation strategies (Morse code and Pig Latin) for testing evasion techniques',
+    'Collection of alternative text transformation strategies (Morse code, Pig Latin, and camelCase) for testing evasion techniques',
   pandamonium:
     "Promptfoo's exclusive dynamic jailbreak strategy currently in development. Note: This is an expensive jailbreak strategy with no limit on probes.",
   piglatin:
     'Tests detection and handling of text transformed into Pig Latin, a language game where initial consonant clusters are moved to the end of words with "ay" added',
+  camelcase:
+    'Tests detection and handling of text transformed into camelCase format to potentially bypass content filters',
   'prompt-injection': 'Tests direct prompt injection vulnerability detection',
   retry: 'Automatically incorporates previously failed test cases to prevent regression',
   rot13: 'Assesses handling of ROT13-encoded malicious payloads',
@@ -1524,6 +1512,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   'other-encodings': 'Collection of Text Encodings',
   pandamonium: 'Pandamonium',
   piglatin: 'Pig Latin',
+  camelcase: 'CamelCase',
   'prompt-injection': 'Prompt Injection',
   retry: 'Regression Testing',
   rot13: 'ROT13 Encoding',
