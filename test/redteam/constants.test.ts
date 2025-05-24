@@ -208,9 +208,9 @@ describe('constants', () => {
 
   it('STRATEGY_COLLECTION_MAPPINGS should have correct mappings', () => {
     expect(STRATEGY_COLLECTION_MAPPINGS['other-encodings']).toEqual([
+      'camelcase',
       'morse',
       'piglatin',
-      'camelcase',
     ]);
   });
 

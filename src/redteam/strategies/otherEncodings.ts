@@ -124,7 +124,8 @@ export function toPigLatin(text: string): string {
  * Convert text to camelCase
  */
 export function toCamelCase(text: string): string {
-  const words = text.split(' ');
+  const trimmedText = text.trim();
+  const words = trimmedText.split(/\s+/); // Split on any whitespace
   return words
     .map((word, index) => {
       const match = word.match(/^([a-zA-Z0-9]+)(.*)$/);
@@ -168,7 +169,7 @@ export function addOtherEncodings(
       case EncodingType.CAMEL_CASE:
         return toCamelCase;
       default:
-        throw new Error(`Unknown encoding type: ${encodingType}`);
+        return toMorseCode; // Default to Morse code
     }
   })();
 

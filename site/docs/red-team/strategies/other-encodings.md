@@ -1,12 +1,12 @@
 ---
 sidebar_position: 102
 title: Other Encodings - Alternative Text Transformation Strategies
-description: Learn how to test LLM resilience using Morse code, Pig Latin, and camelCase text transformations to bypass content filters and evaluate model security.
+description: Learn how to test LLM resilience using camelCase, Morse code, and Pig Latin text transformations to bypass content filters and evaluate model security.
 ---
 
 # Other Encodings
 
-The other-encodings strategy collection provides multiple text transformation methods to test model resilience against evasion techniques that use alternative text representations. This collection automatically includes Morse code, Pig Latin, and camelCase encodings.
+The other-encodings strategy collection provides multiple text transformation methods to test model resilience against evasion techniques that use alternative text representations. This collection automatically includes camelCase, Morse code, and Pig Latin encodings.
 
 ## Strategy Collection
 
@@ -14,16 +14,44 @@ You can use the `other-encodings` collection in your configuration to automatica
 
 ```yaml title="promptfooconfig.yaml"
 strategies:
-  - other-encodings # Includes Morse code, Pig Latin, and camelCase transformations
+  - other-encodings # Includes camelCase, Morse code, and Pig Latin transformations
 ```
 
 This is equivalent to specifying each strategy individually:
 
 ```yaml title="promptfooconfig.yaml"
 strategies:
+  - camelcase
   - morse
   - piglatin
-  - camelcase
+```
+
+## camelCase
+
+The camelCase strategy converts text to camelCase by removing spaces and capitalizing the first letter of each subsequent word.
+
+### How It Works
+
+The transformation follows these rules:
+
+- The first word starts with a lowercase letter
+- Each subsequent word has its first letter capitalized
+- Spaces between words are removed
+- Punctuation and numbers remain unchanged
+
+For example, "Hello World" becomes:
+
+```
+helloWorld
+```
+
+### Configuration
+
+Add the camelCase strategy individually to your red team configuration:
+
+```yaml title="promptfooconfig.yaml"
+strategies:
+  - camelcase # Apply camelCase transformation
 ```
 
 ## Morse Code
@@ -80,20 +108,6 @@ strategies:
   - piglatin # Apply Pig Latin transformation
 ```
 
-## camelCase
-
-The camelCase strategy converts text to camelCase by removing spaces and capitalizing the first letter of each subsequent word, while ensuring that the first word starts with a lowercase letter.  
-For example, `"hello world example"` becomes `"helloWorldExample"`.
-
-### Configuration
-
-Add the camelCase strategy individually to your red team configuration:
-
-```yaml title="promptfooconfig.yaml"
-strategies:
-  - camelcase # Apply camelCase transformation
-```
-
 ## Example
 
 Here's a complete example that applies the encoding collection to test cases:
@@ -112,7 +126,7 @@ redteam:
     - owasp:llm
   strategies:
     - basic # Include original prompts
-    - other-encodings # Includes Morse code, Pig Latin, and camelCase
+    - other-encodings # Includes camelCase, Morse code, and Pig Latin
 ```
 
 ## Technical Details
