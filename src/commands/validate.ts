@@ -29,7 +29,9 @@ export async function doValidate(
     const configParse = UnifiedConfigSchema.safeParse(config);
     if (!configParse.success) {
       logger.error(
-        dedent`Configuration validation error:\n${fromError(configParse.error).message}`,
+        dedent`Configuration validation error:
+Config file path(s): ${Array.isArray(configPaths) ? configPaths.join(', ') : configPaths ?? 'N/A'}
+${fromError(configParse.error).message}`,
       );
       process.exitCode = 1;
       return;
