@@ -4,28 +4,10 @@ import type { Config } from '@docusaurus/types';
 import type { ConfigureWebpackResult } from '@docusaurus/types/src/plugin';
 import * as fs from 'fs';
 import * as path from 'path';
+import { sanitizeMarkdown } from './src/utils/markdown';
 
 const lightCodeTheme = themes.github;
 const darkCodeTheme = themes.duotoneDark;
-
-/**
- * Sanitizes markdown content by removing:
- * - Frontmatter (content between --- delimiters)
- * - Image markdown syntax (![alt](url))
- * - HTML img tags
- * - HTML comments
- * - HTML divs with style attributes
- * Returns the cleaned content with whitespace normalized and trimmed
- */
-const sanitizeMarkdown = (markdown: string): string => {
-  let output = markdown.replace(/^---[\s\S]*?---\s*/m, '');
-  output = output.replace(/!\[[^\]]*\]\([^\)]*\)/g, '');
-  output = output.replace(/<img[^>]*>/gi, '');
-  output = output.replace(/<!--([\s\S]*?)-->/g, '');
-  // Remove divs with style attributes but keep their content
-  output = output.replace(/<div[^>]*style=[^>]*>([\s\S]*?)<\/div>/gi, '$1');
-  return output.replace(/\n\s*\n\s*\n/g, '\n\n').trim();
-};
 
 const config: Config = {
   title: 'promptfoo',
