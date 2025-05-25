@@ -52,22 +52,18 @@ const CopyPageButton: React.FC = () => {
   };
 
   return (
-    <div className={styles.buttonContainer}>
-      <button
-        onClick={handleCopy}
-        aria-label={copied ? 'Copied markdown to clipboard' : 'Copy markdown to clipboard'}
-        aria-live="polite"
-        className={styles.copyButton}
-      >
-        <span className={styles.buttonContent}>
-          <span className={`${styles.iconContainer} ${copied ? styles.copied : ''}`}>
-            <ContentCopyIcon className={styles.copyIcon} />
-            <CheckIcon className={styles.checkIcon} />
-          </span>
-          <span>Copy page</span>
-        </span>
-      </button>
-    </div>
+    <button
+      onClick={handleCopy}
+      aria-label={copied ? 'Copied markdown to clipboard' : 'Copy markdown to clipboard'}
+      aria-live="polite"
+      className={styles.copyButton}
+    >
+      <span className={`${styles.iconContainer} ${copied ? styles.copied : ''}`}>
+        <ContentCopyIcon className={styles.copyIcon} />
+        <CheckIcon className={styles.checkIcon} />
+      </span>
+      <span>Copy page as Markdown</span>
+    </button>
   );
 };
 
