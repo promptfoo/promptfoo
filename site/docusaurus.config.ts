@@ -397,6 +397,14 @@ const config: Config = {
     ],
     // Plugin to serve markdown files for CopyPageButton
     function markdownServePlugin(context) {
+      const sanitizeMarkdown = (markdown: string) => {
+        let output = markdown;
+        output = output.replace(/!\[[^\]]*\]\([^\)]*\)/g, '');
+        output = output.replace(/<img[^>]*>/gi, '');
+        output = output.replace(/<!--([\s\S]*?)-->/g, '');
+        return output.trim();
+      };
+
       return {
         name: 'markdown-serve-plugin',
         loadContent: async () => {
@@ -502,8 +510,8 @@ const config: Config = {
                       // Read the file directly from the filesystem
                       let content = await fs.promises.readFile(filePath, 'utf8');
 
-                      // Remove frontmatter
-                      content = content.replace(/^---[\s\S]*?---\s*/m, '');
+                      // Remove frontmatter and sanitize
+                      content = sanitizeMarkdown(content.replace(/^---[\s\S]*?---\s*/m, ''));
 
                       // Set appropriate headers for raw markdown content
                       res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
@@ -547,7 +555,8 @@ const config: Config = {
             try {
               // Create nested directories if needed
               await fs.promises.mkdir(outDirname, { recursive: true });
-              await fs.promises.writeFile(outPath, content);
+              const sanitized = sanitizeMarkdown(content);
+              await fs.promises.writeFile(outPath, sanitized);
             } catch (err) {
               console.error(`Error writing markdown file ${filePath}:`, err);
             }

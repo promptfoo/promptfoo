@@ -8,23 +8,11 @@
 .copyButton {
   display: flex;
   align-items: center;
-  border: 1px solid #e5e7eb;
-  border-radius: 18px;
-  background: #fff;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
-  padding: 0 14px;
-  font-size: 15px;
-  font-weight: 500;
-  cursor: pointer;
-  height: 36px;
-  min-width: 110px;
-}
-
-.buttonContent {
-  display: flex;
-  align-items: center;
   justify-content: center;
-  gap: 4px;
+  border: none;
+  background: transparent;
+  padding: 4px;
+  cursor: pointer;
 }
 
 .iconContainer {
@@ -65,9 +53,6 @@
 
 /* Dark theme styles */
 [data-theme='dark'] .copyButton {
-  border-color: #4a4a4a;
-  background: #2d2d2d;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
   color: #e6e6e6;
 }
 
