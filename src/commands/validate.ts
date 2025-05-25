@@ -30,7 +30,7 @@ export async function doValidate(
     if (!configParse.success) {
       logger.error(
         dedent`Configuration validation error:
-Config file path(s): ${Array.isArray(configPaths) ? configPaths.join(', ') : configPaths ?? 'N/A'}
+Config file path(s): ${Array.isArray(configPaths) ? configPaths.join(', ') : (configPaths ?? 'N/A')}
 ${fromError(configParse.error).message}`,
       );
       process.exitCode = 1;
