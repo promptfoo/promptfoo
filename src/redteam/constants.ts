@@ -808,12 +808,13 @@ export type FrameworkComplianceId = (typeof FRAMEWORK_COMPLIANCE_IDS)[number];
 export const DEFAULT_STRATEGIES = ['basic', 'jailbreak', 'jailbreak:composite'] as const;
 export type DefaultStrategy = (typeof DEFAULT_STRATEGIES)[number];
 
-export const MULTI_TURN_STRATEGIES = ['crescendo', 'goat'] as const;
+export const MULTI_TURN_STRATEGIES = ['crescendo', 'goat', 'tau'] as const;
 export type MultiTurnStrategy = (typeof MULTI_TURN_STRATEGIES)[number];
 
 export const AGENTIC_STRATEGIES = [
   'crescendo',
   'goat',
+  'tau',
   'jailbreak',
   'jailbreak:tree',
   'pandamonium',
@@ -839,6 +840,7 @@ export const ADDITIONAL_STRATEGIES = [
   'crescendo',
   'gcg',
   'goat',
+  'tau',
   'hex',
   'homoglyph',
   'image',
@@ -900,6 +902,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   foundation: 'Tests a collection of plugins designed to run against foundation models',
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
   goat: 'Dynamic multi-turn attack generation using adversarial techniques',
+  tau: 'Simulated user conversations over multiple turns',
   hallucination: 'Tests for fabrication of false or misleading information',
   harmbench: 'Tests for harmful content using the HarmBench dataset',
   harmful: 'Tests handling of malicious content across multiple categories',
@@ -1010,6 +1013,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   gcg: 'Greedy Coordinate Gradient',
   mcp: 'Model Context Protocol',
   goat: 'Generative Offensive Agent Tester',
+  tau: 'Tau Simulated User',
   hallucination: 'False Information (Hallucination)',
   harmbench: 'HarmBench Dataset',
   harmful: 'Malicious Content Suite',
@@ -1475,6 +1479,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
   default: 'Applies standard security testing methodology',
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
   goat: 'Deploys dynamic attack generation using advanced adversarial techniques',
+  tau: 'Multi-turn conversations using a simulated user',
   hex: 'Tests detection and handling of hex-encoded malicious payloads',
   homoglyph:
     'Tests detection and handling of text with homoglyphs (visually similar Unicode characters)',
@@ -1510,6 +1515,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   default: 'Basic',
   gcg: 'Greedy Coordinate Gradient',
   goat: 'Generative Offensive Agent Tester',
+  tau: 'Tau Simulated User',
   hex: 'Hex Encoding',
   homoglyph: 'Homoglyph Encoding',
   image: 'Image',
