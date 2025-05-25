@@ -843,8 +843,6 @@ export const ADDITIONAL_STRATEGIES = [
   'hex',
   'homoglyph',
   'image',
-  'jailbreak',
-  'jailbreak:composite',
   'jailbreak:likert',
   'jailbreak:tree',
   'leetspeak',
@@ -1077,10 +1075,18 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'rag-poisoning': 'RAG Poisoning',
   rbac: 'RBAC Implementation',
   'reasoning-dos': 'Reasoning DoS',
-  religion: 'Religion',
-  retry: 'Retry',
-  rot13: 'Rot13',
-  'shell-injection': 'ShellInjection',
+  religion: 'Religious Bias',
+  retry: 'Regression Testing',
+  rot13: 'ROT13 Payload Encoding',
+  'shell-injection': 'Command Injection',
+  'sql-injection': 'SQL Injection',
+  ssrf: 'SSRF Vulnerability',
+  'system-prompt-override': 'System Prompt Override',
+  'tool-discovery': 'Tool Discovery',
+  'tool-discovery:multi-turn': 'Multi-turn Tool Discovery',
+  unsafebench: 'UnsafeBench Dataset',
+  xstest: 'XSTest Dataset',
+  video: 'Video Content',
 };
 
 export enum Severity {
@@ -1168,9 +1174,14 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   rbac: Severity.High,
   'reasoning-dos': Severity.Low,
   religion: Severity.Low,
-  retry: Severity.Low,
-  rot13: Severity.Low,
   'shell-injection': Severity.High,
+  'sql-injection': Severity.High,
+  ssrf: Severity.High,
+  'system-prompt-override': Severity.High,
+  'tool-discovery:multi-turn': Severity.Low,
+  'tool-discovery': Severity.Low,
+  unsafebench: Severity.Medium,
+  xstest: Severity.Low,
 };
 
 export const riskCategories: Record<string, Plugin[]> = {
@@ -1358,8 +1369,6 @@ export const categoryAliases: Record<Plugin, string> = {
   'sql-injection': 'SqlInjection',
   ssrf: 'SSRFEnforcement',
   'system-prompt-override': 'System Prompt Override',
-  'tool-discovery:multi-turn': 'Multi-turn Tool Discovery',
-  'tool-discovery': 'ToolDiscovery',
   unsafebench: 'UnsafeBench',
   xstest: 'XSTest',
 };
@@ -1447,8 +1456,15 @@ export const pluginDescriptions: Record<Plugin, string> = {
   rbac: 'Tests implementation of role-based access control mechanisms',
   'reasoning-dos':
     'Tests for vulnerabilities to computational resource exhaustion through excessive reasoning patterns',
-  religion: 'Religion',
-  'shell-injection': 'ShellInjection',
+  religion: 'Assesses handling of religious content and bias mitigation',
+  'shell-injection': 'Tests protection against command injection vulnerabilities',
+  'sql-injection': 'Evaluates resilience against SQL injection attacks',
+  ssrf: 'Tests for server-side request forgery vulnerabilities',
+  'system-prompt-override': 'Tests for system prompt override vulnerabilities',
+  unsafebench:
+    'Tests handling of unsafe image content through multi-modal model evaluation and safety filters',
+  xstest:
+    'Tests how models handle ambiguous terms related to potentially harmful topics like violence and drugs',
 };
 
 export const strategyDescriptions: Record<Strategy, string> = {
