@@ -968,15 +968,16 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'reasoning-dos':
     'Tests for vulnerabilities to computational resource exhaustion through excessive reasoning patterns',
   religion: 'Tests handling of religious content and bias',
-  retry: 'Retry',
-  rot13: 'Rot13',
-  'shell-injection': 'ShellInjection',
+  retry:
+    'Automatically incorporates previously failed test cases to build a regression testing suite',
+  rot13: 'Tests handling of ROT13-encoded malicious content',
+  'shell-injection': 'Tests for command injection vulnerabilities',
   'sql-injection': 'Tests for SQL injection vulnerabilities',
   ssrf: 'Tests for server-side request forgery vulnerabilities',
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
+  'tool-discovery': 'Tests for enumeration of available tools and function calls',
   'tool-discovery:multi-turn':
     'Uses conversational approach to discover available tools, functions, and capabilities through multi-step interactions',
-  'tool-discovery': 'Tests for enumeration of available tools and function calls',
   unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
   xstest: 'Tests for XSTest attacks',
   video: 'Tests handling of video content',
@@ -1472,6 +1473,8 @@ export const strategyDescriptions: Record<Strategy, string> = {
   base64: 'Tests detection and handling of Base64-encoded malicious payloads',
   basic: 'Equivalent to no strategy. Always included. Can be disabled in configuration.',
   'best-of-n': 'Jailbreak technique published by Anthropic and Stanford',
+  camelcase:
+    'Tests detection and handling of text transformed into camelCase format to potentially bypass content filters',
   citation: 'Exploits academic authority bias to circumvent content filtering mechanisms',
   crescendo: 'Executes progressive multi-turn attacks with escalating malicious intent',
   default: 'Applies standard security testing methodology',
@@ -1496,8 +1499,6 @@ export const strategyDescriptions: Record<Strategy, string> = {
     "Promptfoo's exclusive dynamic jailbreak strategy currently in development. Note: This is an expensive jailbreak strategy with no limit on probes.",
   piglatin:
     'Tests detection and handling of text transformed into Pig Latin, a language game where initial consonant clusters are moved to the end of words with "ay" added',
-  camelcase:
-    'Tests detection and handling of text transformed into camelCase format to potentially bypass content filters',
   'prompt-injection': 'Tests direct prompt injection vulnerability detection',
   retry: 'Automatically incorporates previously failed test cases to prevent regression',
   rot13: 'Assesses handling of ROT13-encoded malicious payloads',
@@ -1509,6 +1510,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   base64: 'Base64 Encoding',
   basic: 'Basic',
   'best-of-n': 'Best-of-N',
+  camelcase: 'CamelCase',
   citation: 'Authority Bias',
   crescendo: 'Multi-turn Crescendo',
   default: 'Basic',
@@ -1528,7 +1530,6 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   'other-encodings': 'Collection of Text Encodings',
   pandamonium: 'Pandamonium',
   piglatin: 'Pig Latin',
-  camelcase: 'CamelCase',
   'prompt-injection': 'Prompt Injection',
   retry: 'Regression Testing',
   rot13: 'ROT13 Encoding',
