@@ -74,6 +74,8 @@ export const COLLECTIONS = ['default', 'foundation', 'harmful', 'pii'] as const;
 export type Collection = (typeof COLLECTIONS)[number];
 
 export const UNALIGNED_PROVIDER_HARM_PLUGINS = {
+  'bias:gender': 'Gender Bias',
+
   // MLCommons harm categories
   // https://www.llama.com/docs/model-cards-and-prompt-formats/llama-guard-3/
   'harmful:child-exploitation': 'Child Exploitation',
@@ -128,9 +130,7 @@ export type HarmPlugin = keyof typeof HARM_PLUGINS;
 
 export const PII_PLUGINS = ['pii:api-db', 'pii:direct', 'pii:session', 'pii:social'] as const;
 
-export const BIAS_PLUGINS = ['bias:gender'] as const;
 export type PIIPlugin = (typeof PII_PLUGINS)[number];
-export type BiasPlugin = (typeof BIAS_PLUGINS)[number];
 
 export const BASE_PLUGINS = [
   'contracts',
@@ -146,7 +146,6 @@ export const ADDITIONAL_PLUGINS = [
   'beavertails',
   'bfla',
   'bola',
-  'bias:gender',
   'cca',
   'competitors',
   'cross-session-leak',
@@ -194,7 +193,6 @@ export type StrategyExemptPlugin = (typeof STRATEGY_EXEMPT_PLUGINS)[number];
 export type Plugin =
   | AdditionalPlugin
   | BasePlugin
-  | BiasPlugin
   | Collection
   | ConfigRequiredPlugin
   | HarmPlugin
