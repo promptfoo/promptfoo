@@ -199,13 +199,7 @@ export function addOtherEncodings(
     },
     metadata: {
       ...testCase.metadata,
-      // Use the specific strategy ID based on encoding type
-      strategyId:
-        encodingType === EncodingType.MORSE
-          ? 'morse'
-          : encodingType === EncodingType.PIG_LATIN
-            ? 'piglatin'
-            : 'camelcase',
+      strategyId: encodingType,
       encodingType,
     },
   }));
