@@ -8,6 +8,25 @@ import * as path from 'path';
 const lightCodeTheme = themes.github;
 const darkCodeTheme = themes.duotoneDark;
 
+/**
+ * Sanitizes markdown content by removing:
+ * - Frontmatter (content between --- delimiters)
+ * - Image markdown syntax (![alt](url))
+ * - HTML img tags
+ * - HTML comments
+ * - HTML divs with style attributes
+ * Returns the cleaned content with whitespace normalized and trimmed
+ */
+const sanitizeMarkdown = (markdown: string): string => {
+  let output = markdown.replace(/^---[\s\S]*?---\s*/m, '');
+  output = output.replace(/!\[[^\]]*\]\([^\)]*\)/g, '');
+  output = output.replace(/<img[^>]*>/gi, '');
+  output = output.replace(/<!--([\s\S]*?)-->/g, '');
+  // Remove divs with style attributes but keep their content
+  output = output.replace(/<div[^>]*style=[^>]*>([\s\S]*?)<\/div>/gi, '$1');
+  return output.replace(/\n\s*\n\s*\n/g, '\n\n').trim();
+};
+
 const config: Config = {
   title: 'promptfoo',
   tagline: 'Test your prompts',
@@ -397,14 +416,6 @@ const config: Config = {
     ],
     // Plugin to serve markdown files for CopyPageButton
     function markdownServePlugin(context) {
-      const sanitizeMarkdown = (markdown: string) => {
-        let output = markdown;
-        output = output.replace(/!\[[^\]]*\]\([^\)]*\)/g, '');
-        output = output.replace(/<img[^>]*>/gi, '');
-        output = output.replace(/<!--([\s\S]*?)-->/g, '');
-        return output.trim();
-      };
-
       return {
         name: 'markdown-serve-plugin',
         loadContent: async () => {
@@ -508,10 +519,9 @@ const config: Config = {
                   if (foundFile) {
                     try {
                       // Read the file directly from the filesystem
-                      let content = await fs.promises.readFile(filePath, 'utf8');
-
-                      // Remove frontmatter and sanitize
-                      content = sanitizeMarkdown(content.replace(/^---[\s\S]*?---\s*/m, ''));
+                      const content = sanitizeMarkdown(
+                        await fs.promises.readFile(filePath, 'utf8'),
+                      );
 
                       // Set appropriate headers for raw markdown content
                       res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
