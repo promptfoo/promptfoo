@@ -3,7 +3,7 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
 import { getEnvBool } from '../../envars';
-import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
+import { checkEmailStatus, getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { ApiSchemas } from '../apiSchemas';
@@ -53,6 +53,24 @@ userRouter.post('/email', async (req: Request, res: Response): Promise<void> => 
   }
 });
 
+userRouter.get('/email/status', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const result = await checkEmailStatus();
+
+    res.json(
+      ApiSchemas.User.EmailStatus.Response.parse({
+        hasEmail: result.hasEmail,
+        email: result.email,
+        status: result.status,
+        message: result.message,
+      }),
+    );
+  } catch (error) {
+    logger.error(`Error checking email status: ${error}`);
+    res.status(500).json({ error: 'Failed to check email status' });
+  }
+});
+
 userRouter.post('/consent', async (req: Request, res: Response) => {
   const { email, metadata } = req.body;
 
@@ -62,7 +80,23 @@ userRouter.post('/consent', async (req: Request, res: Response) => {
   }
 
   try {
-    await telemetry.saveConsent(email, metadata);
+    // Set the user email if it's not already set
+    const currentEmail = getUserEmail();
+    if (!currentEmail) {
+      setUserEmail(email);
+    }
+
+    await telemetry.saveConsent(email, {
+      source: 'webui_redteam',
+      ...metadata,
+    });
+
+    await telemetry.recordAndSend('webui_api', {
+      event: 'redteam_email_consent',
+      email,
+      selfHosted: getEnvBool('PROMPTFOO_SELF_HOSTED'),
+    });
+
     res.status(200).json({ success: true });
   } catch (error) {
     logger.debug(`Failed to save consent: ${(error as Error).message}`);
