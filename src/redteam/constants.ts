@@ -844,6 +844,7 @@ export const ADDITIONAL_STRATEGIES = [
   'audio',
   'base64',
   'best-of-n',
+  'camelcase',
   'citation',
   'crescendo',
   'gcg',
@@ -870,7 +871,7 @@ export const STRATEGY_COLLECTIONS = ['other-encodings'] as const;
 export type StrategyCollection = (typeof STRATEGY_COLLECTIONS)[number];
 
 export const STRATEGY_COLLECTION_MAPPINGS: Record<StrategyCollection, string[]> = {
-  'other-encodings': ['morse', 'piglatin'],
+  'other-encodings': ['camelcase', 'morse', 'piglatin'],
 };
 
 const _ALL_STRATEGIES = [
@@ -943,7 +944,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   homoglyph:
     'Tests handling of homoglyph (visually similar Unicode characters) encoding to bypass filters',
   image: 'Tests handling of image content',
-  imitation: 'Tests for unauthorized impersonation of entities',
+  imitation: 'Tests handling of unauthorized impersonation of entities',
   'indirect-prompt-injection': 'Tests for injection vulnerabilities via untrusted variables',
   intent: 'Tests for manipulation of system behavior via specific prompts',
   jailbreak: 'Single-shot optimization of safety bypass techniques',
@@ -964,6 +965,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'pii:session': 'Tests for PII exposure in session data',
   'pii:social': 'Tests for PII exposure via social engineering',
   piglatin: 'Tests handling of content translated to Pig Latin to potentially bypass filters',
+  camelcase: 'Tests handling of text transformed into camelCase to potentially bypass filters',
   pliny: 'Tests handling of Pliny prompt injections',
   policy: 'Tests compliance with custom security policies',
   politics: 'Tests handling of political content and bias',
@@ -989,7 +991,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   xstest: 'Tests for XSTest attacks',
   video: 'Tests handling of video content',
   'other-encodings':
-    'Collection of alternative text transformation strategies (Morse code and Pig Latin) for testing evasion techniques',
+    'Collection of alternative text transformation strategies (Morse code, Pig Latin, and camelCase) for testing evasion techniques',
 };
 
 // These names are displayed in risk cards and in the table
@@ -1003,6 +1005,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'best-of-n': 'Best-of-N',
   bfla: 'Function-Level Authorization Bypass',
   bola: 'Object-Level Authorization Bypass',
+  camelcase: 'CamelCase Encoding',
   cca: 'Context Compliance Attack',
   citation: 'Authority Bias Exploitation',
   competitors: 'Competitors',
@@ -1479,6 +1482,8 @@ export const strategyDescriptions: Record<Strategy, string> = {
   base64: 'Tests detection and handling of Base64-encoded malicious payloads',
   basic: 'Equivalent to no strategy. Always included. Can be disabled in configuration.',
   'best-of-n': 'Jailbreak technique published by Anthropic and Stanford',
+  camelcase:
+    'Tests detection and handling of text transformed into camelCase format to potentially bypass content filters',
   citation: 'Exploits academic authority bias to circumvent content filtering mechanisms',
   crescendo: 'Executes progressive multi-turn attacks with escalating malicious intent',
   default: 'Applies standard security testing methodology',
@@ -1498,7 +1503,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
     'Tests detection and handling of text encoded in Morse code where letters are converted to dots and dashes to potentially bypass content filters',
   multilingual: 'Evaluates cross-language attack vector handling',
   'other-encodings':
-    'Collection of alternative text transformation strategies (Morse code and Pig Latin) for testing evasion techniques',
+    'Collection of alternative text transformation strategies (Morse code, Pig Latin, and camelCase) for testing evasion techniques',
   pandamonium:
     "Promptfoo's exclusive dynamic jailbreak strategy currently in development. Note: This is an expensive jailbreak strategy with no limit on probes.",
   piglatin:
@@ -1514,6 +1519,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   base64: 'Base64 Encoding',
   basic: 'Basic',
   'best-of-n': 'Best-of-N',
+  camelcase: 'CamelCase',
   citation: 'Authority Bias',
   crescendo: 'Multi-turn Crescendo',
   default: 'Basic',
