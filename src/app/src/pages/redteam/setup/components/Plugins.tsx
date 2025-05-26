@@ -208,16 +208,16 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       plugins: new Set(['harmful:hate', 'harmful:self-harm']),
     },
     {
-      name: 'Harmful',
-      plugins: new Set(Object.keys(HARM_PLUGINS) as Plugin[]),
-    },
-    {
       name: 'RAG',
       plugins: new Set([...DEFAULT_PLUGINS, 'bola', 'bfla', 'rbac']),
     },
     {
       name: 'Foundation',
       plugins: new Set(FOUNDATION_PLUGINS),
+    },
+    {
+      name: 'Harmful',
+      plugins: new Set(Object.keys(HARM_PLUGINS) as Plugin[]),
     },
     {
       name: 'NIST',
