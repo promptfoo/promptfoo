@@ -55,7 +55,10 @@ userRouter.post('/email', async (req: Request, res: Response): Promise<void> => 
 
 userRouter.get('/email/status', async (req: Request, res: Response): Promise<void> => {
   try {
-    const result = await checkEmailStatus();
+    // Validate query parameters
+    const { email: queryEmail } = ApiSchemas.User.EmailStatus.Request.parse(req.query);
+
+    const result = await checkEmailStatus(queryEmail);
 
     res.json(
       ApiSchemas.User.EmailStatus.Response.parse({
@@ -67,7 +70,11 @@ userRouter.get('/email/status', async (req: Request, res: Response): Promise<voi
     );
   } catch (error) {
     logger.error(`Error checking email status: ${error}`);
-    res.status(500).json({ error: 'Failed to check email status' });
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: fromError(error).toString() });
+    } else {
+      res.status(500).json({ error: 'Failed to check email status' });
+    }
   }
 });
 

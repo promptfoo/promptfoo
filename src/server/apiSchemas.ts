@@ -19,6 +19,9 @@ export const ApiSchemas = {
       }),
     },
     EmailStatus: {
+      Request: z.object({
+        email: EmailSchema.optional(),
+      }),
       Response: z.object({
         hasEmail: z.boolean(),
         email: EmailSchema.optional(),

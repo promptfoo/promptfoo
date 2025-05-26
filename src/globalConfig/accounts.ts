@@ -47,7 +47,7 @@ export async function checkEmailStatus(email?: string): Promise<EmailStatusResul
 
   try {
     const resp = await fetchWithTimeout(
-      `https://api.promptfoo.app/api/users/status?email=${userEmail}`,
+      `https://api.promptfoo.app/api/users/status?email=${encodeURIComponent(userEmail)}`,
       undefined,
       500,
     );

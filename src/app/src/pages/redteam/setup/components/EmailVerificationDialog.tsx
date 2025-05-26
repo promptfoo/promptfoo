@@ -88,6 +88,11 @@ export function EmailVerificationDialog({
       maxWidth="sm"
       fullWidth
       disableEscapeKeyDown={isSubmitting}
+      slotProps={{
+        backdrop: {
+          onClick: isSubmitting ? (event) => event.stopPropagation() : undefined,
+        },
+      }}
     >
       <DialogTitle>Email Required</DialogTitle>
       <DialogContent>
@@ -103,7 +108,7 @@ export function EmailVerificationDialog({
             type="email"
             value={email}
             onChange={handleEmailChange}
-            onKeyPress={handleKeyPress}
+            onKeyDown={handleKeyPress}
             error={!!emailError}
             helperText={emailError}
             disabled={isSubmitting}

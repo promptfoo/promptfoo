@@ -341,6 +341,31 @@ describe('accounts', () => {
       });
     });
 
+    it('should prioritize provided email parameter over stored email', async () => {
+      // Set up stored email
+      jest.mocked(isCI).mockReturnValue(false);
+      jest.mocked(readGlobalConfig).mockReturnValue({
+        account: { email: 'stored@example.com' },
+      });
+
+      const customEmail = 'custom@example.com';
+      const mockResponse = new Response(JSON.stringify({ status: 'ok' }), {
+        status: 200,
+        statusText: 'OK',
+      });
+      jest.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
+
+      const result = await checkEmailStatus(customEmail);
+
+      // Should use the provided email, not the stored one
+      expect(fetchWithTimeout).toHaveBeenCalledWith(
+        'https://api.promptfoo.app/api/users/status?email=custom@example.com',
+        undefined,
+        500,
+      );
+      expect(result.email).toBe(customEmail);
+    });
+
     it('should return exceeded_limit status', async () => {
       jest.mocked(isCI).mockReturnValue(false);
       jest.mocked(readGlobalConfig).mockReturnValue({
