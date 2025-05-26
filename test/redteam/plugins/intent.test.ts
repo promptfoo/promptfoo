@@ -8,6 +8,14 @@ jest.mock('../../../src/matchers', () => ({
   matchesLlmRubric: jest.fn(),
 }));
 
+jest.mock('../../../src/cache', () => ({
+  fetchWithCache: jest.fn().mockResolvedValue({
+    data: { intent: 'Access unauthorized customer data' },
+    status: 200,
+    statusText: 'OK',
+  }),
+}));
+
 jest.mock('../../../src/database', () => ({
   getDb: jest.fn(),
 }));
