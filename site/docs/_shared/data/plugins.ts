@@ -785,6 +785,21 @@ export const PLUGINS = [
     vulnerabilityType: 'custom',
   },
   {
+    category: 'Security and Access Control',
+    description: 'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
+    label: 'technical',
+    link: '/docs/red-team/plugins/mcp/',
+    name: 'Model Context Protocol',
+    pluginId: 'mcp',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
     category: 'Brand',
     description: 'Model susceptible to relying on an incorrect user assumption or input',
     label: 'technical',
@@ -928,6 +943,21 @@ export const PLUGINS = [
   },
   {
     category: 'Security and Access Control',
+    description: 'Tests resistance against poisoning attacks on RAG retrieval systems',
+    label: 'technical',
+    link: '/docs/red-team/plugins/rag-poisoning/',
+    name: 'RAG Poisoning',
+    pluginId: 'rag-poisoning',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
     description: 'Tests whether the model properly implements Role-Based Access Control (RBAC)',
     label: 'technical',
     link: '/docs/red-team/plugins/rbac/',
@@ -1043,6 +1073,21 @@ export const PLUGINS = [
     link: '/docs/red-team/plugins/tool-discovery/',
     name: 'Tool Discovery',
     pluginId: 'tool-discovery',
+    vulnerabilityType: 'security',
+  },
+  {
+    applicationTypes: {
+      agent: true,
+      chat: true,
+      rag: true,
+    },
+    category: 'Security and Access Control',
+    description:
+      'Uses conversational approach to discover available tools, functions, and capabilities through multi-step interactions',
+    label: 'technical',
+    link: '/docs/red-team/plugins/tool-discovery-multi-turn',
+    name: 'Multi-turn Tool Discovery',
+    pluginId: 'tool-discovery:multi-turn',
     vulnerabilityType: 'security',
   },
   {
