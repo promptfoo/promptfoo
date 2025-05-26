@@ -18,8 +18,8 @@ import type {
 import type { TokenUsage } from '../../types/shared';
 import { maybeLoadToolsFromExternalFile } from '../../util';
 import { outputFromMessage, parseMessages } from '../anthropic/util';
-import { novaOutputFromMessage, novaParseMessages } from './util';
 import { parseChatPrompt } from '../shared';
+import { novaOutputFromMessage, novaParseMessages } from './util';
 
 // Utility function to coerce string values to numbers
 export const coerceStrToNum = (value: string | number | undefined): number | undefined =>
