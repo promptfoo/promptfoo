@@ -1,18 +1,17 @@
+import { getEnvString } from '../envars';
 import logger from '../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../types';
 import type { EnvOverrides } from '../types/env';
 import type { ApiProvider } from '../types/providers';
 import invariant from '../util/invariant';
 import { OpenAiImageProvider, formatOutput, callOpenAiImageApi } from './openai/image';
+import type { OpenAiSharedOptions } from './openai/types';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
-export type XaiImageOptions = {
+export type XaiImageOptions = OpenAiSharedOptions & {
   n?: number;
   response_format?: 'url' | 'b64_json';
   user?: string;
-  headers?: Record<string, string>;
-  apiKey?: string;
-  apiKeyEnvar?: string;
 };
 
 export class XAIImageProvider extends OpenAiImageProvider {
@@ -25,12 +24,19 @@ export class XAIImageProvider extends OpenAiImageProvider {
     super(modelName, {
       ...options,
       config: {
-        ...(options.config || {}),
+        ...options.config,
         apiKeyEnvar: 'XAI_API_KEY',
         apiBaseUrl: 'https://api.x.ai/v1',
       },
     });
     this.config = options.config || {};
+  }
+
+  getApiKey(): string | undefined {
+    if (this.config?.apiKey) {
+      return this.config.apiKey;
+    }
+    return getEnvString('XAI_API_KEY');
   }
 
   getApiUrlDefault(): string {
@@ -45,17 +51,17 @@ export class XAIImageProvider extends OpenAiImageProvider {
     return `[xAI Image Provider ${this.modelName}]`;
   }
 
-  // Map xAI model names to API-compatible model names
   private getApiModelName(): string {
-    // xAI uses 'grok-2-image' as the model name for image generation
-    // We accept 'grok-2-image' or just 'grok-image' as aliases
     const modelMap: Record<string, string> = {
       'grok-2-image': 'grok-2-image',
       'grok-image': 'grok-2-image',
-      // Add more mappings as needed
     };
-
     return modelMap[this.modelName] || 'grok-2-image';
+  }
+
+  private calculateImageCost(n: number = 1): number {
+    // xAI pricing: $0.07 per generated image for grok-2-image
+    return 0.07 * n;
   }
 
   async callApi(
@@ -74,7 +80,7 @@ export class XAIImageProvider extends OpenAiImageProvider {
       ...context?.prompt?.config,
     } as XaiImageOptions;
 
-    const model = this.getApiModelName(); // Use mapped model name
+    const model = this.getApiModelName();
     const responseFormat = config.response_format || 'url';
     const endpoint = '/images/generations';
 
@@ -93,7 +99,7 @@ export class XAIImageProvider extends OpenAiImageProvider {
     const headers = {
       'Content-Type': 'application/json',
       ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
-      ...config['headers'],
+      ...config.headers,
     } as Record<string, string>;
 
     let data: any, status: number, statusText: string;
@@ -133,7 +139,7 @@ export class XAIImageProvider extends OpenAiImageProvider {
         return formattedOutput;
       }
 
-      const cost = 0; // Cost information not available
+      const cost = cached ? 0 : this.calculateImageCost(config.n || 1);
 
       return {
         output: formattedOutput,
@@ -155,7 +161,6 @@ export function createXAIImageProvider(
   options: { config?: XaiImageOptions; id?: string; env?: EnvOverrides } = {},
 ): ApiProvider {
   const splits = providerPath.split(':');
-  // providerPath: xai:image:<model>
   const modelName = splits.slice(2).join(':');
   invariant(modelName, 'Model name is required');
   return new XAIImageProvider(modelName, options);

@@ -4,10 +4,7 @@ prompts:
   - 'In the style of {{artist}}: {{subject}}'
 
 providers:
-  - id: xai:image:grok-2-image
-    config:
-      # n: 2 # generate multiple images
-      # response_format: b64_json # return base64 JSON instead of URL
+  - xai:image:grok-2-image
 
 tests:
   - vars:
@@ -16,12 +13,3 @@ tests:
   - vars:
       artist: Dali
       subject: melting clocks
-  - vars:
-      artist: Picasso
-      subject: abstract faces
-  - vars:
-      artist: Monet
-      subject: water lilies
-  - vars:
-      artist: Warhol
-      subject: colorful soup cans
