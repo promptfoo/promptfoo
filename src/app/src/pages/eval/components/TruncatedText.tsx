@@ -55,10 +55,11 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
       if (props.children) {
         const childLength = textLength(props.children);
         if (childLength > maxLength - length) {
-          return React.cloneElement(node, {
-            ...props,
-            children: truncateText(props.children, length),
-          });
+          if (React.isValidElement(node)) {
+            return React.cloneElement(node as React.ReactElement<any>, {
+              children: truncateText(props.children, length),
+            });
+          }
         }
       }
     }

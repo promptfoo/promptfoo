@@ -96,7 +96,7 @@ export default function InfoModal<T extends { open: boolean; onClose: () => void
                 },
               }}
             >
-              {item.icon as React.ReactElement}
+              {React.isValidElement(item.icon) ? item.icon : <>{item.icon}</>}
               <Link
                 underline="none"
                 target="_blank"
