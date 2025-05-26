@@ -5,7 +5,7 @@ This example demonstrates how to evaluate xAI's Grok models across their three m
 You can run this example with:
 
 ```bash
-npx promptfoo@latest init --example xai-grok    
+npx promptfoo@latest init --example xai
 ```
 
 ## Environment Variables

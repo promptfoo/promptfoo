@@ -125,6 +125,8 @@ export function calculateXAICost(
 }
 
 export class XAIProvider extends OpenAiChatCompletionProvider {
+  private originalConfig?: XAIConfig;
+
   protected get apiKey(): string | undefined {
     return this.config?.apiKey;
   }
@@ -139,7 +141,7 @@ export class XAIProvider extends OpenAiChatCompletionProvider {
 
   getOpenAiBody(prompt: string, context?: any, callApiOptions?: any) {
     const result = super.getOpenAiBody(prompt, context, callApiOptions);
-    const searchParams = (this.config as XAIConfig).search_parameters;
+    const searchParams = this.originalConfig?.search_parameters;
     if (searchParams) {
       result.body.search_parameters = renderVarsInObject(searchParams, context?.vars);
     }
@@ -157,6 +159,9 @@ export class XAIProvider extends OpenAiChatCompletionProvider {
           : 'https://api.x.ai/v1',
       },
     });
+
+    // Store the original config for later use
+    this.originalConfig = providerOptions.config?.config;
   }
 
   id(): string {

@@ -13,4 +13,4 @@ providers:
 
 tests:
   - vars:
-      topic: AI regulation
+      topic: xai
