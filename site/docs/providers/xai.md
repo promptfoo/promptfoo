@@ -165,6 +165,16 @@ tests:
 
 For more information on the available models and API usage, refer to the [xAI documentation](https://docs.x.ai/docs).
 
+## Examples
+
+For examples demonstrating text generation, image creation, and web search, see the [xai example](https://github.com/promptfoo/promptfoo/tree/main/examples/xai).
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example xai
+```
+
 ## See Also
 
 - [OpenAI Provider](/docs/providers/openai)
