@@ -137,7 +137,7 @@ export class XAIProvider extends OpenAiChatCompletionProvider {
     return true;
   }
 
-  protected getOpenAiBody(prompt: string, context?: any, callApiOptions?: any) {
+  getOpenAiBody(prompt: string, context?: any, callApiOptions?: any) {
     const result = super.getOpenAiBody(prompt, context, callApiOptions);
     const searchParams = (this.config as XAIConfig).search_parameters;
     if (searchParams) {
