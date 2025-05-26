@@ -1,5 +1,4 @@
-import type { ReactNode } from 'react';
-import React, { useState, useEffect } from 'react';
+import React, { type ReactNode, useState, useEffect } from 'react';
 import { ShiftKeyContext } from './ShiftKeyContextDef';
 
 export const ShiftKeyProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
