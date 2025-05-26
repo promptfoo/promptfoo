@@ -1,9 +1,9 @@
 import React from 'react';
 import Link from '@docusaurus/Link';
-import { scrollToTop } from '../utils/navigation';
 import CheckIcon from '@mui/icons-material/Check';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
+import { scrollToTop } from '../utils/navigation';
 import styles from './pricing.module.css';
 
 function PricingHeader() {
@@ -41,7 +41,10 @@ function PricingTable() {
       price: 'Custom',
       description: (
         <>
-          For teams that need advanced features. <Link onClick={scrollToTop} to="/docs/enterprise/">Learn more</Link>
+          For teams that need advanced features.{' '}
+          <Link onClick={scrollToTop} to="/docs/enterprise/">
+            Learn more
+          </Link>
         </>
       ),
       features: [
@@ -97,7 +100,8 @@ function PricingTable() {
               ))}
             </ul>
           </div>
-          <Link onClick={scrollToTop}
+          <Link
+            onClick={scrollToTop}
             to={plan.ctaLink}
             className={clsx(
               'button',
@@ -395,7 +399,8 @@ function DemoCTA() {
     <section className={styles.demoCTA}>
       <h2>Ready to get started?</h2>
       <p>Schedule a demo to see how Promptfoo can help secure your LLM applications.</p>
-      <Link onClick={scrollToTop}
+      <Link
+        onClick={scrollToTop}
         to="https://cal.com/team/promptfoo/intro2"
         className={clsx('button', 'button--lg', 'button--primary', styles.demoButton)}
       >

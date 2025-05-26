@@ -1,7 +1,6 @@
 import React from 'react';
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
-import { scrollToTop } from '../utils/navigation';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import SecurityUpdateGoodIcon from '@mui/icons-material/SecurityUpdateGood';
 import ShieldIcon from '@mui/icons-material/Shield';
@@ -10,6 +9,7 @@ import Layout from '@theme/Layout';
 import clsx from 'clsx';
 import LogoContainer from '../components/LogoContainer';
 import NewsletterForm from '../components/NewsletterForm';
+import { scrollToTop } from '../utils/navigation';
 import styles from './llm-vulnerability-scanner.module.css';
 
 function HeroSection() {
@@ -42,7 +42,8 @@ function GuardrailsHeader() {
           Self-improving protection powered by continuous red teaming feedback
         </p>
         <div className={styles.buttons}>
-          <Link onClick={scrollToTop}
+          <Link
+            onClick={scrollToTop}
             className={clsx('button button--secondary button--lg', styles.buttonPrimary)}
             to="/contact/"
           >
@@ -181,7 +182,8 @@ function CallToActionSection() {
       <div className="container">
         <h2>Upgrade to guardrails that learn and adapt</h2>
         <div className={styles.buttons}>
-          <Link onClick={scrollToTop}
+          <Link
+            onClick={scrollToTop}
             className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
             to="/contact/"
           >
