@@ -19,7 +19,7 @@ import type {
 import {
   AwsBedrockGenericProvider,
   type BedrockAmazonNovaSonicGenerationOptions,
-} from '../bedrock';
+} from '.';
 
 // Configuration types
 interface SessionState {
