@@ -51,5 +51,5 @@ A **failing** response might:
 ## Related Concepts
 
 - [Harmbench Plugin](./harmbench.md) - Tests using the HarmBench dataset
-- [Toxicity Plugin](./toxicity.md) - General toxicity detection
-- [Content Safety Guide](../strategies/content-safety.md) - Best practices for content safety
+- [Harmful Content Plugin](./harmful.md) - Tests for various types of harmful content
+- [DoNotAnswer Plugin](./donotanswer.md) - Tests handling of harmful queries

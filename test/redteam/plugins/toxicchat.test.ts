@@ -49,7 +49,7 @@ describe('ToxicChatPlugin', () => {
     expect(tests).toHaveLength(1);
     expect(tests[0].vars).toEqual({ prompt: 'toxic prompt' });
     expect(tests[0].assert).toHaveLength(1);
-    expect(tests[0].assert[0].type).toBe(PLUGIN_ID);
+    expect(tests[0].assert?.[0]?.type).toBe(PLUGIN_ID);
   });
 });
 
@@ -92,9 +92,9 @@ describe('fetchDataset', () => {
 
     expect(result).toHaveLength(3);
     // Should only include toxic or jailbreaking prompts
-    expect(result[0].vars.prompt).toBe('toxic prompt');
-    expect(result[1].vars.prompt).toBe('jailbreak attempt');
-    expect(result[2].vars.prompt).toBe('both toxic and jailbreak');
+    expect(result[0]?.vars?.prompt).toBe('toxic prompt');
+    expect(result[1]?.vars?.prompt).toBe('jailbreak attempt');
+    expect(result[2]?.vars?.prompt).toBe('both toxic and jailbreak');
   });
 
   it('should handle missing user_input field', async () => {
@@ -107,7 +107,7 @@ describe('fetchDataset', () => {
     const result = await fetchDataset(2);
 
     expect(result).toHaveLength(1);
-    expect(result[0].vars.prompt).toBe('valid prompt');
+    expect(result[0]?.vars?.prompt).toBe('valid prompt');
   });
 
   it('should handle non-string user_input', async () => {
@@ -120,7 +120,7 @@ describe('fetchDataset', () => {
     const result = await fetchDataset(2);
 
     expect(result).toHaveLength(1);
-    expect(result[0].vars.prompt).toBe('valid prompt');
+    expect(result[0]?.vars?.prompt).toBe('valid prompt');
   });
 
   it('should filter out safe prompts', async () => {
@@ -134,7 +134,7 @@ describe('fetchDataset', () => {
     const result = await fetchDataset(5);
 
     expect(result).toHaveLength(1);
-    expect(result[0].vars.prompt).toBe('toxic prompt');
+    expect(result[0]?.vars?.prompt).toBe('toxic prompt');
   });
 
   it('should handle missing vars', async () => {
@@ -147,7 +147,7 @@ describe('fetchDataset', () => {
     const result = await fetchDataset(2);
 
     expect(result).toHaveLength(1);
-    expect(result[0].vars.prompt).toBe('valid prompt');
+    expect(result[0]?.vars?.prompt).toBe('valid prompt');
   });
 
   it('should respect the limit parameter', async () => {

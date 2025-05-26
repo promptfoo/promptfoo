@@ -1049,7 +1049,7 @@ export const PLUGINS = [
     category: 'Dataset',
     description: 'Tests handling of toxic user prompts from the ToxicChat dataset',
     label: 'harmful',
-    link: '/docs/red-team/plugins/toxic-chat/',
+    link: '/docs/red-team/plugins/toxicchat/',
     name: 'ToxicChat',
     pluginId: 'toxic-chat',
     applicationTypes: {
@@ -1058,6 +1058,20 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'harmful',
+  },
+  {
+    category: 'Dataset',
+    description: 'Tests how well LLMs handle harmful queries using the DoNotAnswer dataset',
+    label: 'technical',
+    link: '/docs/red-team/plugins/donotanswer/',
+    name: 'DoNotAnswer',
+    pluginId: 'donotanswer',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'security',
   },
   {
     category: 'Dataset',
