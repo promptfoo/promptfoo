@@ -7,16 +7,15 @@ import { HARM_PLUGINS, PII_PLUGINS } from '../../src/redteam/constants';
 import { extractEntities } from '../../src/redteam/extraction/entities';
 import { extractSystemPurpose } from '../../src/redteam/extraction/purpose';
 import {
-  synthesize,
-  resolvePluginConfig,
   calculateTotalTests,
   getMultilingualRequestedCount,
   getTestCount,
+  resolvePluginConfig,
+  synthesize,
 } from '../../src/redteam/index';
 import { Plugins } from '../../src/redteam/plugins';
-import { shouldGenerateRemote, getRemoteHealthUrl } from '../../src/redteam/remoteGeneration';
-import { Strategies } from '../../src/redteam/strategies';
-import { validateStrategies } from '../../src/redteam/strategies';
+import { getRemoteHealthUrl, shouldGenerateRemote } from '../../src/redteam/remoteGeneration';
+import { Strategies, validateStrategies } from '../../src/redteam/strategies';
 import { DEFAULT_LANGUAGES } from '../../src/redteam/strategies/multilingual';
 import type { TestCaseWithPlugin } from '../../src/types';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
@@ -418,6 +417,60 @@ describe('synthesize', () => {
           'Validation failed for plugin fail-plugin: Error: Validation failed!, skipping plugin',
         ),
       );
+    });
+
+    it('should not store full config in metadata for intent plugin to prevent bloating', async () => {
+      const mockProvider = {
+        id: () => 'test-provider',
+        callApi: jest.fn().mockResolvedValue({ output: 'Test response' }),
+      };
+
+      const intentPlugin = {
+        id: 'intent',
+        numTests: 2,
+        config: {
+          intent: ['intent1', 'intent2', 'intent3', 'intent4', 'intent5'], // Large array
+        },
+      };
+
+      const regularPlugin = {
+        id: 'contracts',
+        numTests: 1,
+        config: {
+          someConfig: 'value',
+        },
+      };
+
+      const result = await synthesize({
+        plugins: [intentPlugin, regularPlugin],
+        prompts: ['Test prompt'],
+        provider: mockProvider,
+        purpose: 'Test purpose',
+        strategies: [],
+        injectVar: 'prompt',
+        language: 'en',
+        numTests: 5,
+        targetLabels: ['test'],
+      });
+
+      // Check that intent plugin test cases don't have pluginConfig in metadata
+      const intentTestCases = result.testCases.filter((tc) => tc.metadata?.pluginId === 'intent');
+      expect(intentTestCases.length).toBeGreaterThan(0);
+      intentTestCases.forEach((tc) => {
+        expect(tc.metadata?.pluginConfig).toBeUndefined();
+        expect(tc.metadata?.pluginId).toBe('intent');
+      });
+
+      // Check that regular plugins still have pluginConfig in metadata
+      const contractsTestCases = result.testCases.filter(
+        (tc) => tc.metadata?.pluginId === 'contracts',
+      );
+      expect(contractsTestCases.length).toBeGreaterThan(0);
+      contractsTestCases.forEach((tc) => {
+        expect(tc.metadata?.pluginConfig).toBeDefined();
+        expect(tc.metadata?.pluginConfig).toEqual({ someConfig: 'value' });
+        expect(tc.metadata?.pluginId).toBe('contracts');
+      });
     });
   });
 

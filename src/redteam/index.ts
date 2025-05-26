@@ -14,12 +14,12 @@ import { extractVariablesFromTemplates } from '../util/templates';
 import type { StrategyExemptPlugin } from './constants';
 import {
   ALIASED_PLUGIN_MAPPINGS,
-  STRATEGY_COLLECTION_MAPPINGS,
   FOUNDATION_PLUGINS,
   HARM_PLUGINS,
   PII_PLUGINS,
   riskCategorySeverityMap,
   Severity,
+  STRATEGY_COLLECTION_MAPPINGS,
   STRATEGY_COLLECTIONS,
   STRATEGY_EXEMPT_PLUGINS,
 } from './constants';
@@ -719,7 +719,11 @@ export async function synthesize({
             metadata: {
               ...(t?.metadata || {}),
               pluginId: plugin.id,
-              pluginConfig: resolvePluginConfig(plugin.config),
+              // For intent plugin, don't store the full config to prevent bloating
+              // since it can contain many intents
+              ...(plugin.id !== 'intent' && {
+                pluginConfig: resolvePluginConfig(plugin.config),
+              }),
               severity: getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
             },
           })),
@@ -747,7 +751,11 @@ export async function synthesize({
             metadata: {
               ...(t.metadata || {}),
               pluginId: plugin.id,
-              pluginConfig: resolvePluginConfig(plugin.config),
+              // For intent plugin, don't store the full config to prevent bloating
+              // since it can contain many intents
+              ...(plugin.id !== 'intent' && {
+                pluginConfig: resolvePluginConfig(plugin.config),
+              }),
               severity: getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
             },
           })),
