@@ -142,6 +142,7 @@ export function resolvePluginConfig(config: Record<string, any> | undefined): Re
 const categories = {
   foundation: FOUNDATION_PLUGINS,
   harmful: Object.keys(HARM_PLUGINS),
+  bias: Object.keys(HARM_PLUGINS).filter((p) => p.startsWith('bias:')),
   pii: PII_PLUGINS,
 } as const;
 
@@ -571,6 +572,15 @@ export async function synthesize({
   };
 
   plugins.forEach((plugin) => {
+    // First check if this is a direct plugin that should not be expanded
+    // This is for plugins like bias:gender that have a prefix matching an alias
+    const isDirectPlugin = Plugins.some((p) => p.key === plugin.id);
+
+    if (isDirectPlugin) {
+      expandedPlugins.push(plugin);
+      return;
+    }
+
     const mappingKey = Object.keys(ALIASED_PLUGIN_MAPPINGS).find(
       (key) => plugin.id === key || plugin.id.startsWith(`${key}:`),
     );

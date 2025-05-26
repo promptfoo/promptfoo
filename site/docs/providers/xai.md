@@ -135,6 +135,34 @@ tests:
       question: "What's in this image?"
 ```
 
+### Image Generation
+
+xAI also supports image generation through the Grok image model:
+
+```yaml
+providers:
+  - xai:image:grok-2-image
+```
+
+Example configuration for image generation:
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+prompts:
+  - 'A {{style}} painting of {{subject}}'
+
+providers:
+  - id: xai:image:grok-2-image
+    config:
+      n: 1 # Number of images to generate (1-10)
+      response_format: 'url' # 'url' or 'b64_json'
+
+tests:
+  - vars:
+      style: 'impressionist'
+      subject: 'sunset over mountains'
+```
+
 For more information on the available models and API usage, refer to the [xAI documentation](https://docs.x.ai/docs).
 
 ## See Also
