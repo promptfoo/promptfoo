@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useState, useEffect } from 'react';
+import { useEmailVerification } from '@app/hooks/useEmailVerification';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import YamlEditor from '@app/pages/eval-creator/components/YamlEditor';
@@ -11,6 +12,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import SettingsIcon from '@mui/icons-material/Settings';
 import StopIcon from '@mui/icons-material/Stop';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
@@ -35,6 +37,7 @@ import type { RedteamPlugin } from '@promptfoo/redteam/types';
 import type { Job } from '@promptfoo/types';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { generateOrderedYaml } from '../utils/yamlHelpers';
+import { EmailVerificationDialog } from './EmailVerificationDialog';
 import { LogViewer } from './LogViewer';
 
 interface PolicyPlugin {
@@ -65,6 +68,10 @@ export default function Review() {
   const [isJobStatusDialogOpen, setIsJobStatusDialogOpen] = useState(false);
   const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
   const [isRunSettingsDialogOpen, setIsRunSettingsDialogOpen] = useState(false);
+  const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
+  const [emailVerificationMessage, setEmailVerificationMessage] = useState('');
+  const [emailVerificationError, setEmailVerificationError] = useState<string | null>(null);
+  const { checkEmailStatus } = useEmailVerification();
 
   const handleDescriptionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     updateConfig('description', event.target.value);
@@ -169,6 +176,30 @@ export default function Review() {
 
   const handleRunWithSettings = async () => {
     setIsRunSettingsDialogOpen(false);
+
+    // Check email verification first
+    const emailResult = await checkEmailStatus();
+
+    if (!emailResult.canProceed) {
+      if (emailResult.needsEmail) {
+        setEmailVerificationMessage(
+          emailResult.status?.message ||
+            'Redteam evals require email verification. Please enter your work email:',
+        );
+        setIsEmailDialogOpen(true);
+        return;
+      } else if (emailResult.error) {
+        setEmailVerificationError(emailResult.error);
+        showToast(emailResult.error, 'error');
+        return;
+      }
+    }
+
+    // Show usage warning if present
+    if (emailResult.status?.status === 'show_usage_warning' && emailResult.status.message) {
+      showToast(emailResult.status.message, 'warning');
+    }
+
     const { hasRunningJob } = await checkForRunningJob();
 
     if (hasRunningJob) {
@@ -750,6 +781,22 @@ export default function Review() {
           </Stack>
         </DialogContent>
       </Dialog>
+
+      {emailVerificationError && (
+        <Alert severity="error" sx={{ mt: 2 }}>
+          {emailVerificationError}
+        </Alert>
+      )}
+
+      <EmailVerificationDialog
+        open={isEmailDialogOpen}
+        onClose={() => setIsEmailDialogOpen(false)}
+        onSuccess={() => {
+          setIsEmailDialogOpen(false);
+          handleRunWithSettings();
+        }}
+        message={emailVerificationMessage}
+      />
     </Box>
   );
 }

@@ -13,10 +13,10 @@ export default function DocItem(props) {
       <HtmlClassNameProvider className={docHtmlClassName}>
         <DocItemMetadata />
         <DocItemLayout>
-          <div style={{ marginBottom: 24 }}>
+          <div style={{ position: 'relative' }}>
             <CopyPageButton />
+            <MDXComponent />
           </div>
-          <MDXComponent />
         </DocItemLayout>
       </HtmlClassNameProvider>
     </DocProvider>

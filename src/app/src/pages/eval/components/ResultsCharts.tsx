@@ -26,7 +26,7 @@ import {
   Colors,
   type TooltipItem,
 } from 'chart.js';
-import { useStore } from './store';
+import { useTableStore } from './store';
 import type { EvaluateTable, UnifiedConfig, ResultLightweightWithLabel } from './types';
 
 interface ResultsChartsProps {
@@ -435,7 +435,7 @@ interface ProgressData {
 }
 
 function PerformanceOverTimeChart({ evalId }: ChartProps) {
-  const { config } = useStore();
+  const { config } = useTableStore();
   const lineCanvasRef = useRef(null);
   const lineChartInstance = useRef<Chart | null>(null);
   const [progressData, setProgressData] = useState<ProgressData[]>([]);
@@ -599,7 +599,7 @@ function ResultsCharts({ columnVisibility, recentEvals }: ResultsChartsProps) {
   const [showCharts, setShowCharts] = useState(true);
   const [showPerformanceOverTimeChart, setShowPerformanceOverTimeChart] = useState(false);
 
-  const { table, evalId, config } = useStore();
+  const { table, evalId, config } = useTableStore();
 
   useEffect(() => {
     if (config?.description && import.meta.env.VITE_PROMPTFOO_EXPERIMENTAL) {
