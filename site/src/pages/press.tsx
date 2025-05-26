@@ -9,7 +9,6 @@ import Typography from '@mui/material/Typography';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import Layout from '@theme/Layout';
 import LogoPanda from '../../static/img/logo-panda.svg';
-import { scrollToTop } from '../utils/navigation';
 import styles from './press.module.css';
 
 const PressContent = () => {
@@ -77,7 +76,7 @@ const PressContent = () => {
                   models has been widely covered by major technology and news publications.
                 </Typography>
                 <Typography variant="body2" paragraph>
-                  <Link to="/blog/deepseek-censorship/" onClick={scrollToTop}>
+                  <Link to="/blog/deepseek-censorship/" >
                     Read the original research →
                   </Link>
                 </Typography>

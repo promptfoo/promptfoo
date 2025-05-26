@@ -5,7 +5,6 @@ import SearchIcon from '@mui/icons-material/Search';
 import SecurityIcon from '@mui/icons-material/Security';
 import TimelineIcon from '@mui/icons-material/Timeline';
 import dedent from 'dedent';
-import { scrollToTop } from '../../../utils/navigation';
 import styles from '../styles.module.css';
 
 const features = [
@@ -82,7 +81,7 @@ export default function Features(): JSX.Element {
                 <Link
                   to={feature.infoLink}
                   className={styles.featureInfoLink}
-                  onClick={scrollToTop}
+                  
                 >
                   {feature.infoLinkText}
                 </Link>
