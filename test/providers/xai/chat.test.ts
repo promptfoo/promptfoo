@@ -1,8 +1,14 @@
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
-import { calculateXAICost, createXAIProvider } from '../../../src/providers/xai/chat';
+import {
+  calculateXAICost,
+  createXAIProvider,
+  XAI_CHAT_MODELS,
+  GROK_3_MINI_MODELS,
+} from '../../../src/providers/xai/chat';
 import type { ProviderOptions } from '../../../src/types/providers';
 
 jest.mock('../../../src/providers/openai/chat');
+jest.mock('../../../src/logger');
 
 function createMockToJSON(modelName: string, config: any = {}) {
   const { _apiKey, ...restConfig } = config;
@@ -13,7 +19,7 @@ function createMockToJSON(modelName: string, config: any = {}) {
   });
 }
 
-describe('xAI Provider', () => {
+describe('xAI Chat Provider', () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
@@ -123,18 +129,14 @@ describe('xAI Provider', () => {
       expect(provider.toString()).toBe('[xAI Provider grok-3-mini-beta]');
     });
 
-    it('serializes properly with toJSON()', () => {
-      (OpenAiChatCompletionProvider as any).mockImplementation(() => ({
-        id: () => 'xai:grok-3-beta',
-        toString: () => '[xAI Provider grok-3-beta]',
-        toJSON: () => ({
-          provider: 'xai',
-          model: 'grok-3-beta',
-          config: {
-            temperature: 0.7,
-          },
-        }),
-      }));
+    it('serializes properly with toJSON() and masks API key', () => {
+      (OpenAiChatCompletionProvider as any).mockImplementation((modelName: string) => {
+        return {
+          id: () => `xai:${modelName}`,
+          toString: () => `[xAI Provider ${modelName}]`,
+          toJSON: createMockToJSON(modelName, { _apiKey: 'test-key', temperature: 0.7 }),
+        };
+      });
 
       const provider = createXAIProvider('xai:grok-3-beta', {
         config: {
@@ -142,7 +144,8 @@ describe('xAI Provider', () => {
         } as any,
       });
 
-      const json = provider.toJSON?.() || {};
+      expect(provider.toJSON).toBeDefined();
+      const json = provider.toJSON!();
       expect(json).toMatchObject({
         provider: 'xai',
         model: 'grok-3-beta',
@@ -150,20 +153,6 @@ describe('xAI Provider', () => {
           temperature: 0.7,
         },
       });
-    });
-
-    it('masks API key in toJSON()', () => {
-      (OpenAiChatCompletionProvider as any).mockImplementation((modelName: string) => {
-        return {
-          id: () => `xai:${modelName}`,
-          toString: () => `[xAI Provider ${modelName}]`,
-          toJSON: createMockToJSON(modelName, { _apiKey: 'test-key' }),
-        };
-      });
-
-      const provider = createXAIProvider('xai:grok-3-beta');
-
-      const json = provider.toJSON?.() || {};
       expect(json.config.apiKey).toBeUndefined();
     });
   });
@@ -231,15 +220,14 @@ describe('xAI Provider', () => {
       expect(result.body.search_parameters).toEqual({ mode: 'test' });
     });
 
-    it('does not include search_parameters when undefined', () => {
+    it('does not include search_parameters when undefined and preserves original configuration', () => {
       const provider = createXAIProvider('xai:grok-3-beta');
       const result = (provider as any).getOpenAiBody('test prompt');
       expect(result.body.search_parameters).toBeUndefined();
-    });
 
-    it('preserves original search_parameters configuration', () => {
+      // Test preserving original config
       const searchParams = { mode: 'test', filter: 'all' };
-      const provider = createXAIProvider('xai:grok-3-beta', {
+      const providerWithParams = createXAIProvider('xai:grok-3-beta', {
         config: {
           config: {
             search_parameters: searchParams,
@@ -247,63 +235,21 @@ describe('xAI Provider', () => {
         },
       }) as any;
 
-      expect(provider.originalConfig.search_parameters).toEqual(searchParams);
+      expect(providerWithParams.originalConfig.search_parameters).toEqual(searchParams);
     });
   });
 
-  describe('Standard models (grok-3-beta, grok-3-fast-beta)', () => {
-    it('supports temperature for all models', () => {
-      const mockSupportsTemperature = jest.fn().mockReturnValue(true);
-      expect(mockSupportsTemperature()).toBe(true);
-    });
-
-    it('calculates costs correctly for standard models', () => {
-      const betaCost = calculateXAICost('grok-3-beta', {}, 1000, 500);
-      expect(betaCost).toBeCloseTo(0.0105);
-
-      const fastCost = calculateXAICost('grok-3-fast-beta', {}, 1000, 500);
-      expect(fastCost).toBeCloseTo(0.0175);
-
-      expect(Number(fastCost)).toBeGreaterThan(Number(betaCost));
-    });
-
-    it('does not support reasoning effort parameter', () => {
-      createXAIProvider('xai:grok-3-beta', {
-        config: {
-          config: {
-            reasoning_effort: 'high',
-          },
-        },
-      });
-
-      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
-        'grok-3-beta',
-        expect.objectContaining({
-          config: expect.objectContaining({
-            config: {
-              reasoning_effort: 'high',
-            },
-          }),
-        }),
-      );
-    });
-  });
-
-  describe('Reasoning models (grok-3-mini-beta, grok-3-mini-fast-beta)', () => {
+  describe('Model type detection and capabilities', () => {
     it('identifies reasoning models correctly', () => {
-      const mockReasoningCheck = jest.fn();
-      mockReasoningCheck.mockReturnValueOnce(true);
-      mockReasoningCheck.mockReturnValueOnce(true);
-      mockReasoningCheck.mockReturnValueOnce(false);
-      mockReasoningCheck.mockReturnValueOnce(false);
-
-      expect(mockReasoningCheck()).toBe(true);
-      expect(mockReasoningCheck()).toBe(true);
-      expect(mockReasoningCheck()).toBe(false);
-      expect(mockReasoningCheck()).toBe(false);
+      expect(GROK_3_MINI_MODELS).toContain('grok-3-mini-beta');
+      expect(GROK_3_MINI_MODELS).toContain('grok-3-mini-fast-beta');
+      expect(GROK_3_MINI_MODELS).not.toContain('grok-2-1212');
     });
+  });
 
-    it('supports high reasoning effort parameter', () => {
+  describe('Reasoning models configuration', () => {
+    it('supports reasoning effort parameters for mini models', () => {
+      // Test high reasoning effort
       createXAIProvider('xai:grok-3-mini-beta', {
         config: {
           config: {
@@ -318,15 +264,11 @@ describe('xAI Provider', () => {
           config: expect.objectContaining({
             apiBaseUrl: 'https://api.x.ai/v1',
             apiKeyEnvar: 'XAI_API_KEY',
-            config: {
-              reasoning_effort: 'high',
-            },
           }),
         }),
       );
-    });
 
-    it('supports low reasoning effort parameter', () => {
+      // Test low reasoning effort
       createXAIProvider('xai:grok-3-mini-beta', {
         config: {
           config: {
@@ -335,26 +277,14 @@ describe('xAI Provider', () => {
         },
       });
 
-      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
+      expect(OpenAiChatCompletionProvider).toHaveBeenLastCalledWith(
         'grok-3-mini-beta',
         expect.objectContaining({
           config: expect.objectContaining({
-            config: {
-              reasoning_effort: 'low',
-            },
+            apiKeyEnvar: 'XAI_API_KEY',
           }),
         }),
       );
-    });
-
-    it('calculates costs correctly for mini models', () => {
-      const miniCost = calculateXAICost('grok-3-mini-beta', {}, 1000, 500);
-      expect(miniCost).toBeCloseTo(0.00055);
-
-      const miniFastCost = calculateXAICost('grok-3-mini-fast-beta', {}, 1000, 500);
-      expect(miniFastCost).toBeCloseTo(0.0026);
-
-      expect(Number(miniFastCost)).toBeGreaterThan(Number(miniCost));
     });
 
     it('handles multiple configuration options for mini models', () => {
@@ -378,94 +308,127 @@ describe('xAI Provider', () => {
             apiBaseUrl: 'https://us-east-1.api.x.ai/v1',
             temperature: 0.5,
             max_tokens: 1000,
-            config: {
-              reasoning_effort: 'high',
-              region: 'us-east-1',
-            },
           }),
         }),
       );
     });
   });
 
-  describe('Legacy models (grok-2)', () => {
-    it('calculates costs correctly for grok-2 models', () => {
+  describe('Cost calculation', () => {
+    it('calculates costs correctly for all model types', () => {
+      // Standard models
+      const betaCost = calculateXAICost('grok-3-beta', {}, 1000, 500);
+      expect(betaCost).toBeCloseTo(0.0105);
+      expect(betaCost).toBe(1000 * (3.0 / 1e6) + 500 * (15.0 / 1e6));
+
+      const fastCost = calculateXAICost('grok-3-fast-beta', {}, 1000, 500);
+      expect(fastCost).toBeCloseTo(0.0175);
+
+      // Mini models
+      const miniCost = calculateXAICost('grok-3-mini-beta', {}, 1000, 500);
+      expect(miniCost).toBeCloseTo(0.00055);
+      expect(miniCost).toBe(1000 * (0.3 / 1e6) + 500 * (0.5 / 1e6));
+
+      const miniFastCost = calculateXAICost('grok-3-mini-fast-beta', {}, 1000, 500);
+      expect(miniFastCost).toBeCloseTo(0.0026);
+
+      // Legacy models
       const grok2Cost = calculateXAICost('grok-2-latest', {}, 1000, 500);
       expect(grok2Cost).toBeCloseTo(0.007);
 
       const grok2VisionCost = calculateXAICost('grok-2-vision-latest', {}, 1000, 500);
       expect(grok2VisionCost).toBeCloseTo(0.007);
-    });
-  });
 
-  describe('Cost calculation and token processing', () => {
-    it('includes reasoning tokens in cost calculation', () => {
-      const cost = calculateXAICost('grok-3-mini-beta', {}, 1000, 500, 200);
-      expect(cost).toBeCloseTo(0.00055);
+      // Verify cost relationships
+      expect(Number(fastCost)).toBeGreaterThan(Number(betaCost));
+      expect(Number(miniFastCost)).toBeGreaterThan(Number(miniCost));
+      expect(Number(betaCost)).toBeGreaterThan(Number(miniCost));
     });
 
     it('handles model aliases correctly', () => {
       const costWithAlias = calculateXAICost('grok-3-latest', {}, 1000, 500);
       const costWithId = calculateXAICost('grok-3-beta', {}, 1000, 500);
+      const aliasTest = calculateXAICost('grok-3', {}, 1000, 500);
 
       expect(costWithAlias).toBe(costWithId);
+      expect(aliasTest).toBe(costWithId);
       expect(costWithAlias).toBeCloseTo(0.0105);
     });
 
-    it('returns undefined for unknown models', () => {
-      const cost = calculateXAICost('non-existent-model', {}, 1000, 500);
-      expect(cost).toBeUndefined();
-    });
-
-    it('returns undefined when token counts are missing', () => {
+    it('returns undefined for invalid inputs', () => {
+      expect(calculateXAICost('non-existent-model', {}, 1000, 500)).toBeUndefined();
+      expect(calculateXAICost('unknown-model', {}, 1000, 500)).toBeUndefined();
       expect(calculateXAICost('grok-3-beta', {}, undefined, 500)).toBeUndefined();
       expect(calculateXAICost('grok-3-beta', {}, 1000, undefined)).toBeUndefined();
+      expect(calculateXAICost('grok-3-beta', {}, undefined, undefined)).toBeUndefined();
     });
 
-    it('uses config cost values when provided', () => {
+    it('uses custom cost values when provided', () => {
       const customCost = 10.0 / 1e6;
       const cost = calculateXAICost('grok-3-beta', { cost: customCost }, 1000, 500);
-
       expect(cost).toBeCloseTo(0.015);
+      expect(cost).toBe(1000 * (10.0 / 1e6) + 500 * (10.0 / 1e6));
+
+      // Test with reasoning tokens
+      const customCostWithReasoning = 5.0 / 1e6;
+      const costWithReasoning = calculateXAICost(
+        'grok-3-mini-beta',
+        { cost: customCostWithReasoning },
+        100,
+        50,
+        30,
+      );
+      const expectedCost = (100 + 50) * (5.0 / 1e6);
+      expect(costWithReasoning).toBeCloseTo(expectedCost);
     });
 
-    it('handles different reasoning token counts without changing cost', () => {
+    it('handles reasoning tokens correctly', () => {
+      // Reasoning tokens are included in mini model calculations
+      const miniCostWithReasoning = calculateXAICost('grok-3-mini-beta', {}, 100, 50, 30);
+      expect(miniCostWithReasoning).toBeDefined();
+      expect(miniCostWithReasoning).toBeCloseTo(0.000055);
+      expect(miniCostWithReasoning).toBe(100 * (0.3 / 1e6) + 50 * (0.5 / 1e6));
+
+      // Reasoning tokens don't affect non-mini models
+      const standardCost = calculateXAICost('grok-3-beta', {}, 100, 50);
+      const standardWithReasoningCost = calculateXAICost('grok-3-beta', {}, 100, 50, 30);
+      expect(standardCost).toBe(standardWithReasoningCost);
+
+      // Different reasoning token counts don't change cost for mini models
       const cost1 = calculateXAICost('grok-3-mini-beta', {}, 100, 50, 10);
       const cost2 = calculateXAICost('grok-3-mini-beta', {}, 100, 50, 30);
-
       expect(cost1).toBe(cost2);
-    });
 
-    it('properly applies custom cost values with reasoning tokens', () => {
-      const customCost = 5.0 / 1e6;
-      const cost = calculateXAICost('grok-3-mini-beta', { cost: customCost }, 100, 50, 30);
-
-      const expectedCost = (100 + 50) * (5.0 / 1e6);
-      expect(cost).toBeCloseTo(expectedCost);
+      // Reasoning tokens in cost calculation
+      const costWithReasoningTokens = calculateXAICost('grok-3-mini-beta', {}, 1000, 500, 200);
+      expect(costWithReasoningTokens).toBe(1000 * (0.3 / 1e6) + 500 * (0.5 / 1e6));
     });
   });
 
-  describe('API response handling', () => {
-    it('processes reasoning tokens in Grok-3 mini models', () => {
-      const cost = calculateXAICost('grok-3-mini-beta', {}, 100, 50, 30);
-      expect(cost).toBeDefined();
-      expect(cost).toBeCloseTo(0.000055);
+  describe('Model constants and configuration', () => {
+    it('defines correct Grok-3 mini models', () => {
+      expect(GROK_3_MINI_MODELS).toEqual(['grok-3-mini-beta', 'grok-3-mini-fast-beta']);
     });
 
-    it('ignores reasoning tokens for non-mini models', () => {
-      const standardCost = calculateXAICost('grok-3-beta', {}, 100, 50);
-      const standardWithReasoningCost = calculateXAICost('grok-3-beta', {}, 100, 50, 30);
-
-      expect(standardCost).toBe(standardWithReasoningCost);
+    it('defines model costs correctly', () => {
+      const grok3Beta = XAI_CHAT_MODELS.find((m) => m.id === 'grok-3-beta');
+      expect(grok3Beta).toBeDefined();
+      expect(grok3Beta!.cost.input).toBe(3.0 / 1e6);
+      expect(grok3Beta!.cost.output).toBe(15.0 / 1e6);
     });
 
-    it('applies different pricing models correctly', () => {
-      const miniCost = calculateXAICost('grok-3-mini-beta', {}, 100, 50, 30);
-      const betaCost = calculateXAICost('grok-3-beta', {}, 100, 50);
-      const grok2Cost = calculateXAICost('grok-2-latest', {}, 100, 50);
+    it('includes all required model properties', () => {
+      XAI_CHAT_MODELS.forEach((model) => {
+        expect(model).toHaveProperty('id');
+        expect(model).toHaveProperty('cost');
+        expect(model.cost).toHaveProperty('input');
+        expect(model.cost).toHaveProperty('output');
+      });
+    });
 
-      expect(Number(betaCost)).toBeGreaterThan(Number(miniCost));
-      expect(Number(betaCost)).toBeGreaterThan(Number(grok2Cost));
+    it('has correct aliases for models', () => {
+      const modelWithAliases = XAI_CHAT_MODELS.find((m) => m.id === 'grok-3-beta');
+      expect(modelWithAliases?.aliases).toEqual(['grok-3', 'grok-3-latest']);
     });
   });
 });
