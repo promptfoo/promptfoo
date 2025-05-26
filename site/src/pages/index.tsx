@@ -24,10 +24,7 @@ function HomepageHeader({ getStartedUrl }: { getStartedUrl: string }) {
         </h1>
         <p>Open-source LLM security trusted by 80,000+ users</p>
         <div className={styles.buttons}>
-          <Link
-            className="button button--primary button--lg"
-            to={getStartedUrl}
-          >
+          <Link className="button button--primary button--lg" to={getStartedUrl}>
             Get Started
           </Link>
           <Link
@@ -94,17 +91,12 @@ function HomepageWalkthrough() {
             <li>Unauthorized contract creation</li>
             <li>Toxic content generation</li>
             <li>
-              And{' '}
-              <Link to="/docs/red-team/llm-vulnerability-types/">
-                much more
-              </Link>
+              And <Link to="/docs/red-team/llm-vulnerability-types/">much more</Link>
             </li>
           </ul>
           <p>
             <strong>
-              <Link to="/red-teaming">
-                &raquo; Learn more about Red Teaming
-              </Link>
+              <Link to="/red-teaming">&raquo; Learn more about Red Teaming</Link>
             </strong>
           </p>
         </>
@@ -139,9 +131,7 @@ function HomepageWalkthrough() {
           </p>
           <p>
             <strong>
-              <Link to="/guardrails">
-                &raquo; Learn more about Guardrails
-              </Link>
+              <Link to="/guardrails">&raquo; Learn more about Guardrails</Link>
             </strong>
           </p>
         </>
@@ -169,9 +159,7 @@ function HomepageWalkthrough() {
           <p>Get detailed reports with clear remediation steps and continuous monitoring.</p>
           <p>
             <strong>
-              <Link to="/model-security">
-                &raquo; Learn more about Model Security
-              </Link>
+              <Link to="/model-security">&raquo; Learn more about Model Security</Link>
             </strong>
           </p>
         </>
@@ -200,9 +188,7 @@ function HomepageWalkthrough() {
           </p>
           <p>
             <strong>
-              <Link to="/docs/intro/">
-                &raquo; Get Started with Evaluations
-              </Link>
+              <Link to="/docs/intro/">&raquo; Get Started with Evaluations</Link>
             </strong>
           </p>
         </>
@@ -350,10 +336,7 @@ export default function Home(): JSX.Element {
         <div className={styles.ctaSection}>
           <h2>Secure your AI applications today</h2>
           <div className={styles.buttons}>
-            <Link
-              className="button button--primary button--lg"
-              to={getStartedUrl}
-            >
+            <Link className="button button--primary button--lg" to={getStartedUrl}>
               Get Started
             </Link>
             <Link
