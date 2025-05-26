@@ -18,7 +18,7 @@ describe('CommentDialog', () => {
     onChange: vi.fn(),
   };
 
-  const renderWithTheme = (component: React.ReactElement<any>) => {
+  const renderWithTheme = (component: React.ReactElement) => {
     const theme = createTheme({
       palette: { mode: 'light' },
     });
