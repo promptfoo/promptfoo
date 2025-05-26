@@ -12,6 +12,7 @@ import AccordionSummary from '@mui/material/AccordionSummary';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
+import Chip from '@mui/material/Chip';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton';
@@ -19,7 +20,6 @@ import Paper from '@mui/material/Paper';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { alpha } from '@mui/material/styles';
-import Chip from '@mui/material/Chip';
 import {
   ALL_PLUGINS,
   DEFAULT_PLUGINS,
@@ -472,7 +472,8 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                                 label="Agentic"
                                 size="small"
                                 sx={{
-                                  backgroundColor: (theme) => alpha(theme.palette.warning.main, 0.1),
+                                  backgroundColor: (theme) =>
+                                    alpha(theme.palette.warning.main, 0.1),
                                   color: 'warning.main',
                                   borderColor: 'warning.main',
                                   border: 1,
