@@ -7,7 +7,6 @@ import {
   CONFIG_REQUIRED_PLUGINS,
   HARM_PLUGINS,
   PII_PLUGINS,
-  BIAS_PLUGINS,
 } from '../../../src/redteam/constants';
 
 describe('Plugin IDs', () => {
@@ -97,11 +96,6 @@ describe('Plugin IDs', () => {
       expectedPrefixedPluginIds.add(`promptfoo:redteam:${piiPlugin}`);
     });
 
-    // Add BIAS plugins with their prefixes
-    BIAS_PLUGINS.forEach((biasPlugin) => {
-      expectedPrefixedPluginIds.add(`promptfoo:redteam:${biasPlugin}`);
-    });
-
     // Add special case for general PII plugin
     expectedPrefixedPluginIds.add('promptfoo:redteam:pii');
 
@@ -146,7 +140,6 @@ describe('Plugin IDs', () => {
             ...ADDITIONAL_PLUGINS,
             ...CONFIG_REQUIRED_PLUGINS,
             ...PII_PLUGINS,
-            ...BIAS_PLUGINS,
             'pii', // Add the general pii plugin
             'harmful', // Add the general harmful plugin
             ...Object.keys(HARM_PLUGINS),
