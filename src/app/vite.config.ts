@@ -25,7 +25,23 @@ export default defineConfig({
     port: 3000,
   },
   base: process.env.VITE_PUBLIC_BASENAME || '/',
-  plugins: [react(), nodePolyfills()] as PluginOption[],
+  plugins: [
+    react(),
+    nodePolyfills({
+      // To exclude specific polyfills, add them to this list.
+      exclude: [
+        'fs', // Excludes the polyfill for `fs` and `node:fs`.
+      ],
+      // Whether to polyfill specific globals.
+      globals: {
+        Buffer: true, // can also be 'build', 'dev', or false
+        global: true,
+        process: true,
+      },
+      // Whether to polyfill Node.js built-in modules.
+      protocolImports: true,
+    }),
+  ] as PluginOption[],
   resolve: {
     alias: {
       '@app': path.resolve(__dirname, './src'),
@@ -37,14 +53,23 @@ export default defineConfig({
     outDir: '../../dist/src/app',
   },
   test: {
-    environment: 'jsdom',
-    setupFiles: ['./src/setupTests.ts'],
     globals: true,
+    environment: 'jsdom',
+    setupFiles: './src/setupTests.ts',
+    server: {
+      deps: {
+        inline: ['react', 'react-dom', '@testing-library/react'],
+      },
+    },
   },
   define: {
     'import.meta.env.VITE_PROMPTFOO_VERSION': JSON.stringify(packageJson.version),
     'import.meta.env.VITE_PROMPTFOO_DISABLE_TELEMETRY': JSON.stringify(
       process.env.PROMPTFOO_DISABLE_TELEMETRY || 'false',
     ),
+    global: 'globalThis',
+  },
+  optimizeDeps: {
+    include: ['react', 'react-dom', '@testing-library/react'],
   },
 });
