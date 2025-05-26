@@ -1,6 +1,6 @@
 import { callOpenAiImageApi } from '../../../src/providers/openai/image';
 import { REQUEST_TIMEOUT_MS } from '../../../src/providers/shared';
-import { createXAIImageProvider, XAIImageProvider } from '../../../src/providers/xai/image';
+import { XAIImageProvider, createXAIImageProvider } from '../../../src/providers/xai/image';
 
 jest.mock('../../../src/logger');
 jest.mock('../../../src/providers/openai/image', () => ({
@@ -8,7 +8,7 @@ jest.mock('../../../src/providers/openai/image', () => ({
   callOpenAiImageApi: jest.fn(),
 }));
 
-describe('XAIImageProvider', () => {
+describe('XAI Image Provider', () => {
   const mockApiKey = 'test-api-key';
   const mockPrompt = 'test prompt';
 
@@ -468,11 +468,6 @@ describe('XAIImageProvider', () => {
       expect(provider.id()).toBe('xai:image:grok-2-image');
     });
 
-    it('should format provider ID correctly', () => {
-      const provider = new XAIImageProvider('grok-2-image');
-      expect(provider.id()).toBe('xai:image:grok-2-image');
-    });
-
     it('returns readable toString() description', () => {
       const provider = new XAIImageProvider('grok-2-image');
       expect(provider.toString()).toBe('[xAI Image Provider grok-2-image]');
@@ -484,7 +479,7 @@ describe('XAIImageProvider', () => {
     });
   });
 
-  describe('createXAIImageProvider', () => {
+  describe('createXAIImageProvider factory function', () => {
     it('should create provider instance', () => {
       const provider = createXAIImageProvider('xai:image:grok-2-image');
       expect(provider).toBeInstanceOf(XAIImageProvider);
@@ -492,6 +487,62 @@ describe('XAIImageProvider', () => {
 
     it('should throw error if model name missing', () => {
       expect(() => createXAIImageProvider('xai:image:')).toThrow('Model name is required');
+    });
+
+    it('should pass through options correctly', () => {
+      const options = {
+        config: { apiKey: 'test-key', n: 2 },
+      };
+      const provider = createXAIImageProvider('xai:image:grok-2-image', options);
+      expect(provider.config).toEqual(options.config);
+    });
+  });
+
+  describe('Cost calculation for images', () => {
+    it('should calculate cost correctly for single image', async () => {
+      const provider = new XAIImageProvider('grok-2-image', {
+        config: { apiKey: mockApiKey },
+      });
+
+      const result = await provider.callApi('test prompt');
+      expect(result.cost).toBe(0.07);
+    });
+
+    it('should not charge for cached responses', async () => {
+      const provider = new XAIImageProvider('grok-2-image', {
+        config: { apiKey: mockApiKey },
+      });
+
+      jest.mocked(callOpenAiImageApi).mockResolvedValue(mockCachedResponse);
+
+      const result = await provider.callApi('test prompt');
+      expect(result.cost).toBe(0);
+      expect(result.cached).toBe(true);
+    });
+
+    it('should calculate cost for multiple images', async () => {
+      const provider = new XAIImageProvider('grok-2-image', {
+        config: { apiKey: mockApiKey, n: 3 },
+      });
+
+      const multiImageResponse = {
+        data: {
+          created: 1234567890,
+          data: [
+            { url: 'https://example.com/image1.jpg' },
+            { url: 'https://example.com/image2.jpg' },
+            { url: 'https://example.com/image3.jpg' },
+          ],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+
+      jest.mocked(callOpenAiImageApi).mockResolvedValue(multiImageResponse);
+
+      const result = await provider.callApi('test prompt');
+      expect(result.cost).toBeCloseTo(0.21, 2); // 3 images * $0.07
     });
   });
 });
