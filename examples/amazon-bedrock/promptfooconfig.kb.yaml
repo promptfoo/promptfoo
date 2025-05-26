@@ -1,23 +1,15 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'AWS Bedrock Knowledge Base Example - Claude 4 with RAG'
+description: Knowledge Base RAG using AWS Bedrock
 
 prompts:
-  - What's the latest status of {{project_name}}?
-  - How do I implement {{technical_topic}}?
-  - What are the company policies regarding {{policy_area}}?
+  - |
+    Answer the following question in a concise manner:
+    {{prompt}}
 
 providers:
   # Knowledge Base provider with Claude 4
   - id: bedrock:kb:us.anthropic.claude-sonnet-4-20250514-v1:0
     label: Claude 4 KB
-    config:
-      region: us-east-2
-      knowledgeBaseId: 'HYKSGW6CJS' # Replace with your actual Knowledge Base ID
-      temperature: 0.0
-      max_tokens: 1000
-  # Knowledge Base provider with Claude 3.7
-  - id: bedrock:kb:us.anthropic.claude-3-7-sonnet-20250219-v1:0
-    label: Claude 3.7 KB
     config:
       region: us-east-2
       knowledgeBaseId: 'HYKSGW6CJS' # Replace with your actual Knowledge Base ID
@@ -30,14 +22,6 @@ providers:
       region: us-east-2
       temperature: 0.0
       max_tokens: 1000
-  # Compare with regular Bedrock Claude 3.7 (without KB)
-  - id: bedrock:us.anthropic.claude-3-7-sonnet-20250219-v1:0
-    label: Claude 3.7 Direct
-    config:
-      region: us-east-2
-      temperature: 0.0
-      max_tokens: 1000
-
 tests:
   - vars:
       prompt: 'What is promptfoo and what problem does it solve?'

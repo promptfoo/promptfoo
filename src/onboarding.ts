@@ -386,14 +386,14 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     }
 
     const choices: { name: string; value: (string | object)[] }[] = [
-      { name: `I'll choose later`, value: ['openai:gpt-4o-mini', 'openai:gpt-4o'] },
+      { name: `I'll choose later`, value: ['openai:gpt-4.1-mini', 'openai:gpt-4.1'] },
       {
         name: '[OpenAI] o1, o3, GPT 4o, GPT 4o-mini, GPT-3.5, ...',
         value:
           action === 'agent'
             ? [
                 {
-                  id: 'openai:gpt-4o',
+                  id: 'openai:gpt-4.1',
                   config: {
                     tools: [
                       {
@@ -417,7 +417,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
                   },
                 },
               ]
-            : ['openai:gpt-4o-mini', 'openai:gpt-4o'],
+            : ['openai:gpt-4.1-mini', 'openai:gpt-4.1'],
       },
       {
         name: '[Anthropic] Claude Opus, Sonnet, Haiku, ...',
@@ -425,7 +425,6 @@ export async function createDummyFiles(directory: string | null, interactive: bo
           'anthropic:messages:claude-sonnet-4-20250514',
           'anthropic:messages:claude-opus-4-20250514',
           'anthropic:messages:claude-3-7-sonnet-20250219',
-          'anthropic:messages:claude-3-5-haiku-20241022',
         ],
       },
       {
@@ -460,7 +459,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
         name: '[Cohere] Command R, Command R+, ...',
         value: ['cohere:command-r', 'cohere:command-r-plus'],
       },
-      { name: '[Google] Gemini, ...', value: ['vertex:gemini-2.0-flash-001'] },
+      { name: '[Google] Gemini 2.5 Pro, ...', value: ['vertex:gemini-2.5-pro-preview-03-25'] },
       {
         name: '[Ollama] Llama, Qwen, Phi, ...',
         value: ['ollama:chat:llama3.3', 'ollama:chat:phi4'],

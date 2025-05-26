@@ -1,7 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-# Claude Thinking Example
-# This example demonstrates how to use Claude's extended thinking capability
-
+description: 'Claude Thinking Example'
 prompts:
   - file://prompts.txt
 providers:

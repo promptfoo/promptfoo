@@ -6,7 +6,7 @@ description: Learn how to use Amazon Bedrock models in your evaluations, includi
 
 # Bedrock
 
-The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to access Anthropic's Claude (including the latest Claude 4 models), Meta's Llama 3.3, Amazon's Nova, AI21's Jamba, and other models. The complete list of available models can be found [here](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns).
+The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to access Anthropic's Claude, Meta's Llama 3.3, Amazon's Nova, AI21's Jamba, and other models. The complete list of available models can be found [here](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns).
 
 ## Setup
 
@@ -254,13 +254,6 @@ config:
 ```
 
 ### Claude Models
-
-Amazon Bedrock now supports the latest Claude 4 models:
-
-- **Claude Opus 4** (`anthropic.claude-opus-4-20250514-v1:0`): The most advanced model for complex tasks and deep reasoning
-  - Available in: US East (Ohio, N. Virginia), US West (Oregon)
-- **Claude Sonnet 4** (`anthropic.claude-sonnet-4-20250514-v1:0`): Optimized for efficiency at scale with enhanced performance
-  - Available in: US East (Ohio, N. Virginia), US West (Oregon), Asia Pacific (multiple regions), Europe (Spain)
 
 For Claude models (e.g., `anthropic.claude-sonnet-4-20250514-v1:0`, `anthropic.us.claude-3-5-sonnet-20241022-v2:0`), you can use the following configuration options:
 

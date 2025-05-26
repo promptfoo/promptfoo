@@ -5,12 +5,6 @@ prompts:
   - file://prompts.txt
 
 providers:
-  - id: bedrock:us.anthropic.claude-opus-4-20250514-v1:0
-    label: Claude Opus 4
-    config:
-      region: us-west-2
-      max_tokens: 2048
-      temperature: 0
   - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0
     label: Claude Sonnet 4
     config:
@@ -23,12 +17,6 @@ providers:
     label: Nova Pro
   - id: bedrock:mistral.mistral-large-2407-v1:0
     label: Mistral Large 2407
-    config:
-      region: us-west-2
-      max_tokens: 1024
-      temperature: 0
-  - id: bedrock:us.anthropic.claude-3-7-sonnet-20250219-v1:0
-    label: Claude 3.7
     config:
       region: us-west-2
       max_tokens: 1024

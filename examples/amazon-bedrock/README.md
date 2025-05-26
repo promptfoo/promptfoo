@@ -1,6 +1,4 @@
-# amazon-bedrock
-
-Evaluating various models (including Claude 4, Nova, Llama) through Amazon Bedrock.
+# amazon-bedrock (Amazon Bedrock Examples)
 
 You can run this example with:
 
@@ -8,87 +6,30 @@ You can run this example with:
 npx promptfoo@latest init --example amazon-bedrock
 ```
 
-This example demonstrates how to evaluate and compare different foundation models available through Amazon Bedrock, with a focus on the latest Claude 4 models.
-
-## Available Models
-
-### Claude 4 Models (Latest)
-
-- **Claude Opus 4** (`anthropic.claude-opus-4-20250514-v1:0`): The most advanced model for complex tasks and deep reasoning
-  - Available in: US East (Ohio, N. Virginia), US West (Oregon)
-- **Claude Sonnet 4** (`anthropic.claude-sonnet-4-20250514-v1:0`): Optimized for efficiency at scale with enhanced performance
-  - Available in: US East (Ohio, N. Virginia), US West (Oregon), Asia Pacific, Europe (Spain)
-
-### Other Models
-
-- Claude 3.7 Sonnet
-- Amazon Nova (Lite, Micro, Pro, Premier)
-- Meta Llama 3.3
-- Mistral Large
-- AI21 Jamba
-- DeepSeek
-
-## Configuration Examples
-
-### Basic Claude 4 Configuration
-
-```yaml
-providers:
-  - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0
-    config:
-      region: us-west-2
-      temperature: 0.7
-      max_tokens: 2048
-```
-
-### Claude 4 with Extended Thinking
-
-```yaml
-providers:
-  - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0
-    config:
-      thinking:
-        type: enabled
-        budget_tokens: 1024
-      showThinking: true
-```
-
-### Tool Use with Claude 4
-
-```yaml
-providers:
-  - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0
-    config:
-      tools:
-        - name: get_weather
-          description: Get the current weather
-          input_schema:
-            type: object
-            properties:
-              location:
-                type: string
-```
-
-## Running the Examples
-
-1. **Main comparison** (`promptfooconfig.yaml`): Compares Claude 4, Nova, Llama, and other models
-2. **Claude-specific** (`promptfooconfig.claude.yaml`): Focuses on Claude 4 models with thinking capabilities
-3. **Tool use** (`promptfooconfig.bedrock.yaml` in tool-use example): Demonstrates Claude 4's tool calling abilities
-4. **Knowledge Base** (`promptfooconfig.kb.yaml`): Shows Claude 4 with AWS Bedrock Knowledge Base for RAG
-
 ## Prerequisites
 
-1. AWS credentials configured
-2. Model access enabled in AWS Bedrock console
-3. Install AWS SDK: `npm install -g @aws-sdk/client-bedrock-runtime`
+1. Set up your AWS credentials:
 
-## Regional Availability
+   ```bash
+   export AWS_ACCESS_KEY_ID="your_access_key"
+   export AWS_SECRET_ACCESS_KEY="your_secret_key"
+   ```
 
-When using Claude 4 models, ensure you're using the correct regional prefix:
+   See [authentication docs](https://www.promptfoo.dev/docs/providers/aws-bedrock/#authentication) for other auth methods, including SSO profiles.
 
-- US: `us.anthropic.claude-*`
-- EU: `eu.anthropic.claude-*` (Sonnet 4 only)
-- APAC: `apac.anthropic.claude-*` (Sonnet 4 only)
+2. Request model access in your AWS region:
+   - Visit the [AWS Bedrock Model Access page](https://us-west-2.console.aws.amazon.com/bedrock/home?region=us-west-2#/modelaccess)
+   - Switch to your desired region. We recommend us-west-2 and us-east-1 which tend to have the most models available.
+   - Enable the models you want to use.
+3. Install required dependencies:
+
+   ```bash
+   # For basic Bedrock models
+   npm install @aws-sdk/client-bedrock-runtime
+
+   # For Knowledge Base examples
+   npm install @aws-sdk/client-bedrock-agent-runtime
+   ```
 
 ## Available Examples
 

@@ -2,12 +2,12 @@
 description: 'GPT vs Claude example'
 
 prompts:
-  - file://prompt.txt
+  - file://prompt.yaml
 
 providers:
   - id: anthropic:claude-sonnet-4-20250514
     label: Claude Sonnet 4
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
 
 defaultTest:
   assert:
