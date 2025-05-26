@@ -548,7 +548,7 @@ export async function resolveConfigs(
     type !== 'DatasetGeneration' &&
     !hasProviders
   ) {
-    logger.error('You must specify at least 1 provider (for example, openai:gpt-4o)');
+    logger.error('You must specify at least 1 provider (for example, openai:gpt-4.1)');
     process.exit(1);
   }
 

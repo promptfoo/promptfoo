@@ -74,6 +74,8 @@ export const COLLECTIONS = ['default', 'foundation', 'harmful', 'pii'] as const;
 export type Collection = (typeof COLLECTIONS)[number];
 
 export const UNALIGNED_PROVIDER_HARM_PLUGINS = {
+  'bias:gender': 'Gender Bias',
+
   // MLCommons harm categories
   // https://www.llama.com/docs/model-cards-and-prompt-formats/llama-guard-3/
   'harmful:child-exploitation': 'Child Exploitation',
@@ -128,9 +130,7 @@ export type HarmPlugin = keyof typeof HARM_PLUGINS;
 
 export const PII_PLUGINS = ['pii:api-db', 'pii:direct', 'pii:session', 'pii:social'] as const;
 
-export const BIAS_PLUGINS = ['bias:gender'] as const;
 export type PIIPlugin = (typeof PII_PLUGINS)[number];
-export type BiasPlugin = (typeof BIAS_PLUGINS)[number];
 
 export const BASE_PLUGINS = [
   'contracts',
@@ -146,7 +146,6 @@ export const ADDITIONAL_PLUGINS = [
   'beavertails',
   'bfla',
   'bola',
-  'bias:gender',
   'cca',
   'competitors',
   'cross-session-leak',
@@ -181,20 +180,28 @@ export type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
 export const CONFIG_REQUIRED_PLUGINS = ['intent', 'policy'] as const;
 export type ConfigRequiredPlugin = (typeof CONFIG_REQUIRED_PLUGINS)[number];
 
-// Plugins that don't use strategies (standalone plugins)
-export const STRATEGY_EXEMPT_PLUGINS = [
-  'pliny',
+// Agentic plugins that don't use strategies (standalone agentic plugins)
+export const AGENTIC_EXEMPT_PLUGINS = [
   'system-prompt-override',
   'tool-discovery:multi-turn',
-  'unsafebench',
 ] as const;
 
+// Dataset plugins that don't use strategies (standalone dataset plugins)
+export const DATASET_EXEMPT_PLUGINS = ['pliny', 'unsafebench'] as const;
+
+// Plugins that don't use strategies (standalone plugins) - combination of agentic and dataset
+export const STRATEGY_EXEMPT_PLUGINS = [
+  ...AGENTIC_EXEMPT_PLUGINS,
+  ...DATASET_EXEMPT_PLUGINS,
+] as const;
+
+export type AgenticExemptPlugin = (typeof AGENTIC_EXEMPT_PLUGINS)[number];
+export type DatasetExemptPlugin = (typeof DATASET_EXEMPT_PLUGINS)[number];
 export type StrategyExemptPlugin = (typeof STRATEGY_EXEMPT_PLUGINS)[number];
 
 export type Plugin =
   | AdditionalPlugin
   | BasePlugin
-  | BiasPlugin
   | Collection
   | ConfigRequiredPlugin
   | HarmPlugin
@@ -1534,17 +1541,18 @@ export const strategyDisplayNames: Record<Strategy, string> = {
 
 export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
   Custom: 'Choose your own plugins',
+  'EU AI Act': 'Plugins mapped to EU AI Act prohibited & high-risk requirements',
   Foundation: 'Plugins for redteaming foundation models recommended by Promptfoo',
+  Harmful: 'Harmful content assessment using MLCommons and HarmBench taxonomies',
   'Minimal Test': 'Minimal set of plugins to validate your setup',
   MITRE: 'MITRE ATLAS framework',
   NIST: 'NIST AI Risk Management Framework',
-  'OWASP API Top 10': 'OWASP API security vulnerabilities framework',
-  'OWASP LLM Top 10': 'OWASP LLM security vulnerabilities framework',
-  'OWASP Gen AI Red Team': 'OWASP Gen AI Red Teaming Best Practices',
   'OWASP Agentic AI Top 10': 'OWASP Agentic AI Top 10 Threats and Mitigations',
+  'OWASP API Top 10': 'OWASP API security vulnerabilities framework',
+  'OWASP Gen AI Red Team': 'OWASP Gen AI Red Teaming Best Practices',
+  'OWASP LLM Top 10': 'OWASP LLM security vulnerabilities framework',
   RAG: 'Recommended plugins plus additional tests for RAG specific scenarios like access control',
   Recommended: 'A broad set of plugins recommended by Promptfoo',
-  'EU AI Act': 'Plugins mapped to EU AI Act prohibited & high-risk requirements',
 } as const;
 
 export const DEFAULT_OUTPUT_PATH = 'redteam.yaml';
