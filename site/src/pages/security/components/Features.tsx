@@ -78,11 +78,7 @@ export default function Features(): JSX.Element {
                     </React.Fragment>
                   ))}
                 </p>
-                <Link
-                  to={feature.infoLink}
-                  className={styles.featureInfoLink}
-                  
-                >
+                <Link to={feature.infoLink} className={styles.featureInfoLink}>
                   {feature.infoLinkText}
                 </Link>
               </div>

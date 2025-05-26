@@ -12,17 +12,12 @@ export default function Hero(): JSX.Element {
         </p>
         <div className={styles.heroButtons}>
           <Link
-            
             to="/docs/red-team/quickstart/"
             className={`${styles.button} ${styles.buttonPrimary}`}
           >
             Get started
           </Link>
-          <Link
-            
-            to="/contact/"
-            className={`${styles.button} ${styles.buttonSecondary}`}
-          >
+          <Link to="/contact/" className={`${styles.button} ${styles.buttonSecondary}`}>
             Get a demo
           </Link>
         </div>

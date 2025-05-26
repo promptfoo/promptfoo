@@ -247,7 +247,7 @@ const AboutPageContent = () => {
           <Typography variant="body1" paragraph>
             Join leading enterprises who trust Promptfoo to fortify their AI applications.
           </Typography>
-          <Link  className="button button--primary button--lg" to="/contact/">
+          <Link className="button button--primary button--lg" to="/contact/">
             Get in Touch
           </Link>
         </Box>

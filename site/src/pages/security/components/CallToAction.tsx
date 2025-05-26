@@ -13,17 +13,12 @@ export default function CallToAction(): JSX.Element {
         </p>
         <div className={styles.ctaButtons}>
           <Link
-            
             to="/docs/red-team/quickstart/"
             className={`${styles.button} ${styles.buttonPrimary}`}
           >
             Get Started
           </Link>
-          <Link
-            
-            to="/contact/"
-            className={`${styles.button} ${styles.buttonSecondary}`}
-          >
+          <Link to="/contact/" className={`${styles.button} ${styles.buttonSecondary}`}>
             Contact Us
           </Link>
         </div>

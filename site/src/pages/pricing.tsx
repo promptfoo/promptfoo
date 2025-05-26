@@ -40,10 +40,7 @@ function PricingTable() {
       price: 'Custom',
       description: (
         <>
-          For teams that need advanced features.{' '}
-          <Link  to="/docs/enterprise/">
-            Learn more
-          </Link>
+          For teams that need advanced features. <Link to="/docs/enterprise/">Learn more</Link>
         </>
       ),
       features: [
@@ -100,7 +97,6 @@ function PricingTable() {
             </ul>
           </div>
           <Link
-            
             to={plan.ctaLink}
             className={clsx(
               'button',

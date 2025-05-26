@@ -76,9 +76,7 @@ const PressContent = () => {
                   models has been widely covered by major technology and news publications.
                 </Typography>
                 <Typography variant="body2" paragraph>
-                  <Link to="/blog/deepseek-censorship/" >
-                    Read the original research →
-                  </Link>
+                  <Link to="/blog/deepseek-censorship/">Read the original research →</Link>
                 </Typography>
                 <Grid container spacing={2} mt={2}>
                   {[
