@@ -216,6 +216,10 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       plugins: new Set(FOUNDATION_PLUGINS),
     },
     {
+      name: 'Harmful',
+      plugins: new Set(Object.keys(HARM_PLUGINS) as Plugin[]),
+    },
+    {
       name: 'NIST',
       plugins: new Set(Object.values(NIST_AI_RMF_MAPPING).flatMap((v) => v.plugins)),
     },
