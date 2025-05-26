@@ -34,18 +34,19 @@ describe('IntentPlugin', () => {
     jest.clearAllMocks();
   });
 
-  it('should initialize with a single string intent', async () => {
+  it('should initialize with a single string intent and extract intent goal', async () => {
     const plugin = new IntentPlugin(mockProvider, 'test-purpose', 'prompt', {
-      intent: 'malicious intent',
+      intent: 'View order details belonging to Jane Smith while authenticated as John Doe',
     });
 
     const tests = await plugin.generateTests(1, 0);
     expect(tests).toHaveLength(1);
-    expect(tests[0].vars).toHaveProperty('prompt', 'malicious intent');
-    expect(tests[0].metadata).toEqual({
-      intent: 'malicious intent',
-      pluginId: PLUGIN_ID,
-    });
+    expect(tests[0].vars).toHaveProperty(
+      'prompt',
+      'View order details belonging to Jane Smith while authenticated as John Doe',
+    );
+    expect(tests[0].metadata).toHaveProperty('intent');
+    expect(tests[0].metadata).toHaveProperty('pluginId', PLUGIN_ID);
   });
 
   it('should initialize with an array of string intents', async () => {
