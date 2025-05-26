@@ -30,6 +30,9 @@ import {
   ALL_STRATEGIES,
   strategyDescriptions,
   strategyDisplayNames,
+  AGENTIC_EXEMPT_PLUGINS,
+  DATASET_EXEMPT_PLUGINS,
+  STRATEGY_EXEMPT_PLUGINS,
 } from '../../src/redteam/constants';
 
 describe('constants', () => {
@@ -134,6 +137,26 @@ describe('constants', () => {
     expectedPlugins.forEach((plugin) => {
       expect(DATASET_PLUGINS).toContain(plugin);
     });
+  });
+
+  it('AGENTIC_EXEMPT_PLUGINS should contain expected plugins', () => {
+    expect(AGENTIC_EXEMPT_PLUGINS).toEqual(['system-prompt-override', 'tool-discovery:multi-turn']);
+  });
+
+  it('DATASET_EXEMPT_PLUGINS should contain expected plugins', () => {
+    expect(DATASET_EXEMPT_PLUGINS).toEqual(['pliny', 'unsafebench']);
+  });
+
+  it('STRATEGY_EXEMPT_PLUGINS should combine agentic and dataset exempt plugins', () => {
+    const expectedPlugins = [
+      'system-prompt-override',
+      'tool-discovery:multi-turn',
+      'pliny',
+      'unsafebench',
+    ];
+
+    expect(STRATEGY_EXEMPT_PLUGINS).toEqual(expectedPlugins);
+    expect(STRATEGY_EXEMPT_PLUGINS).toEqual([...AGENTIC_EXEMPT_PLUGINS, ...DATASET_EXEMPT_PLUGINS]);
   });
 
   it('Severity enum should have expected values', () => {
