@@ -30,6 +30,9 @@ import {
   ALL_STRATEGIES,
   strategyDescriptions,
   strategyDisplayNames,
+  AGENTIC_EXEMPT_PLUGINS,
+  DATASET_EXEMPT_PLUGINS,
+  STRATEGY_EXEMPT_PLUGINS,
 } from '../../src/redteam/constants';
 
 describe('constants', () => {
@@ -137,6 +140,26 @@ describe('constants', () => {
     });
   });
 
+  it('AGENTIC_EXEMPT_PLUGINS should contain expected plugins', () => {
+    expect(AGENTIC_EXEMPT_PLUGINS).toEqual(['system-prompt-override', 'tool-discovery:multi-turn']);
+  });
+
+  it('DATASET_EXEMPT_PLUGINS should contain expected plugins', () => {
+    expect(DATASET_EXEMPT_PLUGINS).toEqual(['pliny', 'unsafebench']);
+  });
+
+  it('STRATEGY_EXEMPT_PLUGINS should combine agentic and dataset exempt plugins', () => {
+    const expectedPlugins = [
+      'system-prompt-override',
+      'tool-discovery:multi-turn',
+      'pliny',
+      'unsafebench',
+    ];
+
+    expect(STRATEGY_EXEMPT_PLUGINS).toEqual(expectedPlugins);
+    expect(STRATEGY_EXEMPT_PLUGINS).toEqual([...AGENTIC_EXEMPT_PLUGINS, ...DATASET_EXEMPT_PLUGINS]);
+  });
+
   it('Severity enum should have expected values', () => {
     expect(Severity.Critical).toBe('critical');
     expect(Severity.High).toBe('high');
@@ -160,6 +183,9 @@ describe('constants', () => {
     );
     expect(PLUGIN_PRESET_DESCRIPTIONS['Minimal Test']).toBe(
       'Minimal set of plugins to validate your setup',
+    );
+    expect(PLUGIN_PRESET_DESCRIPTIONS.Harmful).toBe(
+      'Harmful content assessment using MLCommons and HarmBench taxonomies',
     );
     expect(PLUGIN_PRESET_DESCRIPTIONS['OWASP Agentic AI Top 10']).toBe(
       'OWASP Agentic AI Top 10 Threats and Mitigations',
@@ -208,7 +234,11 @@ describe('constants', () => {
   });
 
   it('STRATEGY_COLLECTION_MAPPINGS should have correct mappings', () => {
-    expect(STRATEGY_COLLECTION_MAPPINGS['other-encodings']).toEqual(['morse', 'piglatin']);
+    expect(STRATEGY_COLLECTION_MAPPINGS['other-encodings']).toEqual([
+      'camelcase',
+      'morse',
+      'piglatin',
+    ]);
   });
 
   it('ALL_STRATEGIES should include strategy collections', () => {
@@ -217,7 +247,7 @@ describe('constants', () => {
 
   it('strategy collections should have proper descriptions', () => {
     expect(strategyDescriptions['other-encodings']).toBe(
-      'Collection of alternative text transformation strategies (Morse code and Pig Latin) for testing evasion techniques',
+      'Collection of alternative text transformation strategies (Morse code, Pig Latin, and camelCase) for testing evasion techniques',
     );
   });
 
@@ -227,7 +257,7 @@ describe('constants', () => {
 
   it('strategy collections should have proper subcategory descriptions', () => {
     expect(subCategoryDescriptions['other-encodings']).toBe(
-      'Collection of alternative text transformation strategies (Morse code and Pig Latin) for testing evasion techniques',
+      'Collection of alternative text transformation strategies (Morse code, Pig Latin, and camelCase) for testing evasion techniques',
     );
   });
 });

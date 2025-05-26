@@ -1,5 +1,6 @@
 import logger from '../logger';
 import type { ApiProvider, ProviderOptions } from '../types';
+import { renderVarsInObject } from '../util';
 import invariant from '../util/invariant';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import type { OpenAiCompletionOptions } from './openai/types';
@@ -7,6 +8,7 @@ import type { OpenAiCompletionOptions } from './openai/types';
 type XAIConfig = {
   region?: string;
   reasoning_effort?: 'low' | 'high';
+  search_parameters?: Record<string, any>;
 } & OpenAiCompletionOptions;
 
 type XAIProviderOptions = Omit<ProviderOptions, 'config'> & {
@@ -123,6 +125,8 @@ export function calculateXAICost(
 }
 
 export class XAIProvider extends OpenAiChatCompletionProvider {
+  private originalConfig?: XAIConfig;
+
   protected get apiKey(): string | undefined {
     return this.config?.apiKey;
   }
@@ -133,6 +137,15 @@ export class XAIProvider extends OpenAiChatCompletionProvider {
 
   protected supportsTemperature(): boolean {
     return true;
+  }
+
+  getOpenAiBody(prompt: string, context?: any, callApiOptions?: any) {
+    const result = super.getOpenAiBody(prompt, context, callApiOptions);
+    const searchParams = this.originalConfig?.search_parameters;
+    if (searchParams) {
+      result.body.search_parameters = renderVarsInObject(searchParams, context?.vars);
+    }
+    return result;
   }
 
   constructor(modelName: string, providerOptions: XAIProviderOptions) {
@@ -146,6 +159,9 @@ export class XAIProvider extends OpenAiChatCompletionProvider {
           : 'https://api.x.ai/v1',
       },
     });
+
+    // Store the original config for later use
+    this.originalConfig = providerOptions.config?.config;
   }
 
   id(): string {

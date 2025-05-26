@@ -13,7 +13,7 @@ targets:
         input: '{{prompt}}'
         role: engineering
       transformResponse: json.response
-      sessionParser: x-session-id
+      sessionParser: 'data.headers["x-session-id"]'
 prompts:
   - '{{prompt}}'
 redteam:

@@ -35,7 +35,11 @@ import type {
   RedteamStrategyObject,
   SynthesizeOptions,
 } from '../types';
-import { type DiscoveredPurpose, doTargetPurposeDiscovery, mergePurposes } from './discover';
+import {
+  type TargetPurposeDiscoveryResult,
+  doTargetPurposeDiscovery,
+  mergeTargetPurposeDiscoveryResults,
+} from './discover';
 
 function getConfigHash(configPath: string): string {
   const content = fs.readFileSync(configPath, 'utf8');
@@ -79,7 +83,7 @@ export async function doGenerateRedteam(
     shouldGenerate = true;
   }
 
-  let discoveredPurpose: DiscoveredPurpose | undefined;
+  let targetPurposeDiscoveryResult: TargetPurposeDiscoveryResult | undefined;
   if (configPath) {
     const resolved = await resolveConfigs(
       {
@@ -109,7 +113,10 @@ export async function doGenerateRedteam(
             'More than one prompt provided, only the first prompt will be used for purpose discovery',
           );
         }
-        discoveredPurpose = await doTargetPurposeDiscovery(providers[0], testSuite.prompts[0]);
+        targetPurposeDiscoveryResult = await doTargetPurposeDiscovery(
+          providers[0],
+          testSuite.prompts[0],
+        );
       } catch (error) {
         logger.error(
           `Discovery failed from error, skipping: ${error instanceof Error ? error.message : String(error)}`,
@@ -134,7 +141,10 @@ export async function doGenerateRedteam(
     return null;
   }
 
-  const mergedPurpose = mergePurposes(redteamConfig?.purpose ?? options.purpose, discoveredPurpose);
+  const mergedPurpose = mergeTargetPurposeDiscoveryResults(
+    redteamConfig?.purpose ?? options.purpose,
+    targetPurposeDiscoveryResult,
+  );
 
   const startTime = Date.now();
   telemetry.record('command_used', {
@@ -144,6 +154,7 @@ export async function doGenerateRedteam(
     plugins: redteamConfig?.plugins?.map((p) => (typeof p === 'string' ? p : p.id)) || [],
     strategies: redteamConfig?.strategies?.map((s) => (typeof s === 'string' ? s : s.id)) || [],
   });
+  await telemetry.send();
 
   let plugins;
 
@@ -303,6 +314,7 @@ export async function doGenerateRedteam(
         ...(configPath && redteamTests.length > 0
           ? { configHash: getConfigHash(configPath) }
           : { configHash: 'force-regenerate' }),
+        ...(targetPurposeDiscoveryResult ? { targetPurposeDiscoveryResult } : {}),
       },
     };
     ret = writePromptfooConfig(updatedYaml, options.output);
@@ -348,9 +360,11 @@ export async function doGenerateRedteam(
     };
     existingConfig.tests = [...(existingConfig.tests || []), ...redteamTests];
     existingConfig.redteam = { ...(existingConfig.redteam || {}), ...updatedRedteamConfig };
+    // Add the result of target purpose discovery to metadata if available
     existingConfig.metadata = {
       ...(existingConfig.metadata || {}),
       configHash: getConfigHash(configPath),
+      ...(targetPurposeDiscoveryResult ? { targetPurposeDiscoveryResult } : {}),
     };
     ret = writePromptfooConfig(existingConfig, configPath);
     logger.info(
@@ -374,7 +388,7 @@ export async function doGenerateRedteam(
     plugins: plugins.map((p) => p.id),
     strategies: strategies.map((s) => (typeof s === 'string' ? s : s.id)),
   });
-
+  await telemetry.send();
   return ret;
 }
 

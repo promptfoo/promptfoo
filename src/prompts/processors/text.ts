@@ -10,13 +10,31 @@ import { PROMPT_DELIMITER } from '../constants';
  */
 export function processTxtFile(filePath: string, { label }: Partial<Prompt>): Prompt[] {
   const fileContent = fs.readFileSync(filePath, 'utf-8');
-  return fileContent // handle leading/trailing delimiters and empty lines
-    .split(PROMPT_DELIMITER)
-    .map((p) => p.trim())
-    .filter((p) => p.length > 0)
-    .map((prompt) => ({
-      raw: prompt,
-      label: label ? `${label}: ${filePath}: ${prompt}` : `${filePath}: ${prompt}`,
-      // no config
-    }));
+
+  const lines = fileContent.split(/\r?\n/);
+  const prompts: Prompt[] = [];
+  let buffer: string[] = [];
+
+  const flush = () => {
+    const raw = buffer.join('\n').trim();
+    if (raw.length > 0) {
+      prompts.push({
+        raw,
+        label: label ? `${label}: ${filePath}: ${raw}` : `${filePath}: ${raw}`,
+        // no config
+      });
+    }
+    buffer = [];
+  };
+
+  for (const line of lines) {
+    if (line.trim() === PROMPT_DELIMITER) {
+      flush();
+    } else {
+      buffer.push(line);
+    }
+  }
+  flush();
+
+  return prompts;
 }

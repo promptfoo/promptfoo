@@ -1,5 +1,6 @@
 import React from 'react';
 import Link from '@docusaurus/Link';
+import { scrollToTop } from '../../utils/navigation';
 import styles from './styles.module.css';
 
 export default function HomepageFeatures() {
@@ -98,12 +99,12 @@ export default function HomepageFeatures() {
               <div className={styles.featureContent}>
                 <h3>{feature.title}</h3>
                 <p>{feature.description}</p>
-                <Link to={feature.link} className="button button--secondary">
+                <Link onClick={scrollToTop} to={feature.link} className="button button--secondary">
                   {feature.cta}
                 </Link>
               </div>
               <div className={styles.featureImageWrapper}>
-                <Link to={feature.link}>
+                <Link onClick={scrollToTop} to={feature.link}>
                   <img
                     loading="lazy"
                     src={feature.image}

@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+prompts:
+  - 'What is the latest news about {{topic}}?'
+
+providers:
+  - id: xai:grok-3-beta
+    config:
+      search_parameters:
+        mode: auto
+        return_citations: true
+        sources:
+          - type: web
+
+tests:
+  - vars:
+      topic: xai

@@ -1289,6 +1289,8 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-opus-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-opus-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-instant-v1': BEDROCK_MODEL.CLAUDE_COMPLETION,
   'anthropic.claude-v1': BEDROCK_MODEL.CLAUDE_COMPLETION,
   'anthropic.claude-v2': BEDROCK_MODEL.CLAUDE_COMPLETION,
@@ -1322,6 +1324,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'apac.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'apac.anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.meta.llama4-scout-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
   'apac.meta.llama4-maverick-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
 
@@ -1334,6 +1337,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'eu.anthropic.claude-3-7-sonnet-20250219-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'eu.anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.meta.llama3-2-1b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'eu.meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'eu.meta.llama4-scout-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
@@ -1355,6 +1359,8 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-opus-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us.anthropic.claude-opus-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us.anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.deepseek.r1-v1:0': BEDROCK_MODEL.DEEPSEEK,
   'us.meta.llama3-1-405b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_1,
   'us.meta.llama3-1-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_1,
@@ -1433,7 +1439,7 @@ export abstract class AwsBedrockGenericProvider {
     this.id = id ? () => id : this.id;
 
     if (this.config.guardrailIdentifier) {
-      telemetry.record('feature_used', {
+      telemetry.recordAndSendOnce('feature_used', {
         feature: 'guardrail',
         provider: 'bedrock',
       });
