@@ -12,7 +12,6 @@ import AccordionSummary from '@mui/material/AccordionSummary';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
-import Chip from '@mui/material/Chip';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton';
@@ -37,7 +36,8 @@ import {
   riskCategories,
   OWASP_LLM_RED_TEAM_MAPPING,
   EU_AI_ACT_MAPPING,
-  STRATEGY_EXEMPT_PLUGINS,
+  AGENTIC_EXEMPT_PLUGINS,
+  DATASET_EXEMPT_PLUGINS,
 } from '@promptfoo/redteam/constants';
 import { useDebounce } from 'use-debounce';
 import { useRedTeamConfig, useRecentlyUsedPlugins } from '../hooks/useRedTeamConfig';
@@ -465,20 +465,41 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                               {getPluginCategory(plugin)}
                             </Typography>
                           )}
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                            {displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
-                            {STRATEGY_EXEMPT_PLUGINS.includes(plugin as any) && (
-                              <Chip
-                                label="Agentic"
-                                size="small"
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                              {displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
+                            </Typography>
+                            {AGENTIC_EXEMPT_PLUGINS.includes(plugin as any) && (
+                              <Typography
+                                variant="caption"
                                 sx={{
-                                  backgroundColor: (theme) =>
-                                    alpha(theme.palette.warning.main, 0.1),
-                                  color: 'warning.main',
-                                  borderColor: 'warning.main',
-                                  border: 1,
+                                  fontSize: '0.7rem',
+                                  color: 'text.secondary',
+                                  fontWeight: 400,
+                                  backgroundColor: 'action.hover',
+                                  px: 0.5,
+                                  py: 0.25,
+                                  borderRadius: 0.5,
                                 }}
-                              />
+                              >
+                                agentic
+                              </Typography>
+                            )}
+                            {DATASET_EXEMPT_PLUGINS.includes(plugin as any) && (
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  fontSize: '0.7rem',
+                                  color: 'text.secondary',
+                                  fontWeight: 400,
+                                  backgroundColor: 'action.hover',
+                                  px: 0.5,
+                                  py: 0.25,
+                                  borderRadius: 0.5,
+                                }}
+                              >
+                                no strategies
+                              </Typography>
                             )}
                           </Box>
                           <Typography variant="body2" color="text.secondary">

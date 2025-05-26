@@ -180,14 +180,23 @@ export type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
 export const CONFIG_REQUIRED_PLUGINS = ['intent', 'policy'] as const;
 export type ConfigRequiredPlugin = (typeof CONFIG_REQUIRED_PLUGINS)[number];
 
-// Plugins that don't use strategies (standalone plugins)
-export const STRATEGY_EXEMPT_PLUGINS = [
-  'pliny',
+// Agentic plugins that don't use strategies (standalone agentic plugins)
+export const AGENTIC_EXEMPT_PLUGINS = [
   'system-prompt-override',
   'tool-discovery:multi-turn',
-  'unsafebench',
 ] as const;
 
+// Dataset plugins that don't use strategies (standalone dataset plugins)
+export const DATASET_EXEMPT_PLUGINS = ['pliny', 'unsafebench'] as const;
+
+// Plugins that don't use strategies (standalone plugins) - combination of agentic and dataset
+export const STRATEGY_EXEMPT_PLUGINS = [
+  ...AGENTIC_EXEMPT_PLUGINS,
+  ...DATASET_EXEMPT_PLUGINS,
+] as const;
+
+export type AgenticExemptPlugin = (typeof AGENTIC_EXEMPT_PLUGINS)[number];
+export type DatasetExemptPlugin = (typeof DATASET_EXEMPT_PLUGINS)[number];
 export type StrategyExemptPlugin = (typeof STRATEGY_EXEMPT_PLUGINS)[number];
 
 export type Plugin =
