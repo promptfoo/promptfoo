@@ -400,7 +400,6 @@ function DemoCTA() {
       <h2>Ready to get started?</h2>
       <p>Schedule a demo to see how Promptfoo can help secure your LLM applications.</p>
       <Link
-        onClick={scrollToTop}
         to="https://cal.com/team/promptfoo/intro2"
         className={clsx('button', 'button--lg', 'button--primary', styles.demoButton)}
       >
