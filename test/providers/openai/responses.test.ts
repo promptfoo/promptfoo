@@ -1463,6 +1463,23 @@ describe('OpenAiResponsesProvider', () => {
         },
       });
     });
+
+    it('correctly loads response_format from an external file', () => {
+      const provider = new OpenAiResponsesProvider('o3');
+      const filePath = 'file://test/providers/openai/assets/dummy_response_format.json';
+      const config = {
+        response_format: filePath,
+      };
+
+      const { body } = provider.getOpenAiBody('Test prompt', { prompt: { config } });
+
+      expect(body.text.format.type).toBe('json_schema');
+      expect(body.text.format.name).toBe('test_schema_from_file');
+      expect(body.text.format.schema.properties.greeting.type).toBe('string');
+      // Also check if the schema itself is loaded, not just the path
+      expect(body.text.format.schema).not.toBe(filePath);
+      expect(typeof body.text.format.schema).toBe('object');
+    });
   });
 
   describe('refusal handling', () => {

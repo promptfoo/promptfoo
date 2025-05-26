@@ -99,40 +99,64 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     const instructions = config.instructions;
 
     let textFormat;
+    // Process response_format by first rendering variables if it's an object,
+    // then loading from file if it's a file path string.
+    let processedResponseFormat = config.response_format;
     if (config.response_format) {
-      if (config.response_format.type === 'json_object') {
+      // If response_format is an object, render variables within its properties
+      if (typeof config.response_format === 'object' && config.response_format !== null) {
+        processedResponseFormat = renderVarsInObject(config.response_format, context?.vars);
+      }
+      // Whether it was originally an object (now with vars rendered) or a string path,
+      // try loading it if it's a string (potentially a file path).
+      // maybeLoadFromExternalFile will return the string itself if it's not a file path,
+      // or the loaded object if it is a file path.
+      processedResponseFormat = maybeLoadFromExternalFile(processedResponseFormat, context?.vars);
+    }
+
+    if (processedResponseFormat && typeof processedResponseFormat === 'object') {
+      if (processedResponseFormat.type === 'json_object') {
         textFormat = {
           format: {
             type: 'json_object',
           },
         };
-
         // IMPORTANT: json_object format requires the word 'json' in the input prompt
-      } else if (config.response_format.type === 'json_schema') {
-        const schema = maybeLoadFromExternalFile(
-          renderVarsInObject(
-            config.response_format.schema || config.response_format.json_schema?.schema,
-            context?.vars,
-          ),
-        );
+      } else if (processedResponseFormat.type === 'json_schema') {
+        // Note: schema property itself can also be a file path or contain variables
+        const schemaPathOrObject = processedResponseFormat.schema || processedResponseFormat.json_schema?.schema;
+        // Render variables in schemaPathOrObject if it's an object or string that might contain them.
+        // It's safe to pass a string to renderVarsInObject.
+        const renderedSchemaPathOrObject = renderVarsInObject(schemaPathOrObject, context?.vars);
+        const schema = maybeLoadFromExternalFile(renderedSchemaPathOrObject, context?.vars);
 
         const schemaName =
-          config.response_format.json_schema?.name ||
-          config.response_format.name ||
+          processedResponseFormat.json_schema?.name ||
+          processedResponseFormat.name ||
           'response_schema';
+        
+        const baseStrict = true; // Default strictness
+        let strict = baseStrict;
+        if (typeof processedResponseFormat.strict === 'boolean') {
+          strict = processedResponseFormat.strict;
+        } else if (processedResponseFormat.json_schema && typeof processedResponseFormat.json_schema.strict === 'boolean') {
+          strict = processedResponseFormat.json_schema.strict;
+        }
 
         textFormat = {
           format: {
             type: 'json_schema',
             name: schemaName,
             schema,
-            strict: true,
+            strict,
           },
         };
       } else {
+        // Default or unrecognized type
         textFormat = { format: { type: 'text' } };
       }
     } else {
+      // No response_format or it's a string that wasn't a file path and not an object
       textFormat = { format: { type: 'text' } };
     }
 

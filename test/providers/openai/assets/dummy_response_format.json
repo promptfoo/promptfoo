@@ -1,0 +1,16 @@
+{
+  "type": "json_schema",
+  "json_schema": {
+    "name": "test_schema_from_file",
+    "strict": true,
+    "schema": {
+      "type": "object",
+      "properties": {
+        "greeting": {
+          "type": "string"
+        }
+      },
+      "required": ["greeting"]
+    }
+  }
+}
