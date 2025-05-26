@@ -277,5 +277,3 @@ export function createXAIProvider(
   invariant(modelName, 'Model name is required');
   return new XAIProvider(modelName, options);
 }
-
-export { GROK_3_MINI_MODELS };
