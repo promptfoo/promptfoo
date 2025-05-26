@@ -137,8 +137,12 @@ describe('XAIImageProvider', () => {
         );
       } finally {
         // Restore the original environment variables
-        if (originalXaiKey) {process.env.XAI_API_KEY = originalXaiKey;}
-        if (originalOpenAiKey) {process.env.OPENAI_API_KEY = originalOpenAiKey;}
+        if (originalXaiKey) {
+          process.env.XAI_API_KEY = originalXaiKey;
+        }
+        if (originalOpenAiKey) {
+          process.env.OPENAI_API_KEY = originalOpenAiKey;
+        }
       }
     });
   });
