@@ -1,8 +1,8 @@
-import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
-import { calculateXAICost, createXAIProvider } from '../../src/providers/xai/chat';
-import type { ProviderOptions } from '../../src/types/providers';
+import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
+import { calculateXAICost, createXAIProvider } from '../../../src/providers/xai/chat';
+import type { ProviderOptions } from '../../../src/types/providers';
 
-jest.mock('../../src/providers/openai/chat');
+jest.mock('../../../src/providers/openai/chat');
 
 function createMockToJSON(modelName: string, config: any = {}) {
   const { _apiKey, ...restConfig } = config;
