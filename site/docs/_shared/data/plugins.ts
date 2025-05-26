@@ -815,21 +815,6 @@ export const PLUGINS = [
   },
   {
     category: 'Security and Access Control',
-    description: 'Tests resistance against poisoning attacks on RAG retrieval systems',
-    label: 'technical',
-    link: '/docs/red-team/plugins/rag-poisoning/',
-    name: 'RAG Poisoning',
-    pluginId: 'rag-poisoning',
-    applicationTypes: {
-      rag: true,
-      agent: true,
-      chat: true,
-    },
-    vulnerabilityType: 'security',
-    isRemote: true,
-  },
-  {
-    category: 'Security and Access Control',
     description: 'PII exposed through API or database',
     label: 'pii',
     link: '/docs/red-team/plugins/pii/',
@@ -948,6 +933,21 @@ export const PLUGINS = [
     link: '/docs/red-team/plugins/rag-document-exfiltration',
     name: 'RAG Document Exfiltration',
     pluginId: 'rag-document-exfiltration',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description: 'Tests resistance against poisoning attacks on RAG retrieval systems',
+    label: 'technical',
+    link: '/docs/red-team/plugins/rag-poisoning/',
+    name: 'RAG Poisoning',
+    pluginId: 'rag-poisoning',
     applicationTypes: {
       rag: true,
       agent: true,
