@@ -23,6 +23,12 @@ describe('xAI Provider', () => {
         toString: () => `[xAI Provider ${modelName}]`,
         toJSON: createMockToJSON(modelName, options?.config),
         callApi: jest.fn().mockImplementation(async () => ({ output: 'Mock response' })),
+        getOpenAiBody: jest.fn().mockImplementation((prompt) => ({
+          body: {
+            model: modelName,
+            messages: [{ role: 'user', content: prompt }],
+          },
+        })),
       };
     });
   });
@@ -34,9 +40,7 @@ describe('xAI Provider', () => {
 
     it('creates an xAI provider with specified model', () => {
       const provider = createXAIProvider('xai:grok-2');
-
       expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('grok-2', expect.any(Object));
-
       expect(provider.id()).toBe('xai:grok-2');
       expect(typeof provider.toString).toBe('function');
     });
@@ -95,6 +99,17 @@ describe('xAI Provider', () => {
         }),
       );
     });
+
+    it('stores originalConfig during initialization', () => {
+      const config = {
+        config: {
+          search_parameters: { mode: 'test' },
+          region: 'us-west-1',
+        },
+      };
+      const provider = createXAIProvider('xai:grok-2', { config }) as any;
+      expect(provider.originalConfig).toEqual(config.config);
+    });
   });
 
   describe('Provider methods', () => {
@@ -151,22 +166,88 @@ describe('xAI Provider', () => {
       const json = provider.toJSON?.() || {};
       expect(json.config.apiKey).toBeUndefined();
     });
+  });
 
-    it('passes search_parameters through to OpenAI provider', () => {
-      createXAIProvider('xai:grok-3-beta', {
+  describe('Search parameters handling', () => {
+    it('renders search_parameters with context variables', () => {
+      const mockGetOpenAiBody = jest.fn().mockImplementation((prompt: string, context: any) => ({
+        body: {
+          model: 'grok-3-beta',
+          messages: [{ role: 'user', content: prompt }],
+          search_parameters: {
+            mode: context?.vars?.mode,
+            filter: context?.vars?.filter,
+          },
+        },
+      }));
+
+      (OpenAiChatCompletionProvider as any).mockImplementation(() => ({
+        getOpenAiBody: mockGetOpenAiBody,
+      }));
+
+      const provider = createXAIProvider('xai:grok-3-beta', {
         config: {
-          search_parameters: { mode: 'auto' },
-        } as any,
+          config: {
+            search_parameters: { mode: '{{mode}}', filter: '{{filter}}' },
+          },
+        },
       });
 
-      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
-        'grok-3-beta',
-        expect.objectContaining({
-          config: expect.objectContaining({
-            search_parameters: { mode: 'auto' },
-          }),
-        }),
-      );
+      const result = (provider as any).getOpenAiBody('test prompt', {
+        vars: {
+          mode: 'advanced',
+          filter: 'latest',
+        },
+      });
+
+      expect(result.body.search_parameters).toEqual({
+        mode: 'advanced',
+        filter: 'latest',
+      });
+    });
+
+    it('includes search_parameters in API body when defined', () => {
+      const mockGetOpenAiBody = jest.fn().mockImplementation(() => ({
+        body: {
+          model: 'grok-3-beta',
+          messages: [{ role: 'user', content: 'test prompt' }],
+          search_parameters: { mode: 'test' },
+        },
+      }));
+
+      (OpenAiChatCompletionProvider as any).mockImplementation(() => ({
+        getOpenAiBody: mockGetOpenAiBody,
+      }));
+
+      const provider = createXAIProvider('xai:grok-3-beta', {
+        config: {
+          config: {
+            search_parameters: { mode: 'test' },
+          },
+        },
+      });
+
+      const result = (provider as any).getOpenAiBody('test prompt');
+      expect(result.body.search_parameters).toEqual({ mode: 'test' });
+    });
+
+    it('does not include search_parameters when undefined', () => {
+      const provider = createXAIProvider('xai:grok-3-beta');
+      const result = (provider as any).getOpenAiBody('test prompt');
+      expect(result.body.search_parameters).toBeUndefined();
+    });
+
+    it('preserves original search_parameters configuration', () => {
+      const searchParams = { mode: 'test', filter: 'all' };
+      const provider = createXAIProvider('xai:grok-3-beta', {
+        config: {
+          config: {
+            search_parameters: searchParams,
+          },
+        },
+      }) as any;
+
+      expect(provider.originalConfig.search_parameters).toEqual(searchParams);
     });
   });
 
