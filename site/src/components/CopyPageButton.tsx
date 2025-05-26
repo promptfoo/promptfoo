@@ -59,12 +59,9 @@ const CopyPageButton: React.FC = () => {
         aria-live="polite"
         className={styles.copyButton}
       >
-        <span className={styles.buttonContent}>
-          <span className={`${styles.iconContainer} ${copied ? styles.copied : ''}`}>
-            <ContentCopyIcon className={styles.copyIcon} />
-            <CheckIcon className={styles.checkIcon} />
-          </span>
-          <span>Copy page</span>
+        <span className={`${styles.iconContainer} ${copied ? styles.copied : ''}`}>
+          <ContentCopyIcon className={styles.copyIcon} />
+          <CheckIcon className={styles.checkIcon} />
         </span>
       </button>
     </div>
