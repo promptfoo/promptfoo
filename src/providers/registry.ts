@@ -87,8 +87,8 @@ import { VoyageEmbeddingProvider } from './voyage';
 import { WatsonXProvider } from './watsonx';
 import { WebhookProvider } from './webhook';
 import { WebSocketProvider } from './websocket';
-import { createXAIProvider } from './xai';
-import { createXAIImageProvider } from './xai-image';
+import { createXAIProvider } from './xai/chat';
+import { createXAIImageProvider } from './xai/image';
 
 interface ProviderFactory {
   test: (providerPath: string) => boolean;

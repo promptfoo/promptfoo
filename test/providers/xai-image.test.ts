@@ -1,5 +1,5 @@
 import { fetchWithCache } from '../../src/cache';
-import { createXAIImageProvider, XAIImageProvider } from '../../src/providers/xai-image';
+import { createXAIImageProvider, XAIImageProvider } from '../../src/providers/xai/image';
 
 jest.mock('../../src/cache');
 jest.mock('../../src/logger');
