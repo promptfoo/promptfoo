@@ -310,17 +310,21 @@ export async function redteamInit(directory: string | undefined) {
   } else {
     const providerChoices = [
       { name: `I'll choose later`, value: 'Other' },
-      { name: 'openai:gpt-4o-mini', value: 'openai:gpt-4o-mini' },
-      { name: 'openai:gpt-4o', value: 'openai:gpt-4o' },
+      { name: 'openai:gpt-4.1-mini', value: 'openai:gpt-4.1-mini' },
+      { name: 'openai:gpt-4.1', value: 'openai:gpt-4.1' },
+      {
+        name: 'anthropic:claude-sonnet-4-20250514',
+        value: 'anthropic:messages:claude-sonnet-4-20250514',
+      },
+      {
+        name: 'anthropic:claude-opus-4-20250514',
+        value: 'anthropic:messages:claude-opus-4-20250514',
+      },
       {
         name: 'anthropic:claude-3-7-sonnet-20250219',
         value: 'anthropic:messages:claude-3-7-sonnet-20250219',
       },
-      {
-        name: 'anthropic:claude-3-5-sonnet-20241022',
-        value: 'anthropic:messages:claude-3-5-sonnet-20241022',
-      },
-      { name: 'vertex:gemini-pro', value: 'vertex:gemini-pro' },
+      { name: 'vertex:gemini-2.5-pro-preview-03-25', value: 'vertex:gemini-2.5-pro-preview-03-25' },
     ];
 
     const selectedProvider = await select({
@@ -332,7 +336,7 @@ export async function redteamInit(directory: string | undefined) {
     recordOnboardingStep('choose provider', { value: selectedProvider });
 
     if (selectedProvider === 'Other') {
-      providers = [{ id: 'openai:gpt-4o-mini', label }];
+      providers = [{ id: 'openai:gpt-4.1-mini', label }];
     } else {
       providers = [{ id: selectedProvider, label }];
     }
