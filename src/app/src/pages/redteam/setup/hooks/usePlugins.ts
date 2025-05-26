@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { categoryLabels } from '@promptfoo/redteam/constants';
 
 export function usePlugins() {

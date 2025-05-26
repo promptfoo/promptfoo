@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import { useCallback } from 'react';
 import { callApi } from '@app/utils/api';
 import type { EventProperties, TelemetryEventTypes } from '@promptfoo/telemetry';
 
