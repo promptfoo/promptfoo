@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
-  - 'What is the latest news about AI regulation?'
+  - 'What is the latest news about {{topic}}?'
 
 providers:
   - id: xai:grok-3-beta
@@ -12,4 +12,5 @@ providers:
           - type: web
 
 tests:
-  - vars: {}
+  - vars:
+      topic: AI regulation

@@ -1,11 +1,11 @@
-# xai-grok (xAI Grok Models Evaluation)
+# xai (xAI Grok Models Evaluation)
 
 This example demonstrates how to evaluate xAI's Grok models across their three main capabilities: text generation with reasoning, image creation, and real-time web search.
 
 You can run this example with:
 
 ```bash
-npx promptfoo@latest init --example xai-grok
+npx promptfoo@latest init --example xai-grok    
 ```
 
 ## Environment Variables
