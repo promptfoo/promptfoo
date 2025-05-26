@@ -64,6 +64,7 @@ const DATASET_PLUGINS = [
   'cyberseceval',
   'donotanswer',
   'harmbench',
+  'pliny',
   'unsafebench',
   'xstest',
 ] as const;
