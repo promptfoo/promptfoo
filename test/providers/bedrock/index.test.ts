@@ -4,7 +4,7 @@ import type {
   BedrockClaudeMessagesCompletionOptions,
   LlamaMessage,
   TextGenerationOptions,
-} from '../../src/providers/bedrock';
+} from '../../../src/providers/bedrock';
 import {
   addConfigParam,
   AwsBedrockCompletionProvider,
@@ -18,8 +18,8 @@ import {
   getLlamaModelHandler,
   LlamaVersion,
   parseValue,
-} from '../../src/providers/bedrock';
-import type { IBedrockModel } from '../../src/providers/bedrock';
+} from '../../../src/providers/bedrock';
+import type { IBedrockModel } from '../../../src/providers/bedrock';
 
 jest.mock('@aws-sdk/client-bedrock-runtime', () => ({
   BedrockRuntime: jest.fn().mockImplementation(() => ({
@@ -37,7 +37,7 @@ jest.mock('@smithy/node-http-handler', () => {
 
 jest.mock('proxy-agent', () => jest.fn());
 
-jest.mock('../../src/cache', () => ({
+jest.mock('../../../src/cache', () => ({
   getCache: jest.fn(),
   isCacheEnabled: jest.fn(),
 }));
@@ -1734,7 +1734,7 @@ describe('AwsBedrockCompletionProvider', () => {
       set: jest.fn().mockResolvedValue(null),
     };
 
-    const { getCache, isCacheEnabled } = jest.requireMock('../../src/cache');
+    const { getCache, isCacheEnabled } = jest.requireMock('../../../src/cache');
     getCache.mockResolvedValue(mockCache);
     isCacheEnabled.mockReturnValue(false);
 
