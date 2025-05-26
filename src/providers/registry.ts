@@ -26,7 +26,7 @@ import { AzureCompletionProvider } from './azure/completion';
 import { AzureEmbeddingProvider } from './azure/embedding';
 import { AzureModerationProvider } from './azure/moderation';
 import { BAMProvider } from './bam';
-import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './bedrock';
+import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './bedrock/index';
 import { BrowserProvider } from './browser';
 import { createCerebrasProvider } from './cerebras';
 import { ClouderaAiChatCompletionProvider } from './cloudera';
@@ -87,8 +87,8 @@ import { VoyageEmbeddingProvider } from './voyage';
 import { WatsonXProvider } from './watsonx';
 import { WebhookProvider } from './webhook';
 import { WebSocketProvider } from './websocket';
-import { createXAIProvider } from './xai';
-import { createXAIImageProvider } from './xai-image';
+import { createXAIProvider } from './xai/chat';
+import { createXAIImageProvider } from './xai/image';
 
 interface ProviderFactory {
   test: (providerPath: string) => boolean;
@@ -293,7 +293,7 @@ export const providerMap: ProviderFactory[] = [
         return new AwsBedrockEmbeddingProvider(modelName, providerOptions);
       }
       if (modelType === 'kb' || modelType === 'knowledge-base') {
-        const { AwsBedrockKnowledgeBaseProvider } = await import('./bedrockKnowledgeBase');
+        const { AwsBedrockKnowledgeBaseProvider } = await import('./bedrock/knowledgeBase');
         return new AwsBedrockKnowledgeBaseProvider(modelName, providerOptions);
       }
       return new AwsBedrockCompletionProvider(
