@@ -34,8 +34,8 @@ export interface EmailStatusResult {
  * Shared function to check email status with the promptfoo API
  * Used by both CLI and server routes
  */
-export async function checkEmailStatus(email?: string): Promise<EmailStatusResult> {
-  const userEmail = email || (isCI() ? 'ci-placeholder@promptfoo.dev' : getUserEmail());
+export async function checkEmailStatus(): Promise<EmailStatusResult> {
+  const userEmail = isCI() ? 'ci-placeholder@promptfoo.dev' : getUserEmail();
 
   if (!userEmail) {
     return {

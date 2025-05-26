@@ -62,52 +62,32 @@ export function useEmailVerification() {
     }
   }, []);
 
-  const setEmailAndConsent = useCallback(
-    async (email: string): Promise<{ success: boolean; error?: string }> => {
-      try {
-        // First set the email
-        const emailResponse = await callApi('/user/email', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ email }),
-        });
+  const saveEmail = useCallback(async (email: string): Promise<{ error?: string }> => {
+    try {
+      // First set the email
+      const emailResponse = await callApi('/user/email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email }),
+      });
 
-        if (!emailResponse.ok) {
-          const errorData = await emailResponse.json();
-          return { success: false, error: errorData.error || 'Failed to set email' };
-        }
-
-        // Then save consent
-        const consentResponse = await callApi('/user/consent', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            email,
-            metadata: { source: 'webui_redteam' },
-          }),
-        });
-
-        if (!consentResponse.ok) {
-          const errorData = await consentResponse.json();
-          return { success: false, error: errorData.error || 'Failed to save consent' };
-        }
-
-        return { success: true };
-      } catch (error) {
-        console.error('Error setting email and consent:', error);
-        return { success: false, error: 'Failed to set email and consent. Please try again.' };
+      if (!emailResponse.ok) {
+        const errorData = await emailResponse.json();
+        return { error: errorData.error || 'Failed to set email' };
       }
-    },
-    [],
-  );
+
+      return {};
+    } catch (error) {
+      console.error('Error setting email:', error);
+      return { error: `Failed to set email: ${error}` };
+    }
+  }, []);
 
   return {
     checkEmailStatus,
-    setEmailAndConsent,
+    saveEmail,
     isChecking,
   };
 }

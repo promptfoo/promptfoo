@@ -27,7 +27,7 @@ export function EmailVerificationDialog({
   const [email, setEmail] = useState('');
   const [emailError, setEmailError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { setEmailAndConsent } = useEmailVerification();
+  const { saveEmail } = useEmailVerification();
   const { showToast } = useToast();
 
   const validateEmail = (email: string): boolean => {
@@ -59,17 +59,16 @@ export function EmailVerificationDialog({
     setEmailError('');
 
     try {
-      const result = await setEmailAndConsent(email);
+      const result = await saveEmail(email);
 
-      if (result.success) {
-        showToast('Email verified successfully', 'success');
-        onSuccess();
-      } else {
+      if (result.error) {
         setEmailError(result.error || 'Failed to verify email');
       }
+      showToast('Email saved succesfully, starting redteam.');
+      onSuccess();
     } catch (error) {
       console.error('Error submitting email:', error);
-      setEmailError('An unexpected error occurred. Please try again.');
+      setEmailError(`An unexpected error occurred: ${error}.`);
     } finally {
       setIsSubmitting(false);
     }

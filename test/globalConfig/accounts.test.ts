@@ -190,7 +190,7 @@ describe('accounts', () => {
       await checkEmailStatusOrExit();
 
       expect(fetchWithTimeout).toHaveBeenCalledWith(
-        'https://api.promptfoo.app/api/users/status?email=ci-placeholder@promptfoo.dev',
+        'https://api.promptfoo.app/api/users/status?email=ci-placeholder%40promptfoo.dev',
         undefined,
         500,
       );
@@ -211,7 +211,7 @@ describe('accounts', () => {
       await checkEmailStatusOrExit();
 
       expect(fetchWithTimeout).toHaveBeenCalledWith(
-        'https://api.promptfoo.app/api/users/status?email=test@example.com',
+        'https://api.promptfoo.app/api/users/status?email=test%40example.com',
         undefined,
         500,
       );
@@ -306,7 +306,7 @@ describe('accounts', () => {
       const result = await checkEmailStatus();
 
       expect(fetchWithTimeout).toHaveBeenCalledWith(
-        'https://api.promptfoo.app/api/users/status?email=ci-placeholder@promptfoo.dev',
+        'https://api.promptfoo.app/api/users/status?email=ci-placeholder%40promptfoo.dev',
         undefined,
         500,
       );
@@ -316,54 +316,6 @@ describe('accounts', () => {
         email: 'ci-placeholder@promptfoo.dev',
         message: undefined,
       });
-    });
-
-    it('should use provided email parameter', async () => {
-      const testEmail = 'custom@example.com';
-      const mockResponse = new Response(JSON.stringify({ status: 'ok' }), {
-        status: 200,
-        statusText: 'OK',
-      });
-      jest.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
-
-      const result = await checkEmailStatus(testEmail);
-
-      expect(fetchWithTimeout).toHaveBeenCalledWith(
-        'https://api.promptfoo.app/api/users/status?email=custom@example.com',
-        undefined,
-        500,
-      );
-      expect(result).toEqual({
-        status: 'ok',
-        hasEmail: true,
-        email: testEmail,
-        message: undefined,
-      });
-    });
-
-    it('should prioritize provided email parameter over stored email', async () => {
-      // Set up stored email
-      jest.mocked(isCI).mockReturnValue(false);
-      jest.mocked(readGlobalConfig).mockReturnValue({
-        account: { email: 'stored@example.com' },
-      });
-
-      const customEmail = 'custom@example.com';
-      const mockResponse = new Response(JSON.stringify({ status: 'ok' }), {
-        status: 200,
-        statusText: 'OK',
-      });
-      jest.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
-
-      const result = await checkEmailStatus(customEmail);
-
-      // Should use the provided email, not the stored one
-      expect(fetchWithTimeout).toHaveBeenCalledWith(
-        'https://api.promptfoo.app/api/users/status?email=custom@example.com',
-        undefined,
-        500,
-      );
-      expect(result.email).toBe(customEmail);
     });
 
     it('should return exceeded_limit status', async () => {

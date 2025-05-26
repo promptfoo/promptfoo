@@ -43,22 +43,22 @@ userRouter.post('/email', async (req: Request, res: Response): Promise<void> => 
       email,
       selfHosted: getEnvBool('PROMPTFOO_SELF_HOSTED'),
     });
+    await telemetry.saveConsent(email, {
+      source: 'webui_redteam',
+    });
   } catch (error) {
     logger.error(`Error setting email: ${error}`);
     if (error instanceof z.ZodError) {
       res.status(400).json({ error: fromError(error).toString() });
     } else {
-      res.status(500).json({ error: 'Failed to set email' });
+      res.status(500).json({ error: String(error) });
     }
   }
 });
 
 userRouter.get('/email/status', async (req: Request, res: Response): Promise<void> => {
   try {
-    // Validate query parameters
-    const { email: queryEmail } = ApiSchemas.User.EmailStatus.Request.parse(req.query);
-
-    const result = await checkEmailStatus(queryEmail);
+    const result = await checkEmailStatus();
 
     res.json(
       ApiSchemas.User.EmailStatus.Response.parse({
@@ -75,38 +75,5 @@ userRouter.get('/email/status', async (req: Request, res: Response): Promise<voi
     } else {
       res.status(500).json({ error: 'Failed to check email status' });
     }
-  }
-});
-
-userRouter.post('/consent', async (req: Request, res: Response) => {
-  const { email, metadata } = req.body;
-
-  if (!email) {
-    res.status(400).json({ error: 'Email is required' });
-    return;
-  }
-
-  try {
-    // Set the user email if it's not already set
-    const currentEmail = getUserEmail();
-    if (!currentEmail) {
-      setUserEmail(email);
-    }
-
-    await telemetry.saveConsent(email, {
-      source: 'webui_redteam',
-      ...metadata,
-    });
-
-    await telemetry.recordAndSend('webui_api', {
-      event: 'redteam_email_consent',
-      email,
-      selfHosted: getEnvBool('PROMPTFOO_SELF_HOSTED'),
-    });
-
-    res.status(200).json({ success: true });
-  } catch (error) {
-    logger.debug(`Failed to save consent: ${(error as Error).message}`);
-    res.status(500).json({ error: 'Failed to save consent' });
   }
 });
