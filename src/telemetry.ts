@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import cliState from './cliState';
 import { VERSION } from './constants';
 import { getEnvBool, isCI } from './envars';
 import { fetchWithTimeout } from './fetch';
@@ -54,6 +55,7 @@ export class Telemetry {
         packageVersion: VERSION,
         properties: {
           ...properties,
+          isRedteam: Boolean(cliState.config?.redteam),
           isRunningInCi: isCI(),
         },
       };
