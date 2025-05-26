@@ -6,211 +6,142 @@ keywords: [xai, grok, grok-3, grok-2, reasoning, vision, llm]
 
 # xAI (Grok)
 
-Use xAI's Grok models for text generation, reasoning, vision, and image generation with promptfoo.
+The `xai` provider supports [xAI's Grok models](https://x.ai/) through an API interface compatible with OpenAI's format. The provider supports both text and vision capabilities depending on the model used.
 
-## Quick Start
+## Setup
 
-Set your API key and start evaluating:
+To use xAI's API, set the `XAI_API_KEY` environment variable or specify via `apiKey` in the configuration file.
 
-```bash
+```sh
 export XAI_API_KEY=your_api_key_here
 ```
+
+## Provider Format
+
+The xAI provider includes support for the following model formats:
+
+### Grok-3 Models
+
+- `xai:grok-3-beta` - Latest flagship model for enterprise tasks (131K context)
+- `xai:grok-3-fast-beta` - Faster variant of grok-3-beta (131K context)
+- `xai:grok-3-mini-beta` - Lightweight reasoning model (131K context)
+- `xai:grok-3-mini-fast-beta` - Faster variant of grok-3-mini with reasoning (131K context)
+
+### Grok-2 and previous Models
+
+- `xai:grok-2-latest` - Latest Grok-2 model (131K context)
+- `xai:grok-2-vision-latest` - Latest Grok-2 vision model (32K context)
+- `xai:grok-2-vision-1212`
+- `xai:grok-2-1212`
+- `xai:grok-beta` - Beta version (131K context)
+- `xai:grok-vision-beta` - Vision beta version (8K context)
+
+You can also use specific versioned models:
+
+- `xai:grok-2-1212`
+- `xai:grok-2-vision-1212`
+
+## Configuration
+
+The provider supports all [OpenAI provider](/docs/providers/openai) configuration options plus Grok-specific options. Example usage:
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+providers:
+  - id: xai:grok-3-mini-beta
+    config:
+      temperature: 0.7
+      reasoning_effort: 'high' # Only for grok-3-mini models
+      apiKey: your_api_key_here # Alternative to XAI_API_KEY
+```
+
+### Reasoning Support
+
+Grok-3 introduces reasoning capabilities for specific models. The `grok-3-mini-beta` and `grok-3-mini-fast-beta` models support reasoning through the `reasoning_effort` parameter:
+
+- `reasoning_effort: "low"` - Minimal thinking time, using fewer tokens for quick responses
+- `reasoning_effort: "high"` - Maximum thinking time, leveraging more tokens for complex problems
+
+:::info
+
+Reasoning is only available for the mini variants. The standard `grok-3-beta` and `grok-3-fast-beta` models do not support reasoning.
+
+:::
+
+### Region Support
+
+You can specify a region to use a region-specific API endpoint:
+
+```yaml
+providers:
+  - id: xai:grok-2-latest
+    config:
+      region: us-west-1 # Will use https://us-west-1.api.x.ai/v1
+```
+
+This is equivalent to setting `base_url="https://us-west-1.api.x.ai/v1"` in the Python client.
+
+### Vision Support
+
+For models with vision capabilities, you can include images in your prompts using the same format as OpenAI. Create a `prompt.yaml` file:
+
+```yaml title="prompt.yaml"
+- role: user
+  content:
+    - type: image_url
+      image_url:
+        url: '{{image_url}}'
+        detail: 'high'
+    - type: text
+      text: '{{question}}'
+```
+
+Then reference it in your promptfoo config:
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
-  - 'Explain {{topic}} in simple terms'
+  - file://prompt.yaml
 
 providers:
-  - xai:grok-3-mini-beta
-
-tests:
-  - vars:
-      topic: 'quantum computing'
-```
-
-Run your eval:
-
-```bash
-npx promptfoo eval
-```
-
-## Text Generation
-
-### Basic Usage
-
-Use any Grok model for text generation:
-
-```yaml
-providers:
-  - xai:grok-3-beta # Latest flagship model
-  - xai:grok-3-fast-beta # Faster variant
-  - xai:grok-3-mini-beta # Lightweight with reasoning
-  - xai:grok-2-latest # Previous generation
-```
-
-### Reasoning Models
-
-Grok-3 mini models support reasoning for complex problems:
-
-```yaml
-providers:
-  - id: xai:grok-3-mini-beta
-    config:
-      reasoning_effort: 'high' # 'low' or 'high'
-```
-
-Use `reasoning_effort: 'high'` for complex logic problems and `reasoning_effort: 'low'` for quick responses.
-
-## Vision
-
-Analyze images with vision-capable models:
-
-```yaml title="promptfooconfig.yaml"
-prompts:
-  - role: user
-    content:
-      - type: image_url
-        image_url:
-          url: '{{image_url}}'
-      - type: text
-        text: 'What do you see in this image?'
-
-providers:
-  - xai:grok-2-vision-latest
+  - id: xai:grok-2-vision-latest
 
 tests:
   - vars:
       image_url: 'https://example.com/image.jpg'
+      question: "What's in this image?"
 ```
 
-## Image Generation
+### Image Generation
 
-Generate images with the Grok image model:
+xAI also supports image generation through the Grok image model:
+
+```yaml
+providers:
+  - xai:image:grok-2-image
+```
+
+Example configuration for image generation:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'A {{style}} painting of {{subject}}'
 
 providers:
-  - xai:image:grok-2-image
+  - id: xai:image:grok-2-image
+    config:
+      n: 1 # Number of images to generate (1-10)
+      response_format: 'url' # 'url' or 'b64_json'
 
 tests:
   - vars:
       style: 'impressionist'
-      subject: 'a sunset over mountains'
+      subject: 'sunset over mountains'
 ```
 
-### Image Generation Options
-
-Configure image generation parameters:
-
-```yaml
-providers:
-  - id: xai:image:grok-2-image
-    config:
-      n: 4 # Generate 1-10 images
-      response_format: 'url' # 'url' or 'b64_json'
-```
-
-:::tip
-
-To view generated images in the web interface, enable 'Render markdown' in Table Settings.
-
-:::
-
-## Configuration
-
-### API Key
-
-Set your API key using environment variables or config:
-
-```bash
-export XAI_API_KEY=your_api_key_here
-```
-
-Or in your config file:
-
-```yaml
-providers:
-  - id: xai:grok-3-beta
-    config:
-      apiKey: your_api_key_here
-```
-
-### Regional Endpoints
-
-Use region-specific endpoints for better performance:
-
-```yaml
-providers:
-  - id: xai:grok-2-latest
-    config:
-      region: us-west-1
-```
-
-### Advanced Options
-
-Configure model parameters:
-
-```yaml
-providers:
-  - id: xai:grok-3-beta
-    config:
-      temperature: 0.7
-      max_tokens: 1000
-      top_p: 0.9
-```
-
-## Available Models
-
-### Grok-3 Models
-
-| Model                   | Context | Best For                        |
-| ----------------------- | ------- | ------------------------------- |
-| `grok-3-beta`           | 131K    | Enterprise tasks, deep analysis |
-| `grok-3-fast-beta`      | 131K    | Same quality, faster responses  |
-| `grok-3-mini-beta`      | 131K    | Reasoning, logic problems       |
-| `grok-3-mini-fast-beta` | 131K    | Fast reasoning                  |
-
-### Grok-2 Models
-
-| Model                  | Context | Best For                |
-| ---------------------- | ------- | ----------------------- |
-| `grok-2-latest`        | 131K    | General text generation |
-| `grok-2-vision-latest` | 32K     | Image analysis          |
-| `grok-2-image-latest`  | -       | Image generation        |
-
-:::info
-
-All models support the same OpenAI-compatible API format.
-
-:::
-
-## Examples
-
-### Reasoning Comparison
-
-Compare reasoning capabilities across models:
-
-```yaml title="promptfooconfig.yaml"
-prompts:
-  - 'Solve this step by step: {{problem}}'
-
-providers:
-  - id: xai:grok-3-mini-beta
-    config:
-      reasoning_effort: 'high'
-  - id: xai:grok-3-beta
-  - id: xai:grok-2-latest
-
-tests:
-  - vars:
-      problem: 'If a train travels 120 miles in 2 hours, and then 180 miles in 3 hours, what is its average speed for the entire journey?'
-```
+For more information on the available models and API usage, refer to the [xAI documentation](https://docs.x.ai/docs).
 
 ## See Also
 
-- [OpenAI Provider](/docs/providers/openai) - Similar API format
-- [xAI Image Example](https://github.com/promptfoo/promptfoo/tree/main/examples/xai-images) - Complete image generation example
-- [xAI Documentation](https://docs.x.ai/docs) - Official API documentation
+- [OpenAI Provider](/docs/providers/openai)
