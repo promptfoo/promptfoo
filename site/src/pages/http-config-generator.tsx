@@ -3,7 +3,7 @@ import { Container, Typography } from '@mui/material';
 import { HttpConfigGenerator } from '@site/src/components/HttpConfigGenerator';
 import Layout from '@theme/Layout';
 
-export default function HttpConfigGeneratorPage(): JSX.Element {
+export default function HttpConfigGeneratorPage(): React.JSX.Element {
   return (
     <Layout title="HTTP Config Generator" description="Generate HTTP configurations for Promptfoo">
       <Container maxWidth="lg">

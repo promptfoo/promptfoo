@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { LinkProps } from 'react-router-dom';
-import { Link, useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import EngineeringIcon from '@mui/icons-material/Engineering';
@@ -51,10 +51,15 @@ const NavSection = styled(Box)({
 
 function NavLink({ href, label }: { href: string; label: string }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const isActive = location.pathname.startsWith(href);
 
+  const handleClick = () => {
+    navigate(href);
+  };
+
   return (
-    <NavButton component={Link} to={href} className={isActive ? 'active' : ''}>
+    <NavButton onClick={handleClick} className={isActive ? 'active' : ''}>
       {label}
     </NavButton>
   );
@@ -64,6 +69,7 @@ function CreateDropdown() {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const open = Boolean(anchorEl);
   const location = useLocation();
+  const navigate = useNavigate();
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -71,6 +77,11 @@ function CreateDropdown() {
 
   const handleClose = () => {
     setAnchorEl(null);
+  };
+
+  const handleNavigation = (path: string) => {
+    navigate(path);
+    handleClose();
   };
 
   const isActive = ['/setup', '/redteam/setup'].some((route) =>
@@ -99,12 +110,8 @@ function CreateDropdown() {
           },
         }}
       >
-        <MenuItem onClick={handleClose} component={Link} to="/setup">
-          Eval
-        </MenuItem>
-        <MenuItem onClick={handleClose} component={Link} to="/redteam/setup">
-          Red team
-        </MenuItem>
+        <MenuItem onClick={() => handleNavigation('/setup')}>Eval</MenuItem>
+        <MenuItem onClick={() => handleNavigation('/redteam/setup')}>Red team</MenuItem>
       </Menu>
     </>
   );
@@ -114,6 +121,7 @@ function EvalsDropdown() {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const open = Boolean(anchorEl);
   const location = useLocation();
+  const navigate = useNavigate();
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -121,6 +129,11 @@ function EvalsDropdown() {
 
   const handleClose = () => {
     setAnchorEl(null);
+  };
+
+  const handleNavigation = (path: string) => {
+    navigate(path);
+    handleClose();
   };
 
   const isActive = ['/eval', '/evals'].some((route) => location.pathname.startsWith(route));
@@ -135,12 +148,8 @@ function EvalsDropdown() {
         Evals
       </NavButton>
       <Menu anchorEl={anchorEl} open={open} onClose={handleClose}>
-        <MenuItem onClick={handleClose} component={Link} to="/eval">
-          Latest Eval
-        </MenuItem>
-        <MenuItem onClick={handleClose} component={Link} to="/evals">
-          All Evals
-        </MenuItem>
+        <MenuItem onClick={() => handleNavigation('/eval')}>Latest Eval</MenuItem>
+        <MenuItem onClick={() => handleNavigation('/evals')}>All Evals</MenuItem>
       </Menu>
     </>
   );

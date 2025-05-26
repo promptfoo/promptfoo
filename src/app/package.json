@@ -28,6 +28,7 @@
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.5.2",
+    "@types/fuzzysearch": "^1.0.2",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
     "@typescript-eslint/eslint-plugin": "^8.18.1",
@@ -63,9 +64,16 @@
     "@types/react-dom": "^19.0.2"
   },
   "dependencies": {
+    "ansi-to-html": "^0.7.2",
     "chart.js": "^4.4.9",
     "diff": "^8.0.2",
+    "fuzzysearch": "^1.0.3",
+    "html2canvas": "^1.4.1",
+    "idb-keyval": "^6.2.1",
+    "jspdf": "^2.5.2",
     "react-error-boundary": "^6.0.0",
-    "remark-gfm": "^4.0.1"
+    "recharts": "^2.13.3",
+    "remark-gfm": "^4.0.1",
+    "socket.io-client": "^4.8.1"
   }
 }

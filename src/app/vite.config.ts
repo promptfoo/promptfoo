@@ -31,12 +31,13 @@ export default defineConfig({
       // To exclude specific polyfills, add them to this list.
       exclude: [
         'fs', // Excludes the polyfill for `fs` and `node:fs`.
+        'process', // Exclude process polyfill for React 19 compatibility
       ],
       // Whether to polyfill specific globals.
       globals: {
         Buffer: true, // can also be 'build', 'dev', or false
         global: true,
-        process: true,
+        process: false, // Let React 19 handle process
       },
       // Whether to polyfill Node.js built-in modules.
       protocolImports: true,
@@ -51,14 +52,22 @@ export default defineConfig({
   build: {
     emptyOutDir: true,
     outDir: '../../dist/src/app',
-  },
-  test: {
-    globals: true,
-    environment: 'jsdom',
-    setupFiles: './src/setupTests.ts',
-    server: {
-      deps: {
-        inline: ['react', 'react-dom', '@testing-library/react'],
+    rollupOptions: {
+      external: [
+        'vite-plugin-node-polyfills/shims/buffer',
+        'vite-plugin-node-polyfills/shims/process',
+        'vite-plugin-node-polyfills/shims/global',
+        'vite-plugin-node-polyfills/shims/util',
+      ],
+      onwarn(warning, warn) {
+        // Suppress warnings about vite-plugin-node-polyfills shims
+        if (
+          warning.code === 'UNRESOLVED_IMPORT' &&
+          warning.id?.includes('vite-plugin-node-polyfills/shims/')
+        ) {
+          return;
+        }
+        warn(warning);
       },
     },
   },
