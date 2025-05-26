@@ -63,12 +63,15 @@ export function EmailVerificationDialog({
 
       if (result.error) {
         setEmailError(result.error || 'Failed to verify email');
+        return;
       }
-      showToast('Email saved succesfully, starting redteam.');
+      showToast('Email saved successfully, starting redteam.');
       onSuccess();
     } catch (error) {
       console.error('Error submitting email:', error);
-      setEmailError(`An unexpected error occurred: ${error}.`);
+      setEmailError(
+        `An unexpected error occurred: ${error instanceof Error ? error.message : error}.`,
+      );
     } finally {
       setIsSubmitting(false);
     }
