@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
+import { scrollToTop } from '../utils/navigation';
 import AutorenewIcon from '@mui/icons-material/Autorenew';
 import BugReportIcon from '@mui/icons-material/BugReport';
 import CodeIcon from '@mui/icons-material/Code';
@@ -50,13 +51,13 @@ function RedTeamingHeader() {
           The most widely adopted platform for LLM security testing
         </p>
         <div className={styles.buttons}>
-          <Link
+          <Link onClick={scrollToTop}
             className={clsx('button button--primary button--lg', styles.buttonPrimary)}
             to="/docs/red-team/quickstart"
           >
             Get Started
           </Link>
-          <Link
+          <Link onClick={scrollToTop}
             className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
             to="/contact/"
           >
@@ -330,10 +331,10 @@ function CallToActionSection() {
       <div className="container">
         <h2>Start securing your AI applications today</h2>
         <div className={styles.buttons}>
-          <Link className="button button--primary button--lg" to="/docs/red-team/quickstart">
+          <Link onClick={scrollToTop} className="button button--primary button--lg" to="/docs/red-team/quickstart">
             Get Started
           </Link>
-          <Link
+          <Link onClick={scrollToTop}
             className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
             to="/contact/"
           >

@@ -1,5 +1,6 @@
 import React from 'react';
 import Link from '@docusaurus/Link';
+import { scrollToTop } from '../../utils/navigation';
 import styles from '../styles.module.css';
 
 export default function Hero(): JSX.Element {
@@ -11,13 +12,13 @@ export default function Hero(): JSX.Element {
           Detect, mitigate, and monitor vulnerabilities in AI systems before deployment
         </p>
         <div className={styles.heroButtons}>
-          <Link
+          <Link onClick={scrollToTop}
             to="/docs/red-team/quickstart/"
             className={`${styles.button} ${styles.buttonPrimary}`}
           >
             Get started
           </Link>
-          <Link to="/contact/" className={`${styles.button} ${styles.buttonSecondary}`}>
+          <Link onClick={scrollToTop} to="/contact/" className={`${styles.button} ${styles.buttonSecondary}`}>
             Get a demo
           </Link>
         </div>

@@ -1,6 +1,7 @@
 import React from 'react';
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
+import { scrollToTop } from '../utils/navigation';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import ScannerIcon from '@mui/icons-material/DocumentScanner';
 import IntegrationInstructionsIcon from '@mui/icons-material/IntegrationInstructions';
@@ -45,7 +46,7 @@ function ModelSecurityHeader() {
           End-to-end protection from model files to deployed instances
         </p>
         <div className={styles.buttons}>
-          <Link
+          <Link onClick={scrollToTop}
             className={clsx('button button--primary button--lg', styles.buttonPrimary)}
             to="/contact/"
           >
@@ -81,7 +82,7 @@ function ComprehensiveApproachSection() {
               <p>
                 <strong>Supported:</strong> PyTorch, TensorFlow, Keras, Pickle, JSON/YAML
               </p>
-              <Link to="/docs/model-audit/" className="button button--secondary button--sm">
+              <Link onClick={scrollToTop} to="/docs/model-audit/" className="button button--secondary button--sm">
                 Learn More
               </Link>
             </div>
@@ -104,7 +105,7 @@ function ComprehensiveApproachSection() {
               <p>
                 <strong>Works with:</strong> Any foundation or fine-tuned model
               </p>
-              <Link
+              <Link onClick={scrollToTop}
                 to="/docs/red-team/foundation-models/"
                 className="button button--secondary button--sm"
               >
@@ -130,7 +131,7 @@ function ComprehensiveApproachSection() {
               <p>
                 <strong>Built-in:</strong> OWASP, NIST, EU AI Act, MITRE, custom
               </p>
-              <Link
+              <Link onClick={scrollToTop}
                 to="/docs/red-team/owasp-llm-top-10/"
                 className="button button--secondary button--sm"
               >
@@ -297,10 +298,10 @@ function CallToActionSection() {
       <div className="container">
         <h2>Get complete AI model security coverage</h2>
         <div className={styles.buttons}>
-          <Link className="button button--primary button--lg" to="/docs/model-audit/">
+          <Link onClick={scrollToTop} className="button button--primary button--lg" to="/docs/model-audit/">
             Try Model Scanner Free
           </Link>
-          <Link
+          <Link onClick={scrollToTop}
             className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
             to="/contact/"
           >

@@ -1,5 +1,6 @@
 import React from 'react';
 import Link from '@docusaurus/Link';
+import { scrollToTop } from '../utils/navigation';
 import { useColorMode } from '@docusaurus/theme-common';
 import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
@@ -247,7 +248,7 @@ const AboutPageContent = () => {
           <Typography variant="body1" paragraph>
             Join leading enterprises who trust Promptfoo to fortify their AI applications.
           </Typography>
-          <Link className="button button--primary button--lg" to="/contact/">
+          <Link onClick={scrollToTop} className="button button--primary button--lg" to="/contact/">
             Get in Touch
           </Link>
         </Box>

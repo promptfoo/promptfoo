@@ -1,6 +1,7 @@
 import React from 'react';
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
+import { scrollToTop } from '../utils/navigation';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import SecurityUpdateGoodIcon from '@mui/icons-material/SecurityUpdateGood';
 import ShieldIcon from '@mui/icons-material/Shield';
@@ -41,7 +42,7 @@ function GuardrailsHeader() {
           Self-improving protection powered by continuous red teaming feedback
         </p>
         <div className={styles.buttons}>
-          <Link
+          <Link onClick={scrollToTop}
             className={clsx('button button--secondary button--lg', styles.buttonPrimary)}
             to="/contact/"
           >
@@ -180,7 +181,7 @@ function CallToActionSection() {
       <div className="container">
         <h2>Upgrade to guardrails that learn and adapt</h2>
         <div className={styles.buttons}>
-          <Link
+          <Link onClick={scrollToTop}
             className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
             to="/contact/"
           >
