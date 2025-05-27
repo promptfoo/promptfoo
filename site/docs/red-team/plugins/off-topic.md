@@ -52,7 +52,7 @@ Here's an example configuration for testing a customer support chatbot:
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Red Teaming Customer Support Bot for Off-Topic Manipulation
 
-providers:
+targets:
   - anthropic:messages:claude-3-haiku-20240307
 
 prompts:
