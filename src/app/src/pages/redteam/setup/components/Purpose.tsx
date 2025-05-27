@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useTelemetry } from '@app/hooks/useTelemetry';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
-import { Alert, Switch } from '@mui/material';
+import { Alert, IconButton, Switch } from '@mui/material';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
@@ -30,6 +31,7 @@ export default function Purpose({ onNext }: PromptsProps) {
   const [externalSystemEnabled, setExternalSystemEnabled] = useState(
     Boolean(config.applicationDefinition.connectedSystems?.trim()),
   );
+  const [expandAlert, setExpandAlert] = useState(false);
 
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_purpose' });
@@ -145,48 +147,180 @@ export default function Purpose({ onNext }: PromptsProps) {
 
       {testMode === 'application' ? (
         <>
-          <Alert
-            severity="info"
-            sx={{
-              '& .MuiAlert-icon': {
-                color: 'info.main',
-              },
-              backgroundColor: (theme) =>
-                theme.palette.mode === 'dark'
-                  ? alpha(theme.palette.info.main, 0.1)
-                  : alpha(theme.palette.info.main, 0.05),
-              border: (theme) =>
-                `1px solid ${
-                  theme.palette.mode === 'dark'
-                    ? alpha(theme.palette.info.main, 0.3)
-                    : alpha(theme.palette.info.main, 0.2)
-                }`,
-              '& .MuiAlert-message': {
-                color: 'text.primary',
-              },
-            }}
-          >
-            The more information you provide, the better the redteam attacks will be. You can leave
-            fields blank if they're not relevant, and you'll be able to revise information later.
-          </Alert>
-
           <Box>
             <Stack direction="column" spacing={3}>
               <Box>
                 <Typography variant="h5" gutterBottom sx={{ fontWeight: 'medium' }}>
                   Purpose
                 </Typography>
-                <Typography variant="body1">
-                  The primary objective of the AI in this application.
+                <Typography variant="body1" sx={{ mb: 2 }}>
+                  The objective of the agentic application and it's context.
                 </Typography>
+
+                <Alert
+                  severity="info"
+                  sx={{
+                    mt: 2,
+                    mb: 2,
+                    borderRadius: (theme) => theme.shape.borderRadius,
+                    cursor: 'pointer',
+                    position: 'relative',
+                    transition: 'background-color 0.1s ease',
+                    boxShadow: 'none',
+                    '& .MuiAlert-icon': {
+                      color: 'info.main',
+                      paddingTop: '14px',
+                      alignSelf: 'flex-start',
+                      fontSize: (theme) => theme.typography.subtitle1.fontSize,
+                    },
+                    backgroundColor: (theme) =>
+                      theme.palette.mode === 'dark'
+                        ? alpha(theme.palette.info.main, 0.1)
+                        : alpha(theme.palette.info.main, 0.05),
+                    border: (theme) =>
+                      `1px solid ${
+                        theme.palette.mode === 'dark'
+                          ? alpha(theme.palette.info.main, 0.3)
+                          : alpha(theme.palette.info.main, 0.2)
+                      }`,
+                    '& .MuiAlert-message': {
+                      color: 'text.primary',
+                      width: '100%',
+                      py: 0.5,
+                    },
+                    '&:hover': {
+                      backgroundColor: (theme) =>
+                        theme.palette.mode === 'dark'
+                          ? alpha(theme.palette.info.main, 0.15)
+                          : alpha(theme.palette.info.main, 0.1),
+                      boxShadow: 'none',
+                    },
+                  }}
+                  onClick={() => setExpandAlert(!expandAlert)}
+                >
+                  <Box sx={{ width: '100%' }}>
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <Box>
+                        <Typography
+                          variant="subtitle2"
+                          fontWeight="500"
+                          sx={{
+                            color: 'text.primary',
+                            mb: 0.5,
+                          }}
+                        >
+                          Provide Detailed Information
+                        </Typography>
+                        <Typography variant="body2">
+                          The more information you provide, the better the redteam attacks will be.
+                        </Typography>
+                      </Box>
+                      <IconButton
+                        size="small"
+                        color="info"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpandAlert(!expandAlert);
+                        }}
+                        sx={{
+                          ml: 1,
+                          transition: 'transform 0.2s ease',
+                          transform: expandAlert ? 'rotate(180deg)' : 'rotate(0deg)',
+                          bgcolor: 'transparent',
+                          '&:hover': {
+                            bgcolor: (theme) => alpha(theme.palette.info.main, 0.1),
+                          },
+                        }}
+                      >
+                        <ExpandMoreIcon />
+                      </IconButton>
+                    </Box>
+
+                    {expandAlert && (
+                      <>
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            mt: 2,
+                          }}
+                        >
+                          <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
+                            Healthcare Assistant Example:
+                          </Typography>
+                        </Box>
+
+                        <Typography variant="body2" sx={{ mt: 1 }}>
+                          <strong>Purpose:</strong> Assist healthcare professionals and patients
+                          with medical-related tasks, access medical information, schedule
+                          appointments, manage prescriptions, provide general medical advice,
+                          maintain HIPAA compliance and patient confidentiality.
+                        </Typography>
+                        <Typography variant="body2" sx={{ mt: 1 }}>
+                          <strong>Features:</strong> Patient record access, appointment scheduling,
+                          prescription management, lab results retrieval, insurance verification,
+                          payment processing, medical advice delivery, user authentication with
+                          role-based access control.
+                        </Typography>
+                        <Typography variant="body2" sx={{ mt: 1 }}>
+                          <strong>Has Access to:</strong> Patient's own medical records, appointment
+                          scheduling system, prescription database, lab results (with
+                          authorization), insurance verification tools, general medical knowledge
+                          base, approved medical guidelines, and health education resources.
+                        </Typography>
+                        <Typography variant="body2" sx={{ mt: 1 }}>
+                          <strong>Not have access to:</strong> Other patients' medical records,
+                          hospital/clinic financial systems, provider credentialing information,
+                          research databases, unencrypted patient identifiers, administrative
+                          backend systems, and unauthorized medication dispensing functions.
+                        </Typography>
+                        <Typography variant="body2" sx={{ mt: 1 }}>
+                          <strong>Users:</strong> Authorized Patients, and Unauthenticated Users.
+                        </Typography>
+                        <Typography variant="body2" sx={{ mt: 1 }}>
+                          <strong>Security:</strong> HIPAA compliance, patient confidentiality,
+                          authentication checks, and audit logging for all access.
+                        </Typography>
+                        <Typography variant="body2" sx={{ mt: 1 }}>
+                          <strong>Example Identifiers:</strong> Patient IDs (MRN2023001), Emails
+                          (marcus.washington@gmail.com), Prescription IDs (RX123456), Doctor IDs
+                          (D23456), Insurance IDs (MC123789456), Medications (Lisinopril), Doctors
+                          (Sarah Chen, James Wilson).
+                        </Typography>
+                      </>
+                    )}
+                  </Box>
+                </Alert>
+
                 <TextField
                   fullWidth
                   value={config.applicationDefinition.purpose}
                   onChange={(e) => updateApplicationDefinition('purpose', e.target.value)}
-                  placeholder="e.g. You are a travel agent specialized in budget trips to Europe."
-                  margin="normal"
+                  placeholder="Describe your application purpose at the minimum, other application context like features, roles, security requirements, and any example identifiers can further help improve the quality of the redteam attacks and grading"
                   multiline
-                  rows={4}
+                  variant="outlined"
+                  minRows={8}
+                  maxRows={20}
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      '&.Mui-focused fieldset': {
+                        borderColor: 'primary.main',
+                        borderWidth: '2px',
+                      },
+                    },
+                    '& .MuiInputBase-input': {
+                      fontFamily: (theme) => theme.typography.fontFamily,
+                      fontSize: '0.9rem',
+                      lineHeight: 1.7,
+                    },
+                  }}
                 />
               </Box>
 

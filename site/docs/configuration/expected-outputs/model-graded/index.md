@@ -66,7 +66,7 @@ You can use test `vars` in the LLM rubric. This example uses the `question` vari
 
 ```yaml
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
 prompts:
   - file://prompt1.txt
   - file://prompt2.txt
@@ -165,7 +165,7 @@ By default, model-graded asserts use `gpt-4.1-2025-04-14` for grading. If you do
 1. Using the `--grader` CLI option:
 
    ```
-   promptfoo eval --grader openai:gpt-4o-mini
+   promptfoo eval --grader openai:gpt-4.1-mini
    ```
 
 2. Using `test.options` or `defaultTest.options` on a per-test or testsuite basis:
@@ -173,7 +173,7 @@ By default, model-graded asserts use `gpt-4.1-2025-04-14` for grading. If you do
    ```yaml
    defaultTest:
      options:
-       provider: openai:gpt-4o-mini
+       provider: openai:gpt-4.1-mini
    tests:
      - description: Use LLM to evaluate output
        assert:
@@ -189,14 +189,14 @@ By default, model-graded asserts use `gpt-4.1-2025-04-14` for grading. If you do
        assert:
          - type: llm-rubric
            value: Is spoken like a pirate
-           provider: openai:gpt-4o-mini
+           provider: openai:gpt-4.1-mini
    ```
 
 Use the `provider.config` field to set custom parameters:
 
 ```yaml
 provider:
-  - id: openai:gpt-4o-mini
+  - id: openai:gpt-4.1-mini
     config:
       temperature: 0
 ```
@@ -251,6 +251,27 @@ defaultTest:
 ```
 
 See the [full example](https://github.com/promptfoo/promptfoo/blob/main/examples/custom-grading-prompt/promptfooconfig.yaml).
+
+### Image-based rubric prompts
+
+`llm-rubric` can also grade responses that reference images. Provide a `rubricPrompt` in OpenAI chat format that includes an image and use a vision-capable provider such as `openai:gpt-4.1`.
+
+```yaml
+defaultTest:
+  options:
+    provider: openai:gpt-4.1
+    rubricPrompt: |
+      [
+        { "role": "system", "content": "Evaluate if the answer matches the image. Respond with JSON {reason:string, pass:boolean, score:number}" },
+        {
+          "role": "user",
+          "content": [
+            { "type": "image_url", "image_url": { "url": "{{image_url}}" } },
+            { "type": "text", "text": "Output: {{ output }}\nRubric: {{ rubric }}" }
+          ]
+        }
+      ]
+```
 
 #### select-best rubric prompt
 

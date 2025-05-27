@@ -19,5 +19,5 @@
     "swc": true
   },
   "include": ["src/", "typings/**/*", "test/", "./package.json", "src/**/*.json", "test/**/*.json"],
-  "exclude": ["node_modules", "dist", "src/workers/**/*", "src/app/**/*"]
+  "exclude": ["node_modules", "dist", "src/workers/**/*", "src/app/**/*", "test/site/"]
 }

@@ -35,7 +35,7 @@ providers:
 
 tests:
   - vars:
-      model: 'gpt-4o-mini'
+      model: 'gpt-4.1-mini'
       language: 'French'
 ```
 
@@ -143,7 +143,7 @@ tests:
         - role: 'assistant'
           content: 'baz'
       // highlight-end
-      model: 'gpt-4o-mini'
+      model: 'gpt-4.1-mini'
       language: 'French'
 ```
 
@@ -164,6 +164,17 @@ providers:
         q: '{{prompt}}'
         foo: 'bar'
       // highlight-end
+```
+
+## Dynamic URLs
+
+Both the provider `id` and the `url` field support Nunjucks templates. Variables in your test `vars` will be rendered before sending the request.
+
+```yaml
+providers:
+  - id: https://api.example.com/users/{{userId}}/profile
+    config:
+      method: 'GET'
 ```
 
 ## Using as a library
@@ -288,7 +299,7 @@ Extracts the message content from this response:
   "id": "chatcmpl-abc123",
   "object": "chat.completion",
   "created": 1677858242,
-  "model": "gpt-4o-mini",
+  "model": "gpt-4.1-mini",
   "usage": {
     "prompt_tokens": 13,
     "completion_tokens": 7,
@@ -711,7 +722,7 @@ Supported config options:
 
 | Option            | Type                    | Description                                                                                                                                                                         |
 | ----------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| url               | string                  | The URL to send the HTTP request to. If not provided, the `id` of the provider will be used as the URL.                                                                             |
+| url               | string                  | The URL to send the HTTP request to. Supports Nunjucks templates. If not provided, the `id` of the provider will be used as the URL.                                                |
 | request           | string                  | A raw HTTP request to send. This will override the `url`, `method`, `headers`, `body`, and `queryParams` options.                                                                   |
 | method            | string                  | HTTP method (GET, POST, etc). Defaults to POST if body is provided, GET otherwise.                                                                                                  |
 | headers           | Record\<string, string> | Key-value pairs of HTTP headers to include in the request.                                                                                                                          |

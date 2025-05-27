@@ -53,12 +53,14 @@ export function redteamRunCommand(program: Command) {
       telemetry.record('command_used', {
         name: 'redteam run',
       });
+      await telemetry.send();
 
       if (opts.config && UUID_REGEX.test(opts.config)) {
         if (opts.target && !UUID_REGEX.test(opts.target)) {
           throw new Error('Invalid target ID, it must be a valid UUID');
         }
         const configObj = await getConfigFromCloud(opts.config, opts.target);
+
         // backwards compatible for old cloud servers
         if (
           opts.target &&
@@ -71,6 +73,12 @@ export function redteamRunCommand(program: Command) {
         opts.config = undefined;
 
         opts.loadedFromCloud = true;
+      } else if (opts.target) {
+        logger.error(
+          `Target ID (-t) can only be used when -c is used. To use a cloud target inside of a config set the id of the target to ${CLOUD_PROVIDER_PREFIX}${opts.target}. `,
+        );
+        process.exitCode = 1;
+        return;
       }
 
       try {

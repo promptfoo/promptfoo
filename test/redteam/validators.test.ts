@@ -324,6 +324,7 @@ describe('redteamConfigSchema', () => {
       strategies: strategiesExceptDefault,
     };
     const result = RedteamConfigSchema.safeParse(input);
+
     expect(result).toEqual({
       success: true,
       data: expect.objectContaining({
@@ -340,7 +341,10 @@ describe('redteamConfigSchema', () => {
     expect(result.data?.plugins).toHaveLength(
       REDTEAM_ALL_PLUGINS.filter((id) => !COLLECTIONS.includes(id as any)).length,
     );
-    expect(result.data?.strategies).toHaveLength(strategiesExceptDefault.length);
+
+    // The schema deduplicates strategies, so we should expect the unique count
+    const uniqueStrategies = [...new Set(strategiesExceptDefault)];
+    expect(result.data?.strategies).toHaveLength(uniqueStrategies.length);
   });
 
   it('should expand harmful plugin to all harm categories', () => {

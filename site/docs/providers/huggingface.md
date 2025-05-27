@@ -176,7 +176,7 @@ prompts:
   - 'Act as {{act}}. {{prompt}}'
 
 providers:
-  - id: openai:gpt-4o-mini
+  - id: openai:gpt-4.1-mini
 
 tests: huggingface://datasets/fka/awesome-chatgpt-prompts?split=train
 ```

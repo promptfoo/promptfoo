@@ -11,6 +11,7 @@ export const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   base64: 1,
   basic: 1,
   'best-of-n': 1,
+  camelcase: 1,
   citation: 1,
   crescendo: 10,
   default: 1,
@@ -27,6 +28,7 @@ export const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   'math-prompt': 1,
   morse: 1,
   multilingual: 3, // This won't matter, we multiply all probes by number of languages
+  'other-encodings': 1,
   pandamonium: 5,
   piglatin: 1,
   'prompt-injection': 1,

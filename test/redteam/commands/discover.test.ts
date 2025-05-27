@@ -1,14 +1,13 @@
-import type { z } from 'zod';
 import { fetchWithProxy } from '../../../src/fetch';
 import {
   ArgsSchema,
-  DEFAULT_TURN_COUNT,
   doTargetPurposeDiscovery,
-  mergePurposes,
+  mergeTargetPurposeDiscoveryResults,
 } from '../../../src/redteam/commands/discover';
-import type { ApiProvider } from '../../../src/types';
 
 jest.mock('../../../src/fetch');
+
+const mockedFetchWithProxy = jest.mocked(fetchWithProxy);
 
 describe('ArgsSchema', () => {
   it('`config` and `target` are mutually exclusive', () => {
@@ -23,153 +22,245 @@ describe('ArgsSchema', () => {
     expect(success).toBe(false);
     expect(error?.issues[0].message).toBe('Cannot specify both config and target!');
   });
-
-  it('Either `config` or `target` must be provided', () => {
-    const args = {
-      preview: false,
-      overwrite: false,
-    };
-
-    const { success, error } = ArgsSchema.safeParse(args);
-    expect(success).toBe(false);
-    expect(error?.issues[0].message).toBe('Either config or target must be provided!');
-  });
-
-  it('`output` and `preview` are mutually exclusive', () => {
-    const args: z.infer<typeof ArgsSchema> = {
-      config: 'test',
-      output: 'test',
-      preview: true,
-      overwrite: false,
-    };
-
-    const { success, error } = ArgsSchema.safeParse(args);
-    expect(success).toBe(false);
-    expect(error?.issues[0].message).toBe('Cannot specify both output and preview!');
-
-    // Remove the preview flag:
-    args.preview = false;
-    const { success: success2, error: error2 } = ArgsSchema.safeParse(args);
-    expect(success2).toBe(true);
-    expect(error2).toBeUndefined();
-
-    // Remove the output flag:
-    args.preview = true;
-    args.output = undefined;
-    const { success: success3, error: error3 } = ArgsSchema.safeParse(args);
-    expect(success3).toBe(true);
-    expect(error3).toBeUndefined();
-  });
-
-  it('`overwrite` can only be used if `output` is provided', () => {
-    const args: z.infer<typeof ArgsSchema> = {
-      config: 'test',
-      preview: false,
-      overwrite: true,
-    };
-
-    const { success, error } = ArgsSchema.safeParse(args);
-    expect(success).toBe(false);
-    expect(error?.issues[0].message).toBe('Cannot specify overwrite without output!');
-
-    // Remove the overwrite flag:
-    args.output = 'test';
-    args.overwrite = false;
-    const { success: success2, error: error2 } = ArgsSchema.safeParse(args);
-    expect(success2).toBe(true);
-    expect(error2).toBeUndefined();
-
-    // Overwrite to true
-    args.overwrite = true;
-    const { success: success3, error: error3 } = ArgsSchema.safeParse(args);
-    expect(success3).toBe(true);
-    expect(error3).toBeUndefined();
-  });
-
-  it('If `preview` is false, `output` must be provided', () => {
-    const args: z.infer<typeof ArgsSchema> = {
-      config: 'test',
-      preview: false,
-      overwrite: false,
-    };
-
-    const { success, error } = ArgsSchema.safeParse(args);
-    expect(success).toBe(false);
-    expect(error?.issues[0].message).toBe('If preview is false, output must be provided!');
-
-    // Remove the preview flag:
-    args.preview = true;
-    const { success: success2, error: error2 } = ArgsSchema.safeParse(args);
-    expect(success2).toBe(true);
-    expect(error2).toBeUndefined();
-  });
 });
 
-describe('mergePurposes', () => {
+describe('mergeTargetPurposeDiscoveryResults', () => {
   it('should correctly merge human-defined and discovered purposes', () => {
     const humanDefined = 'This is a human defined purpose';
-    const discovered = 'This is a discovered purpose';
-    const expected = `${humanDefined}\n\nDiscovered Purpose:\n\n${discovered}`;
+    const discovered = {
+      purpose: 'This is a discovered purpose',
+      limitations: 'This is a discovered limitation',
+      tools: [
+        {
+          name: 'tool1',
+          description: 'desc1',
+          arguments: [{ name: 'arg1', description: 'desc arg1', type: 'string' }],
+        },
+      ],
+      user: 'This is a discovered user',
+    };
 
-    expect(mergePurposes(humanDefined, discovered)).toBe(expected);
+    const mergedPurpose = mergeTargetPurposeDiscoveryResults(humanDefined, discovered);
+
+    expect(mergedPurpose).toContain(humanDefined);
+    expect(mergedPurpose).toContain(discovered.purpose);
+    expect(mergedPurpose).toContain(discovered.limitations);
+    expect(mergedPurpose).toContain('tool1');
+    expect(mergedPurpose).toContain('desc1');
+    expect(mergedPurpose).toContain('arg1');
+    expect(mergedPurpose).toContain(discovered.user);
+  });
+
+  it('should handle only human-defined purpose', () => {
+    const humanDefined = 'This is a human defined purpose';
+    const mergedPurpose = mergeTargetPurposeDiscoveryResults(humanDefined, undefined);
+
+    expect(mergedPurpose).toContain(humanDefined);
+  });
+
+  it('should handle only discovered purpose', () => {
+    const discovered = {
+      purpose: 'This is a discovered purpose',
+      limitations: 'These are limitations',
+      tools: [
+        { name: 'tool1', description: 'desc1', arguments: [] },
+        { name: 'tool2', description: 'desc2', arguments: [] },
+      ],
+      user: 'This is a discovered user',
+    };
+    const mergedPurpose = mergeTargetPurposeDiscoveryResults(undefined, discovered);
+
+    expect(mergedPurpose).toContain(discovered.purpose);
+    expect(mergedPurpose).toContain(discovered.limitations);
+    expect(mergedPurpose).toContain('tool1');
+    expect(mergedPurpose).toContain('tool2');
+    expect(mergedPurpose).toContain(discovered.user);
+  });
+
+  it('should handle neither purpose being defined', () => {
+    const mergedPurpose = mergeTargetPurposeDiscoveryResults(undefined, undefined);
+    expect(mergedPurpose).toBe('');
+  });
+
+  it('should properly format complex tool structures', () => {
+    const discovered = {
+      purpose: 'purpose',
+      limitations: 'limitations',
+      tools: [
+        {
+          name: 'tool1',
+          description: 'desc1',
+          arguments: [{ name: 'a', description: 'd', type: 'string' }],
+        },
+        {
+          name: 'tool2',
+          description: 'desc2',
+          arguments: [{ name: 'b', description: 'e', type: 'number' }],
+        },
+      ],
+      user: 'user',
+    };
+    const mergedPurpose = mergeTargetPurposeDiscoveryResults(undefined, discovered);
+
+    expect(mergedPurpose).toContain('purpose');
+    expect(mergedPurpose).toContain('limitations');
+    expect(mergedPurpose).toContain('tool1');
+    expect(mergedPurpose).toContain('tool2');
+    expect(mergedPurpose).toContain('desc1');
+    expect(mergedPurpose).toContain('desc2');
+    expect(mergedPurpose).toContain('a');
+    expect(mergedPurpose).toContain('b');
+    expect(mergedPurpose).toContain('user');
   });
 });
 
 describe('doTargetPurposeDiscovery', () => {
-  const mockTarget: ApiProvider = {
-    id: () => 'test-target',
-    callApi: jest.fn().mockResolvedValue({ output: 'test response' }),
-  };
-
   beforeEach(() => {
-    jest.resetAllMocks();
+    jest.clearAllMocks();
   });
 
-  it('should throw error when question is undefined', async () => {
-    const mockFetchResponse = {
-      ok: true,
-      json: () => Promise.resolve({ done: false }),
-      statusText: 'Bad Request',
-    } as Response;
-    jest.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
+  it('should handle empty prompt', async () => {
+    const mockResponses = [
+      {
+        done: false,
+        question: 'What is your purpose?',
+        state: {
+          currentQuestionIndex: 0,
+          answers: [],
+        },
+      },
+      {
+        done: true,
+        purpose: {
+          purpose: 'Test purpose',
+          limitations: 'Test limitations',
+          tools: [
+            {
+              name: 'tool1',
+              description: 'desc1',
+              arguments: [{ name: 'a', description: 'd', type: 'string' }],
+            },
+          ],
+          user: 'Test user',
+        },
+        state: {
+          currentQuestionIndex: 1,
+          answers: ['I am a test assistant'],
+        },
+      },
+    ];
 
-    await expect(doTargetPurposeDiscovery(mockTarget)).rejects.toThrow(
-      'Failed to discover purpose: Bad Request',
+    mockedFetchWithProxy.mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify(mockResponses.shift()), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
     );
+
+    const target = {
+      id: () => 'test',
+      callApi: jest.fn().mockResolvedValue({ output: 'I am a test assistant' }),
+    };
+
+    const discoveredPurpose = await doTargetPurposeDiscovery(target);
+
+    // Verify the target was called with the rendered prompt
+    expect(target.callApi).toHaveBeenCalledWith('What is your purpose?', {
+      prompt: { raw: 'What is your purpose?', label: 'Target Purpose Discovery Question' },
+      vars: { sessionId: expect.any(String) },
+    });
+
+    // Verify fetchWithProxy was called twice
+    expect(mockedFetchWithProxy).toHaveBeenCalledTimes(2);
+
+    // Verify the discovered purpose matches expected output
+    expect(discoveredPurpose).toEqual({
+      purpose: 'Test purpose',
+      limitations: 'Test limitations',
+      tools: [
+        {
+          name: 'tool1',
+          description: 'desc1',
+          arguments: [{ name: 'a', description: 'd', type: 'string' }],
+        },
+      ],
+      user: 'Test user',
+    });
   });
 
-  it('should use DEFAULT_TURN_COUNT when maxTurns not provided', async () => {
-    const mockFetchResponse = {
-      ok: true,
-      json: () => Promise.resolve({ done: true, purpose: 'discovered purpose' }),
-    } as Response;
-    jest.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
+  it('should render the prompt if passed in', async () => {
+    const mockResponses = [
+      {
+        done: false,
+        question: 'What is your purpose?',
+        state: {
+          currentQuestionIndex: 0,
+          answers: [],
+        },
+      },
+      {
+        done: true,
+        purpose: {
+          purpose: 'Test purpose',
+          limitations: 'Test limitations',
+          tools: [
+            {
+              name: 'tool1',
+              description: 'desc1',
+              arguments: [{ name: 'a', description: 'd', type: 'string' }],
+            },
+          ],
+          user: 'Test user',
+        },
+        state: {
+          currentQuestionIndex: 1,
+          answers: ['I am a test assistant'],
+        },
+      },
+    ];
 
-    await doTargetPurposeDiscovery(mockTarget);
-
-    expect(fetchWithProxy).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({
-        body: expect.stringContaining(`"maxTurns":${DEFAULT_TURN_COUNT}`),
-      }),
+    mockedFetchWithProxy.mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify(mockResponses.shift()), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
     );
-  });
 
-  it('should use provided maxTurns value', async () => {
-    const mockFetchResponse = {
-      ok: true,
-      json: () => Promise.resolve({ done: true, purpose: 'discovered purpose' }),
-    } as Response;
-    jest.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
+    const target = {
+      id: () => 'test',
+      callApi: jest.fn().mockResolvedValue({ output: 'I am a test assistant' }),
+    };
+    const prompt = {
+      raw: 'This is a test prompt {{prompt}}',
+      label: 'Test Prompt',
+    };
+    const discoveredPurpose = await doTargetPurposeDiscovery(target, prompt);
 
-    const customTurns = 10;
-    await doTargetPurposeDiscovery(mockTarget, customTurns);
+    // Verify the target was called with the rendered prompt
+    expect(target.callApi).toHaveBeenCalledWith('This is a test prompt What is your purpose?', {
+      prompt: { raw: 'What is your purpose?', label: 'Target Purpose Discovery Question' },
+      vars: { sessionId: expect.any(String) },
+    });
 
-    expect(fetchWithProxy).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({
-        body: expect.stringContaining(`"maxTurns":${customTurns}`),
-      }),
-    );
+    // Verify fetchWithProxy was called twice
+    expect(mockedFetchWithProxy).toHaveBeenCalledTimes(2);
+
+    // Verify the discovered purpose matches expected output
+    expect(discoveredPurpose).toEqual({
+      purpose: 'Test purpose',
+      limitations: 'Test limitations',
+      tools: [
+        {
+          name: 'tool1',
+          description: 'desc1',
+          arguments: [{ name: 'a', description: 'd', type: 'string' }],
+        },
+      ],
+      user: 'Test user',
+    });
   });
 });

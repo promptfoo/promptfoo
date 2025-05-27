@@ -1170,6 +1170,7 @@
                           "system-prompt-override",
                           "tool-discovery",
                           "tool-discovery:multi-turn",
+                          "toxic-chat",
                           "toxicity",
                           "unsafebench",
                           "xstest"
@@ -1338,6 +1339,7 @@
                               "system-prompt-override",
                               "tool-discovery",
                               "tool-discovery:multi-turn",
+                              "toxic-chat",
                               "toxicity",
                               "unsafebench",
                               "xstest"
@@ -1387,6 +1389,7 @@
                           "base64",
                           "basic",
                           "best-of-n",
+                          "camelcase",
                           "citation",
                           "crescendo",
                           "default",
@@ -1403,6 +1406,7 @@
                           "math-prompt",
                           "morse",
                           "multilingual",
+                          "other-encodings",
                           "pandamonium",
                           "piglatin",
                           "prompt-injection",
@@ -1436,7 +1440,7 @@
                   }
                 ]
               },
-              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports audio, base64, basic, best-of-n, citation, crescendo, default, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak:composite, jailbreak:likert, jailbreak:tree, leetspeak, math-prompt, morse, multilingual, pandamonium, piglatin, prompt-injection, retry, rot13, video",
+              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports audio, base64, basic, best-of-n, camelcase, citation, crescendo, default, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak:composite, jailbreak:likert, jailbreak:tree, leetspeak, math-prompt, morse, multilingual, other-encodings, pandamonium, piglatin, prompt-injection, retry, rot13, video",
               "default": [
                 "default"
               ]

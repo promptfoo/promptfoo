@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Comparison of xAI Grok Models'
+
+prompts:
+  - file://./prompt.yaml
+
+providers:
+  # Grok-3 Models (New)
+  - xai:grok-3-fast
+  - id: xai:grok-3-mini-fast
+    config:
+      reasoning_effort: 'high'
+  # Grok-3 Mini with low reasoning (for comparison)
+  # - id: xai:grok-3-mini
+  #   config:
+  #     reasoning_effort: 'low'
+  # Older Grok-2 Models (for comparison)
+  # - xai:grok-2
+  # - xai:grok-2-vision
+
+defaultTest:
+  assert:
+    - type: javascript
+      value: 'output.length >= 100'
+
+tests:
+  - vars:
+      problem: 'A baker has 3 boxes of cookies. Each box contains 15 cookies. He sells 12 cookies. How many cookies does he have left?'

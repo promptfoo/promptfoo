@@ -35,7 +35,11 @@ import type {
   RedteamStrategyObject,
   SynthesizeOptions,
 } from '../types';
-import { doTargetPurposeDiscovery, mergePurposes } from './discover';
+import {
+  type TargetPurposeDiscoveryResult,
+  doTargetPurposeDiscovery,
+  mergeTargetPurposeDiscoveryResults,
+} from './discover';
 
 function getConfigHash(configPath: string): string {
   const content = fs.readFileSync(configPath, 'utf8');
@@ -55,7 +59,6 @@ export async function doGenerateRedteam(
   let redteamConfig: RedteamFileConfig | undefined;
   const configPath = options.config || options.defaultConfigPath;
   const outputPath = options.output || 'redteam.yaml';
-  let finalPurpose = redteamConfig?.purpose ?? options.purpose;
 
   // Check for updates to the config file and decide whether to generate
   let shouldGenerate = options.force;
@@ -80,6 +83,7 @@ export async function doGenerateRedteam(
     shouldGenerate = true;
   }
 
+  let targetPurposeDiscoveryResult: TargetPurposeDiscoveryResult | undefined;
   if (configPath) {
     const resolved = await resolveConfigs(
       {
@@ -104,14 +108,18 @@ export async function doGenerateRedteam(
       );
       const providers = await loadApiProviders(resolved.config.providers);
       try {
-        const generatedPurpose = await doTargetPurposeDiscovery(providers[0]);
-        // Append the discovered purpose to the purpose if it exists:
-        finalPurpose = finalPurpose
-          ? mergePurposes(finalPurpose, generatedPurpose)
-          : generatedPurpose;
+        if (testSuite.prompts.length > 1) {
+          logger.warn(
+            'More than one prompt provided, only the first prompt will be used for purpose discovery',
+          );
+        }
+        targetPurposeDiscoveryResult = await doTargetPurposeDiscovery(
+          providers[0],
+          testSuite.prompts[0],
+        );
       } catch (error) {
         logger.error(
-          `Failed to auto-discover purpose: ${error instanceof Error ? error.message : String(error)}`,
+          `Discovery failed from error, skipping: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
     }
@@ -133,6 +141,11 @@ export async function doGenerateRedteam(
     return null;
   }
 
+  const mergedPurpose = mergeTargetPurposeDiscoveryResults(
+    redteamConfig?.purpose ?? options.purpose,
+    targetPurposeDiscoveryResult,
+  );
+
   const startTime = Date.now();
   telemetry.record('command_used', {
     name: 'generate redteam - started',
@@ -141,6 +154,7 @@ export async function doGenerateRedteam(
     plugins: redteamConfig?.plugins?.map((p) => (typeof p === 'string' ? p : p.id)) || [],
     strategies: redteamConfig?.strategies?.map((s) => (typeof s === 'string' ? s : s.id)) || [],
   });
+  await telemetry.send();
 
   let plugins;
 
@@ -212,7 +226,7 @@ export async function doGenerateRedteam(
     entities: redteamConfig?.entities,
     plugins,
     provider: redteamConfig?.provider || options.provider,
-    purpose: finalPurpose,
+    purpose: mergedPurpose,
     strategies: strategyObjs,
     delay: redteamConfig?.delay || options.delay,
     sharing: redteamConfig?.sharing || options.sharing,
@@ -300,6 +314,7 @@ export async function doGenerateRedteam(
         ...(configPath && redteamTests.length > 0
           ? { configHash: getConfigHash(configPath) }
           : { configHash: 'force-regenerate' }),
+        ...(targetPurposeDiscoveryResult ? { targetPurposeDiscoveryResult } : {}),
       },
     };
     ret = writePromptfooConfig(updatedYaml, options.output);
@@ -345,9 +360,11 @@ export async function doGenerateRedteam(
     };
     existingConfig.tests = [...(existingConfig.tests || []), ...redteamTests];
     existingConfig.redteam = { ...(existingConfig.redteam || {}), ...updatedRedteamConfig };
+    // Add the result of target purpose discovery to metadata if available
     existingConfig.metadata = {
       ...(existingConfig.metadata || {}),
       configHash: getConfigHash(configPath),
+      ...(targetPurposeDiscoveryResult ? { targetPurposeDiscoveryResult } : {}),
     };
     ret = writePromptfooConfig(existingConfig, configPath);
     logger.info(
@@ -371,7 +388,7 @@ export async function doGenerateRedteam(
     plugins: plugins.map((p) => p.id),
     strategies: strategies.map((s) => (typeof s === 'string' ? s : s.id)),
   });
-
+  await telemetry.send();
   return ret;
 }
 
