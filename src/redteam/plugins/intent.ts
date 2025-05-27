@@ -1,9 +1,11 @@
 import dedent from 'dedent';
 import { fetchWithCache } from '../../cache';
+import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { ApiProvider, Assertion, AtomicTestCase, GradingResult, TestCase } from '../../types';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import invariant from '../../util/invariant';
+import { sleep } from '../../util/time';
 import { getRemoteGenerationUrl } from '../remoteGeneration';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
@@ -119,7 +121,7 @@ export class IntentPlugin extends RedteamPluginBase {
       }
 
       if (delayMs > 0) {
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        await sleep(delayMs);
       }
     }
 
