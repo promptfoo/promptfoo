@@ -14,18 +14,27 @@ import { runDbMigrations } from '../src/migrate';
 import Eval from '../src/models/eval';
 import { type ApiProvider, type TestSuite, type Prompt, ResultFailureReason } from '../src/types';
 import { sleep } from '../src/util/time';
+import fs from 'fs';
+import { processConfigFileReferences } from '../src/util/fileReference';
 
 jest.mock('../src/util/fileReference', () => ({
   ...jest.requireActual('../src/util/fileReference'),
   processConfigFileReferences: jest.fn().mockImplementation(async (config) => {
-    if (
-      typeof config === 'object' &&
-      config !== null &&
-      config.var1 === 'file://test/fixtures/test_file.txt'
-    ) {
-      return {
-        var1: '<h1>Sample Report</h1><p>This is a test report with some data for the year 2023.</p>',
-      };
+    if (typeof config === 'object' && config !== null) {
+      if (config.tests && Array.isArray(config.tests)) {
+        const result = {
+          ...config,
+          tests: config.tests.map((test: any) => {
+            return {
+              ...test,
+              vars: test.vars.var1 === 'file://test/fixtures/test_file.txt' 
+                ? { var1: '<h1>Sample Report</h1><p>This is a test report with some data for the year 2023.</p>' }
+                : test.vars
+            };
+          })
+        };
+        return result;
+      }
     }
     return config;
   }),
@@ -281,6 +290,14 @@ describe('evaluator', () => {
   });
 
   it('evaluate with vars from file', async () => {
+    const originalReadFileSync = fs.readFileSync;
+    fs.readFileSync = jest.fn().mockImplementation((path) => {
+      if (path.includes('test_file.txt')) {
+        return '<h1>Sample Report</h1><p>This is a test report with some data for the year 2023.</p>';
+      }
+      return originalReadFileSync(path);
+    });
+
     const evalHelpers = await import('../src/evaluatorHelpers');
     const originalRenderPrompt = evalHelpers.renderPrompt;
 
@@ -303,8 +320,9 @@ describe('evaluator', () => {
     };
 
     try {
-      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-      await evaluate(testSuite, evalRecord, {});
+      const processedTestSuite = await processConfigFileReferences(testSuite);
+      const evalRecord = await Eval.create({}, processedTestSuite.prompts, { id: randomUUID() });
+      await evaluate(processedTestSuite, evalRecord, {});
       const summary = await evalRecord.toEvaluateSummary();
 
       expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
@@ -323,6 +341,7 @@ describe('evaluator', () => {
       expect(summary.results[0].response?.output).toBe('Test output');
     } finally {
       mockRenderPrompt.mockRestore();
+      fs.readFileSync = originalReadFileSync;
     }
   });
 
