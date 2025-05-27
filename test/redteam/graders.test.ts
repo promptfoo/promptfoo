@@ -36,10 +36,9 @@ describe('getGraderById', () => {
 
     const offTopicGrader = getGraderById('promptfoo:redteam:off-topic');
     expect(offTopicGrader).toBeInstanceOf(OffTopicPluginGrader);
-    
+
     const toxicChatGrader = getGraderById('promptfoo:redteam:toxic-chat');
     expect(toxicChatGrader).toBeInstanceOf(ToxicChatGrader);
-
   });
 
   it('should return harmful grader for IDs starting with promptfoo:redteam:harmful', () => {
