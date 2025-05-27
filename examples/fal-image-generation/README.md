@@ -6,96 +6,57 @@ You can run this example with:
 npx promptfoo@latest init --example fal-image-generation
 ```
 
-A simple example demonstrating how to evaluate fal.ai's state-of-the-art image generation models with promptfoo, comparing FLUX models for creative image generation.
+Demonstrates how to evaluate and compare image generation models using promptfoo.
 
-## Environment Variables
+## Setup
 
-This example requires the following environment variable:
+1. **Get your API key** from [fal.ai dashboard](https://fal.ai/dashboard/keys)
+2. **Set environment variable**:
+   ```bash
+   export FAL_KEY=your-fal-key-here
+   ```
+3. **Install client**:
+   ```bash
+   npm install @fal-ai/client
+   ```
+4. **Run the evaluation**:
+   ```bash
+   promptfoo eval
+   ```
 
-- `FAL_KEY` - Your fal.ai API key (get it from [fal.ai dashboard](https://fal.ai/dashboard/keys))
+## What This Example Shows
 
-You can set this in a `.env` file or directly in your environment:
+- **Model comparison**: Two different fal.ai models side-by-side
+- **Creative prompts**: 7 test cases with artistic styles
+- **Reproducible results**: Fixed seeds for consistent outputs
+- **Configuration options**: Different settings per model
+
+## Example Output
+
+The evaluation generates a comparison table showing:
+
+- Model performance across different prompts
+- Generated images in markdown format
+- Execution time and caching behavior
+
+## View Results
 
 ```bash
-export FAL_KEY=your-fal-key-here
-```
-
-## Quick Start
-
-```bash
-# Create this example
-npx promptfoo@latest init --example fal-image-generation
-
-# Set your API key
-export FAL_KEY=your-fal-key-here
-
-# Install the fal.ai client
-npm install @fal-ai/client
-
-# Run the evaluation
-promptfoo eval
-
-# View the results
 promptfoo view
 ```
 
-## What's in this Example
+Opens the web interface to browse generated images and compare model outputs.
 
-This example showcases:
+## Customize the Example
 
-- **Two FLUX Models**: Compares FLUX Schnell (speed) vs FLUX Dev (quality)
-- **Creative Prompts**: Tests various artistic styles and imaginative subjects
-- **Model-Specific Configurations**: Different settings optimized for each model
-- **Artistic Evaluation**: Diverse creative scenarios from classical to modern styles
+Edit `promptfooconfig.yaml` to:
 
-### Models Tested
-
-1. **FLUX Schnell** (`fal-ai/flux/schnell`) - Ultra-fast generation (4 inference steps)
-2. **FLUX Dev** (`fal-ai/flux/dev`) - High-quality balanced model (28 inference steps)
-
-### Test Scenarios
-
-- **Classical Art**: Van Gogh, Picasso, Monet-inspired generations
-- **Animation Styles**: Studio Ghibli aesthetic
-- **Modern Concepts**: Cyberpunk and futuristic themes
-- **Historical Art**: Renaissance and Japanese woodblock print styles
-
-## Key Features
-
-- **Seed Control**: Reproducible results with fixed seeds (seed: 42)
-- **Custom Parameters**: Guidance scale and inference steps optimized per model
-- **Markdown Output**: Images are returned as markdown for easy viewing
-- **Caching**: Automatic caching of expensive image generation calls
-
-## Model Comparison
-
-### FLUX Schnell
-
-- **Speed**: Ultra-fast with 4 inference steps
-- **Guidance Scale**: 3.5 for balanced creativity
-- **Best For**: Quick iterations and rapid prototyping
-
-### FLUX Dev
-
-- **Quality**: High-quality with 28 inference steps
-- **Guidance Scale**: 7.5 for precise prompt following
-- **Image Size**: Landscape 4:3 aspect ratio
-- **Best For**: Final high-quality outputs
-
-## Configuration Notes
-
-- Both models use the same seed (42) for fair comparison
-- Guidance scale affects how closely the model follows the prompt
-- Number of inference steps balances quality vs. speed
-- FLUX Dev includes custom image sizing for better composition
+- Try different models from [fal.ai/models](https://fal.ai/models)
+- Add your own prompts
+- Adjust model parameters
+- Add assertions to test output quality
 
 ## Documentation
 
-- [fal.ai Model Gallery](https://fal.ai/models)
-- [fal.ai API Documentation](https://docs.fal.ai/)
-- [promptfoo fal.ai Provider Documentation](https://promptfoo.dev/docs/providers/fal)
-- [FLUX Model Documentation](https://fal.ai/models/fal-ai/flux)
-
-## Pricing Considerations
-
-fal.ai charges per image generated. FLUX Schnell is more cost-effective for experimentation, while FLUX Dev provides higher quality at a higher cost. Check current pricing at [fal.ai/pricing](https://fal.ai/pricing).
+- [promptfoo fal provider](https://promptfoo.dev/docs/providers/fal)
+- [fal.ai models](https://fal.ai/models)

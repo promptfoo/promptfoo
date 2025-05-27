@@ -1,4 +1,5 @@
 import { getCache, isCacheEnabled } from '../../src/cache';
+import { getEnvString } from '../../src/envars';
 import { FalImageGenerationProvider } from '../../src/providers/fal';
 
 // Mock the fal client
@@ -91,7 +92,6 @@ describe('Fal Provider', () => {
       });
 
       it('should use environment variable for API key when not provided in config', () => {
-        const { getEnvString } = require('../../src/envars');
         jest.mocked(getEnvString).mockReturnValue('env-api-key');
 
         const envProvider = new FalImageGenerationProvider('fal-ai/flux/schnell');
@@ -121,7 +121,6 @@ describe('Fal Provider', () => {
 
     describe('API key validation', () => {
       it('should throw error when API key is not set', async () => {
-        const { getEnvString } = require('../../src/envars');
         jest.mocked(getEnvString).mockReturnValue(undefined);
 
         const noKeyProvider = new FalImageGenerationProvider('fal-ai/flux/schnell');
@@ -340,7 +339,11 @@ describe('Fal Provider', () => {
         const result = await provider.callApi('test prompt');
 
         expect(result.cached).toBe(false);
-        expect(mockSubscribe).toHaveBeenCalled();
+        expect(mockSubscribe).toHaveBeenCalledWith('fal-ai/flux/schnell', {
+          input: {
+            prompt: 'test prompt',
+          },
+        });
         expect(mockCache.set).toHaveBeenCalledWith(
           expect.stringContaining('fal:fal-ai/flux/schnell:'),
           JSON.stringify('![test prompt](https://example.com/image.png)'),
@@ -422,8 +425,14 @@ describe('Fal Provider', () => {
 
         await newProvider.callApi('test prompt');
 
-        expect(mockSubscribe).toHaveBeenCalled();
-        expect(mockConfig).toHaveBeenCalled();
+        expect(mockSubscribe).toHaveBeenCalledWith('fal-ai/flux/schnell', {
+          input: {
+            prompt: 'test prompt',
+          },
+        });
+        expect(mockConfig).toHaveBeenCalledWith({
+          credentials: 'test-api-key',
+        });
       });
     });
   });

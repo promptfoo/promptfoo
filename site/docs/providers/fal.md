@@ -1,205 +1,155 @@
 ---
+title: fal.ai Provider
+description: Connect Promptfoo to fal.ai image generation models for AI image evaluation and testing
 sidebar_position: 42
+keywords: [fal.ai, image generation, AI images, flux, imagen, ideogram, promptfoo provider]
 ---
 
 # fal.ai
 
-The `fal` provider connects promptfoo to [fal.ai](https://fal.ai) image generation models using the [fal-js](https://github.com/fal-ai/fal-js) client.
+The `fal` provider supports the [fal.ai](https://fal.ai) inference API using the [fal-js](https://github.com/fal-ai/fal-js) client, providing a native experience for using fal.ai models in your evaluations.
 
-## Quick Start
+## Setup
 
-1. **Install the client**:
+1. **Install the fal client**:
 
-   ```sh
+   ```bash
    npm install --save @fal-ai/client
    ```
 
-2. **Get your API key** from the [fal dashboard](https://fal.ai/dashboard/keys)
+2. **Create an API key** in the [fal dashboard](https://fal.ai/dashboard/keys)
 
-3. **Set your environment variable**:
-
-   ```sh
+3. **Set the environment variable**:
+   ```bash
    export FAL_KEY=your_api_key_here
    ```
 
-4. **Add to your config**:
+## Provider Format
 
-   ```yaml
-   providers:
-     - fal:image:fal-ai/flux/schnell
-   ```
+To run a model, specify the model type and model name: `fal:<model_type>:<model_name>`.
 
-## Choose Your Model
+### Featured Models
 
-Select a model based on your use case:
+- `fal:image:fal-ai/flux-pro/v1.1-ultra` - Professional-grade image generation with up to 2K resolution
+- `fal:image:fal-ai/flux/schnell` - Fast, high-quality image generation in 1-4 steps
+- `fal:image:fal-ai/fast-sdxl` - High-speed SDXL with LoRA support
 
-**For speed**: `fal:image:fal-ai/flux/schnell` - Generate images in 1-4 steps  
+:::info
+
+Browse the complete [model gallery](https://fal.ai/models) for the latest models and detailed specifications. Model availability and capabilities are frequently updated.
+
+:::
+
+## Popular Models
+
+**For speed**: `fal:image:fal-ai/flux/schnell` - Ultra-fast generation in 1-4 steps  
 **For quality**: `fal:image:fal-ai/flux/dev` - High-quality 12B parameter model  
-**For text/logos**: `fal:image:fal-ai/ideogram/v3` - Excellent typography handling  
-**For professional work**: `fal:image:fal-ai/flux-pro/v1.1-ultra` - Up to 2K resolution
+**For highest quality**: `fal:image:fal-ai/imagen4/preview` - Google's highest quality model  
+**For text/logos**: `fal:image:fal-ai/ideogram/v3` - Exceptional typography handling  
+**For professional work**: `fal:image:fal-ai/flux-pro/v1.1-ultra` - Up to 2K resolution  
+**For vector art**: `fal:image:fal-ai/recraft/v3/text-to-image` - SOTA with vector art and typography  
+**For 4K images**: `fal:image:fal-ai/sana` - 4K generation in under a second  
+**For multimodal**: `fal:image:fal-ai/bagel` - 7B parameter text and image model
 
 Browse all models at [fal.ai/models](https://fal.ai/models?categories=text-to-image).
 
-## Configure Your Provider
+## Environment Variables
+
+| Variable  | Description                              |
+| --------- | ---------------------------------------- |
+| `FAL_KEY` | Your API key for authentication with fal |
+
+## Configuration
+
+Configure the fal provider in your promptfoo configuration file. Here's an example using [`fal-ai/flux/schnell`](https://fal.ai/models/fal-ai/flux/schnell):
+
+:::info
+
+Configuration parameters vary by model. For example, `fast-sdxl` supports additional parameters like `scheduler` and `guidance_scale`. Always check the [model-specific documentation](https://fal.ai/models) for supported parameters.
+
+:::
 
 ### Basic Setup
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: fal:image:fal-ai/flux/schnell
     config:
-      seed: 42
-```
-
-### Control Image Quality
-
-```yaml
-providers:
-  - id: fal:image:fal-ai/flux/dev
-    config:
-      num_inference_steps: 28 # More steps = higher quality
-      guidance_scale: 7.5 # Higher values = closer to prompt
-      seed: 42 # For reproducible results
-```
-
-### Set Image Dimensions
-
-```yaml
-providers:
-  - id: fal:image:fal-ai/flux-pro/v1.1-ultra
-    config:
+      apiKey: your_api_key_here # Alternative to FAL_KEY environment variable
       image_size:
         width: 1024
         height: 1024
-      # Or use aspect ratios for some models:
-      # aspect_ratio: "16:9"
+      num_inference_steps: 8
+      seed: 6252023
 ```
 
-### Enable Advanced Features
+### Advanced Options
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 providers:
-  - id: fal:image:fal-ai/flux-lora
+  - id: fal:image:fal-ai/flux/dev
     config:
-      loras:
-        - path: 'https://example.com/style.safetensors'
-          scale: 0.8
+      num_inference_steps: 28
+      guidance_scale: 7.5
+      seed: 42
+      image_size:
+        width: 1024
+        height: 1024
 ```
 
-## Write Effective Tests
+### Configuration Options
 
-### Compare Model Performance
+| Parameter             | Type   | Description                             | Example             |
+| --------------------- | ------ | --------------------------------------- | ------------------- |
+| `apiKey`              | string | The API key for authentication with fal | `your_api_key_here` |
+| `image_size.width`    | number | The width of the generated image        | `1024`              |
+| `image_size.height`   | number | The height of the generated image       | `1024`              |
+| `num_inference_steps` | number | The number of inference steps to run    | `4` to `50`         |
+| `seed`                | number | Sets a seed for reproducible results    | `42`                |
+| `guidance_scale`      | number | Prompt adherence (model-dependent)      | `3.5` to `15`       |
 
-```yaml
-description: 'Compare speed vs quality'
+## Example Evaluation
+
+```yaml title="promptfooconfig.yaml"
+description: 'Compare image generation models'
 providers:
   - id: fal:image:fal-ai/flux/schnell
-    label: 'Fast (4 steps)'
+    label: 'Fast'
   - id: fal:image:fal-ai/flux/dev
-    label: 'Quality (28 steps)'
+    label: 'Quality'
 prompts:
   - 'A serene mountain landscape at sunset'
 tests:
   - vars: {}
-```
-
-### Test Typography Quality
-
-```yaml
-providers:
-  - fal:image:fal-ai/ideogram/v3
-prompts:
-  - 'Create a logo with the text "{{company_name}}" in modern typography'
-tests:
-  - vars:
-      company_name: 'TechCorp'
-    assert:
-      - type: contains
-        value: '![Create a logo'
-```
-
-### Validate Output Format
-
-```yaml
-tests:
-  - vars:
-      prompt: 'A cute robot'
     assert:
       - type: javascript
         value: |
-          // Verify markdown image format
           return output.startsWith('![') && 
                  output.includes('](') && 
                  output.endsWith(')');
 ```
 
-## Optimize Performance
+Run the eval:
 
-### Enable Caching
-
-Use fixed seeds to cache expensive generations:
-
-```yaml
-providers:
-  - id: fal:image:fal-ai/flux/dev
-    config:
-      seed: 42 # Same seed = same image = cached result
+```bash
+npx promptfoo eval
 ```
 
-### Control Costs
+## Troubleshooting
 
-- Use `flux/schnell` for experimentation (faster, cheaper)
-- Use `flux/dev` or `flux-pro` for final outputs (slower, higher quality)
-- Set `num_inference_steps` lower for faster generation
+:::warning Common Issues
 
-## Troubleshoot Issues
+**"API key is not set"** → Set `FAL_KEY` environment variable  
+**"Could not identify provider"** → Use format `fal:image:model-name`  
+**"Invalid parameters"** → Check model docs, parameters vary by model  
+**Rate limiting** → Add delays between requests
 
-**"API key is not set"**  
-→ Set `FAL_KEY` environment variable or add `apiKey` to config
+:::
 
-**"Could not identify provider"**  
-→ Use format `fal:image:model-name`, check [model gallery](https://fal.ai/models)
+## See Also
 
-**"Invalid parameters"**  
-→ Check model-specific docs, parameters vary by model
-
-**Rate limiting**  
-→ Add delays between requests or reduce concurrency
-
-## Configuration Reference
-
-### Common Parameters
-
-| Parameter             | Type   | Description          | Example                            |
-| --------------------- | ------ | -------------------- | ---------------------------------- |
-| `seed`                | number | Reproducible results | `42`                               |
-| `num_inference_steps` | number | Quality vs speed     | `4` (fast) to `50` (quality)       |
-| `guidance_scale`      | number | Prompt adherence     | `3.5` (creative) to `15` (precise) |
-| `image_size`          | object | Dimensions           | `{width: 1024, height: 1024}`      |
-| `aspect_ratio`        | string | Ratio (some models)  | `"16:9"`, `"1:1"`, `"9:16"`        |
-
-### Model-Specific Options
-
-**FLUX models**: Support `image_size` object or predefined ratios  
-**Ideogram**: Use `magic_prompt_option` for prompt enhancement  
-**LoRA models**: Configure `loras` array with path and scale  
-**Bagel**: Enable `use_thought` for higher quality (+20% cost)
-
-## Migration Guide
-
-Upgrading from `@fal-ai/serverless-client`?
-
-1. **Update package**:
-
-   ```sh
-   npm uninstall @fal-ai/serverless-client
-   npm install @fal-ai/client
-   ```
-
-2. **No config changes needed** - promptfoo handles the migration automatically
-
-## Get Help
-
-- [Model gallery](https://fal.ai/models) - Browse available models
-- [API docs](https://docs.fal.ai/) - Detailed API reference
-- [Discord](https://discord.gg/fal-ai) - Community support
+- [Model gallery](https://fal.ai/models)
+- [API documentation](https://docs.fal.ai/)
+- [fal.ai Discord community](https://discord.gg/fal-ai)
+- [Image Generation Providers](../guides/image-generation.md)
+- [Configuration Reference](../reference/configuration.md)
