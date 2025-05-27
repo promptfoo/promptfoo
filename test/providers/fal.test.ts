@@ -92,7 +92,7 @@ describe('Fal Provider', () => {
       });
 
       it('should use environment variable for API key when not provided in config', () => {
-        jest.mocked(getEnvString).mockReturnValue('env-api-key');
+        jest.mocked(jest.mocked(getEnvString)).mockReturnValue('env-api-key');
 
         const envProvider = new FalImageGenerationProvider('fal-ai/flux/schnell');
 
@@ -121,7 +121,7 @@ describe('Fal Provider', () => {
 
     describe('API key validation', () => {
       it('should throw error when API key is not set', async () => {
-        jest.mocked(getEnvString).mockReturnValue(undefined);
+        jest.mocked(jest.mocked(getEnvString)).mockReturnValue(undefined as any);
 
         const noKeyProvider = new FalImageGenerationProvider('fal-ai/flux/schnell');
 

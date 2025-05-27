@@ -113,5 +113,4 @@ providers:
 - [Model gallery](https://fal.ai/models)
 - [API documentation](https://docs.fal.ai/)
 - [fal.ai Discord community](https://discord.gg/fal-ai)
-- [Image Generation Providers](../guides/image-generation.md)
-- [Configuration Reference](../reference/configuration.md)
+- [Configuration Reference](../configuration/reference.md)
