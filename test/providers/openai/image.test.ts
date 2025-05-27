@@ -1,5 +1,5 @@
 import { fetchWithCache } from '../../../src/cache';
-import { OpenAiImageProvider } from '../../../src/providers/openai/image';
+import { OpenAiImageProvider, validateSizeForModel, calculateImageCost } from '../../../src/providers/openai/image';
 
 jest.mock('../../../src/cache');
 jest.mock('../../../src/logger');
@@ -467,6 +467,137 @@ describe('OpenAiImageProvider', () => {
         expect.any(Object),
         expect.any(Number),
       );
+    });
+  });
+
+  describe('GPT Image 1 model support', () => {
+    it('should support gpt-image-1 model with new features', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-1', {
+        config: {
+          apiKey: 'test-key',
+          size: '1024x1536',
+          quality: 'high',
+          background: 'transparent',
+          format: 'png',
+        },
+      });
+
+      await provider.callApi('test prompt');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"model":"gpt-image-1"'),
+        }),
+        expect.any(Number),
+      );
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"quality":"high"'),
+        }),
+        expect.any(Number),
+      );
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"background":"transparent"'),
+        }),
+        expect.any(Number),
+      );
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"format":"png"'),
+        }),
+        expect.any(Number),
+      );
+    });
+
+    it('should validate sizes for gpt-image-1', () => {
+      const validSizes = ['1024x1024', '1536x1024', '1024x1536', 'auto'];
+      const invalidSizes = ['256x256', '512x512', '1792x1024'];
+
+      validSizes.forEach(size => {
+        const result = validateSizeForModel(size, 'gpt-image-1');
+        expect(result.valid).toBe(true);
+      });
+
+      invalidSizes.forEach(size => {
+        const result = validateSizeForModel(size, 'gpt-image-1');
+        expect(result.valid).toBe(false);
+        expect(result.message).toContain('Invalid size');
+      });
+    });
+
+    it('should calculate costs correctly for gpt-image-1', () => {
+      // Test different quality and size combinations
+      const lowCost = calculateImageCost('gpt-image-1', '1024x1024', 'low', 1);
+      const mediumCost = calculateImageCost('gpt-image-1', '1024x1024', 'medium', 1);
+      const highCost = calculateImageCost('gpt-image-1', '1024x1024', 'high', 1);
+
+      expect(lowCost).toBeCloseTo(272 * 2.5 / 1e6, 8); // 272 tokens * $2.50 per 1M tokens
+      expect(mediumCost).toBeCloseTo(1056 * 2.5 / 1e6, 8); // 1056 tokens * $2.50 per 1M tokens
+      expect(highCost).toBeCloseTo(4160 * 2.5 / 1e6, 8); // 4160 tokens * $2.50 per 1M tokens
+
+      // Test larger size
+      const largeCost = calculateImageCost('gpt-image-1', '1024x1536', 'high', 1);
+      expect(largeCost).toBeCloseTo(6240 * 2.5 / 1e6, 8); // 6240 tokens * $2.50 per 1M tokens
+
+      // Test multiple images
+      const multipleCost = calculateImageCost('gpt-image-1', '1024x1024', 'medium', 3);
+      expect(multipleCost).toBeCloseTo(1056 * 2.5 / 1e6 * 3, 8);
+    });
+
+    it('should handle auto quality setting', () => {
+      const autoCost = calculateImageCost('gpt-image-1', '1024x1024', 'auto', 1);
+      const mediumCost = calculateImageCost('gpt-image-1', '1024x1024', 'medium', 1);
+      expect(autoCost).toBe(mediumCost); // auto should default to medium
+    });
+
+    it('should support additional gpt-image-1 options', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-1', {
+        config: {
+          apiKey: 'test-key',
+          output_compression: 85,
+          moderation: 'low',
+        },
+      });
+
+      await provider.callApi('test prompt');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"output_compression":85'),
+        }),
+        expect.any(Number),
+      );
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"moderation":"low"'),
+        }),
+        expect.any(Number),
+      );
+    });
+
+    it('should handle edit operation placeholder for gpt-image-1', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-1', {
+        config: {
+          apiKey: 'test-key',
+          operation: 'edit',
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toHaveProperty('error');
+      expect(result.error).toContain('Edit operations for GPT Image 1 are not yet implemented');
     });
   });
 });

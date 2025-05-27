@@ -260,7 +260,9 @@ See the [OpenAI vision example](https://github.com/promptfoo/promptfoo/tree/main
 
 ### Generating images
 
-OpenAI supports Dall-E generations via `openai:image:dall-e-3`. See the [OpenAI Dall-E example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-dalle-images).
+OpenAI supports multiple image generation models including DALL-E 2, DALL-E 3, and the new GPT Image 1. See the [OpenAI Image Generation example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-image-generation).
+
+#### Basic Image Generation
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -270,6 +272,7 @@ prompts:
 
 providers:
   - openai:image:dall-e-3
+  - openai:image:gpt-image-1  # New advanced model
 
 tests:
   - vars:
@@ -277,6 +280,74 @@ tests:
   - vars:
       subject: new york city
 ```
+
+#### GPT Image 1 - Advanced Features
+
+GPT Image 1 is OpenAI's most advanced image generation model with superior instruction following, text rendering capabilities, and advanced customization options:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  # GPT Image 1 via Image API
+  - id: openai:image:gpt-image-1
+    config:
+      size: 1024x1024          # Valid: 1024x1024, 1536x1024, 1024x1536, auto
+      quality: high            # Valid: low, medium, high, auto
+      background: transparent  # Valid: transparent, opaque, auto
+      format: png             # Valid: png, jpeg, webp
+      output_compression: 85   # 0-100 for JPEG/WebP compression
+      moderation: auto        # Valid: auto, low
+
+  # GPT Image 1 via Responses API with image generation tool
+  - id: openai:responses:gpt-4.1-mini
+    config:
+      tools:
+        - type: image_generation
+          size: 1024x1024
+          quality: high
+          background: transparent
+          format: png
+```
+
+#### Model Comparison
+
+| Feature                   | DALL-E 2                    | DALL-E 3                        | GPT Image 1                           |
+| ------------------------- | --------------------------- | ------------------------------- | ------------------------------------- |
+| **Sizes**                 | 256x256, 512x512, 1024x1024 | 1024x1024, 1792x1024, 1024x1792 | 1024x1024, 1536x1024, 1024x1536, auto |
+| **Quality Options**       | Standard only               | Standard, HD                    | Low, Medium, High, Auto               |
+| **Background**            | Opaque only                 | Opaque only                     | Transparent, Opaque, Auto             |
+| **Formats**               | PNG only                    | PNG only                        | PNG, JPEG, WebP                       |
+| **Text Rendering**        | Basic                       | Improved                        | Superior                              |
+| **Instruction Following** | Good                        | Better                          | Best                                  |
+| **Real-world Knowledge**  | Limited                     | Limited                         | Extensive                             |
+| **Cost**                  | $0.016-$0.020 per image     | $0.04-$0.12 per image           | Token-based (272-6240 tokens)         |
+
+#### Responses API Integration
+
+GPT Image 1 can be used via the Responses API, enabling advanced features like:
+
+- **Multi-turn image editing**: Iteratively refine images across conversation turns
+- **Streaming**: Display partial images as they're generated
+- **Tool integration**: Combine image generation with other tools and functions
+- **Conversational refinement**: Natural language image editing
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:gpt-4.1-mini
+    config:
+      tools:
+        - type: image_generation
+          size: auto
+          quality: auto
+          background: auto
+          partial_images: 2  # Show 2 partial images during generation
+```
+
+#### Response Formats
+
+- `response_format: url` (default) - Returns image URLs that expire after ~2 hours
+- `response_format: b64_json` - Returns raw JSON with base64-encoded image data
+
+#### Display in Web Viewer
 
 To display images in the web viewer, wrap vars or outputs in markdown image tags like so:
 

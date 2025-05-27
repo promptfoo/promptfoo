@@ -12,6 +12,25 @@ providers:
       size: 512x512 # Valid sizes for DALL-E 2: 256x256, 512x512, 1024x1024
       # response_format: b64_json # Returns the raw JSON response with base64-encoded image data
 
+  # New GPT Image 1 model with advanced features
+  - id: openai:image:gpt-image-1
+    config:
+      size: 1024x1024 # Valid sizes for GPT Image 1: 1024x1024, 1536x1024, 1024x1536, auto
+      quality: high # Valid qualities: low, medium, high, auto
+      background: transparent # Valid backgrounds: transparent, opaque, auto
+      format: png # Valid formats: png, jpeg, webp
+      # output_compression: 80 # For JPEG/WebP: 0-100
+      # moderation: auto # Valid values: auto, low
+
+  # GPT Image 1 via Responses API with image generation tool
+  - id: openai:responses:gpt-4.1-mini
+    config:
+      tools:
+        - type: image_generation
+          size: 1024x1024
+          quality: high
+          background: transparent
+
 tests:
   - vars:
       artist: Van Gogh

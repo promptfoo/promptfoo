@@ -1680,4 +1680,103 @@ describe('OpenAiResponsesProvider', () => {
     expect(body.max_output_tokens).toBe(1000);
     expect(body.temperature).toBeUndefined(); // codex-mini-latest model should not have temperature
   });
+
+  describe('Image generation support', () => {
+    it('should handle image generation calls in responses', async () => {
+      const provider = new OpenAiResponsesProvider('gpt-4.1-mini');
+
+      const mockResponse = {
+        data: {
+          output: [
+            {
+              type: 'image_generation_call',
+              id: 'ig_123',
+              status: 'completed',
+              revised_prompt: 'A beautiful sunset over mountains',
+              result: 'base64ImageDataHere',
+            },
+          ],
+          usage: {
+            input_tokens: 10,
+            output_tokens: 0,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse);
+
+      const result = await provider.callApi('Generate an image of a sunset');
+
+      expect(result.output).toBe(JSON.stringify({
+        type: 'image_generation',
+        id: 'ig_123',
+        revised_prompt: 'A beautiful sunset over mountains',
+        result: 'base64ImageDataHere',
+      }));
+      expect(result.isBase64).toBe(true);
+      expect(result.format).toBe('json');
+    });
+
+    it('should handle failed image generation calls', async () => {
+      const provider = new OpenAiResponsesProvider('gpt-4.1-mini');
+
+      const mockResponse = {
+        data: {
+          output: [
+            {
+              type: 'image_generation_call',
+              id: 'ig_123',
+              status: 'failed',
+              error: 'Content policy violation',
+            },
+          ],
+          usage: {
+            input_tokens: 10,
+            output_tokens: 0,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse);
+
+      const result = await provider.callApi('Generate an inappropriate image');
+
+      expect(result.error).toContain('Image generation failed: Content policy violation');
+    });
+
+    it('should handle incomplete image generation calls', async () => {
+      const provider = new OpenAiResponsesProvider('gpt-4.1-mini');
+
+      const mockResponse = {
+        data: {
+          output: [
+            {
+              type: 'image_generation_call',
+              id: 'ig_123',
+              status: 'in_progress',
+            },
+          ],
+          usage: {
+            input_tokens: 10,
+            output_tokens: 0,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse);
+
+      const result = await provider.callApi('Generate an image');
+
+      expect(result.error).toContain('Image generation incomplete: status in_progress');
+    });
+  });
 });

@@ -233,11 +233,33 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       let result = '';
       let refusal = '';
       let isRefusal = false;
+      let hasImageGeneration = false;
 
       // Process all output items
       for (const item of output) {
         if (item.type === 'function_call') {
           result = JSON.stringify(item);
+        } else if (item.type === 'image_generation_call') {
+          // Handle image generation calls
+          hasImageGeneration = true;
+          if (item.status === 'completed' && item.result) {
+            // Format the image as base64 JSON or markdown depending on the use case
+            // For now, we'll return the base64 data as JSON
+            result = JSON.stringify({
+              type: 'image_generation',
+              id: item.id,
+              revised_prompt: item.revised_prompt,
+              result: item.result, // This is the base64 image data
+            });
+          } else if (item.status === 'failed') {
+            return {
+              error: `Image generation failed: ${item.error || 'Unknown error'}`,
+            };
+          } else {
+            return {
+              error: `Image generation incomplete: status ${item.status}`,
+            };
+          }
         } else if (item.type === 'message' && item.role === 'assistant') {
           if (item.content) {
             for (const contentItem of item.content) {
@@ -300,6 +322,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           0,
         ),
         raw: data,
+        ...(hasImageGeneration ? { isBase64: true, format: 'json' } : {}),
       };
     } catch (err) {
       await data?.deleteFromCache?.();

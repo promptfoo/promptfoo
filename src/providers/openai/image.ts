@@ -8,13 +8,18 @@ import { REQUEST_TIMEOUT_MS } from '../shared';
 import type { OpenAiSharedOptions } from './types';
 import { formatOpenAiError } from './util';
 
-export type OpenAiImageModel = 'dall-e-2' | 'dall-e-3';
+export type OpenAiImageModel = 'dall-e-2' | 'dall-e-3' | 'gpt-image-1';
 export type OpenAiImageOperation = 'generation' | 'variation' | 'edit';
 export type DallE2Size = '256x256' | '512x512' | '1024x1024';
 export type DallE3Size = '1024x1024' | '1792x1024' | '1024x1792';
+export type GptImageSize = '1024x1024' | '1536x1024' | '1024x1536' | 'auto';
+export type GptImageQuality = 'low' | 'medium' | 'high' | 'auto';
+export type GptImageBackground = 'transparent' | 'opaque' | 'auto';
+export type GptImageFormat = 'png' | 'jpeg' | 'webp';
 
 export const DALLE2_VALID_SIZES: DallE2Size[] = ['256x256', '512x512', '1024x1024'];
 export const DALLE3_VALID_SIZES: DallE3Size[] = ['1024x1024', '1792x1024', '1024x1792'];
+export const GPT_IMAGE_VALID_SIZES: GptImageSize[] = ['1024x1024', '1536x1024', '1024x1536', 'auto'];
 export const DEFAULT_SIZE = '1024x1024';
 
 export const DALLE2_COSTS: Record<DallE2Size, number> = {
@@ -31,6 +36,22 @@ export const DALLE3_COSTS: Record<string, number> = {
   hd_1024x1792: 0.12,
   hd_1792x1024: 0.12,
 };
+
+// GPT Image 1 costs based on quality and size (tokens per image)
+export const GPT_IMAGE_COSTS: Record<string, number> = {
+  low_1024x1024: 272,
+  low_1024x1536: 408,
+  low_1536x1024: 400,
+  medium_1024x1024: 1056,
+  medium_1024x1536: 1584,
+  medium_1536x1024: 1568,
+  high_1024x1024: 4160,
+  high_1024x1536: 6240,
+  high_1536x1024: 6208,
+};
+
+// GPT Image 1 token cost per token (based on OpenAI pricing)
+export const GPT_IMAGE_TOKEN_COST = 2.5 / 1e6; // $2.50 per 1M tokens
 
 type CommonImageOptions = {
   n?: number;
@@ -50,9 +71,21 @@ type DallE2Options = CommonImageOptions & {
   operation?: OpenAiImageOperation;
 };
 
+type GptImageOptions = CommonImageOptions & {
+  size?: GptImageSize;
+  quality?: GptImageQuality;
+  background?: GptImageBackground;
+  format?: GptImageFormat;
+  output_compression?: number; // 0-100 for JPEG and WebP
+  moderation?: 'auto' | 'low';
+  image?: string | string[]; // Base64-encoded image(s) or image URL(s) for editing
+  mask?: string; // Base64-encoded mask image for editing
+  operation?: OpenAiImageOperation;
+};
+
 type OpenAiImageOptions = OpenAiSharedOptions & {
   model?: OpenAiImageModel;
-} & (DallE2Options | DallE3Options);
+} & (DallE2Options | DallE3Options | GptImageOptions);
 
 export function validateSizeForModel(
   size: string,
@@ -69,6 +102,13 @@ export function validateSizeForModel(
     return {
       valid: false,
       message: `Invalid size "${size}" for DALL-E 2. Valid sizes are: ${DALLE2_VALID_SIZES.join(', ')}`,
+    };
+  }
+
+  if (model === 'gpt-image-1' && !GPT_IMAGE_VALID_SIZES.includes(size as GptImageSize)) {
+    return {
+      valid: false,
+      message: `Invalid size "${size}" for GPT Image 1. Valid sizes are: ${GPT_IMAGE_VALID_SIZES.join(', ')}`,
     };
   }
 
@@ -126,6 +166,35 @@ export function prepareRequestBody(
     if ('style' in config && config.style) {
       body.style = config.style;
     }
+  } else if (model === 'gpt-image-1') {
+    if ('quality' in config && config.quality) {
+      body.quality = config.quality;
+    }
+
+    if ('background' in config && config.background) {
+      body.background = config.background;
+    }
+
+    if ('format' in config && config.format) {
+      body.format = config.format;
+    }
+
+    if ('output_compression' in config && config.output_compression !== undefined) {
+      body.output_compression = config.output_compression;
+    }
+
+    if ('moderation' in config && config.moderation) {
+      body.moderation = config.moderation;
+    }
+
+    // Handle image editing for gpt-image-1
+    if ('image' in config && config.image) {
+      body.image = config.image;
+    }
+
+    if ('mask' in config && config.mask) {
+      body.mask = config.mask;
+    }
   }
 
   return body;
@@ -146,6 +215,12 @@ export function calculateImageCost(
   } else if (model === 'dall-e-2') {
     const costPerImage = DALLE2_COSTS[size as DallE2Size] || DALLE2_COSTS['1024x1024'];
     return costPerImage * n;
+  } else if (model === 'gpt-image-1') {
+    // For gpt-image-1, cost is based on tokens
+    const qualityLevel = quality === 'auto' ? 'medium' : (quality || 'medium');
+    const costKey = `${qualityLevel}_${size}`;
+    const tokensPerImage = GPT_IMAGE_COSTS[costKey] || GPT_IMAGE_COSTS['medium_1024x1024'];
+    return tokensPerImage * GPT_IMAGE_TOKEN_COST * n;
   }
 
   return 0.04 * n;
@@ -238,13 +313,21 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
     const operation = ('operation' in config && config.operation) || 'generation';
     const responseFormat = config.response_format || 'url';
 
+    // For now, only support generation operations for all models
+    // TODO: Add support for edit and variation operations for gpt-image-1
     if (operation !== 'generation') {
+      if (model === 'gpt-image-1' && operation === 'edit') {
+        // gpt-image-1 supports editing, but we'll implement this later
+        return {
+          error: `Edit operations for GPT Image 1 are not yet implemented. Use generation for now.`,
+        };
+      }
       return {
         error: `Only 'generation' operations are currently supported. '${operation}' operations are not implemented.`,
       };
     }
 
-    const endpoint = '/images/generations';
+    const endpoint = operation === 'edit' ? '/images/edits' : '/images/generations';
     const size = config.size || DEFAULT_SIZE;
 
     const sizeValidation = validateSizeForModel(size as string, model);

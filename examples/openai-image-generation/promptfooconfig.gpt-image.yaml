@@ -1,0 +1,57 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: GPT Image 1 Model Examples - Advanced Image Generation
+
+prompts:
+  - 'Generate an image: {{prompt}}'
+
+providers:
+  # GPT Image 1 via Image API with different quality settings
+  - id: openai:image:gpt-image-1
+    label: GPT Image 1 (High Quality)
+    config:
+      size: 1024x1024
+      quality: high
+      background: opaque
+      format: png
+
+  - id: openai:image:gpt-image-1
+    label: GPT Image 1 (Medium Quality)
+    config:
+      size: 1024x1536
+      quality: medium
+      background: transparent
+      format: png
+
+  - id: openai:image:gpt-image-1
+    label: GPT Image 1 (Auto Settings)
+    config:
+      size: auto
+      quality: auto
+      background: auto
+      format: webp
+      output_compression: 85
+
+  # GPT Image 1 via Responses API with image generation tool
+  - id: openai:responses:gpt-4.1-mini
+    label: Responses API with Image Generation
+    config:
+      tools:
+        - type: image_generation
+          size: 1024x1024
+          quality: high
+          background: transparent
+          format: png
+
+tests:
+  - vars:
+      prompt: A futuristic cityscape at sunset with flying cars and neon lights
+  - vars:
+      prompt: A serene mountain lake with crystal clear water reflecting snow-capped peaks
+  - vars:
+      prompt: A steampunk robot playing chess in a Victorian library
+  - vars:
+      prompt: An underwater coral reef teeming with colorful fish and marine life
+  - vars:
+      prompt: A magical forest with glowing mushrooms and fairy lights
+  - vars:
+      prompt: A space station orbiting Earth with astronauts doing a spacewalk 
