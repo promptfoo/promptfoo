@@ -168,3 +168,5 @@ export async function checkCanary(provider: ApiProvider | ProviderOptions): Prom
     throw e;
   }
 }
+
+export { serializeProviderForHashing };
