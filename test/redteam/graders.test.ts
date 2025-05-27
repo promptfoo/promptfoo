@@ -2,12 +2,12 @@ import { getGraderById } from '../../src/redteam/graders';
 import { AsciiSmugglingGrader } from '../../src/redteam/plugins/asciiSmuggling';
 import { BeavertailsGrader } from '../../src/redteam/plugins/beavertails';
 import { HarmfulGrader } from '../../src/redteam/plugins/harmful/graders';
+import { OpenAIModerationGrader } from '../../src/redteam/plugins/openaiModeration';
 import { PlinyGrader } from '../../src/redteam/plugins/pliny';
 import { ToolDiscoveryGrader } from '../../src/redteam/plugins/toolDiscovery';
 import { ToolDiscoveryMultiTurnGrader } from '../../src/redteam/plugins/toolDiscoveryMultiTurn';
 import { ToxicChatGrader } from '../../src/redteam/plugins/toxicchat';
 import { UnsafeBenchGrader } from '../../src/redteam/plugins/unsafebench';
-import { OpenAIModerationGrader } from '../../src/redteam/plugins/openaiModeration';
 
 describe('getGraderById', () => {
   it('should return correct grader for valid ID', () => {
