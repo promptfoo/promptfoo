@@ -67,7 +67,7 @@ export class IntentPlugin extends RedteamPluginBase {
       );
 
       if (status !== 200) {
-        console.warn(`Failed to extract intent from prompt: HTTP ${status}`);
+        logger.warn(`Failed to extract intent from prompt: HTTP ${status}`);
         return prompt;
       }
 
