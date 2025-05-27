@@ -927,6 +927,128 @@ The Responses API configuration supports these parameters in addition to standar
 | `truncation`           | Strategy to handle context window overflow        | 'disabled' | 'auto', 'disabled'                  |
 | `reasoning`            | Configuration for reasoning models                | None       | Object with `effort` field          |
 
+### MCP (Model Context Protocol) Support
+
+The Responses API supports OpenAI's MCP integration, allowing models to use remote MCP servers to perform tasks. MCP tools enable access to external services and APIs through a standardized protocol.
+
+#### Basic MCP Configuration
+
+To use MCP tools with the Responses API, add them to the `tools` array:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:gpt-4.1
+    config:
+      tools:
+        - type: mcp
+          server_label: deepwiki
+          server_url: https://mcp.deepwiki.com/mcp
+          require_approval: never
+```
+
+#### MCP Tool Configuration Options
+
+| Parameter          | Description                             | Required | Options                                  |
+| ------------------ | --------------------------------------- | -------- | ---------------------------------------- |
+| `type`             | Tool type (must be 'mcp')               | Yes      | 'mcp'                                    |
+| `server_label`     | Label to identify the MCP server        | Yes      | Any string                               |
+| `server_url`       | URL of the remote MCP server            | Yes      | Valid URL                                |
+| `require_approval` | Approval settings for tool calls        | No       | 'never' or object with approval settings |
+| `allowed_tools`    | Specific tools to allow from the server | No       | Array of tool names                      |
+| `headers`          | Custom headers for authentication       | No       | Object with header key-value pairs       |
+
+#### Authentication with MCP Servers
+
+Most MCP servers require authentication. Use the `headers` parameter to provide API keys or tokens:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:gpt-4.1
+    config:
+      tools:
+        - type: mcp
+          server_label: stripe
+          server_url: https://mcp.stripe.com
+          headers:
+            Authorization: "Bearer sk-test_..."
+          require_approval: never
+```
+
+#### Filtering MCP Tools
+
+To limit which tools are available from an MCP server, use the `allowed_tools` parameter:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:gpt-4.1
+    config:
+      tools:
+        - type: mcp
+          server_label: deepwiki
+          server_url: https://mcp.deepwiki.com/mcp
+          allowed_tools: ["ask_question"]
+          require_approval: never
+```
+
+#### Approval Settings
+
+By default, OpenAI requires approval before sharing data with MCP servers. You can configure approval settings:
+
+```yaml title="promptfooconfig.yaml"
+# Never require approval for all tools
+providers:
+  - id: openai:responses:gpt-4.1
+    config:
+      tools:
+        - type: mcp
+          server_label: deepwiki
+          server_url: https://mcp.deepwiki.com/mcp
+          require_approval: never
+
+# Never require approval for specific tools only
+providers:
+  - id: openai:responses:gpt-4.1
+    config:
+      tools:
+        - type: mcp
+          server_label: deepwiki
+          server_url: https://mcp.deepwiki.com/mcp
+          require_approval:
+            never:
+              tool_names: ["ask_question", "read_wiki_structure"]
+```
+
+#### Complete MCP Example
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+prompts:
+  - "What are the transport protocols supported in the MCP specification for {{repo}}?"
+
+providers:
+  - id: openai:responses:gpt-4.1
+    config:
+      tools:
+        - type: mcp
+          server_label: deepwiki
+          server_url: https://mcp.deepwiki.com/mcp
+          require_approval: never
+          allowed_tools: ["ask_question"]
+
+tests:
+  - vars:
+      repo: modelcontextprotocol/modelcontextprotocol
+    assert:
+      - type: contains
+        value: "transport protocols"
+```
+
+For a complete working example, see the [OpenAI MCP example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-mcp) or initialize it with:
+
+```bash
+npx promptfoo@latest init --example openai-mcp
+```
+
 ### Reasoning Models
 
 When using reasoning models like `o1`, `o1-pro`, `o3`, `o3-mini`, or `o4-mini`, you can control the reasoning effort:
