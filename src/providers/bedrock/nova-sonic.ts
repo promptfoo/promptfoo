@@ -9,6 +9,7 @@ import { randomUUID } from 'node:crypto';
 import { Subject } from 'rxjs';
 import { firstValueFrom } from 'rxjs';
 import { take } from 'rxjs/operators';
+import { AwsBedrockGenericProvider, type BedrockAmazonNovaSonicGenerationOptions } from '.';
 import logger from '../../logger';
 import type {
   ApiProvider,
@@ -16,10 +17,6 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../../types/providers';
-import {
-  AwsBedrockGenericProvider,
-  type BedrockAmazonNovaSonicGenerationOptions,
-} from '../bedrock';
 
 // Configuration types
 interface SessionState {

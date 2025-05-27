@@ -199,8 +199,9 @@ describe('RedteamIterativeProvider', () => {
       const redteamHistory: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
         { role: 'system', content: 'System prompt' },
       ];
-      // eslint-disable-next-line jest/require-to-throw-message
-      await expect(getNewPrompt(mockRedteamProvider, redteamHistory)).rejects.toThrow();
+      await expect(getNewPrompt(mockRedteamProvider, redteamHistory)).rejects.toThrow(
+        'Expected a JSON object',
+      );
     });
 
     it('should handle empty history correctly', async () => {
@@ -273,7 +274,7 @@ describe('RedteamIterativeProvider', () => {
 
       await expect(
         checkIfOnTopic(mockRedteamProvider, 'On-topic system prompt', 'Target prompt'),
-      ).rejects.toThrow(); // eslint-disable-line jest/require-to-throw-message
+      ).rejects.toThrow('Expected a JSON object');
     });
 
     it('should throw an error for unexpected API response format', async () => {

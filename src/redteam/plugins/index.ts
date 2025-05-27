@@ -46,6 +46,7 @@ import { ShellInjectionPlugin } from './shellInjection';
 import { SqlInjectionPlugin } from './sqlInjection';
 import { ToolDiscoveryPlugin } from './toolDiscovery';
 import { ToolDiscoveryMultiTurnPlugin } from './toolDiscoveryMultiTurn';
+import { ToxicChatPlugin } from './toxicchat';
 import { UnsafeBenchPlugin } from './unsafebench';
 import { XSTestPlugin } from './xstest';
 
@@ -172,6 +173,7 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(ToolDiscoveryPlugin, 'tool-discovery'),
   createPluginFactory(ToolDiscoveryMultiTurnPlugin, 'tool-discovery:multi-turn'),
   createPluginFactory(HarmbenchPlugin, 'harmbench'),
+  createPluginFactory(ToxicChatPlugin, 'toxic-chat'),
   createPluginFactory(HallucinationPlugin, 'hallucination'),
   createPluginFactory(ImitationPlugin, 'imitation'),
   createPluginFactory<{ intent: string }>(IntentPlugin, 'intent', (config: { intent: string }) =>

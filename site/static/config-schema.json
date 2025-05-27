@@ -1171,6 +1171,7 @@
                           "system-prompt-override",
                           "tool-discovery",
                           "tool-discovery:multi-turn",
+                          "toxic-chat",
                           "toxicity",
                           "unsafebench",
                           "xstest"
@@ -1340,6 +1341,7 @@
                               "system-prompt-override",
                               "tool-discovery",
                               "tool-discovery:multi-turn",
+                              "toxic-chat",
                               "toxicity",
                               "unsafebench",
                               "xstest"
