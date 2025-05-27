@@ -37,6 +37,14 @@ import invariant from '../util/invariant';
 import { getCurrentTimestamp } from '../util/time';
 import EvalResult from './evalResult';
 
+interface FilteredCountRow {
+  count: number | null;
+}
+
+interface TestIndexRow {
+  test_idx: number;
+}
+
 export function createEvalId(createdAt: Date = new Date()) {
   return `eval-${randomSequence(3)}-${createdAt.toISOString().slice(0, 19)}`;
 }
@@ -473,8 +481,7 @@ export default class Eval {
       `SELECT COUNT(DISTINCT test_idx) as count FROM eval_results WHERE ${whereSql}`,
     );
     const countStart = Date.now();
-    // @ts-ignore
-    const countResult: { count: number } = await db.get(filteredCountQuery);
+    const countResult = await db.get<FilteredCountRow>(filteredCountQuery);
     const countEnd = Date.now();
     logger.debug(`Count query took ${countEnd - countStart}ms`);
     const filteredCount = countResult?.count || 0;
@@ -484,8 +491,7 @@ export default class Eval {
       `SELECT DISTINCT test_idx FROM eval_results WHERE ${whereSql} ORDER BY test_idx LIMIT ${limit} OFFSET ${offset}`,
     );
     const idxStart = Date.now();
-    // @ts-ignore
-    const rows: { test_idx: number }[] = await db.all(idxQuery);
+    const rows = await db.all<TestIndexRow>(idxQuery);
     const idxEnd = Date.now();
     logger.debug(`Index query took ${idxEnd - idxStart}ms`);
 
