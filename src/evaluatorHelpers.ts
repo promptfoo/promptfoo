@@ -344,6 +344,37 @@ export async function runExtensionHook<HookName extends keyof HookContextMap>(
     return context;
   }
 
+  // Guard against type drift by validating the passed context object. This should be caught upstream
+  // so these errors are considered invariants.
+  switch (hookName) {
+    case 'beforeAll': {
+      const parsed = BeforeAllExtensionHookContextSchema.safeParse(context);
+      invariant(
+        parsed.success,
+        `Invalid context passed to beforeAll hook: ${parsed.error?.message}`,
+      );
+      break;
+    }
+    // case 'beforeEach':
+    //   invariant(
+    //     BeforeEachExtensionHookContextSchema.safeParse(context).success,
+    //     `Invalid context passed to beforeEach hook`,
+    //   );
+    //   break;
+    // case 'afterEach':
+    //   invariant(
+    //     AfterEachExtensionHookContextSchema.safeParse(context).success,
+    //     `Invalid context passed to afterEach hook`,
+    //   );
+    //   break;
+    // case 'afterAll':
+    //   invariant(
+    //     AfterAllExtensionHookContextSchema.safeParse(context).success,
+    //     `Invalid context passed to afterAll hook`,
+    //   );
+    //   break;
+  }
+
   // TODO(Will): It would be nice if this logged the hooks used.
   telemetry.recordOnce('feature_used', {
     feature: 'extension_hook',
