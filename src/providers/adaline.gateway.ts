@@ -20,6 +20,7 @@ import type {
   EmbeddingRequestsType as GatewayEmbeddingRequestsType,
 } from '@adaline/types';
 import { Vertex as GatewayVertex } from '@adaline/vertex';
+import type { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions/completions';
 import { isCacheEnabled, getCache } from '../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
@@ -598,7 +599,11 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
     }
 
     try {
-      let output = '';
+      let output:
+        | string
+        | ChatCompletionMessageToolCall[]
+        | { content: string; tool_calls: ChatCompletionMessageToolCall[] }
+        | GatewayMessageType[] = '';
       if (
         response.response.messages[0].content.length === 1 &&
         response.response.messages[0].content[0].modality === 'text'
@@ -636,7 +641,7 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
                     },
                   };
                 }),
-            } as any;
+            };
           } else {
             // response has only tool-call content
             output = response.response.messages[0].content
@@ -650,10 +655,10 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
                     arguments: content.arguments,
                   },
                 };
-              }) as any;
+              });
           }
         } else {
-          output = response.response.messages[0].content as any;
+          output = response.response.messages[0].content;
         }
       }
 
