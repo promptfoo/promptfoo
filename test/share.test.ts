@@ -375,14 +375,14 @@ describe('createShareableUrl', () => {
       await createShareableUrl(mockEval as Eval);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://api.example.com/results',
+        'https://api.example.com/api/v1/results',
         expect.objectContaining({
           method: 'POST',
           body: expect.stringContaining('"results":[]'),
         }),
       );
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://api.example.com/results/mock-eval-id/results',
+        'https://api.example.com/api/v1/results/mock-eval-id/results',
         expect.objectContaining({
           method: 'POST',
           body: expect.stringContaining('[{"id":"1"},{"id":"2"}]'),
@@ -406,14 +406,14 @@ describe('createShareableUrl', () => {
       const result = await createShareableUrl(mockEval as Eval);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/eval'),
+        expect.stringContaining('/api/v1/eval'),
         expect.objectContaining({
           method: 'POST',
           body: expect.stringContaining('"results":[]'),
         }),
       );
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringMatching(`/api/eval/${mockEval.id}/results`),
+        expect.stringMatching(`/api/v1/eval/${mockEval.id}/results`),
         expect.objectContaining({
           method: 'POST',
           body: expect.stringContaining('[{"id":"1"},{"id":"2"}]'),

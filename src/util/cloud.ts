@@ -9,7 +9,7 @@ import invariant from './invariant';
 export function makeRequest(path: string, method: string, body?: any): Promise<Response> {
   const apiHost = cloudConfig.getApiHost();
   const apiKey = cloudConfig.getApiKey();
-  const url = `${apiHost}/${path}`;
+  const url = `${apiHost}/api/v1/${path.startsWith('/') ? path.slice(1) : path}`;
   try {
     return fetchWithProxy(url, {
       method,
@@ -32,7 +32,7 @@ export async function getProviderFromCloud(id: string): Promise<ProviderOptions 
     );
   }
   try {
-    const response = await makeRequest(`api/v1/providers/${id}`, 'GET');
+    const response = await makeRequest(`providers/${id}`, 'GET');
 
     if (!response.ok) {
       const errorMessage = await response.text();
@@ -65,7 +65,7 @@ export async function getConfigFromCloud(id: string, providerId?: string): Promi
   }
   try {
     const response = await makeRequest(
-      `api/v1/redteam/configs/${id}/unified${providerId ? `?providerId=${providerId}` : ''}`,
+      `redteam/configs/${id}/unified${providerId ? `?providerId=${providerId}` : ''}`,
       'GET',
     );
     if (!response.ok) {
