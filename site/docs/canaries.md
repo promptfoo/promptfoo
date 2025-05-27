@@ -34,7 +34,7 @@ providers: # or "targets"
 
 The canary commands will automatically use all providers from your configuration file. If you have multiple providers defined, it will send/check canaries for all of them.
 
-For more information on configuring providers, see the [provider documentation](/docs/configuration/providers/).
+For more information on configuring providers, see the [provider documentation](/docs/providers/).
 
 ### Sending a Canary
 
