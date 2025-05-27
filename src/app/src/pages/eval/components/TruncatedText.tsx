@@ -1,4 +1,4 @@
-import * as React from 'react';
+import React from 'react';
 
 function textLength(node: React.ReactNode): number {
   if (typeof node === 'string' || typeof node === 'number') {
