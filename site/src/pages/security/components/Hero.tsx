@@ -3,7 +3,7 @@ import Link from '@docusaurus/Link';
 import { scrollToTop } from '../../../utils/navigation';
 import styles from '../styles.module.css';
 
-export default function Hero(): JSX.Element {
+export default function Hero(): React.JSX.Element {
   return (
     <section className={styles.hero}>
       <div className={styles.container}>

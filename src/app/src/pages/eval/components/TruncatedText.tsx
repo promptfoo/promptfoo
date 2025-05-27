@@ -7,11 +7,14 @@ function textLength(node: React.ReactNode): number {
   if (Array.isArray(node)) {
     return node.reduce((acc, child) => acc + textLength(child), 0);
   }
-  if (React.isValidElement(node) && node.props.children) {
-    return React.Children.toArray(node.props.children).reduce(
-      (acc: number, child) => acc + textLength(child),
-      0,
-    );
+  if (React.isValidElement(node)) {
+    const props = node.props as { children?: React.ReactNode };
+    if (props.children) {
+      return React.Children.toArray(props.children).reduce(
+        (acc: number, child) => acc + textLength(child),
+        0,
+      );
+    }
   }
   return 0;
 }
@@ -47,13 +50,19 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
       }
       return nodes;
     }
-    if (React.isValidElement(node) && node.props.children) {
-      const childLength = textLength(node.props.children);
-      if (childLength > maxLength - length) {
-        return React.cloneElement(node, {
-          ...node.props,
-          children: truncateText(node.props.children, length),
-        });
+    if (React.isValidElement(node)) {
+      const props = node.props as { children?: React.ReactNode };
+      if (props.children) {
+        const childLength = textLength(props.children);
+        if (childLength > maxLength - length) {
+          return React.cloneElement(
+            node as React.ReactElement<any>,
+            {
+              ...props,
+              children: truncateText(props.children, length),
+            } as any,
+          );
+        }
       }
     }
     return node;

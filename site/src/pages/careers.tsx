@@ -2,7 +2,7 @@ import React from 'react';
 import Layout from '@theme/Layout';
 import styles from './careers.module.css';
 
-export default function Careers(): JSX.Element {
+export default function Careers(): React.JSX.Element {
   return (
     <Layout title="Careers at Promptfoo" description="Shape the future of LLM Security">
       <main className={styles.careersContainer}>

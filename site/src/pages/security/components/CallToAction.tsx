@@ -3,7 +3,7 @@ import Link from '@docusaurus/Link';
 import { scrollToTop } from '../../../utils/navigation';
 import styles from '../styles.module.css';
 
-export default function CallToAction(): JSX.Element {
+export default function CallToAction(): React.JSX.Element {
   return (
     <section className={`${styles.section} ${styles.ctaSection}`}>
       <div className={styles.container}>

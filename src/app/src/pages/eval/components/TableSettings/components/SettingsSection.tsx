@@ -50,7 +50,7 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({
             py: tokens.spacing.padding.tiny,
           }}
         >
-          {icon && (
+          {icon ? (
             <Box
               sx={{
                 color: theme.palette.primary.main,
@@ -59,9 +59,9 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({
                 fontSize: '1.25rem',
               }}
             >
-              {icon}
+              {React.isValidElement(icon) ? icon : <>{icon}</>}
             </Box>
-          )}
+          ) : null}
           <Typography
             variant="subtitle1"
             fontWeight={600}
@@ -100,7 +100,7 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({
           role: 'list',
         }}
       >
-        {children}
+        {React.isValidElement(children) ? children : <>{children}</>}
       </Box>
     </Box>
   );

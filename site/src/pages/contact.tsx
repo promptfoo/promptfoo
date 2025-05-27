@@ -62,7 +62,7 @@ function TabPanel(props: TabPanelProps) {
   );
 }
 
-function Contact(): JSX.Element {
+function Contact(): React.JSX.Element {
   const isDarkTheme = useColorMode().colorMode === 'dark';
   const [tabValue, setTabValue] = useState(0);
 
@@ -197,7 +197,7 @@ function Contact(): JSX.Element {
   );
 }
 
-export default function Page(): JSX.Element {
+export default function Page(): React.JSX.Element {
   return (
     <Layout title="Contact Us" description="Schedule a meeting with the promptfoo team">
       <Contact />

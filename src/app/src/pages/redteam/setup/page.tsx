@@ -119,15 +119,18 @@ interface TabPanelProps {
 function CustomTabPanel(props: TabPanelProps) {
   const { children, value, index, ...other } = props;
 
+  if (value !== index) {
+    return null;
+  }
+
   return (
     <TabPanel
       role="tabpanel"
-      hidden={value !== index}
       id={`vertical-tabpanel-${index}`}
       aria-labelledby={`vertical-tab-${index}`}
       {...other}
     >
-      {value === index && children}
+      {React.isValidElement(children) ? children : <>{children}</>}
     </TabPanel>
   );
 }

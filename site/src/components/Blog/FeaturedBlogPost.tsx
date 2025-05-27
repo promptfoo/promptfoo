@@ -8,7 +8,7 @@ interface FeaturedBlogPostProps {
   post: PropBlogPostContent;
 }
 
-export default function FeaturedBlogPost({ post }: FeaturedBlogPostProps): JSX.Element {
+export default function FeaturedBlogPost({ post }: FeaturedBlogPostProps): React.JSX.Element {
   const { metadata } = post;
   const { title, date, permalink, tags, description } = metadata;
   const author = metadata.authors[0];
