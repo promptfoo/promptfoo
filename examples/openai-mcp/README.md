@@ -13,12 +13,14 @@ Model Context Protocol (MCP) is an open protocol that standardizes how applicati
 Demonstrates basic MCP integration using the public DeepWiki MCP server to search GitHub repositories.
 
 **Features:**
+
 - Remote MCP server integration
 - Tool filtering with `allowed_tools`
 - No approval required for faster execution
 - Repository search and information retrieval
 
 **Usage:**
+
 ```bash
 npx promptfoo eval -c promptfooconfig.yaml
 ```
@@ -28,15 +30,18 @@ npx promptfoo eval -c promptfooconfig.yaml
 Shows how to use MCP servers that require authentication, using Stripe as an example.
 
 **Features:**
+
 - Authentication headers configuration
 - Environment variable usage for API keys
 - Payment processing tools
 - Secure API key handling
 
 **Prerequisites:**
+
 - Valid Stripe API key set in `STRIPE_API_KEY` environment variable
 
 **Usage:**
+
 ```bash
 export STRIPE_API_KEY="sk-test_your_stripe_key_here"
 npx promptfoo eval -c promptfooconfig.authenticated.yaml
@@ -47,12 +52,14 @@ npx promptfoo eval -c promptfooconfig.authenticated.yaml
 Demonstrates different approval settings for MCP tool usage.
 
 **Features:**
+
 - Default approval required behavior
 - Selective approval for specific tools
 - No approval required configuration
 - Comparison of different approval strategies
 
 **Usage:**
+
 ```bash
 npx promptfoo eval -c promptfooconfig.approval.yaml
 ```
@@ -77,7 +84,7 @@ tools:
     server_label: authenticated_server
     server_url: https://mcp.example.com
     headers:
-      Authorization: "Bearer ${API_KEY}"
+      Authorization: 'Bearer ${API_KEY}'
     require_approval: never
 ```
 
@@ -88,7 +95,7 @@ tools:
   - type: mcp
     server_label: filtered_server
     server_url: https://mcp.example.com/mcp
-    allowed_tools: ["specific_tool_1", "specific_tool_2"]
+    allowed_tools: ['specific_tool_1', 'specific_tool_2']
     require_approval: never
 ```
 
@@ -101,7 +108,7 @@ tools:
     server_url: https://mcp.example.com/mcp
     require_approval:
       never:
-        tool_names: ["safe_tool_1", "safe_tool_2"]
+        tool_names: ['safe_tool_1', 'safe_tool_2']
 ```
 
 ## Available MCP Servers
@@ -145,22 +152,26 @@ DEBUG=1 npx promptfoo eval -c promptfooconfig.yaml
 ## Running the Examples
 
 1. **Set up environment variables** (for authenticated examples):
+
    ```bash
    export OPENAI_API_KEY="your_openai_api_key"
    export STRIPE_API_KEY="your_stripe_api_key"  # For authenticated example
    ```
 
 2. **Run basic example**:
+
    ```bash
    npx promptfoo eval -c promptfooconfig.yaml
    ```
 
 3. **Run authenticated example**:
+
    ```bash
    npx promptfoo eval -c promptfooconfig.authenticated.yaml
    ```
 
 4. **Run approval workflow example**:
+
    ```bash
    npx promptfoo eval -c promptfooconfig.approval.yaml
    ```
@@ -175,4 +186,4 @@ DEBUG=1 npx promptfoo eval -c promptfooconfig.yaml
 - [OpenAI MCP Documentation](https://platform.openai.com/docs/guides/mcp)
 - [Model Context Protocol Specification](https://modelcontextprotocol.io/)
 - [Promptfoo OpenAI Provider Documentation](../../site/docs/providers/openai.md)
-- [MCP Server Registry](https://github.com/modelcontextprotocol/servers) 
+- [MCP Server Registry](https://github.com/modelcontextprotocol/servers)

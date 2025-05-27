@@ -3,7 +3,7 @@
 description: Testing OpenAI Responses API with MCP (Model Context Protocol) tools
 
 prompts:
-  - "Can you search for information about {{topic}} in the {{repo}} repository?"
+  - 'Can you search for information about {{topic}} in the {{repo}} repository?'
 
 providers:
   - id: openai:responses:gpt-4.1
@@ -13,7 +13,7 @@ providers:
           server_label: deepwiki
           server_url: https://mcp.deepwiki.com/mcp
           require_approval: never
-          allowed_tools: ["ask_question"]
+          allowed_tools: ['ask_question']
       max_output_tokens: 1000
       temperature: 0.3
 
@@ -23,20 +23,20 @@ tests:
       topic: transport protocols
     assert:
       - type: contains
-        value: "transport"
+        value: 'transport'
       - type: contains
-        value: "protocol"
+        value: 'protocol'
 
   - vars:
       repo: facebook/react
       topic: hooks
     assert:
       - type: contains
-        value: "hook"
+        value: 'hook'
 
   - vars:
       repo: microsoft/typescript
       topic: type system
     assert:
       - type: contains
-        value: "type" 
+        value: 'type'

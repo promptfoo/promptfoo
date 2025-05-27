@@ -3,9 +3,9 @@
 description: Testing OpenAI Responses API with MCP (Model Context Protocol) tools
 
 prompts:
-  - "What are the transport protocols supported in the MCP specification for {{repo}}?"
-  - "Can you search for information about {{topic}} in the {{repo}} repository and summarize the key points?"
-  - "What are the main features of {{repo}}? Please provide a detailed overview."
+  - 'What are the transport protocols supported in the MCP specification for {{repo}}?'
+  - 'Can you search for information about {{topic}} in the {{repo}} repository and summarize the key points?'
+  - 'What are the main features of {{repo}}? Please provide a detailed overview.'
 
 providers:
   - id: openai:responses:gpt-4.1
@@ -15,10 +15,10 @@ providers:
           server_label: deepwiki
           server_url: https://mcp.deepwiki.com/mcp
           require_approval: never
-          allowed_tools: ["ask_question", "read_wiki_structure"]
+          allowed_tools: ['ask_question', 'read_wiki_structure']
       max_output_tokens: 1500
       temperature: 0.3
-      instructions: "You are a helpful research assistant. Use the available MCP tools to search for accurate information about repositories and provide comprehensive answers."
+      instructions: 'You are a helpful research assistant. Use the available MCP tools to search for accurate information about repositories and provide comprehensive answers.'
 
 tests:
   - vars:
@@ -26,27 +26,27 @@ tests:
       topic: transport protocols
     assert:
       - type: contains
-        value: "transport"
+        value: 'transport'
       - type: contains
-        value: "protocol"
+        value: 'protocol'
       - type: llm-rubric
-        value: "The response mentions specific transport protocols like HTTP or WebSocket"
+        value: 'The response mentions specific transport protocols like HTTP or WebSocket'
 
   - vars:
       repo: facebook/react
       topic: hooks
     assert:
       - type: contains
-        value: "hook"
+        value: 'hook'
       - type: llm-rubric
-        value: "The response explains React hooks functionality"
+        value: 'The response explains React hooks functionality'
 
   - vars:
       repo: microsoft/typescript
       topic: type system
     assert:
       - type: contains
-        value: "type"
+        value: 'type'
       - type: llm-rubric
         value: "The response describes TypeScript's type system features"
 
@@ -55,6 +55,6 @@ tests:
       topic: API client
     assert:
       - type: contains
-        value: "API"
+        value: 'API'
       - type: llm-rubric
-        value: "The response describes the OpenAI Python client library" 
+        value: 'The response describes the OpenAI Python client library'

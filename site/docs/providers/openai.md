@@ -970,7 +970,7 @@ providers:
           server_label: stripe
           server_url: https://mcp.stripe.com
           headers:
-            Authorization: "Bearer sk-test_..."
+            Authorization: 'Bearer sk-test_...'
           require_approval: never
 ```
 
@@ -986,7 +986,7 @@ providers:
         - type: mcp
           server_label: deepwiki
           server_url: https://mcp.deepwiki.com/mcp
-          allowed_tools: ["ask_question"]
+          allowed_tools: ['ask_question']
           require_approval: never
 ```
 
@@ -1023,7 +1023,7 @@ providers:
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
-  - "What are the transport protocols supported in the MCP specification for {{repo}}?"
+  - 'What are the transport protocols supported in the MCP specification for {{repo}}?'
 
 providers:
   - id: openai:responses:gpt-4.1
@@ -1033,14 +1033,14 @@ providers:
           server_label: deepwiki
           server_url: https://mcp.deepwiki.com/mcp
           require_approval: never
-          allowed_tools: ["ask_question"]
+          allowed_tools: ['ask_question']
 
 tests:
   - vars:
       repo: modelcontextprotocol/modelcontextprotocol
     assert:
       - type: contains
-        value: "transport protocols"
+        value: 'transport protocols'
 ```
 
 For a complete working example, see the [OpenAI MCP example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-mcp) or initialize it with:

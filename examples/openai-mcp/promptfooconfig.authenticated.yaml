@@ -3,9 +3,9 @@
 description: Testing OpenAI Responses API with authenticated MCP servers
 
 prompts:
-  - "Create a payment link for ${{amount}} with description: {{description}}"
-  - "List the recent transactions for my account"
-  - "What are the available payment methods?"
+  - 'Create a payment link for ${{amount}} with description: {{description}}'
+  - 'List the recent transactions for my account'
+  - 'What are the available payment methods?'
 
 providers:
   - id: openai:responses:gpt-4.1
@@ -15,31 +15,30 @@ providers:
           server_label: stripe
           server_url: https://mcp.stripe.com
           headers:
-            Authorization: "Bearer ${STRIPE_API_KEY}"
+            Authorization: 'Bearer ${STRIPE_API_KEY}'
           require_approval: never
-          allowed_tools: ["create_payment_link", "list_payment_methods"]
+          allowed_tools: ['create_payment_link', 'list_payment_methods']
       max_output_tokens: 1000
       temperature: 0.1
-      instructions: "You are a payment processing assistant. Use the Stripe MCP tools to help with payment-related tasks. Always provide clear and accurate information about payment operations."
+      instructions: 'You are a payment processing assistant. Use the Stripe MCP tools to help with payment-related tasks. Always provide clear and accurate information about payment operations.'
 
 tests:
   - vars:
-      amount: "25.00"
-      description: "Test product purchase"
+      amount: '25.00'
+      description: 'Test product purchase'
     assert:
       - type: contains
-        value: "payment"
+        value: 'payment'
       - type: llm-rubric
-        value: "The response indicates a payment link was created or attempted to be created"
+        value: 'The response indicates a payment link was created or attempted to be created'
 
   - vars:
-      amount: "100.00"
-      description: "Premium subscription"
+      amount: '100.00'
+      description: 'Premium subscription'
     assert:
       - type: contains
-        value: "link"
+        value: 'link'
       - type: llm-rubric
-        value: "The response mentions creating a payment link for the subscription"
-
+        value: 'The response mentions creating a payment link for the subscription'
 # Note: This example requires a valid STRIPE_API_KEY environment variable
-# For testing purposes, you may want to use a test API key from Stripe 
+# For testing purposes, you may want to use a test API key from Stripe

@@ -20,11 +20,13 @@ export interface OpenAiMCPTool {
   type: 'mcp';
   server_label: string;
   server_url: string;
-  require_approval?: 'never' | {
-    never?: {
-      tool_names: string[];
-    };
-  };
+  require_approval?:
+    | 'never'
+    | {
+        never?: {
+          tool_names: string[];
+        };
+      };
   allowed_tools?: string[];
   headers?: Record<string, string>;
 }

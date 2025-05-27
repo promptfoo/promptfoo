@@ -5,27 +5,35 @@ This directory contains examples for testing OpenAI's Responses API with promptf
 ## Examples
 
 ### Basic Responses API (`promptfooconfig.yaml`)
+
 Basic example showing how to use the Responses API with different models and configurations.
 
 ### Function Calling (`promptfooconfig.function-call.yaml`)
+
 Example demonstrating function calling capabilities with the Responses API.
 
 ### Reasoning Models (`promptfooconfig.reasoning.yaml`)
+
 Example showing how to use reasoning models (o1, o3, etc.) with specific configurations.
 
 ### Image Processing (`promptfooconfig.image.yaml`)
+
 Example demonstrating image input capabilities with vision models.
 
 ### Web Search (`promptfooconfig.web-search.yaml`)
+
 Example showing web search capabilities.
 
 ### Codex Models (`promptfooconfig.codex.yaml`)
+
 Example using Codex models for code generation tasks.
 
 ### MCP (Model Context Protocol) (`promptfooconfig.mcp.yaml`)
+
 Example demonstrating OpenAI's MCP integration with remote MCP servers. This example uses the DeepWiki MCP server to query GitHub repositories.
 
 #### MCP Features Demonstrated:
+
 - Remote MCP server integration
 - Tool filtering with `allowed_tools`
 - Approval settings configuration

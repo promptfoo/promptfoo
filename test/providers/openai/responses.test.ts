@@ -1873,8 +1873,10 @@ describe('OpenAiResponsesProvider', () => {
             id: 'mcp_456',
             server_label: 'deepwiki',
             name: 'ask_question',
-            arguments: '{"question":"What is MCP?","repoName":"modelcontextprotocol/modelcontextprotocol"}',
-            output: 'MCP (Model Context Protocol) is an open protocol that standardizes how applications provide tools and context to LLMs.',
+            arguments:
+              '{"question":"What is MCP?","repoName":"modelcontextprotocol/modelcontextprotocol"}',
+            output:
+              'MCP (Model Context Protocol) is an open protocol that standardizes how applications provide tools and context to LLMs.',
             error: null,
           },
           {
@@ -1908,7 +1910,9 @@ describe('OpenAiResponsesProvider', () => {
 
       expect(result.output).toContain('MCP Tool Result (ask_question)');
       expect(result.output).toContain('MCP (Model Context Protocol) is an open protocol');
-      expect(result.output).toContain('Based on the search results, MCP is a protocol for LLM integration.');
+      expect(result.output).toContain(
+        'Based on the search results, MCP is a protocol for LLM integration.',
+      );
     });
 
     it('should handle MCP tool call error correctly', async () => {
