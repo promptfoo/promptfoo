@@ -30,31 +30,25 @@ Multiple newlines above.
   it('should sanitize markdown with sane defaults', () => {
     const result = sanitizeMarkdown(sampleMarkdown);
 
-    // Should remove frontmatter
     expect(result).not.toContain('---');
     expect(result).not.toContain('title: Test Document');
     expect(result).not.toContain('author: Test Author');
 
-    // Should remove images
     expect(result).not.toContain('![an image](image.jpg)');
     expect(result).not.toContain('<img src="test.jpg"');
 
-    // Should remove HTML comments
     expect(result).not.toContain('<!-- This is a comment -->');
 
-    // Should remove styled divs but preserve content
     expect(result).not.toContain('<div style="color: red;">');
     expect(result).toContain('Styled content');
 
-    // Should preserve code blocks and links (sane defaults)
     expect(result).toContain('console.log');
     expect(result).toContain('```javascript');
     expect(result).toContain('`inline code`');
     expect(result).toContain('[link](https://example.com)');
 
-    // Should normalize whitespace
     expect(result).not.toMatch(/\n\n\n/);
-    expect(result).toMatch(/^# Main Title/); // Should be trimmed
+    expect(result).toMatch(/^# Main Title/);
   });
 
   it('should handle empty string', () => {
