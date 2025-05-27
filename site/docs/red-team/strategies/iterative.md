@@ -32,6 +32,8 @@ PROMPTFOO_NUM_JAILBREAK_ITERATIONS=5
 
 ## How It Works
 
+![algorithmic jailbreak diagram](/img/docs/iterative-jailbreak-diagram.svg)
+
 The Iterative Jailbreaks strategy works by:
 
 1. Starting with a base prompt that attempts to elicit undesired behavior
@@ -45,8 +47,6 @@ The Iterative Jailbreaks strategy works by:
 :::warning
 This strategy is medium cost since it makes multiple API calls per test. We recommend running it on a smaller number of tests and plugins before running a full test.
 :::
-
-![algorithmic jailbreak diagram](/img/docs/iterative-jailbreak-diagram.svg)
 
 ## Example Scenario
 
