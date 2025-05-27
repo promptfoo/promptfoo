@@ -51,7 +51,7 @@ export async function getProviderFromCloud(id: string): Promise<ProviderOptions 
     );
   }
   try {
-    const response = await makeRequest(`api/providers/${id}`, 'GET');
+    const response = await makeRequest(`api/v1/providers/${id}`, 'GET');
 
     if (!response.ok) {
       const errorMessage = await response.text();
@@ -84,7 +84,7 @@ export async function getConfigFromCloud(id: string, providerId?: string): Promi
   }
   try {
     const response = await makeRequest(
-      `api/redteam/configs/${id}/unified${providerId ? `?providerId=${providerId}` : ''}`,
+      `api/v1/redteam/configs/${id}/unified${providerId ? `?providerId=${providerId}` : ''}`,
       'GET',
     );
     if (!response.ok) {

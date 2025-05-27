@@ -195,7 +195,7 @@ describe('cloud utils', () => {
 
       expect(result).toEqual({ ...mockProvider.config });
       expect(mockFetchWithProxy).toHaveBeenCalledWith(
-        'https://api.example.com/api/providers/test-provider',
+        'https://api.example.com/api/v1/providers/test-provider',
         {
           method: 'GET',
           headers: { Authorization: 'Bearer test-api-key' },
@@ -263,7 +263,7 @@ describe('cloud utils', () => {
 
       expect(result).toEqual(mockUnifiedConfig);
       expect(mockFetchWithProxy).toHaveBeenCalledWith(
-        'https://api.example.com/api/redteam/configs/test-config/unified',
+        'https://api.example.com/api/v1/redteam/configs/test-config/unified',
         {
           method: 'GET',
           headers: { Authorization: 'Bearer test-api-key' },
@@ -288,7 +288,7 @@ describe('cloud utils', () => {
 
       expect(result).toEqual(mockUnifiedConfig);
       expect(mockFetchWithProxy).toHaveBeenCalledWith(
-        'https://api.example.com/api/redteam/configs/test-config/unified?providerId=test-provider',
+        'https://api.example.com/api/v1/redteam/configs/test-config/unified?providerId=test-provider',
         {
           method: 'GET',
           headers: { Authorization: 'Bearer test-api-key' },
