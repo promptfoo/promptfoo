@@ -48,7 +48,7 @@ redteam:
 
 Here's an example configuration for testing a customer support chatbot:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Red Teaming Customer Support Bot for Off-Topic Manipulation
 
