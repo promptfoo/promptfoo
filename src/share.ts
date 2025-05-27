@@ -285,8 +285,8 @@ async function getApiConfig(evalRecord: Eval): Promise<{
     typeof evalRecord.config.sharing === 'object'
       ? evalRecord.config.sharing.apiBaseUrl || getShareApiBaseUrl()
       : getShareApiBaseUrl();
-
   return {
+    // This is going to a self-hosted instance so the api should match the Open Source API
     url: `${apiBaseUrl}/api/eval`,
   };
 }

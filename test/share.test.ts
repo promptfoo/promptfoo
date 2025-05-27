@@ -406,14 +406,14 @@ describe('createShareableUrl', () => {
       const result = await createShareableUrl(mockEval as Eval);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/v1/eval'),
+        expect.stringContaining('/api/eval'),
         expect.objectContaining({
           method: 'POST',
           body: expect.stringContaining('"results":[]'),
         }),
       );
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringMatching(`/api/v1/eval/${mockEval.id}/results`),
+        expect.stringMatching(`/api/eval/${mockEval.id}/results`),
         expect.objectContaining({
           method: 'POST',
           body: expect.stringContaining('[{"id":"1"},{"id":"2"}]'),
