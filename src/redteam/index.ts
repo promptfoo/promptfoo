@@ -717,14 +717,10 @@ export async function synthesize({
           ...pluginTests.map((t) => ({
             ...t,
             metadata: {
-              ...(t?.metadata || {}),
               pluginId: plugin.id,
-              // For intent plugin, don't store the full config to prevent bloating
-              // since it can contain many intents
-              ...(plugin.id !== 'intent' && {
-                pluginConfig: resolvePluginConfig(plugin.config),
-              }),
+              pluginConfig: resolvePluginConfig(plugin.config),
               severity: getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
+              ...(t?.metadata || {}),
             },
           })),
         );
@@ -749,14 +745,10 @@ export async function synthesize({
           ...customTests.map((t) => ({
             ...t,
             metadata: {
-              ...(t.metadata || {}),
               pluginId: plugin.id,
-              // For intent plugin, don't store the full config to prevent bloating
-              // since it can contain many intents
-              ...(plugin.id !== 'intent' && {
-                pluginConfig: resolvePluginConfig(plugin.config),
-              }),
+              pluginConfig: resolvePluginConfig(plugin.config),
               severity: getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
+              ...(t.metadata || {}),
             },
           })),
         );
