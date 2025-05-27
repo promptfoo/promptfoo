@@ -108,44 +108,6 @@ providers:
 | `seed`                | number | Sets a seed for reproducible results    | `42`                |
 | `guidance_scale`      | number | Prompt adherence (model-dependent)      | `3.5` to `15`       |
 
-## Example Evaluation
-
-```yaml title="promptfooconfig.yaml"
-description: 'Compare image generation models'
-providers:
-  - id: fal:image:fal-ai/flux/schnell
-    label: 'Fast'
-  - id: fal:image:fal-ai/flux/dev
-    label: 'Quality'
-prompts:
-  - 'A serene mountain landscape at sunset'
-tests:
-  - vars: {}
-    assert:
-      - type: javascript
-        value: |
-          return output.startsWith('![') && 
-                 output.includes('](') && 
-                 output.endsWith(')');
-```
-
-Run the eval:
-
-```bash
-npx promptfoo eval
-```
-
-## Troubleshooting
-
-:::warning Common Issues
-
-**"API key is not set"** → Set `FAL_KEY` environment variable  
-**"Could not identify provider"** → Use format `fal:image:model-name`  
-**"Invalid parameters"** → Check model docs, parameters vary by model  
-**Rate limiting** → Add delays between requests
-
-:::
-
 ## See Also
 
 - [Model gallery](https://fal.ai/models)
