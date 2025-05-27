@@ -7,6 +7,7 @@ import { ToolDiscoveryGrader } from '../../src/redteam/plugins/toolDiscovery';
 import { ToolDiscoveryMultiTurnGrader } from '../../src/redteam/plugins/toolDiscoveryMultiTurn';
 import { ToxicChatGrader } from '../../src/redteam/plugins/toxicchat';
 import { UnsafeBenchGrader } from '../../src/redteam/plugins/unsafebench';
+import { OpenAIModerationGrader } from '../../src/redteam/plugins/openaiModeration';
 
 describe('getGraderById', () => {
   it('should return correct grader for valid ID', () => {
@@ -35,6 +36,9 @@ describe('getGraderById', () => {
 
     const toxicChatGrader = getGraderById('promptfoo:redteam:toxic-chat');
     expect(toxicChatGrader).toBeInstanceOf(ToxicChatGrader);
+
+    const openaiModerationGrader = getGraderById('promptfoo:redteam:openai-moderation');
+    expect(openaiModerationGrader).toBeInstanceOf(OpenAIModerationGrader);
   });
 
   it('should return harmful grader for IDs starting with promptfoo:redteam:harmful', () => {

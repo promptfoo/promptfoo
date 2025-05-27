@@ -58,6 +58,7 @@ import { SsrfGrader } from './plugins/ssrf';
 import { ToolDiscoveryGrader } from './plugins/toolDiscovery';
 import { ToolDiscoveryMultiTurnGrader } from './plugins/toolDiscoveryMultiTurn';
 import { ToxicChatGrader } from './plugins/toxicchat';
+import { OpenAIModerationGrader } from './plugins/openaiModeration';
 import { UnsafeBenchGrader } from './plugins/unsafebench';
 import type { RedteamAssertionTypes } from './types';
 
@@ -130,6 +131,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:ssrf': new SsrfGrader(),
   'promptfoo:redteam:toxic-chat': new ToxicChatGrader(),
   'promptfoo:redteam:unsafebench': new UnsafeBenchGrader(),
+  'promptfoo:redteam:openai-moderation': new OpenAIModerationGrader(),
 };
 
 export function getGraderById(id: string): RedteamGraderBase | undefined {
