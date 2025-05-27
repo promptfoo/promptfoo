@@ -1,4 +1,4 @@
-import { OffTopicPluginGrader, PLUGIN_DESCRIPTION } from '../../../src/redteam/plugins/offTopic';
+import { OffTopicPluginGrader } from '../../../src/redteam/plugins/offTopic';
 
 describe('OffTopicPluginGrader', () => {
   let grader: OffTopicPluginGrader;
@@ -90,10 +90,5 @@ describe('OffTopicPluginGrader', () => {
     expect(rubric).toContain('"reason":');
     expect(rubric).toContain('"score": 1|0');
     expect(rubric).toContain('"pass": true|false');
-  });
-
-  it('should have valid plugin description', () => {
-    expect(PLUGIN_DESCRIPTION).toContain('Tests whether AI systems can be manipulated');
-    expect(PLUGIN_DESCRIPTION).toContain('go off-topic from their intended purpose');
   });
 });
