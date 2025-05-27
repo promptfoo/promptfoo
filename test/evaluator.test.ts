@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import fs from 'fs';
 import glob from 'glob';
 import {
   calculateThreadsPerBar,
@@ -13,9 +14,8 @@ import logger from '../src/logger';
 import { runDbMigrations } from '../src/migrate';
 import Eval from '../src/models/eval';
 import { type ApiProvider, type TestSuite, type Prompt, ResultFailureReason } from '../src/types';
-import { sleep } from '../src/util/time';
-import fs from 'fs';
 import { processConfigFileReferences } from '../src/util/fileReference';
+import { sleep } from '../src/util/time';
 
 jest.mock('../src/util/fileReference', () => ({
   ...jest.requireActual('../src/util/fileReference'),
@@ -27,11 +27,14 @@ jest.mock('../src/util/fileReference', () => ({
           tests: config.tests.map((test: any) => {
             return {
               ...test,
-              vars: test.vars.var1 === 'file://test/fixtures/test_file.txt' 
-                ? { var1: '<h1>Sample Report</h1><p>This is a test report with some data for the year 2023.</p>' }
-                : test.vars
+              vars:
+                test.vars.var1 === 'file://test/fixtures/test_file.txt'
+                  ? {
+                      var1: '<h1>Sample Report</h1><p>This is a test report with some data for the year 2023.</p>',
+                    }
+                  : test.vars,
             };
-          })
+          }),
         };
         return result;
       }
