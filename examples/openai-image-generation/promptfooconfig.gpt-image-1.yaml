@@ -6,18 +6,7 @@ prompts:
 providers:
   - id: openai:image:gpt-image-1
     config:
-      size: '1024x1024' # Default square format
-      quality: 'medium' # Balanced quality and cost
-      background: 'opaque' # Standard background
-      output_format: 'png' # Default format
-
-  - id: openai:image:gpt-image-1
-    config:
-      size: '1536x1024' # Landscape format
-      quality: 'high' # High quality rendering
-      background: 'transparent' # Transparent background
-      output_format: 'webp' # Web-optimized format
-      output_compression: 80 # Compression level for WebP
+      output_format: 'webp'
       moderation: 'low' # Less restrictive filtering
 
 tests:
