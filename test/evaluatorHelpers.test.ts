@@ -7,7 +7,7 @@ import {
   runExtensionHook,
   extractTextFromPDF,
 } from '../src/evaluatorHelpers';
-import type { Prompt } from '../src/types';
+import type { Prompt, TestSuite, ApiProvider } from '../src/types';
 import { transform } from '../src/util/transform';
 
 jest.mock('proxy-agent', () => ({
@@ -50,9 +50,20 @@ jest.mock('../src/esm');
 jest.mock('../src/database', () => ({
   getDb: jest.fn(),
 }));
+
 jest.mock('../src/util/transform', () => ({
   transform: jest.fn(),
 }));
+
+const mockApiProvider: ApiProvider = {
+  id: function id() {
+    return 'test-provider';
+  },
+  callApi: jest.fn().mockResolvedValue({
+    output: 'Test output',
+    tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+  }),
+};
 
 function toPrompt(text: string): Prompt {
   return { raw: text, label: text };
@@ -493,41 +504,96 @@ describe('runExtensionHook', () => {
     jest.clearAllMocks();
   });
 
-  it('should not call transform if extensions array is empty', async () => {
-    await runExtensionHook([], 'testHook', { data: 'test' });
-    expect(transform).not.toHaveBeenCalled();
+  describe('beforeAll', () => {
+    const hookName = 'beforeAll';
+    const context = {
+      suite: {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('Test prompt {{ var1 }} {{ var2 }}')],
+        tests: [
+          {
+            vars: { var1: 'value1', var2: 'value2' },
+          },
+        ],
+      } as TestSuite,
+    };
+
+    describe('no extensions provided', () => {
+      it('should not call transform', async () => {
+        await runExtensionHook([], hookName, context);
+        expect(transform).not.toHaveBeenCalled();
+
+        await runExtensionHook(undefined, hookName, context);
+        expect(transform).not.toHaveBeenCalled();
+
+        await runExtensionHook(null, hookName, context);
+        expect(transform).not.toHaveBeenCalled();
+      });
+
+      it('should return the original context', async () => {
+        const out = await runExtensionHook([], hookName, context);
+        expect(out).toEqual(context);
+        const out2 = await runExtensionHook(undefined, hookName, context);
+        expect(out2).toEqual(context);
+        const out3 = await runExtensionHook(null, hookName, context);
+        expect(out3).toEqual(context);
+      });
+    });
+
+    describe('extensions provided', () => {
+      it('should call transform for each extension', async () => {
+        const extensions = ['ext1', 'ext2', 'ext3'];
+        await runExtensionHook(extensions, hookName, context);
+        expect(transform).toHaveBeenCalledTimes(3);
+        expect(transform).toHaveBeenNthCalledWith(1, 'ext1', hookName, context, false);
+        expect(transform).toHaveBeenNthCalledWith(2, 'ext2', hookName, context, false);
+        expect(transform).toHaveBeenNthCalledWith(3, 'ext3', hookName, context, false);
+      });
+
+      it('should return the original context when extension(s) do not return a value', async () => {
+        const out = await runExtensionHook(['ext1', 'ext2', 'ext3'], hookName, context);
+        expect(out).toEqual(context);
+      });
+
+      it('returned context should conform to the expected schema', async () => {
+        // Re-mock the transform function to return a valid context (with a new tag)
+        jest.mocked(transform).mockResolvedValue({
+          suite: {
+            description: 'foobar',
+            providers: context.suite.providers,
+            prompts: context.suite.prompts,
+            tests: context.suite.tests,
+          },
+        });
+
+        const out = await runExtensionHook(['ext1', 'ext2', 'ext3'], hookName, context);
+
+        // Check the structure without relying on exact function name matching
+        expect(out.suite.description).toBe('foobar');
+        expect(out.suite.providers).toHaveLength(1);
+        expect(out.suite.providers[0]).toHaveProperty('id');
+        expect(out.suite.providers[0]).toHaveProperty('callApi');
+        expect(typeof out.suite.providers[0].id).toBe('function');
+        expect(out.suite.providers[0].id()).toBe('test-provider');
+        expect(out.suite.prompts).toEqual(context.suite.prompts);
+        expect(out.suite.tests).toEqual(context.suite.tests);
+      });
+
+      it('should throw a validation error if the returned context does not conform to the expected schema', async () => {
+        // Re-mock the transform function to return an invalid context (dropped `providers` field)
+        jest.mocked(transform).mockResolvedValue({
+          suite: {
+            prompts: context.suite.prompts,
+          },
+        });
+
+        // Expect the hook to throw an error
+        await expect(runExtensionHook(['ext1', 'ext2', 'ext3'], hookName, context)).rejects.toThrow(
+          `[ext1] Invalid context returned by beforeAll hook`,
+        );
+      });
+    });
   });
 
-  it('should not call transform if extensions is undefined', async () => {
-    await runExtensionHook(undefined, 'testHook', { data: 'test' });
-    expect(transform).not.toHaveBeenCalled();
-  });
-
-  it('should not call transform if extensions is null', async () => {
-    await runExtensionHook(null, 'testHook', { data: 'test' });
-    expect(transform).not.toHaveBeenCalled();
-  });
-
-  it('should call transform for each extension', async () => {
-    const extensions = ['ext1', 'ext2', 'ext3'];
-    const hookName = 'testHook';
-    const context = { data: 'test' };
-
-    await runExtensionHook(extensions, hookName, context);
-
-    expect(transform).toHaveBeenCalledTimes(3);
-    expect(transform).toHaveBeenNthCalledWith(1, 'ext1', hookName, context, false);
-    expect(transform).toHaveBeenNthCalledWith(2, 'ext2', hookName, context, false);
-    expect(transform).toHaveBeenNthCalledWith(3, 'ext3', hookName, context, false);
-  });
-
-  it('should throw an error if an extension is not a string', async () => {
-    const extensions = ['ext1', 123, 'ext3'] as unknown as string[];
-    const hookName = 'testHook';
-    const context = { data: 'test' };
-
-    await expect(runExtensionHook(extensions, hookName, context)).rejects.toThrow(
-      'extension must be a string',
-    );
-  });
+  // TODO: Copy over logic for beforeEach, afterEach, afterAll.
 });

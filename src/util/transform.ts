@@ -147,10 +147,10 @@ async function getTransformFunction(
 export async function transform(
   codeOrFilepath: string,
   transformInput: string | object | undefined,
-  context: TransformContext,
+  context: any,
   validateReturn: boolean = true,
   inputType: TransformInputType = TransformInputType.OUTPUT,
-): Promise<Vars> {
+): Promise<any> {
   const postprocessFn = await getTransformFunction(codeOrFilepath, inputType);
   if (!postprocessFn) {
     throw new Error(`Invalid transform function for ${codeOrFilepath}`);
