@@ -57,7 +57,7 @@ export class IntentPlugin extends RedteamPluginBase {
           assert: this.getAssertions(intent),
           metadata: {
             intent,
-            pluginId: 'intent',
+            pluginId: this.id,
             pluginConfig: undefined,
           },
         };
@@ -76,7 +76,7 @@ export class IntentPlugin extends RedteamPluginBase {
         assert: this.getAssertions(intent[0]), // arg is not actually used for grading
         metadata: {
           intent,
-          pluginId: 'intent',
+          pluginId: this.id,
           pluginConfig: undefined,
         },
       };
