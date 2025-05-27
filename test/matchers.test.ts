@@ -323,6 +323,27 @@ describe('matchesLlmRubric', () => {
     });
   });
 
+  it('should render rubric when provided as an object', async () => {
+    const rubric = { prompt: 'Describe the image' };
+    const output = 'Sample output';
+    const options: GradingConfig = {
+      rubricPrompt: 'Grade: {{ rubric }}',
+      provider: {
+        id: () => 'test-provider',
+        callApi: jest.fn().mockResolvedValue({
+          output: JSON.stringify({ pass: true, score: 1, reason: 'ok' }),
+          tokenUsage: { total: 1, prompt: 1, completion: 1 },
+        }),
+      },
+    };
+
+    await matchesLlmRubric(rubric, output, options);
+
+    expect(options.provider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining(JSON.stringify(rubric)),
+    );
+  });
+
   it('should fail when output is neither string nor object', async () => {
     const expected = 'Expected output';
     const output = 'Sample output';
@@ -2163,7 +2184,38 @@ describe('tryParse and renderLlmRubricPrompt', () => {
     const result = await renderLlmRubricPrompt(template, { object: complexObject });
     const parsed = JSON.parse(result);
     expect(typeof parsed.text).toBe('string');
-    expect(parsed.text).toBe('[object Object]');
+    // With our fix, this should now be stringified JSON instead of [object Object]
+    expect(parsed.text).toBe(JSON.stringify(complexObject));
+  });
+
+  it('should properly stringify objects', async () => {
+    const template = 'Source Text:\n{{input}}';
+    // Create objects that would typically cause the [object Object] issue
+    const objects = [
+      { name: 'Object 1', properties: { color: 'red', size: 'large' } },
+      { name: 'Object 2', properties: { color: 'blue', size: 'small' } },
+    ];
+
+    const result = await renderLlmRubricPrompt(template, { input: objects });
+
+    // With our fix, this should properly stringify the objects
+    expect(result).not.toContain('[object Object]');
+    expect(result).toContain(JSON.stringify(objects[0]));
+    expect(result).toContain(JSON.stringify(objects[1]));
+  });
+
+  it('should handle mixed arrays of objects and primitives', async () => {
+    const template = 'Items: {{items}}';
+    const mixedArray = ['string item', { name: 'Object item' }, 42, [1, 2, 3]];
+
+    const result = await renderLlmRubricPrompt(template, { items: mixedArray });
+
+    // Objects in array should be stringified
+    expect(result).not.toContain('[object Object]');
+    expect(result).toContain('string item');
+    expect(result).toContain(JSON.stringify({ name: 'Object item' }));
+    expect(result).toContain('42');
+    expect(result).toContain(JSON.stringify([1, 2, 3]));
   });
 
   it('should render arrays of objects correctly', async () => {

@@ -120,11 +120,36 @@ export function toPigLatin(text: string): string {
     .join(' ');
 }
 
-// Define the enum for encoding types
-export enum EncodingType {
-  MORSE = 'morse',
-  PIG_LATIN = 'pig-latin',
+/**
+ * Convert text to camelCase
+ */
+export function toCamelCase(text: string): string {
+  const trimmedText = text.trim();
+  const words = trimmedText.split(/\s+/); // Split on any whitespace
+  return words
+    .map((word, index) => {
+      const match = word.match(/^([a-zA-Z0-9]+)(.*)$/);
+      if (!match) {
+        return word;
+      }
+      const baseWord = match[1];
+      const punctuation = match[2];
+      const transformed =
+        index === 0
+          ? baseWord.toLowerCase()
+          : baseWord.charAt(0).toUpperCase() + baseWord.slice(1).toLowerCase();
+      return transformed + punctuation;
+    })
+    .join('');
 }
+
+export const EncodingType = {
+  MORSE: 'morse',
+  PIG_LATIN: 'piglatin',
+  CAMEL_CASE: 'camelcase',
+} as const;
+
+export type EncodingType = (typeof EncodingType)[keyof typeof EncodingType];
 
 /**
  * Apply the specified encoding transformation to test cases
@@ -141,6 +166,8 @@ export function addOtherEncodings(
         return toMorseCode;
       case EncodingType.PIG_LATIN:
         return toPigLatin;
+      case EncodingType.CAMEL_CASE:
+        return toCamelCase;
       default:
         return toMorseCode; // Default to Morse code
     }
@@ -153,6 +180,8 @@ export function addOtherEncodings(
         return 'Morse';
       case EncodingType.PIG_LATIN:
         return 'PigLatin';
+      case EncodingType.CAMEL_CASE:
+        return 'CamelCase';
       default:
         return encodingType;
     }
@@ -170,7 +199,7 @@ export function addOtherEncodings(
     },
     metadata: {
       ...testCase.metadata,
-      strategyId: 'other-encodings',
+      strategyId: encodingType,
       encodingType,
     },
   }));

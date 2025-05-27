@@ -16,6 +16,7 @@ import 'swiper/css/pagination';
 import { Navigation, Pagination } from 'swiper/modules';
 import LogoContainer from '../components/LogoContainer';
 import NewsletterForm from '../components/NewsletterForm';
+import { scrollToTop } from '../utils/navigation';
 import styles from './llm-vulnerability-scanner.module.css';
 // Import Swiper styles
 import 'swiper/css';
@@ -51,12 +52,14 @@ function RedTeamingHeader() {
         </p>
         <div className={styles.buttons}>
           <Link
+            onClick={scrollToTop}
             className={clsx('button button--primary button--lg', styles.buttonPrimary)}
             to="/docs/red-team/quickstart"
           >
             Get Started
           </Link>
           <Link
+            onClick={scrollToTop}
             className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
             to="/contact/"
           >
@@ -147,7 +150,7 @@ function DifferentiatorsSection() {
             <div className={styles.benefitContent}>
               <h3>Battle-tested with wide industry adoption</h3>
               <p>
-                Used by foundation model labs, Fortune 50 enterprises, and 75,000 open source users
+                Used by foundation model labs, Fortune 50 enterprises, and 80,000 open source users
                 - we're the closest thing to an industry standard tool for AI security testing.
               </p>
             </div>
@@ -330,10 +333,15 @@ function CallToActionSection() {
       <div className="container">
         <h2>Start securing your AI applications today</h2>
         <div className={styles.buttons}>
-          <Link className="button button--primary button--lg" to="/docs/red-team/quickstart">
+          <Link
+            onClick={scrollToTop}
+            className="button button--primary button--lg"
+            to="/docs/red-team/quickstart"
+          >
             Get Started
           </Link>
           <Link
+            onClick={scrollToTop}
             className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
             to="/contact/"
           >

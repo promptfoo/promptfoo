@@ -44,7 +44,7 @@ This directory contains several example configurations for different Bedrock mod
 - [`promptfooconfig.titan-text.yaml`](promptfooconfig.titan-text.yaml) - Titan text generation examples
 - [`promptfooconfig.kb.yaml`](promptfooconfig.kb.yaml) - Knowledge Base RAG example with citations
 - [`promptfooconfig.yaml`](promptfooconfig.yaml) - Combined evaluation across multiple providers
-- [`promptfooconfig.nova-sonic.yaml`](promptfooconfig.nova-sonic.yaml)
+- [`promptfooconfig.nova-sonic.yaml`](promptfooconfig.nova-sonic.yaml) - Amazon Nova Sonic model for audio
 
 ## Knowledge Base Example
 

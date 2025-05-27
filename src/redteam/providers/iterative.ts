@@ -86,8 +86,11 @@ export async function runRedteamConversation({
   const goal = vars[injectVar];
 
   const redteamSystemPrompt = excludeTargetOutputFromAgenticAttackGeneration
-    ? nunjucks.renderString(CLOUD_ATTACKER_SYSTEM_PROMPT, { goal })
-    : nunjucks.renderString(ATTACKER_SYSTEM_PROMPT, { goal });
+    ? nunjucks.renderString(CLOUD_ATTACKER_SYSTEM_PROMPT, {
+        goal,
+        purpose: test?.metadata?.purpose,
+      })
+    : nunjucks.renderString(ATTACKER_SYSTEM_PROMPT, { goal, purpose: test?.metadata?.purpose });
 
   const onTopicSystemPrompt = nunjucks.renderString(ON_TOPIC_SYSTEM_PROMPT, { goal });
 
@@ -260,11 +263,12 @@ export async function runRedteamConversation({
     const assertToUse = test?.assert?.find((a: { type: string }) => a.type);
     const { getGraderById } = await import('../graders');
     let graderPassed: boolean | undefined;
+
     if (test && assertToUse) {
       const grader = getGraderById(assertToUse.type);
       if (grader) {
         const { grade } = await grader.getResult(
-          goal as string,
+          test?.metadata?.pluginId === 'intent' ? newInjectVar : goal,
           targetResponse.output,
           test,
           gradingProvider,

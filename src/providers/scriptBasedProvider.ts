@@ -46,7 +46,7 @@ export function createScriptBasedProviderFactory(
 
       // If using a cloud config, always use process.cwd() instead of context.basePath
       const isCloudConfig = providerOptions.config?.isCloudConfig === true;
-      const resolvedPath = getResolvedRelativePath(scriptPath, context.basePath, isCloudConfig);
+      const resolvedPath = getResolvedRelativePath(scriptPath, isCloudConfig);
 
       return new providerConstructor(resolvedPath, providerOptions);
     },

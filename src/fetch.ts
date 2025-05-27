@@ -1,10 +1,10 @@
 import fs from 'fs';
 import path from 'path';
+import { getProxyForUrl } from 'proxy-from-env';
 import type { ConnectionOptions } from 'tls';
-import { ProxyAgent, setGlobalDispatcher } from 'undici';
+import { Agent, ProxyAgent, setGlobalDispatcher } from 'undici';
 import cliState from './cliState';
 import { VERSION } from './constants';
-import type { EnvVarKey } from './envars';
 import { getEnvBool, getEnvInt, getEnvString } from './envars';
 import logger from './logger';
 import invariant from './util/invariant';
@@ -48,24 +48,20 @@ export function sanitizeUrl(url: string): string {
   }
 }
 
-export function getProxyUrl(): string | undefined {
-  const proxyEnvVars: EnvVarKey[] = ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy'];
-
-  for (const envVar of proxyEnvVars) {
-    const proxyUrl = getEnvString(envVar);
-    if (proxyUrl) {
-      logger.debug(`Found proxy configuration in ${envVar}: ${sanitizeUrl(proxyUrl)}`);
-      return proxyUrl;
-    }
-  }
-  return undefined;
-}
-
 export async function fetchWithProxy(
   url: RequestInfo,
   options: PromptfooRequestInit = {},
 ): Promise<Response> {
   let finalUrl = url;
+  let finalUrlString: string | undefined;
+
+  if (typeof url === 'string') {
+    finalUrlString = url;
+  } else if (url instanceof URL) {
+    finalUrlString = url.toString();
+  } else if (url instanceof Request) {
+    finalUrlString = url.url;
+  }
 
   const finalOptions: PromptfooRequestInit = {
     ...options,
@@ -99,13 +95,12 @@ export async function fetchWithProxy(
         parsedUrl.username = '';
         parsedUrl.password = '';
         finalUrl = parsedUrl.toString();
+        finalUrlString = finalUrl.toString();
       }
     } catch (e) {
       logger.debug(`URL parsing failed in fetchWithProxy: ${e}`);
     }
   }
-
-  const proxyUrl = getProxyUrl();
 
   const tlsOptions: ConnectionOptions = {
     rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
@@ -123,6 +118,7 @@ export async function fetchWithProxy(
       logger.warn(`Failed to read CA certificate from ${caCertPath}: ${e}`);
     }
   }
+  const proxyUrl = finalUrlString ? getProxyForUrl(finalUrlString) : '';
 
   if (proxyUrl) {
     logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);
@@ -131,6 +127,9 @@ export async function fetchWithProxy(
       proxyTls: tlsOptions,
       requestTls: tlsOptions,
     } as ProxyTlsOptions);
+    setGlobalDispatcher(agent);
+  } else {
+    const agent = new Agent();
     setGlobalDispatcher(agent);
   }
 
@@ -164,7 +163,6 @@ export function fetchWithTimeout(
       });
   });
 }
-
 /**
  * Check if a response indicates rate limiting
  */

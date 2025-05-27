@@ -32,3 +32,6 @@ __pycache__
 examples/**/package-lock.json
 examples/huggingface-dataset-factuality/.cache
 examples/redteam-dalle/images
+examples/redteam-medical-agent/redteam.yaml
+
+**/.claude/settings.local.json

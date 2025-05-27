@@ -61,7 +61,7 @@ describe('scriptBasedProvider', () => {
       const factory = createScriptBasedProviderFactory('test', null, MockProvider as any);
       const provider = await factory.create('test:script.js', mockProviderOptions, mockContext);
 
-      expect(getResolvedRelativePath).toHaveBeenCalledWith('script.js', '/base/path', false);
+      expect(getResolvedRelativePath).toHaveBeenCalledWith('script.js', false);
       expect((provider as any).scriptPath).toBe('script.js/resolved');
     });
 
@@ -73,7 +73,7 @@ describe('scriptBasedProvider', () => {
         mockContext,
       );
 
-      expect(getResolvedRelativePath).toHaveBeenCalledWith('path/script.js', '/base/path', false);
+      expect(getResolvedRelativePath).toHaveBeenCalledWith('path/script.js', false);
       expect((provider as any).scriptPath).toBe('path/script.js/resolved');
     });
 
@@ -86,7 +86,7 @@ describe('scriptBasedProvider', () => {
       const factory = createScriptBasedProviderFactory('test', null, MockProvider as any);
       await factory.create('test:script.js', cloudOptions, mockContext);
 
-      expect(getResolvedRelativePath).toHaveBeenCalledWith('script.js', '/base/path', true);
+      expect(getResolvedRelativePath).toHaveBeenCalledWith('script.js', true);
     });
   });
 });

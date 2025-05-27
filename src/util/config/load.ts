@@ -237,7 +237,8 @@ export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig
 export async function combineConfigs(configPaths: string[]): Promise<UnifiedConfig> {
   const configs: UnifiedConfig[] = [];
   for (const configPath of configPaths) {
-    const globPaths = globSync(configPath, {
+    const resolvedPath = path.resolve(process.cwd(), configPath);
+    const globPaths = globSync(resolvedPath, {
       windowsPathsNoEscape: true,
     });
     if (globPaths.length === 0) {
@@ -459,7 +460,7 @@ export async function resolveConfigs(
   }
   // Standalone assertion mode
   if (cmdObj.assertions) {
-    telemetry.record('feature_used', {
+    telemetry.recordAndSendOnce('feature_used', {
       feature: 'standalone assertions mode',
     });
     if (!cmdObj.modelOutputs) {
@@ -527,11 +528,11 @@ export async function resolveConfigs(
       ${chalk.yellow.bold('⚠️  No promptfooconfig found')}
 
       ${chalk.white('Try running with:')}
-
+  
       ${chalk.cyan(`${runCommand} eval -c ${chalk.bold('path/to/promptfooconfig.yaml')}`)}
-
+  
       ${chalk.white('Or create a config with:')}
-
+  
       ${chalk.green(`${runCommand} init`)}
     `);
     process.exit(1);
@@ -547,7 +548,7 @@ export async function resolveConfigs(
     type !== 'DatasetGeneration' &&
     !hasProviders
   ) {
-    logger.error('You must specify at least 1 provider (for example, openai:gpt-4o)');
+    logger.error('You must specify at least 1 provider (for example, openai:gpt-4.1)');
     process.exit(1);
   }
 

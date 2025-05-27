@@ -335,6 +335,16 @@ export interface EvaluateSummaryV2 {
   stats: EvaluateStats;
 }
 
+export type EvalTableDTO = {
+  table: EvaluateTable;
+  totalCount: number;
+  filteredCount: number;
+  config: Partial<UnifiedConfig>;
+  author: string | null;
+  version: number;
+  id: string;
+};
+
 export interface ResultSuggestion {
   type: string;
   action: 'replace-prompt' | 'pre-filter' | 'post-filter' | 'note';
@@ -427,6 +437,7 @@ export const BaseAssertionTypesSchema = z.enum([
   'latency',
   'levenshtein',
   'llm-rubric',
+  'pi',
   'meteor',
   'model-graded-closedqa',
   'model-graded-factuality',

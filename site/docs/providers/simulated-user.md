@@ -62,7 +62,7 @@ prompts:
   - file://agent_policy.txt
 
 providers:
-  - 'openai:gpt-4o-mini'
+  - 'openai:gpt-4.1-mini'
 
 defaultTest:
   provider:

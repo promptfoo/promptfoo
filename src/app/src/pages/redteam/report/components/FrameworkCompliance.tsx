@@ -229,7 +229,7 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
               const frameworkSeverity = getFrameworkSeverity(framework);
 
               return (
-                <Grid item xs={12} sm={6} md={3} key={framework}>
+                <Grid item xs={12} sm={6} md={4} key={framework}>
                   <FrameworkCard
                     framework={framework}
                     isCompliant={isCompliant}

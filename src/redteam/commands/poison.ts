@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import yaml from 'js-yaml';
 import * as path from 'path';
 import { getUserEmail } from '../../globalConfig/accounts';
-import logger, { setLogLevel } from '../../logger';
+import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { setupEnv } from '../../util';
 import { getRemoteGenerationUrl } from '../remoteGeneration';
@@ -183,16 +183,12 @@ export function poisonCommand(program: Command) {
       'poisoned-documents',
     )
     .option('--env-file, --env-path <path>', 'Path to .env file')
-    .option('-v, --verbose', 'Verbose output')
     .action(async (documents: DocumentLike[], opts: Omit<PoisonOptions, 'documents'>) => {
       setupEnv(opts.envPath);
       telemetry.record('command_used', {
         name: 'redteam poison',
       });
-
-      if (opts.verbose) {
-        setLogLevel('debug');
-      }
+      await telemetry.send();
 
       try {
         await doPoisonDocuments({

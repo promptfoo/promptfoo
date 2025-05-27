@@ -13,7 +13,6 @@ describe('CloudConfig', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     jest.mocked(readGlobalConfig).mockReturnValue({
-      id: 'test-id',
       cloud: {
         appUrl: 'https://test.app',
         apiHost: 'https://test.api',
@@ -25,9 +24,7 @@ describe('CloudConfig', () => {
 
   describe('constructor', () => {
     it('should initialize with default values when no saved config exists', () => {
-      jest.mocked(readGlobalConfig).mockReturnValue({
-        id: 'test-id',
-      });
+      jest.mocked(readGlobalConfig).mockReturnValue({});
       const config = new CloudConfig();
       expect(config.getAppUrl()).toBe('https://www.promptfoo.app');
       expect(config.getApiHost()).toBe(API_HOST);
@@ -47,9 +44,7 @@ describe('CloudConfig', () => {
     });
 
     it('should return false when apiKey does not exist', () => {
-      jest.mocked(readGlobalConfig).mockReturnValue({
-        id: 'test-id',
-      });
+      jest.mocked(readGlobalConfig).mockReturnValue({});
       const config = new CloudConfig();
       expect(config.isEnabled()).toBe(false);
     });
@@ -115,6 +110,7 @@ describe('CloudConfig', () => {
       const mockFetchResponse = {
         ok: true,
         json: () => Promise.resolve(mockResponse),
+        text: () => Promise.resolve(JSON.stringify(mockResponse)),
       } as Response;
 
       jest.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
@@ -140,6 +136,7 @@ describe('CloudConfig', () => {
         ok: false,
         statusText: 'Unauthorized',
         json: () => Promise.reject(new Error('Unauthorized')),
+        text: () => Promise.resolve('Unauthorized'),
       } as Response;
 
       jest.mocked(fetchWithProxy).mockResolvedValue(mockErrorResponse);

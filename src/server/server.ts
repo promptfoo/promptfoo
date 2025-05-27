@@ -7,7 +7,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { Server as SocketIOServer } from 'socket.io';
 import { fromError } from 'zod-validation-error';
-import { DEFAULT_PORT, VERSION } from '../constants';
+import { getDefaultPort, VERSION } from '../constants';
 import { setupSignalWatcher } from '../database/signal';
 import { getDirectory } from '../esm';
 import { cloudConfig } from '../globalConfig/cloud';
@@ -192,7 +192,7 @@ export function createApp() {
         return;
       }
       const { event, properties } = result.data;
-      await telemetry.record(event, properties);
+      await telemetry.recordAndSend(event, properties);
       res.status(200).json({ success: true });
     } catch (error) {
       logger.error(`Error processing telemetry request: ${error}`);
@@ -221,8 +221,8 @@ export function createApp() {
 }
 
 export async function startServer(
-  port = DEFAULT_PORT,
-  browserBehavior = BrowserBehavior.ASK,
+  port = getDefaultPort(),
+  browserBehavior: BrowserBehavior = BrowserBehavior.ASK,
   filterDescription?: string,
 ) {
   const app = createApp();

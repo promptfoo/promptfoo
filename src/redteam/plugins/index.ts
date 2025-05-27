@@ -84,7 +84,7 @@ async function fetchRemoteTestCases(
     email: getUserEmail(),
   });
   try {
-    const { data } = await fetchWithCache(
+    const { data, status, statusText } = await fetchWithCache(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
@@ -95,6 +95,10 @@ async function fetchRemoteTestCases(
       },
       REQUEST_TIMEOUT_MS,
     );
+    if (status !== 200 || !data || !data.result || !Array.isArray(data.result)) {
+      logger.error(`Error generating test cases for ${key}: ${statusText} ${JSON.stringify(data)}`);
+      return [];
+    }
     const ret = (data as { result: TestCase[] }).result;
     logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
     return ret;
@@ -253,7 +257,7 @@ function createRemotePlugin<T extends PluginConfig>(
         },
       }));
 
-      if (key.startsWith('harmful:')) {
+      if (key.startsWith('harmful:') || key.startsWith('bias:')) {
         return testsWithMetadata.map((testCase) => ({
           ...testCase,
           assert: getHarmfulAssertions(key as HarmPlugin),
@@ -279,6 +283,7 @@ const remotePlugins: PluginFactory[] = [
   'religion',
   'ssrf',
   'system-prompt-override',
+  'mcp',
 ].map((key) => createRemotePlugin(key));
 
 remotePlugins.push(
@@ -287,7 +292,7 @@ remotePlugins.push(
     (config: { indirectInjectionVar: string }) =>
       invariant(
         config.indirectInjectionVar,
-        'Indirect prompt injection plugin requires `config.indirectInjectionVar` to be set',
+        'Indirect prompt injection plugin requires `config.indirectInjectionVar` to be set. If using this plugin in a plugin collection, configure this plugin separately.',
       ),
   ),
 );

@@ -6,7 +6,7 @@ sidebar_position: 4
 
 ## Requirements
 
-- Node.js 18 or newer
+- Node.js 18 or newer (including Node.js 20, 22, and 24)
 - Supported operating systems: macOS, Linux, Windows
 
 ## Installation Methods

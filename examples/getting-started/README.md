@@ -1,4 +1,10 @@
-# Getting Started Example
+# getting-started (Getting Started Example)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example getting-started
+```
 
 This is a simple example that demonstrates the basic functionality of promptfoo. It tests two different translation prompts across multiple language models.
 

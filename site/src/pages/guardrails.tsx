@@ -9,6 +9,7 @@ import Layout from '@theme/Layout';
 import clsx from 'clsx';
 import LogoContainer from '../components/LogoContainer';
 import NewsletterForm from '../components/NewsletterForm';
+import { scrollToTop } from '../utils/navigation';
 import styles from './llm-vulnerability-scanner.module.css';
 
 function HeroSection() {
@@ -42,6 +43,7 @@ function GuardrailsHeader() {
         </p>
         <div className={styles.buttons}>
           <Link
+            onClick={scrollToTop}
             className={clsx('button button--secondary button--lg', styles.buttonPrimary)}
             to="/contact/"
           >
@@ -181,6 +183,7 @@ function CallToActionSection() {
         <h2>Upgrade to guardrails that learn and adapt</h2>
         <div className={styles.buttons}>
           <Link
+            onClick={scrollToTop}
             className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
             to="/contact/"
           >

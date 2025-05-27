@@ -35,7 +35,7 @@ providers:
 
 tests:
   - vars:
-      model: 'gpt-4o-mini'
+      model: 'gpt-4.1-mini'
       language: 'French'
 ```
 
@@ -143,7 +143,7 @@ tests:
         - role: 'assistant'
           content: 'baz'
       // highlight-end
-      model: 'gpt-4o-mini'
+      model: 'gpt-4.1-mini'
       language: 'French'
 ```
 
@@ -164,6 +164,17 @@ providers:
         q: '{{prompt}}'
         foo: 'bar'
       // highlight-end
+```
+
+## Dynamic URLs
+
+Both the provider `id` and the `url` field support Nunjucks templates. Variables in your test `vars` will be rendered before sending the request.
+
+```yaml
+providers:
+  - id: https://api.example.com/users/{{userId}}/profile
+    config:
+      method: 'GET'
 ```
 
 ## Using as a library
@@ -288,7 +299,7 @@ Extracts the message content from this response:
   "id": "chatcmpl-abc123",
   "object": "chat.completion",
   "created": 1677858242,
-  "model": "gpt-4o-mini",
+  "model": "gpt-4.1-mini",
   "usage": {
     "prompt_tokens": 13,
     "completion_tokens": 7,
@@ -358,22 +369,92 @@ This expression will be evaluated with three variables available:
 
 #### Function parser
 
-When using promptfoo as a Node.js library, you can provide a function as the response parser:
+When using promptfoo as a Node.js library, you can provide a function as the response. You may return a string or an object of type `ProviderResponse`.
+
+parser:
 
 ```javascript
 {
   providers: [{
     id: 'https',
     config: {
-      url: 'https://example.com/generate',
+      url: 'https://example.com/generate_response',
       transformResponse: (json, text) => {
-        // Custom parsing logic
+        // Custom parsing logic that returns string
         return json.choices[0].message.content;
+      },
+    }
+  },
+  {
+    id: 'https',
+    config: {
+      url: 'https://example.com/generate_with_tokens',
+      transformResponse: (json, text) => {
+        // Custom parsing logic that returns object
+        return {
+          output: json.output,
+          tokenUsage: {
+            prompt: json.usage.input_tokens,
+            completion: json.usage.output_tokens,
+            total: json.usage.input_tokens + json.usage.output_tokens,
+          }
+        }
       },
     }
   }],
 }
 ```
+
+<details>
+<summary>Type definition</summary>
+
+```typescript
+interface ProviderResponse {
+  cached?: boolean;
+  cost?: number;
+  error?: string;
+  logProbs?: number[];
+  metadata?: {
+    redteamFinalPrompt?: string;
+    [key: string]: any;
+  };
+  raw?: string | any;
+  output?: string | any;
+  tokenUsage?: TokenUsage;
+  isRefusal?: boolean;
+  sessionId?: string;
+  guardrails?: GuardrailResponse;
+  audio?: {
+    id?: string;
+    expiresAt?: number;
+    data?: string; // base64 encoded audio data
+    transcript?: string;
+    format?: string;
+  };
+}
+
+export type TokenUsage = z.infer<typeof TokenUsageSchema>;
+
+export const TokenUsageSchema = BaseTokenUsageSchema.extend({
+  assertions: BaseTokenUsageSchema.optional(),
+});
+
+export const BaseTokenUsageSchema = z.object({
+  // Core token counts
+  prompt: z.number().optional(),
+  completion: z.number().optional(),
+  cached: z.number().optional(),
+  total: z.number().optional(),
+
+  // Request metadata
+  numRequests: z.number().optional(),
+
+  // Detailed completion information
+  completionDetails: CompletionTokenDetailsSchema.optional(),
+});
+```
+
+</details>
 
 #### File-based parser
 
@@ -641,7 +722,7 @@ Supported config options:
 
 | Option            | Type                    | Description                                                                                                                                                                         |
 | ----------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| url               | string                  | The URL to send the HTTP request to. If not provided, the `id` of the provider will be used as the URL.                                                                             |
+| url               | string                  | The URL to send the HTTP request to. Supports Nunjucks templates. If not provided, the `id` of the provider will be used as the URL.                                                |
 | request           | string                  | A raw HTTP request to send. This will override the `url`, `method`, `headers`, `body`, and `queryParams` options.                                                                   |
 | method            | string                  | HTTP method (GET, POST, etc). Defaults to POST if body is provided, GET otherwise.                                                                                                  |
 | headers           | Record\<string, string> | Key-value pairs of HTTP headers to include in the request.                                                                                                                          |

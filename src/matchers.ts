@@ -23,6 +23,7 @@ import { getDefaultProviders } from './providers/defaults';
 import { LLAMA_GUARD_REPLICATE_PROVIDER } from './redteam/constants';
 import { shouldGenerateRemote } from './redteam/remoteGeneration';
 import { doRemoteGrading } from './remoteGrading';
+import { doRemoteScoringWithPi } from './remoteScoring';
 import type {
   ApiClassificationProvider,
   ApiEmbeddingProvider,
@@ -380,7 +381,11 @@ async function loadRubricPrompt(
   return rubricPrompt;
 }
 
-function tryParse(content: string) {
+function tryParse(content: string | object) {
+  if (typeof content === 'object') {
+    return content;
+  }
+
   try {
     return JSON.parse(content);
   } catch {}
@@ -395,11 +400,29 @@ export async function renderLlmRubricPrompt(
   rubricPrompt: string,
   context: Record<string, string | object>,
 ) {
+  // Process the context to ensure objects are properly stringified for nunjucks
+  const processedContext = Object.fromEntries(
+    Object.entries(context).map(([key, value]) => {
+      if (value && typeof value === 'object') {
+        // For arrays, stringify individual elements
+        if (Array.isArray(value)) {
+          return [
+            key,
+            value.map((item) => (typeof item === 'object' ? JSON.stringify(item) : item)),
+          ];
+        }
+        // For objects, stringify the entire object
+        return [key, JSON.stringify(value)];
+      }
+      return [key, value];
+    }),
+  );
+
   try {
     // Render every string scalar within the JSON
     // Does not render object keys (only values)
     const parsed = JSON.parse(rubricPrompt, (k, v) =>
-      typeof v === 'string' ? nunjucks.renderString(v, context) : v,
+      typeof v === 'string' ? nunjucks.renderString(v, processedContext) : v,
     );
     return JSON.stringify(parsed);
   } catch {
@@ -408,11 +431,11 @@ export async function renderLlmRubricPrompt(
   }
 
   // Legacy rendering for non-JSON prompts
-  return nunjucks.renderString(rubricPrompt, context);
+  return nunjucks.renderString(rubricPrompt, processedContext);
 }
 
 export async function matchesLlmRubric(
-  rubric: string,
+  rubric: string | object,
   llmOutput: string,
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
@@ -523,6 +546,29 @@ export async function matchesLlmRubric(
         rejectedPrediction: 0,
       },
     },
+  };
+}
+
+export async function matchesPiScore(
+  renderedValue: string,
+  llmInput: string,
+  llmOutput: string,
+  assertion?: Assertion | null,
+): Promise<GradingResult> {
+  return {
+    ...(await doRemoteScoringWithPi(
+      {
+        llm_input: llmInput,
+        llm_output: llmOutput,
+        scoring_spec: [
+          {
+            question: renderedValue,
+          },
+        ],
+      },
+      assertion?.threshold,
+    )),
+    assertion,
   };
 }
 

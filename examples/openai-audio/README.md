@@ -1,4 +1,10 @@
-# OpenAI Audio Example
+# openai-audio (OpenAI Audio Example)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example openai-audio
+```
 
 This example demonstrates how to use promptfoo to test OpenAI's audio capabilities using audio-capable models. The example focuses on audio input processing (speech-to-text) and audio output generation (speech-to-speech).
 

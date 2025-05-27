@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -22,7 +22,6 @@ import { alpha } from '@mui/material/styles';
 import {
   ALL_PLUGINS,
   DEFAULT_PLUGINS,
-  DATASET_PLUGINS,
   FOUNDATION_PLUGINS,
   HARM_PLUGINS,
   MITRE_ATLAS_MAPPING,
@@ -36,6 +35,9 @@ import {
   type Plugin,
   riskCategories,
   OWASP_LLM_RED_TEAM_MAPPING,
+  EU_AI_ACT_MAPPING,
+  AGENTIC_EXEMPT_PLUGINS,
+  DATASET_EXEMPT_PLUGINS,
 } from '@promptfoo/redteam/constants';
 import { useDebounce } from 'use-debounce';
 import { useRedTeamConfig, useRecentlyUsedPlugins } from '../hooks/useRedTeamConfig';
@@ -216,6 +218,10 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       plugins: new Set(FOUNDATION_PLUGINS),
     },
     {
+      name: 'Harmful',
+      plugins: new Set(Object.keys(HARM_PLUGINS) as Plugin[]),
+    },
+    {
       name: 'NIST',
       plugins: new Set(Object.values(NIST_AI_RMF_MAPPING).flatMap((v) => v.plugins)),
     },
@@ -234,6 +240,10 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     {
       name: 'MITRE',
       plugins: new Set(Object.values(MITRE_ATLAS_MAPPING).flatMap((v) => v.plugins)),
+    },
+    {
+      name: 'EU AI Act',
+      plugins: new Set(Object.values(EU_AI_ACT_MAPPING).flatMap((v) => v.plugins)),
     },
   ];
 
@@ -459,8 +469,42 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                               {getPluginCategory(plugin)}
                             </Typography>
                           )}
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                            {displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                              {displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
+                            </Typography>
+                            {AGENTIC_EXEMPT_PLUGINS.includes(plugin as any) && (
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  fontSize: '0.7rem',
+                                  color: 'text.secondary',
+                                  fontWeight: 400,
+                                  backgroundColor: 'action.hover',
+                                  px: 0.5,
+                                  py: 0.25,
+                                  borderRadius: 0.5,
+                                }}
+                              >
+                                agentic
+                              </Typography>
+                            )}
+                            {DATASET_EXEMPT_PLUGINS.includes(plugin as any) && (
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  fontSize: '0.7rem',
+                                  color: 'text.secondary',
+                                  fontWeight: 400,
+                                  backgroundColor: 'action.hover',
+                                  px: 0.5,
+                                  py: 0.25,
+                                  borderRadius: 0.5,
+                                }}
+                              >
+                                no strategies
+                              </Typography>
+                            )}
                           </Box>
                           <Typography variant="body2" color="text.secondary">
                             {subCategoryDescriptions[plugin]}
@@ -639,152 +683,6 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
             renderPluginCategory(category, plugins),
           )}
 
-          {/* Dataset Plugins Section */}
-          <Accordion
-            expanded={expandedCategories.has('Dataset Plugins')}
-            onChange={(event, expanded) => {
-              setExpandedCategories((prev) => {
-                const newSet = new Set(prev);
-                if (expanded) {
-                  newSet.add('Dataset Plugins');
-                } else {
-                  newSet.delete('Dataset Plugins');
-                }
-                return newSet;
-              });
-            }}
-          >
-            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography variant="h6" sx={{ fontWeight: 'medium' }}>
-                Datasets (
-                {
-                  DATASET_PLUGINS.filter(
-                    (plugin) =>
-                      filteredPlugins.includes(plugin as Plugin) &&
-                      selectedPlugins.has(plugin as Plugin),
-                  ).length
-                }
-                /
-                {
-                  DATASET_PLUGINS.filter((plugin) => filteredPlugins.includes(plugin as Plugin))
-                    .length
-                }
-                )
-              </Typography>
-            </AccordionSummary>
-            <AccordionDetails>
-              <Grid container spacing={2}>
-                {DATASET_PLUGINS.filter((plugin) => filteredPlugins.includes(plugin as Plugin)).map(
-                  (plugin) => (
-                    <Grid item xs={12} sm={6} md={4} key={plugin}>
-                      <Paper
-                        elevation={1}
-                        sx={{
-                          p: 2,
-                          height: '100%',
-                          border: (theme) => {
-                            if (selectedPlugins.has(plugin as Plugin)) {
-                              if (
-                                PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
-                                !isPluginConfigured(plugin as Plugin)
-                              ) {
-                                return `1px solid ${theme.palette.error.main}`;
-                              }
-                              return `1px solid ${theme.palette.primary.main}`;
-                            }
-                            return undefined;
-                          },
-                          backgroundColor: (theme) =>
-                            selectedPlugins.has(plugin as Plugin)
-                              ? alpha(theme.palette.primary.main, 0.04)
-                              : 'background.paper',
-                          transition: 'all 0.2s ease-in-out',
-                          '&:hover': {
-                            backgroundColor: (theme) =>
-                              selectedPlugins.has(plugin as Plugin)
-                                ? alpha(theme.palette.primary.main, 0.08)
-                                : alpha(theme.palette.action.hover, 0.04),
-                          },
-                        }}
-                      >
-                        <Box
-                          sx={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            height: '100%',
-                            position: 'relative',
-                          }}
-                        >
-                          <FormControlLabel
-                            sx={{ flex: 1 }}
-                            control={
-                              <Checkbox
-                                checked={selectedPlugins.has(plugin as Plugin)}
-                                onChange={() => handlePluginToggle(plugin as Plugin)}
-                                color="primary"
-                              />
-                            }
-                            label={
-                              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                  {displayNameOverrides[
-                                    plugin as keyof typeof displayNameOverrides
-                                  ] ||
-                                    categoryAliases[plugin as keyof typeof categoryAliases] ||
-                                    plugin}
-                                </Box>
-                                <Typography variant="body2" color="text.secondary">
-                                  {
-                                    subCategoryDescriptions[
-                                      plugin as keyof typeof subCategoryDescriptions
-                                    ]
-                                  }
-                                </Typography>
-                              </Box>
-                            }
-                          />
-                          {selectedPlugins.has(plugin as Plugin) &&
-                            PLUGINS_SUPPORTING_CONFIG.includes(plugin as any) && (
-                              <IconButton
-                                size="small"
-                                title={
-                                  isPluginConfigured(plugin as Plugin)
-                                    ? 'Edit Configuration'
-                                    : 'Configuration Required'
-                                }
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleConfigClick(plugin as Plugin);
-                                }}
-                                sx={{
-                                  position: 'absolute',
-                                  top: 8,
-                                  right: 8,
-                                  opacity: 0.6,
-                                  '&:hover': {
-                                    opacity: 1,
-                                    backgroundColor: (theme) =>
-                                      alpha(theme.palette.primary.main, 0.08),
-                                  },
-                                  ...(PLUGINS_REQUIRING_CONFIG.includes(plugin as any) &&
-                                    !isPluginConfigured(plugin as Plugin) && {
-                                      color: 'error.main',
-                                      opacity: 1,
-                                    }),
-                                }}
-                              >
-                                <SettingsOutlinedIcon fontSize="small" />
-                              </IconButton>
-                            )}
-                        </Box>
-                      </Paper>
-                    </Grid>
-                  ),
-                )}
-              </Grid>
-            </AccordionDetails>
-          </Accordion>
-
           <Accordion
             expanded={expandedCategories.has('Custom Prompts')}
             onChange={(event, expanded) => {
@@ -813,62 +711,34 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
               <CustomIntentSection />
             </AccordionDetails>
           </Accordion>
-        </Box>
-
-        <Accordion
-          expanded={expandedCategories.has('Custom Policies')}
-          onChange={(event, expanded) => {
-            setExpandedCategories((prev) => {
-              const newSet = new Set(prev);
-              if (expanded) {
-                newSet.add('Custom Policies');
-              } else {
-                newSet.delete('Custom Policies');
-              }
-              return newSet;
-            });
-          }}
-        >
-          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-            <Typography variant="h6" sx={{ fontWeight: 'medium' }}>
-              Custom Policies (
-              {config.plugins.filter((p) => typeof p === 'object' && 'id' in p && p.id === 'policy')
-                .length || 0}
-              )
-            </Typography>
-          </AccordionSummary>
-          <AccordionDetails>
-            <CustomPoliciesSection />
-          </AccordionDetails>
-        </Accordion>
-
-        <Accordion
-          expanded={expandedCategories.has('Custom Policy')}
-          onChange={(event, expanded) => {
-            setExpandedCategories((prev) => {
-              const newSet = new Set(prev);
-              if (expanded) {
-                newSet.add('Custom Policy');
-              } else {
-                newSet.delete('Custom Policy');
-              }
-              return newSet;
-            });
-          }}
-        >
-          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-            <Typography variant="h6" sx={{ fontWeight: 'medium' }}>
-              Custom Policy
-            </Typography>
-          </AccordionSummary>
-          <AccordionDetails>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <Typography variant="body2" color="text.secondary">
-                Add your custom policy content here.
+          <Accordion
+            expanded={expandedCategories.has('Custom Policies')}
+            onChange={(event, expanded) => {
+              setExpandedCategories((prev) => {
+                const newSet = new Set(prev);
+                if (expanded) {
+                  newSet.add('Custom Policies');
+                } else {
+                  newSet.delete('Custom Policies');
+                }
+                return newSet;
+              });
+            }}
+          >
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Typography variant="h6" sx={{ fontWeight: 'medium' }}>
+                Custom Policies (
+                {config.plugins.filter(
+                  (p) => typeof p === 'object' && 'id' in p && p.id === 'policy',
+                ).length || 0}
+                )
               </Typography>
-            </Box>
-          </AccordionDetails>
-        </Accordion>
+            </AccordionSummary>
+            <AccordionDetails>
+              <CustomPoliciesSection />
+            </AccordionDetails>
+          </Accordion>
+        </Box>
 
         <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
           <Button

@@ -522,7 +522,7 @@ class Evaluator {
 
   async evaluate(): Promise<Eval> {
     const { testSuite, options } = this;
-
+    const vars = new Set<string>();
     const checkAbort = () => {
       if (options.abortSignal?.aborted) {
         throw new Error('Operation cancelled');
@@ -634,7 +634,7 @@ class Evaluator {
 
     // Build scenarios and add to tests
     if (testSuite.scenarios && testSuite.scenarios.length > 0) {
-      telemetry.record('feature_used', {
+      telemetry.recordAndSendOnce('feature_used', {
         feature: 'scenarios',
       });
       for (const scenario of testSuite.scenarios) {
@@ -827,7 +827,11 @@ class Evaluator {
       });
 
       const rows = await runEval(evalStep);
+
       for (const row of rows) {
+        for (const varName of Object.keys(row.vars)) {
+          vars.add(varName);
+        }
         // Print token usage for model-graded assertions and add to stats
         if (row.gradingResult?.tokensUsed && row.testCase?.assert) {
           for (const assertion of row.testCase.assert) {
@@ -905,8 +909,19 @@ class Evaluator {
         invariant(metrics, 'Expected prompt.metrics to be set');
         metrics.score += row.score;
         for (const [key, value] of Object.entries(row.namedScores)) {
+          // Update named score value
           metrics.namedScores[key] = (metrics.namedScores[key] || 0) + value;
-          metrics.namedScoresCount[key] = (metrics.namedScoresCount[key] || 0) + 1;
+
+          // Count assertions contributing to this named score
+          let contributingAssertions = 0;
+          row.gradingResult?.componentResults?.forEach((result) => {
+            if (result.assertion?.metric === key) {
+              contributingAssertions++;
+            }
+          });
+
+          metrics.namedScoresCount[key] =
+            (metrics.namedScoresCount[key] || 0) + (contributingAssertions || 1);
         }
 
         if (testSuite.derivedMetrics) {
@@ -977,13 +992,7 @@ class Evaluator {
         });
 
         if (options.progressCallback) {
-          options.progressCallback(
-            this.evalRecord.resultsCount,
-            runEvalOptions.length,
-            index,
-            evalStep,
-            metrics,
-          );
+          options.progressCallback(numComplete, runEvalOptions.length, index, evalStep, metrics);
         }
       }
     };
@@ -1075,7 +1084,7 @@ class Evaluator {
         // Progress callback
         if (options.progressCallback) {
           options.progressCallback(
-            this.evalRecord.resultsCount,
+            numComplete,
             runEvalOptions.length,
             typeof index === 'number' ? index : 0,
             evalStep,
@@ -1358,8 +1367,11 @@ class Evaluator {
       progressBar.stop();
     }
 
+    this.evalRecord.setVars(vars);
+
     await runExtensionHook(testSuite.extensions, 'afterAll', {
       prompts: this.evalRecord.prompts,
+      results: this.evalRecord.results,
       suite: testSuite,
     });
 

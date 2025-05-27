@@ -232,7 +232,7 @@ prompts:
   # - file://path/to/prompt.txt
 
 targets:
-  - id: openai:gpt-4o-mini
+  - id: openai:gpt-4.1-mini
     label: 'travel-agent-mini'
 ```
 

@@ -38,7 +38,7 @@ prompts: code_generation_prompt.txt
 
 providers:
   - ollama:chat:llama3:70b
-  - openai:gpt-4o
+  - openai:gpt-4.1
 
 tests:
   - vars:

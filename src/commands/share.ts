@@ -2,23 +2,22 @@ import confirm from '@inquirer/confirm';
 import chalk from 'chalk';
 import type { Command } from 'commander';
 import dedent from 'dedent';
-import { DEFAULT_SHARE_VIEW_BASE_URL } from '../constants';
-import { getEnvBool } from '../envars';
+import { getDefaultShareViewBaseUrl } from '../constants';
+import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import Eval from '../models/eval';
 import { createShareableUrl, hasEvalBeenShared, isSharingEnabled, getShareableUrl } from '../share';
 import telemetry from '../telemetry';
-import { setupEnv } from '../util';
 import { loadDefaultConfig } from '../util/config/default';
 
 export function notCloudEnabledShareInstructions(): void {
-  const cloudUrl = DEFAULT_SHARE_VIEW_BASE_URL;
+  const cloudUrl = getDefaultShareViewBaseUrl();
   const welcomeUrl = `${cloudUrl}/welcome`;
 
   logger.info(dedent`
-
+    
     » You need to have a cloud account to securely share your results.
-
+    
     1. Please go to ${chalk.greenBright.bold(cloudUrl)} to sign up or log in.
     2. Follow the instructions at ${chalk.greenBright.bold(welcomeUrl)} to login to the command line.
     3. Run ${chalk.greenBright.bold('promptfoo share')}
@@ -44,7 +43,6 @@ export function shareCommand(program: Command) {
   program
     .command('share [evalId]')
     .description('Create a shareable URL of an eval (defaults to most recent)' + '\n\n')
-    .option('--env-file, --env-path <path>', 'Path to .env file')
     .option(
       '--show-auth',
       'Show username/password authentication information in the URL if exists',
@@ -61,10 +59,10 @@ export function shareCommand(program: Command) {
         evalId: string | undefined,
         cmdObj: { yes: boolean; envPath?: string; showAuth: boolean } & Command,
       ) => {
-        setupEnv(cmdObj.envPath);
         telemetry.record('command_used', {
           name: 'share',
         });
+        await telemetry.send();
 
         let eval_: Eval | undefined | null = null;
         if (evalId) {
@@ -118,7 +116,7 @@ export function shareCommand(program: Command) {
 
         if (
           // Idempotency is not implemented in self-hosted mode.
-          !getEnvBool('PROMPTFOO_SELF_HOSTED', false) &&
+          cloudConfig.isEnabled() &&
           (await hasEvalBeenShared(eval_))
         ) {
           const url = await getShareableUrl(eval_, cmdObj.showAuth);

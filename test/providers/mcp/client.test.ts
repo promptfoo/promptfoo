@@ -1,37 +1,82 @@
+// Import the mocked modules after mocking
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { MCPClient } from '../../../src/providers/mcp/client';
 
-jest.mock('@modelcontextprotocol/sdk/client/index.js');
-jest.mock('@modelcontextprotocol/sdk/client/stdio.js');
+// Create mock implementations for the imported modules
+const mockClient = {
+  _clientInfo: {},
+  _capabilities: {},
+  registerCapabilities: jest.fn(),
+  assertCapability: jest.fn(),
+  connect: jest.fn(),
+  listTools: jest.fn().mockResolvedValue({
+    tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+  }),
+  callTool: jest.fn(),
+  close: jest.fn(),
+};
+
+const mockStdioTransport = {
+  close: jest.fn(),
+  connect: jest.fn(),
+  start: jest.fn(),
+  send: jest.fn(),
+};
+
+const mockStreamableHTTPTransport = {
+  close: jest.fn(),
+  connect: jest.fn(),
+  start: jest.fn(),
+  send: jest.fn(),
+};
+
+const mockSSETransport = {
+  close: jest.fn(),
+  connect: jest.fn(),
+  start: jest.fn(),
+  send: jest.fn(),
+};
+
+// Mock the modules before importing them
+jest.mock('@modelcontextprotocol/sdk/client/index.js', () => ({
+  Client: jest.fn().mockImplementation(() => mockClient),
+}));
+
+jest.mock('@modelcontextprotocol/sdk/client/stdio.js', () => ({
+  StdioClientTransport: jest.fn().mockImplementation(() => mockStdioTransport),
+}));
+
+jest.mock('@modelcontextprotocol/sdk/client/streamableHttp.js', () => ({
+  StreamableHTTPClientTransport: jest.fn().mockImplementation(() => mockStreamableHTTPTransport),
+}));
+
+jest.mock('@modelcontextprotocol/sdk/client/sse.js', () => ({
+  SSEClientTransport: jest.fn().mockImplementation(() => mockSSETransport),
+}));
 
 describe('MCPClient', () => {
   let mcpClient: MCPClient;
 
   beforeEach(() => {
-    jest.resetAllMocks();
+    jest.clearAllMocks();
   });
 
   describe('initialize', () => {
     it('should not initialize if disabled', async () => {
       mcpClient = new MCPClient({ enabled: false });
       await mcpClient.initialize();
-      expect(Client).not.toHaveBeenCalled();
+      expect(mcpClient.hasInitialized).toBe(false);
     });
 
     it('should initialize with single server config', async () => {
-      const mockClient = {
-        _clientInfo: {},
-        _capabilities: {},
-        registerCapabilities: jest.fn(),
-        assertCapability: jest.fn(),
-        connect: jest.fn(),
-        listTools: jest.fn().mockResolvedValue({
-          tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-        }),
-        close: jest.fn(),
-      };
-      jest.mocked(Client).mockImplementation(() => mockClient as any);
+      // Reset mocks for this test
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
 
       mcpClient = new MCPClient({
         enabled: true,
@@ -47,22 +92,17 @@ describe('MCPClient', () => {
         command: 'npm',
         args: ['start'],
       });
-      expect(mockClient.connect).toHaveBeenCalledWith(expect.any(StdioClientTransport));
+      expect(mockClient.connect).toHaveBeenCalledWith(mockStdioTransport);
+      await mcpClient.cleanup();
+      expect(mcpClient.hasInitialized).toBe(false);
     });
 
     it('should initialize with multiple servers', async () => {
-      const mockClient = {
-        _clientInfo: {},
-        _capabilities: {},
-        registerCapabilities: jest.fn(),
-        assertCapability: jest.fn(),
-        connect: jest.fn(),
-        listTools: jest.fn().mockResolvedValue({
-          tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-        }),
-        close: jest.fn(),
-      };
-      jest.mocked(Client).mockImplementation(() => mockClient as any);
+      // Reset mocks for this test
+      mockClient.connect.mockResolvedValue(undefined);
+      mockClient.listTools.mockResolvedValue({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
 
       mcpClient = new MCPClient({
         enabled: true,
@@ -98,7 +138,13 @@ describe('MCPClient', () => {
       );
     });
 
-    it('should throw error for remote server', async () => {
+    it('should initialize with remote server using StreamableHTTPClientTransport', async () => {
+      // Reset mocks for this test
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+
       mcpClient = new MCPClient({
         enabled: true,
         server: {
@@ -106,25 +152,126 @@ describe('MCPClient', () => {
         },
       });
 
-      await expect(mcpClient.initialize()).rejects.toThrow('Remote MCP servers are not supported');
+      await mcpClient.initialize();
+
+      expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(expect.any(URL), undefined);
+      expect(mockClient.connect).toHaveBeenCalledWith(mockStreamableHTTPTransport);
+    });
+
+    it('should initialize with remote server using StreamableHTTPClientTransport with headers', async () => {
+      // Reset mocks for this test
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+
+      const customHeaders = {
+        'X-Custom-Header': 'custom-value',
+        Authorization: 'Bearer test-token',
+      };
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: {
+          url: 'http://localhost:3000',
+          headers: customHeaders,
+        },
+      });
+
+      await mcpClient.initialize();
+
+      expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(
+        expect.any(URL),
+        expect.objectContaining({
+          requestInit: expect.objectContaining({
+            headers: expect.objectContaining(customHeaders),
+          }),
+        }),
+      );
+      expect(mockClient.connect).toHaveBeenCalledWith(mockStreamableHTTPTransport);
+    });
+
+    it('should fall back to SSEClientTransport if StreamableHTTPClientTransport fails', async () => {
+      // Reset mocks for this test
+      mockClient.connect
+        .mockImplementationOnce(() => {
+          throw new Error('Connection failed');
+        })
+        .mockResolvedValueOnce(undefined);
+
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: {
+          url: 'http://localhost:3000',
+        },
+      });
+
+      await mcpClient.initialize();
+
+      expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(expect.any(URL), undefined);
+      expect(SSEClientTransport).toHaveBeenCalledWith(expect.any(URL), undefined);
+      expect(mockClient.connect).toHaveBeenCalledTimes(2);
+    });
+
+    it('should fall back to SSEClientTransport with headers if StreamableHTTPClientTransport fails', async () => {
+      // Reset mocks for this test
+      mockClient.connect
+        .mockImplementationOnce(() => {
+          throw new Error('Connection failed');
+        })
+        .mockResolvedValueOnce(undefined);
+
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+
+      const customHeaders = {
+        'X-Custom-Header': 'custom-value',
+        Authorization: 'Bearer test-token',
+      };
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: {
+          url: 'http://localhost:3000',
+          headers: customHeaders,
+        },
+      });
+
+      await mcpClient.initialize();
+
+      expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(
+        expect.any(URL),
+        expect.objectContaining({
+          requestInit: expect.objectContaining({
+            headers: expect.objectContaining(customHeaders),
+          }),
+        }),
+      );
+      expect(SSEClientTransport).toHaveBeenCalledWith(
+        expect.any(URL),
+        expect.objectContaining({
+          requestInit: expect.objectContaining({
+            headers: expect.objectContaining(customHeaders),
+          }),
+        }),
+      );
+      expect(mockClient.connect).toHaveBeenCalledTimes(2);
     });
 
     it('should filter tools according to config.tools', async () => {
-      const mockClient = {
-        _clientInfo: {},
-        _capabilities: {},
-        registerCapabilities: jest.fn(),
-        assertCapability: jest.fn(),
-        connect: jest.fn(),
-        listTools: jest.fn().mockResolvedValue({
-          tools: [
-            { name: 'tool1', description: 'desc1', inputSchema: {} },
-            { name: 'tool2', description: 'desc2', inputSchema: {} },
-          ],
-        }),
-        close: jest.fn(),
-      };
-      jest.mocked(Client).mockImplementation(() => mockClient as any);
+      // Reset mocks for this test
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [
+          { name: 'tool1', description: 'desc1', inputSchema: {} },
+          { name: 'tool2', description: 'desc2', inputSchema: {} },
+        ],
+      });
 
       mcpClient = new MCPClient({
         enabled: true,
@@ -144,21 +291,14 @@ describe('MCPClient', () => {
     });
 
     it('should exclude tools according to config.exclude_tools', async () => {
-      const mockClient = {
-        _clientInfo: {},
-        _capabilities: {},
-        registerCapabilities: jest.fn(),
-        assertCapability: jest.fn(),
-        connect: jest.fn(),
-        listTools: jest.fn().mockResolvedValue({
-          tools: [
-            { name: 'tool1', description: 'desc1', inputSchema: {} },
-            { name: 'tool2', description: 'desc2', inputSchema: {} },
-          ],
-        }),
-        close: jest.fn(),
-      };
-      jest.mocked(Client).mockImplementation(() => mockClient as any);
+      // Reset mocks for this test
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [
+          { name: 'tool1', description: 'desc1', inputSchema: {} },
+          { name: 'tool2', description: 'desc2', inputSchema: {} },
+        ],
+      });
 
       mcpClient = new MCPClient({
         enabled: true,
@@ -175,23 +315,36 @@ describe('MCPClient', () => {
         { name: 'tool2', description: 'desc2', inputSchema: {} },
       ]);
     });
+
+    it('should initialize with correct client name', async () => {
+      // Reset mocks for this test
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: {
+          command: 'npm',
+          args: ['start'],
+        },
+      });
+
+      await mcpClient.initialize();
+
+      expect(Client).toHaveBeenCalledWith({ name: 'promptfoo-MCP', version: '1.0.0' });
+    });
   });
 
   describe('callTool', () => {
     it('should call tool successfully', async () => {
-      const mockClient = {
-        _clientInfo: {},
-        _capabilities: {},
-        registerCapabilities: jest.fn(),
-        assertCapability: jest.fn(),
-        connect: jest.fn(),
-        listTools: jest.fn().mockResolvedValue({
-          tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-        }),
-        callTool: jest.fn().mockResolvedValue({ content: 'result' }),
-        close: jest.fn(),
-      };
-      jest.mocked(Client).mockImplementation(() => mockClient as any);
+      // Reset mocks for this test
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+      mockClient.callTool.mockResolvedValueOnce({ content: 'result' });
 
       mcpClient = new MCPClient({
         enabled: true,
@@ -212,19 +365,12 @@ describe('MCPClient', () => {
     });
 
     it('should handle tool error', async () => {
-      const mockClient = {
-        _clientInfo: {},
-        _capabilities: {},
-        registerCapabilities: jest.fn(),
-        assertCapability: jest.fn(),
-        connect: jest.fn(),
-        listTools: jest.fn().mockResolvedValue({
-          tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-        }),
-        callTool: jest.fn().mockRejectedValue(new Error('Tool error')),
-        close: jest.fn(),
-      };
-      jest.mocked(Client).mockImplementation(() => mockClient as any);
+      // Reset mocks for this test
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+      mockClient.callTool.mockRejectedValueOnce(new Error('Tool error'));
 
       mcpClient = new MCPClient({
         enabled: true,
@@ -245,18 +391,11 @@ describe('MCPClient', () => {
     });
 
     it('should throw error for unknown tool', async () => {
-      const mockClient = {
-        _clientInfo: {},
-        _capabilities: {},
-        registerCapabilities: jest.fn(),
-        assertCapability: jest.fn(),
-        connect: jest.fn(),
-        listTools: jest.fn().mockResolvedValue({
-          tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-        }),
-        close: jest.fn(),
-      };
-      jest.mocked(Client).mockImplementation(() => mockClient as any);
+      // Reset mocks for this test
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
 
       mcpClient = new MCPClient({
         enabled: true,
@@ -271,20 +410,13 @@ describe('MCPClient', () => {
     });
 
     it('should support tool content as Buffer', async () => {
+      // Reset mocks for this test
       const contentBuffer = Buffer.from('buffered-result');
-      const mockClient = {
-        _clientInfo: {},
-        _capabilities: {},
-        registerCapabilities: jest.fn(),
-        assertCapability: jest.fn(),
-        connect: jest.fn(),
-        listTools: jest.fn().mockResolvedValue({
-          tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-        }),
-        callTool: jest.fn().mockResolvedValue({ content: contentBuffer }),
-        close: jest.fn(),
-      };
-      jest.mocked(Client).mockImplementation(() => mockClient as any);
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+      mockClient.callTool.mockResolvedValueOnce({ content: contentBuffer });
 
       mcpClient = new MCPClient({
         enabled: true,
@@ -301,19 +433,12 @@ describe('MCPClient', () => {
     });
 
     it('should return empty string if result content is falsy', async () => {
-      const mockClient = {
-        _clientInfo: {},
-        _capabilities: {},
-        registerCapabilities: jest.fn(),
-        assertCapability: jest.fn(),
-        connect: jest.fn(),
-        listTools: jest.fn().mockResolvedValue({
-          tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-        }),
-        callTool: jest.fn().mockResolvedValue({}),
-        close: jest.fn(),
-      };
-      jest.mocked(Client).mockImplementation(() => mockClient as any);
+      // Reset mocks for this test
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+      mockClient.callTool.mockResolvedValueOnce({});
 
       mcpClient = new MCPClient({
         enabled: true,
@@ -332,18 +457,11 @@ describe('MCPClient', () => {
 
   describe('cleanup', () => {
     it('should cleanup all clients', async () => {
-      const mockClient = {
-        _clientInfo: {},
-        _capabilities: {},
-        registerCapabilities: jest.fn(),
-        assertCapability: jest.fn(),
-        connect: jest.fn(),
-        listTools: jest.fn().mockResolvedValue({
-          tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-        }),
-        close: jest.fn(),
-      };
-      jest.mocked(Client).mockImplementation(() => mockClient as any);
+      // Reset mocks for this test
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
 
       mcpClient = new MCPClient({
         enabled: true,
@@ -360,18 +478,12 @@ describe('MCPClient', () => {
     });
 
     it('should handle cleanup errors', async () => {
-      const mockClient = {
-        _clientInfo: {},
-        _capabilities: {},
-        registerCapabilities: jest.fn(),
-        assertCapability: jest.fn(),
-        connect: jest.fn(),
-        listTools: jest.fn().mockResolvedValue({
-          tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-        }),
-        close: jest.fn().mockRejectedValue(new Error('Cleanup error')),
-      };
-      jest.mocked(Client).mockImplementation(() => mockClient as any);
+      // Reset mocks for this test
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+      mockClient.close.mockRejectedValueOnce(new Error('Cleanup error'));
 
       mcpClient = new MCPClient({
         enabled: true,
@@ -388,21 +500,15 @@ describe('MCPClient', () => {
 
   describe('getAllTools', () => {
     it('should return all tools from all servers', async () => {
-      const mockClient = {
-        _clientInfo: {},
-        _capabilities: {},
-        registerCapabilities: jest.fn(),
-        assertCapability: jest.fn(),
-        connect: jest.fn(),
-        listTools: jest.fn().mockResolvedValue({
-          tools: [
-            { name: 'tool1', description: 'desc1', inputSchema: {} },
-            { name: 'tool2', description: 'desc2', inputSchema: {} },
-          ],
-        }),
-        close: jest.fn(),
-      };
-      jest.mocked(Client).mockImplementation(() => mockClient as any);
+      // Reset mocks for this test
+      mockClient.connect.mockResolvedValue(undefined);
+      mockClient.listTools.mockResolvedValue({
+        tools: [
+          { name: 'tool1', description: 'desc1', inputSchema: {} },
+          { name: 'tool2', description: 'desc2', inputSchema: {} },
+        ],
+      });
+
       mcpClient = new MCPClient({
         enabled: true,
         servers: [
@@ -432,46 +538,37 @@ describe('MCPClient', () => {
 
   describe('getAuthHeaders', () => {
     it('should return bearer auth header', () => {
-      // @ts-expect-private: access for test
-
-      const client: any = new MCPClient({ enabled: true });
+      const client = new MCPClient({ enabled: true });
       const server = {
         auth: { type: 'bearer', token: 'abc123' },
       };
-      // @ts-expect-private
+      // @ts-expect-error accessing private method for testing
       expect(client['getAuthHeaders'](server)).toEqual({
         Authorization: 'Bearer abc123',
       });
     });
 
     it('should return api_key auth header', () => {
-      // @ts-expect-private: access for test
-
-      const client: any = new MCPClient({ enabled: true });
+      const client = new MCPClient({ enabled: true });
       const server = {
         auth: { type: 'api_key', api_key: 'xyz789' },
       };
-      // @ts-expect-private
+      // @ts-expect-error accessing private method for testing
       expect(client['getAuthHeaders'](server)).toEqual({
         'X-API-Key': 'xyz789',
       });
     });
 
     it('should return empty object if no auth', () => {
-      // @ts-expect-private: access for test
-
-      const client: any = new MCPClient({ enabled: true });
+      const client = new MCPClient({ enabled: true });
       const server = {};
-      // @ts-expect-private
       expect(client['getAuthHeaders'](server)).toEqual({});
     });
 
     it('should return empty object for incomplete auth', () => {
-      // @ts-expect-private: access for test
-
-      const client: any = new MCPClient({ enabled: true });
+      const client = new MCPClient({ enabled: true });
       const server = { auth: { type: 'bearer' } };
-      // @ts-expect-private
+      // @ts-expect-error accessing private method for testing
       expect(client['getAuthHeaders'](server)).toEqual({});
     });
   });

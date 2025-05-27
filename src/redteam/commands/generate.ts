@@ -11,7 +11,9 @@ import { synthesize } from '../';
 import { disableCache } from '../../cache';
 import cliState from '../../cliState';
 import { VERSION } from '../../constants';
-import logger, { setLogLevel } from '../../logger';
+import { getEnvBool } from '../../envars';
+import logger from '../../logger';
+import { loadApiProviders } from '../../providers';
 import telemetry from '../../telemetry';
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types';
 import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
@@ -26,13 +28,18 @@ import {
   DEFAULT_STRATEGIES,
   REDTEAM_MODEL,
 } from '../constants';
-import { shouldGenerateRemote } from '../remoteGeneration';
+import { shouldGenerateRemote, neverGenerateRemote } from '../remoteGeneration';
 import type {
   RedteamCliGenerateOptions,
   RedteamFileConfig,
   RedteamStrategyObject,
   SynthesizeOptions,
 } from '../types';
+import {
+  type TargetPurposeDiscoveryResult,
+  doTargetPurposeDiscovery,
+  mergeTargetPurposeDiscoveryResults,
+} from './discover';
 
 function getConfigHash(configPath: string): string {
   const content = fs.readFileSync(configPath, 'utf8');
@@ -76,6 +83,7 @@ export async function doGenerateRedteam(
     shouldGenerate = true;
   }
 
+  let targetPurposeDiscoveryResult: TargetPurposeDiscoveryResult | undefined;
   if (configPath) {
     const resolved = await resolveConfigs(
       {
@@ -85,6 +93,36 @@ export async function doGenerateRedteam(
     );
     testSuite = resolved.testSuite;
     redteamConfig = resolved.config.redteam;
+
+    // If automatic purpose discovery is enabled, remote generation is enabled, and a config is provided that contains at least one target,
+    // discover the purpose from the target:
+    if (
+      !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_PURPOSE_DISCOVERY_AGENT', true) &&
+      !neverGenerateRemote() &&
+      resolved.config.providers &&
+      Array.isArray(resolved.config.providers)
+    ) {
+      invariant(
+        resolved.config.providers.length > 0,
+        'At least one provider must be provided in the config file',
+      );
+      const providers = await loadApiProviders(resolved.config.providers);
+      try {
+        if (testSuite.prompts.length > 1) {
+          logger.warn(
+            'More than one prompt provided, only the first prompt will be used for purpose discovery',
+          );
+        }
+        targetPurposeDiscoveryResult = await doTargetPurposeDiscovery(
+          providers[0],
+          testSuite.prompts[0],
+        );
+      } catch (error) {
+        logger.error(
+          `Discovery failed from error, skipping: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
   } else if (options.purpose) {
     // There is a purpose, so we can just have a dummy test suite for standalone invocation
     testSuite = {
@@ -103,6 +141,11 @@ export async function doGenerateRedteam(
     return null;
   }
 
+  const mergedPurpose = mergeTargetPurposeDiscoveryResults(
+    redteamConfig?.purpose ?? options.purpose,
+    targetPurposeDiscoveryResult,
+  );
+
   const startTime = Date.now();
   telemetry.record('command_used', {
     name: 'generate redteam - started',
@@ -111,6 +154,7 @@ export async function doGenerateRedteam(
     plugins: redteamConfig?.plugins?.map((p) => (typeof p === 'string' ? p : p.id)) || [],
     strategies: redteamConfig?.strategies?.map((s) => (typeof s === 'string' ? s : s.id)) || [],
   });
+  await telemetry.send();
 
   let plugins;
 
@@ -182,7 +226,7 @@ export async function doGenerateRedteam(
     entities: redteamConfig?.entities,
     plugins,
     provider: redteamConfig?.provider || options.provider,
-    purpose: redteamConfig?.purpose || options.purpose,
+    purpose: mergedPurpose,
     strategies: strategyObjs,
     delay: redteamConfig?.delay || options.delay,
     sharing: redteamConfig?.sharing || options.sharing,
@@ -270,6 +314,7 @@ export async function doGenerateRedteam(
         ...(configPath && redteamTests.length > 0
           ? { configHash: getConfigHash(configPath) }
           : { configHash: 'force-regenerate' }),
+        ...(targetPurposeDiscoveryResult ? { targetPurposeDiscoveryResult } : {}),
       },
     };
     ret = writePromptfooConfig(updatedYaml, options.output);
@@ -277,6 +322,19 @@ export async function doGenerateRedteam(
     const relativeOutputPath = path.relative(process.cwd(), options.output);
     logger.info(`Wrote ${redteamTests.length} test cases to ${relativeOutputPath}`);
     if (!options.inRedteamRun) {
+      // Provider cleanup step
+      try {
+        const provider = testSuite.providers[0] as ApiProvider;
+        if (provider && typeof provider.cleanup === 'function') {
+          const cleanupResult = provider.cleanup();
+          if (cleanupResult instanceof Promise) {
+            await cleanupResult;
+          }
+        }
+      } catch (cleanupErr) {
+        logger.warn(`Error during provider cleanup: ${cleanupErr}`);
+      }
+
       const commandPrefix = isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo';
       logger.info(
         '\n' +
@@ -302,9 +360,11 @@ export async function doGenerateRedteam(
     };
     existingConfig.tests = [...(existingConfig.tests || []), ...redteamTests];
     existingConfig.redteam = { ...(existingConfig.redteam || {}), ...updatedRedteamConfig };
+    // Add the result of target purpose discovery to metadata if available
     existingConfig.metadata = {
       ...(existingConfig.metadata || {}),
       configHash: getConfigHash(configPath),
+      ...(targetPurposeDiscoveryResult ? { targetPurposeDiscoveryResult } : {}),
     };
     ret = writePromptfooConfig(existingConfig, configPath);
     logger.info(
@@ -328,7 +388,7 @@ export async function doGenerateRedteam(
     plugins: plugins.map((p) => p.id),
     strategies: strategies.map((s) => (typeof s === 'string' ? s : s.id)),
   });
-
+  await telemetry.send();
   return ret;
 }
 
@@ -391,7 +451,6 @@ export function redteamGenerateCommand(
       'Specify the language for generated tests. Defaults to English',
     )
     .option('--no-cache', 'Do not read or write results to disk cache', false)
-    .option('--env-file, --env-path <path>', 'Path to .env file')
     .option(
       '-j, --max-concurrency <number>',
       'Maximum number of concurrent API calls',
@@ -403,14 +462,9 @@ export function redteamGenerateCommand(
     )
     .option('--remote', 'Force remote inference wherever possible', false)
     .option('--force', 'Force generation even if no changes are detected', false)
-    .option('--verbose', 'Show debug logs', defaultConfig?.commandLineOptions?.verbose)
     .option('--no-progress-bar', 'Do not show progress bar')
     .option('--burp-escape-json', 'Escape quotes in Burp payloads', false)
     .action((opts: Partial<RedteamCliGenerateOptions>): void => {
-      if (opts.verbose) {
-        setLogLevel('debug');
-      }
-
       if (opts.remote) {
         cliState.remote = true;
       }

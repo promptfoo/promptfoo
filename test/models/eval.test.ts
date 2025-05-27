@@ -239,4 +239,227 @@ describe('evaluator', () => {
       });
     });
   });
+
+  describe('toResultsFile', () => {
+    it('should return results file with correct version', async () => {
+      const eval1 = await EvalFactory.create();
+      const results = await eval1.toResultsFile();
+      expect(results.version).toBe(eval1.version());
+    });
+
+    it('should return results file with all required fields', async () => {
+      const eval1 = await EvalFactory.create();
+      const results = await eval1.toResultsFile();
+
+      expect(results).toEqual({
+        version: eval1.version(),
+        createdAt: new Date(eval1.createdAt).toISOString(),
+        config: eval1.config,
+        author: null,
+        prompts: eval1.getPrompts(),
+        datasetId: null,
+        results: await eval1.toEvaluateSummary(),
+      });
+    });
+
+    it('should handle null author and datasetId', async () => {
+      const eval1 = new Eval({});
+      const results = await eval1.toResultsFile();
+
+      expect(results.author).toBeNull();
+      expect(results.datasetId).toBeNull();
+    });
+
+    it('should include correct results summary', async () => {
+      const eval1 = await EvalFactory.create();
+      const results = await eval1.toResultsFile();
+
+      expect(results.results).toEqual(await eval1.toEvaluateSummary());
+    });
+  });
+
+  describe('getTablePage', () => {
+    let evalWithResults: Eval;
+
+    beforeEach(async () => {
+      // Create an evaluation with varied results for testing pagination and filtering
+      evalWithResults = await EvalFactory.create({
+        numResults: 20,
+        resultTypes: ['success', 'error', 'failure'],
+        withHighlights: true,
+        withNamedScores: true,
+        searchableContent: 'searchable_content',
+      });
+    });
+
+    it('should return paginated results with default parameters', async () => {
+      const result = await evalWithResults.getTablePage({});
+
+      expect(result).toHaveProperty('head');
+      expect(result).toHaveProperty('body');
+      expect(result).toHaveProperty('totalCount');
+      expect(result).toHaveProperty('filteredCount');
+      expect(result).toHaveProperty('id', evalWithResults.id);
+
+      // Default limit is 50
+      expect(result.body.length).toBeLessThanOrEqual(50);
+    });
+
+    it('should respect offset and limit parameters', async () => {
+      // Create an eval with enough results to ensure we have content for two pages
+      const largeEval = await EvalFactory.create({
+        numResults: 12,
+        resultTypes: ['success', 'failure'],
+      });
+
+      const firstPage = await largeEval.getTablePage({ offset: 0, limit: 5 });
+      const secondPage = await largeEval.getTablePage({ offset: 5, limit: 5 });
+
+      expect(firstPage.body.length).toBeLessThanOrEqual(5);
+      expect(secondPage.body.length).toBeLessThanOrEqual(5);
+
+      // Ensure we have content in both pages for a valid test
+      expect(firstPage.body.length).toBeGreaterThan(0);
+      expect(secondPage.body.length).toBeGreaterThan(0);
+
+      // Compare test indices between pages to ensure they're different
+      const firstPageIndices = firstPage.body.map((row) => row.testIdx);
+      const secondPageIndices = secondPage.body.map((row) => row.testIdx);
+
+      // Verify no overlap between page indices
+      const intersection = firstPageIndices.filter((idx) => secondPageIndices.includes(idx));
+      expect(intersection).toHaveLength(0);
+    });
+
+    it('should filter by errors', async () => {
+      const result = await evalWithResults.getTablePage({ filterMode: 'errors' });
+
+      // Ensure there are results for the test to be meaningful
+      const hasResults = result.body.length > 0;
+      expect(hasResults).toBe(true);
+
+      // Check all outputs for errors
+      for (const row of result.body) {
+        const hasError = row.outputs.some(
+          (output) =>
+            output.text.includes('error') || (output.gradingResult?.reason || '').includes('error'),
+        );
+        expect(hasError).toBe(true);
+      }
+    });
+
+    it('should filter by failures', async () => {
+      const result = await evalWithResults.getTablePage({ filterMode: 'failures' });
+
+      // Ensure there are results for the test to be meaningful
+      const hasResults = result.body.length > 0;
+      expect(hasResults).toBe(true);
+
+      // All results should contain at least one failed output that's not an error
+      for (const row of result.body) {
+        const hasFailure = row.outputs.some(
+          (output) => !output.pass && !output.text.includes('error'),
+        );
+        expect(hasFailure).toBe(true);
+      }
+    });
+
+    it('should filter by passes', async () => {
+      const result = await evalWithResults.getTablePage({ filterMode: 'passes' });
+
+      // Ensure there are results for the test to be meaningful
+      const hasResults = result.body.length > 0;
+      expect(hasResults).toBe(true);
+
+      // All results should contain at least one successful output
+      for (const row of result.body) {
+        const hasSuccess = row.outputs.some((output) => output.pass === true);
+        expect(hasSuccess).toBe(true);
+      }
+    });
+
+    it('should filter by specific test indices', async () => {
+      const testIndices = [1, 3, 5];
+      const result = await evalWithResults.getTablePage({ testIndices });
+
+      // Should only return results for the specified test indices
+      const returnedIndices = result.body.map((row) => row.testIdx);
+      for (const idx of returnedIndices) {
+        expect(testIndices).toContain(idx);
+      }
+
+      // Should return at most the number of requested indices
+      expect(result.body.length).toBeLessThanOrEqual(testIndices.length);
+    });
+
+    it('should handle search queries across fields', async () => {
+      // This test requires setting up specific search terms in the eval factory
+      const searchTerm = 'searchable_content';
+      const result = await evalWithResults.getTablePage({ searchQuery: searchTerm });
+
+      // Results should contain the search term in at least one field
+      expect(result.body.length).toBeGreaterThan(0);
+      expect(result.filteredCount).toBeLessThan(result.totalCount);
+    });
+
+    it('should filter by specific metrics', async () => {
+      // This test requires setting up results with named scores in the eval factory
+      const metricName = 'accuracy';
+      const result = await evalWithResults.getTablePage({ metricFilter: metricName });
+
+      // All results should have the specified metric
+      for (const row of result.body) {
+        const hasMetric = row.outputs.some(
+          (output) => output.namedScores && output.namedScores[metricName] !== undefined,
+        );
+        expect(hasMetric).toBe(true);
+      }
+    });
+
+    it('should combine multiple filter types', async () => {
+      const result = await evalWithResults.getTablePage({
+        filterMode: 'passes',
+        searchQuery: 'searchable_content',
+        metricFilter: 'relevance',
+        limit: 10,
+      });
+
+      // Results should satisfy all conditions and respect limit
+      expect(result.body.length).toBeLessThanOrEqual(10);
+      expect(result.filteredCount).toBeLessThan(result.totalCount);
+    });
+
+    it('should return correct counts for filtered results', async () => {
+      const allResults = await evalWithResults.getTablePage({});
+      const filteredResults = await evalWithResults.getTablePage({ filterMode: 'passes' });
+
+      // Total count should be the same for both queries
+      expect(filteredResults.totalCount).toBe(allResults.totalCount);
+
+      // Filtered count should be less than or equal to total count
+      expect(filteredResults.filteredCount).toBeLessThanOrEqual(filteredResults.totalCount);
+    });
+
+    it('should sanitize SQL inputs properly', async () => {
+      // Test with input containing SQL injection attempt
+      const result = await evalWithResults.getTablePage({
+        searchQuery: "'; DROP TABLE eval_results; --",
+      });
+
+      // Should still return results without error
+      expect(result).toBeDefined();
+      expect(result).toHaveProperty('body');
+    });
+
+    it('should handle empty result sets', async () => {
+      // Create an eval with no results
+      const emptyEval = await EvalFactory.create({ numResults: 0 });
+
+      const result = await emptyEval.getTablePage({});
+
+      expect(result.body).toEqual([]);
+      expect(result.totalCount).toBe(0);
+      expect(result.filteredCount).toBe(0);
+    });
+  });
 });
