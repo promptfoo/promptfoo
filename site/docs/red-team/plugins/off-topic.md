@@ -69,7 +69,6 @@ redteam:
     - off-topic
   strategies:
     - jailbreak
-    - prompt-injection
 ```
 
 ## Example Test Cases
