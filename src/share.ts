@@ -287,7 +287,7 @@ async function getApiConfig(evalRecord: Eval): Promise<{
       : getShareApiBaseUrl();
 
   return {
-    url: `${apiBaseUrl}/api/v1/eval`,
+    url: `${apiBaseUrl}/api/eval`,
   };
 }
 
