@@ -25,8 +25,8 @@ export function LogViewer({ logs }: LogViewerProps) {
   const [isFullscreen, setIsFullscreen] = React.useState(false);
   const [shouldAutoScroll, setShouldAutoScroll] = React.useState(true);
   const [showScrollButton, setShowScrollButton] = React.useState(false);
-  const logsContainerRef = useRef<HTMLDivElement>(null);
-  const fullscreenLogsContainerRef = useRef<HTMLDivElement>(null);
+  const logsContainerRef = useRef<HTMLDivElement>(null!);
+  const fullscreenLogsContainerRef = useRef<HTMLDivElement>(null!);
   const previousScrollPositionRef = useRef<{ main: number; fullscreen: number }>({
     main: 0,
     fullscreen: 0,
@@ -78,7 +78,7 @@ export function LogViewer({ logs }: LogViewerProps) {
     }
   }, [logs, shouldAutoScroll]);
 
-  const scrollToBottom = useCallback((containerRef: React.RefObject<HTMLDivElement | null>) => {
+  const scrollToBottom = useCallback((containerRef: React.RefObject<HTMLDivElement>) => {
     if (containerRef.current) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight;
       setShouldAutoScroll(true);

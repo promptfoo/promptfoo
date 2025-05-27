@@ -19,13 +19,13 @@ export default defineConfig({
     // Custom plugin to handle polyfill imports in tests
     {
       name: 'polyfill-resolver',
-      resolveId(id) {
+      resolveId(id: string) {
         if (id.includes('vite-plugin-node-polyfills/shims/')) {
           return id;
         }
         return null;
       },
-      load(id) {
+      load(id: string) {
         if (id.includes('vite-plugin-node-polyfills/shims/buffer')) {
           return 'export default globalThis.Buffer || {};';
         }
@@ -41,7 +41,7 @@ export default defineConfig({
         return null;
       },
     },
-  ],
+  ] as any,
   resolve: {
     alias: {
       '@app': path.resolve(__dirname, './src'),

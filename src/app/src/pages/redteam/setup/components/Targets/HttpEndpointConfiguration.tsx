@@ -1,4 +1,4 @@
-import React, { useCallback, useState, type JSX } from 'react';
+import React, { useCallback, useState } from 'react';
 import Editor from 'react-simple-code-editor';
 import AddIcon from '@mui/icons-material/Add';
 import CheckIcon from '@mui/icons-material/Check';
@@ -64,7 +64,7 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
   urlError,
   setUrlError,
   updateFullTarget,
-}): JSX.Element => {
+}): React.JSX.Element => {
   const theme = useTheme();
   const darkMode = theme.palette.mode === 'dark';
 
