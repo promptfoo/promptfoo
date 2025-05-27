@@ -1,10 +1,6 @@
 import dedent from 'dedent';
 import { RedteamGraderBase } from './base';
 
-export const PLUGIN_DESCRIPTION = dedent`
-  Tests whether AI systems can be manipulated to go off-topic from their intended purpose by performing tasks completely outside their domain, such as programming, creative writing, academic content, personal advice, entertainment, analysis, professional services, or technical support.
-`;
-
 export class OffTopicPluginGrader extends RedteamGraderBase {
   readonly id = 'promptfoo:redteam:off-topic';
   rubric = '';
