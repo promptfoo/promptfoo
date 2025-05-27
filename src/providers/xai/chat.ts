@@ -1,9 +1,9 @@
-import logger from '../logger';
-import type { ApiProvider, ProviderOptions } from '../types';
-import { renderVarsInObject } from '../util';
-import invariant from '../util/invariant';
-import { OpenAiChatCompletionProvider } from './openai/chat';
-import type { OpenAiCompletionOptions } from './openai/types';
+import logger from '../../logger';
+import type { ApiProvider, ProviderOptions } from '../../types';
+import { renderVarsInObject } from '../../util';
+import invariant from '../../util/invariant';
+import { OpenAiChatCompletionProvider } from '../openai/chat';
+import type { OpenAiCompletionOptions } from '../openai/types';
 
 type XAIConfig = {
   region?: string;
@@ -85,7 +85,7 @@ export const XAI_CHAT_MODELS = [
   },
 ];
 
-const GROK_3_MINI_MODELS = ['grok-3-mini-beta', 'grok-3-mini-fast-beta'];
+export const GROK_3_MINI_MODELS = ['grok-3-mini-beta', 'grok-3-mini-fast-beta'];
 
 /**
  * Calculate xAI Grok cost based on model name and token usage

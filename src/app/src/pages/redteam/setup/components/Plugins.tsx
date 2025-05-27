@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
