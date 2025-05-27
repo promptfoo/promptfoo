@@ -11,20 +11,20 @@ providers:
 
 tests:
   - vars:
-      style: photorealistic
-      subject: a cat wearing sunglasses on a beach
+      style: hyperrealistic oil painting with subtle dreamlike atmosphere
+      subject: the Golden Gate Bridge at sunset with fog rolling in
   - vars:
-      style: pixel art
-      subject: a spaceship landing on an alien planet
+      style: photorealistic documentary photography with surreal color grading
+      subject: the first Apple computer being unveiled at the Homebrew Computer Club in 1976
   - vars:
-      style: watercolor painting
-      subject: a cityscape with flying cars
+      style: hyperrealistic watercolor with floating geometric elements
+      subject: Times Square during the 1969 moon landing celebration
   - vars:
-      style: 3D rendered
-      subject: a futuristic kitchen with smart appliances
+      style: photorealistic architectural visualization with impossible lighting
+      subject: the original ENIAC computer room at the University of Pennsylvania
   - vars:
-      style: detailed technical diagram
-      subject: a self-driving car with labels for key components
+      style: hyperrealistic technical illustration with floating equations
+      subject: the Apollo 11 lunar module with labeled components
   - vars:
-      style: comic book
-      subject: a superhero with fire powers
+      style: photorealistic noir with surreal shadows
+      subject: Alan Turing breaking the Enigma code at Bletchley Park

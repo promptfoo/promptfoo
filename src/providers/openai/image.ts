@@ -132,11 +132,53 @@ export function validateQualityForModel(
   return { valid: true };
 }
 
+// Helper function to detect image format from base64 data
+function detectImageFormatFromBase64(base64Data: string): string {
+  // Get the first few bytes to check file signatures
+  const header = base64Data.substring(0, 16);
+  
+  try {
+    // Decode the first few bytes to check magic numbers
+    const bytes = atob(header);
+    const firstBytes = Array.from(bytes).map(char => char.charCodeAt(0));
+    
+    // PNG signature: 89 50 4E 47 0D 0A 1A 0A
+    if (firstBytes[0] === 0x89 && firstBytes[1] === 0x50 && firstBytes[2] === 0x4E && firstBytes[3] === 0x47) {
+      return 'png';
+    }
+    
+    // JPEG signature: FF D8 FF
+    if (firstBytes[0] === 0xFF && firstBytes[1] === 0xD8 && firstBytes[2] === 0xFF) {
+      return 'jpeg';
+    }
+    
+    // WebP signature: RIFF....WEBP (52 49 46 46 ... 57 45 42 50)
+    if (firstBytes[0] === 0x52 && firstBytes[1] === 0x49 && firstBytes[2] === 0x46 && firstBytes[3] === 0x46) {
+      // Check for WEBP at offset 8
+      if (firstBytes.length >= 12 && 
+          firstBytes[8] === 0x57 && firstBytes[9] === 0x45 && 
+          firstBytes[10] === 0x42 && firstBytes[11] === 0x50) {
+        return 'webp';
+      }
+    }
+    
+    // GIF signature: GIF87a or GIF89a
+    if (firstBytes[0] === 0x47 && firstBytes[1] === 0x49 && firstBytes[2] === 0x46) {
+      return 'gif';
+    }
+  } catch (error) {
+    // If base64 decoding fails, fall back to default
+  }
+  
+  return 'png'; // Default fallback
+}
+
 export function formatOutput(
   data: any,
   prompt: string,
   responseFormat?: string,
   model?: string,
+  config?: any,
 ): string | { error: string } {
   // GPT Image always returns b64_json, regardless of response_format setting
   const usesBase64 = responseFormat === 'b64_json' || model === 'gpt-image-1';
@@ -149,7 +191,15 @@ export function formatOutput(
 
     // For gpt-image-1, create a markdown image tag with embedded base64 data
     if (model === 'gpt-image-1') {
-      const format = data.data[0]?.format || 'png'; // Default to png if format not specified
+      // Try to get format from API response, then from config, then detect from data
+      let format = data.data[0]?.format;
+      if (!format && config && 'output_format' in config) {
+        format = config.output_format;
+      }
+      if (!format) {
+        format = detectImageFormatFromBase64(b64Json);
+      }
+      
       const sanitizedPrompt = prompt
         .replace(/\r?\n|\r/g, ' ')
         .replace(/\[/g, '(')
@@ -282,6 +332,7 @@ export async function processApiResponse(
   model: string,
   size: string,
   quality?: string,
+  config?: any,
   n: number = 1,
 ): Promise<ProviderResponse> {
   if (data.error) {
@@ -292,7 +343,7 @@ export async function processApiResponse(
   }
 
   try {
-    const formattedOutput = formatOutput(data, prompt, responseFormat, model);
+    const formattedOutput = formatOutput(data, prompt, responseFormat, model, config);
     if (typeof formattedOutput === 'object') {
       return formattedOutput;
     }
@@ -434,6 +485,7 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
       model,
       size,
       quality,
+      config,
       config.n || 1,
     );
   }
