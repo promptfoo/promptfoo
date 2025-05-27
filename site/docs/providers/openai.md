@@ -258,17 +258,17 @@ And an example `prompt.json`:
 
 See the [OpenAI vision example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-vision).
 
-### Generating images
+### Image Generation
 
 OpenAI supports image generations via the following models:
 
-- `openai:image:dall-e-2` - The second generation DALL-E model
+- `openai:image:gpt-image-1` - GPT-based image generation model
 - `openai:image:dall-e-3` - The third generation DALL-E model
-- `openai:image:gpt-image-1` - GPT-based image generation model with superior instruction following
+- `openai:image:dall-e-2` - The second generation DALL-E model
 
 > **Important:** To use the `gpt-image-1` model, you may need to complete the [API Organization Verification](https://help.openai.com/en/articles/10910291-api-organization-verification) from your [developer console](https://platform.openai.com/settings/organization/general).
 
-See the [OpenAI Dall-E example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-dalle-images).
+See the [OpenAI Image Generation example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-image-generation).
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -277,7 +277,7 @@ prompts:
   - 'In the style of Dali: {{subject}}'
 
 providers:
-  - openai:image:dall-e-3
+  - openai:image:gpt-image-1
 
 tests:
   - vars:
