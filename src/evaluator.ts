@@ -536,7 +536,10 @@ class Evaluator {
     const assertionTypes = new Set<string>();
     const rowsWithSelectBestAssertion = new Set<number>();
 
-    await runExtensionHook(this.testSuite.extensions, 'beforeAll', { suite: this.testSuite });
+    const beforeAllOut = await runExtensionHook(this.testSuite.extensions, 'beforeAll', {
+      suite: this.testSuite,
+    });
+    this.testSuite = beforeAllOut.suite;
 
     if (options.generateSuggestions) {
       // TODO(ian): Move this into its own command/file
