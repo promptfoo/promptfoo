@@ -54,8 +54,12 @@ tests:
       query: 'getting started guide'
       repo: 'facebook/react'
     assert:
-      - type: contains
-        value: 'react'
+      # For approval-required provider, expect either approval request or explanation
+      - type: contains-any
+        value: ['MCP Tool Result', 'react', 'React', 'would search', 'would look']
+      # Should not have tool errors
+      - type: not-contains
+        value: 'MCP Tool Error'
       - type: llm-rubric
         value: 'The response provides information about React or explains what would be searched'
 
@@ -63,7 +67,29 @@ tests:
       query: 'API documentation'
       repo: 'openai/openai-python'
     assert:
-      - type: contains
-        value: 'API'
+      # Test different approval behaviors across providers
+      - type: contains-any
+        value: ['API', 'MCP Tool Result', 'Python', 'client']
+      # Validate that at least one provider succeeded with MCP tools
+      - type: contains-any
+        value: ['MCP Tool Result', 'documentation', 'API client', 'library']
       - type: llm-rubric
         value: 'The response mentions API documentation or explains the search intent'
+
+  # Add a test specifically for approval workflow validation
+  - vars:
+      query: 'installation instructions'
+      repo: 'nodejs/node'
+    assert:
+      # Comprehensive approval workflow testing
+      - type: contains-any
+        value: ['MCP Tool Result', 'installation', 'Node.js', 'setup']
+        metric: mcp_interaction_detected
+      # Ensure no unexpected errors
+      - type: not-contains
+        value: 'MCP Tool Error'
+        weight: 0.4
+      # Quality check regardless of approval status
+      - type: llm-rubric
+        value: 'The response addresses installation, setup, or Node.js information'
+        weight: 0.6

@@ -1,6 +1,6 @@
-# openai-mcp (OpenAI MCP Integration Examples)
+# openai-mcp (OpenAI MCP Integration)
 
-This directory contains examples demonstrating how to use OpenAI's MCP (Model Context Protocol) integration with the Responses API in promptfoo.
+This example demonstrates how to use OpenAI's Model Context Protocol (MCP) integration with the Responses API in promptfoo.
 
 You can run this example with:
 
@@ -11,149 +11,6 @@ npx promptfoo@latest init --example openai-mcp
 ## What is MCP?
 
 Model Context Protocol (MCP) is an open protocol that standardizes how applications provide tools and context to LLMs. OpenAI's MCP integration allows models to use remote MCP servers to perform tasks like searching repositories, accessing APIs, and more.
-
-## Examples
-
-### Basic MCP Usage (`promptfooconfig.yaml`)
-
-Demonstrates basic MCP integration using the public DeepWiki MCP server to search GitHub repositories.
-
-**Features:**
-
-- Remote MCP server integration
-- Tool filtering with `allowed_tools`
-- No approval required for faster execution
-- Repository search and information retrieval
-
-**Usage:**
-
-```bash
-npx promptfoo eval -c promptfooconfig.yaml
-```
-
-### Authenticated MCP (`promptfooconfig.authenticated.yaml`)
-
-Shows how to use MCP servers that require authentication, using Stripe as an example.
-
-**Features:**
-
-- Authentication headers configuration
-- Environment variable usage for API keys
-- Payment processing tools
-- Secure API key handling
-
-**Prerequisites:**
-
-- Valid Stripe API key set in `STRIPE_API_KEY` environment variable
-
-**Usage:**
-
-```bash
-export STRIPE_API_KEY="sk-test_your_stripe_key_here"
-npx promptfoo eval -c promptfooconfig.authenticated.yaml
-```
-
-### Approval Workflows (`promptfooconfig.approval.yaml`)
-
-Demonstrates different approval settings for MCP tool usage.
-
-**Features:**
-
-- Default approval required behavior
-- Selective approval for specific tools
-- No approval required configuration
-- Comparison of different approval strategies
-
-**Usage:**
-
-```bash
-npx promptfoo eval -c promptfooconfig.approval.yaml
-```
-
-## MCP Configuration Options
-
-### Basic MCP Tool Configuration
-
-```yaml
-tools:
-  - type: mcp
-    server_label: server_name
-    server_url: https://mcp.example.com/mcp
-    require_approval: never
-```
-
-### Authentication
-
-```yaml
-tools:
-  - type: mcp
-    server_label: authenticated_server
-    server_url: https://mcp.example.com
-    headers:
-      Authorization: 'Bearer ${API_KEY}'
-    require_approval: never
-```
-
-### Tool Filtering
-
-```yaml
-tools:
-  - type: mcp
-    server_label: filtered_server
-    server_url: https://mcp.example.com/mcp
-    allowed_tools: ['specific_tool_1', 'specific_tool_2']
-    require_approval: never
-```
-
-### Selective Approval
-
-```yaml
-tools:
-  - type: mcp
-    server_label: selective_server
-    server_url: https://mcp.example.com/mcp
-    require_approval:
-      never:
-        tool_names: ['safe_tool_1', 'safe_tool_2']
-```
-
-## Available MCP Servers
-
-Some popular remote MCP servers include:
-
-- **DeepWiki** (`https://mcp.deepwiki.com/mcp`) - GitHub repository search (no auth required)
-- **Stripe** (`https://mcp.stripe.com`) - Payment processing (requires API key)
-- **Cloudflare** - Cloud infrastructure management
-- **HubSpot** - CRM and marketing tools
-- **Intercom** - Customer messaging
-- **PayPal** - Payment processing
-- **Shopify** - E-commerce platform
-- **Twilio** - Communications APIs
-
-## Security Considerations
-
-1. **Trust MCP Servers**: Only connect to trusted MCP servers as they can access data in the model's context
-2. **Use Approvals**: Enable approvals for sensitive operations to review data sharing
-3. **Secure API Keys**: Store authentication tokens securely using environment variables
-4. **Log Data Sharing**: Monitor what data is sent to third-party MCP servers
-5. **Review Tool Definitions**: Understand what tools are available and what data they require
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Authentication Errors**: Ensure API keys are correctly set in environment variables
-2. **Tool Not Found**: Check that `allowed_tools` includes the tools you want to use
-3. **Approval Required**: If tools require approval, you'll see approval requests in the output
-4. **Network Errors**: Verify MCP server URLs are accessible
-
-### Debugging
-
-Enable debug logging to see detailed MCP interactions:
-
-```bash
-DEBUG=1 npx promptfoo eval -c promptfooconfig.yaml
-```
 
 ## Environment Variables
 
@@ -173,7 +30,7 @@ You can set these in a `.env` file or directly in your environment.
    export STRIPE_API_KEY="your_stripe_api_key"  # For authenticated example only
    ```
 
-2. **Run the examples**:
+2. **Run individual examples**:
 
    ```bash
    # Basic MCP integration
@@ -191,9 +48,105 @@ You can set these in a `.env` file or directly in your environment.
    npx promptfoo view
    ```
 
+## Examples
+
+### Basic MCP Usage (`promptfooconfig.yaml`)
+
+Demonstrates basic MCP integration using the public DeepWiki MCP server to search GitHub repositories.
+
+### Authenticated MCP (`promptfooconfig.authenticated.yaml`)
+
+Shows how to use MCP servers that require authentication, using Stripe as an example.
+
+### Approval Workflows (`promptfooconfig.approval.yaml`)
+
+Demonstrates different approval settings for MCP tool usage.
+
+## MCP Configuration
+
+### Basic Configuration
+
+```yaml
+tools:
+  - type: mcp
+    server_label: deepwiki
+    server_url: https://mcp.deepwiki.com/mcp
+    require_approval: never
+```
+
+### With Authentication
+
+```yaml
+tools:
+  - type: mcp
+    server_label: stripe
+    server_url: https://mcp.stripe.com
+    headers:
+      Authorization: 'Bearer ${STRIPE_API_KEY}'
+    require_approval: never
+```
+
+### Tool Filtering
+
+```yaml
+tools:
+  - type: mcp
+    server_label: deepwiki
+    server_url: https://mcp.deepwiki.com/mcp
+    allowed_tools: ['ask_question', 'read_wiki_structure']
+    require_approval: never
+```
+
+### Selective Approval
+
+```yaml
+tools:
+  - type: mcp
+    server_label: deepwiki
+    server_url: https://mcp.deepwiki.com/mcp
+    require_approval:
+      never:
+        tool_names: ['ask_question']
+```
+
+## Assertion Patterns
+
+The examples demonstrate assertion patterns for validating MCP tool interactions:
+
+### Enhanced OpenAI Tools Validation
+
+```yaml
+assert:
+  - type: is-valid-openai-tools-call # Validates both function and MCP tools
+```
+
+### MCP-Specific Content Validation
+
+```yaml
+assert:
+  - type: contains
+    value: 'MCP Tool Result' # Verify MCP tools were used
+  - type: not-contains
+    value: 'MCP Tool Error' # Ensure no MCP errors occurred
+```
+
+### Multi-layered Validation
+
+```yaml
+assert:
+  - type: is-valid-openai-tools-call
+    weight: 0.4
+  - type: contains-any
+    value: ['expected', 'content']
+    weight: 0.3
+  - type: llm-rubric
+    value: 'Response quality criteria'
+    weight: 0.3
+```
+
 ## Learn More
 
 - [OpenAI MCP Documentation](https://platform.openai.com/docs/guides/mcp)
 - [Model Context Protocol Specification](https://modelcontextprotocol.io/)
-- [Promptfoo OpenAI Provider Documentation](../../site/docs/providers/openai.md)
+- [Promptfoo OpenAI Provider Documentation](/docs/providers/openai)
 - [MCP Server Registry](https://github.com/modelcontextprotocol/servers)
