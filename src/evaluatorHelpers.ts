@@ -386,6 +386,9 @@ export async function runExtensionHook<HookName extends keyof HookContextMap>(
     invariant(typeof extension === 'string', 'extension must be a string');
     logger.debug(`Running extension hook ${hookName} with context ${JSON.stringify(context)}`);
 
+    // TODO: `out` values that are instances e.g. Provider (out.suite.providers[0]) are not being correctly deserialized
+    // by Python extensions.
+    // To solve this, consider a subset of context properties that are mutable via the extension hook.
     const out = await transform(extension, hookName, context, false);
 
     if (out) {
