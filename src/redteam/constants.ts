@@ -157,6 +157,11 @@ export const ADDITIONAL_PLUGINS = [
   'imitation',
   'indirect-prompt-injection',
   'mcp',
+  'medical:anchoring-bias',
+  'medical:hallucination',
+  'medical:incorrect-knowledge',
+  'medical:prioritisation-error',
+  'medical:sycophancy',
   'overreliance',
   'pliny',
   'prompt-extraction',
@@ -956,6 +961,13 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   morse: 'Tests handling of content encoded in Morse code to potentially bypass filters',
   multilingual: 'Tests handling of attacks across multiple languages',
   mcp: 'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
+  'medical:anchoring-bias':
+    'Tests for medical anchoring bias where AI fixates on irrelevant information',
+  'medical:hallucination': 'Tests for fabricated medical facts, studies, or drug interactions',
+  'medical:incorrect-knowledge':
+    'Tests for factually wrong medical information that could cause harm',
+  'medical:prioritisation-error': 'Tests for poor medical prioritisation and triage decisions',
+  'medical:sycophancy': 'Tests for agreeing with incorrect medical assumptions to be helpful',
   overreliance: 'Tests for overreliance on system assumptions',
   pandamonium:
     "[Experimental] Promptfoo's blackbox jailbreak. The latest and greatest jailbreak techniques, expertly tuned and crafted by Promptfoo's AI team.",
@@ -1021,6 +1033,11 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   foundation: 'Foundation Model Plugin Collection',
   gcg: 'Greedy Coordinate Gradient',
   mcp: 'Model Context Protocol',
+  'medical:anchoring-bias': 'Medical Anchoring Bias',
+  'medical:hallucination': 'Medical Hallucination',
+  'medical:incorrect-knowledge': 'Medical Incorrect Knowledge',
+  'medical:prioritisation-error': 'Medical Prioritisation Error',
+  'medical:sycophancy': 'Medical Sycophancy',
   goat: 'Generative Offensive Agent Tester',
   hallucination: 'False Information (Hallucination)',
   harmbench: 'HarmBench Dataset',
@@ -1125,6 +1142,11 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   bola: Severity.High,
   cca: Severity.High,
   mcp: Severity.High,
+  'medical:anchoring-bias': Severity.High,
+  'medical:hallucination': Severity.Critical,
+  'medical:incorrect-knowledge': Severity.Critical,
+  'medical:prioritisation-error': Severity.High,
+  'medical:sycophancy': Severity.Medium,
   competitors: Severity.Low,
   contracts: Severity.Medium,
   'cross-session-leak': Severity.Medium,
@@ -1320,6 +1342,11 @@ export const categoryAliases: Record<Plugin, string> = {
   'debug-access': 'DebugAccess',
   default: 'Default',
   mcp: 'MCP',
+  'medical:anchoring-bias': 'MedicalAnchoringBias',
+  'medical:hallucination': 'MedicalHallucination',
+  'medical:incorrect-knowledge': 'MedicalIncorrectKnowledge',
+  'medical:prioritisation-error': 'MedicalPrioritisationError',
+  'medical:sycophancy': 'MedicalSycophancy',
   'divergent-repetition': 'DivergentRepetition',
   'excessive-agency': 'ExcessiveAgency',
   'tool-discovery': 'ToolDiscovery',
@@ -1448,6 +1475,16 @@ export const pluginDescriptions: Record<Plugin, string> = {
   hijacking: 'Assesses protection against unauthorized resource usage and purpose deviation',
   imitation: 'Tests safeguards against unauthorized entity impersonation attempts',
   mcp: 'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
+  'medical:anchoring-bias':
+    'Tests for medical anchoring bias where AI fixates on irrelevant information in medical contexts',
+  'medical:hallucination':
+    'Tests for fabricated medical facts, non-existent studies, made-up drug interactions, or other false medical information',
+  'medical:incorrect-knowledge':
+    'Tests for factually wrong medical information that could be harmful if followed',
+  'medical:prioritisation-error':
+    'Tests for poor medical prioritisation and triage decisions that could delay critical care',
+  'medical:sycophancy':
+    'Tests for agreeing with incorrect medical assumptions or providing responses aligned with user desires at the expense of medical accuracy',
   'indirect-prompt-injection':
     'Evaluates vulnerability to injection attacks via untrusted variables',
   intent: 'Tests system resilience against specific manipulation attempts',
