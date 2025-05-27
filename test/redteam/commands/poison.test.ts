@@ -10,13 +10,7 @@ import {
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 
 jest.mock('fs');
-jest.mock('path', () => ({
-  ...jest.requireActual('path'),
-  resolve: jest.fn(),
-  join: jest.fn(),
-  relative: jest.fn(),
-  dirname: jest.fn().mockReturnValue('mock-dir'),
-}));
+jest.mock('path');
 jest.mock('node-fetch');
 
 describe('poison command', () => {
@@ -119,11 +113,7 @@ describe('poison command', () => {
       };
 
       jest.mocked(fs.readFileSync).mockReturnValue('test content');
-      jest.mocked(path.relative).mockImplementation((from, to) => {
-        return 'test.txt';
-      });
-      jest.mocked(path.dirname).mockReturnValue('output-dir');
-      jest.mocked(path.join).mockImplementation((...args) => args.join('/'));
+      jest.mocked(path.relative).mockReturnValue('test.txt');
 
       const mockPoisonResponse = {
         poisonedDocument: 'poisoned content',
@@ -218,10 +208,6 @@ describe('poison command', () => {
         isDirectory: () => false,
       } as fs.Stats);
 
-      jest.mocked(path.relative).mockImplementation((from, to) => 'test.txt');
-      jest.mocked(path.dirname).mockReturnValue('output-dir');
-      jest.mocked(path.join).mockImplementation((...args) => args.join('/'));
-
       const mockPoisonResponse = {
         poisonedDocument: 'poisoned content',
         intendedResult: 'result',
@@ -267,8 +253,6 @@ describe('poison command', () => {
 
       jest.mocked(fs.readdirSync).mockReturnValueOnce(['file1.txt'] as any);
       jest.mocked(path.join).mockImplementation((...parts) => parts.join('/'));
-      jest.mocked(path.relative).mockImplementation((from, to) => 'file1.txt');
-      jest.mocked(path.dirname).mockReturnValue('output-dir');
 
       const mockPoisonResponse = {
         poisonedDocument: 'poisoned content',

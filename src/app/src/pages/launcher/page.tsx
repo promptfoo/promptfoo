@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import logoPanda from '@app/assets/logo-panda.svg';
 import useApiConfig from '@app/stores/apiConfig';

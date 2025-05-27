@@ -1,4 +1,4 @@
-import { AwsBedrockKnowledgeBaseProvider } from '../../src/providers/bedrockKnowledgeBase';
+import { AwsBedrockKnowledgeBaseProvider } from '../../../src/providers/bedrock/knowledgeBase';
 
 const mockSend = jest.fn();
 const mockBedrockClient = {
@@ -26,7 +26,7 @@ const mockGet = jest.fn();
 const mockSet = jest.fn();
 const mockIsCacheEnabled = jest.fn().mockReturnValue(false);
 
-jest.mock('../../src/cache', () => ({
+jest.mock('../../../src/cache', () => ({
   getCache: jest.fn().mockImplementation(() => ({
     get: mockGet,
     set: mockSet,

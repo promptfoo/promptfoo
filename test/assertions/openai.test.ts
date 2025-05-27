@@ -16,10 +16,7 @@ import type {
 import { maybeLoadToolsFromExternalFile } from '../../src/util';
 
 jest.mock('fs');
-jest.mock('path', () => ({
-  ...jest.requireActual('path'),
-  resolve: jest.fn(),
-}));
+jest.mock('path');
 jest.mock('../../src/util', () => ({
   ...jest.requireActual('../../src/util'),
   maybeLoadToolsFromExternalFile: jest.fn(),

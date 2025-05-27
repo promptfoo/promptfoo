@@ -2,10 +2,10 @@ import type Eval from '../../../src/models/eval';
 import type EvalResult from '../../../src/models/evalResult';
 import { ResultFailureReason } from '../../../src/types';
 import {
-  getHeaderForTable,
   convertEvalResultToTableCell,
   convertTestResultsToTableRow,
 } from '../../../src/util/exportToFile';
+import { getHeaderForTable } from '../../../src/util/exportToFile/getHeaderForTable';
 
 describe('exportToFile utils', () => {
   describe('getHeaderForTable', () => {

@@ -18,6 +18,14 @@ export const ApiSchemas = {
         message: z.string(),
       }),
     },
+    EmailStatus: {
+      Response: z.object({
+        hasEmail: z.boolean(),
+        email: EmailSchema.optional(),
+        status: z.enum(['ok', 'exceeded_limit', 'show_usage_warning', 'no_email']),
+        message: z.string().optional(),
+      }),
+    },
   },
   Eval: {
     UpdateAuthor: {

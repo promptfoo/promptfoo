@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - id: anthropic:claude-3-5-sonnet-20241022
+  - id: anthropic:claude-sonnet-4-20250514
     config:
       tools:
         - name: get_weather

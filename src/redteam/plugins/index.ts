@@ -35,7 +35,6 @@ import { getHarmfulAssertions } from './harmful/common';
 import { getHarmfulTests } from './harmful/unaligned';
 import { ImitationPlugin } from './imitation';
 import { IntentPlugin } from './intent';
-import { OpenAIModerationPlugin } from './openaiModeration';
 import { OverreliancePlugin } from './overreliance';
 import { getPiiLeakTestsForCategory } from './pii';
 import { PlinyPlugin } from './pliny';
@@ -47,6 +46,7 @@ import { ShellInjectionPlugin } from './shellInjection';
 import { SqlInjectionPlugin } from './sqlInjection';
 import { ToolDiscoveryPlugin } from './toolDiscovery';
 import { ToolDiscoveryMultiTurnPlugin } from './toolDiscoveryMultiTurn';
+import { ToxicChatPlugin } from './toxicchat';
 import { UnsafeBenchPlugin } from './unsafebench';
 import { XSTestPlugin } from './xstest';
 
@@ -173,7 +173,7 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(ToolDiscoveryPlugin, 'tool-discovery'),
   createPluginFactory(ToolDiscoveryMultiTurnPlugin, 'tool-discovery:multi-turn'),
   createPluginFactory(HarmbenchPlugin, 'harmbench'),
-  createPluginFactory(OpenAIModerationPlugin, 'openai-moderation'),
+  createPluginFactory(ToxicChatPlugin, 'toxic-chat'),
   createPluginFactory(HallucinationPlugin, 'hallucination'),
   createPluginFactory(ImitationPlugin, 'imitation'),
   createPluginFactory<{ intent: string }>(IntentPlugin, 'intent', (config: { intent: string }) =>
@@ -259,7 +259,7 @@ function createRemotePlugin<T extends PluginConfig>(
         },
       }));
 
-      if (key.startsWith('harmful:')) {
+      if (key.startsWith('harmful:') || key.startsWith('bias:')) {
         return testsWithMetadata.map((testCase) => ({
           ...testCase,
           assert: getHarmfulAssertions(key as HarmPlugin),
@@ -272,7 +272,6 @@ function createRemotePlugin<T extends PluginConfig>(
 const remotePlugins: PluginFactory[] = [
   MEMORY_POISONING_PLUGIN_ID,
   'ascii-smuggling',
-  'bias:gender',
   'bfla',
   'bola',
   'cca',

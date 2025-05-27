@@ -4,6 +4,7 @@ import type { Config } from '@docusaurus/types';
 import type { ConfigureWebpackResult } from '@docusaurus/types/src/plugin';
 import * as fs from 'fs';
 import * as path from 'path';
+import { sanitizeMarkdown } from './src/utils/markdown';
 
 const lightCodeTheme = themes.github;
 const darkCodeTheme = themes.duotoneDark;
@@ -500,10 +501,9 @@ const config: Config = {
                   if (foundFile) {
                     try {
                       // Read the file directly from the filesystem
-                      let content = await fs.promises.readFile(filePath, 'utf8');
-
-                      // Remove frontmatter
-                      content = content.replace(/^---[\s\S]*?---\s*/m, '');
+                      const content = sanitizeMarkdown(
+                        await fs.promises.readFile(filePath, 'utf8'),
+                      );
 
                       // Set appropriate headers for raw markdown content
                       res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
@@ -547,7 +547,8 @@ const config: Config = {
             try {
               // Create nested directories if needed
               await fs.promises.mkdir(outDirname, { recursive: true });
-              await fs.promises.writeFile(outPath, content);
+              const sanitized = sanitizeMarkdown(content);
+              await fs.promises.writeFile(outPath, sanitized);
             } catch (err) {
               console.error(`Error writing markdown file ${filePath}:`, err);
             }

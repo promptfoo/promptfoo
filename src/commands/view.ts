@@ -31,6 +31,7 @@ export function viewCommand(program: Command) {
         telemetry.record('command_used', {
           name: 'view',
         });
+        await telemetry.send();
 
         if (directory) {
           setConfigDirectoryPath(directory);

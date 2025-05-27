@@ -1,17 +1,13 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Claude 3.7 vs GPT 4o'
+description: 'GPT vs Claude example'
 
 prompts:
   - file://prompt.yaml
 
 providers:
-  - id: anthropic:claude-3-7-sonnet-20250219
-    config:
-      max_tokens: 2500
-      thinking:
-        type: 'enabled'
-        budget_tokens: 2048 # Must be ≥1024 and less than max_tokens
-  - openai:chat:gpt-4o
+  - id: anthropic:claude-sonnet-4-20250514
+    label: Claude Sonnet 4
+  - openai:gpt-4.1-mini
 
 defaultTest:
   assert:

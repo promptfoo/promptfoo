@@ -22,6 +22,7 @@ describe('validateStrategies', () => {
       { id: 'video' },
       { id: 'morse' },
       { id: 'piglatin' },
+      { id: 'camelcase' },
     ];
     await expect(validateStrategies(validStrategies)).resolves.toBeUndefined();
   });
@@ -98,6 +99,12 @@ describe('loadStrategy', () => {
     const strategy = await loadStrategy('piglatin');
     expect(strategy).toBeDefined();
     expect(strategy.id).toBe('piglatin');
+  });
+
+  it('should load camelcase strategy', async () => {
+    const strategy = await loadStrategy('camelcase');
+    expect(strategy).toBeDefined();
+    expect(strategy.id).toBe('camelcase');
   });
 
   it('should throw error for non-existent strategy', async () => {

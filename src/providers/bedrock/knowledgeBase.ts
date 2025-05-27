@@ -3,13 +3,13 @@ import type {
   RetrieveAndGenerateCommandInput,
 } from '@aws-sdk/client-bedrock-agent-runtime';
 import type { Agent } from 'http';
-import { getCache, isCacheEnabled } from '../cache';
-import { getEnvString, getEnvInt } from '../envars';
-import logger from '../logger';
-import telemetry from '../telemetry';
-import type { EnvOverrides } from '../types/env';
-import type { ApiProvider, ProviderResponse } from '../types/providers';
-import { AwsBedrockGenericProvider } from './bedrock';
+import { getCache, isCacheEnabled } from '../../cache';
+import { getEnvString, getEnvInt } from '../../envars';
+import logger from '../../logger';
+import telemetry from '../../telemetry';
+import type { EnvOverrides } from '../../types/env';
+import type { ApiProvider, ProviderResponse } from '../../types/providers';
+import { AwsBedrockGenericProvider } from './index';
 
 export interface BedrockKnowledgeBaseOptions {
   accessKeyId?: string;
@@ -85,7 +85,7 @@ export class AwsBedrockKnowledgeBaseProvider
 
     this.kbConfig = options.config || { knowledgeBaseId: '' };
 
-    telemetry.record('feature_used', {
+    telemetry.recordAndSendOnce('feature_used', {
       feature: 'knowledge_base',
       provider: 'bedrock',
     });

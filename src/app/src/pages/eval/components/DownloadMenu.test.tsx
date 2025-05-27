@@ -3,7 +3,7 @@ import { screen } from '@testing-library/dom';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import DownloadMenu from './DownloadMenu';
-import { useStore as useResultsViewStore } from './store';
+import { useTableStore as useResultsViewStore } from './store';
 
 // Get a reference to the mock
 const showToastMock = vi.fn();
@@ -16,7 +16,7 @@ Object.assign(navigator, {
 });
 
 vi.mock('./store', () => ({
-  useStore: vi.fn(),
+  useTableStore: vi.fn(),
   useResultsViewSettingsStore: vi.fn(),
 }));
 

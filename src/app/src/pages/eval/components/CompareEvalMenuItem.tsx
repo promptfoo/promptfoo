@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import CompareIcon from '@mui/icons-material/Compare';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import MenuItem from '@mui/material/MenuItem';
 import Tooltip from '@mui/material/Tooltip';
 import EvalSelectorDialog from './EvalSelectorDialog';
-import { useStore } from './store';
+import { useTableStore } from './store';
 import type { ResultLightweightWithLabel } from './types';
 
 interface CompareEvalMenuItemProps {
@@ -14,7 +14,7 @@ interface CompareEvalMenuItemProps {
 }
 
 function CompareEvalMenuItem({ onComparisonEvalSelected }: CompareEvalMenuItemProps) {
-  const { evalId: currentEvalId } = useStore();
+  const { evalId: currentEvalId } = useTableStore();
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const handleOpenDialog = () => {

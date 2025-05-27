@@ -1,9 +1,11 @@
 import React from 'react';
+import Link from '@docusaurus/Link';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import SearchIcon from '@mui/icons-material/Search';
 import SecurityIcon from '@mui/icons-material/Security';
 import TimelineIcon from '@mui/icons-material/Timeline';
 import dedent from 'dedent';
+import { scrollToTop } from '../../../utils/navigation';
 import styles from '../styles.module.css';
 
 const features = [
@@ -77,9 +79,13 @@ export default function Features(): JSX.Element {
                     </React.Fragment>
                   ))}
                 </p>
-                <a href={feature.infoLink} className={styles.featureInfoLink}>
+                <Link
+                  to={feature.infoLink}
+                  className={styles.featureInfoLink}
+                  onClick={scrollToTop}
+                >
                   {feature.infoLinkText}
-                </a>
+                </Link>
               </div>
               <div className={styles.featureImageWrapper}>
                 <img src={feature.image} alt={feature.title} className={styles.featureImage} />

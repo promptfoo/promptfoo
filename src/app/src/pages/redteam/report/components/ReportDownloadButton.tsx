@@ -93,6 +93,29 @@ const ReportDownloadButton: React.FC<ReportDownloadButtonProps> = ({
     }
   };
 
+  const handleJsonDownload = () => {
+    setIsDownloading(true);
+    handleClose();
+
+    try {
+      const jsonData = JSON.stringify(evalData, null, 2);
+      const blob = new Blob([jsonData], { type: 'application/json;charset=utf-8;' });
+      const link = document.createElement('a');
+      if (link.download !== undefined) {
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', getFilename('json'));
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+    } catch (error) {
+      console.error('Error generating JSON:', error);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   return (
     <>
       <Tooltip title="Download report" placement="top" open={isHovering && !isDownloading}>
@@ -122,6 +145,7 @@ const ReportDownloadButton: React.FC<ReportDownloadButtonProps> = ({
       >
         <MenuItem onClick={handlePdfDownload}>Download as PDF</MenuItem>
         <MenuItem onClick={handleCsvDownload}>Download as CSV</MenuItem>
+        <MenuItem onClick={handleJsonDownload}>Download as JSON</MenuItem>
       </Menu>
     </>
   );

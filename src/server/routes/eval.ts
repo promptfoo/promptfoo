@@ -11,6 +11,7 @@ import type {
   GradingResult,
   Job,
   ResultsFile,
+  EvalTableDTO,
 } from '../../index';
 import promptfoo from '../../index';
 import logger from '../../logger';
@@ -161,6 +162,113 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
       res.status(500).json({ error: 'Failed to update eval author' });
     }
   }
+});
+
+evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params;
+  const limit = Number(req.query.limit) || 50;
+  const offset = Number(req.query.offset) || 0;
+  const filter = String(req.query.filter || 'all');
+  const searchText = req.query.search ? String(req.query.search) : '';
+  const metricFilter = req.query.metric ? String(req.query.metric) : '';
+
+  const comparisonEvalIds = Array.isArray(req.query.comparisonEvalIds)
+    ? req.query.comparisonEvalIds
+    : typeof req.query.comparisonEvalIds === 'string'
+      ? [req.query.comparisonEvalIds]
+      : [];
+
+  const eval_ = await Eval.findById(id);
+  if (!eval_) {
+    res.status(404).json({ error: 'Eval not found' });
+    return;
+  }
+
+  const table = await eval_.getTablePage({
+    offset,
+    limit,
+    filterMode: filter as any,
+    searchQuery: searchText,
+    metricFilter,
+  });
+
+  const indices = table.body.map((row) => row.testIdx);
+
+  let returnTable = { head: table.head, body: table.body };
+
+  if (comparisonEvalIds.length > 0) {
+    console.log('comparisonEvalIds', comparisonEvalIds);
+    const comparisonEvals = await Promise.all(
+      comparisonEvalIds.map(async (comparisonEvalId) => {
+        const comparisonEval_ = await Eval.findById(comparisonEvalId as string);
+        return comparisonEval_;
+      }),
+    );
+
+    if (comparisonEvals.some((comparisonEval_) => !comparisonEval_)) {
+      res.status(404).json({ error: 'Comparison eval not found' });
+      return;
+    }
+
+    const comparisonTables = await Promise.all(
+      comparisonEvals.map(async (comparisonEval_) => {
+        invariant(comparisonEval_, 'Comparison eval not found');
+        return comparisonEval_.getTablePage({
+          offset: 0,
+          limit: indices.length,
+          filterMode: 'all',
+          testIndices: indices,
+          searchQuery: searchText,
+          metricFilter,
+        });
+      }),
+    );
+
+    returnTable = {
+      head: {
+        prompts: [
+          ...table.head.prompts.map((prompt) => ({
+            ...prompt,
+            label: `[${id}] ${prompt.label || ''}`,
+          })),
+          ...comparisonTables.flatMap((table) =>
+            table.head.prompts.map((prompt) => ({
+              ...prompt,
+              label: `[${table.id}] ${prompt.label || ''}`,
+            })),
+          ),
+        ],
+        vars: table.head.vars, // Assuming vars are the same
+      },
+      body: table.body.map((row, index) => {
+        // Find matching row in comparison table by test index
+        const testIdx = row.testIdx;
+        const matchingRows = comparisonTables
+          .map((table) => {
+            const compRow = table.body.find((compRow) => {
+              const compTestIdx = compRow.testIdx;
+              return compTestIdx === testIdx;
+            });
+            return compRow;
+          })
+          .filter((r) => r !== undefined);
+
+        return {
+          ...row,
+          outputs: [...row.outputs, ...(matchingRows.flatMap((r) => r?.outputs) || [])],
+        };
+      }),
+    };
+  }
+
+  res.json({
+    table: returnTable,
+    totalCount: table.totalCount,
+    filteredCount: table.filteredCount,
+    config: eval_.config,
+    author: eval_.author || null,
+    version: eval_.version(),
+  } as EvalTableDTO);
 });
 
 evalRouter.post('/:id/results', async (req: Request, res: Response) => {

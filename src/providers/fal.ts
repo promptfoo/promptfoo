@@ -10,7 +10,12 @@ type FalProviderOptions = {
   apiKey?: string;
 };
 
-class FalProvider<Input = any> implements ApiProvider {
+interface FalResult<T = unknown> {
+  data: T;
+  requestId: string;
+}
+
+class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
   modelName: string;
   modelType: 'image';
   apiKey?: string;
@@ -18,7 +23,7 @@ class FalProvider<Input = any> implements ApiProvider {
   input: Input;
 
   // eslint-disable-next-line @typescript-eslint/consistent-type-imports
-  private fal: typeof import('@fal-ai/serverless-client') | null = null;
+  private fal: typeof import('@fal-ai/client') | null = null;
 
   constructor(
     modelType: 'image',
@@ -52,7 +57,7 @@ class FalProvider<Input = any> implements ApiProvider {
       );
     }
 
-    let response: any;
+    let response: FalResult<unknown> | undefined;
     let cache: Cache | undefined;
     let cached = false;
 
@@ -70,12 +75,11 @@ class FalProvider<Input = any> implements ApiProvider {
     }
 
     if (!this.fal) {
-      this.fal = await import('@fal-ai/serverless-client');
+      this.fal = await import('@fal-ai/client');
     }
 
-    this.fal.config({
+    this.fal.fal.config({
       credentials: this.apiKey,
-      fetch: fetch as any, // TODO fix type incompatibility
     });
 
     if (!response) {
@@ -96,13 +100,13 @@ class FalProvider<Input = any> implements ApiProvider {
     };
   }
 
-  async runInference<Result = any>(input: Input): Promise<Result> {
+  async runInference<Result = FalResult<unknown>>(input: Input): Promise<Result> {
     if (!this.fal) {
-      this.fal = await import('@fal-ai/serverless-client');
+      this.fal = await import('@fal-ai/client');
     }
 
-    const result = await this.fal.subscribe(this.modelName, {
-      input,
+    const result = await this.fal.fal.subscribe(this.modelName, {
+      input: input as Record<string, unknown>,
     });
     return result as Result;
   }
@@ -122,6 +126,11 @@ type FalImageGenerationInput = FalImageGenerationOptions & {
   prompt: string;
 };
 
+interface FalImageOutput {
+  images?: Array<{ url: string }>;
+  image?: { url: string };
+}
+
 export class FalImageGenerationProvider extends FalProvider<FalImageGenerationInput> {
   constructor(
     modelName: string,
@@ -135,8 +144,8 @@ export class FalImageGenerationProvider extends FalProvider<FalImageGenerationIn
   }
 
   async runInference<Result = string>(input: FalImageGenerationInput): Promise<Result> {
-    const result = await super.runInference(input);
-    const url = this.resolveImageUrl(result);
+    const result = await super.runInference<FalResult<FalImageOutput>>(input);
+    const url = this.resolveImageUrl(result.data);
     const sanitizedPrompt = input.prompt
       .replace(/\r?\n|\r/g, ' ')
       .replace(/\[/g, '(')
@@ -145,12 +154,13 @@ export class FalImageGenerationProvider extends FalProvider<FalImageGenerationIn
     return `![${ellipsizedPrompt}](${url})` as Result;
   }
 
-  protected resolveImageUrl(output: any): string {
+  protected resolveImageUrl(output: FalImageOutput): string {
     if (Array.isArray(output.images) && output.images.length > 0) {
       return output.images[0].url;
     }
     if (
       typeof output.image === 'object' &&
+      output.image !== null &&
       'url' in output.image &&
       typeof output.image.url === 'string'
     ) {

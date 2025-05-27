@@ -47,6 +47,7 @@ export function importCommand(program: Command) {
           name: 'import',
           evalId: evalData.id,
         });
+        await telemetry.send();
       } catch (error) {
         logger.error(`Failed to import eval: ${error}`);
         process.exit(1);

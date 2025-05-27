@@ -9,6 +9,7 @@ import Grid from '@mui/material/Grid2';
 import Typography from '@mui/material/Typography';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import Layout from '@theme/Layout';
+import { scrollToTop } from '../utils/navigation';
 
 const AboutPageContent = () => {
   const { colorMode } = useColorMode();
@@ -247,7 +248,7 @@ const AboutPageContent = () => {
           <Typography variant="body1" paragraph>
             Join leading enterprises who trust Promptfoo to fortify their AI applications.
           </Typography>
-          <Link className="button button--primary button--lg" to="/contact/">
+          <Link onClick={scrollToTop} className="button button--primary button--lg" to="/contact/">
             Get in Touch
           </Link>
         </Box>

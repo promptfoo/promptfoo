@@ -45,5 +45,6 @@ export function cacheCommand(program: Command) {
       telemetry.record('command_used', {
         name: 'cache_clear',
       });
+      await telemetry.send();
     });
 }

@@ -2155,6 +2155,7 @@ describe('evaluator', () => {
         },
       }),
       save: jest.fn().mockResolvedValue(undefined),
+      setVars: jest.fn().mockResolvedValue(undefined),
     };
 
     const testSuite: TestSuite = {

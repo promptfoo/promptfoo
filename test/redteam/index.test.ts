@@ -212,7 +212,7 @@ describe('synthesize', () => {
       );
     });
 
-    it('should handle HARM_PLUGINS, PII_PLUGINS, and BIAS_PLUGINS correctly', async () => {
+    it('should handle HARM_PLUGINS and PII_PLUGINS correctly', async () => {
       const mockPluginAction = jest.fn().mockResolvedValue([{ test: 'case' }]);
       jest.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
 
@@ -278,11 +278,9 @@ describe('synthesize', () => {
     });
 
     it('should expand strategy collections into individual strategies', async () => {
-      // Mock plugin to generate test cases
       const mockPluginAction = jest.fn().mockResolvedValue([{ test: 'case' }]);
       jest.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
 
-      // Mock strategy actions
       const mockStrategyAction = jest.fn().mockReturnValue([{ test: 'strategy case' }]);
       jest.spyOn(Strategies, 'find').mockImplementation((s: any) => {
         if (['morse', 'piglatin'].includes(s.id)) {
@@ -291,7 +289,6 @@ describe('synthesize', () => {
         return undefined;
       });
 
-      // Use the other-encodings collection
       await synthesize({
         language: 'en',
         numTests: 1,
@@ -306,9 +303,6 @@ describe('synthesize', () => {
         targetLabels: ['test-provider'],
       });
 
-      // Just verify validateStrategies was called
-      // The mock implementation might not be executed in the test context,
-      // but we can confirm the expansion mechanism is working
       expect(validateStrategies).toHaveBeenCalledWith(expect.any(Array));
     });
 
@@ -368,25 +362,21 @@ describe('synthesize', () => {
         targetLabels: ['test-provider'],
       });
 
-      // Should log a warning for unknown strategy collection
       expect(logger.warn).toHaveBeenCalledWith(
         expect.stringContaining('unknown-collection not registered'),
       );
     });
 
     it('should skip plugins that fail validation and not throw', async () => {
-      // Plugin 1: will fail validation
       const failingPlugin = {
         id: 'fail-plugin',
         numTests: 1,
       };
-      // Plugin 2: will succeed
       const passingPlugin = {
         id: 'pass-plugin',
         numTests: 1,
       };
 
-      // Mock Plugins.find to return a plugin with a validate method that throws for fail-plugin
       jest
         .spyOn(Plugins, 'find')
         .mockReturnValueOnce({
@@ -526,7 +516,6 @@ describe('synthesize', () => {
       callApi: jest.fn().mockResolvedValue({ output: 'test output' }),
     });
 
-    // Mock plugin to generate a test case
     const mockPlugin = {
       id: 'test-plugin',
       numTests: 1,
@@ -564,6 +553,65 @@ describe('synthesize', () => {
     });
 
     expect(resultDisabled.testCases).toHaveLength(0);
+  });
+
+  describe('Direct plugin handling', () => {
+    it('should recognize and not expand direct plugins like bias:gender', async () => {
+      const mockPluginAction = jest.fn().mockImplementation(({ n }) => {
+        return Array(n).fill({ test: 'bias:gender case' });
+      });
+      jest.spyOn(Plugins, 'find').mockReturnValue({ key: 'bias:gender', action: mockPluginAction });
+
+      const result = await synthesize({
+        language: 'en',
+        numTests: 2,
+        plugins: [{ id: 'bias:gender', numTests: 2 }],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetLabels: ['test-provider'],
+      });
+
+      // Check that the plugin wasn't expanded and was used directly
+      expect(mockPluginAction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: expect.anything(),
+          purpose: expect.any(String),
+          n: 2,
+        }),
+      );
+
+      // Check that the test cases have the correct plugin ID
+      const testCases = result.testCases;
+      testCases.forEach((tc) => {
+        expect(tc.metadata.pluginId).toBe('bias:gender');
+      });
+
+      // Should have exactly the number of test cases we requested
+      expect(testCases).toHaveLength(2);
+    });
+
+    it('should still expand category plugins with new bias category', async () => {
+      const mockPluginAction = jest.fn().mockResolvedValue([{ test: 'case' }]);
+      jest.spyOn(Plugins, 'find').mockReturnValue({ key: 'mockPlugin', action: mockPluginAction });
+
+      const result = await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [{ id: 'bias', numTests: 2 }],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetLabels: ['test-provider'],
+      });
+
+      // Check that we have test cases for each bias plugin
+      const biasPluginIds = Object.keys(HARM_PLUGINS).filter((p) => p.startsWith('bias:'));
+      const testCasePluginIds = result.testCases.map((tc) => tc.metadata.pluginId);
+
+      // Every bias plugin should have a test case
+      biasPluginIds.forEach((id) => {
+        expect(testCasePluginIds).toContain(id);
+      });
+    });
   });
 });
 

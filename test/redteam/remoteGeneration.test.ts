@@ -81,7 +81,6 @@ describe('getRemoteGenerationUrl', () => {
   it('should return cloud API host + /task when cloud is enabled and no env URL is set', () => {
     jest.mocked(getEnvString).mockReturnValue('');
     jest.mocked(readGlobalConfig).mockReturnValue({
-      id: 'test-id',
       cloud: {
         apiKey: 'some-api-key',
         apiHost: 'https://cloud.api.com',
@@ -94,7 +93,6 @@ describe('getRemoteGenerationUrl', () => {
   it('should return default URL when cloud is disabled and no env URL is set', () => {
     jest.mocked(getEnvString).mockReturnValue('');
     jest.mocked(readGlobalConfig).mockReturnValue({
-      id: 'test-id',
       cloud: {
         apiKey: undefined,
         apiHost: 'https://cloud.api.com',
@@ -131,7 +129,6 @@ describe('getRemoteHealthUrl', () => {
     jest.mocked(getEnvBool).mockReturnValue(false);
     jest.mocked(getEnvString).mockReturnValue('');
     jest.mocked(readGlobalConfig).mockReturnValue({
-      id: 'test-id',
       cloud: {
         apiKey: 'some-api-key',
         apiHost: 'https://cloud.api.com',
@@ -144,7 +141,6 @@ describe('getRemoteHealthUrl', () => {
     jest.mocked(getEnvBool).mockReturnValue(false);
     jest.mocked(getEnvString).mockReturnValue('');
     jest.mocked(readGlobalConfig).mockReturnValue({
-      id: 'test-id',
       cloud: {
         apiKey: undefined,
         apiHost: 'https://cloud.api.com',
@@ -167,7 +163,6 @@ describe('getRemoteGenerationUrlForUnaligned', () => {
   it('should return cloud API harmful URL when cloud is enabled', () => {
     jest.mocked(getEnvString).mockReturnValue('');
     jest.mocked(readGlobalConfig).mockReturnValue({
-      id: 'test-id',
       cloud: {
         apiKey: 'some-api-key',
         apiHost: 'https://cloud.api.com',
@@ -179,7 +174,6 @@ describe('getRemoteGenerationUrlForUnaligned', () => {
   it('should return default harmful URL when cloud is disabled', () => {
     jest.mocked(getEnvString).mockReturnValue('');
     jest.mocked(readGlobalConfig).mockReturnValue({
-      id: 'test-id',
       cloud: {
         apiKey: undefined,
         apiHost: 'https://cloud.api.com',

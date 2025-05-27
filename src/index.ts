@@ -12,6 +12,7 @@ import { GRADERS } from './redteam/graders';
 import { Plugins } from './redteam/plugins';
 import { RedteamPluginBase, RedteamGraderBase } from './redteam/plugins/base';
 import { Strategies } from './redteam/strategies';
+import telemetry from './telemetry';
 import type {
   EvaluateOptions,
   TestSuite,
@@ -122,6 +123,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     }
   }
 
+  await telemetry.send();
   return ret;
 }
 

@@ -4,25 +4,24 @@ description: Knowledge Base RAG using AWS Bedrock
 prompts:
   - |
     Answer the following question in a concise manner:
-
     {{prompt}}
 
 providers:
-  # Knowledge Base provider
-  - id: bedrock:kb:us.anthropic.claude-3-7-sonnet-20250219-v1:0
+  # Knowledge Base provider with Claude 4
+  - id: bedrock:kb:us.anthropic.claude-sonnet-4-20250514-v1:0
+    label: Claude 4 KB
     config:
-      region: 'us-east-2'
-      knowledgeBaseId: '0VMCLLCVGB'
+      region: us-east-2
+      knowledgeBaseId: 'HYKSGW6CJS' # Replace with your actual Knowledge Base ID
       temperature: 0.0
       max_tokens: 1000
-
-  # Regular provider for comparison
-  - id: bedrock:us.anthropic.claude-3-7-sonnet-20250219-v1:0
+  # Compare with regular Bedrock Claude 4 (without KB)
+  - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0
+    label: Claude 4 Direct
     config:
-      region: 'us-east-2'
+      region: us-east-2
       temperature: 0.0
       max_tokens: 1000
-
 tests:
   - vars:
       prompt: 'What is promptfoo and what problem does it solve?'

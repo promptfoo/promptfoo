@@ -522,7 +522,7 @@ class Evaluator {
 
   async evaluate(): Promise<Eval> {
     const { testSuite, options } = this;
-
+    const vars = new Set<string>();
     const checkAbort = () => {
       if (options.abortSignal?.aborted) {
         throw new Error('Operation cancelled');
@@ -634,7 +634,7 @@ class Evaluator {
 
     // Build scenarios and add to tests
     if (testSuite.scenarios && testSuite.scenarios.length > 0) {
-      telemetry.record('feature_used', {
+      telemetry.recordAndSendOnce('feature_used', {
         feature: 'scenarios',
       });
       for (const scenario of testSuite.scenarios) {
@@ -827,7 +827,11 @@ class Evaluator {
       });
 
       const rows = await runEval(evalStep);
+
       for (const row of rows) {
+        for (const varName of Object.keys(row.vars)) {
+          vars.add(varName);
+        }
         // Print token usage for model-graded assertions and add to stats
         if (row.gradingResult?.tokensUsed && row.testCase?.assert) {
           for (const assertion of row.testCase.assert) {
@@ -1362,6 +1366,8 @@ class Evaluator {
     if (progressBar) {
       progressBar.stop();
     }
+
+    this.evalRecord.setVars(vars);
 
     await runExtensionHook(testSuite.extensions, 'afterAll', {
       prompts: this.evalRecord.prompts,

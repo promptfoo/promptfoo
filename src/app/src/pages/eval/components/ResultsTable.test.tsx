@@ -1,15 +1,16 @@
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsTable from './ResultsTable';
-import { useResultsViewSettingsStore, useStore } from './store';
+import { useResultsViewSettingsStore, useTableStore } from './store';
 
 vi.mock('./store', () => ({
-  useStore: vi.fn(() => ({
+  useTableStore: vi.fn(() => ({
     config: {},
     evalId: '123',
     setTable: vi.fn(),
     table: null,
     version: 4,
+    fetchEvalData: vi.fn(),
   })),
   useResultsViewSettingsStore: vi.fn(() => ({
     inComparisonMode: false,
@@ -50,6 +51,7 @@ describe('ResultsTable Metrics Display', () => {
           metrics: {
             cost: 1.23456,
             namedScores: {},
+            testPassCount: 10,
             tokenUsage: {
               completion: 500,
               total: 1000,
@@ -81,7 +83,7 @@ describe('ResultsTable Metrics Display', () => {
   };
 
   beforeEach(() => {
-    vi.mocked(useStore).mockImplementation(() => ({
+    vi.mocked(useTableStore).mockImplementation(() => ({
       config: {},
       evalId: '123',
       inComparisonMode: false,
@@ -89,6 +91,7 @@ describe('ResultsTable Metrics Display', () => {
       table: mockTable,
       version: 4,
       renderMarkdown: true,
+      fetchEvalData: vi.fn(),
     }));
   });
 
@@ -141,7 +144,7 @@ describe('ResultsTable Metrics Display', () => {
       },
     };
 
-    vi.mocked(useStore).mockImplementation(() => ({
+    vi.mocked(useTableStore).mockImplementation(() => ({
       config: {},
       evalId: '123',
       inComparisonMode: false,
@@ -149,6 +152,7 @@ describe('ResultsTable Metrics Display', () => {
       table: mockTableNoMetrics,
       version: 4,
       renderMarkdown: true,
+      fetchEvalData: vi.fn(),
     }));
 
     renderWithProviders(<ResultsTable {...defaultProps} />);
@@ -187,7 +191,7 @@ describe('ResultsTable Metrics Display', () => {
     it('renders object variables as formatted JSON with markdown enabled', () => {
       const mockTableWithObjectVar = createMockTableWithVar(complexObject);
 
-      vi.mocked(useStore).mockImplementation(() => ({
+      vi.mocked(useTableStore).mockImplementation(() => ({
         config: {},
         evalId: '123',
         inComparisonMode: false,
@@ -195,6 +199,7 @@ describe('ResultsTable Metrics Display', () => {
         table: mockTableWithObjectVar,
         version: 4,
         renderMarkdown: true,
+        fetchEvalData: vi.fn(),
       }));
 
       renderWithProviders(<ResultsTable {...defaultProps} />);
@@ -207,13 +212,14 @@ describe('ResultsTable Metrics Display', () => {
     it('renders object variables as plain JSON with markdown disabled', () => {
       const mockTableWithObjectVar = createMockTableWithVar(complexObject);
 
-      vi.mocked(useStore).mockImplementation(() => ({
+      vi.mocked(useTableStore).mockImplementation(() => ({
         config: {},
         evalId: '123',
 
         setTable: vi.fn(),
         table: mockTableWithObjectVar,
         version: 4,
+        fetchEvalData: vi.fn(),
       }));
 
       vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
@@ -231,12 +237,13 @@ describe('ResultsTable Metrics Display', () => {
     it('truncates long object representations', () => {
       const mockTableWithLongVar = createMockTableWithVar(longObject);
 
-      vi.mocked(useStore).mockImplementation(() => ({
+      vi.mocked(useTableStore).mockImplementation(() => ({
         config: {},
         evalId: '123',
         setTable: vi.fn(),
         table: mockTableWithLongVar,
         version: 4,
+        fetchEvalData: vi.fn(),
       }));
 
       vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
@@ -254,7 +261,7 @@ describe('ResultsTable Metrics Display', () => {
     it('handles null values correctly', () => {
       const mockTableWithNullVar = createMockTableWithVar(null);
 
-      vi.mocked(useStore).mockImplementation(() => ({
+      vi.mocked(useTableStore).mockImplementation(() => ({
         config: {},
         evalId: '123',
         inComparisonMode: false,
@@ -262,6 +269,7 @@ describe('ResultsTable Metrics Display', () => {
         table: mockTableWithNullVar,
         version: 4,
         renderMarkdown: true,
+        fetchEvalData: vi.fn(),
       }));
 
       renderWithProviders(<ResultsTable {...defaultProps} />);
