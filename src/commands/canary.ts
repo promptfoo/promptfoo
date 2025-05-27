@@ -488,5 +488,3 @@ Examples:
 
   return command;
 }
-
-export { sendCanaryToSingleProvider, sendCanary, checkCanaryForSingleProvider, checkCanary };
