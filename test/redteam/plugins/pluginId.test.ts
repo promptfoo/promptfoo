@@ -114,7 +114,6 @@ describe('Plugin IDs', () => {
     uniqueIds.forEach((id) => {
       if (id === 'policy') {
         // This is a special case where the ID is not prefixed in the code
-        console.log("Note: Found 'policy' ID without prefix - this is a special case");
       }
     });
 
