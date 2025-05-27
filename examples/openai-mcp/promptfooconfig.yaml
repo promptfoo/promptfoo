@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 
-description: Testing OpenAI Responses API with MCP (Model Context Protocol) tools
+description: OpenAI MCP tool integration
 
 prompts:
   - 'What are the transport protocols supported in the MCP specification for {{repo}}?'
@@ -8,7 +8,7 @@ prompts:
   - 'What are the main features of {{repo}}? Please provide a detailed overview.'
 
 providers:
-  - id: openai:responses:gpt-4.1
+  - id: openai:responses:gpt-4.1-2025-04-14
     config:
       tools:
         - type: mcp

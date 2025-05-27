@@ -937,7 +937,7 @@ To use MCP tools with the Responses API, add them to the `tools` array:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:responses:gpt-4.1
+  - id: openai:responses:gpt-4.1-2025-04-14
     config:
       tools:
         - type: mcp
@@ -963,7 +963,7 @@ Most MCP servers require authentication. Use the `headers` parameter to provide 
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:responses:gpt-4.1
+  - id: openai:responses:gpt-4.1-2025-04-14
     config:
       tools:
         - type: mcp
@@ -980,7 +980,7 @@ To limit which tools are available from an MCP server, use the `allowed_tools` p
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:responses:gpt-4.1
+  - id: openai:responses:gpt-4.1-2025-04-14
     config:
       tools:
         - type: mcp
@@ -997,7 +997,7 @@ By default, OpenAI requires approval before sharing data with MCP servers. You c
 ```yaml title="promptfooconfig.yaml"
 # Never require approval for all tools
 providers:
-  - id: openai:responses:gpt-4.1
+  - id: openai:responses:gpt-4.1-2025-04-14
     config:
       tools:
         - type: mcp
@@ -1007,7 +1007,7 @@ providers:
 
 # Never require approval for specific tools only
 providers:
-  - id: openai:responses:gpt-4.1
+  - id: openai:responses:gpt-4.1-2025-04-14
     config:
       tools:
         - type: mcp
@@ -1026,7 +1026,7 @@ prompts:
   - 'What are the transport protocols supported in the MCP specification for {{repo}}?'
 
 providers:
-  - id: openai:responses:gpt-4.1
+  - id: openai:responses:gpt-4.1-2025-04-14
     config:
       tools:
         - type: mcp

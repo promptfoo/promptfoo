@@ -2075,5 +2075,72 @@ describe('OpenAiResponsesProvider', () => {
       expect(body.tools[1].type).toBe('mcp');
       expect(body.tools[1].server_label).toBe('deepwiki');
     });
+
+    it('should handle MCP tool configuration with selective approval correctly', async () => {
+      const mockApiResponse = {
+        id: 'resp_abc123',
+        status: 'completed',
+        model: 'gpt-4.1',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'output_text',
+                text: 'Response with selective approval MCP tools',
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new OpenAiResponsesProvider('gpt-4.1', {
+        config: {
+          apiKey: 'test-key',
+          tools: [
+            {
+              type: 'mcp',
+              server_label: 'deepwiki',
+              server_url: 'https://mcp.deepwiki.com/mcp',
+              require_approval: {
+                never: {
+                  tool_names: ['ask_question', 'read_wiki_structure'],
+                },
+              },
+              allowed_tools: ['ask_question', 'read_wiki_structure', 'search_repo'],
+            },
+          ],
+        },
+      });
+
+      await provider.callApi('Test prompt');
+
+      const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+      const reqOptions = mockCall[1] as { body: string };
+      const body = JSON.parse(reqOptions.body);
+
+      expect(body.tools).toBeDefined();
+      expect(body.tools).toHaveLength(1);
+      expect(body.tools[0]).toEqual({
+        type: 'mcp',
+        server_label: 'deepwiki',
+        server_url: 'https://mcp.deepwiki.com/mcp',
+        require_approval: {
+          never: {
+            tool_names: ['ask_question', 'read_wiki_structure'],
+          },
+        },
+        allowed_tools: ['ask_question', 'read_wiki_structure', 'search_repo'],
+      });
+    });
   });
 });

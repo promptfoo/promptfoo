@@ -1,6 +1,12 @@
-# OpenAI MCP (Model Context Protocol) Examples
+# openai-mcp (OpenAI MCP Integration Examples)
 
-This directory contains examples demonstrating how to use OpenAI's MCP integration with the Responses API in promptfoo.
+This directory contains examples demonstrating how to use OpenAI's MCP (Model Context Protocol) integration with the Responses API in promptfoo.
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example openai-mcp
+```
 
 ## What is MCP?
 
@@ -149,34 +155,38 @@ Enable debug logging to see detailed MCP interactions:
 DEBUG=1 npx promptfoo eval -c promptfooconfig.yaml
 ```
 
+## Environment Variables
+
+This example requires the following environment variables:
+
+- `OPENAI_API_KEY` - Your OpenAI API key from the OpenAI platform
+- `STRIPE_API_KEY` - Your Stripe API key (for authenticated examples only)
+
+You can set these in a `.env` file or directly in your environment.
+
 ## Running the Examples
 
-1. **Set up environment variables** (for authenticated examples):
+1. **Set up environment variables**:
 
    ```bash
    export OPENAI_API_KEY="your_openai_api_key"
-   export STRIPE_API_KEY="your_stripe_api_key"  # For authenticated example
+   export STRIPE_API_KEY="your_stripe_api_key"  # For authenticated example only
    ```
 
-2. **Run basic example**:
+2. **Run the examples**:
 
    ```bash
+   # Basic MCP integration
    npx promptfoo eval -c promptfooconfig.yaml
-   ```
 
-3. **Run authenticated example**:
-
-   ```bash
+   # Authenticated MCP servers
    npx promptfoo eval -c promptfooconfig.authenticated.yaml
-   ```
 
-4. **Run approval workflow example**:
-
-   ```bash
+   # Approval workflow examples
    npx promptfoo eval -c promptfooconfig.approval.yaml
    ```
 
-5. **View results**:
+3. **View results**:
    ```bash
    npx promptfoo view
    ```

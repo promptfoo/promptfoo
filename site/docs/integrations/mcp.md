@@ -160,6 +160,17 @@ MCP is supported by most major providers in Promptfoo, including:
 - OpenAI (and compatible providers like Groq, Together, etc.)
 - Anthropic
 
+## OpenAI Responses API MCP Integration
+
+In addition to the general MCP integration described above, OpenAI's Responses API has native MCP support that allows direct connection to remote MCP servers without running local MCP servers. This approach is specific to OpenAI's Responses API and offers:
+
+- Direct connection to remote MCP servers (like DeepWiki, Stripe, etc.)
+- Built-in approval workflows for data sharing
+- Authentication header support for secured MCP servers
+- Tool filtering capabilities
+
+For detailed information about using MCP with OpenAI's Responses API, see the [OpenAI Provider MCP documentation](../providers/openai.md#mcp-model-context-protocol-support).
+
 ## Troubleshooting
 
 - Ensure your MCP server is running and accessible.

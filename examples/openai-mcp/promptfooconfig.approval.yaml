@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 
-description: Testing OpenAI Responses API with MCP approval workflows
+description: MCP approval workflow examples
 
 prompts:
   - 'Search for information about {{query}} in the {{repo}} repository'
@@ -8,7 +8,7 @@ prompts:
 
 providers:
   # Provider with approval required (default behavior)
-  - id: openai:responses:gpt-4.1
+  - id: openai:responses:gpt-4.1-2025-04-14
     label: 'With Approval Required'
     config:
       tools:
@@ -21,7 +21,7 @@ providers:
       instructions: 'You are a research assistant. When approval is required for MCP tools, explain what you would do if the tool were approved.'
 
   # Provider with selective approval
-  - id: openai:responses:gpt-4.1
+  - id: openai:responses:gpt-4.1-2025-04-14
     label: 'Selective Approval'
     config:
       tools:
@@ -37,7 +37,7 @@ providers:
       instructions: 'You are a research assistant. Use the available tools to gather information.'
 
   # Provider with no approval required
-  - id: openai:responses:gpt-4.1
+  - id: openai:responses:gpt-4.1-2025-04-14
     label: 'No Approval Required'
     config:
       tools:

@@ -261,7 +261,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           if (result) {
             result += '\n';
           }
-          result += `MCP Tools from ${item.server_label}: ${JSON.stringify(item.tools)}`;
+          result += `MCP Tools from ${item.server_label}: ${JSON.stringify(item.tools, null, 2)}`;
         } else if (item.type === 'mcp_call') {
           // MCP tool call result
           if (item.error) {
