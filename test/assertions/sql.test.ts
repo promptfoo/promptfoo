@@ -111,6 +111,53 @@ describe('is-sql assertion', () => {
         'SQL statement does not conform to the provided MySQL database syntax.',
       );
     });
+
+    it('should pass when the SQL statement contains properly matched backticks', async () => {
+      const renderedValue = undefined;
+      const outputString = 'SELECT * FROM `employees` WHERE `id` = 1';
+      const result: GradingResult = await handleIsSql({
+        assertion,
+        renderedValue,
+        outputString,
+        inverse: false,
+      } as AssertionParams);
+      expect(result).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+        assertion,
+      });
+    });
+
+    it('should fail when the SQL statement contains multiple mismatched backticks', async () => {
+      const renderedValue = undefined;
+      const outputString = 'SELECT `id, `name FROM `users';
+      const result: GradingResult = await handleIsSql({
+        assertion,
+        renderedValue,
+        outputString,
+        inverse: false,
+      } as AssertionParams);
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+      });
+    });
+
+    it('should fail when SELECT has invalid column list format', async () => {
+      const renderedValue = undefined;
+      const outputString = 'SELECT col1 col2 col3 FROM table1';
+      const result: GradingResult = await handleIsSql({
+        assertion,
+        renderedValue,
+        outputString,
+        inverse: false,
+      } as AssertionParams);
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+      });
+    });
   });
 
   // ------------------------------------------ Database Specific Syntax Tests ------------------------------------------- //
@@ -177,6 +224,25 @@ describe('is-sql assertion', () => {
         databaseType: 'MySQL',
       };
       const outputString = 'SELECT generate_series(1, 10);';
+      const result: GradingResult = await handleIsSql({
+        assertion,
+        renderedValue,
+        outputString,
+        inverse: false,
+      } as AssertionParams);
+      expect(result).toEqual({
+        pass: false,
+        score: 0,
+        reason: 'SQL statement does not conform to the provided MySQL database syntax.',
+        assertion,
+      });
+    });
+
+    it('should fail when using generate_series in MySQL even with valid syntax', async () => {
+      const renderedValue = {
+        databaseType: 'MySQL',
+      };
+      const outputString = 'SELECT * FROM table_name WHERE id IN (SELECT generate_series(1, 5));';
       const result: GradingResult = await handleIsSql({
         assertion,
         renderedValue,
@@ -300,6 +366,26 @@ describe('is-sql assertion', () => {
         allowedColumns: ['update::employee::salary', 'select::employee::id'],
       };
       const outputString = `UPDATE employee SET salary = 50000 WHERE id = 1`;
+      const result: GradingResult = await handleIsSql({
+        assertion,
+        renderedValue,
+        outputString,
+        inverse: false,
+      } as AssertionParams);
+      expect(result).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+        assertion,
+      });
+    });
+
+    it('should pass with normalized whitelist entries', async () => {
+      const renderedValue = {
+        databaseType: 'MySQL',
+        allowedColumns: ['select::employees::name'],
+      };
+      const outputString = `SELECT name FROM employees`;
       const result: GradingResult = await handleIsSql({
         assertion,
         renderedValue,
