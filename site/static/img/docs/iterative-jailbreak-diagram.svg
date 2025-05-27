@@ -1,0 +1,95 @@
+<svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="1200" height="550" fill="#f8fafc"/>
+  
+  <!-- Title -->
+  <text x="600" y="40" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="32" font-weight="700" fill="#1e293b">Iterative Jailbreaks Strategy</text>
+  
+  <!-- Subtitle -->
+  <text x="600" y="70" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="18" fill="#64748b">Systematic refinement through attack-judge feedback loops</text>
+  
+  <!-- Main Components in Circular Arrangement with more spacing -->
+  
+  <!-- Attacker Box (left) -->
+  <g transform="translate(150, 200)">
+    <rect x="0" y="0" width="240" height="120" rx="12" fill="#dc2626" stroke="none"/>
+    <rect x="0" y="0" width="240" height="120" rx="12" fill="url(#attackerGradient)" stroke="none"/>
+    <text x="120" y="50" text-anchor="middle" font-family="system-ui" font-size="20" font-weight="600" fill="white">🎯 Attacker LLM</text>
+    <text x="120" y="75" text-anchor="middle" font-family="system-ui" font-size="14" fill="#fecaca">Generates refined prompts</text>
+    <text x="120" y="95" text-anchor="middle" font-family="system-ui" font-size="14" fill="#fecaca">based on feedback</text>
+  </g>
+  
+  <!-- Target Box (right) -->
+  <g transform="translate(810, 200)">
+    <rect x="0" y="0" width="240" height="120" rx="12" fill="#3b82f6" stroke="none"/>
+    <rect x="0" y="0" width="240" height="120" rx="12" fill="url(#targetGradient)" stroke="none"/>
+    <text x="120" y="50" text-anchor="middle" font-family="system-ui" font-size="20" font-weight="600" fill="white">🤖 Target System</text>
+    <text x="120" y="75" text-anchor="middle" font-family="system-ui" font-size="14" fill="#dbeafe">Responds to</text>
+    <text x="120" y="95" text-anchor="middle" font-family="system-ui" font-size="14" fill="#dbeafe">adversarial prompts</text>
+  </g>
+  
+  <!-- Judge Box (bottom) -->
+  <g transform="translate(480, 400)">
+    <rect x="0" y="0" width="240" height="120" rx="12" fill="#10b981" stroke="none"/>
+    <rect x="0" y="0" width="240" height="120" rx="12" fill="url(#judgeGradient)" stroke="none"/>
+    <text x="120" y="50" text-anchor="middle" font-family="system-ui" font-size="20" font-weight="600" fill="white">⚖️ Judge LLM</text>
+    <text x="120" y="75" text-anchor="middle" font-family="system-ui" font-size="14" fill="#d1fae5">Scores responses</text>
+    <text x="120" y="95" text-anchor="middle" font-family="system-ui" font-size="14" fill="#d1fae5">(1-10 scale)</text>
+  </g>
+  
+  <!-- Flow Arrows -->
+  <!-- Attacker to Target -->
+  <g>
+    <defs>
+      <marker id="arrowhead1" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" fill="#dc2626">
+        <path d="M 0 0 L 12 6 L 0 12 z"/>
+      </marker>
+    </defs>
+    <path d="M 390 240 Q 600 180 800 240" stroke="#dc2626" stroke-width="3" fill="none" marker-end="url(#arrowhead1)"/>
+    <text x="600" y="165" text-anchor="middle" font-family="system-ui" font-size="14" fill="#64748b">Adversarial</text>
+    <text x="600" y="185" text-anchor="middle" font-family="system-ui" font-size="14" fill="#64748b">Prompt</text>
+  </g>
+  
+  <!-- Target to Judge -->
+  <g>
+    <defs>
+      <marker id="arrowhead2" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" fill="#3b82f6">
+        <path d="M 0 0 L 12 6 L 0 12 z"/>
+      </marker>
+    </defs>
+    <path d="M 870 320 Q 800 380 710 395" stroke="#3b82f6" stroke-width="3" fill="none" marker-end="url(#arrowhead2)"/>
+    <text x="850" y="370" text-anchor="middle" font-family="system-ui" font-size="14" fill="#64748b">Target</text>
+    <text x="850" y="390" text-anchor="middle" font-family="system-ui" font-size="14" fill="#64748b">Response</text>
+  </g>
+  
+  <!-- Judge back to Attacker (feedback loop) -->
+  <g>
+    <defs>
+      <marker id="arrowhead3" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" fill="#10b981">
+        <path d="M 0 0 L 12 6 L 0 12 z"/>
+      </marker>
+    </defs>
+    <path d="M 490 395 Q 400 380 330 320" stroke="#10b981" stroke-width="3" fill="none" marker-end="url(#arrowhead3)"/>
+    <text x="350" y="370" text-anchor="middle" font-family="system-ui" font-size="14" font-weight="500" fill="#10b981">Score +</text>
+    <text x="350" y="390" text-anchor="middle" font-family="system-ui" font-size="14" font-weight="500" fill="#10b981">Feedback</text>
+  </g>
+  
+  
+  <!-- Gradients -->
+  <defs>
+    <linearGradient id="attackerGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ef4444;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#dc2626;stop-opacity:1" />
+    </linearGradient>
+    
+    <linearGradient id="targetGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#60a5fa;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:1" />
+    </linearGradient>
+    
+    <linearGradient id="judgeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#34d399;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#10b981;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+</svg>
