@@ -1,7 +1,6 @@
 import React from 'react';
 import Link from '@docusaurus/Link';
 import type { PropBlogPostContent } from '@docusaurus/plugin-content-blog';
-import { scrollToTop } from '../../utils/navigation';
 import styles from './BlogPostCard.module.css';
 
 interface BlogPostCardProps {
@@ -14,7 +13,7 @@ export default function BlogPostCard({ post }: BlogPostCardProps): React.JSX.Ele
   const author = metadata.authors[0];
 
   return (
-    <Link to={permalink} className={styles.blogPostCard} onClick={scrollToTop}>
+    <Link to={permalink} className={styles.blogPostCard}>
       {metadata.frontMatter.image && (
         <div className={styles.blogPostImage}>
           <img src={metadata.frontMatter.image} alt={title} />

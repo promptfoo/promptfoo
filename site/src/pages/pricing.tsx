@@ -3,7 +3,6 @@ import Link from '@docusaurus/Link';
 import CheckIcon from '@mui/icons-material/Check';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
-import { scrollToTop } from '../utils/navigation';
 import styles from './pricing.module.css';
 
 function PricingHeader() {
@@ -41,10 +40,7 @@ function PricingTable() {
       price: 'Custom',
       description: (
         <>
-          For teams that need advanced features.{' '}
-          <Link onClick={scrollToTop} to="/docs/enterprise/">
-            Learn more
-          </Link>
+          For teams that need advanced features. <Link to="/docs/enterprise/">Learn more</Link>
         </>
       ),
       features: [
@@ -101,7 +97,6 @@ function PricingTable() {
             </ul>
           </div>
           <Link
-            onClick={scrollToTop}
             to={plan.ctaLink}
             className={clsx(
               'button',

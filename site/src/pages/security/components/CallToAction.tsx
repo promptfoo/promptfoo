@@ -1,6 +1,5 @@
 import React from 'react';
 import Link from '@docusaurus/Link';
-import { scrollToTop } from '../../../utils/navigation';
 import styles from '../styles.module.css';
 
 export default function CallToAction(): React.JSX.Element {
@@ -14,17 +13,12 @@ export default function CallToAction(): React.JSX.Element {
         </p>
         <div className={styles.ctaButtons}>
           <Link
-            onClick={scrollToTop}
             to="/docs/red-team/quickstart/"
             className={`${styles.button} ${styles.buttonPrimary}`}
           >
             Get Started
           </Link>
-          <Link
-            onClick={scrollToTop}
-            to="/contact/"
-            className={`${styles.button} ${styles.buttonSecondary}`}
-          >
+          <Link to="/contact/" className={`${styles.button} ${styles.buttonSecondary}`}>
             Contact Us
           </Link>
         </div>
