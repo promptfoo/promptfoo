@@ -96,6 +96,7 @@ export class IntentPlugin extends RedteamPluginBase {
           metadata: {
             intent: extractedIntent,
             pluginId: this.id,
+            pluginConfig: undefined,
           },
         });
       } else {
@@ -116,6 +117,7 @@ export class IntentPlugin extends RedteamPluginBase {
           metadata: {
             intent: extractedIntent,
             pluginId: this.id,
+            pluginConfig: undefined,
           },
         });
       }

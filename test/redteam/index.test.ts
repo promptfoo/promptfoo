@@ -7,16 +7,15 @@ import { HARM_PLUGINS, PII_PLUGINS } from '../../src/redteam/constants';
 import { extractEntities } from '../../src/redteam/extraction/entities';
 import { extractSystemPurpose } from '../../src/redteam/extraction/purpose';
 import {
-  synthesize,
-  resolvePluginConfig,
   calculateTotalTests,
   getMultilingualRequestedCount,
   getTestCount,
+  resolvePluginConfig,
+  synthesize,
 } from '../../src/redteam/index';
 import { Plugins } from '../../src/redteam/plugins';
-import { shouldGenerateRemote, getRemoteHealthUrl } from '../../src/redteam/remoteGeneration';
-import { Strategies } from '../../src/redteam/strategies';
-import { validateStrategies } from '../../src/redteam/strategies';
+import { getRemoteHealthUrl, shouldGenerateRemote } from '../../src/redteam/remoteGeneration';
+import { Strategies, validateStrategies } from '../../src/redteam/strategies';
 import { DEFAULT_LANGUAGES } from '../../src/redteam/strategies/multilingual';
 import type { TestCaseWithPlugin } from '../../src/types';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
@@ -278,11 +277,9 @@ describe('synthesize', () => {
     });
 
     it('should expand strategy collections into individual strategies', async () => {
-      // Mock plugin to generate test cases
       const mockPluginAction = jest.fn().mockResolvedValue([{ test: 'case' }]);
       jest.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
 
-      // Mock strategy actions
       const mockStrategyAction = jest.fn().mockReturnValue([{ test: 'strategy case' }]);
       jest.spyOn(Strategies, 'find').mockImplementation((s: any) => {
         if (['morse', 'piglatin'].includes(s.id)) {
@@ -291,7 +288,6 @@ describe('synthesize', () => {
         return undefined;
       });
 
-      // Use the other-encodings collection
       await synthesize({
         language: 'en',
         numTests: 1,
@@ -306,9 +302,6 @@ describe('synthesize', () => {
         targetLabels: ['test-provider'],
       });
 
-      // Just verify validateStrategies was called
-      // The mock implementation might not be executed in the test context,
-      // but we can confirm the expansion mechanism is working
       expect(validateStrategies).toHaveBeenCalledWith(expect.any(Array));
     });
 
@@ -368,25 +361,21 @@ describe('synthesize', () => {
         targetLabels: ['test-provider'],
       });
 
-      // Should log a warning for unknown strategy collection
       expect(logger.warn).toHaveBeenCalledWith(
         expect.stringContaining('unknown-collection not registered'),
       );
     });
 
     it('should skip plugins that fail validation and not throw', async () => {
-      // Plugin 1: will fail validation
       const failingPlugin = {
         id: 'fail-plugin',
         numTests: 1,
       };
-      // Plugin 2: will succeed
       const passingPlugin = {
         id: 'pass-plugin',
         numTests: 1,
       };
 
-      // Mock Plugins.find to return a plugin with a validate method that throws for fail-plugin
       jest
         .spyOn(Plugins, 'find')
         .mockReturnValueOnce({
@@ -418,6 +407,103 @@ describe('synthesize', () => {
           'Validation failed for plugin fail-plugin: Error: Validation failed!, skipping plugin',
         ),
       );
+    });
+
+    it('should not store full config in metadata for intent plugin to prevent bloating', async () => {
+      jest.clearAllMocks();
+
+      const mockProvider = {
+        id: () => 'test-provider',
+        callApi: jest.fn().mockResolvedValue({ output: 'Test response' }),
+      };
+
+      const intentPlugin = {
+        id: 'intent',
+        numTests: 2,
+        config: {
+          intent: ['intent1', 'intent2', 'intent3', 'intent4', 'intent5'],
+        },
+      };
+
+      const regularPlugin = {
+        id: 'contracts',
+        numTests: 1,
+        config: {
+          someConfig: 'value',
+        },
+      };
+
+      const mockIntentAction = jest.fn().mockResolvedValue([
+        {
+          vars: { prompt: 'intent1' },
+          assert: [{ type: 'promptfoo:redteam:intent', metric: 'Intent' }],
+          metadata: {
+            intent: 'intent1',
+            pluginId: 'intent',
+            pluginConfig: undefined,
+          },
+        },
+        {
+          vars: { prompt: 'intent2' },
+          assert: [{ type: 'promptfoo:redteam:intent', metric: 'Intent' }],
+          metadata: {
+            intent: 'intent2',
+            pluginId: 'intent',
+            pluginConfig: undefined,
+          },
+        },
+      ]);
+
+      const mockContractsAction = jest.fn().mockResolvedValue([
+        {
+          vars: { prompt: 'contract test' },
+          assert: [{ type: 'promptfoo:redteam:contracts', metric: 'Contracts' }],
+          metadata: {
+            pluginId: 'contracts',
+          },
+        },
+      ]);
+
+      jest.spyOn(Plugins, 'find').mockImplementation((predicate) => {
+        const mockPlugins = [
+          { key: 'intent', action: mockIntentAction },
+          { key: 'contracts', action: mockContractsAction },
+        ];
+
+        if (typeof predicate === 'function') {
+          return mockPlugins.find(predicate);
+        }
+        return undefined;
+      });
+
+      const result = await synthesize({
+        plugins: [intentPlugin, regularPlugin],
+        prompts: ['Test prompt'],
+        provider: mockProvider,
+        purpose: 'Test purpose',
+        strategies: [],
+        injectVar: 'prompt',
+        language: 'en',
+        numTests: 5,
+        targetLabels: ['test'],
+      });
+
+      const intentTestCases = result.testCases.filter((tc) => tc.metadata?.pluginId === 'intent');
+      expect(intentTestCases.length).toBeGreaterThan(0);
+      intentTestCases.forEach((tc) => {
+        expect(tc.metadata?.pluginConfig).toBeUndefined();
+        expect(tc.metadata?.pluginId).toBe('intent');
+      });
+
+      const contractsTestCases = result.testCases.filter(
+        (tc) => tc.metadata?.pluginId === 'contracts',
+      );
+      expect(contractsTestCases.length).toBeGreaterThan(0);
+      contractsTestCases.forEach((tc) => {
+        expect(tc.metadata?.pluginConfig).toBeDefined();
+        expect(tc.metadata?.pluginConfig).toEqual({ someConfig: 'value' });
+        expect(tc.metadata?.pluginId).toBe('contracts');
+      });
     });
   });
 
@@ -526,7 +612,6 @@ describe('synthesize', () => {
       callApi: jest.fn().mockResolvedValue({ output: 'test output' }),
     });
 
-    // Mock plugin to generate a test case
     const mockPlugin = {
       id: 'test-plugin',
       numTests: 1,
@@ -537,7 +622,21 @@ describe('synthesize', () => {
       callApi: jest.fn().mockResolvedValue({ output: 'test output' }),
     };
 
-    // Test with basic strategy enabled
+    const mockTestPluginAction = jest.fn().mockResolvedValue([
+      {
+        vars: { input: 'test input' },
+        assert: [{ type: 'test-assertion', metric: 'Test' }],
+        metadata: {
+          pluginId: 'test-plugin',
+        },
+      },
+    ]);
+
+    jest.spyOn(Plugins, 'find').mockReturnValue({
+      key: 'test-plugin',
+      action: mockTestPluginAction,
+    });
+
     const resultEnabled = await synthesize({
       plugins: [mockPlugin],
       strategies: [{ id: 'basic', config: { enabled: true } }],
@@ -551,7 +650,6 @@ describe('synthesize', () => {
 
     expect(resultEnabled.testCases.length).toBeGreaterThan(0);
 
-    // Test with basic strategy disabled
     const resultDisabled = await synthesize({
       plugins: [mockPlugin],
       strategies: [{ id: 'basic', config: { enabled: false } }],
@@ -568,11 +666,9 @@ describe('synthesize', () => {
 
   describe('Direct plugin handling', () => {
     it('should recognize and not expand direct plugins like bias:gender', async () => {
-      // Mock the Plugins.find method to recognize bias:gender as a direct plugin
       const mockPluginAction = jest.fn().mockImplementation(({ n }) => {
         return Array(n).fill({ test: 'bias:gender case' });
       });
-      // Use mockReturnValue with a pre-created object that matches what's returned in the actual code
       jest.spyOn(Plugins, 'find').mockReturnValue({ key: 'bias:gender', action: mockPluginAction });
 
       const result = await synthesize({
@@ -604,9 +700,7 @@ describe('synthesize', () => {
     });
 
     it('should still expand category plugins with new bias category', async () => {
-      // Mock for any plugin to return test cases
       const mockPluginAction = jest.fn().mockResolvedValue([{ test: 'case' }]);
-      // Use mockReturnValue with a generic mock that will work for all plugins
       jest.spyOn(Plugins, 'find').mockReturnValue({ key: 'mockPlugin', action: mockPluginAction });
 
       const result = await synthesize({

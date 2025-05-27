@@ -57,6 +57,7 @@ import { SqlInjectionGrader } from './plugins/sqlInjection';
 import { SsrfGrader } from './plugins/ssrf';
 import { ToolDiscoveryGrader } from './plugins/toolDiscovery';
 import { ToolDiscoveryMultiTurnGrader } from './plugins/toolDiscoveryMultiTurn';
+import { ToxicChatGrader } from './plugins/toxicchat';
 import { UnsafeBenchGrader } from './plugins/unsafebench';
 import type { RedteamAssertionTypes } from './types';
 
@@ -127,6 +128,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:shell-injection': new ShellInjectionGrader(),
   'promptfoo:redteam:sql-injection': new SqlInjectionGrader(),
   'promptfoo:redteam:ssrf': new SsrfGrader(),
+  'promptfoo:redteam:toxic-chat': new ToxicChatGrader(),
   'promptfoo:redteam:unsafebench': new UnsafeBenchGrader(),
 };
 

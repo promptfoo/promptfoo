@@ -1092,6 +1092,20 @@ export const PLUGINS = [
   },
   {
     category: 'Dataset',
+    description: 'Tests handling of toxic user prompts from the ToxicChat dataset',
+    label: 'harmful',
+    link: '/docs/red-team/plugins/toxicchat/',
+    name: 'ToxicChat',
+    pluginId: 'toxic-chat',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'harmful',
+  },
+  {
+    category: 'Dataset',
     description: 'Tests handling of unsafe image content through multi-modal model evaluation',
     label: 'harmful',
     link: '/docs/red-team/plugins/unsafebench/',

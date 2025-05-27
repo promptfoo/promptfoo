@@ -1,6 +1,5 @@
 import React from 'react';
 import Link from '@docusaurus/Link';
-import { scrollToTop } from '../../../utils/navigation';
 import styles from '../styles.module.css';
 
 export default function Hero(): JSX.Element {
@@ -13,17 +12,12 @@ export default function Hero(): JSX.Element {
         </p>
         <div className={styles.heroButtons}>
           <Link
-            onClick={scrollToTop}
             to="/docs/red-team/quickstart/"
             className={`${styles.button} ${styles.buttonPrimary}`}
           >
             Get started
           </Link>
-          <Link
-            onClick={scrollToTop}
-            to="/contact/"
-            className={`${styles.button} ${styles.buttonSecondary}`}
-          >
+          <Link to="/contact/" className={`${styles.button} ${styles.buttonSecondary}`}>
             Get a demo
           </Link>
         </div>
