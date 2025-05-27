@@ -211,14 +211,25 @@ Custom providers can access return values from hooks through the `context.extens
 class CustomProvider {
   async callApi(prompt, context) {
     // Access return values from beforeAll hooks
-    // Note: extensionHookOutputs.beforeAll is an array containing return values from all extensions
-    const [firstExtensionOutput] = context.extensionHookOutputs.beforeAll;
-    const { traceId, apiToken } = firstExtensionOutput;
+    // extensionHookOutputs.beforeAll is an array with length equal to the number of extensions defined
+    // Each element corresponds to the return value from one extension (or undefined if the extension didn't return anything)
+    const [firstExtensionOutput, secondExtensionOutput] = context.extensionHookOutputs.beforeAll;
 
-    // Access return values from beforeEach hooks (if any)
+    // Example: If you have 3 extensions defined, the array will always have length 3
+    console.log(`Number of extensions: ${context.extensionHookOutputs.beforeAll.length}`);
+
+    // Handle the first extension's output
+    if (firstExtensionOutput) {
+      const { traceId, apiToken } = firstExtensionOutput;
+      // Use values from first extension
+    }
+
+    // Access return values from beforeEach hooks (also an array with length equal to number of extensions)
     if (context.extensionHookOutputs.beforeEach?.length > 0) {
-      const [{ testId }] = context.extensionHookOutputs.beforeEach;
-      // Use testId for this specific test
+      const [firstExtBeforeEach] = context.extensionHookOutputs.beforeEach;
+      if (firstExtBeforeEach?.testId) {
+        // Use testId for this specific test
+      }
     }
 
     // Make API call using values from hooks
@@ -238,7 +249,7 @@ class CustomProvider {
 ```
 
 :::note
-When using multiple extensions, `extensionHookOutputs` contains arrays of return values in the order the extensions were defined in the configuration. Each array element corresponds to the return value from one extension.
+The `extensionHookOutputs.beforeAll` and `extensionHookOutputs.beforeEach` arrays always have a length equal to the number of extensions defined in your configuration. Each array element corresponds to the return value from one extension, in the order they were defined. If an extension doesn't return a value (or returns `undefined`), its corresponding array element will be `undefined`, but the position is preserved. For example, if you have 3 extensions defined and only the second one returns a value from `beforeAll`, the array will be `[undefined, { yourData }, undefined]`.
 :::
 
 These hooks provide powerful extensibility to your promptfoo evaluations, allowing you to implement custom logic for setup, teardown, logging, or integration with other systems. The extension function receives the `hookName` and a `context` object, which contains relevant data for each hook type. You can use this information to perform actions specific to each stage of the evaluation process.
