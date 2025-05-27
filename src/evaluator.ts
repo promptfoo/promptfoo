@@ -521,7 +521,7 @@ class Evaluator {
   }
 
   async evaluate(): Promise<Eval> {
-    const { testSuite, options } = this;
+    const { options } = this;
     const vars = new Set<string>();
     const checkAbort = () => {
       if (options.abortSignal?.aborted) {
@@ -536,12 +536,15 @@ class Evaluator {
     const assertionTypes = new Set<string>();
     const rowsWithSelectBestAssertion = new Set<number>();
 
-    await runExtensionHook(testSuite.extensions, 'beforeAll', { suite: testSuite });
+    await runExtensionHook(this.testSuite.extensions, 'beforeAll', { suite: this.testSuite });
 
     if (options.generateSuggestions) {
       // TODO(ian): Move this into its own command/file
       logger.info(`Generating prompt variations...`);
-      const { prompts: newPrompts, error } = await generatePrompts(testSuite.prompts[0].raw, 1);
+      const { prompts: newPrompts, error } = await generatePrompts(
+        this.testSuite.prompts[0].raw,
+        1,
+      );
       if (error || !newPrompts) {
         throw new Error(`Failed to generate prompts: ${error}`);
       }
@@ -564,7 +567,7 @@ class Evaluator {
             async (answer) => {
               rl.close();
               if (answer.toLowerCase().startsWith('y')) {
-                testSuite.prompts.push({ raw: prompt, label: prompt });
+                this.testSuite.prompts.push({ raw: prompt, label: prompt });
                 numAdded++;
               } else {
                 logger.info('Skipping this prompt.');
@@ -584,11 +587,11 @@ class Evaluator {
 
     // Split prompts by provider
     // Order matters - keep provider in outer loop to reduce need to swap models during local inference.
-    for (const provider of testSuite.providers) {
-      for (const prompt of testSuite.prompts) {
+    for (const provider of this.testSuite.providers) {
+      for (const prompt of this.testSuite.prompts) {
         // Check if providerPromptMap exists and if it contains the current prompt's label
         const providerKey = provider.label || provider.id();
-        if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[providerKey])) {
+        if (!isAllowedPrompt(prompt, this.testSuite.providerPromptMap?.[providerKey])) {
           continue;
         }
         const completedPrompt = {
@@ -622,9 +625,9 @@ class Evaluator {
 
     // Aggregate all vars across test cases
     let tests =
-      testSuite.tests && testSuite.tests.length > 0
-        ? testSuite.tests
-        : testSuite.scenarios
+      this.testSuite.tests && this.testSuite.tests.length > 0
+        ? this.testSuite.tests
+        : this.testSuite.scenarios
           ? []
           : [
               {
@@ -633,11 +636,11 @@ class Evaluator {
             ];
 
     // Build scenarios and add to tests
-    if (testSuite.scenarios && testSuite.scenarios.length > 0) {
+    if (this.testSuite.scenarios && this.testSuite.scenarios.length > 0) {
       telemetry.recordAndSendOnce('feature_used', {
         feature: 'scenarios',
       });
-      for (const scenario of testSuite.scenarios) {
+      for (const scenario of this.testSuite.scenarios) {
         for (const data of scenario.config) {
           // Merge defaultTest with scenario config
           const scenarioTests = (
@@ -648,16 +651,16 @@ class Evaluator {
             ]
           ).map((test) => {
             return {
-              ...testSuite.defaultTest,
+              ...this.testSuite.defaultTest,
               ...data,
               ...test,
               vars: {
-                ...testSuite.defaultTest?.vars,
+                ...this.testSuite.defaultTest?.vars,
                 ...data.vars,
                 ...test.vars,
               },
               options: {
-                ...testSuite.defaultTest?.options,
+                ...this.testSuite.defaultTest?.options,
                 ...test.options,
               },
               assert: [
@@ -666,7 +669,7 @@ class Evaluator {
                 ...(test.assert || []),
               ],
               metadata: {
-                ...testSuite.defaultTest?.metadata,
+                ...this.testSuite.defaultTest?.metadata,
                 ...data.metadata,
                 ...test.metadata,
               },
@@ -678,14 +681,14 @@ class Evaluator {
       }
     }
 
-    maybeEmitAzureOpenAiWarning(testSuite, tests);
+    maybeEmitAzureOpenAiWarning(this.testSuite, tests);
 
     // Prepare vars
     const varNames: Set<string> = new Set();
     const varsWithSpecialColsRemoved: Vars[] = [];
-    const inputTransformDefault = testSuite?.defaultTest?.options?.transformVars;
+    const inputTransformDefault = this.testSuite?.defaultTest?.options?.transformVars;
     for (const testCase of tests) {
-      testCase.vars = { ...testSuite.defaultTest?.vars, ...testCase?.vars };
+      testCase.vars = { ...this.testSuite.defaultTest?.vars, ...testCase?.vars };
 
       if (testCase.vars) {
         const varWithSpecialColsRemoved: Vars = {};
@@ -724,7 +727,7 @@ class Evaluator {
     for (let index = 0; index < tests.length; index++) {
       const testCase = tests[index];
       invariant(
-        Array.isArray(testSuite.defaultTest?.assert || []),
+        Array.isArray(this.testSuite.defaultTest?.assert || []),
         `defaultTest.assert is not an array in test case #${index + 1}`,
       );
       invariant(
@@ -732,13 +735,13 @@ class Evaluator {
         `testCase.assert is not an array in test case #${index + 1}`,
       );
       // Handle default properties
-      testCase.assert = [...(testSuite.defaultTest?.assert || []), ...(testCase.assert || [])];
-      testCase.threshold = testCase.threshold ?? testSuite.defaultTest?.threshold;
-      testCase.options = { ...testSuite.defaultTest?.options, ...testCase.options };
-      testCase.metadata = { ...testSuite.defaultTest?.metadata, ...testCase.metadata };
-      testCase.provider = testCase.provider || testSuite.defaultTest?.provider;
+      testCase.assert = [...(this.testSuite.defaultTest?.assert || []), ...(testCase.assert || [])];
+      testCase.threshold = testCase.threshold ?? this.testSuite.defaultTest?.threshold;
+      testCase.options = { ...this.testSuite.defaultTest?.options, ...testCase.options };
+      testCase.metadata = { ...this.testSuite.defaultTest?.metadata, ...testCase.metadata };
+      testCase.provider = testCase.provider || this.testSuite.defaultTest?.provider;
       testCase.assertScoringFunction =
-        testCase.assertScoringFunction || testSuite.defaultTest?.assertScoringFunction;
+        testCase.assertScoringFunction || this.testSuite.defaultTest?.assertScoringFunction;
 
       if (typeof testCase.assertScoringFunction === 'string') {
         const { filePath: resolvedPath, functionName } = parseFileUrl(
@@ -750,9 +753,9 @@ class Evaluator {
         });
       }
       const prependToPrompt =
-        testCase.options?.prefix || testSuite.defaultTest?.options?.prefix || '';
+        testCase.options?.prefix || this.testSuite.defaultTest?.options?.prefix || '';
       const appendToPrompt =
-        testCase.options?.suffix || testSuite.defaultTest?.options?.suffix || '';
+        testCase.options?.suffix || this.testSuite.defaultTest?.options?.suffix || '';
 
       // Finalize test case eval
       const varCombinations =
@@ -765,10 +768,10 @@ class Evaluator {
         for (const vars of varCombinations) {
           let promptIdx = 0;
           // Order matters - keep provider in outer loop to reduce need to swap models during local inference.
-          for (const provider of testSuite.providers) {
-            for (const prompt of testSuite.prompts) {
+          for (const provider of this.testSuite.providers) {
+            for (const prompt of this.testSuite.prompts) {
               const providerKey = provider.label || provider.id();
-              if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[providerKey])) {
+              if (!isAllowedPrompt(prompt, this.testSuite.providerPromptMap?.[providerKey])) {
                 continue;
               }
               runEvalOptions.push({
@@ -779,7 +782,7 @@ class Evaluator {
                   raw: prependToPrompt + prompt.raw + appendToPrompt,
                 },
                 test: { ...testCase, vars, options: testCase.options },
-                nunjucksFilters: testSuite.nunjucksFilters,
+                nunjucksFilters: this.testSuite.nunjucksFilters,
                 testIdx,
                 promptIdx,
                 repeatIndex,
@@ -822,7 +825,7 @@ class Evaluator {
         throw new Error('Expected index to be a number');
       }
 
-      await runExtensionHook(testSuite.extensions, 'beforeEach', {
+      await runExtensionHook(this.testSuite.extensions, 'beforeEach', {
         test: evalStep.test,
       });
 
@@ -924,9 +927,9 @@ class Evaluator {
             (metrics.namedScoresCount[key] || 0) + (contributingAssertions || 1);
         }
 
-        if (testSuite.derivedMetrics) {
+        if (this.testSuite.derivedMetrics) {
           const math = await import('mathjs');
-          for (const metric of testSuite.derivedMetrics) {
+          for (const metric of this.testSuite.derivedMetrics) {
             if (metrics.namedScores[metric.name] === undefined) {
               metrics.namedScores[metric.name] = 0;
             }
@@ -986,7 +989,7 @@ class Evaluator {
 
         metrics.cost += row.cost || 0;
 
-        await runExtensionHook(testSuite.extensions, 'afterEach', {
+        await runExtensionHook(this.testSuite.extensions, 'afterEach', {
           test: evalStep.test,
           result: row,
         });
@@ -1369,10 +1372,10 @@ class Evaluator {
 
     this.evalRecord.setVars(vars);
 
-    await runExtensionHook(testSuite.extensions, 'afterAll', {
+    await runExtensionHook(this.testSuite.extensions, 'afterAll', {
       prompts: this.evalRecord.prompts,
       results: this.evalRecord.results,
-      suite: testSuite,
+      suite: this.testSuite,
     });
 
     telemetry.record('eval_ran', {
@@ -1386,11 +1389,11 @@ class Evaluator {
         0,
       ),
       numVars: varNames.size,
-      numProviders: testSuite.providers.length,
+      numProviders: this.testSuite.providers.length,
       numRepeat: options.repeat || 1,
       providerPrefixes: Array.from(
         new Set(
-          testSuite.providers.map((p) => {
+          this.testSuite.providers.map((p) => {
             const idParts = p.id().split(':');
             return idParts.length > 1 ? idParts[0] : 'unknown';
           }),
