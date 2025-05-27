@@ -5,7 +5,7 @@ import {
   OpenAIModerationPlugin,
   PLUGIN_ID,
 } from '../../../src/redteam/plugins/openaiModeration';
-import type { ApiProvider, AtomicTestCase } from '../../../src/types';
+import type { ApiProvider } from '../../../src/types';
 
 jest.mock('../../../src/matchers', () => ({
   matchesLlmRubric: jest.fn(),
