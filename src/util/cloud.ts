@@ -29,7 +29,7 @@ export function makeRequest(path: string, method: string, body?: any): Promise<R
 
 export async function targetApiBuildDate(): Promise<Date | null> {
   try {
-    const response = await makeRequest('version', 'GET');
+    const response = await makeRequest('api/version', 'GET');
 
     const data = await response.json();
 
