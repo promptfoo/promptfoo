@@ -35,6 +35,12 @@ jest.mock('@smithy/node-http-handler', () => {
   };
 });
 
+// Preserve proxy variables so they can be restored after each test. These are
+// set in the container environment and can influence proxy-related logic in the
+// provider implementation.
+const ORIGINAL_HTTP_PROXY = process.env.HTTP_PROXY;
+const ORIGINAL_HTTPS_PROXY = process.env.HTTPS_PROXY;
+
 jest.mock('proxy-agent', () => jest.fn());
 
 jest.mock('../../../src/cache', () => ({
@@ -66,10 +72,18 @@ describe('AwsBedrockGenericProvider', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     delete process.env.AWS_BEDROCK_MAX_RETRIES;
+    // Ensure proxy environment variables do not force proxy-specific code paths
+    // when running tests. The container sets HTTP_PROXY by default which causes
+    // getBedrockInstance to require optional dependencies that are not
+    // installed in the test environment.
+    process.env.HTTP_PROXY = '';
+    process.env.HTTPS_PROXY = '';
   });
 
   afterEach(() => {
     jest.clearAllMocks();
+    process.env.HTTP_PROXY = ORIGINAL_HTTP_PROXY;
+    process.env.HTTPS_PROXY = ORIGINAL_HTTPS_PROXY;
   });
 
   it('should create Bedrock instance without proxy settings', async () => {
