@@ -420,6 +420,8 @@ describe('synthesize', () => {
     });
 
     it('should not store full config in metadata for intent plugin to prevent bloating', async () => {
+      jest.clearAllMocks();
+
       const mockProvider = {
         id: () => 'test-provider',
         callApi: jest.fn().mockResolvedValue({ output: 'Test response' }),
@@ -429,7 +431,7 @@ describe('synthesize', () => {
         id: 'intent',
         numTests: 2,
         config: {
-          intent: ['intent1', 'intent2', 'intent3', 'intent4', 'intent5'], // Large array
+          intent: ['intent1', 'intent2', 'intent3', 'intent4', 'intent5'],
         },
       };
 
@@ -440,6 +442,49 @@ describe('synthesize', () => {
           someConfig: 'value',
         },
       };
+
+      const mockIntentAction = jest.fn().mockResolvedValue([
+        {
+          vars: { prompt: 'intent1' },
+          assert: [{ type: 'promptfoo:redteam:intent', metric: 'Intent' }],
+          metadata: {
+            intent: 'intent1',
+            pluginId: 'intent',
+            pluginConfig: undefined,
+          },
+        },
+        {
+          vars: { prompt: 'intent2' },
+          assert: [{ type: 'promptfoo:redteam:intent', metric: 'Intent' }],
+          metadata: {
+            intent: 'intent2',
+            pluginId: 'intent',
+            pluginConfig: undefined,
+          },
+        },
+      ]);
+
+      const mockContractsAction = jest.fn().mockResolvedValue([
+        {
+          vars: { prompt: 'contract test' },
+          assert: [{ type: 'promptfoo:redteam:contracts', metric: 'Contracts' }],
+          metadata: {
+            pluginId: 'contracts',
+          },
+        },
+      ]);
+
+      jest.spyOn(Plugins, 'find').mockImplementation((predicate) => {
+        const mockPlugins = [
+          { key: 'intent', action: mockIntentAction },
+          { key: 'contracts', action: mockContractsAction },
+        ];
+
+        if (typeof predicate === 'function') {
+          return mockPlugins.find(predicate);
+        }
+        return undefined;
+      });
 
       const result = await synthesize({
         plugins: [intentPlugin, regularPlugin],
@@ -453,7 +498,6 @@ describe('synthesize', () => {
         targetLabels: ['test'],
       });
 
-      // Check that intent plugin test cases don't have pluginConfig in metadata
       const intentTestCases = result.testCases.filter((tc) => tc.metadata?.pluginId === 'intent');
       expect(intentTestCases.length).toBeGreaterThan(0);
       intentTestCases.forEach((tc) => {
@@ -461,7 +505,6 @@ describe('synthesize', () => {
         expect(tc.metadata?.pluginId).toBe('intent');
       });
 
-      // Check that regular plugins still have pluginConfig in metadata
       const contractsTestCases = result.testCases.filter(
         (tc) => tc.metadata?.pluginId === 'contracts',
       );
@@ -579,7 +622,6 @@ describe('synthesize', () => {
       callApi: jest.fn().mockResolvedValue({ output: 'test output' }),
     });
 
-    // Mock plugin to generate a test case
     const mockPlugin = {
       id: 'test-plugin',
       numTests: 1,
@@ -590,7 +632,21 @@ describe('synthesize', () => {
       callApi: jest.fn().mockResolvedValue({ output: 'test output' }),
     };
 
-    // Test with basic strategy enabled
+    const mockTestPluginAction = jest.fn().mockResolvedValue([
+      {
+        vars: { input: 'test input' },
+        assert: [{ type: 'test-assertion', metric: 'Test' }],
+        metadata: {
+          pluginId: 'test-plugin',
+        },
+      },
+    ]);
+
+    jest.spyOn(Plugins, 'find').mockReturnValue({
+      key: 'test-plugin',
+      action: mockTestPluginAction,
+    });
+
     const resultEnabled = await synthesize({
       plugins: [mockPlugin],
       strategies: [{ id: 'basic', config: { enabled: true } }],
@@ -604,7 +660,6 @@ describe('synthesize', () => {
 
     expect(resultEnabled.testCases.length).toBeGreaterThan(0);
 
-    // Test with basic strategy disabled
     const resultDisabled = await synthesize({
       plugins: [mockPlugin],
       strategies: [{ id: 'basic', config: { enabled: false } }],
