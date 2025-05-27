@@ -70,11 +70,13 @@ This example showcases:
 ## Model Comparison
 
 ### FLUX Schnell
+
 - **Speed**: Ultra-fast with 4 inference steps
 - **Guidance Scale**: 3.5 for balanced creativity
 - **Best For**: Quick iterations and rapid prototyping
 
 ### FLUX Dev
+
 - **Quality**: High-quality with 28 inference steps
 - **Guidance Scale**: 7.5 for precise prompt following
 - **Image Size**: Landscape 4:3 aspect ratio
@@ -96,4 +98,4 @@ This example showcases:
 
 ## Pricing Considerations
 
-fal.ai charges per image generated. FLUX Schnell is more cost-effective for experimentation, while FLUX Dev provides higher quality at a higher cost. Check current pricing at [fal.ai/pricing](https://fal.ai/pricing). 
+fal.ai charges per image generated. FLUX Schnell is more cost-effective for experimentation, while FLUX Dev provides higher quality at a higher cost. Check current pricing at [fal.ai/pricing](https://fal.ai/pricing).

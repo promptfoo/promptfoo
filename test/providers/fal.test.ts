@@ -62,7 +62,7 @@ describe('Fal Provider', () => {
             modelName: 'fal-ai/flux/schnell',
             modelType: 'image',
             apiKey: 'test-api-key',
-          })
+          }),
         );
       });
 
@@ -86,7 +86,7 @@ describe('Fal Provider', () => {
               num_inference_steps: 8,
               image_size: { width: 1024, height: 1024 },
             },
-          })
+          }),
         );
       });
 
@@ -123,11 +123,11 @@ describe('Fal Provider', () => {
       it('should throw error when API key is not set', async () => {
         const { getEnvString } = require('../../src/envars');
         jest.mocked(getEnvString).mockReturnValue(undefined);
-        
+
         const noKeyProvider = new FalImageGenerationProvider('fal-ai/flux/schnell');
-        
+
         await expect(noKeyProvider.callApi('test prompt')).rejects.toThrow(
-          'fal.ai API key is not set. Set the FAL_KEY environment variable or or add `apiKey` to the provider config.'
+          'fal.ai API key is not set. Set the FAL_KEY environment variable or or add `apiKey` to the provider config.',
         );
       });
     });
@@ -263,25 +263,32 @@ describe('Fal Provider', () => {
           prompt: 'a [test] prompt\nwith newlines\rand brackets',
         });
 
-        expect(result).toBe('![a (test) prompt with newlines and brackets](https://example.com/image.png)');
+        expect(result).toBe(
+          '![a (test) prompt with newlines and brackets](https://example.com/image.png)',
+        );
       });
 
       it('should ellipsize long prompts in markdown output', async () => {
-        const longPrompt = 'a very long prompt that exceeds the maximum length and should be ellipsized';
-        
+        const longPrompt =
+          'a very long prompt that exceeds the maximum length and should be ellipsized';
+
         const result = await provider.runInference({
           prompt: longPrompt,
         });
 
-        expect(result).toBe('![a very long prompt that exceeds the maximum len...](https://example.com/image.png)');
+        expect(result).toBe(
+          '![a very long prompt that exceeds the maximum len...](https://example.com/image.png)',
+        );
       });
     });
 
     describe('caching behavior', () => {
       it('should use cached response when cache is enabled and available', async () => {
         jest.mocked(isCacheEnabled).mockReturnValue(true);
-        const mockCachedResponse = JSON.stringify('![cached prompt](https://cached.example.com/image.png)');
-        
+        const mockCachedResponse = JSON.stringify(
+          '![cached prompt](https://cached.example.com/image.png)',
+        );
+
         const mockCache = {
           get: jest.fn().mockResolvedValue(mockCachedResponse),
           set: jest.fn(),
@@ -303,7 +310,7 @@ describe('Fal Provider', () => {
         });
         expect(mockSubscribe).not.toHaveBeenCalled();
         expect(mockCache.get).toHaveBeenCalledWith(
-          expect.stringContaining('fal:fal-ai/flux/schnell:')
+          expect.stringContaining('fal:fal-ai/flux/schnell:'),
         );
       });
 
@@ -336,7 +343,7 @@ describe('Fal Provider', () => {
         expect(mockSubscribe).toHaveBeenCalled();
         expect(mockCache.set).toHaveBeenCalledWith(
           expect.stringContaining('fal:fal-ai/flux/schnell:'),
-          JSON.stringify('![test prompt](https://example.com/image.png)')
+          JSON.stringify('![test prompt](https://example.com/image.png)'),
         );
       });
 
@@ -364,7 +371,7 @@ describe('Fal Provider', () => {
         mockSubscribe.mockResolvedValueOnce(mockResponse);
 
         const result = await provider.callApi('test prompt');
-        
+
         expect(result).toEqual({
           cached: false,
           output: '![test prompt](https://example.com/image.png)',
@@ -389,16 +396,18 @@ describe('Fal Provider', () => {
         };
         mockSubscribe.mockResolvedValueOnce(mockResponse);
 
-        await expect(provider.runInference({
-          prompt: 'test prompt',
-        })).rejects.toThrow('Failed to resolve image URL.');
+        await expect(
+          provider.runInference({
+            prompt: 'test prompt',
+          }),
+        ).rejects.toThrow('Failed to resolve image URL.');
       });
     });
 
     describe('client initialization', () => {
       it('should lazy load the fal client', async () => {
         jest.clearAllMocks();
-        
+
         const newProvider = new FalImageGenerationProvider('fal-ai/flux/schnell', {
           config: { apiKey: 'test-api-key' },
         });
@@ -418,4 +427,4 @@ describe('Fal Provider', () => {
       });
     });
   });
-}); 
+});
