@@ -68,7 +68,6 @@ redteam:
   plugins:
     - off-topic
   strategies:
-    - basic
     - jailbreak
     - prompt-injection
 ```
