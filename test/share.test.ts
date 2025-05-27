@@ -10,7 +10,7 @@ import {
   isSharingEnabled,
   hasEvalBeenShared,
 } from '../src/share';
-import { cloudCanAcceptChunkedResults, makeRequest } from '../src/util/cloud';
+import { makeRequest } from '../src/util/cloud';
 
 function buildMockEval(): Partial<Eval> {
   return {
@@ -57,7 +57,6 @@ jest.mock('../src/globalConfig/accounts', () => ({
 }));
 
 jest.mock('../src/util/cloud', () => ({
-  cloudCanAcceptChunkedResults: jest.fn(),
   makeRequest: jest.fn(),
 }));
 
@@ -307,7 +306,6 @@ describe('createShareableUrl', () => {
     jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
     jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
     jest.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
-    jest.mocked(cloudCanAcceptChunkedResults).mockResolvedValue(false);
 
     const originalId = randomUUID();
     const newId = randomUUID();
@@ -356,7 +354,6 @@ describe('createShareableUrl', () => {
       jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
       jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
       jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
-      jest.mocked(cloudCanAcceptChunkedResults).mockResolvedValue(true);
 
       // Set up mock responses
       mockFetch

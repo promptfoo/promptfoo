@@ -6,8 +6,6 @@ import type { ProviderOptions } from '../types/providers';
 import { ProviderOptionsSchema } from '../validators/providers';
 import invariant from './invariant';
 
-const CHUNKED_RESULTS_BUILD_DATE = new Date('2025-01-10');
-
 export function makeRequest(path: string, method: string, body?: any): Promise<Response> {
   const apiHost = cloudConfig.getApiHost();
   const apiKey = cloudConfig.getApiKey();
@@ -24,23 +22,6 @@ export function makeRequest(path: string, method: string, body?: any): Promise<R
       logger.error(`Cause: ${(e as any).cause}`);
     }
     throw e;
-  }
-}
-
-export async function targetApiBuildDate(): Promise<Date | null> {
-  try {
-    const response = await makeRequest('api/version', 'GET');
-
-    const data = await response.json();
-
-    const { buildDate } = data;
-    logger.debug(`[targetApiBuildDate] ${buildDate}`);
-    if (buildDate) {
-      return new Date(buildDate);
-    }
-    return null;
-  } catch {
-    return null;
   }
 }
 
@@ -103,9 +84,4 @@ export async function getConfigFromCloud(id: string, providerId?: string): Promi
     logger.error(String(e));
     throw new Error(`Failed to fetch config from cloud: ${id}.`);
   }
-}
-
-export async function cloudCanAcceptChunkedResults(): Promise<boolean> {
-  const buildDate = await targetApiBuildDate();
-  return buildDate != null && buildDate > CHUNKED_RESULTS_BUILD_DATE;
 }
