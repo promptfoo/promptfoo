@@ -73,7 +73,7 @@ export class IntentPlugin extends RedteamPluginBase {
 
       return data?.intent || prompt;
     } catch (error) {
-      console.warn(`Error extracting intent: ${error}`);
+      logger.warn(`Error extracting intent: ${error}`);
       return prompt;
     }
   }
