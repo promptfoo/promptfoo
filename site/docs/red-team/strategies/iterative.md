@@ -46,6 +46,8 @@ The Iterative Jailbreaks strategy works by:
 This strategy is medium cost since it makes multiple API calls per test. We recommend running it on a smaller number of tests and plugins before running a full test.
 :::
 
+![algorithmic jailbreak diagram](/img/docs/iterative-jailbreak-diagram.svg)
+
 ## Example Scenario
 
 Here's how the iteration process works:
