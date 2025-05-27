@@ -14,10 +14,25 @@ afterEach(() => {
 
 // Ensure React is available globally for tests
 beforeAll(() => {
+  // Ensure DOM is properly set up for React 19
+  if (typeof document === 'undefined') {
+    throw new Error(
+      'DOM environment not properly initialized. Make sure vitest is configured with environment: "jsdom"',
+    );
+  }
+
   // Make sure React is available in the global scope for testing
   if (typeof globalThis.React === 'undefined') {
     globalThis.React = React;
     globalThis.ReactDOM = ReactDOM;
+  }
+
+  // Ensure document and window are available globally
+  if (typeof globalThis.document === 'undefined') {
+    globalThis.document = document;
+  }
+  if (typeof globalThis.window === 'undefined') {
+    globalThis.window = window;
   }
 
   // Suppress React Router future flag warnings in tests
