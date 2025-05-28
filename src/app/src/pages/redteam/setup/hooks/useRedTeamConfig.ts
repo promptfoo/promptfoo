@@ -2,7 +2,7 @@ import type { Plugin } from '@promptfoo/redteam/constants';
 import { DEFAULT_PLUGINS } from '@promptfoo/redteam/constants';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Config, ProviderOptions } from '../types';
+import type { ApplicationDefinition, Config, ProviderOptions } from '../types';
 
 interface RecentlyUsedPlugins {
   plugins: Plugin[];
@@ -34,10 +34,7 @@ interface RedTeamConfigState {
   updatePlugins: (plugins: Array<string | { id: string; config: any }>) => void;
   setFullConfig: (config: Config) => void;
   resetConfig: () => void;
-  updateApplicationDefinition: (
-    section: keyof Config['applicationDefinition'],
-    value: string,
-  ) => void;
+  updateApplicationDefinition: (section: keyof ApplicationDefinition, value: string) => void;
 }
 
 export const DEFAULT_HTTP_TARGET: ProviderOptions = {
@@ -79,6 +76,10 @@ const defaultConfig: Config = {
 const applicationDefinitionToPurpose = (applicationDefinition: Config['applicationDefinition']) => {
   const sections = [];
 
+  if (!applicationDefinition) {
+    return '';
+  }
+
   if (applicationDefinition.purpose) {
     sections.push(`The objective of the application is: ${applicationDefinition.purpose}`);
   }
@@ -114,7 +115,7 @@ const applicationDefinitionToPurpose = (applicationDefinition: Config['applicati
   return sections.join('\n\n');
 };
 
-const EXAMPLE_APPLICATION_DEFINITION = {
+export const EXAMPLE_APPLICATION_DEFINITION: ApplicationDefinition = {
   purpose:
     'Help employees at Travel R Us, a hotel search company, find information faster in their internal documentation.',
   redteamUser: 'An employee in the engineering department',
@@ -212,13 +213,10 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
         // There's a bunch of state that's not persisted that we want to reset
         window.location.reload();
       },
-      updateApplicationDefinition: (
-        section: keyof Config['applicationDefinition'],
-        value: string,
-      ) =>
+      updateApplicationDefinition: (section: keyof ApplicationDefinition, value: string) =>
         set((state) => {
           const newApplicationDefinition = {
-            ...state.config.applicationDefinition,
+            ...(state.config.applicationDefinition ?? {}),
             [section]: value,
           };
           const newPurpose = applicationDefinitionToPurpose(newApplicationDefinition);
