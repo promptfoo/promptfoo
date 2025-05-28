@@ -811,8 +811,9 @@ export class HttpProvider implements ApiProvider {
     );
 
     const ret: ProviderResponse = {};
+    ret.raw = response.data;
+
     if (context?.debug) {
-      ret.raw = response.data;
       ret.metadata = {
         headers: response.headers,
       };
