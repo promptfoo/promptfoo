@@ -129,6 +129,11 @@ export interface ProviderResponse {
     transcript?: string;
     format?: string;
   };
+  http?: {
+    status: number;
+    statusText: string;
+    headers: Record<string, string>;
+  };
 }
 
 export interface ProviderEmbeddingResponse {
