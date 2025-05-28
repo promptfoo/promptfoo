@@ -181,6 +181,10 @@ const sidebars = {
       id: 'red-team/owasp-llm-top-10',
     },
     {
+      type: 'doc',
+      id: 'red-team/tsa',
+    },
+    {
       type: 'category',
       label: 'Plugins',
       collapsed: true,
