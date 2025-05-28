@@ -16,7 +16,12 @@ import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Typography from '@mui/material/Typography';
 import { alpha, useTheme } from '@mui/material/styles';
-import { EXAMPLE_CONFIG, useRedTeamConfig } from '../hooks/useRedTeamConfig';
+import {
+  EXAMPLE_APPLICATION_DEFINITION,
+  EXAMPLE_CONFIG,
+  useRedTeamConfig,
+} from '../hooks/useRedTeamConfig';
+import type { ApplicationDefinition } from '../types';
 
 interface PromptsProps {
   onNext: () => void;
@@ -45,8 +50,8 @@ export default function Purpose({ onNext }: PromptsProps) {
       setTestMode(newMode);
       // Clear application definition fields when switching to model testing
       if (newMode === 'model') {
-        Object.keys(config.applicationDefinition ?? {}).forEach((key) => {
-          updateApplicationDefinition(key as keyof typeof config.applicationDefinition, '');
+        Object.keys(EXAMPLE_APPLICATION_DEFINITION).forEach((key) => {
+          updateApplicationDefinition(key as keyof ApplicationDefinition, '');
         });
       }
       recordEvent('feature_used', { feature: 'redteam_test_mode_change', mode: newMode });

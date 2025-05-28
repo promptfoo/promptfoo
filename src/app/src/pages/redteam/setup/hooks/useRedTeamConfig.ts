@@ -115,7 +115,7 @@ const applicationDefinitionToPurpose = (applicationDefinition: Config['applicati
   return sections.join('\n\n');
 };
 
-const EXAMPLE_APPLICATION_DEFINITION = {
+export const EXAMPLE_APPLICATION_DEFINITION: ApplicationDefinition = {
   purpose:
     'Help employees at Travel R Us, a hotel search company, find information faster in their internal documentation.',
   redteamUser: 'An employee in the engineering department',
