@@ -1,6 +1,7 @@
 ---
 title: Using MCP (Model Context Protocol) in Promptfoo
 description: Configure and integrate Model Context Protocol (MCP) with Promptfoo to enable tool use, memory, and agentic capabilities across different LLM providers
+sidebar_label: Model Context Protocol (MCP)
 sidebar_position: 20
 ---
 
