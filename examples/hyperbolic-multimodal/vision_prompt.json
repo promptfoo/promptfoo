@@ -1,0 +1,17 @@
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "text",
+        "text": "Analyze this image and describe what you see. What's the main subject and what emotions does it convey?"
+      },
+      {
+        "type": "image_url",
+        "image_url": {
+          "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0f/Grosser_Panda.JPG/1280px-Grosser_Panda.JPG"
+        }
+      }
+    ]
+  }
+]

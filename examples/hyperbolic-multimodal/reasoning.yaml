@@ -1,0 +1,67 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Hyperbolic reasoning models
+
+prompts:
+  - 'Solve this step by step: {{problem}}'
+  - 'Explain your reasoning for: {{question}}'
+
+providers:
+  - id: hyperbolic:deepseek-ai/DeepSeek-R1
+    label: DeepSeek R1
+    config:
+      temperature: 0.1
+      max_tokens: 2048
+
+  - id: hyperbolic:qwen/QwQ-32B
+    label: QwQ-32B
+    config:
+      temperature: 0.1
+      max_tokens: 2048
+
+  - id: hyperbolic:meta-llama/Llama-3.1-70B
+    label: Llama 70B
+    config:
+      temperature: 0.3
+      max_tokens: 1024
+
+tests:
+  # Logic puzzles
+  - vars:
+      problem: 'A farmer needs to transport a fox, a chicken, and grain across a river. The boat can only carry the farmer and one item. If left alone, the fox eats the chicken, and the chicken eats the grain. How can the farmer transport all three safely?'
+    assert:
+      - type: contains-all
+        value: ['farmer', 'chicken', 'fox', 'grain']
+      - type: llm-rubric
+        value: 'The solution correctly solves the river crossing puzzle with proper reasoning'
+
+  - vars:
+      problem: 'You have 8 identical balls, but one is slightly heavier. Using a balance scale only twice, how do you find the heavier ball?'
+    assert:
+      - type: llm-rubric
+        value: 'The solution correctly identifies how to find the heavier ball in exactly 2 weighings'
+
+  # Mathematical reasoning
+  - vars:
+      question: 'Why does 0.999... (repeating) equal 1?'
+    assert:
+      - type: llm-rubric
+        value: 'The explanation provides a clear mathematical proof that 0.999... = 1'
+
+  - vars:
+      question: 'If a bat and ball cost $1.10 total, and the bat costs $1 more than the ball, what does each cost?'
+    assert:
+      - type: contains
+        value: '$0.05'
+      - type: contains
+        value: '$1.05'
+
+  # Code reasoning
+  - vars:
+      problem: 'Write a recursive function to calculate the nth Fibonacci number. Then explain its time complexity and how to optimize it.'
+    assert:
+      - type: contains
+        value: 'def'
+      - type: contains-any
+        value: ['O(2^n)', 'exponential']
+      - type: contains-any
+        value: ['memoization', 'dynamic programming', 'iterative']
