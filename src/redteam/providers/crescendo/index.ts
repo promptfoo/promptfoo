@@ -228,6 +228,7 @@ export class CrescendoProvider implements ApiProvider {
       conversationObjective: this.userGoal,
       currentRound: roundNum + 1,
       maxRounds: this.maxRounds,
+      purpose: context?.test?.metadata?.purpose,
     });
 
     this.memory.addMessage(this.redTeamingChatConversationId, {
