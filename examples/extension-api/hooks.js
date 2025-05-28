@@ -1,4 +1,5 @@
 let counter = 0;
+
 async function extensionHook(hookName, context) {
   if (hookName === 'beforeAll') {
     console.log(`Setting up test suite: ${context.suite.description || 'Unnamed suite'}`);
@@ -24,6 +25,8 @@ async function extensionHook(hookName, context) {
       context.results?.reduce((sum, r) => sum + (r.response?.tokenUsage?.total || 0), 0) || 0;
     console.log(`Total token usage: ${totalTokenUsage}`);
   }
+
+  return context;
 }
 
 module.exports = extensionHook;

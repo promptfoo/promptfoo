@@ -4,7 +4,6 @@ This module provides functionality for handling extension hooks in promptfoo.
 It allows for executing custom actions before and after test suites and
 individual evaluations, as well as running setup and teardown commands.
 """
-
 import logging
 import os
 from datetime import datetime
@@ -24,7 +23,7 @@ if not logging.getLogger().handlers:
 counter = 0
 
 
-def extension_hook(hook_name: str, context: dict) -> None:
+def extension_hook(hook_name: str, context: dict) -> dict:
     """Handles different extension hooks for promptfoo.
 
     This function is called at various points during the test execution process.
@@ -37,7 +36,7 @@ def extension_hook(hook_name: str, context: dict) -> None:
             The contents of this dictionary vary depending on the hook being called.
 
     Returns:
-        None
+        context (dict): The updated context.
 
     Global Variables:
         counter (int): Keeps track of the number of tests completed.
@@ -86,3 +85,5 @@ def extension_hook(hook_name: str, context: dict) -> None:
         logging.info(f"Total token usage: {total_token_usage}")
 
     logging.info("")  # Add a blank line for readability between hooks
+
+    return context
