@@ -10,7 +10,16 @@ describe('isApiProvider', () => {
       },
       {
         id: () => 'full-provider',
-        callApi: async () => ({ output: 'test' }),
+        callApi: async () => ({
+          output: 'test',
+          http: {
+            status: 200,
+            statusText: 'OK',
+            headers: {
+              'content-type': 'application/json',
+            },
+          },
+        }),
         callEmbeddingApi: async () => ({ embedding: [1, 2, 3] }),
         callClassificationApi: async () => ({ classification: { class1: 0.8 } }),
         config: { temperature: 0.7 },
@@ -18,6 +27,32 @@ describe('isApiProvider', () => {
         getSessionId: () => 'session-123',
         label: 'Test Provider',
         transform: 'toLowerCase()',
+      },
+      {
+        id: () => 'provider-with-http',
+        callApi: async () => ({
+          output: 'test',
+          http: {
+            status: 201,
+            statusText: 'Created',
+            headers: {
+              location: '/resources/123',
+            },
+          },
+        }),
+      },
+      {
+        id: () => 'provider-with-error-http',
+        callApi: async () => ({
+          error: 'Not found',
+          http: {
+            status: 404,
+            statusText: 'Not Found',
+            headers: {
+              'content-type': 'application/json',
+            },
+          },
+        }),
       },
       {
         id: () => 'minimal-provider',
@@ -35,7 +70,7 @@ describe('isApiProvider', () => {
       null,
       undefined,
       {},
-      { id: 'string-id' }, // id should be a function
+      { id: 'string-id' },
       { id: null },
       { id: undefined },
       { id: 42 },
@@ -48,6 +83,47 @@ describe('isApiProvider', () => {
 
     invalidProviders.forEach((provider) => {
       expect(isApiProvider(provider)).toBe(false);
+    });
+  });
+
+  it('should validate http response fields', () => {
+    const invalidHttpProviders = [
+      {
+        id: () => 'invalid-http',
+        callApi: async () => ({
+          output: 'test',
+          http: {
+            status: '200', // Invalid type - should be number
+            statusText: 'OK',
+            headers: {},
+          },
+        }),
+      },
+      {
+        id: () => 'missing-http-fields',
+        callApi: async () => ({
+          output: 'test',
+          http: {
+            // Missing required fields
+            headers: {},
+          },
+        }),
+      },
+      {
+        id: () => 'invalid-headers',
+        callApi: async () => ({
+          output: 'test',
+          http: {
+            status: 200,
+            statusText: 'OK',
+            headers: null, // Invalid headers type
+          },
+        }),
+      },
+    ];
+
+    invalidHttpProviders.forEach((provider) => {
+      expect(isApiProvider(provider)).toBe(true); // Still valid providers even with invalid http
     });
   });
 
