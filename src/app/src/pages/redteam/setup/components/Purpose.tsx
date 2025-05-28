@@ -29,7 +29,7 @@ export default function Purpose({ onNext }: PromptsProps) {
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [testMode, setTestMode] = useState<'application' | 'model'>('application');
   const [externalSystemEnabled, setExternalSystemEnabled] = useState(
-    Boolean(config.applicationDefinition.connectedSystems?.trim()),
+    Boolean(config.applicationDefinition?.connectedSystems?.trim()),
   );
   const [expandAlert, setExpandAlert] = useState(false);
 
@@ -45,7 +45,7 @@ export default function Purpose({ onNext }: PromptsProps) {
       setTestMode(newMode);
       // Clear application definition fields when switching to model testing
       if (newMode === 'model') {
-        Object.keys(config.applicationDefinition).forEach((key) => {
+        Object.keys(config.applicationDefinition ?? {}).forEach((key) => {
           updateApplicationDefinition(key as keyof typeof config.applicationDefinition, '');
         });
       }
@@ -56,7 +56,7 @@ export default function Purpose({ onNext }: PromptsProps) {
   const isPurposePresent = config.purpose && config.purpose.trim() !== '';
 
   const handleLoadExample = () => {
-    if (config.purpose || Object.values(config.applicationDefinition).some((val) => val)) {
+    if (config.purpose || Object.values(config.applicationDefinition ?? {}).some((val) => val)) {
       setConfirmDialogOpen(true);
     } else {
       recordEvent('feature_used', { feature: 'redteam_config_example' });
@@ -301,7 +301,7 @@ export default function Purpose({ onNext }: PromptsProps) {
 
                 <TextField
                   fullWidth
-                  value={config.applicationDefinition.purpose}
+                  value={config.applicationDefinition?.purpose}
                   onChange={(e) => updateApplicationDefinition('purpose', e.target.value)}
                   placeholder="Describe your application purpose at the minimum, other application context like features, roles, security requirements, and any example identifiers can further help improve the quality of the redteam attacks and grading"
                   multiline
@@ -330,7 +330,7 @@ export default function Purpose({ onNext }: PromptsProps) {
                 </Typography>
                 <TextField
                   fullWidth
-                  value={config.applicationDefinition.redteamUser}
+                  value={config.applicationDefinition?.redteamUser}
                   onChange={(e) => updateApplicationDefinition('redteamUser', e.target.value)}
                   placeholder="e.g. A traveler looking for budget flights to Europe. An employee of the company."
                 />
@@ -356,7 +356,7 @@ export default function Purpose({ onNext }: PromptsProps) {
                     </Typography>
                     <TextField
                       fullWidth
-                      value={config.applicationDefinition.connectedSystems}
+                      value={config.applicationDefinition?.connectedSystems}
                       onChange={(e) =>
                         updateApplicationDefinition('connectedSystems', e.target.value)
                       }
@@ -370,7 +370,7 @@ export default function Purpose({ onNext }: PromptsProps) {
                     </Typography>
                     <TextField
                       fullWidth
-                      value={config.applicationDefinition.accessToData}
+                      value={config.applicationDefinition?.accessToData}
                       onChange={(e) => updateApplicationDefinition('accessToData', e.target.value)}
                       multiline
                       rows={2}
@@ -383,7 +383,7 @@ export default function Purpose({ onNext }: PromptsProps) {
                     </Typography>
                     <TextField
                       fullWidth
-                      value={config.applicationDefinition.forbiddenData}
+                      value={config.applicationDefinition?.forbiddenData}
                       onChange={(e) => updateApplicationDefinition('forbiddenData', e.target.value)}
                       multiline
                       rows={2}
@@ -395,7 +395,7 @@ export default function Purpose({ onNext }: PromptsProps) {
                     </Typography>
                     <TextField
                       fullWidth
-                      value={config.applicationDefinition.accessToActions}
+                      value={config.applicationDefinition?.accessToActions}
                       onChange={(e) =>
                         updateApplicationDefinition('accessToActions', e.target.value)
                       }
@@ -409,7 +409,7 @@ export default function Purpose({ onNext }: PromptsProps) {
                     </Typography>
                     <TextField
                       fullWidth
-                      value={config.applicationDefinition.forbiddenActions}
+                      value={config.applicationDefinition?.forbiddenActions}
                       onChange={(e) =>
                         updateApplicationDefinition('forbiddenActions', e.target.value)
                       }
