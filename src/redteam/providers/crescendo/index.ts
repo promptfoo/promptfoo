@@ -42,7 +42,11 @@ export interface CrescendoMetadata extends BaseRedteamMetadata {
   crescendoBacktrackCount: number;
   crescendoResult: boolean;
   crescendoConfidence: number | null;
-  stopReason: 'Grader failed' | 'Max backtracks reached';
+  stopReason:
+    | 'Grader failed'
+    | 'Internal evaluator success'
+    | 'Max rounds reached'
+    | 'Max backtracks reached';
 }
 
 /**
@@ -216,6 +220,12 @@ export class CrescendoProvider implements ApiProvider {
 
     let objectiveScore: { value: number; rationale: string } | undefined;
 
+    let exitReason:
+      | 'Grader failed'
+      | 'Internal evaluator success'
+      | 'Max rounds reached'
+      | 'Max backtracks reached' = 'Max rounds reached';
+
     const totalTokenUsage = {
       total: 0,
       prompt: 0,
@@ -327,6 +337,7 @@ export class CrescendoProvider implements ApiProvider {
           }
 
           if (backtrackCount >= this.maxBacktracks) {
+            exitReason = 'Max backtracks reached';
             logger.debug(
               `[Crescendo] Max backtracks (${this.maxBacktracks}) reached. Exiting loop.`,
             );
@@ -376,8 +387,19 @@ export class CrescendoProvider implements ApiProvider {
         };
         logger.debug(`[Crescendo] Eval score: flag=${evalFlag}, percentage=${evalPercentage}`);
 
-        if (evalPercentage === 100 || graderPassed === false) {
-          logger.debug(`[Crescendo] Jailbreak Successful, EXITING at ROUND ${roundNum}`);
+        if (evalPercentage === 100) {
+          exitReason = 'Internal evaluator success';
+          logger.debug(
+            `[Crescendo] Jailbreak Successful via Internal Evaluator, EXITING at ROUND ${roundNum}`,
+          );
+          break;
+        }
+
+        if (graderPassed === false) {
+          exitReason = 'Grader failed';
+          logger.debug(
+            `[Crescendo] Jailbreak Successful via External Grader, EXITING at ROUND ${roundNum}`,
+          );
           break;
         }
 
@@ -387,12 +409,15 @@ export class CrescendoProvider implements ApiProvider {
       }
     }
 
+    if (roundNum >= this.maxRounds && exitReason === 'Max rounds reached') {
+      logger.debug(`[Crescendo] Max rounds (${this.maxRounds}) reached. Attack completed.`);
+    }
+
     if (evalFlag) {
       logger.debug('[Crescendo] We achieved the objective.');
     } else {
       logger.debug('[Crescendo] We did not achieve the objective.');
     }
-
     logger.debug(
       `\n[Crescendo] FINAL RESULTS, TOTAL ROUNDS: ${roundNum}, TOTAL BACKTRACKS ${backtrackCount}:\n`,
     );
@@ -411,9 +436,7 @@ export class CrescendoProvider implements ApiProvider {
         crescendoBacktrackCount: backtrackCount,
         crescendoResult: evalFlag,
         crescendoConfidence: evalPercentage,
-        stopReason: (graderPassed === false ? 'Grader failed' : 'Max backtracks reached') as
-          | 'Grader failed'
-          | 'Max backtracks reached',
+        stopReason: exitReason,
         redteamHistory: messagesToRedteamHistory(messages),
       },
       tokenUsage: totalTokenUsage,
