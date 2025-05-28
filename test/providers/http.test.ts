@@ -1342,7 +1342,9 @@ describe('HttpProvider', () => {
       expect(result).toEqual({
         output: { chat_history: 'success' },
         raw: JSON.stringify({ result: 'success' }),
-        http: { status: 200, statusText: 'OK', headers: {} },
+        metadata: {
+          http: { status: 200, statusText: 'OK', headers: {} },
+        },
       });
     });
 
@@ -1369,7 +1371,9 @@ describe('HttpProvider', () => {
       expect(result).toEqual({
         output: { chat_history: 'from transformResponse' },
         raw: JSON.stringify({ result: 'success' }),
-        http: { status: 200, statusText: 'OK', headers: {} },
+        metadata: {
+          http: { status: 200, statusText: 'OK', headers: {} },
+        },
       });
     });
 
@@ -1395,7 +1399,9 @@ describe('HttpProvider', () => {
       expect(result).toEqual({
         output: 'success',
         raw: JSON.stringify({ result: 'success' }),
-        http: { status: 200, statusText: 'OK', headers: {} },
+        metadata: {
+          http: { status: 200, statusText: 'OK', headers: {} },
+        },
       });
     });
   });
@@ -1938,10 +1944,12 @@ describe('response handling', () => {
       vars: {},
     });
 
-    expect(result.http).toEqual({
-      headers: mockHeaders,
-      status: 200,
-      statusText: 'OK',
+    expect(result.metadata).toEqual({
+      http: {
+        headers: mockHeaders,
+        status: 200,
+        statusText: 'OK',
+      },
     });
     expect(result.raw).toEqual(mockData);
   });
@@ -1997,7 +2005,11 @@ describe('response handling', () => {
     });
 
     expect(result.raw).toEqual(mockData);
-    expect(result.http).toHaveProperty('headers', mockHeaders);
+    expect(result.metadata).toHaveProperty('http', {
+      headers: mockHeaders,
+      status: 200,
+      statusText: 'OK',
+    });
     expect(result.output).toEqual({ foo: 'bar' });
   });
 
@@ -2062,7 +2074,11 @@ describe('response handling', () => {
     // Verify transformed response and debug info
     expect(result.output).toEqual({ transformed: true });
     expect(result.raw).toEqual(mockData);
-    expect(result.http).toHaveProperty('headers', mockHeaders);
+    expect(result.metadata).toHaveProperty('http', {
+      headers: mockHeaders,
+      status: 200,
+      statusText: 'OK',
+    });
   });
 });
 
