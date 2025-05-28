@@ -94,10 +94,8 @@ export async function doGenerateRedteam(
     testSuite = resolved.testSuite;
     redteamConfig = resolved.config.redteam;
 
-    // If purpose discovery is enabled, remote generation is enabled, and a config is provided that contains at least one target,
-    // discover the purpose from the target:
     if (
-      !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_PURPOSE_DISCOVERY_AGENT', false) &&
+      !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_TARGET_SCANNING_AGENT', false) &&
       !neverGenerateRemote() &&
       resolved.config.providers &&
       Array.isArray(resolved.config.providers)
@@ -113,13 +111,14 @@ export async function doGenerateRedteam(
             'More than one prompt provided, only the first prompt will be used for purpose discovery',
           );
         }
+        logger.info('Starting Target Scanning Agent');
         targetPurposeDiscoveryResult = await doTargetPurposeDiscovery(
           providers[0],
           testSuite.prompts[0],
         );
       } catch (error) {
         logger.error(
-          `Discovery failed from error, skipping: ${error instanceof Error ? error.message : String(error)}`,
+          `Target Scanning Agent failed from error, skipping: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
     }
