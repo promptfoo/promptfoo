@@ -47,6 +47,7 @@ export type FetchWithCacheResult<T> = {
   status: number;
   statusText: string;
   headers?: Record<string, string>;
+  error?: string | null;
   deleteFromCache?: () => Promise<void>;
 };
 
@@ -147,6 +148,7 @@ export async function fetchWithCache<T = any>(
     status: parsedResponse.status,
     statusText: parsedResponse.statusText,
     headers: parsedResponse.headers,
+    error: errorResponse,
     deleteFromCache: async () => {
       await cache.del(cacheKey);
       logger.debug(`Evicted from cache: ${cacheKey}`);
