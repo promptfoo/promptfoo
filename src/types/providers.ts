@@ -114,6 +114,11 @@ export interface ProviderResponse {
   logProbs?: number[];
   metadata?: {
     redteamFinalPrompt?: string;
+    http?: {
+      status: number;
+      statusText: string;
+      headers: Record<string, string>;
+    };
     [key: string]: any;
   };
   raw?: string | any;
@@ -128,11 +133,6 @@ export interface ProviderResponse {
     data?: string; // base64 encoded audio data
     transcript?: string;
     format?: string;
-  };
-  http?: {
-    status: number;
-    statusText: string;
-    headers: Record<string, string>;
   };
 }
 
