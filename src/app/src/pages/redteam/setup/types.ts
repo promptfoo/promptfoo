@@ -20,7 +20,7 @@ export interface Config {
   strategies: RedteamStrategy[];
   purpose?: string;
   numTests?: number;
-  applicationDefinition?: ApplicationDefinition;
+  applicationDefinition: ApplicationDefinition;
   entities: string[];
   defaultTest?: TestCase;
   extensions?: string[];

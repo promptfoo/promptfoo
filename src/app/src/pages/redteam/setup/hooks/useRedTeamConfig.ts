@@ -76,6 +76,10 @@ const defaultConfig: Config = {
 const applicationDefinitionToPurpose = (applicationDefinition: Config['applicationDefinition']) => {
   const sections = [];
 
+  if (!applicationDefinition) {
+    return '';
+  }
+
   if (applicationDefinition.purpose) {
     sections.push(`The objective of the application is: ${applicationDefinition.purpose}`);
   }
