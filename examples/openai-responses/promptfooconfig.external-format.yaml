@@ -46,4 +46,4 @@ tests:
   - vars:
       event: 'Alice and Bob are attending a JSON schema conference in New York on September 15th, 2025.'
   - vars:
-      event: 'The annual music festival will take place in Central Park this weekend, featuring local artists and food vendors.' 
+      event: 'The annual music festival will take place in Central Park this weekend, featuring local artists and food vendors.'
