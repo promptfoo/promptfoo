@@ -61,7 +61,7 @@ export class IntentPlugin extends RedteamPluginBase {
           },
           assert: this.getAssertions(intent),
           metadata: {
-            intent: extractedIntent,
+            goal: extractedIntent,
             pluginId: this.id,
             pluginConfig: undefined,
           },
@@ -82,7 +82,7 @@ export class IntentPlugin extends RedteamPluginBase {
           },
           assert: this.getAssertions(firstPrompt),
           metadata: {
-            intent: extractedIntent,
+            goal: extractedIntent,
             pluginId: this.id,
             pluginConfig: undefined,
           },

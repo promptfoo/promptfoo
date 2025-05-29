@@ -129,7 +129,7 @@ export default class GoatProvider implements ApiProvider {
         let failureReason: string | undefined;
         if (this.excludeTargetOutputFromAgenticAttackGeneration && turn > 0) {
           body = JSON.stringify({
-            goal: context?.vars[this.injectVar],
+            goal: context?.test?.metadata?.goal || context?.vars[this.injectVar],
             targetOutput: previousTargetOutput,
             attackAttempt: previousAttackerMessage,
             task: 'extract-goat-failure',
@@ -153,7 +153,7 @@ export default class GoatProvider implements ApiProvider {
         }
 
         body = JSON.stringify({
-          goal: context?.vars[this.injectVar],
+          goal: context?.test?.metadata?.goal || context?.vars[this.injectVar],
           i: turn,
           messages: this.excludeTargetOutputFromAgenticAttackGeneration
             ? messages.filter((m) => m.role !== 'assistant')

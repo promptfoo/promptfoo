@@ -83,7 +83,7 @@ export async function runRedteamConversation({
   tokenUsage: TokenUsage;
 }> {
   const nunjucks = getNunjucksEngine();
-  const goal = vars[injectVar];
+  const goal = context?.test?.metadata?.goal || vars[injectVar];
 
   const redteamSystemPrompt = excludeTargetOutputFromAgenticAttackGeneration
     ? nunjucks.renderString(CLOUD_ATTACKER_SYSTEM_PROMPT, {
@@ -268,7 +268,7 @@ export async function runRedteamConversation({
       const grader = getGraderById(assertToUse.type);
       if (grader) {
         const { grade } = await grader.getResult(
-          test?.metadata?.pluginId === 'intent' ? newInjectVar : goal,
+          newInjectVar,
           targetResponse.output,
           test,
           gradingProvider,

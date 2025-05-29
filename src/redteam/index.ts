@@ -431,7 +431,7 @@ async function addIntentToTestCase(
     ...testCase,
     metadata: {
       ...testCase.metadata,
-      intent: extractedIntent,
+      goal: extractedIntent,
     },
   };
 }
@@ -790,8 +790,38 @@ export async function synthesize({
     }
   });
 
+  // TODO: This is a hack to extract intent for test cases. We should find a better way to do this.
+  logger.debug(`Extracting intent for ${testCases.length} test cases in batches of 20...`);
+  const batchSize = 20;
+  const testCasesWithIntent: TestCaseWithPlugin[] = [];
+
+  for (let i = 0; i < testCases.length; i += batchSize) {
+    const batch = testCases.slice(i, i + batchSize);
+    const batchResults = await Promise.allSettled(
+      batch.map(async (testCase, batchIndex) => {
+        try {
+          return await addIntentToTestCase(testCase, purpose);
+        } catch (error) {
+          logger.warn(
+            `Intent extraction failed for test case ${i + batchIndex}: ${error}. Using original test case.`,
+          );
+          return testCase;
+        }
+      }),
+    );
+
+    batchResults.forEach((result) => {
+      if (result.status === 'fulfilled') {
+        testCasesWithIntent.push(result.value);
+      } else {
+        logger.warn(`Intent extraction rejected: ${result.reason}. Using original test case.`);
+        testCasesWithIntent.push(batch[batchResults.indexOf(result)]);
+      }
+    });
+  }
+
   // After generating plugin test cases but before applying strategies:
-  const pluginTestCases = testCases;
+  const pluginTestCases = testCasesWithIntent;
 
   // Initialize strategy results
   const strategyResults: Record<string, { requested: number; generated: number }> = {};
@@ -846,9 +876,5 @@ export async function synthesize({
 
   logger.info(generateReport(pluginResults, strategyResults));
 
-  const testCasesWithIntent = await Promise.all(
-    finalTestCases.map((testCase) => addIntentToTestCase(testCase, purpose)),
-  );
-
-  return { purpose, entities, testCases: testCasesWithIntent, injectVar };
+  return { purpose, entities, testCases: finalTestCases, injectVar };
 }
