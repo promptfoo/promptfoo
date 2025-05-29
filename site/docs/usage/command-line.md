@@ -356,16 +356,18 @@ Run the complete red teaming process (init, generate, and evaluate).
 
 ## `promptfoo redteam discover`
 
-Automatically discovers the [purpose](https://www.promptfoo.dev/docs/red-team/configuration/#purpose) of your target application.
+Runs the [Target Discovery Agent](/docs/red-team/discovery) against your application.
 
-| Option                | Description                                                                                | Default        |
-| --------------------- | ------------------------------------------------------------------------------------------ | -------------- |
-| `-c, --config <path>` | Path to `promptfooconfig.yaml` configuration file.                                         |                |
-| `-o, --output <path>` | Path to output file.                                                                       | `redteam.yaml` |
-| `--overwrite`         | Overwrite the existing purpose if it already exists.                                       | false          |
-| `-t, --target <id>`   | UUID of a Cloud-defined target to run the discovery on                                     |                |
-| `--preview`           | Preview discovery results without writing to an output file                                | false          |
-| `--turns <turns>`     | A maximum number of turns to run the discovery process. Lower is faster but less accurate. | 50             |
+:::info
+
+Only a configuration file or target can be specified
+
+:::
+
+| Option                | Description                                          | Default |
+| --------------------- | ---------------------------------------------------- | ------- |
+| `-c, --config <path>` | Path to `promptfooconfig.yaml` configuration file.   |         |
+| `-t, --target <id>`   | UUID of a target defined in Promptfoo Cloud to scan. |         |
 
 ## `promptfoo redteam generate`
 

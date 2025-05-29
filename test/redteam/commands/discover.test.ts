@@ -168,7 +168,7 @@ describe('doTargetPurposeDiscovery', () => {
 
     // Verify the target was called with the rendered prompt
     expect(target.callApi).toHaveBeenCalledWith('What is your purpose?', {
-      prompt: { raw: 'What is your purpose?', label: 'Target Purpose Discovery Question' },
+      prompt: { raw: 'What is your purpose?', label: 'Target Discovery Question' },
       vars: { sessionId: expect.any(String) },
     });
 
@@ -242,7 +242,7 @@ describe('doTargetPurposeDiscovery', () => {
 
     // Verify the target was called with the rendered prompt
     expect(target.callApi).toHaveBeenCalledWith('This is a test prompt What is your purpose?', {
-      prompt: { raw: 'What is your purpose?', label: 'Target Purpose Discovery Question' },
+      prompt: { raw: 'What is your purpose?', label: 'Target Discovery Question' },
       vars: { sessionId: expect.any(String) },
     });
 
