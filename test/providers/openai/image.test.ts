@@ -1,5 +1,9 @@
 import { fetchWithCache } from '../../../src/cache';
-import { OpenAiImageProvider, validateSizeForModel, calculateImageCost } from '../../../src/providers/openai/image';
+import {
+  OpenAiImageProvider,
+  validateSizeForModel,
+  calculateImageCost,
+} from '../../../src/providers/openai/image';
 
 jest.mock('../../../src/cache');
 jest.mock('../../../src/logger');
@@ -521,12 +525,12 @@ describe('OpenAiImageProvider', () => {
       const validSizes = ['1024x1024', '1536x1024', '1024x1536', 'auto'];
       const invalidSizes = ['256x256', '512x512', '1792x1024'];
 
-      validSizes.forEach(size => {
+      validSizes.forEach((size) => {
         const result = validateSizeForModel(size, 'gpt-image-1');
         expect(result.valid).toBe(true);
       });
 
-      invalidSizes.forEach(size => {
+      invalidSizes.forEach((size) => {
         const result = validateSizeForModel(size, 'gpt-image-1');
         expect(result.valid).toBe(false);
         expect(result.message).toContain('Invalid size');
@@ -539,17 +543,17 @@ describe('OpenAiImageProvider', () => {
       const mediumCost = calculateImageCost('gpt-image-1', '1024x1024', 'medium', 1);
       const highCost = calculateImageCost('gpt-image-1', '1024x1024', 'high', 1);
 
-      expect(lowCost).toBeCloseTo(272 * 2.5 / 1e6, 8); // 272 tokens * $2.50 per 1M tokens
-      expect(mediumCost).toBeCloseTo(1056 * 2.5 / 1e6, 8); // 1056 tokens * $2.50 per 1M tokens
-      expect(highCost).toBeCloseTo(4160 * 2.5 / 1e6, 8); // 4160 tokens * $2.50 per 1M tokens
+      expect(lowCost).toBeCloseTo((272 * 2.5) / 1e6, 8); // 272 tokens * $2.50 per 1M tokens
+      expect(mediumCost).toBeCloseTo((1056 * 2.5) / 1e6, 8); // 1056 tokens * $2.50 per 1M tokens
+      expect(highCost).toBeCloseTo((4160 * 2.5) / 1e6, 8); // 4160 tokens * $2.50 per 1M tokens
 
       // Test larger size
       const largeCost = calculateImageCost('gpt-image-1', '1024x1536', 'high', 1);
-      expect(largeCost).toBeCloseTo(6240 * 2.5 / 1e6, 8); // 6240 tokens * $2.50 per 1M tokens
+      expect(largeCost).toBeCloseTo((6240 * 2.5) / 1e6, 8); // 6240 tokens * $2.50 per 1M tokens
 
       // Test multiple images
       const multipleCost = calculateImageCost('gpt-image-1', '1024x1024', 'medium', 3);
-      expect(multipleCost).toBeCloseTo(1056 * 2.5 / 1e6 * 3, 8);
+      expect(multipleCost).toBeCloseTo(((1056 * 2.5) / 1e6) * 3, 8);
     });
 
     it('should handle auto quality setting', () => {

@@ -1710,12 +1710,14 @@ describe('OpenAiResponsesProvider', () => {
 
       const result = await provider.callApi('Generate an image of a sunset');
 
-      expect(result.output).toBe(JSON.stringify({
-        type: 'image_generation',
-        id: 'ig_123',
-        revised_prompt: 'A beautiful sunset over mountains',
-        result: 'base64ImageDataHere',
-      }));
+      expect(result.output).toBe(
+        JSON.stringify({
+          type: 'image_generation',
+          id: 'ig_123',
+          revised_prompt: 'A beautiful sunset over mountains',
+          result: 'base64ImageDataHere',
+        }),
+      );
       expect(result.isBase64).toBe(true);
       expect(result.format).toBe('json');
     });

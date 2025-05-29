@@ -72,6 +72,7 @@ The multi-turn image generation example demonstrates how to use `conversationId`
 - Enables natural multi-turn conversations
 
 This is particularly powerful for image generation workflows where you want to:
+
 1. Generate an initial image
 2. Discuss or analyze the generated image
 3. Request modifications or variations

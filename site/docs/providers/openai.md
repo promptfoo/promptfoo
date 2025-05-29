@@ -272,7 +272,7 @@ prompts:
 
 providers:
   - openai:image:dall-e-3
-  - openai:image:gpt-image-1  # New advanced model
+  - openai:image:gpt-image-1 # New advanced model
 
 tests:
   - vars:
@@ -290,12 +290,12 @@ providers:
   # GPT Image 1 via Image API
   - id: openai:image:gpt-image-1
     config:
-      size: 1024x1024          # Valid: 1024x1024, 1536x1024, 1024x1536, auto
-      quality: high            # Valid: low, medium, high, auto
-      background: transparent  # Valid: transparent, opaque, auto
-      format: png             # Valid: png, jpeg, webp
-      output_compression: 85   # 0-100 for JPEG/WebP compression
-      moderation: auto        # Valid: auto, low
+      size: 1024x1024 # Valid: 1024x1024, 1536x1024, 1024x1536, auto
+      quality: high # Valid: low, medium, high, auto
+      background: transparent # Valid: transparent, opaque, auto
+      format: png # Valid: png, jpeg, webp
+      output_compression: 85 # 0-100 for JPEG/WebP compression
+      moderation: auto # Valid: auto, low
 
   # GPT Image 1 via Responses API with image generation tool
   - id: openai:responses:gpt-4.1-mini
@@ -339,7 +339,7 @@ providers:
           size: auto
           quality: auto
           background: auto
-          partial_images: 2  # Show 2 partial images during generation
+          partial_images: 2 # Show 2 partial images during generation
 ```
 
 #### Response Formats

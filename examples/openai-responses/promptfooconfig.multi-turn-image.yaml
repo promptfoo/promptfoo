@@ -2,7 +2,7 @@
 description: Multi-turn Image Generation and Conversation with OpenAI Responses API
 
 prompts:
-  - "{{message}}"
+  - '{{message}}'
 
 providers:
   - id: openai:responses:gpt-4.1-mini
@@ -18,7 +18,7 @@ providers:
 tests:
   # Coffee shop conversation thread
   - vars:
-      message: "Generate an image of a cozy coffee shop on a rainy day"
+      message: 'Generate an image of a cozy coffee shop on a rainy day'
     metadata:
       conversationId: coffee_shop_thread
   - vars:
@@ -26,46 +26,46 @@ tests:
     metadata:
       conversationId: coffee_shop_thread
   - vars:
-      message: "What kind of people might visit this place? Describe the typical customers."
+      message: 'What kind of people might visit this place? Describe the typical customers.'
     metadata:
       conversationId: coffee_shop_thread
   - vars:
-      message: "Can you generate a variation of this coffee shop with warmer, more golden lighting?"
+      message: 'Can you generate a variation of this coffee shop with warmer, more golden lighting?'
     metadata:
       conversationId: coffee_shop_thread
 
-  # Futuristic city conversation thread  
+  # Futuristic city conversation thread
   - vars:
-      message: "Create an image of a futuristic city skyline at sunset"
+      message: 'Create an image of a futuristic city skyline at sunset'
     metadata:
       conversationId: futuristic_city_thread
   - vars:
-      message: "What technologies and architectural features do you see in this cityscape?"
+      message: 'What technologies and architectural features do you see in this cityscape?'
     metadata:
       conversationId: futuristic_city_thread
   - vars:
-      message: "How does this futuristic city compare to modern cities today?"
+      message: 'How does this futuristic city compare to modern cities today?'
     metadata:
       conversationId: futuristic_city_thread
   - vars:
-      message: "Generate a daytime version of this same futuristic city"
+      message: 'Generate a daytime version of this same futuristic city'
     metadata:
       conversationId: futuristic_city_thread
 
   # Magical forest conversation thread
   - vars:
-      message: "Generate an image of a magical forest with glowing mushrooms and ethereal lighting"
+      message: 'Generate an image of a magical forest with glowing mushrooms and ethereal lighting'
     metadata:
       conversationId: magical_forest_thread
   - vars:
-      message: "What creatures and magical beings might inhabit this enchanted forest?"
+      message: 'What creatures and magical beings might inhabit this enchanted forest?'
     metadata:
       conversationId: magical_forest_thread
   - vars:
-      message: "Describe the lighting and atmosphere in detail - what makes it feel magical?"
+      message: 'Describe the lighting and atmosphere in detail - what makes it feel magical?'
     metadata:
       conversationId: magical_forest_thread
   - vars:
-      message: "Create a darker, more mysterious version of this magical forest for nighttime"
+      message: 'Create a darker, more mysterious version of this magical forest for nighttime'
     metadata:
-      conversationId: magical_forest_thread 
+      conversationId: magical_forest_thread

@@ -54,4 +54,4 @@ tests:
   - vars:
       prompt: A magical forest with glowing mushrooms and fairy lights
   - vars:
-      prompt: A space station orbiting Earth with astronauts doing a spacewalk 
+      prompt: A space station orbiting Earth with astronauts doing a spacewalk

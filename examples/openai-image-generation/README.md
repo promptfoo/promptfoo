@@ -30,12 +30,14 @@ promptfoo view
 ## What's in this Example
 
 ### Basic Examples (`promptfooconfig.yaml`)
+
 - Tests artistic style prompts (Van Gogh, Dali, Picasso, etc.)
 - Compares DALL-E 3, DALL-E 2, and GPT Image 1 outputs
 - Configures different image sizes and response formats
 - Tests with different subjects
 
 ### Advanced GPT Image 1 Examples (`promptfooconfig.gpt-image.yaml`)
+
 - Demonstrates GPT Image 1's advanced features
 - Tests different quality settings (low, medium, high, auto)
 - Shows transparent background support
@@ -45,19 +47,22 @@ promptfoo view
 ## Model Comparison
 
 ### DALL-E 2
+
 - **Sizes**: 256x256, 512x512, 1024x1024
 - **Features**: Basic image generation, inpainting with masks
 - **Cost**: $0.016-$0.020 per image
 
 ### DALL-E 3
+
 - **Sizes**: 1024x1024, 1792x1024, 1024x1792
 - **Features**: Higher quality, style control (natural/vivid), HD quality option
 - **Cost**: $0.04-$0.12 per image
 
 ### GPT Image 1 (New!)
+
 - **Sizes**: 1024x1024, 1536x1024, 1024x1536, auto
 - **Quality**: low, medium, high, auto
-- **Features**: 
+- **Features**:
   - Superior instruction following
   - Text rendering capabilities
   - Transparent backgrounds
@@ -70,23 +75,26 @@ promptfoo view
 ## Key Features
 
 ### Response Formats
+
 - `response_format: url` (default) - Returns image URLs that expire after ~2 hours
 - `response_format: b64_json` - Returns raw JSON with base64-encoded image data
 
 ### GPT Image 1 Advanced Options
+
 ```yaml
 providers:
   - id: openai:image:gpt-image-1
     config:
-      size: 1024x1024          # or 1536x1024, 1024x1536, auto
-      quality: high            # low, medium, high, auto
-      background: transparent  # transparent, opaque, auto
-      format: png             # png, jpeg, webp
-      output_compression: 85   # 0-100 for JPEG/WebP
-      moderation: auto        # auto, low
+      size: 1024x1024 # or 1536x1024, 1024x1536, auto
+      quality: high # low, medium, high, auto
+      background: transparent # transparent, opaque, auto
+      format: png # png, jpeg, webp
+      output_compression: 85 # 0-100 for JPEG/WebP
+      moderation: auto # auto, low
 ```
 
 ### Responses API Integration
+
 GPT Image 1 can also be used via the Responses API with the image generation tool:
 
 ```yaml
@@ -101,6 +109,7 @@ providers:
 ```
 
 This enables:
+
 - Multi-turn image editing conversations
 - Streaming partial images during generation
 - Integration with other tools and functions

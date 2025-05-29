@@ -19,7 +19,12 @@ export type GptImageFormat = 'png' | 'jpeg' | 'webp';
 
 export const DALLE2_VALID_SIZES: DallE2Size[] = ['256x256', '512x512', '1024x1024'];
 export const DALLE3_VALID_SIZES: DallE3Size[] = ['1024x1024', '1792x1024', '1024x1792'];
-export const GPT_IMAGE_VALID_SIZES: GptImageSize[] = ['1024x1024', '1536x1024', '1024x1536', 'auto'];
+export const GPT_IMAGE_VALID_SIZES: GptImageSize[] = [
+  '1024x1024',
+  '1536x1024',
+  '1024x1536',
+  'auto',
+];
 export const DEFAULT_SIZE = '1024x1024';
 
 export const DALLE2_COSTS: Record<DallE2Size, number> = {
@@ -217,7 +222,7 @@ export function calculateImageCost(
     return costPerImage * n;
   } else if (model === 'gpt-image-1') {
     // For gpt-image-1, cost is based on tokens
-    const qualityLevel = quality === 'auto' ? 'medium' : (quality || 'medium');
+    const qualityLevel = quality === 'auto' ? 'medium' : quality || 'medium';
     const costKey = `${qualityLevel}_${size}`;
     const tokensPerImage = GPT_IMAGE_COSTS[costKey] || GPT_IMAGE_COSTS['medium_1024x1024'];
     return tokensPerImage * GPT_IMAGE_TOKEN_COST * n;
