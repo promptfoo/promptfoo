@@ -49,4 +49,4 @@ export async function promptYesNo(question: string, defaultYes = false): Promise
     return !answer.toLowerCase().startsWith('n');
   }
   return answer.toLowerCase().startsWith('y');
-} 
+}
