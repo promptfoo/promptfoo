@@ -21,6 +21,7 @@ export interface ApplicationDefinition {
   accessToActions?: string;
   forbiddenActions?: string;
   connectedSystems?: string;
+  attackConstraints?: string;
 }
 
 export interface Config {

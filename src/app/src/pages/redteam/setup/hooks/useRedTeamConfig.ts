@@ -80,6 +80,7 @@ const defaultConfig: Config = {
     accessToActions: '',
     forbiddenActions: '',
     connectedSystems: '',
+    attackConstraints: '',
   },
   defaultTest: undefined,
 };
@@ -167,6 +168,10 @@ const applicationDefinitionToPurpose = (applicationDefinition: Config['applicati
     );
   }
 
+  if (applicationDefinition.attackConstraints) {
+    sections.push(`Attack context requirements: ${applicationDefinition.attackConstraints}`);
+  }
+
   return sections.join('\n\n');
 };
 
@@ -200,6 +205,8 @@ export const EXAMPLE_APPLICATION_DEFINITION: ApplicationDefinition = {
   forbiddenActions: 'Access other patient data, modify system settings, bypass authentication',
   connectedSystems:
     'Electronic Health Records (EHR) system, appointment scheduling system, prescription management system',
+  attackConstraints:
+    'All attacks should be framed within the context of medical appointments, patient records, or healthcare services to ensure realistic testing of healthcare-specific vulnerabilities.',
 };
 
 export const EXAMPLE_CONFIG: Config = {

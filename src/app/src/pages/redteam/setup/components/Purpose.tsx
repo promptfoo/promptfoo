@@ -68,7 +68,7 @@ export default function Purpose({ onNext }: PromptsProps) {
 
   const getCompletionPercentage = (section: string) => {
     const fields = {
-      'Core Application Details': ['features', 'industry'],
+      'Core Application Details': ['features', 'industry', 'attackConstraints'],
       'Access & Permissions': [
         'hasAccessTo',
         'doesNotHaveAccessTo',
@@ -182,26 +182,14 @@ export default function Purpose({ onNext }: PromptsProps) {
                   <strong>significantly</strong> better security testing and{' '}
                   <strong>more accurate</strong> grading of attack effectiveness.
                 </Typography>
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ mb: 4, fontStyle: 'italic' }}
-                >
-                  Only the main purpose is required. All other fields are optional, but providing
-                  more details will result in significantly more targeted and effective security
-                  tests.
-                </Typography>
 
                 {/* Main Purpose - Standalone Section */}
-                <Box sx={{ mb: 4 }}>
+                <Box sx={{}}>
                   <Typography variant="h6" sx={{ fontWeight: 'medium', mb: 2 }}>
-                    Main Purpose
+                    What is the main purpose of your application?{' '}
+                    <span style={{ color: 'red' }}>*</span>
                   </Typography>
                   <Box>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
-                      What is the main purpose of your application?{' '}
-                      <span style={{ color: 'red' }}>*</span>
-                    </Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                       Describe the primary objective and goals of your application. This
                       foundational information provides essential context for generating all types
@@ -223,6 +211,16 @@ export default function Purpose({ onNext }: PromptsProps) {
                     />
                   </Box>
                 </Box>
+
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ mb: 4, fontStyle: 'italic' }}
+                >
+                  Only the main purpose is required. All other fields are optional, but providing
+                  more details will result in significantly more targeted and effective security
+                  tests.
+                </Typography>
 
                 {/* Core Application Details */}
                 <Accordion
@@ -284,6 +282,33 @@ export default function Purpose({ onNext }: PromptsProps) {
                           value={config.applicationDefinition?.industry}
                           onChange={(e) => updateApplicationDefinition('industry', e.target.value)}
                           placeholder="e.g. Healthcare, Financial Services, Education, E-commerce, Government, Legal..."
+                          variant="outlined"
+                        />
+                      </Box>
+
+                      <Box>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
+                          Is there anything specific the attacker should know about this system or
+                          its rules?{' '}
+                          <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>
+                            (optional)
+                          </span>
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                          Describe any constraints, guardrails, special behavior, or requirements
+                          that attackers should consider when generating attack prompts. This can
+                          include information about what the system will or won't respond to, topics
+                          it restricts, input formats, or any other domain-specific rules.
+                        </Typography>
+                        <TextField
+                          fullWidth
+                          value={config.applicationDefinition?.attackConstraints || ''}
+                          onChange={(e) =>
+                            updateApplicationDefinition('attackConstraints', e.target.value)
+                          }
+                          placeholder="e.g. The agent only responds to voicemail-related queries, so every attack should mention voicemail services. OR: All interactions must be in the context of medical appointments, so attacks should reference scheduling or patient care."
+                          multiline
+                          rows={3}
                           variant="outlined"
                         />
                       </Box>
