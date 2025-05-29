@@ -15,6 +15,22 @@ export interface OpenAiSharedOptions {
 
 export type ReasoningEffort = 'low' | 'medium' | 'high';
 
+// OpenAI MCP tool configuration for Responses API
+export interface OpenAiMCPTool {
+  type: 'mcp';
+  server_label: string;
+  server_url: string;
+  require_approval?:
+    | 'never'
+    | {
+        never?: {
+          tool_names: string[];
+        };
+      };
+  allowed_tools?: string[];
+  headers?: Record<string, string>;
+}
+
 export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   temperature?: number;
   max_completion_tokens?: number;
@@ -25,7 +41,7 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   best_of?: number;
   functions?: OpenAiFunction[];
   function_call?: 'none' | 'auto' | { name: string };
-  tools?: OpenAiTool[];
+  tools?: (OpenAiTool | OpenAiMCPTool)[];
   tool_choice?: 'none' | 'auto' | 'required' | { type: 'function'; function?: { name: string } };
   tool_resources?: Record<string, any>;
   showThinking?: boolean;

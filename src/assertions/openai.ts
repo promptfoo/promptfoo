@@ -11,6 +11,36 @@ export const handleIsValidOpenAiToolsCall = ({
   provider,
   test,
 }: AssertionParams): GradingResult => {
+  // Handle MCP tool outputs from Responses API
+  const outputStr = typeof output === 'string' ? output : JSON.stringify(output);
+
+  // Check for MCP tool results in the output
+  if (outputStr.includes('MCP Tool Result') || outputStr.includes('MCP Tool Error')) {
+    // For MCP tools, we validate that the tool call was successful
+    if (outputStr.includes('MCP Tool Error')) {
+      const errorMatch = outputStr.match(/MCP Tool Error \(([^)]+)\): (.+)/);
+      const toolName = errorMatch ? errorMatch[1] : 'unknown';
+      const errorMsg = errorMatch ? errorMatch[2] : 'unknown error';
+      return {
+        pass: false,
+        score: 0,
+        reason: `MCP tool call failed for ${toolName}: ${errorMsg}`,
+        assertion,
+      };
+    }
+
+    // MCP tool call succeeded
+    const resultMatch = outputStr.match(/MCP Tool Result \(([^)]+)\):/);
+    const toolName = resultMatch ? resultMatch[1] : 'unknown';
+    return {
+      pass: true,
+      score: 1,
+      reason: `MCP tool call succeeded for ${toolName}`,
+      assertion,
+    };
+  }
+
+  // Handle traditional OpenAI function/tool calls
   if (typeof output === 'object' && 'tool_calls' in output) {
     output = (output as { tool_calls: any }).tool_calls;
   }
@@ -48,7 +78,7 @@ export const handleIsValidOpenAiToolsCall = ({
     toolsOutput.forEach((toolOutput) => {
       validateFunctionCall(
         toolOutput.function,
-        tools.map((tool) => tool.function),
+        tools.filter((tool) => tool.type === 'function').map((tool) => tool.function),
         test.vars,
       );
     });

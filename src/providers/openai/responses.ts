@@ -256,6 +256,31 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           }
         } else if (item.type === 'tool_result') {
           result = JSON.stringify(item);
+        } else if (item.type === 'mcp_list_tools') {
+          // MCP tools list - include in result for debugging/visibility
+          if (result) {
+            result += '\n';
+          }
+          result += `MCP Tools from ${item.server_label}: ${JSON.stringify(item.tools, null, 2)}`;
+        } else if (item.type === 'mcp_call') {
+          // MCP tool call result
+          if (item.error) {
+            if (result) {
+              result += '\n';
+            }
+            result += `MCP Tool Error (${item.name}): ${item.error}`;
+          } else {
+            if (result) {
+              result += '\n';
+            }
+            result += `MCP Tool Result (${item.name}): ${item.output}`;
+          }
+        } else if (item.type === 'mcp_approval_request') {
+          // MCP approval request - include in result for user to see
+          if (result) {
+            result += '\n';
+          }
+          result += `MCP Approval Required for ${item.server_label}.${item.name}: ${item.arguments}`;
         }
       }
 
