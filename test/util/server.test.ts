@@ -36,8 +36,6 @@ describe('Server Utilities', () => {
 
   afterEach(() => {
     global.fetch = originalFetch;
-    // Ensure all mocks are cleared
-    jest.clearAllMocks();
   });
 
   describe('checkServerRunning', () => {
