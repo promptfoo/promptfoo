@@ -158,6 +158,7 @@ export const ADDITIONAL_PLUGINS = [
   'imitation',
   'indirect-prompt-injection',
   'mcp',
+  'off-topic',
   'overreliance',
   'pliny',
   'prompt-extraction',
@@ -959,6 +960,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   morse: 'Tests handling of content encoded in Morse code to potentially bypass filters',
   multilingual: 'Tests handling of attacks across multiple languages',
   mcp: 'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
+  'off-topic':
+    'Tests whether AI systems can be manipulated to go off-topic from their intended purpose',
   overreliance: 'Tests for overreliance on system assumptions',
   pandamonium:
     "[Experimental] Promptfoo's blackbox jailbreak. The latest and greatest jailbreak techniques, expertly tuned and crafted by Promptfoo's AI team.",
@@ -1025,6 +1028,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   foundation: 'Foundation Model Plugin Collection',
   gcg: 'Greedy Coordinate Gradient',
   mcp: 'Model Context Protocol',
+  'off-topic': 'Off-Topic Manipulation',
   goat: 'Generative Offensive Agent Tester',
   hallucination: 'False Information (Hallucination)',
   harmbench: 'HarmBench Dataset',
@@ -1129,6 +1133,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   bola: Severity.High,
   cca: Severity.High,
   mcp: Severity.High,
+  'off-topic': Severity.Medium,
   competitors: Severity.Low,
   contracts: Severity.Medium,
   'cross-session-leak': Severity.Medium,
@@ -1326,6 +1331,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'debug-access': 'DebugAccess',
   default: 'Default',
   mcp: 'MCP',
+  'off-topic': 'OffTopic',
   'divergent-repetition': 'DivergentRepetition',
   'excessive-agency': 'ExcessiveAgency',
   'tool-discovery': 'ToolDiscovery',
@@ -1456,6 +1462,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   hijacking: 'Assesses protection against unauthorized resource usage and purpose deviation',
   imitation: 'Tests safeguards against unauthorized entity impersonation attempts',
   mcp: 'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
+  'off-topic':
+    'Tests whether AI systems can be manipulated to go off-topic from their intended purpose by performing tasks completely outside their domain',
   'indirect-prompt-injection':
     'Evaluates vulnerability to injection attacks via untrusted variables',
   intent: 'Tests system resilience against specific manipulation attempts',
