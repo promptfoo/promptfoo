@@ -560,11 +560,34 @@ providers:
 
 #### External file references
 
-To make it easier to manage large JSON schemas, external file references are supported for both Chat and Responses APIs:
+To make it easier to manage large JSON schemas, external file references are supported for `response_format` in both Chat and Responses APIs. This is particularly useful for:
+
+- Reusing complex JSON schemas across multiple configurations
+- Managing large schemas in separate files for better organization
+- Version controlling schemas independently from configuration files
 
 ```yaml
 config:
   response_format: file://./path/to/response_format.json
+```
+
+The external file should contain the complete `response_format` configuration object:
+
+```json title="response_format.json"
+{
+  "type": "json_schema",
+  "name": "event_extraction",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "event_name": { "type": "string" },
+      "date": { "type": "string" },
+      "location": { "type": "string" }
+    },
+    "required": ["event_name", "date", "location"],
+    "additionalProperties": false
+  }
+}
 ```
 
 For a complete example with the Chat API, see the [OpenAI Structured Output example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-structured-output) or initialize it with:
@@ -576,7 +599,9 @@ npx promptfoo@latest init --example openai-structured-output
 For an example with the Responses API, see the [OpenAI Responses API example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-responses) and run:
 
 ```bash
-npx promptfoo eval -c examples/openai-responses/promptfooconfig.external-format.yaml
+npx promptfoo@latest init --example openai-responses
+cd openai-responses
+npx promptfoo@latest eval -c promptfooconfig.external-format.yaml
 ```
 
 ## Supported environment variables
@@ -635,6 +660,7 @@ Here's an example of a more detailed config:
 prompts:
   - 'Write a tweet about {{topic}}'
 providers:
+  // highlight-start
   - id: openai:assistant:asst_fEhNN3MClMamLfKLkIaoIpgZ
     config:
       model: gpt-4.1
