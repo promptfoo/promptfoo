@@ -150,10 +150,7 @@ describe('renderPrompt', () => {
   it('should render environment variables in JSON prompts', async () => {
     process.env.TEST_ENV_VAR = 'env_value';
     const prompt = toPrompt('{"text": "{{ env.TEST_ENV_VAR }}"}');
-    console.log('Original prompt:', prompt.raw);
-    console.log('Environment variable value:', process.env.TEST_ENV_VAR);
     const renderedPrompt = await renderPrompt(prompt, {}, {});
-    console.log('Rendered prompt:', renderedPrompt);
     expect(renderedPrompt).toBe(JSON.stringify({ text: 'env_value' }, null, 2));
     delete process.env.TEST_ENV_VAR;
   });
