@@ -175,7 +175,8 @@ export class CrescendoProvider implements ApiProvider {
 
     logger.debug(`[Crescendo] callApi invoked with prompt: ${prompt}`);
 
-    this.userGoal = String(context.vars[this.config.injectVar]);
+    this.userGoal = context.test?.metadata?.goal || String(context.vars[this.config.injectVar]);
+
     logger.debug(`[Crescendo] User goal: ${this.userGoal}`);
 
     return this.runAttack({
@@ -352,7 +353,7 @@ export class CrescendoProvider implements ApiProvider {
           const grader = getGraderById(assertToUse.type);
           if (grader) {
             const { grade } = await grader.getResult(
-              test?.metadata?.pluginId === 'intent' ? attackPrompt : (this.userGoal as string),
+              attackPrompt,
               lastResponse.output,
               test,
               provider,

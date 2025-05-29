@@ -134,7 +134,8 @@ export async function doGenerateRedteam(
 
     // If automatic purpose discovery is enabled for cloud configs
     if (
-      !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_TARGET_DISCOVERY_AGENT', true) &&
+      !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_TARGET_DISCOVERY_AGENT', false) &&
+      !neverGenerateRemote() &&
       resolved.config.providers &&
       Array.isArray(resolved.config.providers)
     ) {
@@ -149,13 +150,14 @@ export async function doGenerateRedteam(
             'More than one prompt provided, only the first prompt will be used for purpose discovery',
           );
         }
+        logger.info('Starting Target Discovery Agent');
         targetPurposeDiscoveryResult = await doTargetPurposeDiscovery(
           providers[0],
           testSuite.prompts[0],
         );
       } catch (error) {
         logger.error(
-          `Discovery failed from error, skipping: ${error instanceof Error ? error.message : String(error)}`,
+          `Target Discovery Agent failed from error, skipping: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
     }
