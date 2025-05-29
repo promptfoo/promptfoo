@@ -44,7 +44,7 @@ describe('readline utils', () => {
     it('should create readline interface with stdin/stdout', () => {
       const result = createReadlineInterface();
 
-      expect(createReadlineInterface).toHaveBeenCalled();
+      expect(createReadlineInterface).toHaveBeenCalledWith();
       expect(result).toBe(mockInterface);
     });
   });
