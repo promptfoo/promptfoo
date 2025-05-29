@@ -29,7 +29,10 @@ providers:
               items:
                 type: 'string'
               description: 'People attending the event'
-          required: ['event_name', 'date', 'location', 'participants']
+            description:
+              type: 'string'
+              description: 'Brief description of the event'
+          required: ['event_name', 'date', 'location', 'participants', 'description']
           additionalProperties: false
 
   - id: openai:responses:gpt-4.1

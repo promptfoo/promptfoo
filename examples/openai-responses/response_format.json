@@ -32,7 +32,8 @@
             "event_name",
             "date",
             "location",
-            "participants"
+            "participants",
+            "description"
         ],
         "additionalProperties": false
     }
