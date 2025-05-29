@@ -357,5 +357,3 @@ assert<TypeEqualityGuard<RedteamFileConfig, z.infer<typeof RedteamConfigSchema>>
 
 // TODO: Why is this never?
 // assert<TypeEqualityGuard<RedteamPluginObject, z.infer<typeof RedteamPluginObjectSchema>>>();
-
-export { assert };
