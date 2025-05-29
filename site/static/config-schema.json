@@ -1171,6 +1171,7 @@
                           "tool-discovery",
                           "tool-discovery:multi-turn",
                           "toxic-chat",
+                          "openai-moderation",
                           "toxicity",
                           "unsafebench",
                           "xstest"
@@ -1340,6 +1341,7 @@
                               "tool-discovery",
                               "tool-discovery:multi-turn",
                               "toxic-chat",
+                              "openai-moderation",
                               "toxicity",
                               "unsafebench",
                               "xstest"

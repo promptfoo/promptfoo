@@ -207,7 +207,8 @@ export type Plugin =
   | ConfigRequiredPlugin
   | HarmPlugin
   | PIIPlugin
-  | AgenticPlugin;
+  | AgenticPlugin
+  | DatasetPlugin;
 
 export const DEFAULT_PLUGINS: ReadonlySet<Plugin> = new Set([
   ...[...BASE_PLUGINS, ...(Object.keys(HARM_PLUGINS) as HarmPlugin[]), ...PII_PLUGINS].sort(),
@@ -765,6 +766,7 @@ export const ALIASED_PLUGIN_MAPPINGS: Record<
         'harmful:profanity',
         'harmful:graphic-content',
         'harmful:sexual-content',
+        'openai-moderation',
       ],
       strategies: [],
     },
@@ -835,8 +837,9 @@ export const DATASET_PLUGINS = [
   'cyberseceval',
   'donotanswer',
   'harmbench',
-  'toxic-chat',
+  'openai-moderation',
   'pliny',
+  'toxic-chat',
   'unsafebench',
   'xstest',
 ] as const;
@@ -915,6 +918,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   hallucination: 'Tests for fabrication of false or misleading information',
   harmbench: 'Tests for harmful content using the HarmBench dataset',
   'toxic-chat': 'Tests handling of toxic prompts from the ToxicChat dataset',
+  'openai-moderation': 'Tests handling of prompts from the OpenAI Moderation dataset',
   harmful: 'Tests handling of malicious content across multiple categories',
   'harmful:chemical-biological-weapons': 'Tests handling of WMD-related content',
   'harmful:child-exploitation': 'Tests handling of child exploitation content',
@@ -1028,6 +1032,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   goat: 'Generative Offensive Agent Tester',
   hallucination: 'False Information (Hallucination)',
   harmbench: 'HarmBench Dataset',
+  'openai-moderation': 'OpenAI Moderation Dataset',
   harmful: 'Malicious Content Suite',
   'bias:gender': 'Gender Bias',
   'harmful:chemical-biological-weapons': 'WMD Content',
@@ -1142,6 +1147,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   hallucination: Severity.Medium,
   harmbench: Severity.Medium,
   'toxic-chat': Severity.Medium,
+  'openai-moderation': Severity.Medium,
   harmful: Severity.Medium,
   'bias:gender': Severity.Low,
   'harmful:chemical-biological-weapons': Severity.High,
@@ -1281,8 +1287,9 @@ export const riskCategories: Record<string, Plugin[]> = {
     'cyberseceval',
     'donotanswer',
     'harmbench',
-    'toxic-chat',
+    'openai-moderation',
     'pliny',
+    'toxic-chat',
     'unsafebench',
     'xstest',
   ],
@@ -1333,7 +1340,6 @@ export const categoryAliases: Record<Plugin, string> = {
   foundation: 'Foundation',
   hallucination: 'Hallucination',
   harmbench: 'Harmbench',
-  'toxic-chat': 'ToxicChat',
   harmful: 'Harmful',
   'bias:gender': 'Gender Bias',
   'harmful:chemical-biological-weapons': 'Chemical & Biological Weapons',
@@ -1367,6 +1373,7 @@ export const categoryAliases: Record<Plugin, string> = {
   imitation: 'Imitation',
   'indirect-prompt-injection': 'Indirect Prompt Injection',
   intent: 'Intent',
+  'openai-moderation': 'OpenAI Moderation Dataset',
   overreliance: 'Overreliance',
   pii: 'PIILeak',
   'pii:api-db': 'PIILeak',
@@ -1386,6 +1393,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'sql-injection': 'SqlInjection',
   ssrf: 'SSRFEnforcement',
   'system-prompt-override': 'System Prompt Override',
+  'toxic-chat': 'ToxicChat Dataset',
   unsafebench: 'UnsafeBench',
   xstest: 'XSTest',
 };
@@ -1424,7 +1432,6 @@ export const pluginDescriptions: Record<Plugin, string> = {
   hallucination: 'Tests system resilience against false information generation and propagation',
   harmbench:
     'Tests for harmful content, illegal activities, misinformation using the HarmBench dataset from the Center for AI Safety (CAIS)',
-  'toxic-chat': 'Tests handling of toxic user prompts from the ToxicChat dataset',
   harmful: 'Comprehensive suite for testing handling of various categories of malicious content',
   'bias:gender': 'Tests handling of gender bias in responses, stereotypes, and discrimination',
   'harmful:chemical-biological-weapons': 'Tests detection and response to WMD-related content',
@@ -1459,6 +1466,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'indirect-prompt-injection':
     'Evaluates vulnerability to injection attacks via untrusted variables',
   intent: 'Tests system resilience against specific manipulation attempts',
+  'openai-moderation': 'Tests handling of prompts from the OpenAI Moderation dataset',
   overreliance: 'Assesses overreliance on system assumptions',
   pii: 'Comprehensive evaluation of personal identifiable information protection',
   'pii:api-db': 'Tests for PII exposure through API and database access vectors',
@@ -1479,6 +1487,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'sql-injection': 'Evaluates resilience against SQL injection attacks',
   ssrf: 'Tests for server-side request forgery vulnerabilities',
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
+  'toxic-chat': 'Tests handling of toxic user prompts from the ToxicChat dataset',
   unsafebench:
     'Tests handling of unsafe image content through multi-modal model evaluation and safety filters',
   xstest:
