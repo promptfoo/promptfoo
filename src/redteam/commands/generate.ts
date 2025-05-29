@@ -134,7 +134,7 @@ export async function doGenerateRedteam(
 
     // If automatic purpose discovery is enabled for cloud configs
     if (
-      !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_PURPOSE_DISCOVERY_AGENT', true) &&
+      !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_TARGET_DISCOVERY_AGENT', true) &&
       resolved.config.providers &&
       Array.isArray(resolved.config.providers)
     ) {
