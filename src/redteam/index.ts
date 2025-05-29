@@ -735,7 +735,7 @@ export async function synthesize({
 
           const extractedGoal = await extractGoalFromPrompt(prompt, purpose);
 
-          testCase.metadata = { ...testCase.metadata, goal: extractedGoal };
+          (testCase.metadata as any).goal = extractedGoal;
         }
 
         // Add the results to main test cases array

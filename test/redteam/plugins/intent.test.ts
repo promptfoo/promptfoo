@@ -131,8 +131,9 @@ describe('IntentPlugin', () => {
       intent: 'malicious intent',
     });
 
-    const tests = await plugin.generateTests(1, 0);
-    expect(tests[0].metadata).toHaveProperty('goal', 'malicious intent');
+    await expect(plugin.generateTests(1, 0)).rejects.toThrow(
+      'Failed to extract goal from prompt: HTTP 500',
+    );
   });
 
   it('should handle fetch errors when extracting intent', async () => {
@@ -142,8 +143,7 @@ describe('IntentPlugin', () => {
       intent: 'malicious intent',
     });
 
-    const tests = await plugin.generateTests(1, 0);
-    expect(tests[0].metadata).toHaveProperty('goal', 'malicious intent');
+    await expect(plugin.generateTests(1, 0)).rejects.toThrow('Network error');
   });
 
   it('should respect delay between test generations', async () => {
