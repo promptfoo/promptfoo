@@ -346,7 +346,7 @@ export async function matchesClassification(
   };
 }
 
-async function loadRubricPrompt(
+export async function loadRubricPrompt(
   rubricPrompt: string | object | undefined,
   defaultPrompt: string,
 ): Promise<string> {
@@ -381,10 +381,10 @@ async function loadRubricPrompt(
   return rubricPrompt;
 }
 
-function tryParse(content: string | object) {
-  if (typeof content === 'object') {
-    return content;
-  }
+function tryParse(content: string) {
+  // if (typeof content === 'object') {
+  //   return content;
+  // }
 
   try {
     return JSON.parse(content);
@@ -422,7 +422,7 @@ export async function renderLlmRubricPrompt(
     // Render every string scalar within the JSON
     // Does not render object keys (only values)
     const parsed = JSON.parse(rubricPrompt, (k, v) =>
-      typeof v === 'string' ? nunjucks.renderString(v, processedContext) : v,
+      typeof v === 'string' ? nunjucks.renderString(v, context) : v,
     );
     return JSON.stringify(parsed);
   } catch {
@@ -431,7 +431,7 @@ export async function renderLlmRubricPrompt(
   }
 
   // Legacy rendering for non-JSON prompts
-  return nunjucks.renderString(rubricPrompt, processedContext);
+  return nunjucks.renderString(rubricPrompt, context);
 }
 
 export async function matchesLlmRubric(
