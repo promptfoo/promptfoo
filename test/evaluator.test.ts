@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import glob from 'glob';
+import { FILE_METADATA_KEY } from '../src/constants';
 import {
   calculateThreadsPerBar,
   evaluate,
@@ -23,17 +24,18 @@ jest.mock('glob', () => ({
 }));
 
 jest.mock('../src/esm');
+
 jest.mock('../src/evaluatorHelpers', () => ({
   ...jest.requireActual('../src/evaluatorHelpers'),
   runExtensionHook: jest.fn(),
 }));
+
 jest.mock('../src/util/time', () => ({
   ...jest.requireActual('../src/util/time'),
   sleep: jest.fn(),
 }));
 
 jest.mock('../src/util/fileExtensions', () => ({
-  ...jest.requireActual('../src/util/fileExtensions'),
   isImageFile: jest
     .fn()
     .mockImplementation((filePath) => filePath.endsWith('.jpg') || filePath.endsWith('.png')),
@@ -1320,6 +1322,7 @@ describe('evaluator', () => {
     expect(results[0].metadata).toEqual({
       testKey: 'testValue',
       responseKey: 'responseValue',
+      [FILE_METADATA_KEY]: {},
     });
   });
 

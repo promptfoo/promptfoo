@@ -634,7 +634,7 @@ export const TestCaseSchema = z.object({
     .union([
       z
         .string()
-        .regex(new RegExp(`^file://.*\\.(${JAVASCRIPT_EXTENSIONS.join('|')}|py)(?::[\\w.]+)?$`)),
+        .regex(new RegExp(`^file://.*\\.(${JAVASCRIPT_EXTENSIONS?.join('|')}|py)(?::[\\w.]+)?$`)),
       z.custom<ScoringFunction>(),
     ])
     .optional(),
