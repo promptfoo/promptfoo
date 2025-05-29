@@ -1,12 +1,9 @@
 import dedent from 'dedent';
-import { fetchWithCache } from '../../cache';
-import logger from '../../logger';
-import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { ApiProvider, Assertion, AtomicTestCase, GradingResult, TestCase } from '../../types';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
-import { getRemoteGenerationUrl } from '../remoteGeneration';
+import { extractGoalFromPrompt } from '../util';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 export const PLUGIN_ID = 'promptfoo:redteam:intent';
@@ -50,43 +47,13 @@ export class IntentPlugin extends RedteamPluginBase {
     return assertions;
   }
 
-  private async extractIntentFromPrompt(prompt: string): Promise<string> {
-    try {
-      const { data, status } = await fetchWithCache(
-        getRemoteGenerationUrl(),
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            task: 'extract-intent',
-            prompt,
-            purpose: this.purpose,
-          }),
-        },
-        REQUEST_TIMEOUT_MS,
-      );
-
-      if (status !== 200) {
-        logger.warn(`Failed to extract intent from prompt: HTTP ${status}`);
-        return prompt;
-      }
-
-      return data?.intent || prompt;
-    } catch (error) {
-      logger.warn(`Error extracting intent: ${error}`);
-      return prompt;
-    }
-  }
-
   async generateTests(n: number, delayMs: number): Promise<TestCase[]> {
     // Instead of generating new prompts, we create one test case per intent
     const testCases: TestCase[] = [];
 
     for (const intent of this.intents) {
       if (typeof intent === 'string') {
-        const extractedIntent = await this.extractIntentFromPrompt(intent);
+        const extractedIntent = await extractGoalFromPrompt(intent, this.purpose);
 
         testCases.push({
           vars: {
@@ -94,14 +61,14 @@ export class IntentPlugin extends RedteamPluginBase {
           },
           assert: this.getAssertions(intent),
           metadata: {
-            intent: extractedIntent,
+            goal: extractedIntent,
             pluginId: this.id,
             pluginConfig: undefined,
           },
         });
       } else {
         const firstPrompt = Array.isArray(intent) ? intent[0] : intent;
-        const extractedIntent = await this.extractIntentFromPrompt(firstPrompt);
+        const extractedIntent = await extractGoalFromPrompt(firstPrompt, this.purpose);
 
         testCases.push({
           vars: {
@@ -115,7 +82,7 @@ export class IntentPlugin extends RedteamPluginBase {
           },
           assert: this.getAssertions(firstPrompt),
           metadata: {
-            intent: extractedIntent,
+            goal: extractedIntent,
             pluginId: this.id,
             pluginConfig: undefined,
           },
@@ -144,7 +111,7 @@ export class IntentGrader extends RedteamGraderBase {
     Current user request: {{prompt}}
     </UserPrompt>
     <Goal>
-    Attacker's jailbreak goal: {{intent}}
+    Attacker's jailbreak goal: {{goal}}
     </Goal>
     </Context>
 
@@ -214,7 +181,7 @@ export class IntentGrader extends RedteamGraderBase {
     // Ensure we have all required metadata
     const metadata = {
       ...test.metadata,
-      intent: test.metadata?.intent || 'No intent provided',
+      goal: test.metadata?.goal || 'No goal provided',
       purpose: test.metadata?.purpose || 'No purpose provided',
       entities: test.metadata?.entities || [],
       prompt: prompt || 'No prompt provided',
