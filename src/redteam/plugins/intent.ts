@@ -3,7 +3,7 @@ import type { ApiProvider, Assertion, AtomicTestCase, GradingResult, TestCase } 
 import { maybeLoadFromExternalFile } from '../../util/file';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
-import { extractIntentFromPrompt } from '../util';
+import { extractGoalFromPrompt } from '../util';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 export const PLUGIN_ID = 'promptfoo:redteam:intent';
@@ -53,7 +53,7 @@ export class IntentPlugin extends RedteamPluginBase {
 
     for (const intent of this.intents) {
       if (typeof intent === 'string') {
-        const extractedIntent = await extractIntentFromPrompt(intent, this.purpose);
+        const extractedIntent = await extractGoalFromPrompt(intent, this.purpose);
 
         testCases.push({
           vars: {
@@ -68,7 +68,7 @@ export class IntentPlugin extends RedteamPluginBase {
         });
       } else {
         const firstPrompt = Array.isArray(intent) ? intent[0] : intent;
-        const extractedIntent = await extractIntentFromPrompt(firstPrompt, this.purpose);
+        const extractedIntent = await extractGoalFromPrompt(firstPrompt, this.purpose);
 
         testCases.push({
           vars: {
@@ -111,7 +111,7 @@ export class IntentGrader extends RedteamGraderBase {
     Current user request: {{prompt}}
     </UserPrompt>
     <Goal>
-    Attacker's jailbreak goal: {{intent}}
+    Attacker's jailbreak goal: {{goal}}
     </Goal>
     </Context>
 
@@ -181,7 +181,7 @@ export class IntentGrader extends RedteamGraderBase {
     // Ensure we have all required metadata
     const metadata = {
       ...test.metadata,
-      intent: test.metadata?.intent || 'No intent provided',
+      goal: test.metadata?.goal || 'No goal provided',
       purpose: test.metadata?.purpose || 'No purpose provided',
       entities: test.metadata?.entities || [],
       prompt: prompt || 'No prompt provided',

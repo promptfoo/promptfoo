@@ -204,12 +204,12 @@ export function getShortPluginId(pluginId: string): string {
 }
 
 /**
- * Extracts intent from a prompt using remote generation API.
- * @param prompt - The prompt to extract intent from.
+ * Extracts goal from a prompt using remote generation API.
+ * @param prompt - The prompt to extract goal from.
  * @param purpose - The purpose of the system.
- * @returns The extracted intent or the original prompt if extraction fails.
+ * @returns The extracted goal or the original prompt if extraction fails.
  */
-export async function extractIntentFromPrompt(prompt: string, purpose: string): Promise<string> {
+export async function extractGoalFromPrompt(prompt: string, purpose: string): Promise<string> {
   try {
     const { data, status } = await fetchWithCache(
       getRemoteGenerationUrl(),
@@ -228,13 +228,13 @@ export async function extractIntentFromPrompt(prompt: string, purpose: string): 
     );
 
     if (status !== 200) {
-      logger.warn(`Failed to extract intent from prompt: HTTP ${status}`);
+      logger.warn(`Failed to extract goal from prompt: HTTP ${status}`);
       return prompt;
     }
 
     return data?.intent || prompt;
   } catch (error) {
-    logger.warn(`Error extracting intent: ${error}`);
+    logger.warn(`Error extracting goal: ${error}`);
     return prompt;
   }
 }

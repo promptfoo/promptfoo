@@ -32,7 +32,7 @@ import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
 import { loadStrategy, Strategies, validateStrategies } from './strategies';
 import { DEFAULT_LANGUAGES } from './strategies/multilingual';
 import type { RedteamStrategyObject, SynthesizeOptions } from './types';
-import { extractIntentFromPrompt, getShortPluginId } from './util';
+import { extractGoalFromPrompt, getShortPluginId } from './util';
 
 /**
  * Gets the severity level for a plugin based on its ID and configuration.
@@ -412,12 +412,12 @@ function isStrategyCollection(id: string): id is keyof typeof STRATEGY_COLLECTIO
 }
 
 /**
- * Adds intent to test case metadata by extracting it from the prompt.
- * @param testCase - The test case to add intent to.
+ * Adds goal to test case metadata by extracting it from the prompt.
+ * @param testCase - The test case to add goal to.
  * @param purpose - The purpose of the system.
- * @returns The test case with intent added to metadata.
+ * @returns The test case with goal added to metadata.
  */
-async function addIntentToTestCase(
+async function addGoalToTestCase(
   testCase: TestCaseWithPlugin,
   purpose: string,
 ): Promise<TestCaseWithPlugin> {
@@ -425,13 +425,13 @@ async function addIntentToTestCase(
   const promptVar = Object.values(testCase.vars || {})[0];
   const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
 
-  const extractedIntent = await extractIntentFromPrompt(prompt, purpose);
+  const extractedGoal = await extractGoalFromPrompt(prompt, purpose);
 
   return {
     ...testCase,
     metadata: {
       ...testCase.metadata,
-      goal: extractedIntent,
+      goal: extractedGoal,
     },
   };
 }
@@ -738,17 +738,29 @@ export async function synthesize({
         logger.warn(`Failed to generate tests for ${plugin.id}`);
         pluginTests = [];
       } else {
-        testCases.push(
-          ...pluginTests.map((t) => ({
-            ...t,
-            metadata: {
-              pluginId: plugin.id,
-              pluginConfig: resolvePluginConfig(plugin.config),
-              severity: getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
-              ...(t?.metadata || {}),
-            },
-          })),
+        // Add metadata to each test case
+        const testCasesWithMetadata = pluginTests.map((t) => ({
+          ...t,
+          metadata: {
+            pluginId: plugin.id,
+            pluginConfig: resolvePluginConfig(plugin.config),
+            severity: getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
+            ...(t?.metadata || {}),
+          },
+        }));
+
+        // Extract goal for this plugin's tests
+        logger.debug(
+          `Extracting goal for ${testCasesWithMetadata.length} tests from ${plugin.id}...`,
         );
+        const testCasesWithGoal = await Promise.all(
+          testCasesWithMetadata.map(async (testCase) => {
+            return await addGoalToTestCase(testCase, purpose);
+          }),
+        );
+
+        // Add the results to main test cases array
+        testCases.push(...testCasesWithGoal);
       }
 
       pluginTests = Array.isArray(pluginTests) ? pluginTests : [];
@@ -766,17 +778,31 @@ export async function synthesize({
       try {
         const customPlugin = new CustomPlugin(redteamProvider, purpose, injectVar, plugin.id);
         const customTests = await customPlugin.generateTests(plugin.numTests, delay);
-        testCases.push(
-          ...customTests.map((t) => ({
-            ...t,
-            metadata: {
-              pluginId: plugin.id,
-              pluginConfig: resolvePluginConfig(plugin.config),
-              severity: getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
-              ...(t.metadata || {}),
-            },
-          })),
+
+        // Add metadata to each test case
+        const testCasesWithMetadata = customTests.map((t) => ({
+          ...t,
+          metadata: {
+            pluginId: plugin.id,
+            pluginConfig: resolvePluginConfig(plugin.config),
+            severity: getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
+            ...(t.metadata || {}),
+          },
+        }));
+
+        // Extract goal for this plugin's tests
+        logger.debug(
+          `Extracting goal for ${testCasesWithMetadata.length} custom tests from ${plugin.id}...`,
         );
+        const testCasesWithGoal = await Promise.all(
+          testCasesWithMetadata.map(async (testCase) => {
+            return await addGoalToTestCase(testCase, purpose);
+          }),
+        );
+
+        // Add the results to main test cases array
+        testCases.push(...testCasesWithGoal);
+
         logger.debug(`Added ${customTests.length} custom test cases from ${plugin.id}`);
         pluginResults[plugin.id] = { requested: plugin.numTests, generated: customTests.length };
       } catch (e) {
@@ -790,38 +816,8 @@ export async function synthesize({
     }
   });
 
-  // TODO: This is a hack to extract intent for test cases. We should find a better way to do this.
-  logger.debug(`Extracting intent for ${testCases.length} test cases in batches of 20...`);
-  const batchSize = 20;
-  const testCasesWithIntent: TestCaseWithPlugin[] = [];
-
-  for (let i = 0; i < testCases.length; i += batchSize) {
-    const batch = testCases.slice(i, i + batchSize);
-    const batchResults = await Promise.allSettled(
-      batch.map(async (testCase, batchIndex) => {
-        try {
-          return await addIntentToTestCase(testCase, purpose);
-        } catch (error) {
-          logger.warn(
-            `Intent extraction failed for test case ${i + batchIndex}: ${error}. Using original test case.`,
-          );
-          return testCase;
-        }
-      }),
-    );
-
-    batchResults.forEach((result) => {
-      if (result.status === 'fulfilled') {
-        testCasesWithIntent.push(result.value);
-      } else {
-        logger.warn(`Intent extraction rejected: ${result.reason}. Using original test case.`);
-        testCasesWithIntent.push(batch[batchResults.indexOf(result)]);
-      }
-    });
-  }
-
   // After generating plugin test cases but before applying strategies:
-  const pluginTestCases = testCasesWithIntent;
+  const pluginTestCases = testCases;
 
   // Initialize strategy results
   const strategyResults: Record<string, { requested: number; generated: number }> = {};
