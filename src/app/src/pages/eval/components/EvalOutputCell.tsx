@@ -112,15 +112,59 @@ function EvalOutputCell({
   let node: React.ReactNode | undefined;
   let failReasons: string[] = [];
 
-  // Handle failure messages by splitting the text at '---'
-  if (!output.pass && text.includes('---')) {
-    failReasons = (output.gradingResult?.componentResults || [])
-      .filter((result) => (result ? !result.pass : false))
-      .map((result) => result.reason);
-    text = text.split('---').slice(1).join('---');
+  if (output.audio) {
+    const audioDataSize = output.audio.data ? Math.round((output.audio.data.length * 3) / 4 / 1024) : 0;
+    const downloadUrl = `data:audio/${output.audio.format || 'wav'};base64,${output.audio.data}`;
+    
+    node = (
+      <div className="audio-output">
+        <div className="audio-header">
+          <div className="audio-info">
+            <span className="audio-format-badge">{(output.audio.format || 'wav').toUpperCase()}</span>
+            <span className="audio-size">{audioDataSize}KB</span>
+            <span className="audio-source">Generated Audio</span>
+          </div>
+          <div className="audio-actions">
+            <a
+              href={downloadUrl}
+              download={`generated-audio-${Date.now()}.${output.audio.format || 'wav'}`}
+              className="download-link"
+              title="Download audio file"
+            >
+              ⬇ Download
+            </a>
+          </div>
+        </div>
+        <audio 
+          controls 
+          style={{ width: '100%' }} 
+          data-testid="audio-player"
+          preload="metadata"
+        >
+          <source
+            src={downloadUrl}
+            type={`audio/${output.audio.format || 'wav'}`}
+          />
+          Your browser does not support the audio element.
+        </audio>
+        {output.audio.transcript && (
+          <div className="transcript">
+            <div className="transcript-label">Transcript:</div>
+            <div className="transcript-content">{output.audio.transcript}</div>
+          </div>
+        )}
+      </div>
+    );
   }
+  if (!node) {
+    if (!output.pass && text.includes('---')) {
+      failReasons = (output.gradingResult?.componentResults || [])
+        .filter((result) => (result ? !result.pass : false))
+        .map((result) => result.reason);
+      text = text.split('---').slice(1).join('---');
+    }
 
-  if (showDiffs && firstOutput) {
+    if (showDiffs && firstOutput) {
     let firstOutputText =
       typeof firstOutput.text === 'string' ? firstOutput.text : JSON.stringify(firstOutput.text);
 
@@ -211,23 +255,6 @@ function EvalOutputCell({
         onClick={() => toggleLightbox(text)}
       />
     );
-  } else if (output.audio) {
-    node = (
-      <div className="audio-output">
-        <audio controls style={{ width: '100%' }} data-testid="audio-player">
-          <source
-            src={`data:audio/${output.audio.format || 'wav'};base64,${output.audio.data}`}
-            type={`audio/${output.audio.format || 'wav'}`}
-          />
-          Your browser does not support the audio element.
-        </audio>
-        {output.audio.transcript && (
-          <div className="transcript">
-            <strong>Transcript:</strong> {output.audio.transcript}
-          </div>
-        )}
-      </div>
-    );
   } else if (renderMarkdown && !showDiffs) {
     node = (
       <ReactMarkdown
@@ -253,6 +280,7 @@ function EvalOutputCell({
     } catch {
       // Ignore because it's probably not JSON.
     }
+  }
   }
 
   const handleRating = React.useCallback(

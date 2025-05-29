@@ -130,13 +130,13 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
       pass: result.success,
       failureReason: result.failureReason,
       cost: result.cost || 0,
-      audio: result.response?.audio
+      audio: result.response?.output?.audio
         ? {
-            id: result.response.audio.id,
-            expiresAt: result.response.audio.expiresAt,
-            data: result.response.audio.data,
-            transcript: result.response.audio.transcript,
-            format: result.response.audio.format,
+            id: result.response.output.audio.id,
+            expiresAt: result.response.output.audio.expiresAt,
+            data: result.response.output.audio.data,
+            transcript: result.response.output.audio.transcript,
+            format: result.response.output.audio.format,
           }
         : undefined,
     };

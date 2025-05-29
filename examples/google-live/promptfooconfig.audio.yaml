@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Google Live Audio Generation Test
+
+prompts:
+  - 'Please say: {{message}}'
+
+providers:
+  - id: 'google:live:gemini-2.0-flash-exp'
+    config:
+      generationConfig:
+        response_modalities: ['audio'] # Audio only - works better than mixed mode
+      timeoutMs: 60000 # Much longer timeout for audio generation (60 seconds)
+
+tests:
+  - vars:
+      message: 'Hello, this is a test of audio generation'
+    assert:
+      - type: javascript
+        value: output.audio && output.audio.data && output.audio.data.length > 10000
+      - type: contains
+        value: 'wav'
+        transform: output.audio.format
+  - vars:
+      message: 'The quick brown fox jumps over the lazy dog'
+    assert:
+      - type: contains
+        value: 'fox'
+        transform: output.text
+  - vars:
+      message: 'Please count from one to five'
+    assert:
+      - type: regex
+        value: 'one.*two.*three.*four.*five'
+        transform: output.text

@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Google Live Simple Audio Test
+
+prompts:
+  - 'Say hello'
+
+providers:
+  - id: 'google:live:gemini-2.0-flash-exp'
+    config:
+      generationConfig:
+        response_modalities: ['audio'] # Audio only, no text
+      timeoutMs: 30000
+# tests:
+#   - assert:
+#       - type: isTruthy
+
+tests:
+  - assert:
+      - type: contains
+        value: "[Audio response generated]"

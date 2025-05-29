@@ -6,12 +6,13 @@ You can run this example with:
 npx promptfoo@latest init --example google-live
 ```
 
-This example demonstrates how to use promptfoo with Google's WebSocket-based Live API, which enables low-latency bidirectional interactions with Gemini models. The example includes four different configurations:
+This example demonstrates how to use promptfoo with Google's WebSocket-based Live API, which enables low-latency bidirectional interactions with Gemini models. The example includes five different configurations:
 
 1. Basic query demonstration
-2. Multiline conversation demonstration
+2. Multiline conversation demonstration  
 3. Function calling and built-in tools demonstration
 4. Stateful API with Python backend
+5. Audio generation demonstration
 
 ## Prerequisites
 
@@ -69,7 +70,21 @@ This example runs a local Python API that maintains state between function calls
 promptfoo eval -c promptfooconfig.statefulapi.yaml -j 3
 ```
 
+### Audio Generation Example
+
+This example demonstrates audio generation capabilities:
+
+```bash
+promptfoo eval -c promptfooconfig.audio.yaml -j 1
+```
+
 **Setup:**
+
+- Audio generates WAV files that can be played directly in the promptfoo web viewer
+- Uses `response_modalities: ['audio']` for audio-only output
+- Longer timeout (60s) recommended for audio generation
+
+**Stateful API Setup:**
 
 - Requires Python 3 with Flask (`pip install flask`)
 - Uses `python3` command by default
@@ -107,6 +122,12 @@ If you encounter errors, check that:
 - Promptfoo spawns a local Python API that maintains state between calls
 - Demonstrates how to integrate an external service with LLM function calling
 - Shows how to test stateful interactions with assertions
+
+### 5. Audio Generation
+
+- Generates audio responses using the Live API
+- Audio files are displayed with enhanced playback controls in the web viewer
+- Includes download functionality for generated audio files
 
 ## Configuration Details
 
