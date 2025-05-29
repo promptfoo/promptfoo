@@ -167,7 +167,7 @@ export default function Purpose({ onNext }: PromptsProps) {
                   sx={{
                     mt: 2,
                     mb: 2,
-                    borderRadius: (theme) => theme.shape.borderRadius,
+                    borderRadius: '12px',
                     cursor: 'pointer',
                     position: 'relative',
                     transition: 'background-color 0.1s ease',
