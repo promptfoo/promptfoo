@@ -8,8 +8,8 @@ providers:
   - id: 'google:live:gemini-2.0-flash-exp'
     config:
       generationConfig:
-        response_modalities: ['audio'] # Audio only - works better than mixed mode
-      timeoutMs: 60000 # Much longer timeout for audio generation (60 seconds)
+        response_modalities: ['audio']
+      timeoutMs: 60000 # Longer timeout for audio generation (60 seconds)
 
 tests:
   - vars:
@@ -23,12 +23,16 @@ tests:
   - vars:
       message: 'The quick brown fox jumps over the lazy dog'
     assert:
+      - type: javascript
+        value: output.audio && output.audio.data && output.audio.data.length > 10000
       - type: contains
-        value: 'fox'
-        transform: output.text
+        value: 'wav'
+        transform: output.audio.format
   - vars:
       message: 'Please count from one to five'
     assert:
-      - type: regex
-        value: 'one.*two.*three.*four.*five'
-        transform: output.text
+      - type: javascript
+        value: output.audio && output.audio.data && output.audio.data.length > 10000
+      - type: contains
+        value: 'wav'
+        transform: output.audio.format

@@ -9,7 +9,7 @@ npx promptfoo@latest init --example google-live
 This example demonstrates how to use promptfoo with Google's WebSocket-based Live API, which enables low-latency bidirectional interactions with Gemini models. The example includes five different configurations:
 
 1. Basic query demonstration
-2. Multiline conversation demonstration  
+2. Multiline conversation demonstration
 3. Function calling and built-in tools demonstration
 4. Stateful API with Python backend
 5. Audio generation demonstration

@@ -8,13 +8,10 @@ providers:
   - id: 'google:live:gemini-2.0-flash-exp'
     config:
       generationConfig:
-        response_modalities: ['audio'] # Audio only, no text
+        response_modalities: ['audio']
       timeoutMs: 30000
-# tests:
-#   - assert:
-#       - type: isTruthy
 
 tests:
   - assert:
       - type: contains
-        value: "[Audio response generated]"
+        value: '[Audio response generated]'
