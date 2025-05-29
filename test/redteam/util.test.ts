@@ -1,9 +1,16 @@
+import { fetchWithCache } from '../../src/cache';
+import logger from '../../src/logger';
 import {
   removePrefix,
   normalizeApostrophes,
   isEmptyResponse,
   isBasicRefusal,
+  extractIntentFromPrompt,
+  getShortPluginId,
 } from '../../src/redteam/util';
+
+jest.mock('../../src/cache');
+jest.mock('../../src/logger');
 
 describe('removePrefix', () => {
   it('should remove a simple prefix', () => {
@@ -89,5 +96,75 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal('I will help you with that')).toBe(false);
     expect(isBasicRefusal('Here is the information you requested')).toBe(false);
     expect(isBasicRefusal('The answer is 42')).toBe(false);
+  });
+});
+
+describe('getShortPluginId', () => {
+  it('should remove promptfoo:redteam: prefix', () => {
+    expect(getShortPluginId('promptfoo:redteam:test')).toBe('test');
+  });
+
+  it('should return original id if no prefix', () => {
+    expect(getShortPluginId('test')).toBe('test');
+  });
+});
+
+describe('extractIntentFromPrompt', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+  });
+
+  it('should extract intent successfully', async () => {
+    const mockResponse = {
+      data: { intent: 'extracted intent' },
+      status: 200,
+      cached: false,
+      statusText: 'OK',
+      headers: {},
+      deleteFromCache: jest.fn(),
+    };
+    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    const result = await extractIntentFromPrompt('test prompt', 'test purpose');
+    expect(result).toBe('extracted intent');
+  });
+
+  it('should return original prompt on HTTP error', async () => {
+    const mockResponse = {
+      status: 500,
+      data: null,
+      cached: false,
+      statusText: 'Internal Server Error',
+      headers: {},
+      deleteFromCache: jest.fn(),
+    };
+    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    const result = await extractIntentFromPrompt('test prompt', 'test purpose');
+    expect(result).toBe('test prompt');
+    expect(logger.warn).toHaveBeenCalledWith('Failed to extract intent from prompt: HTTP 500');
+  });
+
+  it('should return original prompt on network error', async () => {
+    jest.mocked(fetchWithCache).mockRejectedValue(new Error('Network error'));
+
+    const result = await extractIntentFromPrompt('test prompt', 'test purpose');
+    expect(result).toBe('test prompt');
+    expect(logger.warn).toHaveBeenCalledWith('Error extracting intent: Error: Network error');
+  });
+
+  it('should return original prompt when intent is missing in response', async () => {
+    const mockResponse = {
+      data: {},
+      status: 200,
+      cached: false,
+      statusText: 'OK',
+      headers: {},
+      deleteFromCache: jest.fn(),
+    };
+    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    const result = await extractIntentFromPrompt('test prompt', 'test purpose');
+    expect(result).toBe('test prompt');
   });
 });
