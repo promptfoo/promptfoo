@@ -207,40 +207,52 @@ export function getShortPluginId(pluginId: string): string {
  * Extracts goal from a prompt using remote generation API.
  * @param prompt - The prompt to extract goal from.
  * @param purpose - The purpose of the system.
- * @returns The extracted goal.
- * @throws Error if intent extraction fails.
+ * @returns The extracted goal, or null if extraction fails.
  */
-export async function extractGoalFromPrompt(prompt: string, purpose: string): Promise<string> {
+export async function extractGoalFromPrompt(
+  prompt: string,
+  purpose: string,
+): Promise<string | null> {
+  const requestBody = {
+    task: 'extract-intent',
+    prompt,
+    purpose,
+  };
+
+  logger.debug(`Extracting goal from prompt. Request URL: ${getRemoteGenerationUrl()}`);
+  logger.debug(`Request body: ${JSON.stringify(requestBody, null, 2)}`);
   try {
-    const { data, status } = await fetchWithCache(
+    const { data, status, statusText } = await fetchWithCache(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          task: 'extract-intent',
-          prompt,
-          purpose,
-        }),
+        body: JSON.stringify(requestBody),
       },
       REQUEST_TIMEOUT_MS,
     );
 
+    logger.debug(
+      `Goal extraction response - Status: ${status} ${statusText || ''}, Data: ${JSON.stringify(data)}`,
+    );
+
     if (status !== 200) {
-      logger.error(`Failed to extract goal from prompt: HTTP ${status}`);
-      throw new Error(`Failed to extract goal from prompt: HTTP ${status}`);
+      logger.warn(
+        `Failed to extract goal from prompt: HTTP ${status} ${statusText || ''}, Response Data: ${JSON.stringify(data)}`,
+      );
+      return null;
     }
 
     if (!data?.intent) {
-      logger.error('No intent returned from extraction API');
-      throw new Error('No intent returned from extraction API');
+      logger.warn(`No intent returned from extraction API. Response Data: ${JSON.stringify(data)}`);
+      return null;
     }
 
     return data.intent;
   } catch (error) {
     logger.warn(`Error extracting goal: ${error}`);
-    throw error;
+    return null;
   }
 }
