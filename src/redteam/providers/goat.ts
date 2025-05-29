@@ -165,6 +165,7 @@ export default class GoatProvider implements ApiProvider {
           excludeTargetOutputFromAgenticAttackGeneration:
             this.excludeTargetOutputFromAgenticAttackGeneration,
           failureReason,
+          purpose: context?.test?.metadata?.purpose,
         });
 
         logger.debug(`[GOAT] Sending request to ${getRemoteGenerationUrl()}: ${body}`);
