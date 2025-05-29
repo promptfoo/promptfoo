@@ -20,15 +20,15 @@ export async function promptUser(question: string): Promise<string> {
     try {
       const rl = createReadlineInterface();
 
-      rl.question(question, (answer) => {
-        rl.close();
-        resolve(answer);
-      });
-
       // Handle errors
       rl.on('error', (err) => {
         rl.close();
         reject(err);
+      });
+
+      rl.question(question, (answer) => {
+        rl.close();
+        resolve(answer);
       });
     } catch (err) {
       reject(err);
