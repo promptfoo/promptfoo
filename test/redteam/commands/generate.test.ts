@@ -649,7 +649,7 @@ describe('doGenerateRedteam', () => {
     await doGenerateRedteam(options);
 
     expect(logger.error).toHaveBeenCalledWith(
-      'Discovery failed from error, skipping: Purpose discovery failed',
+      'Target Discovery Agent failed from error, skipping: Purpose discovery failed',
     );
   });
 
@@ -782,7 +782,7 @@ describe('doGenerateRedteam', () => {
     await doGenerateRedteam(options);
 
     expect(logger.error).toHaveBeenCalledWith(
-      'Discovery failed from error, skipping: Custom purpose discovery error',
+      'Target Discovery Agent failed from error, skipping: Custom purpose discovery error',
     );
   });
 
@@ -931,7 +931,7 @@ describe('doGenerateRedteam', () => {
     await doGenerateRedteam(options);
 
     expect(logger.error).toHaveBeenCalledWith(
-      'Discovery failed from error, skipping: Some string error',
+      'Target Discovery Agent failed from error, skipping: Some string error',
     );
   });
 
