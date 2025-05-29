@@ -412,31 +412,6 @@ function isStrategyCollection(id: string): id is keyof typeof STRATEGY_COLLECTIO
 }
 
 /**
- * Adds goal to test case metadata by extracting it from the prompt.
- * @param testCase - The test case to add goal to.
- * @param purpose - The purpose of the system.
- * @returns The test case with goal added to metadata.
- */
-async function addGoalToTestCase(
-  testCase: TestCaseWithPlugin,
-  purpose: string,
-): Promise<TestCaseWithPlugin> {
-  // Get the prompt from the test case vars
-  const promptVar = Object.values(testCase.vars || {})[0];
-  const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
-
-  const extractedGoal = await extractGoalFromPrompt(prompt, purpose);
-
-  return {
-    ...testCase,
-    metadata: {
-      ...testCase.metadata,
-      goal: extractedGoal,
-    },
-  };
-}
-
-/**
  * Synthesizes test cases based on provided options.
  * @param options - The options for test case synthesis.
  * @returns A promise that resolves to an object containing the purpose, entities, and test cases.
@@ -753,14 +728,18 @@ export async function synthesize({
         logger.debug(
           `Extracting goal for ${testCasesWithMetadata.length} tests from ${plugin.id}...`,
         );
-        const testCasesWithGoal = await Promise.all(
-          testCasesWithMetadata.map(async (testCase) => {
-            return await addGoalToTestCase(testCase, purpose);
-          }),
-        );
+        for (const testCase of testCasesWithMetadata) {
+          // Get the prompt from the specific inject variable
+          const promptVar = testCase.vars?.[injectVar];
+          const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
+
+          const extractedGoal = await extractGoalFromPrompt(prompt, purpose);
+
+          (testCase.metadata as any).goal = extractedGoal;
+        }
 
         // Add the results to main test cases array
-        testCases.push(...testCasesWithGoal);
+        testCases.push(...testCasesWithMetadata);
       }
 
       pluginTests = Array.isArray(pluginTests) ? pluginTests : [];
@@ -794,14 +773,18 @@ export async function synthesize({
         logger.debug(
           `Extracting goal for ${testCasesWithMetadata.length} custom tests from ${plugin.id}...`,
         );
-        const testCasesWithGoal = await Promise.all(
-          testCasesWithMetadata.map(async (testCase) => {
-            return await addGoalToTestCase(testCase, purpose);
-          }),
-        );
+        for (const testCase of testCasesWithMetadata) {
+          // Get the prompt from the specific inject variable
+          const promptVar = testCase.vars?.[injectVar];
+          const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
+
+          const extractedGoal = await extractGoalFromPrompt(prompt, purpose);
+
+          (testCase.metadata as any).goal = extractedGoal;
+        }
 
         // Add the results to main test cases array
-        testCases.push(...testCasesWithGoal);
+        testCases.push(...testCasesWithMetadata);
 
         logger.debug(`Added ${customTests.length} custom test cases from ${plugin.id}`);
         pluginResults[plugin.id] = { requested: plugin.numTests, generated: customTests.length };

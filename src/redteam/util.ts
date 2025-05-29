@@ -207,7 +207,8 @@ export function getShortPluginId(pluginId: string): string {
  * Extracts goal from a prompt using remote generation API.
  * @param prompt - The prompt to extract goal from.
  * @param purpose - The purpose of the system.
- * @returns The extracted goal or the original prompt if extraction fails.
+ * @returns The extracted goal.
+ * @throws Error if intent extraction fails.
  */
 export async function extractGoalFromPrompt(prompt: string, purpose: string): Promise<string> {
   try {
@@ -228,13 +229,18 @@ export async function extractGoalFromPrompt(prompt: string, purpose: string): Pr
     );
 
     if (status !== 200) {
-      logger.warn(`Failed to extract goal from prompt: HTTP ${status}`);
-      return prompt;
+      logger.error(`Failed to extract goal from prompt: HTTP ${status}`);
+      throw new Error(`Failed to extract goal from prompt: HTTP ${status}`);
     }
 
-    return data?.intent || prompt;
+    if (!data?.intent) {
+      logger.error('No intent returned from extraction API');
+      throw new Error('No intent returned from extraction API');
+    }
+
+    return data.intent;
   } catch (error) {
     logger.warn(`Error extracting goal: ${error}`);
-    return prompt;
+    throw error;
   }
 }
