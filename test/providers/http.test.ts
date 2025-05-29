@@ -1339,7 +1339,13 @@ describe('HttpProvider', () => {
 
       const result = await provider.callApi('test');
 
-      expect(result).toEqual({ output: { chat_history: 'success' } });
+      expect(result).toEqual({
+        output: { chat_history: 'success' },
+        raw: JSON.stringify({ result: 'success' }),
+        metadata: {
+          http: { status: 200, statusText: 'OK', headers: {} },
+        },
+      });
     });
 
     it('should prefer transformResponse over responseParser when both are set', async () => {
@@ -1362,7 +1368,13 @@ describe('HttpProvider', () => {
 
       const result = await provider.callApi('test');
 
-      expect(result).toEqual({ output: { chat_history: 'from transformResponse' } });
+      expect(result).toEqual({
+        output: { chat_history: 'from transformResponse' },
+        raw: JSON.stringify({ result: 'success' }),
+        metadata: {
+          http: { status: 200, statusText: 'OK', headers: {} },
+        },
+      });
     });
 
     it('should handle string-based responseParser when transformResponse is not set', async () => {
@@ -1384,7 +1396,13 @@ describe('HttpProvider', () => {
 
       const result = await provider.callApi('test');
 
-      expect(result).toEqual({ output: 'success' });
+      expect(result).toEqual({
+        output: 'success',
+        raw: JSON.stringify({ result: 'success' }),
+        metadata: {
+          http: { status: 200, statusText: 'OK', headers: {} },
+        },
+      });
     });
   });
 
@@ -1927,7 +1945,11 @@ describe('response handling', () => {
     });
 
     expect(result.metadata).toEqual({
-      headers: mockHeaders,
+      http: {
+        headers: mockHeaders,
+        status: 200,
+        statusText: 'OK',
+      },
     });
     expect(result.raw).toEqual(mockData);
   });
@@ -1983,7 +2005,11 @@ describe('response handling', () => {
     });
 
     expect(result.raw).toEqual(mockData);
-    expect(result.metadata).toHaveProperty('headers', mockHeaders);
+    expect(result.metadata).toHaveProperty('http', {
+      headers: mockHeaders,
+      status: 200,
+      statusText: 'OK',
+    });
     expect(result.output).toEqual({ foo: 'bar' });
   });
 
@@ -2048,7 +2074,11 @@ describe('response handling', () => {
     // Verify transformed response and debug info
     expect(result.output).toEqual({ transformed: true });
     expect(result.raw).toEqual(mockData);
-    expect(result.metadata).toHaveProperty('headers', mockHeaders);
+    expect(result.metadata).toHaveProperty('http', {
+      headers: mockHeaders,
+      status: 200,
+      statusText: 'OK',
+    });
   });
 });
 

@@ -99,7 +99,9 @@ async function sendEvalRecord(
 
   const responseJson = await response.json();
   if (!responseJson.id) {
-    throw new Error(`Failed to send initial eval data to ${url}: ${response.statusText}`);
+    throw new Error(
+      `Failed to send initial eval data to ${url}: ${response.statusText} ${responseJson}`,
+    );
   }
 
   return responseJson.id;
@@ -216,7 +218,7 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
 
     return evalId;
   } catch (e) {
-    logger.error(`Upload failed: ${e}`);
+    logger.error(`Upload failed: ${e instanceof Error ? e.message : String(e)}`);
 
     if (evalId) {
       logger.info(`Upload failed, rolling back...`);
@@ -275,7 +277,7 @@ async function getApiConfig(evalRecord: Eval): Promise<{
   if (cloudConfig.isEnabled()) {
     const apiBaseUrl = cloudConfig.getApiHost();
     return {
-      url: `${apiBaseUrl}/results`,
+      url: `${apiBaseUrl}/api/v1/results`,
     };
   }
 
@@ -283,8 +285,8 @@ async function getApiConfig(evalRecord: Eval): Promise<{
     typeof evalRecord.config.sharing === 'object'
       ? evalRecord.config.sharing.apiBaseUrl || getShareApiBaseUrl()
       : getShareApiBaseUrl();
-
   return {
+    // This is going to a self-hosted instance so the api should match the Open Source API
     url: `${apiBaseUrl}/api/eval`,
   };
 }

@@ -811,12 +811,14 @@ export class HttpProvider implements ApiProvider {
     );
 
     const ret: ProviderResponse = {};
-    if (context?.debug) {
-      ret.raw = response.data;
-      ret.metadata = {
-        headers: response.headers,
-      };
-    }
+    ret.raw = response.data;
+    ret.metadata = {
+      http: {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers || {},
+      },
+    };
 
     const rawText = response.data as string;
     let parsedData;
