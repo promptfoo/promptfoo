@@ -22,6 +22,7 @@ import {
   writeMultipleOutputs,
   writeOutput,
   maybeLoadToolsFromExternalFile,
+  renderVarsInObject,
 } from '../../src/util';
 import { TestGrader } from './utils';
 
@@ -671,5 +672,16 @@ describe('setupEnv', () => {
     // Then load .env.production with override (should change NODE_ENV to 'production')
     setupEnv('.env.production');
     expect(process.env.NODE_ENV).toBe('production');
+  });
+});
+
+describe('renderVarsInObject', () => {
+  it('should render environment variables in objects', () => {
+    process.env.TEST_ENV_VAR = 'env_value';
+    const obj = { text: '{{ env.TEST_ENV_VAR }}' };
+    const rendered = renderVarsInObject(obj, {});
+    console.log('Rendered object:', rendered);
+    expect(rendered).toEqual({ text: 'env_value' });
+    delete process.env.TEST_ENV_VAR;
   });
 });
