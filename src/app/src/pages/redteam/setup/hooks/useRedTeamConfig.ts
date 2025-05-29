@@ -63,6 +63,17 @@ const defaultConfig: Config = {
   numTests: 10,
   applicationDefinition: {
     purpose: '',
+    features: '',
+    hasAccessTo: '',
+    doesNotHaveAccessTo: '',
+    userTypes: '',
+    securityRequirements: '',
+    exampleIdentifiers: '',
+    industry: '',
+    sensitiveDataTypes: '',
+    criticalActions: '',
+    forbiddenTopics: '',
+    competitors: '',
     redteamUser: '',
     accessToData: '',
     forbiddenData: '',
@@ -81,7 +92,51 @@ const applicationDefinitionToPurpose = (applicationDefinition: Config['applicati
   }
 
   if (applicationDefinition.purpose) {
-    sections.push(`The objective of the application is: ${applicationDefinition.purpose}`);
+    sections.push(`Purpose: ${applicationDefinition.purpose}`);
+  }
+
+  if (applicationDefinition.features) {
+    sections.push(`Features: ${applicationDefinition.features}`);
+  }
+
+  if (applicationDefinition.hasAccessTo) {
+    sections.push(`Has access to: ${applicationDefinition.hasAccessTo}`);
+  }
+
+  if (applicationDefinition.doesNotHaveAccessTo) {
+    sections.push(`Does not have access to: ${applicationDefinition.doesNotHaveAccessTo}`);
+  }
+
+  if (applicationDefinition.userTypes) {
+    sections.push(`User types: ${applicationDefinition.userTypes}`);
+  }
+
+  if (applicationDefinition.securityRequirements) {
+    sections.push(`Security requirements: ${applicationDefinition.securityRequirements}`);
+  }
+
+  if (applicationDefinition.exampleIdentifiers) {
+    sections.push(`Example identifiers: ${applicationDefinition.exampleIdentifiers}`);
+  }
+
+  if (applicationDefinition.industry) {
+    sections.push(`Industry: ${applicationDefinition.industry}`);
+  }
+
+  if (applicationDefinition.sensitiveDataTypes) {
+    sections.push(`Sensitive data types: ${applicationDefinition.sensitiveDataTypes}`);
+  }
+
+  if (applicationDefinition.criticalActions) {
+    sections.push(`Critical actions: ${applicationDefinition.criticalActions}`);
+  }
+
+  if (applicationDefinition.forbiddenTopics) {
+    sections.push(`Forbidden topics: ${applicationDefinition.forbiddenTopics}`);
+  }
+
+  if (applicationDefinition.competitors) {
+    sections.push(`Competitors: ${applicationDefinition.competitors}`);
   }
 
   if (applicationDefinition.redteamUser) {
@@ -117,14 +172,34 @@ const applicationDefinitionToPurpose = (applicationDefinition: Config['applicati
 
 export const EXAMPLE_APPLICATION_DEFINITION: ApplicationDefinition = {
   purpose:
-    'Help employees at Travel R Us, a hotel search company, find information faster in their internal documentation.',
-  redteamUser: 'An employee in the engineering department',
-  accessToData: 'General company information like policies and engineering documents',
+    'Assist healthcare professionals and patients with medical-related tasks, access medical information, schedule appointments, manage prescriptions, provide general medical advice, maintain HIPAA compliance and patient confidentiality.',
+  features:
+    'Patient record access, appointment scheduling, prescription management, lab results retrieval, insurance verification, payment processing, medical advice delivery, user authentication with role-based access control.',
+  hasAccessTo:
+    "Patient's own medical records, appointment scheduling system, prescription database, lab results (with authorization), insurance verification tools, general medical knowledge base, approved medical guidelines, and health education resources.",
+  doesNotHaveAccessTo:
+    "Other patients' medical records, hospital/clinic financial systems, provider credentialing information, research databases, unencrypted patient identifiers, administrative backend systems, and unauthorized medication dispensing functions.",
+  userTypes: 'Authorized Patients, and Unauthenticated Users.',
+  securityRequirements:
+    'HIPAA compliance, patient confidentiality, authentication checks, and audit logging for all access.',
+  exampleIdentifiers:
+    'Patient IDs (MRN2023001), Emails (marcus.washington@gmail.com), Prescription IDs (RX123456), Doctor IDs (D23456), Insurance IDs (MC123789456), Medications (Lisinopril), Doctors (Sarah Chen, James Wilson).',
+  industry: 'Healthcare',
+  sensitiveDataTypes:
+    'Personal health information (PHI), medical records, prescription data, insurance information, social security numbers, date of birth, medical history',
+  criticalActions:
+    'Prescribing medication, scheduling surgery, accessing patient records, modifying treatment plans, processing insurance claims, emergency alerts',
+  forbiddenTopics:
+    'Self-diagnosis, medical advice without proper authorization, other patients medical information, unverified medical treatments, non-FDA approved medications',
+  competitors: 'Epic Systems, Cerner, Allscripts, athenahealth, NextGen Healthcare',
+  redteamUser: 'A patient seeking medical assistance',
+  accessToData: 'Their own medical records, appointment history, and general health information',
   forbiddenData:
-    'Anything owned by other departments. Things like future strategy, financial documents, sales documentation and planning, confidential HR information.',
-  accessToActions: 'Search the documents',
-  forbiddenActions: '',
-  connectedSystems: 'Internal company knowledge base',
+    'Other patients medical records, internal hospital systems, financial data, staff information',
+  accessToActions: 'Schedule appointments, view their records, request prescriptions',
+  forbiddenActions: 'Access other patient data, modify system settings, bypass authentication',
+  connectedSystems:
+    'Electronic Health Records (EHR) system, appointment scheduling system, prescription management system',
 };
 
 export const EXAMPLE_CONFIG: Config = {

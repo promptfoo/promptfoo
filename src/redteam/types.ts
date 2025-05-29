@@ -156,6 +156,17 @@ export interface SavedRedteamConfig {
   numTests?: number;
   applicationDefinition: {
     purpose?: string;
+    features?: string;
+    hasAccessTo?: string;
+    doesNotHaveAccessTo?: string;
+    userTypes?: string;
+    securityRequirements?: string;
+    exampleIdentifiers?: string;
+    industry?: string;
+    sensitiveDataTypes?: string;
+    criticalActions?: string;
+    forbiddenTopics?: string;
+    competitors?: string;
     systemPrompt?: string;
     redteamUser?: string;
     accessToData?: string;
