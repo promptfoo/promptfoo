@@ -218,7 +218,7 @@ export default function Purpose({ onNext }: PromptsProps) {
                 <Typography
                   variant="body2"
                   color="text.secondary"
-                  sx={{ mb: 4, fontStyle: 'italic' }}
+                  sx={{ mb: 4, mt: 2, fontStyle: 'italic' }}
                 >
                   Only the main purpose is required. All other fields are optional, but providing
                   more details will result in significantly more targeted and effective security
