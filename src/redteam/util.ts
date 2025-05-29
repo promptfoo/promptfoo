@@ -1,3 +1,8 @@
+import { fetchWithCache } from '../cache';
+import logger from '../logger';
+import { REQUEST_TIMEOUT_MS } from '../providers/shared';
+import { getRemoteGenerationUrl } from './remoteGeneration';
+
 /**
  * Normalizes different types of apostrophes to a standard single quote
  */
@@ -196,4 +201,46 @@ export function removePrefix(str: string, prefix: string) {
  */
 export function getShortPluginId(pluginId: string): string {
   return pluginId.replace(/^promptfoo:redteam:/, '');
+}
+
+/**
+ * Extracts goal from a prompt using remote generation API.
+ * @param prompt - The prompt to extract goal from.
+ * @param purpose - The purpose of the system.
+ * @returns The extracted goal.
+ * @throws Error if intent extraction fails.
+ */
+export async function extractGoalFromPrompt(prompt: string, purpose: string): Promise<string> {
+  try {
+    const { data, status } = await fetchWithCache(
+      getRemoteGenerationUrl(),
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          task: 'extract-intent',
+          prompt,
+          purpose,
+        }),
+      },
+      REQUEST_TIMEOUT_MS,
+    );
+
+    if (status !== 200) {
+      logger.error(`Failed to extract goal from prompt: HTTP ${status}`);
+      throw new Error(`Failed to extract goal from prompt: HTTP ${status}`);
+    }
+
+    if (!data?.intent) {
+      logger.error('No intent returned from extraction API');
+      throw new Error('No intent returned from extraction API');
+    }
+
+    return data.intent;
+  } catch (error) {
+    logger.warn(`Error extracting goal: ${error}`);
+    throw error;
+  }
 }

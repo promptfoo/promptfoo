@@ -2,6 +2,7 @@ import { getGraderById } from '../../src/redteam/graders';
 import { AsciiSmugglingGrader } from '../../src/redteam/plugins/asciiSmuggling';
 import { BeavertailsGrader } from '../../src/redteam/plugins/beavertails';
 import { HarmfulGrader } from '../../src/redteam/plugins/harmful/graders';
+import { OffTopicPluginGrader } from '../../src/redteam/plugins/offTopic';
 import { PlinyGrader } from '../../src/redteam/plugins/pliny';
 import { ToolDiscoveryGrader } from '../../src/redteam/plugins/toolDiscovery';
 import { ToolDiscoveryMultiTurnGrader } from '../../src/redteam/plugins/toolDiscoveryMultiTurn';
@@ -32,6 +33,9 @@ describe('getGraderById', () => {
 
     const plinyGrader = getGraderById('promptfoo:redteam:pliny');
     expect(plinyGrader).toBeInstanceOf(PlinyGrader);
+
+    const offTopicGrader = getGraderById('promptfoo:redteam:off-topic');
+    expect(offTopicGrader).toBeInstanceOf(OffTopicPluginGrader);
 
     const toxicChatGrader = getGraderById('promptfoo:redteam:toxic-chat');
     expect(toxicChatGrader).toBeInstanceOf(ToxicChatGrader);

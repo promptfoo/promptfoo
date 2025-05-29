@@ -454,7 +454,7 @@ export async function runRedteamConversation({
   excludeTargetOutputFromAgenticAttackGeneration: boolean;
 }): Promise<RedteamTreeResponse> {
   const nunjucks = getNunjucksEngine();
-  const goal: string = vars[injectVar] as string;
+  const goal: string = context?.test?.metadata?.goal || (vars[injectVar] as string);
 
   let maxScore = 0;
 
@@ -624,7 +624,7 @@ export async function runRedteamConversation({
           const grader = getGraderById(assertToUse.type);
           if (grader) {
             const { grade } = await grader.getResult(
-              test?.metadata?.pluginId === 'intent' ? newInjectVar : goal,
+              newInjectVar,
               targetResponse.output,
               test || {},
               gradingProvider,
