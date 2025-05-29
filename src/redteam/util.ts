@@ -213,6 +213,14 @@ export async function extractGoalFromPrompt(
   prompt: string,
   purpose: string,
 ): Promise<string | null> {
+  const requestBody = {
+    task: 'extract-intent',
+    prompt,
+    purpose,
+  };
+
+  logger.debug(`Extracting goal from prompt. Request URL: ${getRemoteGenerationUrl()}`);
+  logger.debug(`Request body: ${JSON.stringify(requestBody, null, 2)}`);
   try {
     const { data, status, statusText } = await fetchWithCache(
       getRemoteGenerationUrl(),
@@ -221,11 +229,7 @@ export async function extractGoalFromPrompt(
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          task: 'extract-intent',
-          prompt,
-          purpose,
-        }),
+        body: JSON.stringify(requestBody),
       },
       REQUEST_TIMEOUT_MS,
     );
@@ -235,12 +239,14 @@ export async function extractGoalFromPrompt(
     );
 
     if (status !== 200) {
-      logger.warn(`Failed to extract goal from prompt: HTTP ${status} ${statusText || ''}`);
+      logger.warn(
+        `Failed to extract goal from prompt: HTTP ${status} ${statusText || ''}, Response Data: ${JSON.stringify(data)}`,
+      );
       return null;
     }
 
     if (!data?.intent) {
-      logger.warn('No intent returned from extraction API');
+      logger.warn(`No intent returned from extraction API. Response Data: ${JSON.stringify(data)}`);
       return null;
     }
 
