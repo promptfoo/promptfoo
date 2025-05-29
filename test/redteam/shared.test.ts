@@ -119,7 +119,6 @@ describe('doRedteamRun', () => {
   });
 
   it('should locate the out file in the same directory as the config file if output is not specified', async () => {
-    // Generate a random directory path
     const dirPath = FakeDataFactory.system.directoryPath();
     const customConfig = `${dirPath}/config.yaml`;
     await doRedteamRun({ config: customConfig });
@@ -158,13 +157,14 @@ describe('doRedteamRun', () => {
       );
     });
 
-    it('should create redteam.yaml file in system temp directory when loadedFromCloud is false', async () => {
+    it('should create timestamped file in temp directory when loadedFromCloud is false', async () => {
       await doRedteamRun({
         liveRedteamConfig: mockConfig,
         loadedFromCloud: false,
       });
 
-      const expectedPath = path.join('/tmp', 'redteam.yaml');
+      const expectedFilename = `redteam-${mockDate.getTime()}.yaml`;
+      const expectedPath = path.join('/tmp', expectedFilename);
 
       expect(os.tmpdir).toHaveBeenCalledWith();
       expect(fs.mkdirSync).toHaveBeenCalledWith(path.dirname(expectedPath), { recursive: true });
@@ -178,13 +178,13 @@ describe('doRedteamRun', () => {
       );
     });
 
-    it('should create redteam.yaml file in system temp directory when loadedFromCloud is undefined', async () => {
+    it('should create timestamped file in temp directory when loadedFromCloud is undefined', async () => {
       await doRedteamRun({
         liveRedteamConfig: mockConfig,
-        // loadedFromCloud is undefined
       });
 
-      const expectedPath = path.join('/tmp', 'redteam.yaml');
+      const expectedFilename = `redteam-${mockDate.getTime()}.yaml`;
+      const expectedPath = path.join('/tmp', expectedFilename);
 
       expect(os.tmpdir).toHaveBeenCalledWith();
       expect(fs.mkdirSync).toHaveBeenCalledWith(path.dirname(expectedPath), { recursive: true });
@@ -202,16 +202,13 @@ describe('doRedteamRun', () => {
       const firstTimestamp = mockDate.getTime();
       const secondTimestamp = firstTimestamp + 1000;
 
-      // First call
       await doRedteamRun({
         liveRedteamConfig: mockConfig,
         loadedFromCloud: true,
       });
 
-      // Update mock timestamp for second call
       dateNowSpy.mockReturnValue(secondTimestamp);
 
-      // Second call
       await doRedteamRun({
         liveRedteamConfig: mockConfig,
         loadedFromCloud: true,
@@ -220,7 +217,6 @@ describe('doRedteamRun', () => {
       const firstExpectedPath = path.join('', `redteam-${firstTimestamp}.yaml`);
       const secondExpectedPath = path.join('', `redteam-${secondTimestamp}.yaml`);
 
-      // Verify different filenames were generated
       expect(fs.writeFileSync).toHaveBeenNthCalledWith(1, firstExpectedPath, 'mocked-yaml-content');
       expect(fs.writeFileSync).toHaveBeenNthCalledWith(
         2,
@@ -229,25 +225,31 @@ describe('doRedteamRun', () => {
       );
     });
 
-    it('should use static filename when loadedFromCloud is false', async () => {
-      // First call
+    it('should generate unique timestamped filenames when loadedFromCloud is false', async () => {
+      const firstTimestamp = mockDate.getTime();
+      const secondTimestamp = firstTimestamp + 1000;
+
       await doRedteamRun({
         liveRedteamConfig: mockConfig,
         loadedFromCloud: false,
       });
 
-      // Second call with different timestamp
-      dateNowSpy.mockReturnValue(mockDate.getTime() + 1000);
+      dateNowSpy.mockReturnValue(secondTimestamp);
+
       await doRedteamRun({
         liveRedteamConfig: mockConfig,
         loadedFromCloud: false,
       });
 
-      const expectedPath = path.join('/tmp', 'redteam.yaml');
+      const firstExpectedPath = path.join('/tmp', `redteam-${firstTimestamp}.yaml`);
+      const secondExpectedPath = path.join('/tmp', `redteam-${secondTimestamp}.yaml`);
 
-      // Verify same filename was used both times
-      expect(fs.writeFileSync).toHaveBeenNthCalledWith(1, expectedPath, 'mocked-yaml-content');
-      expect(fs.writeFileSync).toHaveBeenNthCalledWith(2, expectedPath, 'mocked-yaml-content');
+      expect(fs.writeFileSync).toHaveBeenNthCalledWith(1, firstExpectedPath, 'mocked-yaml-content');
+      expect(fs.writeFileSync).toHaveBeenNthCalledWith(
+        2,
+        secondExpectedPath,
+        'mocked-yaml-content',
+      );
     });
 
     it('should use liveRedteamConfig.commandLineOptions when provided', async () => {
@@ -278,7 +280,6 @@ describe('doRedteamRun', () => {
     });
 
     it('should log debug information when processing liveRedteamConfig', async () => {
-      // Get the mocked logger
       const mockLogger = jest.requireMock('../../src/logger').default;
 
       await doRedteamRun({
