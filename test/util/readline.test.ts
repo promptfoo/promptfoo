@@ -1,17 +1,13 @@
 import readline from 'readline';
 import { createReadlineInterface, promptUser, promptYesNo } from '../../src/util/readline';
 
-// Mock the entire readline module
 jest.mock('readline');
 
-// Mock the entire readline utils module
-jest.mock('../../src/util/readline', () => {
-  return {
-    createReadlineInterface: jest.fn(),
-    promptUser: jest.fn(),
-    promptYesNo: jest.fn(),
-  };
-});
+jest.mock('../../src/util/readline', () => ({
+  createReadlineInterface: jest.fn(),
+  promptUser: jest.fn(),
+  promptYesNo: jest.fn(),
+}));
 
 describe('readline utils', () => {
   let mockInterface: any;
@@ -23,10 +19,7 @@ describe('readline utils', () => {
       on: jest.fn(),
     };
 
-    // Mock readline.createInterface to return our mock interface
     jest.mocked(readline.createInterface).mockReturnValue(mockInterface);
-
-    // Reset the mocked functions
     jest.mocked(createReadlineInterface).mockReturnValue(mockInterface);
     jest.mocked(promptUser).mockReset();
     jest.mocked(promptYesNo).mockReset();
