@@ -46,7 +46,7 @@ export async function promptYesNo(question: string, defaultYes = false): Promise
   const answer = await promptUser(`${question} ${suffix}`);
 
   if (defaultYes) {
-    return !answer.toLowerCase().startsWith('n');
+    return !answer.trim().toLowerCase().startsWith('n');
   }
-  return answer.toLowerCase().startsWith('y');
+  return answer.trim().toLowerCase().startsWith('y');
 }
