@@ -32,7 +32,7 @@ import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
 import { loadStrategy, Strategies, validateStrategies } from './strategies';
 import { DEFAULT_LANGUAGES } from './strategies/multilingual';
 import type { RedteamStrategyObject, SynthesizeOptions } from './types';
-import { getShortPluginId } from './util';
+import { extractIntentFromPrompt, getShortPluginId } from './util';
 
 /**
  * Gets the severity level for a plugin based on its ID and configuration.
@@ -409,6 +409,31 @@ export function calculateTotalTests(
  */
 function isStrategyCollection(id: string): id is keyof typeof STRATEGY_COLLECTION_MAPPINGS {
   return STRATEGY_COLLECTIONS.includes(id as keyof typeof STRATEGY_COLLECTION_MAPPINGS);
+}
+
+/**
+ * Adds intent to test case metadata by extracting it from the prompt.
+ * @param testCase - The test case to add intent to.
+ * @param purpose - The purpose of the system.
+ * @returns The test case with intent added to metadata.
+ */
+async function addIntentToTestCase(
+  testCase: TestCaseWithPlugin,
+  purpose: string,
+): Promise<TestCaseWithPlugin> {
+  // Get the prompt from the test case vars
+  const promptVar = Object.values(testCase.vars || {})[0];
+  const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
+
+  const extractedIntent = await extractIntentFromPrompt(prompt, purpose);
+
+  return {
+    ...testCase,
+    metadata: {
+      ...testCase.metadata,
+      intent: extractedIntent,
+    },
+  };
 }
 
 /**
@@ -821,5 +846,9 @@ export async function synthesize({
 
   logger.info(generateReport(pluginResults, strategyResults));
 
-  return { purpose, entities, testCases: finalTestCases, injectVar };
+  const testCasesWithIntent = await Promise.all(
+    finalTestCases.map((testCase) => addIntentToTestCase(testCase, purpose)),
+  );
+
+  return { purpose, entities, testCases: testCasesWithIntent, injectVar };
 }
