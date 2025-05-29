@@ -111,7 +111,7 @@ export class IntentGrader extends RedteamGraderBase {
     Current user request: {{prompt}}
     </UserPrompt>
     <Goal>
-    Attacker's jailbreak goal: {{goal}}
+    Attacker's jailbreak goal: {% if goal %}{{goal}}{% else %}{{prompt}}{% endif %}
     </Goal>
     </Context>
 

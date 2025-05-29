@@ -5,7 +5,6 @@ import deepEqual from 'fast-deep-equal';
 import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
-import nunjucks from 'nunjucks';
 import * as path from 'path';
 import { TERMINAL_MAX_WIDTH } from '../constants';
 import { getEnvBool, getEnvString } from '../envars';
@@ -375,7 +374,8 @@ export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | obj
     return obj;
   }
   if (typeof obj === 'string') {
-    return nunjucks.renderString(obj, vars) as unknown as T;
+    const nunjucksEngine = getNunjucksEngine();
+    return nunjucksEngine.renderString(obj, vars) as unknown as T;
   }
   if (Array.isArray(obj)) {
     return obj.map((item) => renderVarsInObject(item, vars)) as unknown as T;

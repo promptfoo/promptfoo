@@ -19,6 +19,13 @@ jest.mock('../../../src/util/templates', () => ({
   })),
 }));
 
+jest.mock('../../../src/util/file', () => ({
+  ...jest.requireActual('../../../src/util/file'),
+  getNunjucksEngineForFilePath: jest.fn(() => ({
+    renderString: jest.fn((str) => str),
+  })),
+}));
+
 jest.mock('glob', () => ({
   globSync: jest.fn().mockReturnValue([]),
 }));
@@ -734,6 +741,16 @@ describe('AIStudioChatProvider', () => {
     });
 
     it('should load tools from external file and render variables', async () => {
+      const mockRenderString = jest.fn((str, vars) => {
+        if (str.startsWith('file://')) {
+          return str;
+        }
+        return `rendered-${str}`;
+      });
+      jest.mocked(templates.getNunjucksEngine).mockReturnValue({
+        renderString: mockRenderString,
+      } as any);
+
       const mockExternalTools = [
         {
           functionDeclarations: [
