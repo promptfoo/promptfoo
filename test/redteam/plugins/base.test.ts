@@ -339,7 +339,7 @@ describe('RedteamPluginBase', () => {
 
     it('should handle prompts with nested quotes', () => {
       const input = `
-        Prompt: Outer "inner \"nested\" quote" 
+        Prompt: Outer "inner \"nested\" quote"
         Prompt: Outer 'inner \'nested\' quote'
         Prompt: 'Single quoted "double nested" prompt'
         Prompt: "Double quoted 'single nested' prompt"
@@ -389,7 +389,8 @@ describe('RedteamPluginBase', () => {
 
 class TestGrader extends RedteamGraderBase {
   id = 'test-grader';
-  rubric = 'Test rubric for {{ purpose }} with harm category {{ harmCategory }}';
+  rubric =
+    'Test rubric for {{ purpose }} with harm category {{ harmCategory }} and goal {{ goal }}';
 }
 
 describe('RedteamGraderBase', () => {
@@ -417,7 +418,35 @@ describe('RedteamGraderBase', () => {
     ).rejects.toThrow('Test is missing purpose metadata');
   });
 
-  it('should render the rubric with correct variables', async () => {
+  it('should render the rubric with correct variables including goal', async () => {
+    const mockResult: GradingResult = {
+      pass: true,
+      score: 1,
+      reason: 'Test passed',
+    };
+    jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+    const testWithGoal = {
+      ...mockTest,
+      metadata: { ...mockTest.metadata, goal: 'custom-goal' },
+    };
+
+    await grader.getResult(
+      'test prompt',
+      'test output',
+      testWithGoal,
+      undefined /* provider */,
+      undefined /* renderedValue */,
+    );
+
+    expect(matchesLlmRubric).toHaveBeenCalledWith(
+      'Test rubric for test-purpose with harm category test-harm and goal custom-goal',
+      'test output',
+      expect.any(Object),
+    );
+  });
+
+  it('should use prompt as goal when metadata.goal is not present', async () => {
     const mockResult: GradingResult = {
       pass: true,
       score: 1,
@@ -434,7 +463,7 @@ describe('RedteamGraderBase', () => {
     );
 
     expect(matchesLlmRubric).toHaveBeenCalledWith(
-      'Test rubric for test-purpose with harm category test-harm',
+      'Test rubric for test-purpose with harm category test-harm and goal test prompt',
       'test output',
       expect.any(Object),
     );
@@ -458,7 +487,7 @@ describe('RedteamGraderBase', () => {
 
     expect(result).toEqual({
       grade: mockResult,
-      rubric: 'Test rubric for test-purpose with harm category test-harm',
+      rubric: 'Test rubric for test-purpose with harm category test-harm and goal test prompt',
     });
   });
 
@@ -493,7 +522,7 @@ describe('RedteamGraderBase', () => {
       );
 
       expect(result.rubric).toBe(
-        'Test rubric for test-purpose with harm category test-harm\n\n' +
+        'Test rubric for test-purpose with harm category test-harm and goal test prompt\n\n' +
           'EXAMPLE OUTPUT: {"output":"meow","pass":true,"score":1,"reason":"Example 1"}\n' +
           'EXAMPLE OUTPUT: {"output":"woof","pass":false,"score":0,"reason":"Example 2"}',
       );
@@ -523,7 +552,9 @@ describe('RedteamGraderBase', () => {
         undefined /* renderedValue */,
       );
 
-      expect(result.rubric).toBe('Test rubric for test-purpose with harm category test-harm');
+      expect(result.rubric).toBe(
+        'Test rubric for test-purpose with harm category test-harm and goal test prompt',
+      );
     });
   });
 
