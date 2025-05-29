@@ -1,7 +1,7 @@
-import readline from 'readline';
 import { sendFeedback, gatherFeedback } from '../src/feedback';
 import { fetchWithProxy } from '../src/fetch';
 import logger from '../src/logger';
+import * as readlineUtils from '../src/util/readline';
 
 const actualFeedback = jest.requireActual('../src/feedback');
 
@@ -18,32 +18,11 @@ jest.mock('../src/globalConfig/accounts', () => ({
   getUserEmail: jest.fn(),
 }));
 
-type MockQuestionFn = jest.Mock<void, [string, (answer: string) => void]>;
-
-const createMockInterface = () => {
-  return {
-    question: jest.fn((query: string, callback: (answer: string) => void) => {
-      callback('mocked answer');
-    }) as MockQuestionFn,
-    close: jest.fn(),
-    on: jest.fn(),
-    line: '',
-    cursor: 0,
-    setPrompt: jest.fn(),
-    getPrompt: jest.fn(),
-    write: jest.fn(),
-    pause: jest.fn(),
-    resume: jest.fn(),
-    clearLine: jest.fn(),
-    removeAllListeners: jest.fn(),
-    terminal: null,
-    input: { on: jest.fn() } as any,
-    output: { on: jest.fn() } as any,
-  } as unknown as readline.Interface;
-};
-
-jest.mock('readline', () => ({
-  createInterface: jest.fn(() => createMockInterface()),
+// Mock the readline utilities
+jest.mock('../src/util/readline', () => ({
+  promptUser: jest.fn(),
+  promptYesNo: jest.fn(),
+  createReadlineInterface: jest.fn(),
 }));
 
 jest.mock('../src/feedback', () => {
@@ -149,12 +128,8 @@ describe('Feedback Module', () => {
     });
 
     it('should handle empty feedback input', async () => {
-      const mockInterface = createMockInterface();
-      (mockInterface.question as MockQuestionFn).mockImplementationOnce(
-        (_: string, callback: (answer: string) => void) => callback('   '),
-      );
-
-      jest.mocked(readline.createInterface).mockReturnValue(mockInterface);
+      // Mock promptUser to return empty string
+      jest.mocked(readlineUtils.promptUser).mockResolvedValueOnce('   ');
 
       jest.mocked(gatherFeedback).mockImplementation(actualFeedback.gatherFeedback);
 
@@ -164,9 +139,8 @@ describe('Feedback Module', () => {
     });
 
     it('should handle errors during feedback gathering', async () => {
-      jest.mocked(readline.createInterface).mockImplementation(() => {
-        throw new Error('Test error');
-      });
+      // Mock promptUser to throw an error
+      jest.mocked(readlineUtils.promptUser).mockRejectedValueOnce(new Error('Test error'));
 
       jest.mocked(gatherFeedback).mockImplementation(actualFeedback.gatherFeedback);
 

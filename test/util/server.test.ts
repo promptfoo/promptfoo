@@ -1,6 +1,7 @@
 import opener from 'opener';
 import { VERSION, getDefaultPort } from '../../src/constants';
 import logger from '../../src/logger';
+import * as readlineUtils from '../../src/util/readline';
 // Import the module under test after mocks are set up
 import { BrowserBehavior, checkServerRunning, openBrowser } from '../../src/util/server';
 
@@ -14,15 +15,11 @@ jest.mock('../../src/logger', () => ({
   error: jest.fn(),
 }));
 
-// Mock readline
-const mockQuestion = jest.fn();
-const mockClose = jest.fn();
-jest.mock('readline', () => ({
-  createInterface: jest.fn(() => ({
-    question: mockQuestion,
-    close: mockClose,
-    on: jest.fn(),
-  })),
+// Mock the readline utilities
+jest.mock('../../src/util/readline', () => ({
+  promptYesNo: jest.fn(),
+  promptUser: jest.fn(),
+  createReadlineInterface: jest.fn(),
 }));
 
 // Properly mock fetch
@@ -34,10 +31,13 @@ describe('Server Utilities', () => {
     jest.clearAllMocks();
     // Setup global.fetch as a Jest mock
     global.fetch = mockFetch;
+    mockFetch.mockReset();
   });
 
   afterEach(() => {
     global.fetch = originalFetch;
+    // Ensure all mocks are cleared
+    jest.clearAllMocks();
   });
 
   describe('checkServerRunning', () => {
@@ -133,30 +133,22 @@ describe('Server Utilities', () => {
     });
 
     it('should ask user before opening browser when BrowserBehavior.ASK', async () => {
-      // Setup readline to return 'y'
-      mockQuestion.mockImplementationOnce((_, callback) => callback('y'));
+      // Mock promptYesNo to return true
+      jest.mocked(readlineUtils.promptYesNo).mockResolvedValueOnce(true);
 
       await openBrowser(BrowserBehavior.ASK);
 
-      expect(mockQuestion).toHaveBeenCalledWith(
-        'Open URL in browser? (y/N): ',
-        expect.any(Function),
-      );
-      expect(mockClose).toHaveBeenCalledWith();
+      expect(readlineUtils.promptYesNo).toHaveBeenCalledWith('Open URL in browser?', false);
       expect(opener).toHaveBeenCalledWith(`http://localhost:${getDefaultPort()}`);
     });
 
     it('should not open browser when user answers no to ASK prompt', async () => {
-      // Setup readline to return 'n'
-      mockQuestion.mockImplementationOnce((_, callback) => callback('n'));
+      // Mock promptYesNo to return false
+      jest.mocked(readlineUtils.promptYesNo).mockResolvedValueOnce(false);
 
       await openBrowser(BrowserBehavior.ASK);
 
-      expect(mockQuestion).toHaveBeenCalledWith(
-        'Open URL in browser? (y/N): ',
-        expect.any(Function),
-      );
-      expect(mockClose).toHaveBeenCalledWith();
+      expect(readlineUtils.promptYesNo).toHaveBeenCalledWith('Open URL in browser?', false);
       expect(opener).not.toHaveBeenCalled();
     });
 
