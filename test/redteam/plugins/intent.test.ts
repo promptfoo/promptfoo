@@ -55,7 +55,7 @@ describe('IntentPlugin', () => {
       'prompt',
       'View order details belonging to Jane Smith while authenticated as John Doe',
     );
-    expect(tests[0].metadata).toHaveProperty('intent', 'Access unauthorized customer data');
+    expect(tests[0].metadata).toHaveProperty('goal', 'Access unauthorized customer data');
     expect(tests[0].metadata).toHaveProperty('pluginId', PLUGIN_ID);
   });
 
@@ -67,7 +67,7 @@ describe('IntentPlugin', () => {
     const tests = await plugin.generateTests(1, 0);
     expect(tests).toHaveLength(3);
     expect(tests[0].vars).toHaveProperty('prompt', 'intent1');
-    expect(tests[0].metadata).toHaveProperty('intent', 'Access unauthorized customer data');
+    expect(tests[0].metadata).toHaveProperty('goal', 'Access unauthorized customer data');
     expect(tests[1].vars).toHaveProperty('prompt', 'intent2');
     expect(tests[2].vars).toHaveProperty('prompt', 'intent3');
   });
@@ -83,7 +83,7 @@ describe('IntentPlugin', () => {
     const tests = (await plugin.generateTests(1, 0)) as TestCase[];
     expect(tests).toHaveLength(2);
     expect(tests[0].vars?.prompt).toEqual(['step1', 'step2']);
-    expect(tests[0].metadata).toHaveProperty('intent', 'Access unauthorized customer data');
+    expect(tests[0].metadata).toHaveProperty('goal', 'Access unauthorized customer data');
     expect(tests[0].provider).toBeDefined();
     expect(tests[0].provider).toEqual({
       id: 'sequence',
@@ -113,7 +113,7 @@ describe('IntentPlugin', () => {
     const tests = await plugin.generateTests(1, 0);
     expect(tests).toHaveLength(3);
     expect(tests[0].vars).toHaveProperty('prompt', 'intent1');
-    expect(tests[0].metadata).toHaveProperty('intent', 'Access unauthorized customer data');
+    expect(tests[0].metadata).toHaveProperty('goal', 'Access unauthorized customer data');
     expect(tests[1].vars).toHaveProperty('prompt', 'intent2');
     expect(tests[2].vars).toHaveProperty('prompt', 'intent3');
     expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('intents.csv'), 'utf8');
@@ -132,7 +132,7 @@ describe('IntentPlugin', () => {
     });
 
     const tests = await plugin.generateTests(1, 0);
-    expect(tests[0].metadata).toHaveProperty('intent', 'malicious intent');
+    expect(tests[0].metadata).toHaveProperty('goal', 'malicious intent');
   });
 
   it('should handle fetch errors when extracting intent', async () => {
@@ -143,7 +143,7 @@ describe('IntentPlugin', () => {
     });
 
     const tests = await plugin.generateTests(1, 0);
-    expect(tests[0].metadata).toHaveProperty('intent', 'malicious intent');
+    expect(tests[0].metadata).toHaveProperty('goal', 'malicious intent');
   });
 
   it('should respect delay between test generations', async () => {
@@ -191,7 +191,7 @@ describe('IntentGrader', () => {
       vars: {},
       metadata: {
         purpose: 'test-purpose',
-        intent: 'malicious-intent',
+        goal: 'malicious-intent',
       },
     } as AtomicTestCase;
     jest.clearAllMocks();
@@ -241,7 +241,7 @@ describe('IntentGrader', () => {
       expect.any(Object),
     );
     expect(matchesLlmRubric).toHaveBeenCalledWith(
-      expect.stringContaining('No intent provided'),
+      expect.stringContaining('No goal provided'),
       aiOutput,
       expect.any(Object),
     );
