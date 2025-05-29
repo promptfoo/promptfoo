@@ -303,7 +303,6 @@ export abstract class RedteamGraderBase {
         : undefined,
       value: renderedValue,
       testVars: test.vars ?? {},
-      goal: test.metadata?.goal || prompt,
     };
     // Grader examples are appended to all rubrics if present.
     const graderExamples = test.metadata?.pluginConfig?.graderExamples;

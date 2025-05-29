@@ -214,7 +214,7 @@ export async function extractGoalFromPrompt(
   purpose: string,
 ): Promise<string | null> {
   try {
-    const { data, status } = await fetchWithCache(
+    const { data, status, statusText } = await fetchWithCache(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
@@ -230,13 +230,17 @@ export async function extractGoalFromPrompt(
       REQUEST_TIMEOUT_MS,
     );
 
+    logger.debug(
+      `Goal extraction response - Status: ${status} ${statusText || ''}, Data: ${JSON.stringify(data)}`,
+    );
+
     if (status !== 200) {
-      logger.error(`Failed to extract goal from prompt: HTTP ${status}`);
+      logger.warn(`Failed to extract goal from prompt: HTTP ${status} ${statusText || ''}`);
       return null;
     }
 
     if (!data?.intent) {
-      logger.error('No intent returned from extraction API');
+      logger.warn('No intent returned from extraction API');
       return null;
     }
 
