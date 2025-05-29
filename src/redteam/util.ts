@@ -7,7 +7,7 @@ import { getRemoteGenerationUrl } from './remoteGeneration';
  * Normalizes different types of apostrophes to a standard single quote
  */
 export function normalizeApostrophes(str: string): string {
-  return str.replace(/['′'']/g, "'");
+  return str.replace(/['′’']/g, "'");
 }
 
 export const REFUSAL_PREFIXES = [
