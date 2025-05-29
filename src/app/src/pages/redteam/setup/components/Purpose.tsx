@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useTelemetry } from '@app/hooks/useTelemetry';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import { Alert } from '@mui/material';
@@ -193,11 +194,7 @@ export default function Purpose({ onNext }: PromptsProps) {
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                       Describe the primary objective and goals of your application. This
                       foundational information provides essential context for generating all types
-                      of targeted security attacks and red team tests.{' '}
-                      <strong>
-                        It also helps our grading system evaluate whether attacks are contextually
-                        relevant to your specific application.
-                      </strong>
+                      of targeted security attacks and red team tests.
                     </Typography>
                     <TextField
                       fullWidth
@@ -205,9 +202,15 @@ export default function Purpose({ onNext }: PromptsProps) {
                       onChange={(e) => updateApplicationDefinition('purpose', e.target.value)}
                       placeholder="e.g. Assist healthcare professionals and patients with medical-related tasks, access medical information, schedule appointments..."
                       multiline
-                      rows={3}
+                      minRows={3}
                       variant="outlined"
                       required
+                      sx={{
+                        '& .MuiInputBase-inputMultiline': {
+                          resize: 'vertical',
+                          minHeight: '72px',
+                        },
+                      }}
                     />
                   </Box>
                 </Box>
@@ -226,7 +229,19 @@ export default function Purpose({ onNext }: PromptsProps) {
                 <Accordion
                   expanded={expandedSections.has('Core Application Details')}
                   onChange={() => handleSectionToggle('Core Application Details')}
-                  sx={{ mb: 0 }}
+                  sx={{
+                    mb: 0,
+                    '&:first-of-type': {
+                      borderTopLeftRadius: '8px',
+                      borderTopRightRadius: '8px',
+                    },
+                    '&:not(:last-of-type)': {
+                      borderBottom: 'none',
+                    },
+                    '&:before': {
+                      display: 'none',
+                    },
+                  }}
                 >
                   <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                     <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
@@ -237,6 +252,9 @@ export default function Purpose({ onNext }: PromptsProps) {
                         Core Application Details (
                         {getCompletionPercentage('Core Application Details')})
                       </Typography>
+                      {getCompletionPercentage('Core Application Details') === '100%' && (
+                        <CheckCircleIcon sx={{ color: 'success.main', mr: 1 }} />
+                      )}
                     </Box>
                   </AccordionSummary>
                   <AccordionDetails sx={{ px: 4, py: 3 }}>
@@ -260,8 +278,14 @@ export default function Purpose({ onNext }: PromptsProps) {
                           onChange={(e) => updateApplicationDefinition('features', e.target.value)}
                           placeholder="e.g. Patient record access, appointment scheduling, prescription management, lab results retrieval..."
                           multiline
-                          rows={3}
+                          minRows={2}
                           variant="outlined"
+                          sx={{
+                            '& .MuiInputBase-inputMultiline': {
+                              resize: 'vertical',
+                              minHeight: '56px',
+                            },
+                          }}
                         />
                       </Box>
 
@@ -282,7 +306,15 @@ export default function Purpose({ onNext }: PromptsProps) {
                           value={config.applicationDefinition?.industry}
                           onChange={(e) => updateApplicationDefinition('industry', e.target.value)}
                           placeholder="e.g. Healthcare, Financial Services, Education, E-commerce, Government, Legal..."
+                          multiline
+                          minRows={1}
                           variant="outlined"
+                          sx={{
+                            '& .MuiInputBase-inputMultiline': {
+                              resize: 'vertical',
+                              minHeight: '40px',
+                            },
+                          }}
                         />
                       </Box>
 
@@ -308,8 +340,14 @@ export default function Purpose({ onNext }: PromptsProps) {
                           }
                           placeholder="e.g. The agent only responds to voicemail-related queries, so every attack should mention voicemail services. OR: All interactions must be in the context of medical appointments, so attacks should reference scheduling or patient care."
                           multiline
-                          rows={3}
+                          minRows={2}
                           variant="outlined"
+                          sx={{
+                            '& .MuiInputBase-inputMultiline': {
+                              resize: 'vertical',
+                              minHeight: '56px',
+                            },
+                          }}
                         />
                       </Box>
                     </Stack>
@@ -320,7 +358,15 @@ export default function Purpose({ onNext }: PromptsProps) {
                 <Accordion
                   expanded={expandedSections.has('Access & Permissions')}
                   onChange={() => handleSectionToggle('Access & Permissions')}
-                  sx={{ mb: 0 }}
+                  sx={{
+                    mb: 0,
+                    '&:not(:last-of-type)': {
+                      borderBottom: 'none',
+                    },
+                    '&:before': {
+                      display: 'none',
+                    },
+                  }}
                 >
                   <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                     <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
@@ -330,6 +376,9 @@ export default function Purpose({ onNext }: PromptsProps) {
                       >
                         Access & Permissions ({getCompletionPercentage('Access & Permissions')})
                       </Typography>
+                      {getCompletionPercentage('Access & Permissions') === '100%' && (
+                        <CheckCircleIcon sx={{ color: 'success.main', mr: 1 }} />
+                      )}
                     </Box>
                   </AccordionSummary>
                   <AccordionDetails sx={{ px: 4, py: 3 }}>
@@ -355,8 +404,14 @@ export default function Purpose({ onNext }: PromptsProps) {
                           }
                           placeholder="e.g. Patient's own medical records, appointment scheduling system, prescription database..."
                           multiline
-                          rows={3}
+                          minRows={2}
                           variant="outlined"
+                          sx={{
+                            '& .MuiInputBase-inputMultiline': {
+                              resize: 'vertical',
+                              minHeight: '56px',
+                            },
+                          }}
                         />
                       </Box>
 
@@ -382,8 +437,14 @@ export default function Purpose({ onNext }: PromptsProps) {
                           }
                           placeholder="e.g. Other patients' medical records, hospital/clinic financial systems, provider credentialing information, research databases, unencrypted patient identifiers, administrative backend systems, and unauthorized medication dispensing functions."
                           multiline
-                          rows={3}
+                          minRows={2}
                           variant="outlined"
+                          sx={{
+                            '& .MuiInputBase-inputMultiline': {
+                              resize: 'vertical',
+                              minHeight: '56px',
+                            },
+                          }}
                         />
                       </Box>
 
@@ -406,8 +467,14 @@ export default function Purpose({ onNext }: PromptsProps) {
                           onChange={(e) => updateApplicationDefinition('userTypes', e.target.value)}
                           placeholder="e.g. Authorized Patients, Healthcare Providers, Administrators, Unauthenticated Users..."
                           multiline
-                          rows={2}
+                          minRows={2}
                           variant="outlined"
+                          sx={{
+                            '& .MuiInputBase-inputMultiline': {
+                              resize: 'vertical',
+                              minHeight: '56px',
+                            },
+                          }}
                         />
                       </Box>
 
@@ -432,8 +499,14 @@ export default function Purpose({ onNext }: PromptsProps) {
                           }
                           placeholder="e.g. HIPAA compliance, patient confidentiality, authentication checks, audit logging..."
                           multiline
-                          rows={2}
+                          minRows={2}
                           variant="outlined"
+                          sx={{
+                            '& .MuiInputBase-inputMultiline': {
+                              resize: 'vertical',
+                              minHeight: '56px',
+                            },
+                          }}
                         />
                       </Box>
                     </Stack>
@@ -444,7 +517,15 @@ export default function Purpose({ onNext }: PromptsProps) {
                 <Accordion
                   expanded={expandedSections.has('Data & Content')}
                   onChange={() => handleSectionToggle('Data & Content')}
-                  sx={{ mb: 0 }}
+                  sx={{
+                    mb: 0,
+                    '&:not(:last-of-type)': {
+                      borderBottom: 'none',
+                    },
+                    '&:before': {
+                      display: 'none',
+                    },
+                  }}
                 >
                   <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                     <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
@@ -454,6 +535,9 @@ export default function Purpose({ onNext }: PromptsProps) {
                       >
                         Data & Content ({getCompletionPercentage('Data & Content')})
                       </Typography>
+                      {getCompletionPercentage('Data & Content') === '100%' && (
+                        <CheckCircleIcon sx={{ color: 'success.main', mr: 1 }} />
+                      )}
                     </Box>
                   </AccordionSummary>
                   <AccordionDetails sx={{ px: 4, py: 3 }}>
@@ -483,8 +567,14 @@ export default function Purpose({ onNext }: PromptsProps) {
                           }
                           placeholder="e.g. Personal health information, financial records, social security numbers, payment data, biometric data..."
                           multiline
-                          rows={2}
+                          minRows={2}
                           variant="outlined"
+                          sx={{
+                            '& .MuiInputBase-inputMultiline': {
+                              resize: 'vertical',
+                              minHeight: '56px',
+                            },
+                          }}
                         />
                       </Box>
 
@@ -515,8 +605,14 @@ export default function Purpose({ onNext }: PromptsProps) {
                           }
                           placeholder="e.g. Patient IDs (MRN2023001), Emails (marcus.washington@gmail.com), Prescription IDs (RX123456)..."
                           multiline
-                          rows={2}
+                          minRows={2}
                           variant="outlined"
+                          sx={{
+                            '& .MuiInputBase-inputMultiline': {
+                              resize: 'vertical',
+                              minHeight: '56px',
+                            },
+                          }}
                         />
                       </Box>
 
@@ -542,8 +638,14 @@ export default function Purpose({ onNext }: PromptsProps) {
                           }
                           placeholder="e.g. Prescribing medication, financial transactions, data deletion, system configuration changes..."
                           multiline
-                          rows={2}
+                          minRows={2}
                           variant="outlined"
+                          sx={{
+                            '& .MuiInputBase-inputMultiline': {
+                              resize: 'vertical',
+                              minHeight: '56px',
+                            },
+                          }}
                         />
                       </Box>
 
@@ -568,8 +670,14 @@ export default function Purpose({ onNext }: PromptsProps) {
                           }
                           placeholder="e.g. Self-harm, illegal drugs, violence, competitor products, political opinions, medical diagnosis..."
                           multiline
-                          rows={2}
+                          minRows={2}
                           variant="outlined"
+                          sx={{
+                            '& .MuiInputBase-inputMultiline': {
+                              resize: 'vertical',
+                              minHeight: '56px',
+                            },
+                          }}
                         />
                       </Box>
                     </Stack>
@@ -580,7 +688,16 @@ export default function Purpose({ onNext }: PromptsProps) {
                 <Accordion
                   expanded={expandedSections.has('Business Context')}
                   onChange={() => handleSectionToggle('Business Context')}
-                  sx={{ mb: 0 }}
+                  sx={{
+                    mb: 0,
+                    '&:last-of-type': {
+                      borderBottomLeftRadius: '8px',
+                      borderBottomRightRadius: '8px',
+                    },
+                    '&:before': {
+                      display: 'none',
+                    },
+                  }}
                 >
                   <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                     <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
@@ -590,6 +707,9 @@ export default function Purpose({ onNext }: PromptsProps) {
                       >
                         Business Context ({getCompletionPercentage('Business Context')})
                       </Typography>
+                      {getCompletionPercentage('Business Context') === '100%' && (
+                        <CheckCircleIcon sx={{ color: 'success.main', mr: 1 }} />
+                      )}
                     </Box>
                   </AccordionSummary>
                   <AccordionDetails sx={{ px: 4, py: 3 }}>
@@ -614,8 +734,14 @@ export default function Purpose({ onNext }: PromptsProps) {
                           }
                           placeholder="e.g. Epic Systems, Cerner, Allscripts, athenahealth..."
                           multiline
-                          rows={2}
+                          minRows={2}
                           variant="outlined"
+                          sx={{
+                            '& .MuiInputBase-inputMultiline': {
+                              resize: 'vertical',
+                              minHeight: '56px',
+                            },
+                          }}
                         />
                       </Box>
                     </Stack>
@@ -645,8 +771,14 @@ export default function Purpose({ onNext }: PromptsProps) {
                     onChange={(e) => updateApplicationDefinition('redteamUser', e.target.value)}
                     placeholder="e.g. A patient seeking medical assistance, a customer service representative, an external researcher..."
                     multiline
-                    rows={2}
+                    minRows={2}
                     variant="outlined"
+                    sx={{
+                      '& .MuiInputBase-inputMultiline': {
+                        resize: 'vertical',
+                        minHeight: '56px',
+                      },
+                    }}
                   />
                 </Box>
               </Box>
