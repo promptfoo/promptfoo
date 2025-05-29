@@ -186,4 +186,94 @@ describe('CrescendoProvider', () => {
     const result = await crescendoProvider.callApi(prompt, context);
     expect(result.metadata?.crescendoRoundsCompleted).toBeLessThanOrEqual(2);
   });
+
+  it('should handle purpose from test metadata', async () => {
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      redteamProvider: mockRedTeamProvider,
+    });
+
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: 'test prompt', label: 'test' },
+      test: {
+        metadata: {
+          purpose: 'test purpose',
+        },
+      },
+    };
+
+    mockRedTeamProvider.callApi.mockResolvedValueOnce({
+      output: JSON.stringify({
+        generatedQuestion: 'test question',
+        rationaleBehindJailbreak: 'test rationale',
+        lastResponseSummary: 'test summary',
+      }),
+    });
+
+    mockTargetProvider.callApi.mockResolvedValueOnce({
+      output: 'target response',
+    });
+
+    mockScoringProvider.callApi.mockResolvedValueOnce({
+      output: JSON.stringify({
+        value: true,
+        metadata: 100,
+        rationale: 'test rationale',
+      }),
+    });
+
+    await provider.callApi('test prompt', context);
+
+    expect(mockRedTeamProvider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining('test purpose'),
+      expect.any(Object),
+    );
+  });
+
+  it('should pass purpose parameter to getAttackPrompt', async () => {
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      redteamProvider: mockRedTeamProvider,
+    });
+
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: 'test prompt', label: 'test' },
+      test: {
+        metadata: {
+          purpose: 'test purpose for attack',
+        },
+      },
+    };
+
+    mockRedTeamProvider.callApi.mockResolvedValueOnce({
+      output: JSON.stringify({
+        generatedQuestion: 'test question',
+        rationaleBehindJailbreak: 'test rationale',
+        lastResponseSummary: 'test summary',
+      }),
+    });
+
+    mockTargetProvider.callApi.mockResolvedValueOnce({
+      output: 'target response',
+    });
+
+    mockScoringProvider.callApi.mockResolvedValueOnce({
+      output: JSON.stringify({
+        value: true,
+        metadata: 100,
+        rationale: 'test rationale',
+      }),
+    });
+
+    await provider.callApi('test prompt', context);
+
+    expect(mockRedTeamProvider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining('test purpose for attack'),
+      expect.any(Object),
+    );
+  });
 });
