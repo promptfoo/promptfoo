@@ -627,6 +627,142 @@ describe('HttpProvider', () => {
     });
   });
 
+  describe('mutual TLS (mTLS) support', () => {
+    it('should pass mTLS configuration to fetchWithCache when configured', async () => {
+      provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: { key: '{{ prompt }}' },
+          mtls: {
+            certPath: '/path/to/client.crt',
+            keyPath: '/path/to/client.key',
+            caPath: '/path/to/ca.pem',
+          },
+          transformResponse: (data: any) => data.result,
+        },
+      });
+      const mockResponse = {
+        data: JSON.stringify({ result: 'mTLS response' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.output).toBe('mTLS response');
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        mockUrl,
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ key: 'test prompt' }),
+          mtls: {
+            certPath: '/path/to/client.crt',
+            keyPath: '/path/to/client.key',
+            caPath: '/path/to/ca.pem',
+          },
+        }),
+        expect.any(Number),
+        'text',
+        undefined,
+        undefined,
+      );
+    });
+
+    it('should work with raw requests and mTLS configuration', async () => {
+      const rawRequest = dedent`
+        POST /api/secure HTTP/1.1
+        Host: secure.example.com
+        Content-Type: application/json
+
+        {"message": "{{prompt}}"}
+      `;
+      provider = new HttpProvider('https', {
+        config: {
+          request: rawRequest,
+          mtls: {
+            certPath: '/path/to/client.crt',
+            keyPath: '/path/to/client.key',
+          },
+          transformResponse: (data: any) => data,
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ result: 'secure response' }),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('secure message');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://secure.example.com/api/secure',
+        expect.objectContaining({
+          method: 'POST',
+          headers: {
+            host: 'secure.example.com',
+            'content-type': 'application/json',
+          },
+          body: '{"message": "secure message"}',
+          mtls: {
+            certPath: '/path/to/client.crt',
+            keyPath: '/path/to/client.key',
+          },
+        }),
+        expect.any(Number),
+        'text',
+        undefined,
+        undefined,
+      );
+      expect(result.output).toEqual({ result: 'secure response' });
+    });
+
+    it('should not include mTLS config when not configured', async () => {
+      provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: { key: '{{ prompt }}' },
+          // No mTLS configuration
+          transformResponse: (data: any) => data.result,
+        },
+      });
+      const mockResponse = {
+        data: JSON.stringify({ result: 'response without mTLS' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.output).toBe('response without mTLS');
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        mockUrl,
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ key: 'test prompt' }),
+          // Should not have mtls property
+        }),
+        expect.any(Number),
+        'text',
+        undefined,
+        undefined,
+      );
+      // Verify mtls property is not included
+      const callArgs = jest.mocked(fetchWithCache).mock.calls[0];
+      expect(callArgs[1]).not.toHaveProperty('mtls');
+    });
+  });
+
   describe('processJsonBody', () => {
     it('should process simple key-value pairs', () => {
       const body = { key: 'value', prompt: '{{ prompt }}' };

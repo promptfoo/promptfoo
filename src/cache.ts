@@ -80,7 +80,10 @@ export async function fetchWithCache<T = any>(
 
   const copy = Object.assign({}, options);
   delete copy.headers;
-  const cacheKey = `fetch:v2:${url}:${JSON.stringify(copy)}`;
+  // Don't include mTLS config in cache key since it contains file paths
+  const cacheOptions = { ...copy };
+  delete (cacheOptions as any).mtls;
+  const cacheKey = `fetch:v2:${url}:${JSON.stringify(cacheOptions)}`;
   const cache = await getCache();
 
   let cached = true;

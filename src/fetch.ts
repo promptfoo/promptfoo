@@ -20,11 +20,22 @@ interface ProxyTlsOptions {
 }
 
 /**
+ * Configuration for mutual TLS authentication
+ */
+interface MTLSConfig {
+  certPath: string;
+  keyPath: string;
+  caPath?: string;
+}
+
+/**
  * Extended options for fetch requests with promptfoo-specific headers
  */
 interface PromptfooRequestInit extends RequestInit {
   // Make headers type compatible with standard HeadersInit
   headers?: HeadersInit;
+  // Mutual TLS configuration
+  mtls?: MTLSConfig;
 }
 
 /**
@@ -118,6 +129,41 @@ export async function fetchWithProxy(
       logger.warn(`Failed to read CA certificate from ${caCertPath}: ${e}`);
     }
   }
+
+  // Support mutual TLS (client certificates)
+  if (options.mtls) {
+    try {
+      const certPath = path.resolve(cliState.basePath || '', options.mtls.certPath);
+      const keyPath = path.resolve(cliState.basePath || '', options.mtls.keyPath);
+
+      const cert = fs.readFileSync(certPath, 'utf8');
+      const key = fs.readFileSync(keyPath, 'utf8');
+
+      tlsOptions.cert = cert;
+      tlsOptions.key = key;
+
+      // Add custom CA if provided in mTLS config
+      if (options.mtls.caPath) {
+        const caPath = path.resolve(cliState.basePath || '', options.mtls.caPath);
+        const ca = fs.readFileSync(caPath, 'utf8');
+        // Combine with existing CA if any
+        if (tlsOptions.ca) {
+          // Ensure we create an array of CAs
+          const existingCa = Array.isArray(tlsOptions.ca) ? tlsOptions.ca : [tlsOptions.ca];
+          tlsOptions.ca = [...existingCa, ca];
+        } else {
+          tlsOptions.ca = ca;
+        }
+        logger.debug(`Using mTLS with custom CA certificate from ${caPath}`);
+      }
+
+      logger.debug(`Using mTLS with client certificate from ${certPath} and key from ${keyPath}`);
+    } catch (e) {
+      logger.error(`Failed to read mTLS certificates: ${e}`);
+      throw new Error(`mTLS configuration error: ${e}`);
+    }
+  }
+
   const proxyUrl = finalUrlString ? getProxyForUrl(finalUrlString) : '';
 
   if (proxyUrl) {
@@ -129,7 +175,9 @@ export async function fetchWithProxy(
     } as ProxyTlsOptions);
     setGlobalDispatcher(agent);
   } else {
-    const agent = new Agent();
+    const agent = new Agent({
+      connect: tlsOptions,
+    });
     setGlobalDispatcher(agent);
   }
 
@@ -163,6 +211,7 @@ export function fetchWithTimeout(
       });
   });
 }
+
 /**
  * Check if a response indicates rate limiting
  */

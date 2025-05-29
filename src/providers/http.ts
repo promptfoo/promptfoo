@@ -151,6 +151,14 @@ export const HttpProviderConfigSchema = z.object({
       message: 'Either privateKeyPath or privateKey must be provided',
     })
     .optional(),
+  // Mutual TLS Authentication
+  mtls: z
+    .object({
+      certPath: z.string().describe('Path to client certificate file (.pem or .crt format)'),
+      keyPath: z.string().describe('Path to client private key file (.pem format)'),
+      caPath: z.string().optional().describe('Path to certificate authority bundle (.pem format)'),
+    })
+    .optional(),
 });
 
 export type HttpProviderConfig = z.infer<typeof HttpProviderConfigSchema>;
@@ -798,6 +806,7 @@ export class HttpProvider implements ApiProvider {
             ? JSON.stringify(renderedConfig.body)
             : String(renderedConfig.body)?.trim(),
         }),
+        ...(this.config.mtls && { mtls: this.config.mtls }),
       },
       REQUEST_TIMEOUT_MS,
       'text',
@@ -898,6 +907,7 @@ export class HttpProvider implements ApiProvider {
         method: parsedRequest.method,
         headers: parsedRequest.headers,
         ...(parsedRequest.body && { body: parsedRequest.body.text.trim() }),
+        ...(this.config.mtls && { mtls: this.config.mtls }),
       },
       REQUEST_TIMEOUT_MS,
       'text',
