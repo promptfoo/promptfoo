@@ -1,4 +1,5 @@
 import readline from 'readline';
+import { createReadlineInterface, promptUser, promptYesNo } from '../../src/util/readline';
 
 // Mock the entire readline module
 jest.mock('readline');
@@ -12,8 +13,6 @@ jest.mock('../../src/util/readline', () => {
   };
 });
 
-import { createReadlineInterface, promptUser, promptYesNo } from '../../src/util/readline';
-
 describe('readline utils', () => {
   let mockInterface: any;
 
@@ -23,10 +22,10 @@ describe('readline utils', () => {
       close: jest.fn(),
       on: jest.fn(),
     };
-    
+
     // Mock readline.createInterface to return our mock interface
     jest.mocked(readline.createInterface).mockReturnValue(mockInterface);
-    
+
     // Reset the mocked functions
     jest.mocked(createReadlineInterface).mockReturnValue(mockInterface);
     jest.mocked(promptUser).mockReset();
@@ -44,7 +43,7 @@ describe('readline utils', () => {
   describe('createReadlineInterface', () => {
     it('should create readline interface with stdin/stdout', () => {
       const result = createReadlineInterface();
-      
+
       expect(createReadlineInterface).toHaveBeenCalled();
       expect(result).toBe(mockInterface);
     });
@@ -64,7 +63,7 @@ describe('readline utils', () => {
 
     it('should reject on error', async () => {
       const error = new Error('Test error');
-      
+
       jest.mocked(promptUser).mockRejectedValue(error);
 
       await expect(promptUser('Test question?')).rejects.toThrow(error);
@@ -72,7 +71,7 @@ describe('readline utils', () => {
 
     it('should reject if readline creation fails', async () => {
       const error = new Error('Creation failed');
-      
+
       jest.mocked(promptUser).mockRejectedValue(error);
 
       await expect(promptUser('Test question?')).rejects.toThrow(error);
@@ -122,7 +121,7 @@ describe('readline utils', () => {
 
     it('should return true for non-n input with defaultYes true', async () => {
       jest.mocked(promptYesNo).mockResolvedValue(true);
-      
+
       const result = await promptYesNo('Test question?', true);
       expect(result).toBe(true);
       expect(promptYesNo).toHaveBeenCalledWith('Test question?', true);
@@ -130,7 +129,7 @@ describe('readline utils', () => {
 
     it('should return false for input not starting with y with defaultYes false', async () => {
       jest.mocked(promptYesNo).mockResolvedValue(false);
-      
+
       const result = await promptYesNo('Test question?', false);
       expect(result).toBe(false);
       expect(promptYesNo).toHaveBeenCalledWith('Test question?', false);

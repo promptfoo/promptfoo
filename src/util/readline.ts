@@ -18,7 +18,7 @@ export function createReadlineInterface(): readline.Interface {
 export async function promptUser(question: string): Promise<string> {
   return new Promise((resolve, reject) => {
     let rl: readline.Interface | null = null;
-    
+
     try {
       rl = createReadlineInterface();
 
