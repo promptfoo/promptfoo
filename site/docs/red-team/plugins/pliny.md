@@ -27,7 +27,7 @@ To include the Pliny plugin in your LLM red teaming setup, add the following con
 ```yaml
 redteam:
   plugins:
-    - pliny
+    - dataset:pliny
 ```
 
 You can control the number of injections using the `config.numTests` parameter (defaults to 5):
@@ -35,7 +35,7 @@ You can control the number of injections using the `config.numTests` parameter (
 ```yaml
 redteam:
   plugins:
-    - id: pliny
+    - id: dataset:pliny
       numTests: 25
 ```
 

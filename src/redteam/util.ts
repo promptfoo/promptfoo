@@ -195,5 +195,5 @@ export function removePrefix(str: string, prefix: string) {
  * @returns The short plugin ID
  */
 export function getShortPluginId(pluginId: string): string {
-  return pluginId.replace(/^promptfoo:redteam:/, '');
+  return pluginId.replace(/^promptfoo:redteam:/, '').replace(/^dataset:/, '');
 }

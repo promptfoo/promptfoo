@@ -71,7 +71,7 @@ describe('canGenerateRemote property and behavior', () => {
     it('should not use remote generation for dataset-based plugins even when shouldGenerateRemote is true', async () => {
       jest.mocked(shouldGenerateRemote).mockReturnValue(true);
 
-      const unsafeBenchPlugin = Plugins.find((p) => p.key === 'unsafebench');
+      const unsafeBenchPlugin = Plugins.find((p) => p.key === 'dataset:unsafebench');
 
       await unsafeBenchPlugin?.action({
         provider: mockProvider,

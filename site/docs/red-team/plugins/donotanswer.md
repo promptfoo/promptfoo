@@ -32,7 +32,7 @@ Add to your YAML file:
 ```yaml
 redteam:
   plugins:
-    - donotanswer
+    - dataset:donotanswer
 ```
 
 Control the number of tests:
@@ -40,7 +40,7 @@ Control the number of tests:
 ```yaml
 redteam:
   plugins:
-    - id: donotanswer
+    - id: dataset:donotanswer
       numTests: 25
 ```
 
@@ -54,7 +54,7 @@ prompts:
 
 redteam:
   plugins:
-    - donotanswer
+    - dataset:donotanswer
 
 targets:
   - openai:gpt-4.1-mini

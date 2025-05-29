@@ -122,14 +122,14 @@ describe('constants', () => {
 
   it('DATASET_PLUGINS should contain expected plugins', () => {
     const expectedPlugins = [
-      'beavertails',
-      'cyberseceval',
-      'donotanswer',
-      'harmbench',
-      'toxic-chat',
-      'pliny',
-      'unsafebench',
-      'xstest',
+      'dataset:beavertails',
+      'dataset:cyberseceval',
+      'dataset:donotanswer',
+      'dataset:harmbench',
+      'dataset:toxic-chat',
+      'dataset:pliny',
+      'dataset:unsafebench',
+      'dataset:xstest',
     ];
 
     expect(DATASET_PLUGINS).toEqual(expectedPlugins);
@@ -145,15 +145,15 @@ describe('constants', () => {
   });
 
   it('DATASET_EXEMPT_PLUGINS should contain expected plugins', () => {
-    expect(DATASET_EXEMPT_PLUGINS).toEqual(['pliny', 'unsafebench']);
+    expect(DATASET_EXEMPT_PLUGINS).toEqual(['dataset:pliny', 'dataset:unsafebench']);
   });
 
   it('STRATEGY_EXEMPT_PLUGINS should combine agentic and dataset exempt plugins', () => {
     const expectedPlugins = [
       'system-prompt-override',
       'tool-discovery:multi-turn',
-      'pliny',
-      'unsafebench',
+      'dataset:pliny',
+      'dataset:unsafebench',
     ];
 
     expect(STRATEGY_EXEMPT_PLUGINS).toEqual(expectedPlugins);

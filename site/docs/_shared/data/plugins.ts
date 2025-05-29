@@ -125,7 +125,7 @@ export const PLUGINS = [
     label: 'harmful',
     link: '/docs/red-team/plugins/beavertails/',
     name: 'BeaverTails',
-    pluginId: 'beavertails',
+    pluginId: 'dataset:beavertails',
     applicationTypes: {
       rag: true,
       agent: true,
@@ -243,7 +243,7 @@ export const PLUGINS = [
     label: 'technical',
     link: '/docs/red-team/plugins/cyberseceval/',
     name: 'CyberSecEval',
-    pluginId: 'cyberseceval',
+    pluginId: 'dataset:cyberseceval',
     applicationTypes: {
       rag: true,
       agent: true,
@@ -286,7 +286,7 @@ export const PLUGINS = [
     label: 'technical',
     link: '/docs/red-team/plugins/donotanswer/',
     name: 'DoNotAnswer',
-    pluginId: 'donotanswer',
+    pluginId: 'dataset:donotanswer',
     applicationTypes: {
       rag: true,
       agent: true,
@@ -328,7 +328,7 @@ export const PLUGINS = [
     label: 'technical',
     link: '/docs/red-team/plugins/harmbench/',
     name: 'Harmbench',
-    pluginId: 'harmbench',
+    pluginId: 'dataset:harmbench',
     applicationTypes: {
       rag: true,
       agent: true,
@@ -876,7 +876,7 @@ export const PLUGINS = [
     label: 'technical',
     link: '/docs/red-team/plugins/pliny/',
     name: 'Pliny',
-    pluginId: 'pliny',
+    pluginId: 'dataset:pliny',
     applicationTypes: {
       rag: true,
       agent: true,
@@ -1096,7 +1096,7 @@ export const PLUGINS = [
     label: 'harmful',
     link: '/docs/red-team/plugins/toxicchat/',
     name: 'ToxicChat',
-    pluginId: 'toxic-chat',
+    pluginId: 'dataset:toxic-chat',
     applicationTypes: {
       rag: true,
       agent: true,
@@ -1110,7 +1110,7 @@ export const PLUGINS = [
     label: 'harmful',
     link: '/docs/red-team/plugins/unsafebench/',
     name: 'UnsafeBench',
-    pluginId: 'unsafebench',
+    pluginId: 'dataset:unsafebench',
     applicationTypes: {
       rag: true,
       agent: true,
@@ -1125,7 +1125,7 @@ export const PLUGINS = [
     label: 'technical',
     link: '/docs/red-team/plugins/xstest/',
     name: 'XSTest',
-    pluginId: 'xstest',
+    pluginId: 'dataset:xstest',
     applicationTypes: {
       rag: true,
       agent: true,

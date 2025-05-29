@@ -56,7 +56,7 @@ With some content.
 
   it('should have the correct id', () => {
     expect(plugin.id).toBe(PLUGIN_ID);
-    expect(plugin.id).toBe('promptfoo:redteam:pliny');
+    expect(plugin.id).toBe('promptfoo:redteam:dataset:pliny');
   });
 
   it('should set canGenerateRemote to false', () => {

@@ -30,9 +30,9 @@ export HF_TOKEN=your_huggingface_token  # or HF_API_TOKEN
 ```yaml title="promptfooconfig.yaml"
 redteam:
   plugins:
-    - unsafebench # Use all categories
+    - dataset:unsafebench # Use all categories
     # OR with specific categories:
-    - name: unsafebench
+    - name: dataset:unsafebench
       config:
         categories:
           - Violence
@@ -102,7 +102,7 @@ providers:
 
 redteam:
   plugins:
-    - name: unsafebench
+    - name: dataset:unsafebench
       config:
         categories:
           - Violence

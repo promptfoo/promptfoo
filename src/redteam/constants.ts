@@ -25,11 +25,11 @@ export const LLAMA_GUARD_ENABLED_CATEGORIES: string[] = [
 
 export const FOUNDATION_PLUGINS = [
   'ascii-smuggling',
-  'beavertails',
+  'dataset:beavertails',
   'bias:gender',
   'contracts',
-  'cyberseceval',
-  'donotanswer',
+  'dataset:cyberseceval',
+  'dataset:donotanswer',
   'divergent-repetition',
   'excessive-agency',
   'hallucination',
@@ -62,7 +62,7 @@ export const FOUNDATION_PLUGINS = [
   'imitation',
   'overreliance',
   'pii:direct',
-  'pliny',
+  'dataset:pliny',
   'politics',
   'religion',
 ] as const;
@@ -143,23 +143,23 @@ export type BasePlugin = (typeof BASE_PLUGINS)[number];
 
 export const ADDITIONAL_PLUGINS = [
   'ascii-smuggling',
-  'beavertails',
+  'dataset:beavertails',
   'bfla',
   'bola',
   'cca',
   'competitors',
   'cross-session-leak',
-  'cyberseceval',
+  'dataset:cyberseceval',
   'debug-access',
   'divergent-repetition',
-  'donotanswer',
-  'harmbench',
-  'toxic-chat',
+  'dataset:donotanswer',
+  'dataset:harmbench',
+  'dataset:toxic-chat',
   'imitation',
   'indirect-prompt-injection',
   'mcp',
   'overreliance',
-  'pliny',
+  'dataset:pliny',
   'prompt-extraction',
   'rag-document-exfiltration',
   'rag-poisoning',
@@ -172,8 +172,8 @@ export const ADDITIONAL_PLUGINS = [
   'system-prompt-override',
   'tool-discovery:multi-turn',
   'tool-discovery',
-  'unsafebench',
-  'xstest',
+  'dataset:unsafebench',
+  'dataset:xstest',
 ] as const;
 export type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
 
@@ -188,7 +188,7 @@ export const AGENTIC_EXEMPT_PLUGINS = [
 ] as const;
 
 // Dataset plugins that don't use strategies (standalone dataset plugins)
-export const DATASET_EXEMPT_PLUGINS = ['pliny', 'unsafebench'] as const;
+export const DATASET_EXEMPT_PLUGINS = ['dataset:pliny', 'dataset:unsafebench'] as const;
 
 // Plugins that don't use strategies (standalone plugins) - combination of agentic and dataset
 export const STRATEGY_EXEMPT_PLUGINS = [
@@ -831,16 +831,27 @@ export const AGENTIC_STRATEGIES = [
 export type AgenticStrategy = (typeof AGENTIC_STRATEGIES)[number];
 
 export const DATASET_PLUGINS = [
-  'beavertails',
-  'cyberseceval',
-  'donotanswer',
-  'harmbench',
-  'toxic-chat',
-  'pliny',
-  'unsafebench',
-  'xstest',
+  'dataset:beavertails',
+  'dataset:cyberseceval',
+  'dataset:donotanswer',
+  'dataset:harmbench',
+  'dataset:toxic-chat',
+  'dataset:pliny',
+  'dataset:unsafebench',
+  'dataset:xstest',
 ] as const;
 export type DatasetPlugin = (typeof DATASET_PLUGINS)[number];
+
+export const DATASET_PLUGIN_ALIASES: Record<string, DatasetPlugin> = {
+  beavertails: 'dataset:beavertails',
+  cyberseceval: 'dataset:cyberseceval',
+  donotanswer: 'dataset:donotanswer',
+  harmbench: 'dataset:harmbench',
+  'toxic-chat': 'dataset:toxic-chat',
+  pliny: 'dataset:pliny',
+  unsafebench: 'dataset:unsafebench',
+  xstest: 'dataset:xstest',
+} as const;
 
 export const ADDITIONAL_STRATEGIES = [
   'audio',

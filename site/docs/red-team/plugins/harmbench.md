@@ -22,7 +22,7 @@ To include the HarmBench plugin in your LLM red teaming setup:
 ```yaml
 redteam:
   plugins:
-    - harmbench
+    - dataset:harmbench
 ```
 
 You can control the number of test cases using the `numTests` parameter:
@@ -30,7 +30,7 @@ You can control the number of test cases using the `numTests` parameter:
 ```yaml
 redteam:
   plugins:
-    - id: harmbench
+    - id: dataset:harmbench
       numTests: 25 # The default is 5, but you can define the limit here.
 ```
 

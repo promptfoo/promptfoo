@@ -78,7 +78,7 @@ describe('Plugin IDs', () => {
 
     // Add common plugin format - 'promptfoo:redteam:plugin-name'
     ALL_PLUGINS.forEach((pluginId) => {
-      if (typeof pluginId === 'string' && !pluginId.includes(':')) {
+      if (typeof pluginId === 'string') {
         expectedPrefixedPluginIds.add(`promptfoo:redteam:${pluginId}`);
       }
     });

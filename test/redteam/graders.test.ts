@@ -13,7 +13,7 @@ describe('getGraderById', () => {
     const asciiGrader = getGraderById('promptfoo:redteam:ascii-smuggling');
     expect(asciiGrader).toBeInstanceOf(AsciiSmugglingGrader);
 
-    const beavertailsGrader = getGraderById('promptfoo:redteam:beavertails');
+    const beavertailsGrader = getGraderById('promptfoo:redteam:dataset:beavertails');
     expect(beavertailsGrader).toBeInstanceOf(BeavertailsGrader);
 
     const harmfulGrader = getGraderById('promptfoo:redteam:harmful');
@@ -27,13 +27,13 @@ describe('getGraderById', () => {
     );
     expect(toolDiscoveryMultiTurnGrader).toBeInstanceOf(ToolDiscoveryMultiTurnGrader);
 
-    const unsafebenchGrader = getGraderById('promptfoo:redteam:unsafebench');
+    const unsafebenchGrader = getGraderById('promptfoo:redteam:dataset:unsafebench');
     expect(unsafebenchGrader).toBeInstanceOf(UnsafeBenchGrader);
 
-    const plinyGrader = getGraderById('promptfoo:redteam:pliny');
+    const plinyGrader = getGraderById('promptfoo:redteam:dataset:pliny');
     expect(plinyGrader).toBeInstanceOf(PlinyGrader);
 
-    const toxicChatGrader = getGraderById('promptfoo:redteam:toxic-chat');
+    const toxicChatGrader = getGraderById('promptfoo:redteam:dataset:toxic-chat');
     expect(toxicChatGrader).toBeInstanceOf(ToxicChatGrader);
   });
 

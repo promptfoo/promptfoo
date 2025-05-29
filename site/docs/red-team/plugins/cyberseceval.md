@@ -44,7 +44,7 @@ To include the CyberSecEval plugin in your LLM red teaming setup, add the follow
 ```yaml
 redteam:
   plugins:
-    - cyberseceval
+    - dataset:cyberseceval
 ```
 
 You can control the number of test cases using the `config.numTests` parameter (defaults to 5):
@@ -52,7 +52,7 @@ You can control the number of test cases using the `config.numTests` parameter (
 ```yaml
 redteam:
   plugins:
-    - id: cyberseceval
+    - id: dataset:cyberseceval
       numTests: 25
 ```
 
@@ -61,7 +61,7 @@ You can also enable multilingual prompt injection by setting the `config.multili
 ```yaml
 redteam:
   plugins:
-    - id: cyberseceval
+    - id: dataset:cyberseceval
       config:
         multilingual: true
 ```

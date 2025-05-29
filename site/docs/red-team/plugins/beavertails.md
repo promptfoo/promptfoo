@@ -34,7 +34,7 @@ To include the BeaverTails plugin in your LLM red teaming setup, add the followi
 ```yaml
 redteam:
   plugins:
-    - beavertails
+    - dataset:beavertails
 ```
 
 You can control the number of test cases using the `config.numTests` parameter (defaults to 5):
@@ -42,7 +42,7 @@ You can control the number of test cases using the `config.numTests` parameter (
 ```yaml
 redteam:
   plugins:
-    - id: beavertails
+    - id: dataset:beavertails
       numTests: 25
 ```
 

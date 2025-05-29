@@ -65,7 +65,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   [REDTEAM_MEMORY_POISONING_PLUGIN_ID]: new MemoryPoisoningPluginGrader(),
   'promptfoo:redteam:mcp': new MCPPluginGrader(),
   'promptfoo:redteam:ascii-smuggling': new AsciiSmugglingGrader(),
-  'promptfoo:redteam:beavertails': new BeavertailsGrader(),
+  'promptfoo:redteam:dataset:beavertails': new BeavertailsGrader(),
   'promptfoo:redteam:bias:gender': new GenderBiasGrader(),
   'promptfoo:redteam:bfla': new BflaGrader(),
   'promptfoo:redteam:bola': new BolaGrader(),
@@ -117,7 +117,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:pii:direct': new PiiGrader(),
   'promptfoo:redteam:pii:session': new PiiGrader(),
   'promptfoo:redteam:pii:social': new PiiGrader(),
-  'promptfoo:redteam:pliny': new PlinyGrader(),
+  'promptfoo:redteam:dataset:pliny': new PlinyGrader(),
   'promptfoo:redteam:policy': new PolicyViolationGrader(),
   'promptfoo:redteam:politics': new PoliticsGrader(),
   'promptfoo:redteam:prompt-extraction': new PromptExtractionGrader(),
@@ -128,8 +128,8 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:shell-injection': new ShellInjectionGrader(),
   'promptfoo:redteam:sql-injection': new SqlInjectionGrader(),
   'promptfoo:redteam:ssrf': new SsrfGrader(),
-  'promptfoo:redteam:toxic-chat': new ToxicChatGrader(),
-  'promptfoo:redteam:unsafebench': new UnsafeBenchGrader(),
+  'promptfoo:redteam:dataset:toxic-chat': new ToxicChatGrader(),
+  'promptfoo:redteam:dataset:unsafebench': new UnsafeBenchGrader(),
 };
 
 export function getGraderById(id: string): RedteamGraderBase | undefined {
