@@ -89,8 +89,8 @@ type Args = z.infer<typeof ArgsSchema>;
 
 export const DEFAULT_TURN_COUNT = 5;
 export const MAX_TURN_COUNT = 10;
-const LOG_PREFIX = '[Target Scanning Agent]';
-const COMMAND = 'target-scan';
+const LOG_PREFIX = '[Target Discovery Agent]';
+const COMMAND = 'discover';
 
 // ========================================================
 // Utils
@@ -112,7 +112,7 @@ export async function doTargetPurposeDiscovery(
   const sessionId = randomUUID();
 
   const pbar = new cliProgress.SingleBar({
-    format: `Scanning the target {bar} {percentage}% | {value}${DEFAULT_TURN_COUNT ? '/{total}' : ''} turns`,
+    format: `Discovering the target {bar} {percentage}% | {value}${DEFAULT_TURN_COUNT ? '/{total}' : ''} turns`,
     barCompleteChar: '\u2588',
     barIncompleteChar: '\u2591',
     hideCursor: true,
@@ -133,7 +133,7 @@ export async function doTargetPurposeDiscovery(
     try {
       turn++;
 
-      logger.debug(`${LOG_PREFIX} Scan loop turn: ${turn}`);
+      logger.debug(`${LOG_PREFIX} Discovery loop turn: ${turn}`);
 
       const response = await fetchWithProxy(getRemoteGenerationUrl(), {
         method: 'POST',
@@ -184,7 +184,7 @@ export async function doTargetPurposeDiscovery(
           : question;
 
         const targetResponse = await target.callApi(renderedPrompt, {
-          prompt: { raw: question, label: 'Target Scanning Question' },
+          prompt: { raw: question, label: 'Target Discovery Question' },
           vars: { sessionId },
         });
 
@@ -205,7 +205,7 @@ export async function doTargetPurposeDiscovery(
       }
     } catch (error) {
       logger.error(
-        `An unexpected error occurred during target scanning: ${error instanceof Error ? error.message : String(error)}\n${
+        `An unexpected error occurred during target discovery: ${error instanceof Error ? error.message : String(error)}\n${
           error instanceof Error ? error.stack : ''
         }`,
       );
@@ -242,9 +242,9 @@ export function mergeTargetPurposeDiscoveryResults(
       # Agent Discovered Target Purpose
 
       The following information was discovered by the agent through conversations with the target.
-      
+
       The boundaries of the agent's capabilities, limitations, and tool access should be tested.
-      
+
       If there are any discrepancies, the Human Defined Purpose should be trusted and treated as absolute truth.
     `,
     discoveryResult?.purpose &&
@@ -260,7 +260,7 @@ export function mergeTargetPurposeDiscoveryResults(
       ## Limitations
 
       The target believes its limitations are:
-      
+
       ${discoveryResult.limitations}
     `,
     discoveryResult?.tools &&
@@ -300,7 +300,7 @@ export function discoverCommand(
     .command(COMMAND)
     .description(
       dedent`
-        Run the Target Scanning Agent to automatically discover and report a target application's purpose,
+        Run the Target Discovery Agent to automatically discover and report a target application's purpose,
         limitations, and tools, enhancing attack probe efficacy.
 
         If neither a config file nor a target ID is provided, the current working directory will be checked for a promptfooconfig.yaml file,
@@ -313,7 +313,7 @@ export function discoverCommand(
       // Check that remote generation is enabled:
       if (neverGenerateRemote()) {
         logger.error(dedent`
-          Target scanning relies on remote generation which is disabled.
+          Target discovery relies on remote generation which is disabled.
 
           To enable remote generation, unset the PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION environment variable.
         `);

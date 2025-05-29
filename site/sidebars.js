@@ -182,7 +182,7 @@ const sidebars = {
     },
     {
       type: 'doc',
-      id: 'red-team/tsa',
+      id: 'red-team/discovery',
     },
     {
       type: 'category',

@@ -39,7 +39,6 @@ The `promptfoo` command line utility supports the following subcommands:
   - `redteam run`
   - `redteam discover`
   - `redteam generate`
-  - `redteam target-scan`
   - `redteam poison`
   - `redteam eval`
   - `redteam report`
@@ -355,9 +354,15 @@ Run the complete red teaming process (init, generate, and evaluate).
 | `--filter-providers, --filter-targets <providers>` | Only run tests with these providers (regex match) |
 | `-t, --target <id>`                                | Cloud provider target ID to run the scan on       |
 
-## `promptfoo redteam target-scan`
+## `promptfoo redteam discover`
 
-Runs the [Target Scanning Agent](/docs/red-team/tsa) against your application.
+Runs the [Target Discovery Agent](/docs/red-team/discovery) against your application.
+
+:::info
+
+Only a configuration file or target can be specified
+
+:::
 
 | Option                | Description                                          | Default |
 | --------------------- | ---------------------------------------------------- | ------- |
