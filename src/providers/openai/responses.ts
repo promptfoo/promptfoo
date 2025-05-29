@@ -98,9 +98,14 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     const instructions = config.instructions;
 
+    // Load response_format from external file if needed, similar to chat provider
+    const responseFormat = config.response_format
+      ? maybeLoadFromExternalFile(renderVarsInObject(config.response_format, context?.vars))
+      : undefined;
+
     let textFormat;
-    if (config.response_format) {
-      if (config.response_format.type === 'json_object') {
+    if (responseFormat) {
+      if (responseFormat.type === 'json_object') {
         textFormat = {
           format: {
             type: 'json_object',
@@ -108,18 +113,16 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         };
 
         // IMPORTANT: json_object format requires the word 'json' in the input prompt
-      } else if (config.response_format.type === 'json_schema') {
+      } else if (responseFormat.type === 'json_schema') {
         const schema = maybeLoadFromExternalFile(
           renderVarsInObject(
-            config.response_format.schema || config.response_format.json_schema?.schema,
+            responseFormat.schema || responseFormat.json_schema?.schema,
             context?.vars,
           ),
         );
 
         const schemaName =
-          config.response_format.json_schema?.name ||
-          config.response_format.name ||
-          'response_schema';
+          responseFormat.json_schema?.name || responseFormat.name || 'response_schema';
 
         textFormat = {
           format: {
@@ -163,7 +166,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...(config.passthrough || {}),
     };
 
-    return { body, config };
+    return { body, config: { ...config, response_format: responseFormat } };
   }
 
   async callApi(
