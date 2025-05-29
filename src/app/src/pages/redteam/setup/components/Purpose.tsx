@@ -1,7 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useTelemetry } from '@app/hooks/useTelemetry';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import { Alert } from '@mui/material';
+import Accordion from '@mui/material/Accordion';
+import AccordionDetails from '@mui/material/AccordionDetails';
+import AccordionSummary from '@mui/material/AccordionSummary';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Grid from '@mui/material/Grid';
@@ -23,6 +27,9 @@ export default function Purpose({ onNext }: PromptsProps) {
   const { config, updateApplicationDefinition } = useRedTeamConfig();
   const { recordEvent } = useTelemetry();
   const [testMode, setTestMode] = useState<'application' | 'model'>('application');
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(
+    new Set(['Core Application Details']), // Expand the first section by default since it has required fields
+  );
 
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_purpose' });
@@ -44,8 +51,51 @@ export default function Purpose({ onNext }: PromptsProps) {
     }
   };
 
+  const handleSectionToggle = (section: string) => {
+    setExpandedSections((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(section)) {
+        newSet.delete(section);
+      } else {
+        newSet.add(section);
+      }
+      return newSet;
+    });
+  };
+
   const isPurposePresent =
     config.applicationDefinition?.purpose && config.applicationDefinition.purpose.trim() !== '';
+
+  const getCompletionPercentage = (section: string) => {
+    const fields = {
+      'Core Application Details': ['features', 'industry'],
+      'Access & Permissions': [
+        'hasAccessTo',
+        'doesNotHaveAccessTo',
+        'userTypes',
+        'securityRequirements',
+      ],
+      'Data & Content': [
+        'sensitiveDataTypes',
+        'exampleIdentifiers',
+        'criticalActions',
+        'forbiddenTopics',
+      ],
+      'Business Context': ['competitors'],
+    };
+
+    const sectionFields = fields[section as keyof typeof fields] || [];
+    const filledFields = sectionFields.filter((field) => {
+      const value = config.applicationDefinition?.[field as keyof ApplicationDefinition];
+      return value && value.trim() !== '';
+    });
+
+    if (sectionFields.length === 0) {
+      return '0%';
+    }
+    const percentage = Math.round((filledFields.length / sectionFields.length) * 100);
+    return `${percentage}%`;
+  };
 
   return (
     <Box sx={{ width: '100%' }}>
@@ -142,42 +192,57 @@ export default function Purpose({ onNext }: PromptsProps) {
                   tests.
                 </Typography>
 
-                <Stack spacing={4}>
-                  {/* Core Application Details */}
+                {/* Main Purpose - Standalone Section */}
+                <Box sx={{ mb: 4 }}>
+                  <Typography variant="h6" sx={{ fontWeight: 'medium', mb: 2 }}>
+                    Main Purpose
+                  </Typography>
                   <Box>
-                    <Typography
-                      variant="h6"
-                      sx={{ fontWeight: 'medium', mb: 2, color: 'primary.main' }}
-                    >
-                      Core Application Details
+                    <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
+                      What is the main purpose of your application?{' '}
+                      <span style={{ color: 'red' }}>*</span>
                     </Typography>
-                    <Stack spacing={3}>
-                      <Box>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
-                          What is the main purpose of your application?{' '}
-                          <span style={{ color: 'red' }}>*</span>
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                          Describe the primary objective and goals of your application. This
-                          foundational information provides essential context for generating all
-                          types of targeted security attacks and red team tests.{' '}
-                          <strong>
-                            It also helps our grading system evaluate whether attacks are
-                            contextually relevant to your specific application.
-                          </strong>
-                        </Typography>
-                        <TextField
-                          fullWidth
-                          value={config.applicationDefinition?.purpose}
-                          onChange={(e) => updateApplicationDefinition('purpose', e.target.value)}
-                          placeholder="e.g. Assist healthcare professionals and patients with medical-related tasks, access medical information, schedule appointments..."
-                          multiline
-                          rows={3}
-                          variant="outlined"
-                          required
-                        />
-                      </Box>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                      Describe the primary objective and goals of your application. This
+                      foundational information provides essential context for generating all types
+                      of targeted security attacks and red team tests.{' '}
+                      <strong>
+                        It also helps our grading system evaluate whether attacks are contextually
+                        relevant to your specific application.
+                      </strong>
+                    </Typography>
+                    <TextField
+                      fullWidth
+                      value={config.applicationDefinition?.purpose}
+                      onChange={(e) => updateApplicationDefinition('purpose', e.target.value)}
+                      placeholder="e.g. Assist healthcare professionals and patients with medical-related tasks, access medical information, schedule appointments..."
+                      multiline
+                      rows={3}
+                      variant="outlined"
+                      required
+                    />
+                  </Box>
+                </Box>
 
+                {/* Core Application Details */}
+                <Accordion
+                  expanded={expandedSections.has('Core Application Details')}
+                  onChange={() => handleSectionToggle('Core Application Details')}
+                  sx={{ mb: 0 }}
+                >
+                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+                      <Typography
+                        variant="h6"
+                        sx={{ fontWeight: 'medium', flex: 1, color: 'text.primary' }}
+                      >
+                        Core Application Details (
+                        {getCompletionPercentage('Core Application Details')})
+                      </Typography>
+                    </Box>
+                  </AccordionSummary>
+                  <AccordionDetails sx={{ px: 4, py: 3 }}>
+                    <Stack spacing={3}>
                       <Box>
                         <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
                           What key features does your application provide?{' '}
@@ -223,26 +288,34 @@ export default function Purpose({ onNext }: PromptsProps) {
                         />
                       </Box>
                     </Stack>
-                  </Box>
+                  </AccordionDetails>
+                </Accordion>
 
-                  {/* Access & Permissions */}
-                  <Box>
-                    <Typography
-                      variant="h6"
-                      sx={{ fontWeight: 'medium', mb: 2, color: 'primary.main' }}
-                    >
-                      Access & Permissions
-                    </Typography>
+                {/* Access & Permissions */}
+                <Accordion
+                  expanded={expandedSections.has('Access & Permissions')}
+                  onChange={() => handleSectionToggle('Access & Permissions')}
+                  sx={{ mb: 0 }}
+                >
+                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+                      <Typography
+                        variant="h6"
+                        sx={{ fontWeight: 'medium', flex: 1, color: 'text.primary' }}
+                      >
+                        Access & Permissions ({getCompletionPercentage('Access & Permissions')})
+                      </Typography>
+                    </Box>
+                  </AccordionSummary>
+                  <AccordionDetails sx={{ px: 4, py: 3 }}>
                     <Stack spacing={3}>
                       <Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                          <Typography variant="subtitle1" sx={{ fontWeight: 'medium' }}>
-                            What systems, data, or resources does your application have access to?{' '}
-                            <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>
-                              (optional)
-                            </span>
-                          </Typography>
-                        </Box>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
+                          What systems, data, or resources does your application have access to?{' '}
+                          <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>
+                            (optional)
+                          </span>
+                        </Typography>
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                           Describe what your application can legitimately access and use. This
                           information helps test for RBAC enforcement issues, unauthorized data
@@ -263,15 +336,13 @@ export default function Purpose({ onNext }: PromptsProps) {
                       </Box>
 
                       <Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                          <Typography variant="subtitle1" sx={{ fontWeight: 'medium' }}>
-                            What systems, data, or resources should your application NOT have access
-                            to?{' '}
-                            <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>
-                              (optional)
-                            </span>
-                          </Typography>
-                        </Box>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
+                          What systems, data, or resources should your application NOT have access
+                          to?{' '}
+                          <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>
+                            (optional)
+                          </span>
+                        </Typography>
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                           Specify what your application should be restricted from accessing. This
                           helps generate tests for RBAC enforcement failures, unauthorized data
@@ -292,14 +363,12 @@ export default function Purpose({ onNext }: PromptsProps) {
                       </Box>
 
                       <Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                          <Typography variant="subtitle1" sx={{ fontWeight: 'medium' }}>
-                            What types of users interact with your application?{' '}
-                            <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>
-                              (optional)
-                            </span>
-                          </Typography>
-                        </Box>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
+                          What types of users interact with your application?{' '}
+                          <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>
+                            (optional)
+                          </span>
+                        </Typography>
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                           Describe the different user roles and their authorization levels. This
                           enables testing for RBAC enforcement issues, privilege escalation
@@ -318,14 +387,12 @@ export default function Purpose({ onNext }: PromptsProps) {
                       </Box>
 
                       <Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                          <Typography variant="subtitle1" sx={{ fontWeight: 'medium' }}>
-                            What security and compliance requirements apply to your application?{' '}
-                            <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>
-                              (optional)
-                            </span>
-                          </Typography>
-                        </Box>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
+                          What security and compliance requirements apply to your application?{' '}
+                          <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>
+                            (optional)
+                          </span>
+                        </Typography>
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                           List important security, privacy, and regulatory requirements. This helps
                           generate tests for privacy violations, direct PII exposure, RBAC
@@ -345,26 +412,34 @@ export default function Purpose({ onNext }: PromptsProps) {
                         />
                       </Box>
                     </Stack>
-                  </Box>
+                  </AccordionDetails>
+                </Accordion>
 
-                  {/* Data & Content */}
-                  <Box>
-                    <Typography
-                      variant="h6"
-                      sx={{ fontWeight: 'medium', mb: 2, color: 'primary.main' }}
-                    >
-                      Data & Content
-                    </Typography>
+                {/* Data & Content */}
+                <Accordion
+                  expanded={expandedSections.has('Data & Content')}
+                  onChange={() => handleSectionToggle('Data & Content')}
+                  sx={{ mb: 0 }}
+                >
+                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+                      <Typography
+                        variant="h6"
+                        sx={{ fontWeight: 'medium', flex: 1, color: 'text.primary' }}
+                      >
+                        Data & Content ({getCompletionPercentage('Data & Content')})
+                      </Typography>
+                    </Box>
+                  </AccordionSummary>
+                  <AccordionDetails sx={{ px: 4, py: 3 }}>
                     <Stack spacing={3}>
                       <Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                          <Typography variant="subtitle1" sx={{ fontWeight: 'medium' }}>
-                            What types of sensitive data does your application handle?{' '}
-                            <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>
-                              (optional)
-                            </span>
-                          </Typography>
-                        </Box>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
+                          What types of sensitive data does your application handle?{' '}
+                          <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>
+                            (optional)
+                          </span>
+                        </Typography>
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                           Understanding data sensitivity helps generate targeted privacy and data
                           protection attacks, including tests for direct PII exposure, PII leakage
@@ -389,15 +464,13 @@ export default function Purpose({ onNext }: PromptsProps) {
                       </Box>
 
                       <Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                          <Typography variant="subtitle1" sx={{ fontWeight: 'medium' }}>
-                            What are some example identifiers, names, or data points your
-                            application uses?{' '}
-                            <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>
-                              (optional)
-                            </span>
-                          </Typography>
-                        </Box>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
+                          What are some example identifiers, names, or data points your application
+                          uses?{' '}
+                          <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>
+                            (optional)
+                          </span>
+                        </Typography>
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                           Provide realistic examples of the types of data and identifiers in your
                           system. This enables testing for direct PII exposure, PII leakage in
@@ -423,15 +496,13 @@ export default function Purpose({ onNext }: PromptsProps) {
                       </Box>
 
                       <Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                          <Typography variant="subtitle1" sx={{ fontWeight: 'medium' }}>
-                            What are the most critical or dangerous actions your application can
-                            perform?{' '}
-                            <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>
-                              (optional)
-                            </span>
-                          </Typography>
-                        </Box>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
+                          What are the most critical or dangerous actions your application can
+                          perform?{' '}
+                          <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>
+                            (optional)
+                          </span>
+                        </Typography>
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                           Identify high-risk operations that should be heavily protected from
                           misuse. This helps generate tests for privilege escalation, shell
@@ -452,14 +523,12 @@ export default function Purpose({ onNext }: PromptsProps) {
                       </Box>
 
                       <Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                          <Typography variant="subtitle1" sx={{ fontWeight: 'medium' }}>
-                            What content or topics should your application never discuss or promote?{' '}
-                            <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>
-                              (optional)
-                            </span>
-                          </Typography>
-                        </Box>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
+                          What content or topics should your application never discuss or promote?{' '}
+                          <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>
+                            (optional)
+                          </span>
+                        </Typography>
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                           Define content boundaries to test for harmful or inappropriate responses.
                           This enables testing for hate speech, self-harm content, sexual content,
@@ -479,26 +548,34 @@ export default function Purpose({ onNext }: PromptsProps) {
                         />
                       </Box>
                     </Stack>
-                  </Box>
+                  </AccordionDetails>
+                </Accordion>
 
-                  {/* Business Context */}
-                  <Box>
-                    <Typography
-                      variant="h6"
-                      sx={{ fontWeight: 'medium', mb: 2, color: 'primary.main' }}
-                    >
-                      Business Context
-                    </Typography>
+                {/* Business Context */}
+                <Accordion
+                  expanded={expandedSections.has('Business Context')}
+                  onChange={() => handleSectionToggle('Business Context')}
+                  sx={{ mb: 0 }}
+                >
+                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+                      <Typography
+                        variant="h6"
+                        sx={{ fontWeight: 'medium', flex: 1, color: 'text.primary' }}
+                      >
+                        Business Context ({getCompletionPercentage('Business Context')})
+                      </Typography>
+                    </Box>
+                  </AccordionSummary>
+                  <AccordionDetails sx={{ px: 4, py: 3 }}>
                     <Stack spacing={3}>
                       <Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                          <Typography variant="subtitle1" sx={{ fontWeight: 'medium' }}>
-                            Who are your main competitors that shouldn't be endorsed or promoted?{' '}
-                            <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>
-                              (optional)
-                            </span>
-                          </Typography>
-                        </Box>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
+                          Who are your main competitors that shouldn't be endorsed or promoted?{' '}
+                          <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>
+                            (optional)
+                          </span>
+                        </Typography>
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                           List companies or products that your application should remain neutral
                           about. This helps test for competitor endorsement vulnerabilities, brand
@@ -516,65 +593,37 @@ export default function Purpose({ onNext }: PromptsProps) {
                           variant="outlined"
                         />
                       </Box>
-
-                      <Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                          <Typography variant="subtitle1" sx={{ fontWeight: 'medium' }}>
-                            Who is the red team user?{' '}
-                            <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>
-                              (optional)
-                            </span>
-                          </Typography>
-                        </Box>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                          Define the persona attempting to attack your system. This helps create
-                          realistic attack scenarios for social engineering attacks targeting PII,
-                          hijacking attempts, prompt extraction, system prompt override, and
-                          role-based security vulnerabilities.
-                        </Typography>
-                        <TextField
-                          fullWidth
-                          value={config.applicationDefinition?.redteamUser}
-                          onChange={(e) =>
-                            updateApplicationDefinition('redteamUser', e.target.value)
-                          }
-                          placeholder="e.g. A patient seeking medical assistance, a customer service representative, an external researcher..."
-                          multiline
-                          rows={2}
-                          variant="outlined"
-                        />
-                      </Box>
                     </Stack>
-                  </Box>
-                </Stack>
+                  </AccordionDetails>
+                </Accordion>
               </Box>
 
-              {/* User Context */}
-              <Box>
-                <Typography
-                  variant="h6"
-                  sx={{ fontWeight: 'medium', mb: 2, color: 'primary.main' }}
-                >
-                  User Context
+              {/* Red Team User - Standalone Section */}
+              <Box sx={{ mt: 4 }}>
+                <Typography variant="h6" sx={{ fontWeight: 'medium', mb: 2 }}>
+                  Red Team User
                 </Typography>
-                <Stack spacing={3}>
-                  <Box>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
-                      Describe the user the red teamer is impersonating{' '}
-                      <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>(optional)</span>
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                      Define what type of user the red teamer should simulate during attacks.
-                    </Typography>
-                    <TextField
-                      fullWidth
-                      value={config.applicationDefinition?.redteamUser}
-                      onChange={(e) => updateApplicationDefinition('redteamUser', e.target.value)}
-                      placeholder="e.g. A traveler looking for budget flights to Europe. An employee of the company. A patient seeking medical assistance."
-                      variant="outlined"
-                    />
-                  </Box>
-                </Stack>
+                <Box>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
+                    Who is the red team user?{' '}
+                    <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>(optional)</span>
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    Define the persona attempting to attack your system. This helps create realistic
+                    attack scenarios for social engineering attacks targeting PII, hijacking
+                    attempts, prompt extraction, system prompt override, and role-based security
+                    vulnerabilities.
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    value={config.applicationDefinition?.redteamUser}
+                    onChange={(e) => updateApplicationDefinition('redteamUser', e.target.value)}
+                    placeholder="e.g. A patient seeking medical assistance, a customer service representative, an external researcher..."
+                    multiline
+                    rows={2}
+                    variant="outlined"
+                  />
+                </Box>
               </Box>
             </>
           ) : (
