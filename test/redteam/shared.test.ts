@@ -165,18 +165,19 @@ describe('doRedteamRun', () => {
       });
 
       const expectedPath = path.join('/tmp', 'redteam.yaml');
+      const expectedFilePrefix = path.join('/tmp', 'redteam-');
 
       expect(os.tmpdir).toHaveBeenCalledWith();
       expect(fs.mkdirSync).toHaveBeenCalledWith(path.dirname(expectedPath), { recursive: true });
       expect(fs.writeFileSync).toHaveBeenCalledWith(
-        expect.stringContaining('/tmp/redteam-'),
+        expect.stringContaining(expectedFilePrefix),
         'mocked-yaml-content',
       );
       expect(yaml.dump).toHaveBeenCalledWith(mockConfig);
       expect(doGenerateRedteam).toHaveBeenCalledWith(
         expect.objectContaining({
-          config: expect.stringContaining('/tmp/redteam-'),
-          output: expect.stringContaining('/tmp/redteam-'),
+          config: expect.stringContaining(expectedFilePrefix),
+          output: expect.stringContaining(expectedFilePrefix),
         }),
       );
     });
@@ -188,18 +189,19 @@ describe('doRedteamRun', () => {
       });
 
       const expectedPath = path.join('/tmp', 'redteam.yaml');
+      const expectedFilePrefix = path.join('/tmp', 'redteam-');
 
       expect(os.tmpdir).toHaveBeenCalledWith();
       expect(fs.mkdirSync).toHaveBeenCalledWith(path.dirname(expectedPath), { recursive: true });
       expect(fs.writeFileSync).toHaveBeenCalledWith(
-        expect.stringContaining('/tmp/redteam-'),
+        expect.stringContaining(expectedFilePrefix),
         'mocked-yaml-content',
       );
       expect(yaml.dump).toHaveBeenCalledWith(mockConfig);
       expect(doGenerateRedteam).toHaveBeenCalledWith(
         expect.objectContaining({
-          config: expect.stringContaining('/tmp/redteam-'),
-          output: expect.stringContaining('/tmp/redteam-'),
+          config: expect.stringContaining(expectedFilePrefix),
+          output: expect.stringContaining(expectedFilePrefix),
         }),
       );
     });
