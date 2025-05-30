@@ -192,6 +192,11 @@ function ResultsTable({
   invariant(table, 'Table should be defined');
   const { head, body } = table;
 
+  const visiblePromptCount = React.useMemo(
+    () => head.prompts.filter((_, idx) => columnVisibility[`Prompt ${idx + 1}`] !== false).length,
+    [head.prompts, columnVisibility],
+  );
+
   const [lightboxOpen, setLightboxOpen] = React.useState(false);
   const [lightboxImage, setLightboxImage] = React.useState<string | null>(null);
   const [pagination, setPagination] = React.useState<{ pageIndex: number; pageSize: number }>({
@@ -738,7 +743,7 @@ function ResultsTable({
                     output.id,
                   )}
                   firstOutput={getFirstOutput(info.row.index)}
-                  showDiffs={filterMode === 'different'}
+                  showDiffs={filterMode === 'different' && visiblePromptCount > 1}
                   searchText={debouncedSearchText}
                   showStats={showStats}
                 />
