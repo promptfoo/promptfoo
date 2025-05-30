@@ -66,6 +66,19 @@ class AIStudioGenericProvider implements ApiProvider {
     return undefined;
   }
 
+  getApiUrlDefault(): string {
+    return `https://${this.getApiHost()}`;
+  }
+
+  getApiUrl(): string {
+    return (
+      this.config.apiBaseUrl ||
+      this.env?.GOOGLE_API_BASE_URL ||
+      getEnvString('GOOGLE_API_BASE_URL') ||
+      this.getApiUrlDefault()
+    );
+  }
+
   getApiKey(): string | undefined {
     const apiKey =
       this.config.apiKey ||
@@ -141,7 +154,7 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
       cached = false;
     try {
       ({ data, cached } = (await fetchWithCache(
-        `https://${this.getApiHost()}/v1beta3/models/${
+        `${this.getApiUrl()}/v1beta3/models/${
           this.modelName
         }:generateMessage?key=${this.getApiKey()}`,
         {
@@ -257,7 +270,7 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
     let cached = false;
     try {
       ({ data, cached } = (await fetchWithCache(
-        `https://${this.getApiHost()}/${apiVersion}/models/${
+        `${this.getApiUrl()}/${apiVersion}/models/${
           this.modelName
         }:generateContent?key=${this.getApiKey()}`,
         {
@@ -379,7 +392,7 @@ export class GoogleEmbeddingProvider extends AIStudioGenericProvider {
 
     // Use embedContent endpoint
     const endpoint = 'embedContent';
-    const url = `https://${this.getApiHost()}/v1/models/${this.modelName}:${endpoint}?key=${this.getApiKey()}`;
+    const url = `${this.getApiUrl()}/v1/models/${this.modelName}:${endpoint}?key=${this.getApiKey()}`;
 
     logger.debug(`Calling Google Embedding API: ${url} with body: ${JSON.stringify(body)}`);
 

@@ -1106,4 +1106,25 @@ describe('AIStudioChatProvider', () => {
       );
     });
   });
+
+  describe('getApiUrl', () => {
+    it('should return the default API URL if no override is set', () => {
+      const provider = new AIStudioChatProvider('gemini-pro');
+      expect(provider.getApiUrl()).toBe('https://generativelanguage.googleapis.com');
+    });
+
+    it('should use apiBaseUrl from config if provided', () => {
+      const provider = new AIStudioChatProvider('gemini-pro', {
+        config: { apiBaseUrl: 'https://custom.googleapis.com' },
+      });
+      expect(provider.getApiUrl()).toBe('https://custom.googleapis.com');
+    });
+
+    it('should use GOOGLE_API_BASE_URL from env if provided', () => {
+      const provider = new AIStudioChatProvider('gemini-pro', {
+        env: { GOOGLE_API_BASE_URL: 'https://env.googleapis.com' },
+      });
+      expect(provider.getApiUrl()).toBe('https://env.googleapis.com');
+    });
+  });
 });
