@@ -12,7 +12,8 @@ import { disableCache } from '../../cache';
 import cliState from '../../cliState';
 import { VERSION } from '../../constants';
 import { getEnvBool } from '../../envars';
-import { getAuthor } from '../../globalConfig/accounts';
+import { getAuthor, getUserEmail } from '../../globalConfig/accounts';
+import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import { loadApiProviders } from '../../providers';
 import telemetry from '../../telemetry';
@@ -45,6 +46,44 @@ import {
 function getConfigHash(configPath: string): string {
   const content = fs.readFileSync(configPath, 'utf8');
   return createHash('md5').update(`${VERSION}:${content}`).digest('hex');
+}
+
+function createHeaderComments({
+  title,
+  timestampLabel,
+  author,
+  cloudHost,
+  testCasesCount,
+  plugins,
+  strategies,
+  isUpdate = false,
+}: {
+  title: string;
+  timestampLabel: string;
+  author: string | null;
+  cloudHost: string | null;
+  testCasesCount: number;
+  plugins: Array<{ id: string }>;
+  strategies: Array<{ id: string }>;
+  isUpdate?: boolean;
+}): string[] {
+  const sectionLabel = isUpdate ? 'Changes:' : 'Test Configuration:';
+  const countLabel = isUpdate ? `Added ${testCasesCount} new test cases` : `Total cases: ${testCasesCount}`;
+  
+  return [
+    `===================================================================`,
+    title,
+    `===================================================================`,
+    `${timestampLabel} ${new Date().toISOString()}`,
+    author ? `Author:    ${author}` : undefined,
+    cloudHost ? `Cloud:     ${cloudHost}` : `Cloud:     Not logged in`,
+    ``,
+    sectionLabel,
+    `  ${countLabel}`,
+    `  Plugins:     ${plugins.map((p) => p.id).join(', ')}`,
+    `  Strategies:  ${strategies.map((s) => s.id).join(', ')}`,
+    `===================================================================`,
+  ].filter(Boolean) as string[];
 }
 
 export async function doGenerateRedteam(
@@ -318,19 +357,17 @@ export async function doGenerateRedteam(
       },
     };
     const author = getAuthor();
-    const headerComments = [
-      `===================================================================`,
-      `REDTEAM CONFIGURATION`,
-      `===================================================================`,
-      `Generated: ${new Date().toISOString()}`,
-      author ? `Author:    ${author}` : undefined,
-      ``,
-      `Test Configuration:`,
-      `  Total cases: ${redteamTests.length}`,
-      `  Plugins:     ${plugins.map((p) => p.id).join(', ')}`,
-      `  Strategies:  ${strategyObjs.map((s) => s.id).join(', ')}`,
-      `===================================================================`,
-    ].filter(Boolean) as string[];
+    const userEmail = getUserEmail();
+    const cloudHost = userEmail ? cloudConfig.getApiHost() : null;
+    const headerComments = createHeaderComments({
+      title: 'REDTEAM CONFIGURATION',
+      timestampLabel: 'Generated:',
+      author,
+      cloudHost,
+      testCasesCount: redteamTests.length,
+      plugins,
+      strategies: strategyObjs,
+    });
 
     ret = writePromptfooConfig(updatedYaml, options.output, headerComments);
     printBorder();
@@ -382,19 +419,18 @@ export async function doGenerateRedteam(
       ...(targetPurposeDiscoveryResult ? { targetPurposeDiscoveryResult } : {}),
     };
     const author = getAuthor();
-    const headerComments = [
-      `===================================================================`,
-      `REDTEAM CONFIGURATION UPDATE`,
-      `===================================================================`,
-      `Updated: ${new Date().toISOString()}`,
-      author ? `Author:  ${author}` : undefined,
-      ``,
-      `Changes:`,
-      `  Added ${redteamTests.length} new test cases`,
-      `  Plugins:     ${plugins.map((p) => p.id).join(', ')}`,
-      `  Strategies:  ${strategyObjs.map((s) => s.id).join(', ')}`,
-      `===================================================================`,
-    ].filter(Boolean) as string[];
+    const userEmail = getUserEmail();
+    const cloudHost = userEmail ? cloudConfig.getApiHost() : null;
+    const headerComments = createHeaderComments({
+      title: 'REDTEAM CONFIGURATION UPDATE',
+      timestampLabel: 'Updated:',
+      author,
+      cloudHost,
+      testCasesCount: redteamTests.length,
+      plugins,
+      strategies: strategyObjs,
+      isUpdate: true,
+    });
 
     ret = writePromptfooConfig(existingConfig, configPath, headerComments);
     logger.info(
@@ -407,19 +443,17 @@ export async function doGenerateRedteam(
     logger.info('\n' + chalk.green(`Run ${chalk.bold(`${command}`)} to run the red team!`));
   } else {
     const author = getAuthor();
-    const headerComments = [
-      `===================================================================`,
-      `REDTEAM CONFIGURATION`,
-      `===================================================================`,
-      `Generated: ${new Date().toISOString()}`,
-      author ? `Author:    ${author}` : undefined,
-      ``,
-      `Test Configuration:`,
-      `  Total cases: ${redteamTests.length}`,
-      `  Plugins:     ${plugins.map((p) => p.id).join(', ')}`,
-      `  Strategies:  ${strategyObjs.map((s) => s.id).join(', ')}`,
-      `===================================================================`,
-    ].filter(Boolean) as string[];
+    const userEmail = getUserEmail();
+    const cloudHost = userEmail ? cloudConfig.getApiHost() : null;
+    const headerComments = createHeaderComments({
+      title: 'REDTEAM CONFIGURATION',
+      timestampLabel: 'Generated:',
+      author,
+      cloudHost,
+      testCasesCount: redteamTests.length,
+      plugins,
+      strategies: strategyObjs,
+    });
 
     ret = writePromptfooConfig({ tests: redteamTests }, 'redteam.yaml', headerComments);
   }
