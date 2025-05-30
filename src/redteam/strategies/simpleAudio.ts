@@ -105,6 +105,7 @@ export async function addAudioToBase64(
       metadata: {
         ...testCase.metadata,
         strategyId: 'audio',
+        originalText,
       },
     });
 
