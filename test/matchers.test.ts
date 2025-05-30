@@ -22,10 +22,7 @@ import {
 } from '../src/matchers';
 import { 
   ANSWER_RELEVANCY_GENERATE,
-  DEFAULT_GRADING_PROMPT,
-  OPENAI_CLOSED_QA_PROMPT,
-  PROMPTFOO_FACTUALITY_PROMPT,
-  SELECT_BEST_PROMPT
+  DEFAULT_GRADING_PROMPT
  } from '../src/prompts';
 import { HuggingfaceTextClassificationProvider } from '../src/providers/huggingface';
 import { OpenAiChatCompletionProvider } from '../src/providers/openai/chat';
