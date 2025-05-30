@@ -17,8 +17,7 @@ import {
   matchesContextRecall,
   matchesContextFaithfulness,
   renderLlmRubricPrompt,
-  matchesGEval,
-  loadRubricPrompt
+  matchesGEval
 } from '../src/matchers';
 import { 
   ANSWER_RELEVANCY_GENERATE,
