@@ -68,8 +68,10 @@ function createHeaderComments({
   isUpdate?: boolean;
 }): string[] {
   const sectionLabel = isUpdate ? 'Changes:' : 'Test Configuration:';
-  const countLabel = isUpdate ? `Added ${testCasesCount} new test cases` : `Total cases: ${testCasesCount}`;
-  
+  const countLabel = isUpdate
+    ? `Added ${testCasesCount} new test cases`
+    : `Total cases: ${testCasesCount}`;
+
   return [
     `===================================================================`,
     title,
