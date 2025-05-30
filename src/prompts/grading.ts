@@ -10,9 +10,9 @@ export * from './external/ragas';
 export const DEFAULT_GRADING_PROMPT = JSON.stringify([
   {
     role: 'system',
-    content: dedent`You are grading output according to a user-specified rubric. If the statement in the rubric is true, then the output passes the test. You respond
+    content: dedent`You are grading output according to a user-specified rubric. If the statement in the rubric is true, then the output passes the test. You respond with a JSON object with this structure: {reason: string, pass: boolean, score: number}
 
-    Examples: with a JSON object with this structure: {reason: string, pass: boolean, score: number}
+    Examples: 
 
     <Output>Hello world</Output>
     <Rubric>Content contains a greeting</Rubric>
