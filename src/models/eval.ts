@@ -441,9 +441,21 @@ export default class Eval {
     if (filter === 'errors') {
       conditions.push(`failure_reason = ${ResultFailureReason.ERROR}`);
     } else if (filter === 'failures') {
-      conditions.push(`success = 0 AND failure_reason != ${ResultFailureReason.ERROR}`);
+      conditions.push(
+        `success = 0 AND failure_reason != ${ResultFailureReason.ERROR}`,
+      );
     } else if (filter === 'passes') {
       conditions.push(`success = 1`);
+    } else if (filter === 'thumbs-up') {
+      conditions.push(
+        `grading_result LIKE '%"type":"human"%' AND json_extract(grading_result, '$.pass') = 1`,
+      );
+    } else if (filter === 'thumbs-down') {
+      conditions.push(
+        `grading_result LIKE '%"type":"human"%' AND json_extract(grading_result, '$.pass') = 0`,
+      );
+    } else if (filter === 'human') {
+      conditions.push(`grading_result LIKE '%"type":"human"%'`);
     }
 
     // Add specific metric filter if provided

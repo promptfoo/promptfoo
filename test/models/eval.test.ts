@@ -2,6 +2,7 @@ import { getDb } from '../../src/database';
 import { getUserEmail } from '../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../src/migrate';
 import Eval, { getEvalSummaries } from '../../src/models/eval';
+import EvalResult from '../../src/models/evalResult';
 import type { Prompt } from '../../src/types';
 import EvalFactory from '../factories/evalFactory';
 
@@ -290,6 +291,47 @@ describe('evaluator', () => {
         withNamedScores: true,
         searchableContent: 'searchable_content',
       });
+
+      // Mark first two results with manual human ratings for filter tests
+      const results = await EvalResult.findManyByEvalId(evalWithResults.id);
+      if (results[0]) {
+        results[0].gradingResult = {
+          pass: true,
+          score: 1,
+          reason: 'Manual result (overrides all other grading results)',
+          comment: '',
+          assertion: null,
+          componentResults: [
+            {
+              pass: true,
+              score: 1,
+              reason: 'Manual',
+              assertion: { type: 'human' },
+            },
+          ],
+        } as any;
+        results[0].success = true;
+        await results[0].save();
+      }
+      if (results[1]) {
+        results[1].gradingResult = {
+          pass: false,
+          score: 0,
+          reason: 'Manual result (overrides all other grading results)',
+          comment: '',
+          assertion: null,
+          componentResults: [
+            {
+              pass: false,
+              score: 0,
+              reason: 'Manual',
+              assertion: { type: 'human' },
+            },
+          ],
+        } as any;
+        results[1].success = false;
+        await results[1].save();
+      }
     });
 
     it('should return paginated results with default parameters', async () => {
@@ -375,6 +417,30 @@ describe('evaluator', () => {
       for (const row of result.body) {
         const hasSuccess = row.outputs.some((output) => output.pass === true);
         expect(hasSuccess).toBe(true);
+      }
+    });
+
+    it('should filter by human thumbs up', async () => {
+      const result = await evalWithResults.getTablePage({ filterMode: 'thumbs-up' });
+
+      expect(result.body.length).toBeGreaterThan(0);
+      for (const row of result.body) {
+        const hasHumanPass = row.outputs.some(
+          (output) => output.gradingResult?.componentResults?.some((c) => c.assertion?.type === 'human' && c.pass),
+        );
+        expect(hasHumanPass).toBe(true);
+      }
+    });
+
+    it('should filter by human thumbs down', async () => {
+      const result = await evalWithResults.getTablePage({ filterMode: 'thumbs-down' });
+
+      expect(result.body.length).toBeGreaterThan(0);
+      for (const row of result.body) {
+        const hasHumanFail = row.outputs.some(
+          (output) => output.gradingResult?.componentResults?.some((c) => c.assertion?.type === 'human' && !c.pass),
+        );
+        expect(hasHumanFail).toBe(true);
       }
     });
 

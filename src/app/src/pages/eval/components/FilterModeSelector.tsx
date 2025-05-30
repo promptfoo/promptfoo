@@ -16,6 +16,9 @@ const options = [
   { value: 'errors', label: 'Show errors only' },
   { value: 'different', label: 'Show different outputs' },
   { value: 'highlights', label: 'Show highlights only' },
+  { value: 'thumbs-up', label: 'Show thumbs up' },
+  { value: 'thumbs-down', label: 'Show thumbs down' },
+  { value: 'human', label: 'Show all human ratings' },
 ];
 
 export const FilterModeSelector: React.FC<FilterModeSelectorProps> = ({ filterMode, onChange }) => {
