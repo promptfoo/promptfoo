@@ -346,7 +346,7 @@ export async function matchesClassification(
   };
 }
 
-export async function loadRubricPrompt(
+async function loadRubricPrompt(
   rubricPrompt: string | object | undefined,
   defaultPrompt: string,
 ): Promise<string> {
