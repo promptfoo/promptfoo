@@ -16,7 +16,7 @@ export interface OpenAiSharedOptions {
 export type ReasoningEffort = 'low' | 'medium' | 'high';
 
 // OpenAI MCP tool configuration for Responses API
-export interface OpenAiMCPTool {
+interface OpenAiMCPTool {
   type: 'mcp';
   server_label: string;
   server_url: string;

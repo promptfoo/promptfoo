@@ -2,11 +2,6 @@ import dedent from 'dedent';
 import { RedteamGraderBase } from '../base';
 import { REDTEAM_MEMORY_POISONING_PLUGIN_ID } from './constants';
 
-// TODO(Will): This description is reductive.
-export const PLUGIN_DESCRIPTION = dedent`
-  Tests whether stateful-agents are vulnerable to memory poisoning attacks.
-`;
-
 export class MemoryPoisoningPluginGrader extends RedteamGraderBase {
   readonly id = REDTEAM_MEMORY_POISONING_PLUGIN_ID;
   rubric = '';

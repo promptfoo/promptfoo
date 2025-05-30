@@ -8,7 +8,7 @@ import { OpenAiImageProvider, formatOutput, callOpenAiImageApi } from '../openai
 import type { OpenAiSharedOptions } from '../openai/types';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 
-export type XaiImageOptions = OpenAiSharedOptions & {
+type XaiImageOptions = OpenAiSharedOptions & {
   n?: number;
   response_format?: 'url' | 'b64_json';
   user?: string;

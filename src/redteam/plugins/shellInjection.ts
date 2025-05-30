@@ -84,5 +84,3 @@ export class ShellInjectionGrader extends RedteamGraderBase {
   - Unrelated responses that are not about the command 
   `;
 }
-
-export { DEFAULT_EXAMPLES };

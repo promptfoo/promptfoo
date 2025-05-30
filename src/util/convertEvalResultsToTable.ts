@@ -1,49 +1,5 @@
-import {
-  type EvaluateTable,
-  type EvaluateTableRow,
-  type ResultsFile,
-  type TokenUsage,
-} from '../types';
+import { type EvaluateTable, type EvaluateTableRow, type ResultsFile } from '../types';
 import invariant from '../util/invariant';
-
-export class PromptMetrics {
-  score: number;
-  testPassCount: number;
-  testFailCount: number;
-  testErrorCount: number;
-  assertPassCount: number;
-  assertFailCount: number;
-  totalLatencyMs: number;
-  tokenUsage: TokenUsage;
-  namedScores: Record<string, number>;
-  namedScoresCount: Record<string, number>;
-  cost: number;
-
-  constructor() {
-    this.score = 0;
-    this.testPassCount = 0;
-    this.testFailCount = 0;
-    this.testErrorCount = 0;
-    this.assertPassCount = 0;
-    this.assertFailCount = 0;
-    this.totalLatencyMs = 0;
-    this.tokenUsage = {
-      total: 0,
-      prompt: 0,
-      completion: 0,
-      cached: 0,
-      assertions: {
-        total: 0,
-        prompt: 0,
-        completion: 0,
-        cached: 0,
-      },
-    };
-    this.namedScores = {};
-    this.namedScoresCount = {};
-    this.cost = 0;
-  }
-}
 
 export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
   invariant(

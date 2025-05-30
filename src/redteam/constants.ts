@@ -68,10 +68,10 @@ export const FOUNDATION_PLUGINS = [
 ] as const;
 
 export const AGENTIC_PLUGINS = [MEMORY_POISONING_PLUGIN_ID] as const;
-export type AgenticPlugin = (typeof AGENTIC_PLUGINS)[number];
+type AgenticPlugin = (typeof AGENTIC_PLUGINS)[number];
 
 export const COLLECTIONS = ['default', 'foundation', 'harmful', 'pii'] as const;
-export type Collection = (typeof COLLECTIONS)[number];
+type Collection = (typeof COLLECTIONS)[number];
 
 export const UNALIGNED_PROVIDER_HARM_PLUGINS = {
   'bias:gender': 'Gender Bias',
@@ -111,13 +111,11 @@ export const UNALIGNED_PROVIDER_HARM_PLUGINS = {
   //'locale_specific_illegal (e.g. hate speech in Germany, alcohol in Saudi Arabia)',
   //'scam_fraud_creation',
 } as const;
-export type UnalignedProviderHarmPlugin = keyof typeof UNALIGNED_PROVIDER_HARM_PLUGINS;
 
 export const REDTEAM_PROVIDER_HARM_PLUGINS = {
   'harmful:intellectual-property': 'Intellectual Property violation',
   'harmful:privacy': 'Privacy violations',
 } as const;
-export type RedTeamProviderHarmPlugin = keyof typeof REDTEAM_PROVIDER_HARM_PLUGINS;
 
 export const HARM_PLUGINS = {
   'harmful:misinformation-disinformation':
@@ -176,11 +174,11 @@ export const ADDITIONAL_PLUGINS = [
   'unsafebench',
   'xstest',
 ] as const;
-export type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
+type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
 
 // Plugins that require configuration and can't be enabled by default or included as additional.
 export const CONFIG_REQUIRED_PLUGINS = ['intent', 'policy'] as const;
-export type ConfigRequiredPlugin = (typeof CONFIG_REQUIRED_PLUGINS)[number];
+type ConfigRequiredPlugin = (typeof CONFIG_REQUIRED_PLUGINS)[number];
 
 // Agentic plugins that don't use strategies (standalone agentic plugins)
 export const AGENTIC_EXEMPT_PLUGINS = [
@@ -196,9 +194,6 @@ export const STRATEGY_EXEMPT_PLUGINS = [
   ...AGENTIC_EXEMPT_PLUGINS,
   ...DATASET_EXEMPT_PLUGINS,
 ] as const;
-
-export type AgenticExemptPlugin = (typeof AGENTIC_EXEMPT_PLUGINS)[number];
-export type DatasetExemptPlugin = (typeof DATASET_EXEMPT_PLUGINS)[number];
 export type StrategyExemptPlugin = (typeof STRATEGY_EXEMPT_PLUGINS)[number];
 
 export type Plugin =
@@ -222,43 +217,6 @@ export const ALL_PLUGINS: readonly Plugin[] = [
     ...AGENTIC_PLUGINS,
   ]),
 ].sort() as Plugin[];
-
-export const FRAMEWORK_NAMES: Record<string, string> = {
-  'mitre:atlas': 'MITRE ATLAS',
-  'nist:ai:measure': 'NIST AI RMF',
-  'owasp:api': 'OWASP API Top 10',
-  'owasp:llm': 'OWASP LLM Top 10',
-  'owasp:agentic': 'OWASP Agentic v1.0',
-  'eu:ai-act': 'EU AI Act',
-};
-
-export const OWASP_LLM_TOP_10_NAMES = [
-  'Prompt Injection',
-  'Sensitive Information Disclosure',
-  'Supply Chain',
-  'Improper Output Handling',
-  'Insecure Output Handling',
-  'Excessive Agency',
-  'System Prompt Leakage',
-  'Vector and Embedding Weaknesses',
-  'Misinformation',
-  'Unbounded Consumption',
-];
-
-export const OWASP_API_TOP_10_NAMES = [
-  'Broken Object Level Authorization',
-  'Broken Authentication',
-  'Broken Object Property Level Authorization',
-  'Unrestricted Resource Consumption',
-  'Broken Function Level Authorization',
-  'Unrestricted Access to Sensitive Business Flows',
-  'Server Side Request Forgery',
-  'Security Misconfiguration',
-  'Improper Inventory Management',
-  'Unsafe Consumption of APIs',
-];
-
-export const OWASP_AGENTIC_NAMES = ['T1: Memory Poisoning'];
 
 export const OWASP_LLM_TOP_10_MAPPING: Record<
   string,
@@ -407,15 +365,13 @@ export const OWASP_API_TOP_10_MAPPING: Record<
 /**
  * OWASP Agentic AI - Threats and Mitigations v1.0 (February 2025)
  */
-export const OWASP_AGENTIC_REDTEAM_MAPPING: Record<
-  string,
-  { plugins: Plugin[]; strategies: Strategy[] }
-> = {
-  'owasp:agentic:t01': {
-    plugins: [MEMORY_POISONING_PLUGIN_ID],
-    strategies: [],
-  },
-};
+const OWASP_AGENTIC_REDTEAM_MAPPING: Record<string, { plugins: Plugin[]; strategies: Strategy[] }> =
+  {
+    'owasp:agentic:t01': {
+      plugins: [MEMORY_POISONING_PLUGIN_ID],
+      strategies: [],
+    },
+  };
 
 /**
  * Maps each major phase of the OWASP GenAI Red Teaming Blueprint
@@ -806,30 +762,9 @@ export const ALIASED_PLUGIN_MAPPINGS: Record<
   },
 };
 
-// These are exposed on the frontend under the framework compliance section
-export const FRAMEWORK_COMPLIANCE_IDS = [
-  'mitre:atlas',
-  'nist:ai:measure',
-  'owasp:api',
-  'owasp:llm',
-  'eu:ai-act',
-] as const;
-export type FrameworkComplianceId = (typeof FRAMEWORK_COMPLIANCE_IDS)[number];
-
 export const DEFAULT_STRATEGIES = ['basic', 'jailbreak', 'jailbreak:composite'] as const;
-export type DefaultStrategy = (typeof DEFAULT_STRATEGIES)[number];
 
 export const MULTI_TURN_STRATEGIES = ['crescendo', 'goat'] as const;
-export type MultiTurnStrategy = (typeof MULTI_TURN_STRATEGIES)[number];
-
-export const AGENTIC_STRATEGIES = [
-  'crescendo',
-  'goat',
-  'jailbreak',
-  'jailbreak:tree',
-  'pandamonium',
-] as const;
-export type AgenticStrategy = (typeof AGENTIC_STRATEGIES)[number];
 
 export const DATASET_PLUGINS = [
   'beavertails',
@@ -841,7 +776,6 @@ export const DATASET_PLUGINS = [
   'unsafebench',
   'xstest',
 ] as const;
-export type DatasetPlugin = (typeof DATASET_PLUGINS)[number];
 
 export const ADDITIONAL_STRATEGIES = [
   'audio',
@@ -868,10 +802,9 @@ export const ADDITIONAL_STRATEGIES = [
   'rot13',
   'video',
 ] as const;
-export type AdditionalStrategy = (typeof ADDITIONAL_STRATEGIES)[number];
 
 export const STRATEGY_COLLECTIONS = ['other-encodings'] as const;
-export type StrategyCollection = (typeof STRATEGY_COLLECTIONS)[number];
+type StrategyCollection = (typeof STRATEGY_COLLECTIONS)[number];
 
 export const STRATEGY_COLLECTION_MAPPINGS: Record<StrategyCollection, string[]> = {
   'other-encodings': ['camelcase', 'morse', 'piglatin'],
@@ -1301,20 +1234,6 @@ export const categoryDescriptions = {
   Datasets: 'Pre-defined test cases from research datasets.',
 };
 
-export type TopLevelCategory = keyof typeof riskCategories;
-
-export const categoryMapReverse = Object.entries(riskCategories).reduce(
-  (acc, [category, harms]) => {
-    harms.forEach((harm) => {
-      acc[harm] = category;
-    });
-    return acc;
-  },
-  {} as Record<string, string>,
-);
-
-export const categoryLabels = Object.keys(categoryMapReverse);
-
 // Map from plugin name to metric name or harm category
 export const categoryAliases: Record<Plugin, string> = {
   [MEMORY_POISONING_PLUGIN_ID]: 'AgenticMemoryPoisoning',
@@ -1395,14 +1314,6 @@ export const categoryAliases: Record<Plugin, string> = {
   unsafebench: 'UnsafeBench',
   xstest: 'XSTest',
 };
-
-export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
-  (acc, [key, value]) => {
-    acc[value] = key;
-    return acc;
-  },
-  {} as Record<string, string>,
-);
 
 export const pluginDescriptions: Record<Plugin, string> = {
   [MEMORY_POISONING_PLUGIN_ID]: 'Tests whether an agent is vulnerable to memory poisoning attacks',
@@ -1576,5 +1487,3 @@ export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
   RAG: 'Recommended plugins plus additional tests for RAG specific scenarios like access control',
   Recommended: 'A broad set of plugins recommended by Promptfoo',
 } as const;
-
-export const DEFAULT_OUTPUT_PATH = 'redteam.yaml';

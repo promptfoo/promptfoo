@@ -204,7 +204,7 @@ export interface BedrockAI21GenerationOptions extends BedrockOptions {
   top_p?: number;
 }
 
-export interface BedrockAmazonNovaGenerationOptions extends BedrockOptions {
+interface BedrockAmazonNovaGenerationOptions extends BedrockOptions {
   interfaceConfig?: {
     max_new_tokens?: number;
     temperature?: number;
@@ -241,12 +241,12 @@ export interface BedrockAmazonNovaGenerationOptions extends BedrockOptions {
   };
 }
 
-export type ContentType = 'AUDIO' | 'TEXT' | 'TOOL';
+type ContentType = 'AUDIO' | 'TEXT' | 'TOOL';
 
-export type AudioMediaType = 'audio/wav' | 'audio/lpcm' | 'audio/mulaw' | 'audio/mpeg';
-export type TextMediaType = 'text/plain' | 'application/json';
+type AudioMediaType = 'audio/wav' | 'audio/lpcm' | 'audio/mulaw' | 'audio/mpeg';
+type TextMediaType = 'text/plain' | 'application/json';
 
-export interface AudioConfiguration {
+interface AudioConfiguration {
   readonly mediaType: AudioMediaType;
   readonly sampleRateHertz: number;
   readonly sampleSizeBits: number;
@@ -255,7 +255,7 @@ export interface AudioConfiguration {
   readonly audioType: 'SPEECH';
 }
 
-export interface TextConfiguration {
+interface TextConfiguration {
   readonly contentType: ContentType;
   readonly mediaType: TextMediaType;
 }
@@ -300,7 +300,7 @@ export interface BedrockAmazonNovaSonicGenerationOptions extends BedrockOptions 
   };
 }
 
-export interface BedrockDeepseekGenerationOptions extends BedrockOptions {
+interface BedrockDeepseekGenerationOptions extends BedrockOptions {
   max_tokens?: number;
   temperature?: number;
   top_p?: number;

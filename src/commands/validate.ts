@@ -14,7 +14,7 @@ interface ValidateOptions {
   envPath?: string;
 }
 
-export async function doValidate(
+async function doValidate(
   opts: ValidateOptions,
   defaultConfig: Partial<UnifiedConfig>,
   defaultConfigPath: string | undefined,

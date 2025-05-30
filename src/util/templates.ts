@@ -95,19 +95,3 @@ export function extractVariablesFromTemplates(templates: string[]): string[] {
   }
   return Array.from(variableSet);
 }
-
-export function getTemplateContext(additionalContext: Record<string, any> = {}) {
-  if (getEnvBool('PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS', false)) {
-    return additionalContext;
-  }
-
-  return {
-    ...additionalContext,
-    // Add environment variables with config.env taking precedence
-    env: {
-      ...process.env,
-      ...(cliState.config?.env || {}),
-      ...additionalContext.env,
-    },
-  };
-}

@@ -20,7 +20,6 @@ import {
   type EvaluateTable,
   type PromptWithMetadata,
   type ResultsFile,
-  type TestCase,
   type TestCasesWithMetadata,
   type TestCasesWithMetadataPrompt,
   type UnifiedConfig,
@@ -205,7 +204,7 @@ export async function getLatestEval(filterDescription?: string): Promise<Results
   return await eval_?.toResultsFile();
 }
 
-export async function getPromptsWithPredicate(
+async function getPromptsWithPredicate(
   predicate: (result: ResultsFile) => boolean,
   limit: number,
 ): Promise<PromptWithMetadata[]> {
@@ -270,13 +269,7 @@ export function getPromptsForTestCasesHash(
   }, limit);
 }
 
-export function getPromptsForTestCases(testCases: TestCase[]) {
-  const testCasesJson = JSON.stringify(testCases);
-  const testCasesSha256 = sha256(testCasesJson);
-  return getPromptsForTestCasesHash(testCasesSha256);
-}
-
-export async function getTestCasesWithPredicate(
+async function getTestCasesWithPredicate(
   predicate: (result: ResultsFile) => boolean,
   limit: number,
 ): Promise<TestCasesWithMetadata[]> {
@@ -364,7 +357,7 @@ export async function getDatasetFromHash(hash: string) {
   return undefined;
 }
 
-export async function getEvalsWithPredicate(
+async function getEvalsWithPredicate(
   predicate: (result: ResultsFile) => boolean,
   limit: number,
 ): Promise<EvalWithMetadata[]> {
@@ -411,7 +404,7 @@ export async function getEvalsWithPredicate(
   return ret;
 }
 
-export async function getEvals(limit: number = DEFAULT_QUERY_LIMIT) {
+async function getEvals(limit: number = DEFAULT_QUERY_LIMIT) {
   return getEvalsWithPredicate(() => true, limit);
 }
 
@@ -458,7 +451,7 @@ export async function deleteAllEvals(): Promise<void> {
   });
 }
 
-export type StandaloneEval = CompletedPrompt & {
+type StandaloneEval = CompletedPrompt & {
   evalId: string;
   description: string | null;
   datasetId: string | null;

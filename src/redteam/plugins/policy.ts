@@ -3,7 +3,7 @@ import type { Assertion, ApiProvider, TestCase, AtomicTestCase, GradingResult } 
 import invariant from '../../util/invariant';
 import { RedteamPluginBase, RedteamGraderBase } from './base';
 
-export const PLUGIN_ID = 'promptfoo:redteam:policy';
+const PLUGIN_ID = 'promptfoo:redteam:policy';
 
 export class PolicyPlugin extends RedteamPluginBase {
   readonly id = PLUGIN_ID;

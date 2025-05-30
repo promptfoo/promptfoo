@@ -12,7 +12,7 @@ import type {
 import invariant from '../../util/invariant';
 import { RedteamPluginBase, RedteamGraderBase } from './base';
 
-export const PLUGIN_ID = 'promptfoo:redteam:tool-discovery:multi-turn';
+const PLUGIN_ID = 'promptfoo:redteam:tool-discovery:multi-turn';
 
 interface ToolDiscoveryConfig extends RedteamObjectConfig {
   injectVar: string;

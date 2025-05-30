@@ -204,4 +204,3 @@ export const CustomPoliciesSection = () => {
   );
 };
 
-export default memo(CustomPoliciesSection);

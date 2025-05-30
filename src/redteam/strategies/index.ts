@@ -29,7 +29,7 @@ import { addImageToBase64 } from './simpleImage';
 import { addVideoToBase64 } from './simpleVideo';
 import { addCompositeTestCases } from './singleTurnComposite';
 
-export interface Strategy {
+interface Strategy {
   id: string;
   action: (
     testCases: TestCaseWithPlugin[],

@@ -76,7 +76,7 @@ export function urlEncodeRawRequestPath(rawRequest: string) {
   return rawRequest;
 }
 
-export async function generateSignature(
+async function generateSignature(
   privateKeyPathOrKey: string,
   signatureTimestamp: number,
   signatureDataTemplate: string,
@@ -101,7 +101,7 @@ export async function generateSignature(
   }
 }
 
-export function needsSignatureRefresh(
+function needsSignatureRefresh(
   timestamp: number,
   validityMs: number,
   bufferMs?: number,
@@ -112,7 +112,7 @@ export function needsSignatureRefresh(
   return timeElapsed + effectiveBufferMs >= validityMs;
 }
 
-export const HttpProviderConfigSchema = z.object({
+const HttpProviderConfigSchema = z.object({
   body: z.union([z.record(z.any()), z.string(), z.array(z.any())]).optional(),
   headers: z.record(z.string()).optional(),
   maxRetries: z.number().min(0).optional(),
@@ -153,7 +153,7 @@ export const HttpProviderConfigSchema = z.object({
     .optional(),
 });
 
-export type HttpProviderConfig = z.infer<typeof HttpProviderConfigSchema>;
+type HttpProviderConfig = z.infer<typeof HttpProviderConfigSchema>;
 
 function contentTypeIsJson(headers: Record<string, string> | undefined) {
   if (!headers) {

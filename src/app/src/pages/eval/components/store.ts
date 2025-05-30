@@ -26,11 +26,6 @@ interface ColumnState {
   columnVisibility: VisibilityState;
 }
 
-export interface PaginationState {
-  pageIndex: number;
-  pageSize: number;
-}
-
 interface TableState {
   evalId: string | null;
   setEvalId: (evalId: string) => void;

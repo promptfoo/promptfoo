@@ -49,9 +49,6 @@ export const DEFAULT_HTTP_TARGET: ProviderOptions = {
   },
 };
 
-export const PROMPT_EXAMPLE =
-  'You are a travel agent specialized in budget trips to Europe\n\nUser query: {{prompt}}';
-
 const defaultConfig: Config = {
   description: 'My Red Team Configuration',
   prompts: ['{{prompt}}'],

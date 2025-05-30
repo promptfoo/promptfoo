@@ -18,8 +18,8 @@ export const TelemetryEventSchema = z.object({
   packageVersion: z.string().optional().default(VERSION),
   properties: z.record(z.union([z.string(), z.number(), z.boolean(), z.array(z.string())])),
 });
-export type TelemetryEvent = z.infer<typeof TelemetryEventSchema>;
-export type TelemetryEventTypes = TelemetryEvent['event'];
+type TelemetryEvent = z.infer<typeof TelemetryEventSchema>;
+type TelemetryEventTypes = TelemetryEvent['event'];
 export type EventProperties = TelemetryEvent['properties'];
 
 const TELEMETRY_ENDPOINT = 'https://api.promptfoo.dev/telemetry';

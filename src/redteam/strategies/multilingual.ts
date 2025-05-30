@@ -14,7 +14,7 @@ import { redteamProviderManager } from '../providers/shared';
 import { getRemoteGenerationUrl, shouldGenerateRemote } from '../remoteGeneration';
 
 export const DEFAULT_LANGUAGES = ['bn', 'sw', 'jv']; // Bengali, Swahili, Javanese
-export const DEFAULT_BATCH_SIZE = 3; // Default number of languages to process in a single batch
+const DEFAULT_BATCH_SIZE = 3; // Default number of languages to process in a single batch
 
 /**
  * Helper function to get the concurrency limit from config or use default
@@ -37,7 +37,7 @@ function getBatchSize(config: Record<string, any> = {}): number {
   return config.batchSize || DEFAULT_BATCH_SIZE;
 }
 
-export async function generateMultilingual(
+async function generateMultilingual(
   testCases: TestCase[],
   injectVar: string,
   config: Record<string, any>,
@@ -239,11 +239,6 @@ export async function translateBatch(
     );
     return {};
   }
-}
-
-export async function translate(text: string, lang: string): Promise<string | null> {
-  const translations = await translateBatch(text, [lang]);
-  return translations[lang] || null;
 }
 
 export async function addMultilingual(

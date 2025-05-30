@@ -14,7 +14,7 @@ import type { EnvOverrides } from './types/env';
 import { isRunningUnderNpx } from './util';
 import { getNunjucksEngine } from './util/templates';
 
-export const CONFIG_TEMPLATE = `# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+const CONFIG_TEMPLATE = `# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 
 # Learn more about building a configuration: https://promptfoo.dev/docs/configuration/guide
 
@@ -102,7 +102,7 @@ tests:
 {% endif %}
 `;
 
-export const PYTHON_PROVIDER = `# Learn more about building a Python provider: https://promptfoo.dev/docs/providers/python/
+const PYTHON_PROVIDER = `# Learn more about building a Python provider: https://promptfoo.dev/docs/providers/python/
 import json
 
 def call_api(prompt, options, context):
@@ -140,7 +140,7 @@ def call_api(prompt, options, context):
     return result
 `;
 
-export const JAVASCRIPT_PROVIDER = `// Learn more about building a JavaScript provider: https://promptfoo.dev/docs/providers/custom-api
+const JAVASCRIPT_PROVIDER = `// Learn more about building a JavaScript provider: https://promptfoo.dev/docs/providers/custom-api
 // customApiProvider.js
 
 class CustomApiProvider {
@@ -179,7 +179,7 @@ class CustomApiProvider {
 module.exports = CustomApiProvider;
 `;
 
-export const BASH_PROVIDER = `# Learn more about building any generic provider: https://promptfoo.dev/docs/providers/custom-script
+const BASH_PROVIDER = `# Learn more about building any generic provider: https://promptfoo.dev/docs/providers/custom-script
 
 # Anything printed to standard output will be captured as the output of the provider
 
@@ -189,7 +189,7 @@ echo "This is the LLM output"
 php my_script.php
 `;
 
-export const PYTHON_VAR = `# Learn more about using dynamic variables: https://promptfoo.dev/docs/configuration/guide/#import-vars-from-separate-files
+const PYTHON_VAR = `# Learn more about using dynamic variables: https://promptfoo.dev/docs/configuration/guide/#import-vars-from-separate-files
 def get_var(var_name, prompt, other_vars):
     # This is where you can fetch documents from a database, call an API, etc.
     # ...
@@ -207,7 +207,7 @@ def get_var(var_name, prompt, other_vars):
     # return { 'error': 'Error message' }
 `;
 
-export const JAVASCRIPT_VAR = `// Learn more about using dynamic variables: https://promptfoo.dev/docs/configuration/guide/#import-vars-from-separate-files
+const JAVASCRIPT_VAR = `// Learn more about using dynamic variables: https://promptfoo.dev/docs/configuration/guide/#import-vars-from-separate-files
 module.exports = function (varName, prompt, otherVars) {
   // This is where you can fetch documents from a database, call an API, etc.
   // ...
@@ -229,7 +229,7 @@ module.exports = function (varName, prompt, otherVars) {
 };
 `;
 
-export const DEFAULT_README = `To get started, set your OPENAI_API_KEY environment variable, or other required keys for the providers you selected.
+const DEFAULT_README = `To get started, set your OPENAI_API_KEY environment variable, or other required keys for the providers you selected.
 
 Next, edit promptfooconfig.yaml.
 

@@ -136,7 +136,7 @@ type GatewayChatOptions = GatewayBaseOptions & {
   safetySettings?: { category: string; threshold: string }[];
 };
 
-export class AdalineGatewayGenericProvider implements ApiProvider {
+class AdalineGatewayGenericProvider implements ApiProvider {
   gateway: Gateway;
 
   modelName: string;
@@ -709,4 +709,4 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
   }
 }
 
-export { AdalineGatewayCachePlugin, adalineGateway };
+export { AdalineGatewayCachePlugin,  };
