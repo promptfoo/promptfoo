@@ -391,6 +391,7 @@ Generate adversarial test cases to challenge your prompts and models.
 | `--remote`                       | Force remote inference wherever possible                             | false                |
 | `--force`                        | Force generation even if no changes are detected                     | false                |
 | `--burp-escape-json`             | Escape special characters in .burp output for JSON payloads          | false                |
+| `-t, --target <id>`              | Cloud provider target ID to run the scan on                          |                      |
 
 For example, let's suppose we have the following `promptfooconfig.yaml`:
 
@@ -413,6 +414,12 @@ This command overrides the system purpose and the variable to inject adversarial
 
 ```sh
 promptfoo redteam generate --purpose 'Travel agent that helps users plan trips' --injectVar 'message'
+```
+
+This command generates test cases using a cloud configuration and specific target:
+
+```sh
+promptfoo redteam generate -c 12345678-1234-1234-1234-123456789012 -t 87654321-4321-4321-4321-210987654321
 ```
 
 ## `promptfoo redteam poison`
