@@ -170,6 +170,7 @@ export default function ResultsView({
     setAuthor,
     filteredResultsCount,
     totalResultsCount,
+    highlightedResultsCount,
   } = useTableStore();
 
   const {
@@ -591,6 +592,13 @@ export default function ResultsView({
             </>
           ) : (
             <>{filteredResultsCount} results</>
+          )}
+          {highlightedResultsCount > 0 && (
+            <Chip
+              size="small"
+              label={`Highlighted: ${highlightedResultsCount}`}
+              sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
+            />
           )}
         </Box>
         <Box flexGrow={1} />
