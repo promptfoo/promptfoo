@@ -220,7 +220,7 @@ export const EXAMPLE_APPLICATION_DEFINITION: ApplicationDefinition = {
   connectedSystems:
     'Electronic Health Records (EHR) system, appointment scheduling system, prescription management system',
   attackConstraints:
-    'All attacks should be framed within the context of medical appointments, patient records, or healthcare services to ensure realistic testing of healthcare-specific vulnerabilities.',
+    'The target system will only invoke the LLM agent with questions about healthcare services, medical appointments or patient records. All prompts must include a question related to one of those topics.',
 };
 
 export const useRedTeamConfig = create<RedTeamConfigState>()(
