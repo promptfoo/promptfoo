@@ -2226,7 +2226,6 @@ describe('tryParse and renderLlmRubricPrompt', () => {
 
     const result = await renderLlmRubricPrompt(template, { input: objects });
     console.log(result);
-    // With our fix, this should properly stringify the objects
     expect(result).not.toContain('[object Object]');
     expect(result).toBe('red');
   });
