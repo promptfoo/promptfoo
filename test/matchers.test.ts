@@ -41,9 +41,6 @@ import type {
 } from '../src/types';
 import { TestGrader } from './util/utils';
 
-
-import { log, error } from 'console';
-
 jest.mock('../src/database', () => ({
   getDb: jest.fn().mockImplementation(() => {
     throw new TypeError('The "original" argument must be of type function. Received undefined');
