@@ -101,7 +101,9 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     logger.debug(`\tOpenAI thread run API response: ${JSON.stringify(run)}`);
 
     while (true) {
-      const currentRun = await openai.beta.threads.runs.retrieve(run.thread_id, run.id);
+      const currentRun = await openai.beta.threads.runs.retrieve(run.id, {
+        thread_id: run.thread_id,
+      });
 
       if (currentRun.status === 'completed') {
         run = currentRun;
@@ -150,13 +152,10 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
           )}`,
         );
         try {
-          run = await openai.beta.threads.runs.submitToolOutputs(
-            currentRun.thread_id,
-            currentRun.id,
-            {
-              tool_outputs: toolOutputs,
-            },
-          );
+          run = await openai.beta.threads.runs.submitToolOutputs(currentRun.id, {
+            thread_id: currentRun.thread_id,
+            tool_outputs: toolOutputs,
+          });
         } catch (err) {
           return failApiCall(err);
         }
@@ -190,7 +189,8 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     logger.debug(`Calling OpenAI API, getting thread run steps for ${run.thread_id}`);
     let steps;
     try {
-      steps = await openai.beta.threads.runs.steps.list(run.thread_id, run.id, {
+      steps = await openai.beta.threads.runs.steps.list(run.id, {
+        thread_id: run.thread_id,
         order: 'asc',
       });
     } catch (err) {
@@ -205,8 +205,10 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
         let message;
         try {
           message = await openai.beta.threads.messages.retrieve(
-            run.thread_id,
             step.step_details.message_creation.message_id,
+            {
+              thread_id: run.thread_id,
+            },
           );
         } catch (err) {
           return failApiCall(err);
