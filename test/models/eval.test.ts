@@ -425,8 +425,10 @@ describe('evaluator', () => {
 
       expect(result.body.length).toBeGreaterThan(0);
       for (const row of result.body) {
-        const hasHumanPass = row.outputs.some(
-          (output) => output.gradingResult?.componentResults?.some((c) => c.assertion?.type === 'human' && c.pass),
+        const hasHumanPass = row.outputs.some((output) =>
+          output.gradingResult?.componentResults?.some(
+            (c) => c.assertion?.type === 'human' && c.pass,
+          ),
         );
         expect(hasHumanPass).toBe(true);
       }
@@ -437,8 +439,10 @@ describe('evaluator', () => {
 
       expect(result.body.length).toBeGreaterThan(0);
       for (const row of result.body) {
-        const hasHumanFail = row.outputs.some(
-          (output) => output.gradingResult?.componentResults?.some((c) => c.assertion?.type === 'human' && !c.pass),
+        const hasHumanFail = row.outputs.some((output) =>
+          output.gradingResult?.componentResults?.some(
+            (c) => c.assertion?.type === 'human' && !c.pass,
+          ),
         );
         expect(hasHumanFail).toBe(true);
       }

@@ -8,20 +8,27 @@ import Select from '@mui/material/Select';
 interface FilterModeSelectorProps {
   filterMode: string;
   onChange: (event: SelectChangeEvent) => void;
+  showDifferentOption?: boolean;
 }
 
-const options = [
+const BASE_OPTIONS = [
   { value: 'all', label: 'Show all results' },
   { value: 'failures', label: 'Show failures only' },
   { value: 'errors', label: 'Show errors only' },
   { value: 'different', label: 'Show different outputs' },
   { value: 'highlights', label: 'Show highlights only' },
-  { value: 'thumbs-up', label: 'Show thumbs up' },
-  { value: 'thumbs-down', label: 'Show thumbs down' },
-  { value: 'human', label: 'Show all human ratings' },
 ];
 
-export const FilterModeSelector: React.FC<FilterModeSelectorProps> = ({ filterMode, onChange }) => {
+export const FilterModeSelector: React.FC<FilterModeSelectorProps> = ({
+  filterMode,
+  onChange,
+  showDifferentOption = true,
+}) => {
+  const options = React.useMemo(
+    () =>
+      showDifferentOption ? BASE_OPTIONS : BASE_OPTIONS.filter((o) => o.value !== 'different'),
+    [showDifferentOption],
+  );
   return (
     <FormControl sx={{ minWidth: 180 }} size="small">
       <InputLabel id="filter-mode-label">Display</InputLabel>

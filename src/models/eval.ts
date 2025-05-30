@@ -441,9 +441,7 @@ export default class Eval {
     if (filter === 'errors') {
       conditions.push(`failure_reason = ${ResultFailureReason.ERROR}`);
     } else if (filter === 'failures') {
-      conditions.push(
-        `success = 0 AND failure_reason != ${ResultFailureReason.ERROR}`,
-      );
+      conditions.push(`success = 0 AND failure_reason != ${ResultFailureReason.ERROR}`);
     } else if (filter === 'passes') {
       conditions.push(`success = 1`);
     } else if (filter === 'thumbs-up') {
