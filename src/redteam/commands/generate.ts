@@ -12,6 +12,7 @@ import { disableCache } from '../../cache';
 import cliState from '../../cliState';
 import { VERSION } from '../../constants';
 import { getEnvBool } from '../../envars';
+import { getAuthor } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { loadApiProviders } from '../../providers';
 import telemetry from '../../telemetry';
@@ -316,7 +317,22 @@ export async function doGenerateRedteam(
         ...(targetPurposeDiscoveryResult ? { targetPurposeDiscoveryResult } : {}),
       },
     };
-    ret = writePromptfooConfig(updatedYaml, options.output);
+    const author = getAuthor();
+    const headerComments = [
+      `===================================================================`,
+      `REDTEAM CONFIGURATION`,
+      `===================================================================`,
+      `Generated: ${new Date().toISOString()}`,
+      author ? `Author:    ${author}` : undefined,
+      ``,
+      `Test Configuration:`,
+      `  Total cases: ${redteamTests.length}`,
+      `  Plugins:     ${plugins.map((p) => p.id).join(', ')}`,
+      `  Strategies:  ${strategyObjs.map((s) => s.id).join(', ')}`,
+      `===================================================================`,
+    ].filter(Boolean) as string[];
+
+    ret = writePromptfooConfig(updatedYaml, options.output, headerComments);
     printBorder();
     const relativeOutputPath = path.relative(process.cwd(), options.output);
     logger.info(`Wrote ${redteamTests.length} test cases to ${relativeOutputPath}`);
@@ -365,7 +381,22 @@ export async function doGenerateRedteam(
       configHash: getConfigHash(configPath),
       ...(targetPurposeDiscoveryResult ? { targetPurposeDiscoveryResult } : {}),
     };
-    ret = writePromptfooConfig(existingConfig, configPath);
+    const author = getAuthor();
+    const headerComments = [
+      `===================================================================`,
+      `REDTEAM CONFIGURATION UPDATE`,
+      `===================================================================`,
+      `Updated: ${new Date().toISOString()}`,
+      author ? `Author:  ${author}` : undefined,
+      ``,
+      `Changes:`,
+      `  Added ${redteamTests.length} new test cases`,
+      `  Plugins:     ${plugins.map((p) => p.id).join(', ')}`,
+      `  Strategies:  ${strategyObjs.map((s) => s.id).join(', ')}`,
+      `===================================================================`,
+    ].filter(Boolean) as string[];
+
+    ret = writePromptfooConfig(existingConfig, configPath, headerComments);
     logger.info(
       `\nWrote ${redteamTests.length} new test cases to ${path.relative(process.cwd(), configPath)}`,
     );
@@ -375,7 +406,22 @@ export async function doGenerateRedteam(
       : `${commandPrefix} eval -c ${path.relative(process.cwd(), configPath)}`;
     logger.info('\n' + chalk.green(`Run ${chalk.bold(`${command}`)} to run the red team!`));
   } else {
-    ret = writePromptfooConfig({ tests: redteamTests }, 'redteam.yaml');
+    const author = getAuthor();
+    const headerComments = [
+      `===================================================================`,
+      `REDTEAM CONFIGURATION`,
+      `===================================================================`,
+      `Generated: ${new Date().toISOString()}`,
+      author ? `Author:    ${author}` : undefined,
+      ``,
+      `Test Configuration:`,
+      `  Total cases: ${redteamTests.length}`,
+      `  Plugins:     ${plugins.map((p) => p.id).join(', ')}`,
+      `  Strategies:  ${strategyObjs.map((s) => s.id).join(', ')}`,
+      `===================================================================`,
+    ].filter(Boolean) as string[];
+
+    ret = writePromptfooConfig({ tests: redteamTests }, 'redteam.yaml', headerComments);
   }
 
   telemetry.record('command_used', {
