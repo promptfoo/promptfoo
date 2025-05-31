@@ -2,29 +2,13 @@ import React, { useEffect } from 'react';
 import Layout from '@theme/Layout';
 import styles from './careers.module.css';
 
-declare global {
-  interface Window {
-    __ashbyBaseJobBoardUrl?: string;
-  }
-}
-
 export default function Careers(): JSX.Element {
   useEffect(() => {
-    window.__ashbyBaseJobBoardUrl = 'https://jobs.ashbyhq.com/promptfoo';
-
     const script = document.createElement('script');
-    script.id = 'ashby-script';
     script.src = 'https://jobs.ashbyhq.com/promptfoo/embed';
     script.async = true;
 
     document.body.appendChild(script);
-
-    return () => {
-      const existingScript = document.getElementById('ashby-script');
-      if (existingScript) {
-        document.body.removeChild(existingScript);
-      }
-    };
   }, []);
 
   return (
@@ -42,10 +26,8 @@ export default function Careers(): JSX.Element {
           developer community and our{' '}
           <a href="https://github.com/promptfoo/promptfoo">open-source</a> offering.
         </p>
-
-        <h2>Open Positions</h2>
-        <div id="ashby_embed"></div>
       </main>
+      <div id="ashby_embed" />
     </Layout>
   );
 }
