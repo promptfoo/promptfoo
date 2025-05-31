@@ -1583,5 +1583,3 @@ export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
 } as const;
 
 export const DEFAULT_OUTPUT_PATH = 'redteam.yaml';
-
-export { _ALL_STRATEGIES };
