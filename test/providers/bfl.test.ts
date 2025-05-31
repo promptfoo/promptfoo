@@ -123,9 +123,9 @@ describe('BlackForestLabsProvider', () => {
   describe('callApi', () => {
     it('should throw error when API key is not set', async () => {
       const provider = new BlackForestLabsProvider('flux-pro-1.1');
-      
+
       await expect(provider.callApi('test prompt')).rejects.toThrow(
-        'Black Forest Labs API key is not set'
+        'Black Forest Labs API key is not set',
       );
     });
   });
@@ -145,7 +145,7 @@ describe('createBlackForestLabsProvider', () => {
 
   it('should throw error for invalid provider path', () => {
     expect(() => createBlackForestLabsProvider('bfl')).toThrow(
-      'Invalid BFL provider path: bfl. Use format: bfl:<model-name>'
+      'Invalid BFL provider path: bfl. Use format: bfl:<model-name>',
     );
   });
 
@@ -153,4 +153,4 @@ describe('createBlackForestLabsProvider', () => {
     const provider = createBlackForestLabsProvider('bfl:flux-pro-1.1');
     expect((provider as BlackForestLabsProvider).modelName).toBe('flux-pro-1.1');
   });
-}); 
+});

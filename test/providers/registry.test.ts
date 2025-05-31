@@ -320,11 +320,7 @@ describe('Provider Registry', () => {
       expect(kontextProvider).toBeDefined();
       expect(kontextProvider.id()).toBe('bfl:flux-kontext-pro');
 
-      const devProvider = await factory!.create(
-        'bfl:flux-dev',
-        mockProviderOptions,
-        mockContext,
-      );
+      const devProvider = await factory!.create('bfl:flux-dev', mockProviderOptions, mockContext);
       expect(devProvider).toBeDefined();
       expect(devProvider.id()).toBe('bfl:flux-dev');
     });

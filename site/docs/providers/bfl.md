@@ -44,7 +44,7 @@ providers:
   - bfl:flux-pro-1.1
 
 prompts:
-  - "A majestic mountain landscape at sunset"
+  - 'A majestic mountain landscape at sunset'
 
 tests:
   - vars: {}
@@ -56,10 +56,10 @@ tests:
 providers:
   - id: bfl:flux-kontext-pro
     config:
-      input_image: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD..." # Base64 encoded image
-      
+      input_image: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD...' # Base64 encoded image
+
 prompts:
-  - "Change the car color to red while maintaining the same style"
+  - 'Change the car color to red while maintaining the same style'
 
 tests:
   - vars: {}
@@ -72,15 +72,15 @@ providers:
   - id: bfl:flux-pro-1.1
     config:
       seed: 42
-      aspect_ratio: "16:9"
-      output_format: "jpeg"
+      aspect_ratio: '16:9'
+      output_format: 'jpeg'
       prompt_upsampling: true
       safety_tolerance: 2
       width: 1024
       height: 576
 
 prompts:
-  - "A futuristic cityscape with flying cars"
+  - 'A futuristic cityscape with flying cars'
 
 tests:
   - vars: {}
@@ -114,16 +114,16 @@ Kontext models excel at image-to-image editing:
 providers:
   - id: bfl:flux-kontext-pro
     config:
-      input_image: "{{ image_base64 }}"
+      input_image: '{{ image_base64 }}'
 
 prompts:
-  - "Add a hat to the person while maintaining the same style of the painting"
-  - "Change the background to a sunny beach"
-  - "Transform to watercolor painting style"
+  - 'Add a hat to the person while maintaining the same style of the painting'
+  - 'Change the background to a sunny beach'
+  - 'Transform to watercolor painting style'
 
 tests:
   - vars:
-      image_base64: "data:image/jpeg;base64,..."
+      image_base64: 'data:image/jpeg;base64,...'
 ```
 
 ### FLUX Pro 1.1
@@ -136,14 +136,14 @@ providers:
     config:
       width: 1344
       height: 768
-      image_prompt: "{{ style_reference }}"
+      image_prompt: '{{ style_reference }}'
 
 prompts:
-  - "A serene lake surrounded by mountains"
+  - 'A serene lake surrounded by mountains'
 
 tests:
   - vars:
-      style_reference: "data:image/jpeg;base64,..." # Optional style reference
+      style_reference: 'data:image/jpeg;base64,...' # Optional style reference
 ```
 
 ## Prompting Best Practices
@@ -157,7 +157,7 @@ tests:
 
 ```yaml
 prompts:
-  - "A photorealistic portrait of a wise elderly wizard with a long silver beard, wearing deep blue robes, standing in a mystical forest with glowing fireflies, dramatic lighting, highly detailed"
+  - 'A photorealistic portrait of a wise elderly wizard with a long silver beard, wearing deep blue robes, standing in a mystical forest with glowing fireflies, dramatic lighting, highly detailed'
 ```
 
 ### For Image-to-Image (Kontext models)
@@ -169,9 +169,9 @@ prompts:
 
 ```yaml
 prompts:
-  - "Change the car color to red while maintaining the same lighting and background"
-  - "Add snow to the scene while preserving the original composition"
-  - "Transform to impressionist painting style while keeping the same subject matter"
+  - 'Change the car color to red while maintaining the same lighting and background'
+  - 'Add snow to the scene while preserving the original composition'
+  - 'Transform to impressionist painting style while keeping the same subject matter'
 ```
 
 ## Error Handling
@@ -197,52 +197,52 @@ The provider includes cost tracking in the response for billing transparency.
 
 ## Comparison with Other Image Providers
 
-| Feature                | BFL FLUX    | OpenAI DALL-E | Replicate | fal.ai |
-| ---------------------- | ----------- | ------------- | --------- | ------ |
-| Image-to-image editing | ✅ (Kontext) | ❌             | ✅         | ✅      |
-| High resolution        | ✅           | ✅             | ✅         | ✅      |
-| Style transfer         | ✅           | Limited       | ✅         | ✅      |
-| Aspect ratio control   | ✅           | ✅             | ✅         | ✅      |
-| Real-time generation   | ❌           | ❌             | ❌         | ✅      |
-| API reliability        | ✅           | ✅             | ✅         | ✅      |
+| Feature                | BFL FLUX     | OpenAI DALL-E | Replicate | fal.ai |
+| ---------------------- | ------------ | ------------- | --------- | ------ |
+| Image-to-image editing | ✅ (Kontext) | ❌            | ✅        | ✅     |
+| High resolution        | ✅           | ✅            | ✅        | ✅     |
+| Style transfer         | ✅           | Limited       | ✅        | ✅     |
+| Aspect ratio control   | ✅           | ✅            | ✅        | ✅     |
+| Real-time generation   | ❌           | ❌            | ❌        | ✅     |
+| API reliability        | ✅           | ✅            | ✅        | ✅     |
 
 ## Example Evaluation Config
 
 ```yaml
-description: "Evaluate BFL FLUX models for different image generation tasks"
+description: 'Evaluate BFL FLUX models for different image generation tasks'
 
 providers:
   - id: bfl:flux-pro-1.1
-    label: "FLUX Pro 1.1"
+    label: 'FLUX Pro 1.1'
     config:
-      aspect_ratio: "16:9"
-      output_format: "jpeg"
+      aspect_ratio: '16:9'
+      output_format: 'jpeg'
   - id: bfl:flux-kontext-pro
-    label: "FLUX Kontext Pro"
+    label: 'FLUX Kontext Pro'
     config:
-      input_image: "{{ base_image }}"
+      input_image: '{{ base_image }}'
 
 prompts:
-  - "{{ prompt }}"
+  - '{{ prompt }}'
 
 tests:
-  - description: "Landscape generation"
+  - description: 'Landscape generation'
     vars:
-      prompt: "A serene mountain lake at sunrise with mist and reflection"
-  - description: "Portrait generation"
+      prompt: 'A serene mountain lake at sunrise with mist and reflection'
+  - description: 'Portrait generation'
     vars:
-      prompt: "Professional headshot of a confident business executive"
-  - description: "Image editing"
+      prompt: 'Professional headshot of a confident business executive'
+  - description: 'Image editing'
     vars:
-      prompt: "Change the sky to sunset colors"
-      base_image: "data:image/jpeg;base64,..."
+      prompt: 'Change the sky to sunset colors'
+      base_image: 'data:image/jpeg;base64,...'
 
 defaultTest:
   assert:
     - type: contains
-      value: "![" # Verify markdown image format
+      value: '![' # Verify markdown image format
     - type: not-contains
-      value: "error"
+      value: 'error'
 ```
 
-This configuration allows you to evaluate different FLUX models across various image generation and editing tasks. 
+This configuration allows you to evaluate different FLUX models across various image generation and editing tasks.

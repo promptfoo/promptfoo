@@ -29,9 +29,9 @@ export interface BflImageOptions {
   headers?: Record<string, string>;
 }
 
-export type BflModel = 
+export type BflModel =
   | 'flux-kontext-pro'
-  | 'flux-kontext-max' 
+  | 'flux-kontext-max'
   | 'flux-pro-1.1'
   | 'flux-pro'
   | 'flux-dev'
@@ -100,7 +100,10 @@ export class BlackForestLabsProvider implements ApiProvider {
     return endpointMap[this.modelName] || '/flux-pro-1.1';
   }
 
-  private async submitImageGeneration(prompt: string, config: BflImageOptions): Promise<BflSubmissionResponse> {
+  private async submitImageGeneration(
+    prompt: string,
+    config: BflImageOptions,
+  ): Promise<BflSubmissionResponse> {
     const endpoint = this.getEndpoint();
     const url = `${this.getApiUrl()}${endpoint}`;
 
@@ -155,7 +158,9 @@ export class BlackForestLabsProvider implements ApiProvider {
       ...config.headers,
     };
 
-    logger.debug(`Submitting BFL image generation: ${url} ${JSON.stringify({ ...body, prompt: ellipsize(prompt, 50) })}`);
+    logger.debug(
+      `Submitting BFL image generation: ${url} ${JSON.stringify({ ...body, prompt: ellipsize(prompt, 50) })}`,
+    );
 
     try {
       const { data, status, statusText } = await fetchWithCache(
@@ -171,7 +176,9 @@ export class BlackForestLabsProvider implements ApiProvider {
       );
 
       if (status < 200 || status >= 300) {
-        throw new Error(`API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`);
+        throw new Error(
+          `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
+        );
       }
 
       return data as BflSubmissionResponse;
@@ -180,7 +187,10 @@ export class BlackForestLabsProvider implements ApiProvider {
     }
   }
 
-  private async pollForResult(submissionResponse: BflSubmissionResponse, config: BflImageOptions): Promise<BflResultResponse> {
+  private async pollForResult(
+    submissionResponse: BflSubmissionResponse,
+    config: BflImageOptions,
+  ): Promise<BflResultResponse> {
     const maxPollTime = config.max_poll_time_ms || 300000; // 5 minutes
     const pollInterval = config.poll_interval_ms || 2000; // 2 seconds
     const startTime = Date.now();
@@ -204,7 +214,9 @@ export class BlackForestLabsProvider implements ApiProvider {
         );
 
         if (status < 200 || status >= 300) {
-          throw new Error(`Polling error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`);
+          throw new Error(
+            `Polling error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
+          );
         }
 
         const result = data as BflResultResponse;
@@ -256,7 +268,7 @@ export class BlackForestLabsProvider implements ApiProvider {
     try {
       // Submit the image generation request
       const submissionResponse = await this.submitImageGeneration(prompt, config);
-      
+
       // Poll for the result
       const result = await this.pollForResult(submissionResponse, config);
 
@@ -323,4 +335,4 @@ export function createBlackForestLabsProvider(
     throw new Error(`Invalid BFL provider path: ${providerPath}. Use format: bfl:<model-name>`);
   }
   return new BlackForestLabsProvider(modelName as BflModel, options);
-} 
+}

@@ -1,90 +1,90 @@
-description: "Black Forest Labs FLUX Image Generation and Editing Examples"
+description: 'Black Forest Labs FLUX Image Generation and Editing Examples'
 
 providers:
   # Text-to-Image Generation
   - id: bfl:flux-pro-1.1
-    label: "FLUX Pro 1.1"
+    label: 'FLUX Pro 1.1'
     config:
-      aspect_ratio: "16:9"
-      output_format: "jpeg"
+      aspect_ratio: '16:9'
+      output_format: 'jpeg'
       seed: 42
       prompt_upsampling: true
       safety_tolerance: 2
-  
+
   # Image-to-Image Editing with Kontext
   - id: bfl:flux-kontext-pro
-    label: "FLUX Kontext Pro"
+    label: 'FLUX Kontext Pro'
     config:
-      input_image: "{{ input_image }}"
-      output_format: "png"
+      input_image: '{{ input_image }}'
+      output_format: 'png'
       prompt_upsampling: false
       safety_tolerance: 2
-  
+
   # Development Model (Lower Cost)
   - id: bfl:flux-dev
-    label: "FLUX Dev"
+    label: 'FLUX Dev'
     config:
-      aspect_ratio: "1:1"
-      output_format: "png"
+      aspect_ratio: '1:1'
+      output_format: 'png'
 
 prompts:
-  - "{{ prompt }}"
+  - '{{ prompt }}'
 
 tests:
   # Text-to-Image Generation Tests
-  - description: "Landscape Generation"
+  - description: 'Landscape Generation'
     vars:
-      prompt: "A serene mountain lake at sunrise with mist rising from the water, dramatic lighting, photorealistic, highly detailed"
+      prompt: 'A serene mountain lake at sunrise with mist rising from the water, dramatic lighting, photorealistic, highly detailed'
     assert:
       - type: contains
-        value: "!["
+        value: '!['
       - type: not-contains
-        value: "error"
+        value: 'error'
 
-  - description: "Portrait Generation"
+  - description: 'Portrait Generation'
     vars:
-      prompt: "Professional headshot of a confident business executive, studio lighting, corporate background, high quality"
+      prompt: 'Professional headshot of a confident business executive, studio lighting, corporate background, high quality'
     assert:
       - type: contains
-        value: "!["
+        value: '!['
 
-  - description: "Digital Art Generation"
+  - description: 'Digital Art Generation'
     vars:
-      prompt: "Cyberpunk cityscape at night with neon lights and flying cars, digital art style, vibrant colors"
+      prompt: 'Cyberpunk cityscape at night with neon lights and flying cars, digital art style, vibrant colors'
     assert:
       - type: contains
-        value: "!["
+        value: '!['
 
   # Image-to-Image Editing Tests (requires input image)
-  - description: "Style Transfer"
+  - description: 'Style Transfer'
     vars:
-      prompt: "Transform to impressionist painting style while maintaining the same composition"
-      input_image: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD..." # Replace with actual base64
+      prompt: 'Transform to impressionist painting style while maintaining the same composition'
+      input_image: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD...' # Replace with actual base64
     assert:
       - type: contains
-        value: "!["
+        value: '!['
 
-  - description: "Object Addition"
+  - description: 'Object Addition'
     vars:
-      prompt: "Add a hat to the person while maintaining the original style and lighting"
-      input_image: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD..." # Replace with actual base64
+      prompt: 'Add a hat to the person while maintaining the original style and lighting'
+      input_image: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD...' # Replace with actual base64
     assert:
       - type: contains
-        value: "!["
+        value: '!['
 
-  - description: "Background Change"
+  - description: 'Background Change'
     vars:
-      prompt: "Change the background to a sunny beach while keeping the subject unchanged"
-      input_image: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD..." # Replace with actual base64
+      prompt: 'Change the background to a sunny beach while keeping the subject unchanged'
+      input_image: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD...' # Replace with actual base64
     assert:
       - type: contains
-        value: "!["
+        value: '!['
 
 defaultTest:
   assert:
     - type: contains
-      value: "!["
-      description: "Response should contain markdown image syntax"
+      value: '!['
+      description: 'Response should contain markdown image syntax'
     - type: not-contains
-      value: "Black Forest Labs API error"
-      description: "Response should not contain API errors" 
+      value: 'Black Forest Labs API error'
+      description: 'Response should not contain API errors'
