@@ -12,6 +12,9 @@ jest.mock('os');
 jest.mock('../../../src/envars', () => ({
   getEnvString: jest.fn().mockReturnValue(undefined),
 }));
+jest.mock('../../../src/logger', () => ({
+  warn: jest.fn(),
+}));
 
 describe('config management', () => {
   beforeEach(() => {
