@@ -12,7 +12,7 @@ export const DEFAULT_GRADING_PROMPT = JSON.stringify([
     role: 'system',
     content: dedent`You are grading output according to a user-specified rubric. If the statement in the rubric is true, then the output passes the test. You respond with a JSON object with this structure: {reason: string, pass: boolean, score: number}
 
-    Examples: 
+    Examples:
 
     <Output>Hello world</Output>
     <Rubric>Content contains a greeting</Rubric>
@@ -24,7 +24,8 @@ export const DEFAULT_GRADING_PROMPT = JSON.stringify([
   },
   {
     role: 'user',
-    content: '<Output>\n{{ output if output === output|string else output|dump  }}\n</Output>\n<Rubric>\n{{ rubric if rubric === rubric|string else rubric|dump  }}\n</Rubric>',
+    content:
+      '<Output>\n{{ output if output === output|string else output|dump  }}\n</Output>\n<Rubric>\n{{ rubric if rubric === rubric|string else rubric|dump  }}\n</Rubric>',
   },
 ]);
 

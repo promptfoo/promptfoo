@@ -382,9 +382,6 @@ async function loadRubricPrompt(
 }
 
 function tryParse(content: string) {
-  // if (typeof content === 'object') {
-  //   return content;
-  // }
 
   try {
     return JSON.parse(content);
@@ -400,24 +397,7 @@ export async function renderLlmRubricPrompt(
   rubricPrompt: string,
   context: Record<string, string | object>,
 ) {
-  // Process the context to ensure objects are properly stringified for nunjucks
-  const processedContext = Object.fromEntries(
-    Object.entries(context).map(([key, value]) => {
-      if (value && typeof value === 'object') {
-        // For arrays, stringify individual elements
-        if (Array.isArray(value)) {
-          return [
-            key,
-            value.map((item) => (typeof item === 'object' ? JSON.stringify(item) : item)),
-          ];
-        }
-        // For objects, stringify the entire object
-        return [key, JSON.stringify(value)];
-      }
-      return [key, value];
-    }),
-  );
-
+  
   try {
     // Render every string scalar within the JSON
     // Does not render object keys (only values)
