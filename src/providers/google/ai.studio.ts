@@ -71,6 +71,19 @@ class AIStudioGenericProvider implements ApiProvider {
   }
 
   getApiUrl(): string {
+    // Check for apiHost first (most specific override)
+    const apiHost =
+      this.config.apiHost ||
+      this.env?.GOOGLE_API_HOST ||
+      this.env?.PALM_API_HOST ||
+      getEnvString('GOOGLE_API_HOST') ||
+      getEnvString('PALM_API_HOST');
+    if (apiHost) {
+      const renderedHost = getNunjucksEngine().renderString(apiHost, {});
+      return `https://${renderedHost}`;
+    }
+
+    // Check for apiBaseUrl (less specific override)
     return (
       this.config.apiBaseUrl ||
       this.env?.GOOGLE_API_BASE_URL ||
