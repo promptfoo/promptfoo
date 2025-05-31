@@ -228,8 +228,16 @@ describe('EvalOutputCell', () => {
     await userEvent.click(screen.getByLabelText('Edit comment'));
 
     await userEvent.click(screen.getByLabelText('Toggle test highlight'));
+    expect(mockOnRating).toHaveBeenNthCalledWith(
+      1,
+      undefined,
+      undefined,
+      '!highlight Initial comment',
+    );
 
-    expect(mockOnRating).toHaveBeenCalledWith(undefined, undefined, '!highlight Initial comment');
+    await userEvent.click(screen.getByLabelText('Toggle test highlight'));
+
+    expect(mockOnRating).toHaveBeenNthCalledWith(2, undefined, undefined, 'Initial comment');
   });
 
   it('falls back to output text when no component results', async () => {
