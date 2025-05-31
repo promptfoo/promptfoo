@@ -1,5 +1,5 @@
-.careersContainer {
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 2rem;
+.careersTitle {
+  text-align: center;
+  margin-top: 2rem;
+  margin-bottom: 1rem;
 }
