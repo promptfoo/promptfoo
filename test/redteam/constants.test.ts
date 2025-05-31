@@ -238,6 +238,7 @@ describe('constants', () => {
       'camelcase',
       'morse',
       'piglatin',
+      'emoji',
     ]);
   });
 
@@ -247,7 +248,7 @@ describe('constants', () => {
 
   it('strategy collections should have proper descriptions', () => {
     expect(strategyDescriptions['other-encodings']).toBe(
-      'Collection of alternative text transformation strategies (Morse code, Pig Latin, and camelCase) for testing evasion techniques',
+      'Collection of alternative text transformation strategies (Morse code, Pig Latin, camelCase, and emoji variation selector smuggling) for testing evasion techniques',
     );
   });
 
@@ -257,7 +258,7 @@ describe('constants', () => {
 
   it('strategy collections should have proper subcategory descriptions', () => {
     expect(subCategoryDescriptions['other-encodings']).toBe(
-      'Collection of alternative text transformation strategies (Morse code, Pig Latin, and camelCase) for testing evasion techniques',
+      'Collection of alternative text transformation strategies (Morse code, Pig Latin, camelCase, and emoji variation selector smuggling) for testing evasion techniques',
     );
   });
 });

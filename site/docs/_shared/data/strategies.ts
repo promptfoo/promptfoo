@@ -290,6 +290,17 @@ export const strategies: Strategy[] = [
     link: '/docs/red-team/strategies/other-encodings/#camelcase',
   },
   {
+    category: 'Static (Single-Turn)',
+    strategy: 'emoji',
+    displayName: 'Emoji Smuggling',
+    description: 'Variation selector encoding',
+    longDescription:
+      'Tests hiding UTF-8 payloads inside emoji variation selectors to evaluate filter evasion.',
+    cost: 'Low',
+    asrIncrease: '20-30%',
+    link: '/docs/red-team/strategies/other-encodings/#emoji-encoding',
+  },
+  {
     category: 'Regression',
     strategy: 'retry',
     displayName: 'Retry',
