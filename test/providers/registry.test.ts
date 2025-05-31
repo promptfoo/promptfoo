@@ -300,6 +300,35 @@ describe('Provider Registry', () => {
       expect(legacyProvider).toBeDefined();
     });
 
+    it('should handle bfl providers correctly', async () => {
+      const factory = providerMap.find((f) => f.test('bfl:flux-pro-1.1'));
+      expect(factory).toBeDefined();
+
+      const fluxProProvider = await factory!.create(
+        'bfl:flux-pro-1.1',
+        mockProviderOptions,
+        mockContext,
+      );
+      expect(fluxProProvider).toBeDefined();
+      expect(fluxProProvider.id()).toBe('bfl:flux-pro-1.1');
+
+      const kontextProvider = await factory!.create(
+        'bfl:flux-kontext-pro',
+        mockProviderOptions,
+        mockContext,
+      );
+      expect(kontextProvider).toBeDefined();
+      expect(kontextProvider.id()).toBe('bfl:flux-kontext-pro');
+
+      const devProvider = await factory!.create(
+        'bfl:flux-dev',
+        mockProviderOptions,
+        mockContext,
+      );
+      expect(devProvider).toBeDefined();
+      expect(devProvider.id()).toBe('bfl:flux-dev');
+    });
+
     it('should handle cloudflare-ai providers correctly', async () => {
       const factory = providerMap.find((f) =>
         f.test('cloudflare-ai:chat:@cf/meta/llama-2-7b-chat-fp16'),

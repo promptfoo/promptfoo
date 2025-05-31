@@ -29,6 +29,7 @@ providers:
 | [AWS Bedrock](./aws-bedrock.md)                     | AWS-hosted models from various providers          | `bedrock:us.meta.llama3-2-90b-instruct-v1:0`       |
 | [Amazon SageMaker](./sagemaker.md)                  | Models deployed on SageMaker endpoints            | `sagemaker:my-endpoint-name`                       |
 | [Azure OpenAI](./azure.md)                          | Azure-hosted OpenAI models                        | `azureopenai:gpt-4o-custom-deployment-name`        |
+| [Black Forest Labs](./bfl.md)                       | FLUX image generation and editing models          | `bfl:flux-pro-1.1` or `bfl:flux-kontext-pro`       |
 | [Cerebras](./cerebras.md)                           | High-performance inference API for Llama models   | `cerebras:llama-4-scout-17b-16e-instruct`          |
 | [Adaline Gateway](./adaline.md)                     | Unified interface for multiple providers          | Compatible with OpenAI syntax                      |
 | [Cloudflare AI](./cloudflare-ai.md)                 | Cloudflare's AI platform                          | `cloudflare-ai:@cf/meta/llama-3-8b-instruct`       |

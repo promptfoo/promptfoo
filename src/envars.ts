@@ -188,6 +188,9 @@ export type EnvVars = {
   AZURE_CONTENT_SAFETY_API_VERSION?: string;
   AZURE_CONTENT_SAFETY_ENDPOINT?: string;
 
+  // Black Forest Labs
+  BFL_API_KEY?: string;
+
   // Cohere
   COHERE_CLIENT_NAME?: string;
   COHERE_K?: string;

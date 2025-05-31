@@ -89,6 +89,7 @@ import { WebhookProvider } from './webhook';
 import { WebSocketProvider } from './websocket';
 import { createXAIProvider } from './xai/chat';
 import { createXAIImageProvider } from './xai/image';
+import { createBlackForestLabsProvider } from './bfl';
 
 interface ProviderFactory {
   test: (providerPath: string) => boolean;
@@ -300,6 +301,19 @@ export const providerMap: ProviderFactory[] = [
         `${modelType}${modelName ? `:${modelName}` : ''}`,
         providerOptions,
       );
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('bfl:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createBlackForestLabsProvider(providerPath, {
+        config: providerOptions.config,
+        env: context.env,
+      });
     },
   },
   {

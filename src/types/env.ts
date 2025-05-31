@@ -24,6 +24,7 @@ export const ProviderEnvOverridesSchema = z.object({
   AZURE_TOKEN_SCOPE: z.string().optional(),
   BAM_API_HOST: z.string().optional(),
   BAM_API_KEY: z.string().optional(),
+  BFL_API_KEY: z.string().optional(),
   CLOUDFLARE_ACCOUNT_ID: z.string().optional(),
   CLOUDFLARE_API_KEY: z.string().optional(),
   COHERE_API_KEY: z.string().optional(),
