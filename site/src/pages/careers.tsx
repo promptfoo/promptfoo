@@ -1,8 +1,32 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import Layout from '@theme/Layout';
 import styles from './careers.module.css';
 
+declare global {
+  interface Window {
+    __ashbyBaseJobBoardUrl?: string;
+  }
+}
+
 export default function Careers(): JSX.Element {
+  useEffect(() => {
+    window.__ashbyBaseJobBoardUrl = 'https://jobs.ashbyhq.com/promptfoo';
+
+    const script = document.createElement('script');
+    script.id = 'ashby-script';
+    script.src = 'https://jobs.ashbyhq.com/promptfoo/embed';
+    script.async = true;
+
+    document.body.appendChild(script);
+
+    return () => {
+      const existingScript = document.getElementById('ashby-script');
+      if (existingScript) {
+        document.body.removeChild(existingScript);
+      }
+    };
+  }, []);
+
   return (
     <Layout title="Careers at Promptfoo" description="Shape the future of LLM Security">
       <main className={styles.careersContainer}>
@@ -19,26 +43,8 @@ export default function Careers(): JSX.Element {
           <a href="https://github.com/promptfoo/promptfoo">open-source</a> offering.
         </p>
 
-        <h2>We're hiring!</h2>
-        <p>
-          We are executing on the above with a small team of extremely talented and motivated
-          people.
-        </p>
-        <p>We are currently hiring:</p>
-        <ul>
-          <li>Founding Developer Relations</li>
-          <li>Senior Software Engineers</li>
-        </ul>
-        <p>
-          If you're a self-driven generalist who can build and ship quickly, aggressively
-          prioritize, and have a passion for security, developer tools, and AI, please get in touch!
-        </p>
-        <p>
-          If you're interested in exploring opportunities, please reach out to{' '}
-          <a href="mailto:careers@promptfoo.dev">careers@promptfoo.dev</a>. Include a link to your
-          LinkedIn or GitHub profile in your email. We carefully review all applications. We will
-          give preference to applicants who have used or made contributions to Promptfoo.
-        </p>
+        <h2>Open Positions</h2>
+        <div id="ashby_embed"></div>
       </main>
     </Layout>
   );
