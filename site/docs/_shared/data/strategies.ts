@@ -297,7 +297,7 @@ export const strategies: Strategy[] = [
     longDescription:
       'Tests hiding UTF-8 payloads inside emoji variation selectors to evaluate filter evasion.',
     cost: 'Low',
-    asrIncrease: '20-30%',
+    asrIncrease: '0-5%',
     link: '/docs/red-team/strategies/other-encodings/#emoji-encoding',
   },
   {
