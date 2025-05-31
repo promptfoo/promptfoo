@@ -80,7 +80,21 @@ function EvalOutputCell({
   };
 
   const [commentDialogOpen, setCommentDialogOpen] = React.useState(false);
-  const [commentText, setCommentText] = React.useState(output.gradingResult?.comment || '');
+  const initialComment = output.gradingResult?.comment || '';
+  const [highlighted, setHighlighted] = React.useState(initialComment.startsWith('!highlight'));
+  const [commentText, setCommentText] = React.useState(
+    initialComment.startsWith('!highlight')
+      ? initialComment.slice('!highlight'.length).trim()
+      : initialComment,
+  );
+
+  React.useEffect(() => {
+    const comment = output.gradingResult?.comment || '';
+    setHighlighted(comment.startsWith('!highlight'));
+    setCommentText(
+      comment.startsWith('!highlight') ? comment.slice('!highlight'.length).trim() : comment,
+    );
+  }, [output.gradingResult?.comment]);
 
   const handleCommentOpen = () => {
     setCommentDialogOpen(true);
@@ -91,20 +105,16 @@ function EvalOutputCell({
   };
 
   const handleCommentSave = () => {
-    onRating(undefined, undefined, commentText);
+    const newComment = highlighted ? `!highlight ${commentText}`.trim() : commentText.trim();
+    onRating(undefined, undefined, newComment);
     setCommentDialogOpen(false);
   };
 
   const handleToggleHighlight = () => {
-    let newCommentText;
-    if (commentText.startsWith('!highlight')) {
-      newCommentText = commentText.slice('!highlight'.length).trim();
-      onRating(undefined, undefined, newCommentText);
-    } else {
-      newCommentText = ('!highlight ' + commentText).trim();
-      onRating(undefined, undefined, newCommentText);
-    }
-    setCommentText(newCommentText);
+    const newHighlighted = !highlighted;
+    setHighlighted(newHighlighted);
+    const newComment = newHighlighted ? `!highlight ${commentText}`.trim() : commentText.trim();
+    onRating(undefined, undefined, newComment);
   };
 
   let text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
@@ -372,12 +382,14 @@ function EvalOutputCell({
     }
   }
 
-  const comment =
-    output.gradingResult?.comment && output.gradingResult.comment !== '!highlight' ? (
-      <div className="comment" onClick={handleCommentOpen}>
-        {output.gradingResult.comment}
-      </div>
-    ) : null;
+  const rawComment = output.gradingResult?.comment || '';
+  const isHighlighted = rawComment.startsWith('!highlight');
+  const displayComment = isHighlighted ? rawComment.slice('!highlight'.length).trim() : rawComment;
+  const comment = displayComment ? (
+    <div className="comment" onClick={handleCommentOpen}>
+      {displayComment}
+    </div>
+  ) : null;
 
   const detail = showStats ? (
     <div className="cell-detail">
@@ -484,15 +496,14 @@ function EvalOutputCell({
   );
 
   const cellStyle = useMemo(() => {
-    const base =
-      output.gradingResult?.comment === '!highlight' ? { backgroundColor: '#ffffeb' } : {};
+    const base = rawComment.startsWith('!highlight') ? { backgroundColor: '#ffffeb' } : {};
 
     return {
       ...base,
       '--max-image-width': `${maxImageWidth}px`,
       '--max-image-height': `${maxImageHeight}px`,
     } as CSSPropertiesWithCustomVars;
-  }, [output.gradingResult?.comment, maxImageWidth, maxImageHeight]);
+  }, [rawComment, maxImageWidth, maxImageHeight]);
 
   // Pass/fail badge creation
   let passCount = 0;
