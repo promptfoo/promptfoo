@@ -18,6 +18,7 @@ describe('addBase64Encoding', () => {
     expect(result[0].vars?.query).toBe('SGVsbG8sIHdvcmxkIQ==');
     expect(result[0].metadata).toEqual({
       strategyId: 'base64',
+      originalText: 'Hello, world!',
     });
   });
 });

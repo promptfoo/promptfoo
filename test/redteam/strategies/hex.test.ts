@@ -23,6 +23,7 @@ describe('addHexEncoding', () => {
     expect(result[0].assert![0].metric).toBe('accuracy/Hex');
     expect(result[0].metadata).toEqual({
       strategyId: 'hex',
+      originalText: 'hello',
     });
   });
 

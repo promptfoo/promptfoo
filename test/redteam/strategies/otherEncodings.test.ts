@@ -38,6 +38,7 @@ describe('other encodings strategy', () => {
       // Check that metadata and assertion are updated correctly
       expect(result[0].metadata?.strategyId).toBe('morse');
       expect(result[0].metadata?.encodingType).toBe(EncodingType.MORSE);
+      expect(result[0].metadata?.originalText).toBe('Hello World! 123');
     });
 
     it('should handle empty string', () => {
@@ -75,6 +76,7 @@ describe('other encodings strategy', () => {
       // Check that metadata and assertion are updated correctly
       expect(result[0].metadata?.strategyId).toBe('piglatin');
       expect(result[0].metadata?.encodingType).toBe(EncodingType.PIG_LATIN);
+      expect(result[0].metadata?.originalText).toBe('Hello World! 123');
     });
 
     it('should handle words with no vowels', () => {
@@ -141,6 +143,7 @@ describe('other encodings strategy', () => {
 
       expect(result[0].metadata?.strategyId).toBe('camelcase');
       expect(result[0].metadata?.encodingType).toBe(EncodingType.CAMEL_CASE);
+      expect(result[0].metadata?.originalText).toBe('Hello World! 123');
     });
   });
 
@@ -151,12 +154,14 @@ describe('other encodings strategy', () => {
         '.... . .-.. .-.. --- / .-- --- .-. .-.. -.. -.-.-- / .---- ..--- ...--',
       );
       expect(result[0].metadata?.encodingType).toBe(EncodingType.MORSE);
+      expect(result[0].metadata?.originalText).toBe('Hello World! 123');
     });
 
     it('should preserve other test case properties', () => {
       const result = addOtherEncodings(testCases, 'prompt', EncodingType.MORSE);
       expect(result[0].vars!.expected).toBe('normal value');
       expect(result[0].metadata?.strategyId).toBe('morse');
+      expect(result[0].metadata?.originalText).toBe('Hello World! 123');
     });
 
     it('should handle invalid encoding type by defaulting to Morse', () => {
@@ -164,6 +169,7 @@ describe('other encodings strategy', () => {
       expect(result[0].vars!.prompt).toBe(
         '.... . .-.. .-.. --- / .-- --- .-. .-.. -.. -.-.-- / .---- ..--- ...--',
       );
+      expect(result[0].metadata?.originalText).toBe('Hello World! 123');
     });
   });
 
