@@ -33,6 +33,7 @@ import {
   AGENTIC_EXEMPT_PLUGINS,
   DATASET_EXEMPT_PLUGINS,
   STRATEGY_EXEMPT_PLUGINS,
+  ADDITIONAL_STRATEGIES,
 } from '../../src/redteam/constants';
 
 describe('constants', () => {
@@ -259,6 +260,30 @@ describe('constants', () => {
   it('strategy collections should have proper subcategory descriptions', () => {
     expect(subCategoryDescriptions['other-encodings']).toBe(
       'Collection of alternative text transformation strategies (Morse code, Pig Latin, camelCase, and emoji variation selector smuggling) for testing evasion techniques',
+    );
+  });
+
+  it('ADDITIONAL_STRATEGIES should include emoji strategy', () => {
+    expect(ADDITIONAL_STRATEGIES).toContain('emoji');
+  });
+
+  it('should have correct display name for emoji strategy', () => {
+    expect(strategyDisplayNames['emoji']).toBe('Emoji Smuggling');
+  });
+
+  it('should have correct strategy description for emoji strategy', () => {
+    expect(strategyDescriptions['emoji']).toBe(
+      'Tests detection and handling of UTF-8 payloads hidden inside emoji variation selectors',
+    );
+  });
+
+  it('should include emoji in other-encodings strategy collection', () => {
+    expect(STRATEGY_COLLECTION_MAPPINGS['other-encodings']).toContain('emoji');
+  });
+
+  it('should have correct subcategory description for emoji strategy', () => {
+    expect(subCategoryDescriptions['emoji']).toBe(
+      'Tests handling of text hidden using emoji variation selectors',
     );
   });
 });
