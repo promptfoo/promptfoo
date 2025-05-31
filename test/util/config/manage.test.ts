@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import * as os from 'os';
+import * as path from 'path';
 import {
   getConfigDirectoryPath,
   setConfigDirectoryPath,
@@ -26,14 +27,16 @@ describe('config management', () => {
     it('should return default config path when no custom path set', () => {
       setConfigDirectoryPath(undefined);
       const configPath = getConfigDirectoryPath();
-      expect(configPath).toBe('/home/user/.promptfoo');
+      expect(configPath).toBe(path.join('/home/user', '.promptfoo'));
     });
 
     it('should create directory if createIfNotExists is true', () => {
       jest.mocked(fs.existsSync).mockReturnValue(false);
       setConfigDirectoryPath(undefined);
       getConfigDirectoryPath(true);
-      expect(fs.mkdirSync).toHaveBeenCalledWith('/home/user/.promptfoo', { recursive: true });
+      expect(fs.mkdirSync).toHaveBeenCalledWith(path.join('/home/user', '.promptfoo'), {
+        recursive: true,
+      });
     });
 
     it('should not create directory if it already exists', () => {
@@ -54,7 +57,7 @@ describe('config management', () => {
     it('should handle undefined path', () => {
       setConfigDirectoryPath(undefined);
       const configPath = getConfigDirectoryPath();
-      expect(configPath).toBe('/home/user/.promptfoo');
+      expect(configPath).toBe(path.join('/home/user', '.promptfoo'));
     });
   });
 
