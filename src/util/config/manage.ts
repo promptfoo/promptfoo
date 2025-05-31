@@ -50,5 +50,3 @@ export function writePromptfooConfig(
   fs.writeFileSync(outputPath, `${schemaComment}\n${headerCommentLines}${yamlContent}`);
   return orderedConfig;
 }
-
-export { configDirectoryPath };
