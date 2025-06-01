@@ -6,19 +6,19 @@ prompts:
   - 'Explain your reasoning for: {{question}}'
 
 providers:
-  - id: hyperbolic:deepseek-ai/DeepSeek-R1
-    label: DeepSeek R1
+  - id: hyperbolic:deepseek-ai/DeepSeek-V3-0324
+    label: DeepSeek V3-0324
     config:
       temperature: 0.1
       max_tokens: 2048
 
-  - id: hyperbolic:qwen/QwQ-32B
-    label: QwQ-32B
+  - id: hyperbolic:Qwen/QwQ-32B-Preview
+    label: QwQ-32B Preview
     config:
       temperature: 0.1
       max_tokens: 2048
 
-  - id: hyperbolic:meta-llama/Llama-3.1-70B
+  - id: hyperbolic:meta-llama/Meta-Llama-3.1-70B-Instruct
     label: Llama 3.1-70B
     config:
       temperature: 0.3

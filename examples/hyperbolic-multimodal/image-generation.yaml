@@ -5,7 +5,7 @@ prompts:
   - '{{prompt}}'
 
 providers:
-  - id: hyperbolic:image:Flux.1-dev
+  - id: hyperbolic:image:FLUX.1-dev
     label: Flux.1 Dev
     config:
       width: 1024
@@ -13,21 +13,22 @@ providers:
       steps: 30
       cfg_scale: 7.5
 
-  - id: hyperbolic:image:SDXL1.0-base
-    label: SDXL Base
-    config:
-      width: 1024
-      height: 1024
-      steps: 30
-      cfg_scale: 7.0
+  # Note: These models may not be available with your current API key
+  # - id: hyperbolic:image:SDXL1.0-base
+  #   label: SDXL Base
+  #   config:
+  #     width: 1024
+  #     height: 1024
+  #     steps: 30
+  #     cfg_scale: 7.0
 
-  - id: hyperbolic:image:SD1.5
-    label: SD 1.5
-    config:
-      width: 512
-      height: 512
-      steps: 25
-      cfg_scale: 7.5
+  # - id: hyperbolic:image:SD1.5
+  #   label: SD 1.5
+  #   config:
+  #     width: 512
+  #     height: 512
+  #     steps: 25
+  #     cfg_scale: 7.5
 
 tests:
   # Artistic styles
