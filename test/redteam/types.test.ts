@@ -108,13 +108,9 @@ describe('redteam types', () => {
   });
 
   it('should create valid RedteamFileConfig', () => {
-    // Use a valid Plugin key for severity, e.g. 'agentic' which is part of AgenticPlugin
-    // To avoid TS error, use a type assertion for the key
     const pluginKey = 'agentic' as keyof NonNullable<RedteamFileConfig['severity']>;
     const config: RedteamFileConfig = {
       entities: ['entity1', 'entity2'],
-      // Use a known Plugin type string for the key
-      // For this repo, 'agentic' is a valid key (from AgenticPlugin in constants.ts)
       severity: {
         [pluginKey]: Severity.High,
       } as Record<string, Severity>,
@@ -179,13 +175,41 @@ describe('redteam types', () => {
       entities: ['entity1'],
       applicationDefinition: {
         purpose: 'test purpose',
+        features: 'key app features',
+        hasAccessTo: 'allowed data and systems',
+        doesNotHaveAccessTo: 'restricted data',
+        userTypes: 'admin, regular users',
+        securityRequirements: 'security controls',
+        exampleIdentifiers: 'sample IDs',
+        industry: 'healthcare',
+        sensitiveDataTypes: 'PHI, PII',
+        criticalActions: 'data deletion',
+        forbiddenTopics: 'restricted topics',
+        competitors: 'competitor list',
         systemPrompt: 'test prompt',
+        redteamUser: 'test user',
+        accessToData: 'accessible data',
+        forbiddenData: 'restricted data',
+        accessToActions: 'allowed actions',
+        forbiddenActions: 'restricted actions',
+        connectedSystems: 'integrated systems',
       },
     };
 
     expect(config.description).toBe('Test config');
     expect(config.prompts).toHaveLength(2);
     expect(config.plugins).toHaveLength(2);
+    expect(config.applicationDefinition.features).toBe('key app features');
+    expect(config.applicationDefinition.hasAccessTo).toBe('allowed data and systems');
+    expect(config.applicationDefinition.doesNotHaveAccessTo).toBe('restricted data');
+    expect(config.applicationDefinition.userTypes).toBe('admin, regular users');
+    expect(config.applicationDefinition.securityRequirements).toBe('security controls');
+    expect(config.applicationDefinition.exampleIdentifiers).toBe('sample IDs');
+    expect(config.applicationDefinition.industry).toBe('healthcare');
+    expect(config.applicationDefinition.sensitiveDataTypes).toBe('PHI, PII');
+    expect(config.applicationDefinition.criticalActions).toBe('data deletion');
+    expect(config.applicationDefinition.forbiddenTopics).toBe('restricted topics');
+    expect(config.applicationDefinition.competitors).toBe('competitor list');
   });
 
   it('should create valid BaseRedteamMetadata', () => {

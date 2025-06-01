@@ -48,6 +48,10 @@ jest.mock('../../src/redteam/strategies', () => ({
 
 jest.mock('../../src/util/apiHealth');
 jest.mock('../../src/redteam/remoteGeneration');
+jest.mock('../../src/redteam/util', () => ({
+  ...jest.requireActual('../../src/redteam/util'),
+  extractGoalFromPrompt: jest.fn().mockResolvedValue('mocked goal'),
+}));
 
 describe('synthesize', () => {
   const mockProvider = {

@@ -1,0 +1,95 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: MCP approval workflow examples
+
+prompts:
+  - 'Search for information about {{query}} in the {{repo}} repository'
+  - 'What are the latest updates in {{repo}}?'
+
+providers:
+  # Provider with approval required (default behavior)
+  - id: openai:responses:gpt-4.1-2025-04-14
+    label: 'With Approval Required'
+    config:
+      tools:
+        - type: mcp
+          server_label: deepwiki
+          server_url: https://mcp.deepwiki.com/mcp
+          # require_approval is not specified, so approval is required by default
+      max_output_tokens: 1000
+      temperature: 0.2
+      instructions: 'You are a research assistant. When approval is required for MCP tools, explain what you would do if the tool were approved.'
+
+  # Provider with selective approval
+  - id: openai:responses:gpt-4.1-2025-04-14
+    label: 'Selective Approval'
+    config:
+      tools:
+        - type: mcp
+          server_label: deepwiki
+          server_url: https://mcp.deepwiki.com/mcp
+          require_approval:
+            never:
+              tool_names: ['read_wiki_structure']
+          # ask_question will still require approval, but read_wiki_structure won't
+      max_output_tokens: 1000
+      temperature: 0.2
+      instructions: 'You are a research assistant. Use the available tools to gather information.'
+
+  # Provider with no approval required
+  - id: openai:responses:gpt-4.1-2025-04-14
+    label: 'No Approval Required'
+    config:
+      tools:
+        - type: mcp
+          server_label: deepwiki
+          server_url: https://mcp.deepwiki.com/mcp
+          require_approval: never
+      max_output_tokens: 1000
+      temperature: 0.2
+      instructions: 'You are a research assistant. Use the available MCP tools to search for information.'
+
+tests:
+  - vars:
+      query: 'getting started guide'
+      repo: 'facebook/react'
+    assert:
+      # For approval-required provider, expect either approval request or explanation
+      - type: contains-any
+        value: ['MCP Tool Result', 'react', 'React', 'would search', 'would look']
+      # Should not have tool errors
+      - type: not-contains
+        value: 'MCP Tool Error'
+      - type: llm-rubric
+        value: 'The response provides information about React or explains what would be searched'
+
+  - vars:
+      query: 'API documentation'
+      repo: 'openai/openai-python'
+    assert:
+      # Test different approval behaviors across providers
+      - type: contains-any
+        value: ['API', 'MCP Tool Result', 'Python', 'client']
+      # Validate that at least one provider succeeded with MCP tools
+      - type: contains-any
+        value: ['MCP Tool Result', 'documentation', 'API client', 'library']
+      - type: llm-rubric
+        value: 'The response mentions API documentation or explains the search intent'
+
+  # Add a test specifically for approval workflow validation
+  - vars:
+      query: 'installation instructions'
+      repo: 'nodejs/node'
+    assert:
+      # Comprehensive approval workflow testing
+      - type: contains-any
+        value: ['MCP Tool Result', 'installation', 'Node.js', 'setup']
+        metric: mcp_interaction_detected
+      # Ensure no unexpected errors
+      - type: not-contains
+        value: 'MCP Tool Error'
+        weight: 0.4
+      # Quality check regardless of approval status
+      - type: llm-rubric
+        value: 'The response addresses installation, setup, or Node.js information'
+        weight: 0.6

@@ -1,3 +1,8 @@
+import { fetchWithCache } from '../cache';
+import logger from '../logger';
+import { REQUEST_TIMEOUT_MS } from '../providers/shared';
+import { getRemoteGenerationUrl } from './remoteGeneration';
+
 /**
  * Normalizes different types of apostrophes to a standard single quote
  */
@@ -196,4 +201,58 @@ export function removePrefix(str: string, prefix: string) {
  */
 export function getShortPluginId(pluginId: string): string {
   return pluginId.replace(/^promptfoo:redteam:/, '');
+}
+
+/**
+ * Extracts goal from a prompt using remote generation API.
+ * @param prompt - The prompt to extract goal from.
+ * @param purpose - The purpose of the system.
+ * @returns The extracted goal, or null if extraction fails.
+ */
+export async function extractGoalFromPrompt(
+  prompt: string,
+  purpose: string,
+): Promise<string | null> {
+  const requestBody = {
+    task: 'extract-intent',
+    prompt,
+    purpose,
+  };
+
+  logger.debug(`Extracting goal from prompt. Request URL: ${getRemoteGenerationUrl()}`);
+  logger.debug(`Request body: ${JSON.stringify(requestBody, null, 2)}`);
+  try {
+    const { data, status, statusText } = await fetchWithCache(
+      getRemoteGenerationUrl(),
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      },
+      REQUEST_TIMEOUT_MS,
+    );
+
+    logger.debug(
+      `Goal extraction response - Status: ${status} ${statusText || ''}, Data: ${JSON.stringify(data)}`,
+    );
+
+    if (status !== 200) {
+      logger.warn(
+        `Failed to extract goal from prompt: HTTP ${status} ${statusText || ''}, Response Data: ${JSON.stringify(data)}`,
+      );
+      return null;
+    }
+
+    if (!data?.intent) {
+      logger.warn(`No intent returned from extraction API. Response Data: ${JSON.stringify(data)}`);
+      return null;
+    }
+
+    return data.intent;
+  } catch (error) {
+    logger.warn(`Error extracting goal: ${error}`);
+    return null;
+  }
 }
