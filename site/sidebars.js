@@ -251,7 +251,7 @@ const sidebars = {
           type: 'category',
           label: 'Custom',
           collapsed: true,
-          items: ['red-team/plugins/custom', 'red-team/plugins/intent'],
+          items: ['red-team/plugins/policy', 'red-team/plugins/intent', 'red-team/plugins/custom'],
         },
       ],
     },
