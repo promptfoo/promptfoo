@@ -1,3 +1,7 @@
+---
+sidebar_label: Google Vertex
+---
+
 # Google Vertex
 
 The `vertex` provider enables integration with Google's [Vertex AI](https://cloud.google.com/vertex-ai) platform, which provides access to foundation models including Gemini, PaLM (Bison), Llama, Claude, and specialized models for text, code, and embeddings.
