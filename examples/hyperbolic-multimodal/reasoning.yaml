@@ -19,7 +19,7 @@ providers:
       max_tokens: 2048
 
   - id: hyperbolic:meta-llama/Llama-3.1-70B
-    label: Llama 70B
+    label: Llama 3.1-70B
     config:
       temperature: 0.3
       max_tokens: 1024

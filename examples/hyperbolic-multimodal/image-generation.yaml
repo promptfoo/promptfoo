@@ -5,12 +5,12 @@ prompts:
   - '{{prompt}}'
 
 providers:
-  - id: hyperbolic:image:FLUX.1-dev
+  - id: hyperbolic:image:Flux.1-dev
     label: Flux.1 Dev
     config:
       width: 1024
       height: 1024
-      steps: 50
+      steps: 30
       cfg_scale: 7.5
 
   - id: hyperbolic:image:SDXL1.0-base
