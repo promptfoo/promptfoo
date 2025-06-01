@@ -42,7 +42,7 @@ export class HyperbolicAudioProvider implements ApiProvider {
     if (this.config?.apiKey) {
       return this.config.apiKey;
     }
-    return getEnvString('HYPERBOLIC_API_KEY', this.env);
+    return this.env?.HYPERBOLIC_API_KEY || getEnvString('HYPERBOLIC_API_KEY');
   }
 
   getApiUrl(): string {
@@ -96,10 +96,18 @@ export class HyperbolicAudioProvider implements ApiProvider {
     };
 
     // Add optional parameters
-    if (config.model) {body.model = config.model;}
-    if (config.voice) {body.voice = config.voice;}
-    if (config.speed !== undefined) {body.speed = config.speed;}
-    if (config.language) {body.language = config.language;}
+    if (config.model) {
+      body.model = config.model;
+    }
+    if (config.voice) {
+      body.voice = config.voice;
+    }
+    if (config.speed !== undefined) {
+      body.speed = config.speed;
+    }
+    if (config.language) {
+      body.language = config.language;
+    }
 
     logger.debug(`Calling Hyperbolic Audio API: ${JSON.stringify(body)}`);
 
@@ -154,8 +162,15 @@ export class HyperbolicAudioProvider implements ApiProvider {
         output: data.audio,
         cached,
         cost,
-        isBase64: true,
-        format: 'audio',
+        ...(data.audio
+          ? {
+              isBase64: true,
+              audio: {
+                data: data.audio,
+                format: 'wav',
+              },
+            }
+          : {}),
       };
     } catch (err) {
       return {

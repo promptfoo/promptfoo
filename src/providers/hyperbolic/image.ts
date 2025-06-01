@@ -92,7 +92,7 @@ export class HyperbolicImageProvider implements ApiProvider {
     if (this.config?.apiKey) {
       return this.config.apiKey;
     }
-    return getEnvString('HYPERBOLIC_API_KEY', this.env);
+    return this.env?.HYPERBOLIC_API_KEY || getEnvString('HYPERBOLIC_API_KEY');
   }
 
   getApiUrl(): string {
@@ -150,20 +150,48 @@ export class HyperbolicImageProvider implements ApiProvider {
     };
 
     // Add optional parameters
-    if (config.prompt_2) {body.prompt_2 = config.prompt_2;}
-    if (config.negative_prompt) {body.negative_prompt = config.negative_prompt;}
-    if (config.negative_prompt_2) {body.negative_prompt_2 = config.negative_prompt_2;}
-    if (config.image) {body.image = config.image;}
-    if (config.strength !== undefined) {body.strength = config.strength;}
-    if (config.seed !== undefined) {body.seed = config.seed;}
-    if (config.cfg_scale !== undefined) {body.cfg_scale = config.cfg_scale;}
-    if (config.sampler) {body.sampler = config.sampler;}
-    if (config.steps !== undefined) {body.steps = config.steps;}
-    if (config.style_preset) {body.style_preset = config.style_preset;}
-    if (config.enable_refiner !== undefined) {body.enable_refiner = config.enable_refiner;}
-    if (config.controlnet_name) {body.controlnet_name = config.controlnet_name;}
-    if (config.controlnet_image) {body.controlnet_image = config.controlnet_image;}
-    if (config.loras) {body.loras = config.loras;}
+    if (config.prompt_2) {
+      body.prompt_2 = config.prompt_2;
+    }
+    if (config.negative_prompt) {
+      body.negative_prompt = config.negative_prompt;
+    }
+    if (config.negative_prompt_2) {
+      body.negative_prompt_2 = config.negative_prompt_2;
+    }
+    if (config.image) {
+      body.image = config.image;
+    }
+    if (config.strength !== undefined) {
+      body.strength = config.strength;
+    }
+    if (config.seed !== undefined) {
+      body.seed = config.seed;
+    }
+    if (config.cfg_scale !== undefined) {
+      body.cfg_scale = config.cfg_scale;
+    }
+    if (config.sampler) {
+      body.sampler = config.sampler;
+    }
+    if (config.steps !== undefined) {
+      body.steps = config.steps;
+    }
+    if (config.style_preset) {
+      body.style_preset = config.style_preset;
+    }
+    if (config.enable_refiner !== undefined) {
+      body.enable_refiner = config.enable_refiner;
+    }
+    if (config.controlnet_name) {
+      body.controlnet_name = config.controlnet_name;
+    }
+    if (config.controlnet_image) {
+      body.controlnet_image = config.controlnet_image;
+    }
+    if (config.loras) {
+      body.loras = config.loras;
+    }
 
     logger.debug(`Calling Hyperbolic Image API: ${JSON.stringify(body)}`);
 
@@ -219,8 +247,7 @@ export class HyperbolicImageProvider implements ApiProvider {
         output: imageData,
         cached,
         cost,
-        isBase64: true,
-        format: 'json',
+        ...(imageData ? { isBase64: true } : {}),
       };
     } catch (err) {
       return {
