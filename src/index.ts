@@ -20,6 +20,7 @@ import type {
   ProviderOptions,
   Scenario,
 } from './types';
+import type { ApiProvider } from './types/providers';
 import { readFilters, writeMultipleOutputs, writeOutput } from './util';
 import invariant from './util/invariant';
 import { readTests } from './util/testCaseReader';
@@ -33,12 +34,21 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     await runDbMigrations();
   }
 
+  const loadedProviders = await loadApiProviders(testSuite.providers, {
+    env: testSuite.env,
+  });
+  const providerMap: Record<string, ApiProvider> = {};
+  for (const p of loadedProviders) {
+    providerMap[p.id()] = p;
+    if (p.label) {
+      providerMap[p.label] = p;
+    }
+  }
+
   const constructedTestSuite: TestSuite = {
     ...testSuite,
     scenarios: testSuite.scenarios as Scenario[],
-    providers: await loadApiProviders(testSuite.providers, {
-      env: testSuite.env,
-    }),
+    providers: loadedProviders,
     tests: await readTests(testSuite.tests),
 
     nunjucksFilters: await readFilters(testSuite.nunjucksFilters || {}),
@@ -77,11 +87,14 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
         }
 
         if (assertion.provider) {
-          if (typeof assertion.provider === 'object') {
+          if (typeof assertion.provider === 'string') {
+            assertion.provider =
+              providerMap[assertion.provider] || (await loadApiProvider(assertion.provider));
+          } else if (typeof assertion.provider === 'object') {
             const casted = assertion.provider as ProviderOptions;
             invariant(casted.id, 'Provider object must have an id');
             assertion.provider = await loadApiProvider(casted.id, { options: casted });
-          } else if (typeof assertion.provider === 'string') {
+          } else if (typeof assertion.provider === 'function') {
             assertion.provider = await loadApiProvider(assertion.provider);
           } else {
             throw new Error('Invalid provider type');
