@@ -66,6 +66,7 @@ Before running the full examples, you can test if your API key works:
 Simple test to verify your setup works with basic text generation.
 
 Model tested:
+
 - `hyperbolic:meta-llama/Llama-3.1-8B` - Fast, small model for quick testing
 
 ### 2. reasoning.yaml - Reasoning Models
@@ -77,6 +78,7 @@ Tests advanced reasoning capabilities across:
 - **Code Reasoning**: Algorithm analysis and optimization
 
 Models tested:
+
 - `hyperbolic:deepseek-ai/DeepSeek-R1` - Advanced reasoning model (requires pro account)
 - `hyperbolic:qwen/QwQ-32B` - Qwen reasoning model
 - `hyperbolic:meta-llama/Llama-3.1-70B` - General purpose LLM
@@ -90,6 +92,7 @@ Tests image generation across different styles:
 - **Fantasy/Sci-fi**: Dragons, space exploration
 
 Models tested:
+
 - `hyperbolic:image:Flux.1-dev` - State-of-the-art image generation
 - `hyperbolic:image:SDXL1.0-base` - Stable Diffusion XL
 - `hyperbolic:image:SD1.5` - Classic Stable Diffusion
@@ -104,6 +107,7 @@ Tests text-to-speech synthesis across different types of content:
 - **Numbers & Punctuation**: Addresses and phone numbers
 
 Model tested:
+
 - `hyperbolic:audio:Melo-TTS` - High-quality text-to-speech
 
 ### 5. multimodal.yaml - Vision-Language Models
@@ -115,6 +119,7 @@ Tests multimodal understanding:
 - **Text Extraction**: Reading text from images
 
 Models tested:
+
 - `hyperbolic:qwen/Qwen2.5-VL-72B-Instruct` - Qwen vision-language model
 - `hyperbolic:mistralai/Pixtral-12B` - Mistral's multimodal model
 
