@@ -121,7 +121,7 @@ The system uses generates diverse canary types:
 The detection process follows a straightforward approach:
 
 1. Promptfoo generates probe messages designed to elicit responses that might reveal memorization, along with detection patterns with confidence scores for different match types
-2. These probes to the target LLM
+2. Promptfoo sends these probes to the target LLM
 3. Promptfoo looks for exact, partial, and semantic matches in the responses
 4. Confidence scores are calculated based on the match type and quality
 
