@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: 'CyberSecEval Prompt Injections'
 prompts:
   - id: file://prompt.json
