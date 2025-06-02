@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Named Metrics example
+description: Custom metric naming and derivation for evaluation
 
 prompts:
   - 'Say this as though you are a pirate: {{body}}'

@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Prompts Per Model example
+description: Different prompts configured per model provider
 
 prompts:
   - id: file://prompt1.txt

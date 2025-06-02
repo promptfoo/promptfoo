@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Cohere example
+description: Cohere Command with web search and similarity embeddings
 
 prompts:
   - 'Write a tweet about {{topic}}'

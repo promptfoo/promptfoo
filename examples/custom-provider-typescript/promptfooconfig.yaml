@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Custom Provider Typescript example
+description: Custom provider implementation using TypeScript
 
 prompts:
   - file://prompts.txt

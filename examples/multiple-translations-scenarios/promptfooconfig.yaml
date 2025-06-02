@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Multiple Translations Scenarios example
+description: Multiple translation scenarios with different evaluation criteria
 
 prompts:
   - file://prompts.txt

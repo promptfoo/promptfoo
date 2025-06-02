@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Select Best Example example
+description: Selecting best response from multiple generated tweets
 
 prompts:
   - 'Write a tweet about {{topic}}'

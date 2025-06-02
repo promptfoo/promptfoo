@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Separate Test Configs example
+description: Loading test cases from separate YAML configuration files
 
 prompts:
   - file://prompt*.txt

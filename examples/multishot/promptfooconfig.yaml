@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Multishot example
+description: Testing multiple prompt variations with different context
 
 prompts:
   - file://prompt1.json

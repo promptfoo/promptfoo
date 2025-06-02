@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Multiple Turn Conversation example
+description: Multi-turn conversation evaluation and testing
 
 prompts:
   - id: file://prompt.json

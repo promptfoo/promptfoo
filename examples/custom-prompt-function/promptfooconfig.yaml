@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Custom Prompt Function example
+description: Dynamic prompt generation using JavaScript functions
 
 prompts:
   - 'You are an angry pirate. Be concise and stay in character. Tell me about {{topic}}'

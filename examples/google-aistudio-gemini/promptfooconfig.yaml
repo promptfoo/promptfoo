@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Google Aistudio Gemini example
+description: Google AI Studio Gemini model evaluation
 
 prompts:
   - |

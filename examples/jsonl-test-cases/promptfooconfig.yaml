@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Jsonl Test Cases example
+description: Loading test cases from JSONL formatted files
 
 prompts:
   - 'Translate the following text to {{target_language}}: {{text}}'

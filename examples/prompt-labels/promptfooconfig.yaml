@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Prompt Labels example
+description: Using prompt labels for organized testing and comparison
 
 prompts:
   - id: file://prompts1.txt

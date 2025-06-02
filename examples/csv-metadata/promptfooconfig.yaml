@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Csv Metadata example
+description: Loading test cases and metadata from CSV files
 
 prompts:
   - 'Tell me about {{topic}}'

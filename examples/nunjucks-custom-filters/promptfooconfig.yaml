@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Nunjucks Custom Filters example
+description: Custom Nunjucks template filters for prompt generation
 
 prompts:
   - file://prompts.txt

@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Openai Vision example
+description: OpenAI vision model image analysis and evaluation
 
 prompts:
   - file://prompt.json

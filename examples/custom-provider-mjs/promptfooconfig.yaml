@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Custom Provider Mjs example
+description: Custom provider implementation using ES modules (.mjs)
 
 prompts:
   - file://prompts.txt

@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Simple Test example
+description: Basic assertion types and test case fundamentals
 
 prompts:
   - file://prompts.txt

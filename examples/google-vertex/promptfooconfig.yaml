@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Google Vertex example
+description: Google Vertex AI model evaluation and testing
 
 # This configuration runs each prompt through a series of example inputs and checks if they meet requirements.
 

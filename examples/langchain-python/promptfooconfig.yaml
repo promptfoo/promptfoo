@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Langchain Python example
+description: LangChain Python integration for prompt evaluation
 
 prompts:
   - prompt.txt

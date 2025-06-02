@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Javascript Assert External example
+description: External JavaScript assertion files for custom validation
 
 prompts:
   - 'Tell me about {{topic}} in three words'

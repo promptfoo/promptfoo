@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Store And Reuse Outputs example
+description: Storing outputs from one prompt for use in subsequent prompts
 
 prompts:
   - 'Respond to the user: {{message}}'

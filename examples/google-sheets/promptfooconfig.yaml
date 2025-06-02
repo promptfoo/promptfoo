@@ -1,8 +1,8 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Google Sheets example
+description: Using Google Sheets for LLM test inputs and outputs
 
 prompts:
-  - prompts.txt
+  - file://prompts.txt
 
 providers:
   - openai:gpt-4o-mini

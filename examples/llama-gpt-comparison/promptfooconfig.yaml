@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Llama Gpt Comparison example
+description: Comparing Llama and GPT model performance
 
 prompts:
   - file://prompts/chat_prompt.json

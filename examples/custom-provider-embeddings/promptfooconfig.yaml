@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Custom Provider Embeddings example
+description: Custom provider implementation with embedding similarity
 
 prompts:
   - 'Translate this to French: {{message}}'

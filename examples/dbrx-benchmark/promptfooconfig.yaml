@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Dbrx Benchmark example
+description: DBRX model benchmarking against Mixtral and GPT-4o-mini
 
 prompts:
   - 'Think deeply and answer concisely: {{query}}'

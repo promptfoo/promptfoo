@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Openai Tools Call example
+description: OpenAI tools calling with weather API integration
 
 prompts:
   - 'What is the weather like in {{city}}?'

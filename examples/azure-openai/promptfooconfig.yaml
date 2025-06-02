@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Azure Openai example
+description: Azure OpenAI chat and embeddings with fact generation
 
 prompts:
   - 'Generate one very interesting fact about {{topic}}'

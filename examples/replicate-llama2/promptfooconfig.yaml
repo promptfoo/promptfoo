@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Replicate Llama2 example
+description: Replicate Llama2 model evaluation and testing
 
 prompts:
   - file://prompts.txt

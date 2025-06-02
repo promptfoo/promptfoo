@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Openai Multiline Yaml example
+description: OpenAI evaluation with multiline YAML prompt formatting
 
 prompts:
   - prompt.yaml

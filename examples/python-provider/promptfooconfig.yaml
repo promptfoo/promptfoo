@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Python Provider example
+description: Custom Python provider with functions and multi-format configs
 
 prompts:
   - 'Write a very concise funny tweet about {{topic}}'

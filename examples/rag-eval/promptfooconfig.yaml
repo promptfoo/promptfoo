@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Rag Eval example
+description: Evaluating RAG responses using multiple quality metrics
 
 prompts:
   - |

@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Gpt 4o Temperature Comparison example
+description: Comparing GPT-4o behavior at different temperature settings
 
 prompts:
   - 'Respond to the following instruction: {{message}}'

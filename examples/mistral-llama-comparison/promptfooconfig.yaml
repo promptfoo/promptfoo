@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Mistral Llama Comparison example
+description: Comparing Mistral and Llama model performance
 
 prompts:
   - '{{message}}'

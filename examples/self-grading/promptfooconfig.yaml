@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Self Grading example
+description: Automatic response evaluation using LLM rubric scoring
 
 prompts:
   - file://prompts.txt
