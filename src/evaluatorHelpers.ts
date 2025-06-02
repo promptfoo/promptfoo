@@ -17,11 +17,12 @@ import {
   type ApiProvider,
   type NunjucksFilterMap,
   type Prompt,
-  type TestCase,
+  TestCaseSchema,
   type TestSuite,
   type CompletedPrompt,
   type EvaluateResult,
   TestSuiteSchema,
+  type TestCase,
 } from './types';
 import { renderVarsInObject } from './util';
 import { isJavascriptFile, isImageFile, isVideoFile, isAudioFile } from './util/fileExtensions';
@@ -339,7 +340,12 @@ const BeforeAllExtensionHookContextSchema = z.object({
   suite: TestSuiteSchema,
 });
 
+const BeforeEachExtensionHookContextSchema = z.object({
+  test: TestCaseSchema,
+});
+
 type BeforeAllExtensionHookContext = z.infer<typeof BeforeAllExtensionHookContextSchema>;
+type BeforeEachExtensionHookContext = z.infer<typeof BeforeEachExtensionHookContextSchema>;
 
 /**
  * Defines the set of fields on BeforeAllExtensionHookContextSchema that may be mutated by the extension hook.
@@ -357,9 +363,9 @@ const MutableBeforeAllExtensionHookContextSchema = z.object({
   }),
 });
 
-type BeforeEachExtensionHookContext = {
-  test: TestCase;
-};
+const MutableBeforeEachExtensionHookContextSchema = z.object({
+  test: TestCaseSchema,
+});
 
 type AfterEachExtensionHookContext = {
   test: TestCase;
@@ -411,12 +417,12 @@ export async function runExtensionHook<HookName extends keyof HookContextMap>(
       );
       break;
     }
-    // case 'beforeEach':
-    //   invariant(
-    //     BeforeEachExtensionHookContextSchema.safeParse(context).success,
-    //     `Invalid context passed to beforeEach hook`,
-    //   );
-    //   break;
+    case 'beforeEach':
+      invariant(
+        BeforeEachExtensionHookContextSchema.safeParse(context).success,
+        `Invalid context passed to beforeEach hook`,
+      );
+      break;
     // case 'afterEach':
     //   invariant(
     //     AfterEachExtensionHookContextSchema.safeParse(context).success,
@@ -447,7 +453,7 @@ export async function runExtensionHook<HookName extends keyof HookContextMap>(
     if (extensionReturnValue) {
       // Update the context with the mutable values returned by the extension hook.
       switch (hookName) {
-        case 'beforeAll':
+        case 'beforeAll': {
           const parsed = MutableBeforeAllExtensionHookContextSchema.safeParse(extensionReturnValue);
           if (parsed.success) {
             (updatedContext as BeforeAllExtensionHookContext) = {
@@ -461,8 +467,18 @@ export async function runExtensionHook<HookName extends keyof HookContextMap>(
             throw new Error(`[${extension}] Invalid context returned by beforeAll hook`);
           }
           break;
-        case 'beforeEach':
-          continue;
+        }
+        case 'beforeEach': {
+          const parsed =
+            MutableBeforeEachExtensionHookContextSchema.safeParse(extensionReturnValue);
+          if (parsed.success) {
+            (updatedContext as BeforeEachExtensionHookContext) = { test: parsed.data.test };
+          } else {
+            logger.error(parsed.error.message);
+            throw new Error(`[${extension}] Invalid context returned by beforeEach hook`);
+          }
+          break;
+        }
         case 'afterEach':
           continue;
         case 'afterAll':

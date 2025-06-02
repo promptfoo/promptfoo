@@ -66,11 +66,15 @@ def extension_hook(hook_name: str, context: dict) -> dict:
                 "assert": [{"type": "contains", "value": "Es un día hermoso."}],
             }
         )
+
         # Add an additional default assertion to the suite:
         context["suite"]["defaultTest"]["assert"].append({"type": "is-json"})
 
     elif hook_name == "beforeEach":
         logging.info("Preparing test")
+
+        # All languages are now pirate:
+        context["test"]["vars"]["language"] = f"Pirate {context["test"]["vars"]["language"]}"
 
     elif hook_name == "afterEach":
         result = context.get("result", {})

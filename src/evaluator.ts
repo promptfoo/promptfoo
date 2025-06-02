@@ -822,9 +822,10 @@ class Evaluator {
         throw new Error('Expected index to be a number');
       }
 
-      await runExtensionHook(this.testSuite.extensions, 'beforeEach', {
+      const beforeEachOut = await runExtensionHook(this.testSuite.extensions, 'beforeEach', {
         test: evalStep.test,
       });
+      evalStep.test = beforeEachOut.test;
 
       const rows = await runEval(evalStep);
 
