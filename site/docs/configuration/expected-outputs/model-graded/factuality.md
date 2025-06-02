@@ -1,3 +1,7 @@
+---
+sidebar_label: Factuality
+---
+
 # Factuality
 
 The `factuality` assertion evaluates the factual consistency between an LLM output and a reference answer. It uses a structured prompt based on [OpenAI's evals](https://github.com/openai/evals/blob/main/evals/registry/modelgraded/fact.yaml) to determine if the output is factually consistent with the reference.
