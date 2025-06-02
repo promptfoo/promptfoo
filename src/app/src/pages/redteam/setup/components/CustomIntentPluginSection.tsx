@@ -209,8 +209,8 @@ export default function CustomIntentSection() {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <Typography variant="body2" color="text.secondary">
-        These prompts are passed directly to your target. They are also used as an initial prompt by
-        Promptfoo's automated jailbreak strategies.
+        These prompts are passed directly to your target. They are also used as goals by Promptfoo's
+        automated jailbreak strategies.
       </Typography>
       {isLoading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
