@@ -53,7 +53,8 @@ class AIStudioGenericProvider implements ApiProvider {
   }
 
   getApiUrlDefault(): string {
-    return `https://${DEFAULT_API_HOST}`;
+    const renderedHost = getNunjucksEngine().renderString(DEFAULT_API_HOST, {});
+    return `https://${renderedHost}`;
   }
 
   getApiHost(): string | undefined {
@@ -64,10 +65,8 @@ class AIStudioGenericProvider implements ApiProvider {
       getEnvString('GOOGLE_API_HOST') ||
       getEnvString('PALM_API_HOST') ||
       DEFAULT_API_HOST;
-    if (apiHost) {
-      return getNunjucksEngine().renderString(apiHost, {});
-    }
-    return undefined;
+    
+    return getNunjucksEngine().renderString(apiHost, {});
   }
 
   getApiUrl(): string {

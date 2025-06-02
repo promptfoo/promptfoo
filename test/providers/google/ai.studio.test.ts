@@ -112,7 +112,7 @@ describe('AIStudioChatProvider', () => {
     
       // Default URL fallback
       const providerWithDefault = new AIStudioChatProvider('gemini-pro');
-      expect(providerWithDefault.getApiUrl()).toBe('https://generativelanguage.googleapis.com');
+      expect(providerWithDefault.getApiUrl()).toBe('https://rendered-generativelanguage.googleapis.com');
     });
     
     it('should prioritize apiHost over apiBaseUrl', () => {
@@ -122,7 +122,7 @@ describe('AIStudioChatProvider', () => {
           apiBaseUrl: 'https://base.googleapis.com',
         },
       });
-      expect(provider.getApiUrl()).toBe('https://host.googleapis.com');
+      expect(provider.getApiUrl()).toBe('https://rendered-host.googleapis.com');
     });
 
     it('should handle custom provider ID', () => {
