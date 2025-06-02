@@ -65,7 +65,6 @@ class AIStudioGenericProvider implements ApiProvider {
       getEnvString('GOOGLE_API_HOST') ||
       getEnvString('PALM_API_HOST') ||
       DEFAULT_API_HOST;
-    
     return getNunjucksEngine().renderString(apiHost, {});
   }
 
