@@ -8,7 +8,7 @@ import {
   extractTextFromPDF,
   collectFileMetadata,
 } from '../src/evaluatorHelpers';
-import type { Prompt, TestSuite, ApiProvider } from '../src/types';
+import type { Prompt, TestSuite, ApiProvider, TestCase } from '../src/types';
 import { transform } from '../src/util/transform';
 
 jest.mock('proxy-agent', () => ({
@@ -603,6 +603,81 @@ describe('runExtensionHook', () => {
         // Expect the hook to throw an error
         await expect(runExtensionHook(['ext1', 'ext2', 'ext3'], hookName, context)).rejects.toThrow(
           `[ext1] Invalid context returned by beforeAll hook`,
+        );
+      });
+    });
+  });
+
+  describe('beforeEach', () => {
+    const hookName = 'beforeEach';
+    const context = {
+      test: {
+        vars: { var1: 'value1', var2: 'value2' },
+        assert: [{ type: 'equals', value: 'expected' }],
+      } as TestCase,
+    };
+
+    describe('no extensions provided', () => {
+      it('should not call transform', async () => {
+        await runExtensionHook([], hookName, context);
+        expect(transform).not.toHaveBeenCalled();
+
+        await runExtensionHook(undefined, hookName, context);
+        expect(transform).not.toHaveBeenCalled();
+
+        await runExtensionHook(null, hookName, context);
+        expect(transform).not.toHaveBeenCalled();
+      });
+
+      it('should return the original context', async () => {
+        const out = await runExtensionHook([], hookName, context);
+        expect(out).toEqual(context);
+        const out2 = await runExtensionHook(undefined, hookName, context);
+        expect(out2).toEqual(context);
+        const out3 = await runExtensionHook(null, hookName, context);
+        expect(out3).toEqual(context);
+      });
+    });
+
+    describe('extensions provided', () => {
+      it('should call transform for each extension', async () => {
+        const extensions = ['ext1', 'ext2', 'ext3'];
+        await runExtensionHook(extensions, hookName, context);
+        expect(transform).toHaveBeenCalledTimes(3);
+        expect(transform).toHaveBeenNthCalledWith(1, 'ext1', hookName, context, false);
+        expect(transform).toHaveBeenNthCalledWith(2, 'ext2', hookName, context, false);
+        expect(transform).toHaveBeenNthCalledWith(3, 'ext3', hookName, context, false);
+      });
+
+      it('should return the original context when extension(s) do not return a value', async () => {
+        const out = await runExtensionHook(['ext1', 'ext2', 'ext3'], hookName, context);
+        expect(out).toEqual(context);
+      });
+
+      it('returned context should conform to the expected schema', async () => {
+        // Re-mock the transform function to return a valid context (with modified test)
+        jest.mocked(transform).mockResolvedValue({
+          test: {
+            vars: { var1: 'modified_value1', var2: 'modified_value2' },
+            assert: [{ type: 'equals', value: 'modified_expected' }],
+          },
+        });
+
+        const out = await runExtensionHook(['ext1', 'ext2', 'ext3'], hookName, context);
+
+        expect(out.test.vars).toEqual({ var1: 'modified_value1', var2: 'modified_value2' });
+        expect(out.test.assert).toEqual([{ type: 'equals', value: 'modified_expected' }]);
+      });
+
+      it('should throw a validation error if the returned context does not conform to the expected schema', async () => {
+        // Re-mock the transform function to return an invalid context (test should be an object, not a string)
+        jest.mocked(transform).mockResolvedValue({
+          test: 'invalid_test_value',
+        });
+
+        // Expect the hook to throw an error
+        await expect(runExtensionHook(['ext1', 'ext2', 'ext3'], hookName, context)).rejects.toThrow(
+          `[ext1] Invalid context returned by beforeEach hook`,
         );
       });
     });

@@ -363,9 +363,11 @@ const MutableBeforeAllExtensionHookContextSchema = z.object({
   }),
 });
 
-const MutableBeforeEachExtensionHookContextSchema = z.object({
-  test: TestCaseSchema,
-});
+const MutableBeforeEachExtensionHookContextSchema = z
+  .object({
+    test: TestCaseSchema,
+  })
+  .strict();
 
 type AfterEachExtensionHookContext = {
   test: TestCase;
@@ -417,12 +419,14 @@ export async function runExtensionHook<HookName extends keyof HookContextMap>(
       );
       break;
     }
-    case 'beforeEach':
+    case 'beforeEach': {
+      const parsed = BeforeEachExtensionHookContextSchema.safeParse(context);
       invariant(
-        BeforeEachExtensionHookContextSchema.safeParse(context).success,
-        `Invalid context passed to beforeEach hook`,
+        parsed.success,
+        `Invalid context passed to beforeEach hook: ${parsed.error?.message}`,
       );
       break;
+    }
     // case 'afterEach':
     //   invariant(
     //     AfterEachExtensionHookContextSchema.safeParse(context).success,
