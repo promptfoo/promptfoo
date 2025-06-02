@@ -1,0 +1,52 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Google Live Audio - Affective Dialog (Emotion Adaptation)
+
+# Affective dialog lets Gemini adapt its response style to match the input expression and tone
+# Learn more about affective dialog at https://ai.google.dev/gemini-api/docs/live#affective-dialog
+
+prompts:
+  - label: 'Neutral Input'
+    raw: What is Promptfoo?
+
+  - label: 'Sad Input'
+    raw: |
+      I looked in the fridge and I found nothing. 
+      I think someone ate my sandwich
+
+providers:
+  # Example with Affective Dialog Enabled
+  # Note: Affective dialog requires apiVersion: 'v1alpha' and audio output
+  # Affective dialog requires the specific models:
+  # gemini-2.5-flash-preview-native-audio-dialog or
+  # gemini-2.5-flash-exp-native-audio-thinking-dialog (will show thinking process in the text field)
+  - id: 'google:live:gemini-2.5-flash-exp-native-audio-thinking-dialog'
+    label: 'With Affective Dialog'
+    config:
+      apiVersion: 'v1alpha'
+      generationConfig:
+        response_modalities: ['audio']
+        enableAffectiveDialog: true
+        outputAudioTranscription: {} # Enable transcription to see what's being said
+      timeoutMs: 30000
+
+  # For comparison: Regular audio without affective dialog
+  - id: 'google:live:gemini-2.5-flash-exp-native-audio-thinking-dialog'
+    label: 'Without Affective Dialog'
+    config:
+      apiVersion: 'v1alpha'
+      generationConfig:
+        response_modalities: ['audio']
+        outputAudioTranscription: {}
+      timeoutMs: 30000
+
+tests:
+  - assert:
+      - type: javascript
+        value: |
+          // Just check that we got audio response
+          if (context.providerResponse && context.providerResponse.audio) {
+            console.log('Got audio response with transcript:', context.providerResponse.audio.transcript);
+            return true;
+          }
+          console.log('No audio response received');
+          return false;

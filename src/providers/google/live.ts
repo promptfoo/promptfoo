@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { spawn, type ChildProcess } from 'child_process';
 import WebSocket from 'ws';
 import { getEnvString } from '../../envars';
@@ -130,34 +131,53 @@ export class GoogleLiveProvider implements ApiProvider {
         statefulApi.stderr?.on('data', (data) => {
           logger.error(`Python API stderr: ${data.toString()}`);
         });
+        
+        // Give the Python API time to start up
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        logger.debug('Stateful API process started');
       } catch (err) {
         logger.error(`Failed to spawn Python API: ${JSON.stringify(err)}`);
       }
     }
 
     return new Promise<ProviderResponse>((resolve) => {
-      const url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${this.getApiKey()}`;
+      const isNativeAudioModel = this.modelName.includes('native-audio');
+      
+      let apiVersion = this.config.apiVersion;
+      if (!apiVersion) {
+        apiVersion = 'v1alpha';
+      }
+      
+      const url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.${apiVersion}.GenerativeService.BidiGenerateContent?key=${this.getApiKey()}`;
+      
       const ws = new WebSocket(url);
-
-      const timeout = setTimeout(() => {
-        logger.error('WebSocket request timed out');
-        ws.close();
-        resolve({ error: 'WebSocket request timed out' });
-      }, this.config.timeoutMs || 10000);
 
       let response_text_total = '';
       let response_audio_total = '';
+      let response_audio_transcript = '';
       let hasAudioContent = false;
       const function_calls_total: FunctionCall[] = [];
       let audioCompletionTimer: NodeJS.Timeout | null = null;
+      let statefulApiState: any = undefined;
 
       const isTextExpected = this.config.generationConfig?.response_modalities?.includes('text') ?? false;
       const isAudioExpected = this.config.generationConfig?.response_modalities?.includes('audio') ?? false;
 
       let hasTextStreamEnded = !isTextExpected;
       let hasAudioStreamEnded = !isAudioExpected;
+      
+      // Extract transcription config for use in message handler
+      const hasOutputTranscription = !!this.config.generationConfig?.outputAudioTranscription;
+      const hasInputTranscription = !!this.config.generationConfig?.inputAudioTranscription;
 
-      const finalizeResponse = () => {
+      const timeout = setTimeout(() => {
+        logger.error(`WebSocket request timed out after ${this.config.timeoutMs || 10000}ms`);
+        logger.error(`Current state - hasTextStreamEnded: ${hasTextStreamEnded}, hasAudioStreamEnded: ${hasAudioStreamEnded}`);
+        ws.close();
+        resolve({ error: 'WebSocket request timed out' });
+      }, this.config.timeoutMs || 10000);
+
+      const finalizeResponse = async () => {
         if (ws.readyState === WebSocket.OPEN) {
           ws.close();
         }
@@ -165,29 +185,37 @@ export class GoogleLiveProvider implements ApiProvider {
         if (audioCompletionTimer) {
           clearTimeout(audioCompletionTimer);
         }
+        
+        // Retrieve final state from stateful API before shutting down
+        if (this.config.functionToolStatefulApi) {
+          try {
+            const url = new URL('get_state', this.config.functionToolStatefulApi.url).href;
+            const apiResponse = await axios.get(url);
+            statefulApiState = apiResponse.data;
+            logger.debug(`Stateful api state: ${JSON.stringify(statefulApiState)}`);
+          } catch (err) {
+            logger.error(`Error retrieving final state of api: ${JSON.stringify(err)}`);
+          }
+        }
+        
         if (statefulApi) {
           statefulApi.kill();
         }
 
         const result: ProviderResponse = {
-          output: response_text_total,
-          metadata: {
-            raw: response_text_total,
-            ...(function_calls_total.length > 0 && { function_calls: function_calls_total }),
-            ...(hasAudioContent && {
-              audio: {
-                data: this.convertPcmToWav(response_audio_total),
-                format: 'wav',
-              },
-            }),
+          output: {
+            text: response_text_total,
+            toolCall: { functionCalls: function_calls_total },
+            statefulApiState,
           },
+          metadata: {},
         };
 
         if (hasAudioContent) {
           result.audio = {
             data: this.convertPcmToWav(response_audio_total),
             format: 'wav',
-            transcript: response_text_total || undefined,
+            transcript: response_audio_transcript || response_text_total || undefined,
           };
         }
         resolve(result);
@@ -195,6 +223,36 @@ export class GoogleLiveProvider implements ApiProvider {
 
       ws.onopen = () => {
         logger.debug('WebSocket connection is opening...');
+        const {
+          speechConfig,
+          outputAudioTranscription,
+          inputAudioTranscription,
+          enableAffectiveDialog,
+          proactivity,
+          ...restGenerationConfig
+        } = this.config.generationConfig || {};
+        
+        let formattedSpeechConfig;
+        if (speechConfig) {
+          formattedSpeechConfig = {
+            ...(speechConfig.voiceConfig && {
+              voice_config: {
+                prebuilt_voice_config: {
+                  voice_name: speechConfig.voiceConfig.prebuiltVoiceConfig?.voiceName,
+                },
+              },
+            }),
+            ...(speechConfig.languageCode && { language_code: speechConfig.languageCode }),
+          };
+        }
+        
+        let formattedProactivity;
+        if (proactivity) {
+          formattedProactivity = {
+            proactive_audio: proactivity.proactiveAudio
+          };
+        }
+        
         const setupMessage = {
           setup: {
             model: `models/${this.modelName}`,
@@ -206,19 +264,26 @@ export class GoogleLiveProvider implements ApiProvider {
               maxOutputTokens: this.config.maxOutputTokens,
               topP: this.config.topP,
               topK: this.config.topK,
-              ...this.config.generationConfig,
+              ...restGenerationConfig,
+              ...(formattedSpeechConfig ? { speech_config: formattedSpeechConfig } : {}),
+              ...(enableAffectiveDialog ? { enable_affective_dialog: enableAffectiveDialog } : {}),
+              ...(formattedProactivity ? { proactivity: formattedProactivity } : {}),
             },
             ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),
             ...(this.config.tools ? { tools: loadFile(this.config.tools, context?.vars) } : {}),
             ...(systemInstruction ? { systemInstruction } : {}),
+            ...(outputAudioTranscription ? { output_audio_transcription: outputAudioTranscription } : {}),
+            ...(inputAudioTranscription ? { input_audio_transcription: inputAudioTranscription } : {}),
           },
         };
-        logger.debug(`WebSocket sent: ${JSON.stringify(setupMessage)}`);
+        
+        logger.debug(`Sending setup message: ${JSON.stringify(setupMessage, null, 2)}`);
         ws.send(JSON.stringify(setupMessage));
       };
 
       ws.onmessage = async (event) => {
         // Handle different data types from WebSocket
+        logger.debug('WebSocket message received');
         let responseData: string;
         if (event.data instanceof ArrayBuffer || event.data instanceof Buffer) {
           const dataString = event.data.toString('utf-8');
@@ -241,7 +306,10 @@ export class GoogleLiveProvider implements ApiProvider {
                   hasAudioStreamEnded = true;
                 }
                 if (hasTextStreamEnded && hasAudioStreamEnded) {
-                  finalizeResponse();
+                  finalizeResponse().catch(err => {
+                    logger.error(`Error in finalizeResponse: ${err}`);
+                    resolve({ error: `Error finalizing response: ${err}` });
+                  });
                 }
               }, 1500);
             }
@@ -260,11 +328,32 @@ export class GoogleLiveProvider implements ApiProvider {
           const responseText = await new Response(responseData).text();
           const response = JSON.parse(responseText);
 
+          if (response.error) {
+            logger.error(`Google Live API error: ${JSON.stringify(response.error)}`);
+            ws.close();
+            resolve({ error: `Google Live API error: ${JSON.stringify(response.error)}` });
+            return;
+          }
+          
+          const messageType = 
+            response.setupComplete ? 'setupComplete' :
+            response.serverContent?.modelTurn ? 'modelTurn' :
+            response.serverContent?.generationComplete ? 'generationComplete' :
+            response.serverContent?.turnComplete ? 'turnComplete' :
+            response.toolCall ? 'toolCall' :
+            response.streamingCustomOp ? 'streamingCustomOp' :
+            'unknown';
+          logger.debug(`Message type: ${messageType}, hasAudioContent: ${hasAudioContent}, hasOutputTranscription: ${hasOutputTranscription}`);
+          
           if (response.setupComplete) {
             const contentMessage = formatContentMessage(contents, contentIndex);
             contentIndex += 1;
             logger.debug(`WebSocket sent: ${JSON.stringify(contentMessage)}`);
             ws.send(JSON.stringify(contentMessage));
+          } else if (response.serverContent?.outputTranscription?.text && !response.serverContent?.modelTurn) {
+            // Handle transcription-only messages (when transcription comes separately)
+            response_audio_transcript += response.serverContent.outputTranscription.text;
+            clearTimeout(timeout);
           } else if (response.serverContent?.modelTurn?.parts) {
             for (const part of response.serverContent.modelTurn.parts) {
               if (part.text) {
@@ -285,31 +374,58 @@ export class GoogleLiveProvider implements ApiProvider {
                       hasAudioStreamEnded = true;
                     }
                     if (hasTextStreamEnded && hasAudioStreamEnded) {
-                      finalizeResponse();
+                      finalizeResponse().catch(err => {
+                        logger.error(`Error in finalizeResponse: ${err}`);
+                        resolve({ error: `Error finalizing response: ${err}` });
+                      });
                     }
                   }, 1500);
                 }
               }
             }
+            if (response.serverContent.outputTranscription?.text) {
+              // Append transcription text (it comes in chunks)
+              response_audio_transcript += response.serverContent.outputTranscription.text;
+              // Mark that we've received audio content when transcription arrives
+              if (isAudioExpected) {
+                hasAudioContent = true;
+              }
+            }
           } else if (response.serverContent?.generationComplete) {
+            logger.debug(`Generation complete received - text expected: ${isTextExpected}, audio expected: ${isAudioExpected}, has transcription: ${hasOutputTranscription}`);
             if (isTextExpected && !hasTextStreamEnded) {
               hasTextStreamEnded = true;
             }
+            // When audio with transcription is expected, generation complete signals end of audio too
+            if (isAudioExpected && !hasAudioStreamEnded && hasOutputTranscription) {
+              hasAudioStreamEnded = true;
+            }
             if (hasTextStreamEnded && hasAudioStreamEnded) {
-              finalizeResponse();
+              finalizeResponse().catch(err => {
+                logger.error(`Error in finalizeResponse: ${err}`);
+                resolve({ error: `Error finalizing response: ${err}` });
+              });
               return;
             }
           } else if (response.serverContent?.turnComplete && contentIndex >= contents.length) {
+            logger.debug(`Turn complete received - text expected: ${isTextExpected}, text ended: ${hasTextStreamEnded}, audio expected: ${isAudioExpected}, audio ended: ${hasAudioStreamEnded}, has audio: ${hasAudioContent}, has transcription: ${!!response_audio_transcript}`);
             if (isTextExpected && !hasTextStreamEnded) {
               hasTextStreamEnded = true;
             }
             if (isAudioExpected && !hasAudioStreamEnded) {
-              if (hasAudioContent) {
+              // When transcription is enabled, we should complete immediately on turnComplete
+              // as the audio and transcription are sent together
+              if (hasOutputTranscription || hasInputTranscription) {
+                hasAudioStreamEnded = true;
+              } else if (hasAudioContent) {
                 if (!audioCompletionTimer) {
                   audioCompletionTimer = setTimeout(() => {
                     hasAudioStreamEnded = true;
                     if (hasTextStreamEnded && hasAudioStreamEnded) {
-                      finalizeResponse();
+                      finalizeResponse().catch(err => {
+                        logger.error(`Error in finalizeResponse: ${err}`);
+                        resolve({ error: `Error finalizing response: ${err}` });
+                      });
                     }
                   }, 500);
                 }
@@ -318,7 +434,10 @@ export class GoogleLiveProvider implements ApiProvider {
               }
             }
             if (hasTextStreamEnded && hasAudioStreamEnded) {
-              finalizeResponse();
+              finalizeResponse().catch(err => {
+                logger.error(`Error in finalizeResponse: ${err}`);
+                resolve({ error: `Error finalizing response: ${err}` });
+              });
               return;
             }
           } else if (response.serverContent?.turnComplete && contentIndex < contents.length) {
@@ -343,7 +462,25 @@ export class GoogleLiveProvider implements ApiProvider {
                     );
                   } else if (this.config.functionToolStatefulApi) {
                     logger.warn('functionToolStatefulApi configured but no HTTP client implemented for it after cleanup.');
-                    callbackResponse = { error: 'Stateful API call with HTTP not implemented' };
+                    const url = new URL(functionName, this.config.functionToolStatefulApi.url).href;
+                    try {
+                      // Try GET first, then fall back to POST
+                      try {
+                        const axiosResponse = await axios.get(url, {
+                          params: functionCall.args || null,
+                        });
+                        callbackResponse = axiosResponse.data;
+                      } catch {
+                        const axiosResponse = await axios.post(url, functionCall.args || null);
+                        callbackResponse = axiosResponse.data;
+                      }
+                      logger.debug(`Stateful api response: ${JSON.stringify(callbackResponse)}`);
+                    } catch (err) {
+                      callbackResponse = {
+                        error: `Error executing function ${functionName}: ${JSON.stringify(err)}`,
+                      };
+                      logger.error(`Error executing function ${functionName}: ${JSON.stringify(err)}`);
+                    }
                   }
                 } catch (err) {
                   callbackResponse = { error: `Error executing function ${functionName}: ${JSON.stringify(err)}` };
@@ -390,6 +527,16 @@ export class GoogleLiveProvider implements ApiProvider {
             !response.streamingCustomOp
           ) {
             logger.warn(`Received unhandled WebSocket message structure: ${JSON.stringify(response).substring(0,200)}`);
+            if (hasOutputTranscription && hasAudioContent && isAudioExpected && !hasAudioStreamEnded) {
+              logger.debug('Unknown message with transcription enabled - marking audio as complete');
+              hasAudioStreamEnded = true;
+              if (hasTextStreamEnded && hasAudioStreamEnded) {
+                finalizeResponse().catch(err => {
+                  logger.error(`Error in finalizeResponse: ${err}`);
+                  resolve({ error: `Error finalizing response: ${err}` });
+                });
+              }
+            }
           }
         } catch (err) {
           logger.error(`Failed to process WebSocket response: ${JSON.stringify(err)}`);
@@ -399,13 +546,16 @@ export class GoogleLiveProvider implements ApiProvider {
       };
 
       ws.onerror = (err) => {
-        logger.error(`WebSocket error: ${JSON.stringify(err)}`);
+        logger.error(`WebSocket error for model ${this.modelName}: ${JSON.stringify(err)}`);
+        if (isNativeAudioModel) {
+          logger.error(`Native audio model ${this.modelName} may not be available or may require different configuration`);
+        }
         clearTimeout(timeout);
         ws.close();
-        resolve({ error: `WebSocket error: ${JSON.stringify(err)}` });
+        resolve({ error: `WebSocket error for model ${this.modelName}: ${JSON.stringify(err)}` });
       };
 
-      ws.onclose = (event) => {
+      ws.onclose = () => {
         logger.debug(
           `WebSocket connection closed. Code: ${event.code}, Reason: ${event.reason}, Clean: ${event.wasClean}`,
         );
