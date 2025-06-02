@@ -372,12 +372,15 @@ function EvalOutputCell({
     }
   }
 
-  const comment =
-    output.gradingResult?.comment && output.gradingResult.comment !== '!highlight' ? (
-      <div className="comment" onClick={handleCommentOpen}>
-        {output.gradingResult.comment}
-      </div>
-    ) : null;
+  const commentTextToDisplay = output.gradingResult?.comment?.startsWith('!highlight')
+    ? output.gradingResult.comment.slice('!highlight'.length).trim()
+    : output.gradingResult?.comment;
+
+  const comment = commentTextToDisplay ? (
+    <div className="comment" onClick={handleCommentOpen}>
+      {commentTextToDisplay}
+    </div>
+  ) : null;
 
   const detail = showStats ? (
     <div className="cell-detail">
@@ -484,13 +487,12 @@ function EvalOutputCell({
   );
 
   const cellStyle = useMemo(() => {
-    const base =
-      output.gradingResult?.comment === '!highlight'
-        ? {
-            backgroundColor: 'var(--cell-highlight-color)',
-            color: 'var(--cell-highlight-text-color)',
-          }
-        : {};
+    const base = output.gradingResult?.comment?.startsWith('!highlight')
+      ? {
+          backgroundColor: 'var(--cell-highlight-color)',
+          color: 'var(--cell-highlight-text-color)',
+        }
+      : {};
 
     return {
       ...base,
