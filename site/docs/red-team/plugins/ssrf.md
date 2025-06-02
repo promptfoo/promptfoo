@@ -1,5 +1,5 @@
 ---
-sidebar_label: SSRF
+sidebar_label: Server-Side Request Forgery
 ---
 
 # Server-Side Request Forgery (SSRF) Plugin
