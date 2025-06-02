@@ -485,7 +485,12 @@ function EvalOutputCell({
 
   const cellStyle = useMemo(() => {
     const base =
-      output.gradingResult?.comment === '!highlight' ? { backgroundColor: '#ffffeb' } : {};
+      output.gradingResult?.comment === '!highlight'
+        ? {
+            backgroundColor: 'var(--cell-highlight-color)',
+            color: 'var(--cell-highlight-text-color)',
+          }
+        : {};
 
     return {
       ...base,
