@@ -733,7 +733,7 @@ export async function synthesize({
           const promptVar = testCase.vars?.[injectVar];
           const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
 
-          const extractedGoal = await extractGoalFromPrompt(prompt, purpose);
+          const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id);
 
           (testCase.metadata as any).goal = extractedGoal;
         }
@@ -778,7 +778,7 @@ export async function synthesize({
           const promptVar = testCase.vars?.[injectVar];
           const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
 
-          const extractedGoal = await extractGoalFromPrompt(prompt, purpose);
+          const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id);
 
           (testCase.metadata as any).goal = extractedGoal;
         }
