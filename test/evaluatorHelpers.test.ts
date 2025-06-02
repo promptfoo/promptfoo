@@ -576,7 +576,6 @@ describe('runExtensionHook', () => {
         // Re-mock the transform function to return a valid context (with a new tag)
         jest.mocked(transform).mockResolvedValue({
           suite: {
-            description: 'foobar',
             providers: context.suite.providers,
             prompts: context.suite.prompts,
             tests: context.suite.tests,
@@ -586,7 +585,6 @@ describe('runExtensionHook', () => {
         const out = await runExtensionHook(['ext1', 'ext2', 'ext3'], hookName, context);
 
         // Check the structure without relying on exact function name matching
-        expect(out.suite.description).toBe('foobar');
         expect(out.suite.providers).toHaveLength(1);
         expect(out.suite.providers[0]).toHaveProperty('id');
         expect(out.suite.providers[0]).toHaveProperty('callApi');
@@ -599,9 +597,7 @@ describe('runExtensionHook', () => {
       it('should throw a validation error if the returned context does not conform to the expected schema', async () => {
         // Re-mock the transform function to return an invalid context (dropped `providers` field)
         jest.mocked(transform).mockResolvedValue({
-          suite: {
-            prompts: context.suite.prompts,
-          },
+          suite: { foo: 'bar' },
         });
 
         // Expect the hook to throw an error
