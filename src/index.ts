@@ -29,6 +29,36 @@ export * from './types';
 
 export { generateTable } from './table';
 
+/**
+ * Helper function to resolve provider from various formats (string, object, function)
+ * Uses providerMap for optimization and falls back to loadApiProvider with proper context
+ */
+async function resolveProvider(
+  provider: any,
+  providerMap: Record<string, ApiProvider>,
+  context: { env?: any } = {}
+): Promise<ApiProvider> {
+  if (typeof provider === 'string') {
+    // Check providerMap first for optimization, then fall back to loadApiProvider with context
+    if (providerMap[provider]) {
+      return providerMap[provider];
+    }
+    return context.env ? await loadApiProvider(provider, { env: context.env }) : await loadApiProvider(provider);
+  } else if (typeof provider === 'object') {
+    const casted = provider as ProviderOptions;
+    invariant(casted.id, 'Provider object must have an id');
+    const loadOptions = { options: casted };
+    if (context.env) {
+      (loadOptions as any).env = context.env;
+    }
+    return await loadApiProvider(casted.id, loadOptions);
+  } else if (typeof provider === 'function') {
+    return context.env ? await loadApiProvider(provider, { env: context.env }) : await loadApiProvider(provider);
+  } else {
+    throw new Error('Invalid provider type');
+  }
+}
+
 async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions = {}) {
   if (testSuite.writeLatestResults) {
     await runDbMigrations();
@@ -59,26 +89,20 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
 
   // Resolve nested providers
   if (constructedTestSuite.defaultTest?.options?.provider) {
-    if (typeof constructedTestSuite.defaultTest.options.provider === 'function') {
-      constructedTestSuite.defaultTest.options.provider = await loadApiProvider(
-        constructedTestSuite.defaultTest.options.provider,
-      );
-    } else if (typeof constructedTestSuite.defaultTest.options.provider === 'object') {
-      const casted = constructedTestSuite.defaultTest.options.provider as ProviderOptions;
-      invariant(casted.id, 'Provider object must have an id');
-      constructedTestSuite.defaultTest.options.provider = await loadApiProvider(casted.id, {
-        options: casted,
-      });
-    }
+    constructedTestSuite.defaultTest.options.provider = await resolveProvider(
+      constructedTestSuite.defaultTest.options.provider,
+      providerMap,
+      { env: testSuite.env }
+    );
   }
 
   for (const test of constructedTestSuite.tests || []) {
-    if (test.options?.provider && typeof test.options.provider === 'function') {
-      test.options.provider = await loadApiProvider(test.options.provider);
-    } else if (test.options?.provider && typeof test.options.provider === 'object') {
-      const casted = test.options.provider as ProviderOptions;
-      invariant(casted.id, 'Provider object must have an id');
-      test.options.provider = await loadApiProvider(casted.id, { options: casted });
+    if (test.options?.provider) {
+      test.options.provider = await resolveProvider(
+        test.options.provider,
+        providerMap,
+        { env: testSuite.env }
+      );
     }
     if (test.assert) {
       for (const assertion of test.assert) {
@@ -87,18 +111,11 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
         }
 
         if (assertion.provider) {
-          if (typeof assertion.provider === 'string') {
-            assertion.provider =
-              providerMap[assertion.provider] || (await loadApiProvider(assertion.provider));
-          } else if (typeof assertion.provider === 'object') {
-            const casted = assertion.provider as ProviderOptions;
-            invariant(casted.id, 'Provider object must have an id');
-            assertion.provider = await loadApiProvider(casted.id, { options: casted });
-          } else if (typeof assertion.provider === 'function') {
-            assertion.provider = await loadApiProvider(assertion.provider);
-          } else {
-            throw new Error('Invalid provider type');
-          }
+          assertion.provider = await resolveProvider(
+            assertion.provider,
+            providerMap,
+            { env: testSuite.env }
+          );
         }
       }
     }
