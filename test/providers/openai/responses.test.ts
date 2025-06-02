@@ -1415,6 +1415,19 @@ describe('OpenAiResponsesProvider', () => {
       });
     });
 
+    it('should handle external file loading for response_format correctly', () => {
+      // Test that the provider can be configured with external file syntax
+      // This verifies the type handling for external file references
+      expect(() => {
+        new OpenAiResponsesProvider('gpt-4o', {
+          config: {
+            apiKey: 'test-key',
+            response_format: 'file://./response_format.json' as any,
+          },
+        });
+      }).not.toThrow();
+    });
+
     it('should handle explicit text format correctly', async () => {
       const mockApiResponse = {
         id: 'resp_abc123',
@@ -1462,6 +1475,37 @@ describe('OpenAiResponsesProvider', () => {
           type: 'text',
         },
       });
+    });
+
+    it('should accept external file reference syntax for response_format', () => {
+      // Test that the provider can be instantiated with external file syntax
+      // without throwing type errors (using type assertion as needed)
+      expect(() => {
+        new OpenAiResponsesProvider('gpt-4o', {
+          config: {
+            apiKey: 'test-key',
+            response_format: 'file://./schema.json' as any,
+          },
+        });
+      }).not.toThrow();
+
+      expect(() => {
+        new OpenAiResponsesProvider('gpt-4o', {
+          config: {
+            apiKey: 'test-key',
+            response_format: 'file://relative/path/schema.json' as any,
+          },
+        });
+      }).not.toThrow();
+
+      expect(() => {
+        new OpenAiResponsesProvider('gpt-4o', {
+          config: {
+            apiKey: 'test-key',
+            response_format: 'file:///absolute/path/schema.json' as any,
+          },
+        });
+      }).not.toThrow();
     });
   });
 
