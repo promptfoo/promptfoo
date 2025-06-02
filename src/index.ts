@@ -30,6 +30,14 @@ export * from './types';
 export { generateTable } from './table';
 
 /**
+ * Interface for loadApiProvider options that includes both required and optional properties
+ */
+interface LoadApiProviderOptions {
+  options?: ProviderOptions;
+  env?: any;
+}
+
+/**
  * Helper function to resolve provider from various formats (string, object, function)
  * Uses providerMap for optimization and falls back to loadApiProvider with proper context
  */
@@ -38,6 +46,11 @@ async function resolveProvider(
   providerMap: Record<string, ApiProvider>,
   context: { env?: any } = {}
 ): Promise<ApiProvider> {
+  // Guard clause for null or undefined provider values
+  if (provider == null) {
+    throw new Error('Provider cannot be null or undefined');
+  }
+
   if (typeof provider === 'string') {
     // Check providerMap first for optimization, then fall back to loadApiProvider with context
     if (providerMap[provider]) {
@@ -47,9 +60,9 @@ async function resolveProvider(
   } else if (typeof provider === 'object') {
     const casted = provider as ProviderOptions;
     invariant(casted.id, 'Provider object must have an id');
-    const loadOptions = { options: casted };
+    const loadOptions: LoadApiProviderOptions = { options: casted };
     if (context.env) {
-      (loadOptions as any).env = context.env;
+      loadOptions.env = context.env;
     }
     return await loadApiProvider(casted.id, loadOptions);
   } else if (typeof provider === 'function') {
