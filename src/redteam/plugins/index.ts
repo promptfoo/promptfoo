@@ -279,6 +279,7 @@ const remotePlugins: PluginFactory[] = [
   'harmful:misinformation-disinformation',
   'harmful:specialized-advice',
   'hijacking',
+  'mcp',
   'medical:anchoring-bias',
   'medical:hallucination',
   'medical:incorrect-knowledge',
