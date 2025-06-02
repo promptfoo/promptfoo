@@ -28,7 +28,14 @@ jest.mock('../src/prompts', () => {
     readProviderPromptMap: jest.fn().mockReturnValue({}),
   };
 });
-jest.mock('../src/providers');
+jest.mock('../src/providers', () => {
+  const originalModule = jest.requireActual('../src/providers');
+  return {
+    ...originalModule,
+    loadApiProvider: jest.fn(),
+    loadApiProviders: jest.fn(),
+  };
+});
 jest.mock('../src/telemetry');
 jest.mock('../src/util');
 
