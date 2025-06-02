@@ -496,7 +496,12 @@ function EvalOutputCell({
   );
 
   const cellStyle = useMemo(() => {
-    const base = rawComment.startsWith('!highlight') ? { backgroundColor: '#ffffeb' } : {};
+    const base = rawComment.startsWith('!highlight')
+      ? {
+          backgroundColor: 'var(--cell-highlight-color, #ffffeb)',
+          color: 'var(--cell-highlight-text-color)',
+        }
+      : {};
 
     return {
       ...base,
