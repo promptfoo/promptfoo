@@ -1361,7 +1361,7 @@ class Evaluator {
       progressBar.stop();
     }
 
-    this.evalRecord.setVars(vars);
+    this.evalRecord.setVars(Array.from(vars));
 
     await runExtensionHook(testSuite.extensions, 'afterAll', {
       prompts: this.evalRecord.prompts,
