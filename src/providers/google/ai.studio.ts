@@ -25,8 +25,6 @@ import {
 } from './util';
 import type { GeminiResponseData } from './util';
 
-const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
-
 class AIStudioGenericProvider implements ApiProvider {
   modelName: string;
 
@@ -52,22 +50,8 @@ class AIStudioGenericProvider implements ApiProvider {
     return `[Google AI Studio Provider ${this.modelName}]`;
   }
 
-  getApiHost(): string | undefined {
-    const apiHost =
-      this.config.apiHost ||
-      this.env?.GOOGLE_API_HOST ||
-      this.env?.PALM_API_HOST ||
-      getEnvString('GOOGLE_API_HOST') ||
-      getEnvString('PALM_API_HOST') ||
-      DEFAULT_API_HOST;
-    if (apiHost) {
-      return getNunjucksEngine().renderString(apiHost, {});
-    }
-    return undefined;
-  }
-
   getApiUrlDefault(): string {
-    return `https://${this.getApiHost()}`;
+    return `https://generativelanguage.googleapis.com`;
   }
 
   getApiUrl(): string {
