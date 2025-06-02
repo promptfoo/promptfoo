@@ -22,6 +22,7 @@ import {
   writeMultipleOutputs,
   writeOutput,
   maybeLoadToolsFromExternalFile,
+  renderVarsInObject,
 } from '../../src/util';
 import { TestGrader } from './utils';
 
@@ -671,5 +672,184 @@ describe('setupEnv', () => {
     // Then load .env.production with override (should change NODE_ENV to 'production')
     setupEnv('.env.production');
     expect(process.env.NODE_ENV).toBe('production');
+  });
+});
+
+describe('renderVarsInObject', () => {
+  beforeEach(() => {
+    delete process.env.PROMPTFOO_DISABLE_TEMPLATING;
+  });
+
+  afterEach(() => {
+    delete process.env.TEST_ENV_VAR;
+    delete process.env.PROMPTFOO_DISABLE_TEMPLATING;
+  });
+
+  it('should render environment variables in objects', () => {
+    process.env.TEST_ENV_VAR = 'env_value';
+    const obj = { text: '{{ env.TEST_ENV_VAR }}' };
+    const rendered = renderVarsInObject(obj, {});
+    expect(rendered).toEqual({ text: 'env_value' });
+  });
+
+  it('should return object unchanged when no vars provided', () => {
+    const obj = { text: '{{ variable }}', number: 42 };
+    const rendered = renderVarsInObject(obj);
+    expect(rendered).toEqual(obj);
+  });
+
+  it('should return object unchanged when vars is empty object', () => {
+    const obj = { text: '{{ variable }}', number: 42 };
+    const rendered = renderVarsInObject(obj, {});
+    // Empty object {} is truthy, so templating still runs but with no variables
+    expect(rendered).toEqual({ text: '', number: 42 });
+  });
+
+  it('should return object unchanged when PROMPTFOO_DISABLE_TEMPLATING is true', () => {
+    process.env.PROMPTFOO_DISABLE_TEMPLATING = 'true';
+    const obj = { text: '{{ variable }}' };
+    const vars = { variable: 'test_value' };
+    const rendered = renderVarsInObject(obj, vars);
+    expect(rendered).toEqual(obj);
+  });
+
+  it('should render variables in string objects', () => {
+    const obj = 'Hello {{ name }}!';
+    const vars = { name: 'World' };
+    const rendered = renderVarsInObject(obj, vars);
+    expect(rendered).toBe('Hello World!');
+  });
+
+  it('should render variables in array objects', () => {
+    const obj = ['{{ greeting }}', '{{ name }}', 42];
+    const vars = { greeting: 'Hello', name: 'World' };
+    const rendered = renderVarsInObject(obj, vars);
+    expect(rendered).toEqual(['Hello', 'World', 42]);
+  });
+
+  it('should render variables in nested arrays', () => {
+    const obj = [
+      ['{{ item1 }}', '{{ item2 }}'],
+      ['static', '{{ item3 }}'],
+    ];
+    const vars = { item1: 'first', item2: 'second', item3: 'third' };
+    const rendered = renderVarsInObject(obj, vars);
+    expect(rendered).toEqual([
+      ['first', 'second'],
+      ['static', 'third'],
+    ]);
+  });
+
+  it('should render variables in nested objects', () => {
+    const obj = {
+      level1: {
+        level2: {
+          text: '{{ variable }}',
+          number: 42,
+        },
+        array: ['{{ item }}'],
+      },
+    };
+    const vars = { variable: 'nested_value', item: 'array_item' };
+    const rendered = renderVarsInObject(obj, vars);
+    expect(rendered).toEqual({
+      level1: {
+        level2: {
+          text: 'nested_value',
+          number: 42,
+        },
+        array: ['array_item'],
+      },
+    });
+  });
+
+  it('should handle function objects by calling them with vars', () => {
+    const mockFunction = jest.fn().mockReturnValue({ result: '{{ value }}' });
+    const vars = { value: 'function_result' };
+    const rendered = renderVarsInObject(mockFunction, vars);
+
+    expect(mockFunction).toHaveBeenCalledWith({ vars });
+    // Function result is NOT recursively templated because vars is not passed in recursive call
+    expect(rendered).toEqual({ result: '{{ value }}' });
+  });
+
+  it('should handle null values', () => {
+    const obj = null;
+    const vars = { variable: 'test' };
+    const rendered = renderVarsInObject(obj, vars);
+    expect(rendered).toBeNull();
+  });
+
+  it('should handle undefined values', () => {
+    const obj = undefined;
+    const vars = { variable: 'test' };
+    const rendered = renderVarsInObject(obj, vars);
+    expect(rendered).toBeUndefined();
+  });
+
+  it('should handle primitive number values', () => {
+    const obj = 42;
+    const vars = { variable: 'test' };
+    const rendered = renderVarsInObject(obj, vars);
+    expect(rendered).toBe(42);
+  });
+
+  it('should handle primitive boolean values', () => {
+    const obj = true;
+    const vars = { variable: 'test' };
+    const rendered = renderVarsInObject(obj, vars);
+    expect(rendered).toBe(true);
+  });
+
+  it('should handle objects with null properties', () => {
+    const obj = { nullProp: null, text: '{{ variable }}' };
+    const vars = { variable: 'test_value' };
+    const rendered = renderVarsInObject(obj, vars);
+    expect(rendered).toEqual({ nullProp: null, text: 'test_value' });
+  });
+
+  it('should handle mixed type objects', () => {
+    const obj = {
+      string: '{{ text }}',
+      number: 42,
+      boolean: true,
+      nullValue: null,
+      array: ['{{ item }}', 123],
+      nested: {
+        deep: '{{ deep_value }}',
+      },
+    };
+    const vars = { text: 'rendered', item: 'array_item', deep_value: 'deep_rendered' };
+    const rendered = renderVarsInObject(obj, vars);
+    expect(rendered).toEqual({
+      string: 'rendered',
+      number: 42,
+      boolean: true,
+      nullValue: null,
+      array: ['array_item', 123],
+      nested: {
+        deep: 'deep_rendered',
+      },
+    });
+  });
+
+  it('should handle function that returns complex object structure', () => {
+    const complexFunction = jest.fn().mockReturnValue({
+      data: {
+        items: ['{{ item1 }}', '{{ item2 }}'],
+        metadata: { value: '{{ meta }}' },
+      },
+    });
+    const vars = { item1: 'first', item2: 'second', meta: 'metadata_value' };
+    const rendered = renderVarsInObject(complexFunction, vars);
+
+    expect(complexFunction).toHaveBeenCalledWith({ vars });
+    // Function result is NOT recursively templated because vars is not passed in recursive call
+    expect(rendered).toEqual({
+      data: {
+        items: ['{{ item1 }}', '{{ item2 }}'],
+        metadata: { value: '{{ meta }}' },
+      },
+    });
   });
 });

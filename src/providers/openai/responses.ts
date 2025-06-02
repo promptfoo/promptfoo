@@ -98,9 +98,14 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     const instructions = config.instructions;
 
+    // Load response_format from external file if needed, similar to chat provider
+    const responseFormat = config.response_format
+      ? maybeLoadFromExternalFile(renderVarsInObject(config.response_format, context?.vars))
+      : undefined;
+
     let textFormat;
-    if (config.response_format) {
-      if (config.response_format.type === 'json_object') {
+    if (responseFormat) {
+      if (responseFormat.type === 'json_object') {
         textFormat = {
           format: {
             type: 'json_object',
@@ -108,18 +113,16 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         };
 
         // IMPORTANT: json_object format requires the word 'json' in the input prompt
-      } else if (config.response_format.type === 'json_schema') {
+      } else if (responseFormat.type === 'json_schema') {
         const schema = maybeLoadFromExternalFile(
           renderVarsInObject(
-            config.response_format.schema || config.response_format.json_schema?.schema,
+            responseFormat.schema || responseFormat.json_schema?.schema,
             context?.vars,
           ),
         );
 
         const schemaName =
-          config.response_format.json_schema?.name ||
-          config.response_format.name ||
-          'response_schema';
+          responseFormat.json_schema?.name || responseFormat.name || 'response_schema';
 
         textFormat = {
           format: {
@@ -163,7 +166,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...(config.passthrough || {}),
     };
 
-    return { body, config };
+    return { body, config: { ...config, response_format: responseFormat } };
   }
 
   async callApi(
@@ -256,6 +259,31 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           }
         } else if (item.type === 'tool_result') {
           result = JSON.stringify(item);
+        } else if (item.type === 'mcp_list_tools') {
+          // MCP tools list - include in result for debugging/visibility
+          if (result) {
+            result += '\n';
+          }
+          result += `MCP Tools from ${item.server_label}: ${JSON.stringify(item.tools, null, 2)}`;
+        } else if (item.type === 'mcp_call') {
+          // MCP tool call result
+          if (item.error) {
+            if (result) {
+              result += '\n';
+            }
+            result += `MCP Tool Error (${item.name}): ${item.error}`;
+          } else {
+            if (result) {
+              result += '\n';
+            }
+            result += `MCP Tool Result (${item.name}): ${item.output}`;
+          }
+        } else if (item.type === 'mcp_approval_request') {
+          // MCP approval request - include in result for user to see
+          if (result) {
+            result += '\n';
+          }
+          result += `MCP Approval Required for ${item.server_label}.${item.name}: ${item.arguments}`;
         }
       }
 

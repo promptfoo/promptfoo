@@ -7,16 +7,15 @@ import { HARM_PLUGINS, PII_PLUGINS } from '../../src/redteam/constants';
 import { extractEntities } from '../../src/redteam/extraction/entities';
 import { extractSystemPurpose } from '../../src/redteam/extraction/purpose';
 import {
-  synthesize,
-  resolvePluginConfig,
   calculateTotalTests,
   getMultilingualRequestedCount,
   getTestCount,
+  resolvePluginConfig,
+  synthesize,
 } from '../../src/redteam/index';
 import { Plugins } from '../../src/redteam/plugins';
-import { shouldGenerateRemote, getRemoteHealthUrl } from '../../src/redteam/remoteGeneration';
-import { Strategies } from '../../src/redteam/strategies';
-import { validateStrategies } from '../../src/redteam/strategies';
+import { getRemoteHealthUrl, shouldGenerateRemote } from '../../src/redteam/remoteGeneration';
+import { Strategies, validateStrategies } from '../../src/redteam/strategies';
 import { DEFAULT_LANGUAGES } from '../../src/redteam/strategies/multilingual';
 import type { TestCaseWithPlugin } from '../../src/types';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
@@ -49,6 +48,10 @@ jest.mock('../../src/redteam/strategies', () => ({
 
 jest.mock('../../src/util/apiHealth');
 jest.mock('../../src/redteam/remoteGeneration');
+jest.mock('../../src/redteam/util', () => ({
+  ...jest.requireActual('../../src/redteam/util'),
+  extractGoalFromPrompt: jest.fn().mockResolvedValue('mocked goal'),
+}));
 
 describe('synthesize', () => {
   const mockProvider = {
@@ -409,6 +412,103 @@ describe('synthesize', () => {
         ),
       );
     });
+
+    it('should not store full config in metadata for intent plugin to prevent bloating', async () => {
+      jest.clearAllMocks();
+
+      const mockProvider = {
+        id: () => 'test-provider',
+        callApi: jest.fn().mockResolvedValue({ output: 'Test response' }),
+      };
+
+      const intentPlugin = {
+        id: 'intent',
+        numTests: 2,
+        config: {
+          intent: ['intent1', 'intent2', 'intent3', 'intent4', 'intent5'],
+        },
+      };
+
+      const regularPlugin = {
+        id: 'contracts',
+        numTests: 1,
+        config: {
+          someConfig: 'value',
+        },
+      };
+
+      const mockIntentAction = jest.fn().mockResolvedValue([
+        {
+          vars: { prompt: 'intent1' },
+          assert: [{ type: 'promptfoo:redteam:intent', metric: 'Intent' }],
+          metadata: {
+            intent: 'intent1',
+            pluginId: 'intent',
+            pluginConfig: undefined,
+          },
+        },
+        {
+          vars: { prompt: 'intent2' },
+          assert: [{ type: 'promptfoo:redteam:intent', metric: 'Intent' }],
+          metadata: {
+            intent: 'intent2',
+            pluginId: 'intent',
+            pluginConfig: undefined,
+          },
+        },
+      ]);
+
+      const mockContractsAction = jest.fn().mockResolvedValue([
+        {
+          vars: { prompt: 'contract test' },
+          assert: [{ type: 'promptfoo:redteam:contracts', metric: 'Contracts' }],
+          metadata: {
+            pluginId: 'contracts',
+          },
+        },
+      ]);
+
+      jest.spyOn(Plugins, 'find').mockImplementation((predicate) => {
+        const mockPlugins = [
+          { key: 'intent', action: mockIntentAction },
+          { key: 'contracts', action: mockContractsAction },
+        ];
+
+        if (typeof predicate === 'function') {
+          return mockPlugins.find(predicate);
+        }
+        return undefined;
+      });
+
+      const result = await synthesize({
+        plugins: [intentPlugin, regularPlugin],
+        prompts: ['Test prompt'],
+        provider: mockProvider,
+        purpose: 'Test purpose',
+        strategies: [],
+        injectVar: 'prompt',
+        language: 'en',
+        numTests: 5,
+        targetLabels: ['test'],
+      });
+
+      const intentTestCases = result.testCases.filter((tc) => tc.metadata?.pluginId === 'intent');
+      expect(intentTestCases.length).toBeGreaterThan(0);
+      intentTestCases.forEach((tc) => {
+        expect(tc.metadata?.pluginConfig).toBeUndefined();
+        expect(tc.metadata?.pluginId).toBe('intent');
+      });
+
+      const contractsTestCases = result.testCases.filter(
+        (tc) => tc.metadata?.pluginId === 'contracts',
+      );
+      expect(contractsTestCases.length).toBeGreaterThan(0);
+      contractsTestCases.forEach((tc) => {
+        expect(tc.metadata?.pluginConfig).toBeDefined();
+        expect(tc.metadata?.pluginConfig).toEqual({ someConfig: 'value' });
+        expect(tc.metadata?.pluginId).toBe('contracts');
+      });
+    });
   });
 
   describe('Logger', () => {
@@ -526,7 +626,21 @@ describe('synthesize', () => {
       callApi: jest.fn().mockResolvedValue({ output: 'test output' }),
     };
 
-    // Test with basic strategy enabled
+    const mockTestPluginAction = jest.fn().mockResolvedValue([
+      {
+        vars: { input: 'test input' },
+        assert: [{ type: 'test-assertion', metric: 'Test' }],
+        metadata: {
+          pluginId: 'test-plugin',
+        },
+      },
+    ]);
+
+    jest.spyOn(Plugins, 'find').mockReturnValue({
+      key: 'test-plugin',
+      action: mockTestPluginAction,
+    });
+
     const resultEnabled = await synthesize({
       plugins: [mockPlugin],
       strategies: [{ id: 'basic', config: { enabled: true } }],
@@ -540,7 +654,6 @@ describe('synthesize', () => {
 
     expect(resultEnabled.testCases.length).toBeGreaterThan(0);
 
-    // Test with basic strategy disabled
     const resultDisabled = await synthesize({
       plugins: [mockPlugin],
       strategies: [{ id: 'basic', config: { enabled: false } }],

@@ -5,14 +5,14 @@ import cliProgress from 'cli-progress';
 import { randomUUID } from 'crypto';
 import { globSync } from 'glob';
 import * as path from 'path';
-import readline from 'readline';
 import type winston from 'winston';
 import { MODEL_GRADED_ASSERTION_TYPES, runAssertions, runCompareAssertion } from './assertions';
 import { fetchWithCache, getCache } from './cache';
 import cliState from './cliState';
+import { FILE_METADATA_KEY } from './constants';
 import { updateSignalFile } from './database/signal';
 import { getEnvBool, getEnvInt, isCI, getEvalTimeoutMs } from './envars';
-import { renderPrompt, runExtensionHook } from './evaluatorHelpers';
+import { renderPrompt, runExtensionHook, collectFileMetadata } from './evaluatorHelpers';
 import logger from './logger';
 import type Eval from './models/eval';
 import { generateIdFromPrompt } from './models/prompt';
@@ -39,6 +39,7 @@ import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
 import { safeJsonStringify } from './util/json';
+import { promptYesNo } from './util/readline';
 import { sleep } from './util/time';
 import { transform, type TransformContext, TransformInputType } from './util/transform';
 
@@ -186,6 +187,10 @@ export async function runEval({
 
   // Set up the special _conversation variable
   const vars = test.vars || {};
+
+  // Collect file metadata for the test case before rendering the prompt.
+  const fileMetadata = collectFileMetadata(test.vars || vars);
+
   const conversationKey = `${provider.label || provider.id()}:${prompt.id}${test.metadata?.conversationId ? `:${test.metadata.conversationId}` : ''}`;
   const usesConversation = prompt.raw.includes('_conversation');
   if (
@@ -314,6 +319,7 @@ export async function runEval({
       metadata: {
         ...test.metadata,
         ...response.metadata,
+        [FILE_METADATA_KEY]: fileMetadata,
       },
       promptIdx,
       testIdx,
@@ -461,7 +467,7 @@ export function generateVarCombinations(
     if (typeof vars[key] === 'string' && vars[key].startsWith('file://')) {
       const filePath = vars[key].slice('file://'.length);
       const resolvedPath = path.resolve(cliState.basePath || '', filePath);
-      const filePaths = globSync(resolvedPath.replace(/\\/g, '/'));
+      const filePaths = globSync(resolvedPath.replace(/\\/g, '/')) || [];
       values = filePaths.map((path: string) => `file://${path}`);
       if (values.length === 0) {
         throw new Error(`No files found for variable ${key} at path ${resolvedPath}`);
@@ -560,25 +566,13 @@ class Evaluator {
         logger.info('--------------------------------------------------------');
 
         // Ask the user if they want to continue
-        await new Promise((resolve) => {
-          const rl = readline.createInterface({
-            input: process.stdin,
-            output: process.stdout,
-          });
-          rl.question(
-            `${chalk.blue('Do you want to test this prompt?')} (y/N): `,
-            async (answer) => {
-              rl.close();
-              if (answer.toLowerCase().startsWith('y')) {
-                this.testSuite.prompts.push({ raw: prompt, label: prompt });
-                numAdded++;
-              } else {
-                logger.info('Skipping this prompt.');
-              }
-              resolve(true);
-            },
-          );
-        });
+        const shouldTest = await promptYesNo('Do you want to test this prompt?', false);
+        if (shouldTest) {
+          this.testSuite.prompts.push({ raw: prompt, label: prompt });
+          numAdded++;
+        } else {
+          logger.info('Skipping this prompt.');
+        }
       }
 
       if (numAdded < 1) {

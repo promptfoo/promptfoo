@@ -89,6 +89,8 @@ type Args = z.infer<typeof ArgsSchema>;
 
 export const DEFAULT_TURN_COUNT = 5;
 export const MAX_TURN_COUNT = 10;
+const LOG_PREFIX = '[Target Discovery Agent]';
+const COMMAND = 'discover';
 
 // ========================================================
 // Utils
@@ -110,7 +112,7 @@ export async function doTargetPurposeDiscovery(
   const sessionId = randomUUID();
 
   const pbar = new cliProgress.SingleBar({
-    format: `Discovery phase - probing the target {bar} {percentage}% | {value}${DEFAULT_TURN_COUNT ? '/{total}' : ''} turns`,
+    format: `Mapping the target {bar} {percentage}% | {value}${DEFAULT_TURN_COUNT ? '/{total}' : ''} turns`,
     barCompleteChar: '\u2588',
     barIncompleteChar: '\u2591',
     hideCursor: true,
@@ -131,7 +133,7 @@ export async function doTargetPurposeDiscovery(
     try {
       turn++;
 
-      logger.debug(`[TargetPurposeDiscovery] Starting the purpose discovery loop, turn: ${turn}`);
+      logger.debug(`${LOG_PREFIX} Discovery loop turn: ${turn}`);
 
       const response = await fetchWithProxy(getRemoteGenerationUrl(), {
         method: 'POST',
@@ -154,9 +156,7 @@ export async function doTargetPurposeDiscovery(
 
       if (!response.ok) {
         const error = await response.text();
-        logger.error(
-          `[TargetPurposeDiscovery] Error getting the next question from remote server: ${error}`,
-        );
+        logger.error(`${LOG_PREFIX} Error getting the next question from remote server: ${error}`);
         continue;
       }
 
@@ -164,11 +164,7 @@ export async function doTargetPurposeDiscovery(
       const data = TargetPurposeDiscoveryTaskResponseSchema.parse(responseData);
 
       logger.debug(
-        `[TargetPurposeDiscovery] Received response from remote server: ${JSON.stringify(
-          data,
-          null,
-          2,
-        )}`,
+        `${LOG_PREFIX} Received response from remote server: ${JSON.stringify(data, null, 2)}`,
       );
 
       done = data.done;
@@ -177,7 +173,7 @@ export async function doTargetPurposeDiscovery(
       state = data.state;
 
       if (data.error) {
-        logger.error(`[TargetPurposeDiscovery] Error from remote server: ${data.error}`);
+        logger.error(`${LOG_PREFIX} Error from remote server: ${data.error}`);
       }
       // Should another question be asked?
       else if (!done) {
@@ -188,25 +184,21 @@ export async function doTargetPurposeDiscovery(
           : question;
 
         const targetResponse = await target.callApi(renderedPrompt, {
-          prompt: { raw: question, label: 'Target Purpose Discovery Question' },
+          prompt: { raw: question, label: 'Target Discovery Question' },
           vars: { sessionId },
         });
 
         if (targetResponse.error) {
-          logger.error(`[TargetPurposeDiscovery] Error from target: ${targetResponse.error}`);
+          logger.error(`${LOG_PREFIX} Error from target: ${targetResponse.error}`);
           if (turn > MAX_TURN_COUNT) {
-            logger.error('[TargetPurposeDiscovery] Too many retries, giving up.');
+            logger.error(`${LOG_PREFIX} Too many retries, giving up.`);
             return undefined;
           }
           continue;
         }
 
         logger.debug(
-          `[TargetPurposeDiscovery] Received response from target: ${JSON.stringify(
-            targetResponse,
-            null,
-            2,
-          )}`,
+          `${LOG_PREFIX} Received response from target: ${JSON.stringify(targetResponse, null, 2)}`,
         );
 
         state.answers.push(targetResponse.output);
@@ -250,9 +242,9 @@ export function mergeTargetPurposeDiscoveryResults(
       # Agent Discovered Target Purpose
 
       The following information was discovered by the agent through conversations with the target.
-      
+
       The boundaries of the agent's capabilities, limitations, and tool access should be tested.
-      
+
       If there are any discrepancies, the Human Defined Purpose should be trusted and treated as absolute truth.
     `,
     discoveryResult?.purpose &&
@@ -268,7 +260,7 @@ export function mergeTargetPurposeDiscoveryResults(
       ## Limitations
 
       The target believes its limitations are:
-      
+
       ${discoveryResult.limitations}
     `,
     discoveryResult?.tools &&
@@ -305,22 +297,23 @@ export function discoverCommand(
   defaultConfigPath: string | undefined,
 ) {
   program
-    .command('discover')
+    .command(COMMAND)
     .description(
       dedent`
-        Automatically discover a target application's purpose, enhancing attack probe efficacy.
+        Run the Target Discovery Agent to automatically discover and report a target application's purpose,
+        limitations, and tools, enhancing attack probe efficacy.
 
         If neither a config file nor a target ID is provided, the current working directory will be checked for a promptfooconfig.yaml file,
-        and the target will be discovered from the first provider in that config.
+        and the first provider in that config will be used.
       `,
     )
     .option('-c, --config <path>', 'Path to `promptfooconfig.yaml` configuration file.')
-    .option('-t, --target <id>', 'UUID of a Cloud-defined target to run the discovery on')
+    .option('-t, --target <id>', 'UUID of a target defined in Promptfoo Cloud to scan.')
     .action(async (rawArgs: Args) => {
       // Check that remote generation is enabled:
       if (neverGenerateRemote()) {
         logger.error(dedent`
-          Discovery relies on remote generation which is disabled.
+          Target discovery relies on remote generation which is disabled.
 
           To enable remote generation, unset the PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION environment variable.
         `);
@@ -340,7 +333,7 @@ export function discoverCommand(
 
       // Record telemetry:
       telemetry.record('command_used', {
-        name: 'redteam discover',
+        name: `redteam ${COMMAND}`,
       });
 
       let config: UnifiedConfig | null = null;
@@ -424,7 +417,7 @@ export function discoverCommand(
         }
       } catch (error) {
         logger.error(
-          `An unexpected error occurred during target discovery: ${error instanceof Error ? error.message : String(error)}\n${
+          `An unexpected error occurred during target scan: ${error instanceof Error ? error.message : String(error)}\n${
             error instanceof Error ? error.stack : ''
           }`,
         );

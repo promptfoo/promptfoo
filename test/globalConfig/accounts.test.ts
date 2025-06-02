@@ -9,6 +9,7 @@ import {
   promptForEmailUnverified,
   checkEmailStatusOrExit,
   checkEmailStatus,
+  isLoggedIntoCloud,
 } from '../../src/globalConfig/accounts';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../../src/globalConfig/globalConfig';
 import logger from '../../src/logger';
@@ -384,6 +385,40 @@ describe('accounts', () => {
         email: 'test@example.com',
         message: 'Unable to verify email status, but proceeding',
       });
+    });
+  });
+
+  describe('isLoggedIntoCloud', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('should return true when user has email and not in CI', () => {
+      jest.mocked(readGlobalConfig).mockReturnValue({
+        account: { email: 'test@example.com' },
+      });
+      jest.mocked(isCI).mockReturnValue(false);
+      expect(isLoggedIntoCloud()).toBe(true);
+    });
+
+    it('should return false when user has no email', () => {
+      jest.mocked(readGlobalConfig).mockReturnValue({});
+      jest.mocked(isCI).mockReturnValue(false);
+      expect(isLoggedIntoCloud()).toBe(false);
+    });
+
+    it('should return false when in CI environment', () => {
+      jest.mocked(readGlobalConfig).mockReturnValue({});
+      jest.mocked(isCI).mockReturnValue(true);
+      expect(isLoggedIntoCloud()).toBe(false);
+    });
+
+    it('should return false when user has email but in CI environment', () => {
+      jest.mocked(readGlobalConfig).mockReturnValue({
+        account: { email: 'test@example.com' },
+      });
+      jest.mocked(isCI).mockReturnValue(true);
+      expect(isLoggedIntoCloud()).toBe(false);
     });
   });
 });

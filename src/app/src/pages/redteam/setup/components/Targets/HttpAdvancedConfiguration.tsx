@@ -515,7 +515,7 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
                             try {
                               const inputKey =
                                 selectedTarget.config.signatureAuth?.privateKey || '';
-                              const formattedKey = convertStringKeyToPem(inputKey);
+                              const formattedKey = await convertStringKeyToPem(inputKey);
                               updateCustomTarget('signatureAuth', {
                                 ...selectedTarget.config.signatureAuth,
                                 privateKey: formattedKey,

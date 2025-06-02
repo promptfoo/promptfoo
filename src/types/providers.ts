@@ -114,6 +114,11 @@ export interface ProviderResponse {
   logProbs?: number[];
   metadata?: {
     redteamFinalPrompt?: string;
+    http?: {
+      status: number;
+      statusText: string;
+      headers: Record<string, string>;
+    };
     [key: string]: any;
   };
   raw?: string | any;

@@ -1,3 +1,7 @@
+---
+sidebar_label: LLM Rubric
+---
+
 # LLM Rubric
 
 `llm-rubric` is promptfoo's general-purpose grader for "LLM as a judge" evaluation.

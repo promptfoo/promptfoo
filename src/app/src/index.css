@@ -35,9 +35,37 @@
   --textarea-color: #404040;
   --search-highlight-color: #ffff00;
   --search-text-color: inherit;
+  --cell-highlight-color: #ffffeb;
+  --cell-highlight-text-color: inherit;
 }
 
 /* Dark mode colors */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background-color: #1a1a1a;
+    --text-color: #f0f0f0;
+    --link-color: #6fcaff;
+    --border-color: #444444;
+    --table-border-color: #444444;
+    --pass-color: #b1e9b3;
+    --fail-color: #ee726a;
+    --success-background-color: #216d2b;
+    --fail-background-color: #6d2121;
+    --neutral-background-color: #424242;
+    --variable-background-color: #333;
+    --header-background-color: #333;
+    --insert-highlight-color: #4f8a34;
+    --delete-highlight-color: #8a3434;
+    --prompt-highlight-color: #67605a;
+    --textarea-background-color: #2d2d2d;
+    --textarea-color: #fff;
+    --search-highlight-color: #ffff00;
+    --search-text-color: #404040;
+    --cell-highlight-color: #1e3a5f;
+    --cell-highlight-text-color: #e8f4f8;
+  }
+}
+
 [data-theme='dark'] {
   /* Keep synced with prefers-color-scheme above */
   --background-color: #1a1a1a;
@@ -59,6 +87,8 @@
   --textarea-color: #fff;
   --search-highlight-color: #ffff00;
   --search-text-color: #404040;
+  --cell-highlight-color: #1e3a5f;
+  --cell-highlight-text-color: #e8f4f8;
 }
 
 html {

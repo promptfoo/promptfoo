@@ -51,7 +51,9 @@ export function transformMCPToolsToGoogle(tools: MCPTool[]): GoogleTool[] {
     const schema: MCPToolInputSchema = tool.inputSchema;
     let parameters: GoogleSchema = { type: 'OBJECT', properties: {} };
     if (schema && typeof schema === 'object' && 'properties' in schema) {
-      parameters = { type: 'OBJECT', ...schema };
+      // Remove $schema field if present
+      const { $schema: _$schema, ...cleanSchema } = schema;
+      parameters = { type: 'OBJECT', ...cleanSchema };
     } else {
       parameters = {
         type: 'OBJECT',
