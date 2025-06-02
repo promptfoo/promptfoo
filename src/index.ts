@@ -44,7 +44,7 @@ interface LoadApiProviderOptions {
 async function resolveProvider(
   provider: any,
   providerMap: Record<string, ApiProvider>,
-  context: { env?: any } = {}
+  context: { env?: any } = {},
 ): Promise<ApiProvider> {
   // Guard clause for null or undefined provider values
   if (provider == null) {
@@ -56,7 +56,9 @@ async function resolveProvider(
     if (providerMap[provider]) {
       return providerMap[provider];
     }
-    return context.env ? await loadApiProvider(provider, { env: context.env }) : await loadApiProvider(provider);
+    return context.env
+      ? await loadApiProvider(provider, { env: context.env })
+      : await loadApiProvider(provider);
   } else if (typeof provider === 'object') {
     const casted = provider as ProviderOptions;
     invariant(casted.id, 'Provider object must have an id');
@@ -66,7 +68,9 @@ async function resolveProvider(
     }
     return await loadApiProvider(casted.id, loadOptions);
   } else if (typeof provider === 'function') {
-    return context.env ? await loadApiProvider(provider, { env: context.env }) : await loadApiProvider(provider);
+    return context.env
+      ? await loadApiProvider(provider, { env: context.env })
+      : await loadApiProvider(provider);
   } else {
     throw new Error('Invalid provider type');
   }
@@ -105,17 +109,15 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     constructedTestSuite.defaultTest.options.provider = await resolveProvider(
       constructedTestSuite.defaultTest.options.provider,
       providerMap,
-      { env: testSuite.env }
+      { env: testSuite.env },
     );
   }
 
   for (const test of constructedTestSuite.tests || []) {
     if (test.options?.provider) {
-      test.options.provider = await resolveProvider(
-        test.options.provider,
-        providerMap,
-        { env: testSuite.env }
-      );
+      test.options.provider = await resolveProvider(test.options.provider, providerMap, {
+        env: testSuite.env,
+      });
     }
     if (test.assert) {
       for (const assertion of test.assert) {
@@ -124,11 +126,9 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
         }
 
         if (assertion.provider) {
-          assertion.provider = await resolveProvider(
-            assertion.provider,
-            providerMap,
-            { env: testSuite.env }
-          );
+          assertion.provider = await resolveProvider(assertion.provider, providerMap, {
+            env: testSuite.env,
+          });
         }
       }
     }
