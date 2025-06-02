@@ -1,3 +1,7 @@
+---
+sidebar_label: Github
+---
+
 # Github
 
 [Github Models](https://github.com/marketplace/models/) provides an interface for a handful of LLM APIs.

@@ -1,3 +1,7 @@
+---
+sidebar_label: Google AI / Gemini
+---
+
 # Google AI / Gemini
 
 The `google` provider enables integration with Google AI Studio and the Gemini API. It provides access to Google's state-of-the-art language models with support for text, images, and video inputs.

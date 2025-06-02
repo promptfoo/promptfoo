@@ -393,7 +393,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
 
         <Typography variant="body2" color="text.secondary" sx={{ mb: 5 }}>
           The target name will be used to report vulnerabilities. Make sure it's meaningful and
-          re-use it when generating new redteam configs for the same target. Eg:
+          re-use it when generating new red team configs for the same target. Eg:
           'customer-service-agent', 'compliance-bot'
         </Typography>
 
