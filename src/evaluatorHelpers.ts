@@ -341,6 +341,22 @@ const BeforeAllExtensionHookContextSchema = z.object({
 
 type BeforeAllExtensionHookContext = z.infer<typeof BeforeAllExtensionHookContextSchema>;
 
+/**
+ * Defines the set of fields on BeforeAllExtensionHookContextSchema that may be mutated by the extension hook.
+ */
+const MutableBeforeAllExtensionHookContextSchema = z.object({
+  suite: z.object({
+    prompts: TestSuiteSchema.shape.prompts,
+    providerPromptMap: TestSuiteSchema.shape.providerPromptMap,
+    tests: TestSuiteSchema.shape.tests,
+    scenarios: TestSuiteSchema.shape.scenarios,
+    defaultTest: TestSuiteSchema.shape.defaultTest,
+    nunjucksFilters: TestSuiteSchema.shape.nunjucksFilters,
+    derivedMetrics: TestSuiteSchema.shape.derivedMetrics,
+    redteam: TestSuiteSchema.shape.redteam,
+  }),
+});
+
 type BeforeEachExtensionHookContext = {
   test: TestCase;
 };
@@ -426,18 +442,20 @@ export async function runExtensionHook<HookName extends keyof HookContextMap>(
     invariant(typeof extension === 'string', 'extension must be a string');
     logger.debug(`Running extension hook ${hookName} with context ${JSON.stringify(context)}`);
 
-    // TODO: `out` values that are instances e.g. Provider (out.suite.providers[0]) are not being correctly deserialized
-    // by Python extensions.
-    // To solve this, consider a subset of context properties that are mutable via the extension hook.
-    const out = await transform(extension, hookName, context, false);
+    const extensionReturnValue = await transform(extension, hookName, context, false);
 
-    if (out) {
-      // Update the context with the new values
+    if (extensionReturnValue) {
+      // Update the context with the mutable values returned by the extension hook.
       switch (hookName) {
         case 'beforeAll':
-          const parsed = BeforeAllExtensionHookContextSchema.safeParse(out);
+          const parsed = MutableBeforeAllExtensionHookContextSchema.safeParse(extensionReturnValue);
           if (parsed.success) {
-            (updatedContext as BeforeAllExtensionHookContext) = parsed.data;
+            (updatedContext as BeforeAllExtensionHookContext) = {
+              suite: {
+                ...(context as BeforeAllExtensionHookContext).suite,
+                ...parsed.data.suite,
+              },
+            };
           } else {
             logger.error(parsed.error.message);
             throw new Error(`[${extension}] Invalid context returned by beforeAll hook`);

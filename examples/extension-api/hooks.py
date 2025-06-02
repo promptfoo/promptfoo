@@ -56,6 +56,19 @@ def extension_hook(hook_name: str, context: dict) -> dict:
         logging.info(f"Total providers: {len(suite.get('providers', []))}")
         logging.info(f"Total tests: {len(suite.get('tests', []))}")
 
+        # Add an additional test case to the suite:
+        context["suite"]["tests"].append(
+            {
+                "vars": {
+                    "body": "It's a beautiful day",
+                    "language": "Spanish",
+                },
+                "assert": [{"type": "contains", "value": "Es un día hermoso."}],
+            }
+        )
+        # Add an additional default assertion to the suite:
+        context["suite"]["defaultTest"]["assert"].append({"type": "is-json"})
+
     elif hook_name == "beforeEach":
         logging.info("Preparing test")
 
