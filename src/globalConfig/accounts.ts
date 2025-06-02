@@ -23,6 +23,11 @@ export function getAuthor(): string | null {
   return getEnvString('PROMPTFOO_AUTHOR') || getUserEmail() || null;
 }
 
+export function isLoggedIntoCloud(): boolean {
+  const userEmail = getUserEmail();
+  return !!userEmail && !isCI();
+}
+
 export interface EmailStatusResult {
   status: 'ok' | 'exceeded_limit' | 'show_usage_warning' | 'no_email';
   message?: string;

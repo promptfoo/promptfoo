@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Example showing how to override scoring functions
 providers:
   - openai:gpt-4o-mini

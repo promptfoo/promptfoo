@@ -1,9 +1,9 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
-import readline from 'readline';
 import { fetchWithProxy } from './fetch';
 import { getUserEmail } from './globalConfig/accounts';
 import logger from './logger';
+import { promptUser } from './util/readline';
 
 /**
  * Send feedback to the promptfoo API
@@ -37,23 +37,6 @@ export async function sendFeedback(feedback: string) {
 }
 
 /**
- * Simple readline prompt that returns a promise
- */
-function prompt(question: string): Promise<string> {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
-  return new Promise((resolve) => {
-    rl.question(question, (answer) => {
-      rl.close();
-      resolve(answer);
-    });
-  });
-}
-
-/**
  * Gather and send user feedback
  */
 export async function gatherFeedback(message?: string) {
@@ -71,7 +54,7 @@ export async function gatherFeedback(message?: string) {
     console.log(chalk.dim('─'.repeat(40)));
 
     // Get feedback message
-    const feedbackText = await prompt(
+    const feedbackText = await promptUser(
       dedent`
       ${chalk.gray('Share your thoughts, bug reports, or feature requests:')}
       ${chalk.bold('> ')}
@@ -90,7 +73,7 @@ export async function gatherFeedback(message?: string) {
     if (userEmail) {
       contactInfo = userEmail;
     } else {
-      const contactResponse = await prompt(
+      const contactResponse = await promptUser(
         chalk.gray("Email address (optional, if you'd like a response): "),
       );
       contactInfo = contactResponse.trim();

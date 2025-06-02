@@ -1,4 +1,4 @@
-import * as React from 'react';
+import React from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { useToast } from '@app/hooks/useToast';
@@ -338,6 +338,14 @@ export default function ResultsView({
     columnVisibility: allColumns.reduce((acc, col) => ({ ...acc, [col]: true }), {}),
   };
 
+  const visiblePromptCount = React.useMemo(
+    () =>
+      head.prompts.filter(
+        (_, idx) => currentColumnState.columnVisibility[`Prompt ${idx + 1}`] !== false,
+      ).length,
+    [head.prompts, currentColumnState.columnVisibility],
+  );
+
   const updateColumnVisibility = React.useCallback(
     (columns: string[]) => {
       const newColumnVisibility: VisibilityState = {};
@@ -533,7 +541,11 @@ export default function ResultsView({
       </ResponsiveStack>
       <ResponsiveStack direction="row" spacing={1} alignItems="center" sx={{ gap: 2 }}>
         <Box>
-          <FilterModeSelector filterMode={filterMode} onChange={handleFilterModeChange} />
+          <FilterModeSelector
+            filterMode={filterMode}
+            onChange={handleFilterModeChange}
+            showDifferentOption={visiblePromptCount > 1}
+          />
         </Box>
         <Box>
           <SearchInputField

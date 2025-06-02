@@ -1,5 +1,4 @@
-import * as React from 'react';
-import { useMemo } from 'react';
+import React, { useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useShiftKey } from '@app/hooks/useShiftKey';
 import Tooltip from '@mui/material/Tooltip';
@@ -373,12 +372,15 @@ function EvalOutputCell({
     }
   }
 
-  const comment =
-    output.gradingResult?.comment && output.gradingResult.comment !== '!highlight' ? (
-      <div className="comment" onClick={handleCommentOpen}>
-        {output.gradingResult.comment}
-      </div>
-    ) : null;
+  const commentTextToDisplay = output.gradingResult?.comment?.startsWith('!highlight')
+    ? output.gradingResult.comment.slice('!highlight'.length).trim()
+    : output.gradingResult?.comment;
+
+  const comment = commentTextToDisplay ? (
+    <div className="comment" onClick={handleCommentOpen}>
+      {commentTextToDisplay}
+    </div>
+  ) : null;
 
   const detail = showStats ? (
     <div className="cell-detail">
@@ -485,8 +487,12 @@ function EvalOutputCell({
   );
 
   const cellStyle = useMemo(() => {
-    const base =
-      output.gradingResult?.comment === '!highlight' ? { backgroundColor: '#ffffeb' } : {};
+    const base = output.gradingResult?.comment?.startsWith('!highlight')
+      ? {
+          backgroundColor: 'var(--cell-highlight-color)',
+          color: 'var(--cell-highlight-text-color)',
+        }
+      : {};
 
     return {
       ...base,

@@ -1126,6 +1126,7 @@
                           "nist:ai:measure:4.1",
                           "nist:ai:measure:4.2",
                           "nist:ai:measure:4.3",
+                          "off-topic",
                           "overreliance",
                           "owasp:agentic:t01",
                           "owasp:api",
@@ -1175,6 +1176,7 @@
                           "system-prompt-override",
                           "tool-discovery",
                           "tool-discovery:multi-turn",
+                          "toxic-chat",
                           "toxicity",
                           "unsafebench",
                           "xstest"
@@ -1299,6 +1301,7 @@
                               "nist:ai:measure:4.1",
                               "nist:ai:measure:4.2",
                               "nist:ai:measure:4.3",
+                              "off-topic",
                               "overreliance",
                               "owasp:agentic:t01",
                               "owasp:api",
@@ -1348,6 +1351,7 @@
                               "system-prompt-override",
                               "tool-discovery",
                               "tool-discovery:multi-turn",
+                              "toxic-chat",
                               "toxicity",
                               "unsafebench",
                               "xstest"
