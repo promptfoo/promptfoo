@@ -403,6 +403,171 @@ describe('EvalOutputCell', () => {
   });
 });
 
+describe('EvalOutputCell highlight toggle functionality', () => {
+  const mockOnRating = vi.fn();
+
+  const createPropsWithComment = (comment: string): MockEvalOutputCellProps => ({
+    firstOutput: {
+      cost: 0,
+      id: 'test-id',
+      latencyMs: 100,
+      namedScores: {},
+      pass: true,
+      failureReason: ResultFailureReason.NONE,
+      prompt: 'Test prompt',
+      provider: 'test-provider',
+      score: 0.8,
+      text: 'Test output text',
+      testCase: {},
+    },
+    maxTextLength: 100,
+    onRating: mockOnRating,
+    output: {
+      cost: 0,
+      gradingResult: {
+        comment,
+        componentResults: [],
+        pass: true,
+        reason: 'Test reason',
+        score: 0.8,
+      },
+      id: 'test-id',
+      latencyMs: 100,
+      namedScores: {},
+      pass: true,
+      failureReason: ResultFailureReason.NONE,
+      prompt: 'Test prompt',
+      provider: 'test-provider',
+      score: 0.8,
+      text: 'Test output text',
+      testCase: {},
+    },
+    promptIndex: 0,
+    rowIndex: 0,
+    searchText: '',
+    showDiffs: false,
+    showStats: true,
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('toggles highlight on when comment does not start with !highlight', async () => {
+    const props = createPropsWithComment('Regular comment');
+    renderWithProviders(<EvalOutputCell {...props} />);
+
+    // Click the highlight toggle button (only visible when shift is pressed)
+    const highlightButton = screen.getByLabelText('Toggle test highlight');
+    await userEvent.click(highlightButton);
+
+    // Verify that onRating was called with the highlighted comment
+    expect(mockOnRating).toHaveBeenCalledWith(undefined, undefined, '!highlight Regular comment');
+  });
+
+  it('toggles highlight off when comment starts with !highlight', async () => {
+    const props = createPropsWithComment('!highlight Already highlighted comment');
+    renderWithProviders(<EvalOutputCell {...props} />);
+
+    const highlightButton = screen.getByLabelText('Toggle test highlight');
+    await userEvent.click(highlightButton);
+
+    // Verify that onRating was called with the unhighlighted comment
+    expect(mockOnRating).toHaveBeenCalledWith(undefined, undefined, 'Already highlighted comment');
+  });
+
+  it('handles empty comment when toggling highlight on', async () => {
+    const props = createPropsWithComment('');
+    renderWithProviders(<EvalOutputCell {...props} />);
+
+    const highlightButton = screen.getByLabelText('Toggle test highlight');
+    await userEvent.click(highlightButton);
+
+    // Verify that onRating was called with just the highlight prefix
+    expect(mockOnRating).toHaveBeenCalledWith(undefined, undefined, '!highlight');
+  });
+
+  it('handles comment with only !highlight when toggling off', async () => {
+    const props = createPropsWithComment('!highlight');
+    renderWithProviders(<EvalOutputCell {...props} />);
+
+    const highlightButton = screen.getByLabelText('Toggle test highlight');
+    await userEvent.click(highlightButton);
+
+    // Verify that onRating was called with empty string
+    expect(mockOnRating).toHaveBeenCalledWith(undefined, undefined, '');
+  });
+
+  it('applies highlight styling when comment starts with !highlight', () => {
+    const props = createPropsWithComment('!highlight This cell should be highlighted');
+    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+
+    const cellElement = container.querySelector('.cell');
+    expect(cellElement).toBeInTheDocument();
+
+    // Check that the cell has highlight styling applied
+    expect(cellElement).toHaveStyle({
+      backgroundColor: 'var(--cell-highlight-color)',
+      color: 'var(--cell-highlight-text-color)',
+    });
+  });
+
+  it('does not apply highlight styling when comment does not start with !highlight', () => {
+    const props = createPropsWithComment('Regular comment without highlight');
+    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+
+    const cellElement = container.querySelector('.cell');
+    expect(cellElement).toBeInTheDocument();
+
+    // Check that the cell does not have highlight background color
+    expect(cellElement).not.toHaveStyle({
+      backgroundColor: 'var(--cell-highlight-color)',
+    });
+  });
+
+  it('displays comment text without !highlight prefix in comment display', () => {
+    const props = createPropsWithComment('!highlight This is the actual comment text');
+    renderWithProviders(<EvalOutputCell {...props} />);
+
+    // The comment should be displayed without the !highlight prefix
+    const commentElement = screen.getByText('This is the actual comment text');
+    expect(commentElement).toBeInTheDocument();
+  });
+
+  it('shows highlight button only when shift key is pressed', () => {
+    const props = createPropsWithComment('Regular comment');
+    renderWithProviders(<EvalOutputCell {...props} />);
+
+    // The highlight button should be visible because useShiftKey is mocked to return true
+    const highlightButton = screen.getByLabelText('Toggle test highlight');
+    expect(highlightButton).toBeInTheDocument();
+  });
+
+  it('maintains comment state correctly through multiple toggles', async () => {
+    // Test toggling ON from regular comment
+    const regularProps = createPropsWithComment('Original comment');
+    const { rerender } = renderWithProviders(<EvalOutputCell {...regularProps} />);
+
+    const highlightButton = screen.getByLabelText('Toggle test highlight');
+    await userEvent.click(highlightButton);
+    expect(mockOnRating).toHaveBeenNthCalledWith(
+      1,
+      undefined,
+      undefined,
+      '!highlight Original comment',
+    );
+
+    // Test toggling OFF from highlighted comment
+    mockOnRating.mockClear();
+    const highlightedProps = createPropsWithComment('!highlight Original comment');
+    rerender(<EvalOutputCell {...highlightedProps} />);
+
+    const highlightButtonAfterRerender = screen.getByLabelText('Toggle test highlight');
+    await userEvent.click(highlightButtonAfterRerender);
+    expect(mockOnRating).toHaveBeenCalledWith(undefined, undefined, 'Original comment');
+  });
+});
+
 describe('EvalOutputCell provider override', () => {
   const defaultProps: MockEvalOutputCellProps = {
     firstOutput: {
