@@ -148,6 +148,22 @@ describe('renderPrompt', () => {
     expect(renderedPrompt).toBe(JSON.stringify({ text: 'value1' }, null, 2));
   });
 
+  it('should render environment variables in JSON prompts', async () => {
+    process.env.TEST_ENV_VAR = 'env_value';
+    const prompt = toPrompt('{"text": "{{ env.TEST_ENV_VAR }}"}');
+    const renderedPrompt = await renderPrompt(prompt, {}, {});
+    expect(renderedPrompt).toBe(JSON.stringify({ text: 'env_value' }, null, 2));
+    delete process.env.TEST_ENV_VAR;
+  });
+
+  it('should render environment variables in non-JSON prompts', async () => {
+    process.env.TEST_ENV_VAR = 'env_value';
+    const prompt = toPrompt('Test prompt {{ env.TEST_ENV_VAR }}');
+    const renderedPrompt = await renderPrompt(prompt, {}, {});
+    expect(renderedPrompt).toBe('Test prompt env_value');
+    delete process.env.TEST_ENV_VAR;
+  });
+
   it('should handle complex variable substitutions in JSON prompts', async () => {
     const prompt = toPrompt('{"message": "{{ var1[var2] }}"}');
     const renderedPrompt = await renderPrompt(

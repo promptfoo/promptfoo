@@ -166,6 +166,17 @@ providers:
       // highlight-end
 ```
 
+## Dynamic URLs
+
+Both the provider `id` and the `url` field support Nunjucks templates. Variables in your test `vars` will be rendered before sending the request.
+
+```yaml
+providers:
+  - id: https://api.example.com/users/{{userId}}/profile
+    config:
+      method: 'GET'
+```
+
 ## Using as a library
 
 If you are using promptfoo as a [node library](/docs/usage/node-package/), you can provide the equivalent provider config:
@@ -711,7 +722,7 @@ Supported config options:
 
 | Option            | Type                    | Description                                                                                                                                                                         |
 | ----------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| url               | string                  | The URL to send the HTTP request to. If not provided, the `id` of the provider will be used as the URL.                                                                             |
+| url               | string                  | The URL to send the HTTP request to. Supports Nunjucks templates. If not provided, the `id` of the provider will be used as the URL.                                                |
 | request           | string                  | A raw HTTP request to send. This will override the `url`, `method`, `headers`, `body`, and `queryParams` options.                                                                   |
 | method            | string                  | HTTP method (GET, POST, etc). Defaults to POST if body is provided, GET otherwise.                                                                                                  |
 | headers           | Record\<string, string> | Key-value pairs of HTTP headers to include in the request.                                                                                                                          |

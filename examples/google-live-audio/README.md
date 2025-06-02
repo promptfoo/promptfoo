@@ -26,14 +26,14 @@ promptfoo view
 The basic configuration in `promptfooconfig.yaml` demonstrates simple audio generation with transcription:
 
 ```bash
-promptfoo eval -c promptfooconfig.yaml 
+promptfoo eval -c promptfooconfig.yaml
 ```
 
 This example shows how to:
+
 - Generate audio responses from text prompts
 - Access the audio transcript in assertions
 - Verify that audio was successfully generated
-
 
 ### Affective Dialog Example
 
@@ -44,6 +44,7 @@ promptfoo eval -c promptfooconfig.audio-affective.yaml -j 3
 ```
 
 This example compares:
+
 - Responses with affective dialog enabled (adapts tone to match input emotion)
 - Regular audio responses without affective adaptation
 - Uses `gemini-2.5-flash-exp-native-audio-thinking-dialog` model which shows the thinking process
@@ -55,10 +56,11 @@ This example compares:
 The voices configuration in `promptfooconfig.audio-voices.yaml` demonstrates different voice personalities:
 
 ```bash
-promptfoo eval -c promptfooconfig.audio-voices.yaml 
+promptfoo eval -c promptfooconfig.audio-voices.yaml
 ```
 
 Available voices include:
+
 - Puck
 - Charon
 - Kore
@@ -67,6 +69,5 @@ Available voices include:
 - Leda
 - Orus
 - Zephyr
-
 
 For more information about the Google Live API and audio capabilities, see the [Google AI documentation](/docs/providers/google).

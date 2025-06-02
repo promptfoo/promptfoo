@@ -940,7 +940,9 @@ describe('GoogleLiveProvider', () => {
       await provider.callApi('test prompt');
 
       expect(mockWs.send).toHaveBeenCalledWith(
-        expect.stringContaining('"output_audio_transcription":{"includeTextualContent":true,"language":"en-US"}'),
+        expect.stringContaining(
+          '"output_audio_transcription":{"includeTextualContent":true,"language":"en-US"}',
+        ),
       );
     });
 

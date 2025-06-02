@@ -3,6 +3,7 @@ import {
   EncodingType,
   toMorseCode,
   toPigLatin,
+  toCamelCase,
 } from '../../../src/redteam/strategies/otherEncodings';
 import type { TestCase } from '../../../src/types';
 
@@ -132,6 +133,17 @@ describe('other encodings strategy', () => {
     });
   });
 
+  describe('camelCase', () => {
+    it('should convert text to camelCase', () => {
+      const result = addOtherEncodings(testCases, 'prompt', EncodingType.CAMEL_CASE);
+      expect(result[0].vars!.prompt).toBe('helloWorld!123');
+      expect(result[0].assert?.[0].metric).toBe('original-metric/CamelCase');
+
+      expect(result[0].metadata?.strategyId).toBe('camelcase');
+      expect(result[0].metadata?.encodingType).toBe(EncodingType.CAMEL_CASE);
+    });
+  });
+
   describe('encoding type handling', () => {
     it('should use Morse code as default encoding', () => {
       const result = addOtherEncodings(testCases, 'prompt');
@@ -169,6 +181,19 @@ describe('other encodings strategy', () => {
       expect(toPigLatin('latin')).toBe('atinlay');
       expect(toPigLatin('')).toBe('');
       expect(toPigLatin('123')).toBe('123');
+    });
+
+    it('should convert to camelCase directly', () => {
+      expect(toCamelCase('hello world')).toBe('helloWorld');
+      expect(toCamelCase('Hello-World!')).toBe('hello-World!');
+    });
+
+    it('should handle leading, trailing, and multiple spaces in toCamelCase', () => {
+      expect(toCamelCase('  hello world')).toBe('helloWorld');
+      expect(toCamelCase('hello world   ')).toBe('helloWorld');
+      expect(toCamelCase('  hello   world  ')).toBe('helloWorld');
+      expect(toCamelCase('hello    world')).toBe('helloWorld');
+      expect(toCamelCase('   multiple   spaces   here   ')).toBe('multipleSpacesHere');
     });
   });
 });

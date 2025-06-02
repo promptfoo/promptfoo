@@ -19,6 +19,8 @@ import {
   PII_PLUGINS,
   riskCategorySeverityMap,
   Severity,
+  STRATEGY_COLLECTION_MAPPINGS,
+  STRATEGY_COLLECTIONS,
   STRATEGY_EXEMPT_PLUGINS,
 } from './constants';
 import { extractEntities } from './extraction/entities';
@@ -30,7 +32,7 @@ import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
 import { loadStrategy, Strategies, validateStrategies } from './strategies';
 import { DEFAULT_LANGUAGES } from './strategies/multilingual';
 import type { RedteamStrategyObject, SynthesizeOptions } from './types';
-import { getShortPluginId } from './util';
+import { extractGoalFromPrompt, getShortPluginId } from './util';
 
 /**
  * Gets the severity level for a plugin based on its ID and configuration.
@@ -140,6 +142,7 @@ export function resolvePluginConfig(config: Record<string, any> | undefined): Re
 const categories = {
   foundation: FOUNDATION_PLUGINS,
   harmful: Object.keys(HARM_PLUGINS),
+  bias: Object.keys(HARM_PLUGINS).filter((p) => p.startsWith('bias:')),
   pii: PII_PLUGINS,
 } as const;
 
@@ -402,6 +405,13 @@ export function calculateTotalTests(
 }
 
 /**
+ * Type guard to check if a strategy ID is a strategy collection
+ */
+function isStrategyCollection(id: string): id is keyof typeof STRATEGY_COLLECTION_MAPPINGS {
+  return STRATEGY_COLLECTIONS.includes(id as keyof typeof STRATEGY_COLLECTION_MAPPINGS);
+}
+
+/**
  * Synthesizes test cases based on provided options.
  * @param options - The options for test case synthesis.
  * @returns A promise that resolves to an object containing the purpose, entities, and test cases.
@@ -444,6 +454,36 @@ export async function synthesize({
     maxConcurrency = 1;
     logger.warn('Delay is enabled, setting max concurrency to 1.');
   }
+
+  const expandedStrategies: typeof strategies = [];
+  strategies.forEach((strategy) => {
+    if (isStrategyCollection(strategy.id)) {
+      const aliasedStrategies = STRATEGY_COLLECTION_MAPPINGS[strategy.id];
+      if (aliasedStrategies) {
+        aliasedStrategies.forEach((strategyId) => {
+          expandedStrategies.push({
+            ...strategy,
+            id: strategyId,
+          });
+        });
+      } else {
+        logger.warn(`Strategy collection ${strategy.id} has no mappings, skipping`);
+      }
+    } else {
+      expandedStrategies.push(strategy);
+    }
+  });
+
+  // Deduplicate strategies by id
+  const seen = new Set<string>();
+  strategies = expandedStrategies.filter((strategy) => {
+    if (seen.has(strategy.id)) {
+      return false;
+    }
+    seen.add(strategy.id);
+    return true;
+  });
+
   validateStrategies(strategies);
 
   const redteamProvider = await redteamProviderManager.getProvider({ provider });
@@ -532,6 +572,15 @@ export async function synthesize({
   };
 
   plugins.forEach((plugin) => {
+    // First check if this is a direct plugin that should not be expanded
+    // This is for plugins like bias:gender that have a prefix matching an alias
+    const isDirectPlugin = Plugins.some((p) => p.key === plugin.id);
+
+    if (isDirectPlugin) {
+      expandedPlugins.push(plugin);
+      return;
+    }
+
     const mappingKey = Object.keys(ALIASED_PLUGIN_MAPPINGS).find(
       (key) => plugin.id === key || plugin.id.startsWith(`${key}:`),
     );
@@ -550,18 +599,15 @@ export async function synthesize({
     }
   });
 
-  plugins = [...new Set(expandedPlugins)]
-    .filter((p) => !Object.keys(categories).includes(p.id))
-    .sort();
-
-  // Validate all plugins upfront
-  logger.debug('Validating plugins...');
-  for (const plugin of plugins) {
+  const validatePlugin: (plugin: (typeof plugins)[0]) => boolean = (plugin) => {
+    if (Object.keys(categories).includes(plugin.id)) {
+      return false;
+    }
     const registeredPlugin = Plugins.find((p) => p.key === plugin.id);
+
     if (!registeredPlugin) {
       if (!plugin.id.startsWith('file://')) {
         logger.debug(`Plugin ${plugin.id} not registered, skipping validation`);
-        continue;
       }
     } else if (registeredPlugin.validate) {
       try {
@@ -570,10 +616,17 @@ export async function synthesize({
           ...resolvePluginConfig(plugin.config),
         });
       } catch (error) {
-        throw new Error(`Validation failed for plugin ${plugin.id}: ${error}`);
+        logger.warn(`Validation failed for plugin ${plugin.id}: ${error}, skipping plugin.`);
+        return false;
       }
     }
-  }
+
+    return true;
+  };
+
+  // Validate all plugins upfront
+  logger.debug('Validating plugins...');
+  plugins = [...new Set(expandedPlugins)].filter(validatePlugin).sort();
 
   // Check API health before proceeding
   if (shouldGenerateRemote()) {
@@ -660,17 +713,33 @@ export async function synthesize({
         logger.warn(`Failed to generate tests for ${plugin.id}`);
         pluginTests = [];
       } else {
-        testCases.push(
-          ...pluginTests.map((t) => ({
-            ...t,
-            metadata: {
-              ...(t?.metadata || {}),
-              pluginId: plugin.id,
-              pluginConfig: resolvePluginConfig(plugin.config),
-              severity: getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
-            },
-          })),
+        // Add metadata to each test case
+        const testCasesWithMetadata = pluginTests.map((t) => ({
+          ...t,
+          metadata: {
+            pluginId: plugin.id,
+            pluginConfig: resolvePluginConfig(plugin.config),
+            severity: getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
+            ...(t?.metadata || {}),
+          },
+        }));
+
+        // Extract goal for this plugin's tests
+        logger.debug(
+          `Extracting goal for ${testCasesWithMetadata.length} tests from ${plugin.id}...`,
         );
+        for (const testCase of testCasesWithMetadata) {
+          // Get the prompt from the specific inject variable
+          const promptVar = testCase.vars?.[injectVar];
+          const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
+
+          const extractedGoal = await extractGoalFromPrompt(prompt, purpose);
+
+          (testCase.metadata as any).goal = extractedGoal;
+        }
+
+        // Add the results to main test cases array
+        testCases.push(...testCasesWithMetadata);
       }
 
       pluginTests = Array.isArray(pluginTests) ? pluginTests : [];
@@ -688,17 +757,35 @@ export async function synthesize({
       try {
         const customPlugin = new CustomPlugin(redteamProvider, purpose, injectVar, plugin.id);
         const customTests = await customPlugin.generateTests(plugin.numTests, delay);
-        testCases.push(
-          ...customTests.map((t) => ({
-            ...t,
-            metadata: {
-              ...(t.metadata || {}),
-              pluginId: plugin.id,
-              pluginConfig: resolvePluginConfig(plugin.config),
-              severity: getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
-            },
-          })),
+
+        // Add metadata to each test case
+        const testCasesWithMetadata = customTests.map((t) => ({
+          ...t,
+          metadata: {
+            pluginId: plugin.id,
+            pluginConfig: resolvePluginConfig(plugin.config),
+            severity: getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
+            ...(t.metadata || {}),
+          },
+        }));
+
+        // Extract goal for this plugin's tests
+        logger.debug(
+          `Extracting goal for ${testCasesWithMetadata.length} custom tests from ${plugin.id}...`,
         );
+        for (const testCase of testCasesWithMetadata) {
+          // Get the prompt from the specific inject variable
+          const promptVar = testCase.vars?.[injectVar];
+          const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
+
+          const extractedGoal = await extractGoalFromPrompt(prompt, purpose);
+
+          (testCase.metadata as any).goal = extractedGoal;
+        }
+
+        // Add the results to main test cases array
+        testCases.push(...testCasesWithMetadata);
+
         logger.debug(`Added ${customTests.length} custom test cases from ${plugin.id}`);
         pluginResults[plugin.id] = { requested: plugin.numTests, generated: customTests.length };
       } catch (e) {

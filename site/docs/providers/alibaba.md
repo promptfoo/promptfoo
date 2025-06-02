@@ -1,3 +1,7 @@
+---
+sidebar_label: Alibaba Cloud (Qwen)
+---
+
 # Alibaba Cloud (Qwen)
 
 [Alibaba Cloud's DashScope API](https://www.alibabacloud.com/help/en/model-studio/getting-started/models) provides OpenAI-compatible access to Qwen language models. Compatible with all [OpenAI provider](/docs/providers/openai/) options in promptfoo.

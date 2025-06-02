@@ -28,7 +28,7 @@ describe('cloud utils', () => {
 
       await makeRequest(path, method, body);
 
-      expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/test/path', {
+      expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/test/path', {
         method: 'POST',
         body: JSON.stringify(body),
         headers: { Authorization: 'Bearer test-api-key' },
@@ -41,7 +41,7 @@ describe('cloud utils', () => {
 
       await makeRequest(path, method);
 
-      expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/test/path', {
+      expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/test/path', {
         method: 'GET',
         body: undefined,
         headers: { Authorization: 'Bearer test-api-key' },
@@ -56,7 +56,7 @@ describe('cloud utils', () => {
 
       await makeRequest(path, method);
 
-      expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/test/path', {
+      expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/test/path', {
         method: 'GET',
         body: undefined,
         headers: { Authorization: 'Bearer undefined' },
@@ -69,7 +69,7 @@ describe('cloud utils', () => {
 
       await makeRequest(path, method);
 
-      expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/', {
+      expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/', {
         method: 'GET',
         body: undefined,
         headers: { Authorization: 'Bearer test-api-key' },
@@ -85,13 +85,13 @@ describe('cloud utils', () => {
       await makeRequest(path, method);
 
       expect(mockFetchWithProxy).toHaveBeenCalledWith(
-        'https://api.example.com/test/path',
+        'https://api.example.com/api/v1/test/path',
         expect.any(Object),
       );
     });
 
     it('should handle API host with trailing slash', async () => {
-      mockCloudConfig.getApiHost.mockReturnValue('https://api.example.com/');
+      mockCloudConfig.getApiHost.mockReturnValue('https://api.example.com');
 
       const path = 'test/path';
       const method = 'GET';
@@ -99,7 +99,7 @@ describe('cloud utils', () => {
       await makeRequest(path, method);
 
       expect(mockFetchWithProxy).toHaveBeenCalledWith(
-        'https://api.example.com//test/path',
+        'https://api.example.com/api/v1/test/path',
         expect.any(Object),
       );
     });
@@ -110,7 +110,7 @@ describe('cloud utils', () => {
 
       await makeRequest(path, method);
 
-      expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com//test/path', {
+      expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/test/path', {
         method: 'GET',
         body: undefined,
         headers: { Authorization: 'Bearer test-api-key' },
@@ -132,7 +132,7 @@ describe('cloud utils', () => {
 
       await makeRequest(path, method, body);
 
-      expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/test/path', {
+      expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/test/path', {
         method: 'POST',
         body: JSON.stringify(body),
         headers: { Authorization: 'Bearer test-api-key' },
@@ -146,7 +146,7 @@ describe('cloud utils', () => {
 
       await makeRequest(path, method, body);
 
-      expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/test/path', {
+      expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/test/path', {
         method: 'POST',
         body: JSON.stringify(body),
         headers: { Authorization: 'Bearer test-api-key' },
@@ -158,14 +158,14 @@ describe('cloud utils', () => {
       const method = 'POST';
 
       await makeRequest(path, method, null);
-      expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/test/path', {
+      expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/test/path', {
         method: 'POST',
         body: 'null',
         headers: { Authorization: 'Bearer test-api-key' },
       });
 
       await makeRequest(path, method, undefined);
-      expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/test/path', {
+      expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/test/path', {
         method: 'POST',
         body: undefined,
         headers: { Authorization: 'Bearer test-api-key' },
@@ -195,7 +195,7 @@ describe('cloud utils', () => {
 
       expect(result).toEqual({ ...mockProvider.config });
       expect(mockFetchWithProxy).toHaveBeenCalledWith(
-        'https://api.example.com/api/providers/test-provider',
+        'https://api.example.com/api/v1/providers/test-provider',
         {
           method: 'GET',
           headers: { Authorization: 'Bearer test-api-key' },
@@ -263,7 +263,7 @@ describe('cloud utils', () => {
 
       expect(result).toEqual(mockUnifiedConfig);
       expect(mockFetchWithProxy).toHaveBeenCalledWith(
-        'https://api.example.com/api/redteam/configs/test-config/unified',
+        'https://api.example.com/api/v1/redteam/configs/test-config/unified',
         {
           method: 'GET',
           headers: { Authorization: 'Bearer test-api-key' },
@@ -288,7 +288,7 @@ describe('cloud utils', () => {
 
       expect(result).toEqual(mockUnifiedConfig);
       expect(mockFetchWithProxy).toHaveBeenCalledWith(
-        'https://api.example.com/api/redteam/configs/test-config/unified?providerId=test-provider',
+        'https://api.example.com/api/v1/redteam/configs/test-config/unified?providerId=test-provider',
         {
           method: 'GET',
           headers: { Authorization: 'Bearer test-api-key' },

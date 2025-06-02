@@ -1,3 +1,7 @@
+---
+sidebar_label: LiteLLM
+---
+
 # LiteLLM
 
 The [LiteLLM](https://docs.litellm.ai/docs/) provides access to hundreds of LLMs.

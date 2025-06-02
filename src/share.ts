@@ -5,12 +5,12 @@ import { URL } from 'url';
 import { getShareApiBaseUrl, getDefaultShareViewBaseUrl, getShareViewBaseUrl } from './constants';
 import { getEnvBool, getEnvInt, isCI, getEnvString } from './envars';
 import { fetchWithProxy } from './fetch';
-import { getAuthor, getUserEmail, setUserEmail } from './globalConfig/accounts';
+import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
 import logger from './logger';
 import type Eval from './models/eval';
-import type { SharedResults } from './types';
-import { cloudCanAcceptChunkedResults, makeRequest as makeCloudRequest } from './util/cloud';
+import type EvalResult from './models/evalResult';
+import { makeRequest as makeCloudRequest } from './util/cloud';
 
 export interface ShareDomainResult {
   domain: string;
@@ -62,37 +62,6 @@ export function determineShareDomain(eval_: Eval): ShareDomainResult {
   return { domain, isPublicShare };
 }
 
-const VERSION_SUPPORTS_CHUNKS = '0.103.8';
-
-function isVersionGreaterOrEqual(a: string, b: string) {
-  return a.localeCompare(b, undefined, { numeric: true }) !== -1;
-}
-
-async function getTargetOpenSourceServerVersion(apiHost: string): Promise<string | undefined> {
-  const response = await fetchWithProxy(`${apiHost}/health`, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
-  if (!response.ok) {
-    logger.debug(`Failed to get server version from ${apiHost}/health: ${response.statusText}`);
-    return;
-  }
-  const { version } = await response.json();
-  return version;
-}
-
-async function targetOpenSourceServerCanAcceptChunks(apiHost: string): Promise<boolean> {
-  const version = await getTargetOpenSourceServerVersion(apiHost);
-  return version != null && isVersionGreaterOrEqual(version, VERSION_SUPPORTS_CHUNKS);
-}
-
-async function targetHostCanUseNewResults(apiHost: string): Promise<boolean> {
-  const version = await getTargetOpenSourceServerVersion(apiHost);
-  return version != null;
-}
-
 // Helper functions
 function getResultSize(result: any): number {
   return Buffer.byteLength(JSON.stringify(result), 'utf8');
@@ -107,32 +76,12 @@ function findLargestResultSize(results: any[], sampleSize: number = 1000): numbe
   return maxSize;
 }
 
-function createChunks(results: any[]): any[][] {
-  if (results.length === 0) {
-    return [];
-  }
-  const largestResult = findLargestResultSize(results);
-  // Constants
-  const TARGET_CHUNK_SIZE = 10 * 1024 * 1024; // 10MB in bytes
-  // PROMPTFOO_SHARE_CHUNK_SIZE lets you directly specify how many results to include in each chunk.
-  // The value represents the number of results per chunk, not a byte size.
-  const estimatedResultsPerChunk =
-    getEnvInt('PROMPTFOO_SHARE_CHUNK_SIZE') ??
-    Math.max(1, Math.floor(TARGET_CHUNK_SIZE / largestResult));
-
-  logger.debug(
-    `Largest result size: ${largestResult} bytes, estimated results per chunk: ${estimatedResultsPerChunk}`,
-  );
-
-  const chunks: any[][] = [];
-  for (let i = 0; i < results.length; i += estimatedResultsPerChunk) {
-    chunks.push(results.slice(i, i + estimatedResultsPerChunk));
-  }
-
-  return chunks;
-}
-
-async function sendInitialEvalData(evalRecord: Eval, url: string, headers: Record<string, string>) {
+// This sends the eval record to the remote server
+async function sendEvalRecord(
+  evalRecord: Eval,
+  url: string,
+  headers: Record<string, string>,
+): Promise<string> {
   const evalDataWithoutResults = { ...evalRecord, results: [] };
   logger.debug(`Sending initial eval data to ${url}`);
   const response = await fetchWithProxy(url, {
@@ -142,10 +91,20 @@ async function sendInitialEvalData(evalRecord: Eval, url: string, headers: Recor
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to send initial eval data to ${url}: ${response.statusText}`);
+    const responseBody = await response.text();
+    throw new Error(
+      `Failed to send initial eval data to ${url}: ${response.statusText}, body: ${responseBody}`,
+    );
   }
 
-  return (await response.json()).id;
+  const responseJson = await response.json();
+  if (!responseJson.id) {
+    throw new Error(
+      `Failed to send initial eval data to ${url}: ${response.statusText} ${responseJson}`,
+    );
+  }
+
+  return responseJson.id;
 }
 
 async function sendChunkOfResults(
@@ -195,17 +154,24 @@ async function rollbackEval(url: string, evalId: string, headers: Record<string,
 }
 
 async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string | null> {
-  await evalRecord.loadResults();
+  const sampleResults = (await evalRecord.fetchResultsBatched(100).next()).value ?? [];
+  if (sampleResults.length === 0) {
+    logger.debug(`No results found`);
+    return null;
+  }
+  logger.debug(`Loaded ${sampleResults.length} sample results to determine chunk size`);
 
-  const allResults = evalRecord.results;
-  logger.debug(`Loaded ${allResults.length} results`);
+  // Calculate chunk sizes based on sample
+  const largestSize = findLargestResultSize(sampleResults);
+  logger.debug(`Largest result size from sample: ${largestSize} bytes`);
 
-  // Calculate chunk sizes
-  const medianSize = findLargestResultSize(allResults);
-  logger.debug(`Median result size: ${medianSize} bytes`);
+  // Determine how many results per chunk
+  const TARGET_CHUNK_SIZE = 10 * 1024 * 1024; // 10MB in bytes
+  const estimatedResultsPerChunk =
+    getEnvInt('PROMPTFOO_SHARE_CHUNK_SIZE') ??
+    Math.max(1, Math.floor(TARGET_CHUNK_SIZE / largestSize));
 
-  // Create chunks
-  const chunks = createChunks(allResults);
+  logger.debug(`Estimated results per chunk: ${estimatedResultsPerChunk}`);
 
   // Prepare headers
   const headers: Record<string, string> = {
@@ -215,6 +181,8 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
     headers['Authorization'] = `Bearer ${cloudConfig.getApiKey()}`;
   }
 
+  const totalResults = await evalRecord.getResultsCount();
+
   // Setup progress bar
   const progressBar = new cliProgress.SingleBar(
     {
@@ -222,55 +190,44 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
     },
     cliProgress.Presets.shades_classic,
   );
-  progressBar.start(allResults.length, 0);
+  progressBar.start(totalResults, 0);
 
+  let evalId: string | undefined;
   try {
     // Send initial data and get eval ID
-    const evalId = await sendInitialEvalData(evalRecord, url, headers);
+    evalId = await sendEvalRecord(evalRecord, url, headers);
     logger.debug(`Initial eval data sent successfully - ${evalId}`);
 
-    // Send chunks
-    logger.debug(`Sending ${chunks.length} requests to upload results`);
-    try {
-      for (const chunk of chunks) {
-        await sendChunkOfResults(chunk, url, evalId, headers);
-        progressBar.increment(chunk.length);
+    // Send chunks using batched cursor
+    let currentChunk: EvalResult[] = [];
+    for await (const batch of evalRecord.fetchResultsBatched(estimatedResultsPerChunk)) {
+      for (const result of batch) {
+        currentChunk.push(result);
+        if (currentChunk.length >= estimatedResultsPerChunk) {
+          await sendChunkOfResults(currentChunk, url, evalId, headers);
+          progressBar.increment(currentChunk.length);
+          currentChunk = [];
+        }
       }
-    } catch (e) {
-      logger.error(`Upload failed: ${e}`);
-      logger.info(`Upload failed, rolling back...`);
-      await rollbackEval(url, evalId, headers);
+    }
+    // Send final chunk
+    if (currentChunk.length > 0) {
+      await sendChunkOfResults(currentChunk, url, evalId, headers);
+      progressBar.increment(currentChunk.length);
     }
 
     return evalId;
+  } catch (e) {
+    logger.error(`Upload failed: ${e instanceof Error ? e.message : String(e)}`);
+
+    if (evalId) {
+      logger.info(`Upload failed, rolling back...`);
+      await rollbackEval(url, evalId, headers);
+    }
+    return null;
   } finally {
     progressBar.stop();
   }
-}
-
-async function sendEvalResults(evalRecord: Eval, url: string): Promise<string | null> {
-  await evalRecord.loadResults();
-  logger.debug(`Sending eval results to ${url} with ${evalRecord.results.length} results`);
-
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-  if (cloudConfig.isEnabled()) {
-    headers['Authorization'] = `Bearer ${cloudConfig.getApiKey()}`;
-  }
-
-  const response = await fetchWithProxy(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(evalRecord),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to send eval results to ${url}: ${response.statusText}`);
-  }
-
-  const evalId = (await response.json()).id;
-  return evalId;
 }
 
 /**
@@ -315,16 +272,12 @@ async function handleEmailCollection(evalRecord: Eval): Promise<void> {
 }
 
 async function getApiConfig(evalRecord: Eval): Promise<{
-  apiBaseUrl: string;
   url: string;
-  sendInChunks: boolean;
 }> {
   if (cloudConfig.isEnabled()) {
     const apiBaseUrl = cloudConfig.getApiHost();
     return {
-      apiBaseUrl,
-      url: `${apiBaseUrl}/results`,
-      sendInChunks: await cloudCanAcceptChunkedResults(),
+      url: `${apiBaseUrl}/api/v1/results`,
     };
   }
 
@@ -332,56 +285,10 @@ async function getApiConfig(evalRecord: Eval): Promise<{
     typeof evalRecord.config.sharing === 'object'
       ? evalRecord.config.sharing.apiBaseUrl || getShareApiBaseUrl()
       : getShareApiBaseUrl();
-
   return {
-    apiBaseUrl,
+    // This is going to a self-hosted instance so the api should match the Open Source API
     url: `${apiBaseUrl}/api/eval`,
-    sendInChunks: await targetOpenSourceServerCanAcceptChunks(apiBaseUrl),
   };
-}
-
-async function handleLegacyResults(evalRecord: Eval, url: string): Promise<string | null> {
-  logger.debug(`Using legacy results format for sharing to ${url}`);
-  const summary = await evalRecord.toEvaluateSummary();
-  const table = await evalRecord.getTable();
-
-  const sharedResults: SharedResults = {
-    data: {
-      version: 3,
-      createdAt: new Date().toISOString(),
-      author: getAuthor(),
-      results: { ...summary, table, version: 2 },
-      config: evalRecord.config,
-    },
-  };
-
-  const headers = {
-    'Content-Type': 'application/json',
-    ...(cloudConfig.isEnabled() && { Authorization: `Bearer ${cloudConfig.getApiKey()}` }),
-  };
-
-  const response = await fetchWithProxy(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(sharedResults),
-  });
-
-  if (!response.ok) {
-    logger.error(
-      `Failed to create shareable URL (${url}): ${response.statusText}. Check your API endpoint configuration.`,
-    );
-    return null;
-  }
-
-  const responseJson = (await response.json()) as { id?: string; error?: string };
-  if (responseJson.error) {
-    logger.error(
-      `Failed to create shareable URL (${url}): ${responseJson.error}. Check your API endpoint configuration.`,
-    );
-    return null;
-  }
-
-  return responseJson.id ?? null;
 }
 
 /**
@@ -423,24 +330,15 @@ export async function createShareableUrl(
   await handleEmailCollection(evalRecord);
 
   // 2. Get API configuration
-  const { apiBaseUrl, url, sendInChunks } = await getApiConfig(evalRecord);
+  const { url } = await getApiConfig(evalRecord);
 
   // 3. Determine if we can use new results format
-  const canUseNewResults =
-    cloudConfig.isEnabled() || (await targetHostCanUseNewResults(apiBaseUrl));
+  const canUseNewResults = cloudConfig.isEnabled();
   logger.debug(
     `Sharing with ${url} canUseNewResults: ${canUseNewResults} Use old results: ${evalRecord.useOldResults()}`,
   );
 
-  // 4. Process and send results
-  let evalId: string | null;
-  if (!canUseNewResults || evalRecord.useOldResults()) {
-    evalId = await handleLegacyResults(evalRecord, url);
-  } else if (sendInChunks) {
-    evalId = await sendChunkedResults(evalRecord, url);
-  } else {
-    evalId = await sendEvalResults(evalRecord, url);
-  }
+  const evalId = await sendChunkedResults(evalRecord, url);
 
   if (!evalId) {
     return null;

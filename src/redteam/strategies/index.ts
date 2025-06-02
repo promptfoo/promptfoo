@@ -263,6 +263,15 @@ export const Strategies: Strategy[] = [
       return newTestCases;
     },
   },
+  {
+    id: 'camelcase',
+    action: async (testCases, injectVar) => {
+      logger.debug(`Adding camelCase encoding to ${testCases.length} test cases`);
+      const newTestCases = addOtherEncodings(testCases, injectVar, EncodingType.CAMEL_CASE);
+      logger.debug(`Added ${newTestCases.length} camelCase encoded test cases`);
+      return newTestCases;
+    },
+  },
 ];
 
 export async function validateStrategies(strategies: RedteamStrategyObject[]): Promise<void> {

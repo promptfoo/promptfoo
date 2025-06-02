@@ -67,6 +67,7 @@ describe('config command', () => {
         name: 'config set',
         configKey: 'email',
       });
+      expect(telemetry.send).toHaveBeenCalledWith();
     });
 
     it('should validate email format even when not logged in', async () => {
@@ -86,7 +87,7 @@ describe('config command', () => {
       expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Invalid email address'));
       expect(process.exitCode).toBe(1);
       expect(telemetry.record).not.toHaveBeenCalled();
-      expect(telemetry.record).not.toHaveBeenCalled();
+      expect(telemetry.send).not.toHaveBeenCalled();
     });
   });
 
@@ -134,6 +135,7 @@ describe('config command', () => {
         name: 'config unset',
         configKey: 'email',
       });
+      expect(telemetry.send).toHaveBeenCalledWith();
     });
 
     it('should handle user confirmation for unsetting email', async () => {
@@ -177,7 +179,7 @@ describe('config command', () => {
       expect(setUserEmail).not.toHaveBeenCalled();
       expect(logger.info).toHaveBeenCalledWith('Operation cancelled.');
       expect(telemetry.record).not.toHaveBeenCalled();
-      expect(telemetry.record).not.toHaveBeenCalled();
+      expect(telemetry.send).not.toHaveBeenCalled();
     });
 
     it('should handle case when no email is set', async () => {
@@ -197,7 +199,7 @@ describe('config command', () => {
       expect(logger.info).toHaveBeenCalledWith('No email is currently set.');
       expect(setUserEmail).not.toHaveBeenCalled();
       expect(telemetry.record).not.toHaveBeenCalled();
-      expect(telemetry.record).not.toHaveBeenCalled();
+      expect(telemetry.send).not.toHaveBeenCalled();
     });
   });
 
@@ -220,6 +222,7 @@ describe('config command', () => {
         name: 'config get',
         configKey: 'email',
       });
+      expect(telemetry.send).toHaveBeenCalledWith();
     });
 
     it('should show message when no email is set', async () => {
@@ -240,6 +243,7 @@ describe('config command', () => {
         name: 'config get',
         configKey: 'email',
       });
+      expect(telemetry.send).toHaveBeenCalledWith();
     });
   });
 });

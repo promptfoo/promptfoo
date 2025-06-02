@@ -23,7 +23,7 @@ export type EnvVars = {
   PROMPTFOO_DISABLE_MULTIMEDIA_AS_BASE64?: boolean;
   PROMPTFOO_DISABLE_PDF_AS_TEXT?: boolean;
   PROMPTFOO_DISABLE_REDTEAM_MODERATION?: boolean;
-  PROMPTFOO_DISABLE_REDTEAM_PURPOSE_DISCOVERY_AGENT?: boolean;
+  PROMPTFOO_DISABLE_REDTEAM_TARGET_DISCOVERY_AGENT?: boolean;
   PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION?: boolean;
   PROMPTFOO_DISABLE_REF_PARSER?: boolean;
   PROMPTFOO_DISABLE_SHARE_EMAIL_REQUEST?: boolean;
@@ -285,6 +285,9 @@ export type EnvVars = {
 
   // Pi Labs
   WITHPI_API_KEY?: string;
+
+  // xAI
+  XAI_API_KEY?: string;
 } & EnvOverrides;
 
 // Allow string access to any key for environment variables not explicitly listed

@@ -94,7 +94,7 @@ export interface CompletionOptions {
   projectId?: string;
   region?: string;
   publisher?: string;
-  apiVersion?: string;  // For Live API: 'v1alpha' or 'v1' (default: v1alpha)
+  apiVersion?: string; // For Live API: 'v1alpha' or 'v1' (default: v1alpha)
   anthropicVersion?: string;
   anthropic_version?: string; // Alternative format
 

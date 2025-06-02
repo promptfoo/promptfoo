@@ -29,6 +29,7 @@ The `promptfoo` command line utility supports the following subcommands:
 - `scan-model` - Scan ML models for security vulnerabilities.
 - `show <id>` - Show details of a specific resource (evaluation, prompt, dataset).
 - `delete <id>` - Delete a resource by its ID (currently, just evaluations)
+- `validate` - Validate a promptfoo configuration file.
 - `feedback <message>` - Send feedback to the Promptfoo developers.
 - `import <filepath>` - Import an eval file from JSON format.
 - `export <evalId>` - Export an eval record to JSON format.
@@ -187,6 +188,31 @@ Export an eval record to JSON format. To export the most recent, use evalId `lat
 | ------------------------- | ------------------------------------------- |
 | `-o, --output <filepath>` | File to write. Writes to stdout by default. |
 
+## `promptfoo validate`
+
+Validate a promptfoo configuration file to ensure it follows the correct schema and structure.
+
+| Option                    | Description                                                             |
+| ------------------------- | ----------------------------------------------------------------------- |
+| `-c, --config <paths...>` | Path to configuration file(s). Automatically loads promptfooconfig.yaml |
+
+This command validates both the configuration file and the test suite to ensure they conform to the expected schema. It will report any validation errors with detailed messages to help you fix configuration issues.
+
+Examples:
+
+```sh
+# Validate the default promptfooconfig.yaml
+promptfoo validate
+
+# Validate a specific configuration file
+promptfoo validate -c my-config.yaml
+
+# Validate multiple configuration files
+promptfoo validate -c config1.yaml config2.yaml
+```
+
+The command will exit with code `1` if validation fails, making it useful for CI/CD pipelines to catch configuration errors early.
+
 ## `promptfoo scan-model`
 
 Scan ML models for security vulnerabilities. Provide one or more paths to model files or directories.
@@ -330,16 +356,18 @@ Run the complete red teaming process (init, generate, and evaluate).
 
 ## `promptfoo redteam discover`
 
-Automatically discovers the [purpose](https://www.promptfoo.dev/docs/red-team/configuration/#purpose) of your target application.
+Runs the [Target Discovery Agent](/docs/red-team/discovery) against your application.
 
-| Option                | Description                                                                                | Default        |
-| --------------------- | ------------------------------------------------------------------------------------------ | -------------- |
-| `-c, --config <path>` | Path to `promptfooconfig.yaml` configuration file.                                         |                |
-| `-o, --output <path>` | Path to output file.                                                                       | `redteam.yaml` |
-| `--overwrite`         | Overwrite the existing purpose if it already exists.                                       | false          |
-| `-t, --target <id>`   | UUID of a Cloud-defined target to run the discovery on                                     |                |
-| `--preview`           | Preview discovery results without writing to an output file                                | false          |
-| `--turns <turns>`     | A maximum number of turns to run the discovery process. Lower is faster but less accurate. | 50             |
+:::info
+
+Only a configuration file or target can be specified
+
+:::
+
+| Option                | Description                                          | Default |
+| --------------------- | ---------------------------------------------------- | ------- |
+| `-c, --config <path>` | Path to `promptfooconfig.yaml` configuration file.   |         |
+| `-t, --target <id>`   | UUID of a target defined in Promptfoo Cloud to scan. |         |
 
 ## `promptfoo redteam generate`
 

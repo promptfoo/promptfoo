@@ -114,6 +114,7 @@ export async function doEval(
       // Only set when redteam is enabled for sure, because we don't know if config is loaded yet
       ...(Boolean(config?.redteam) && { isRedteam: true }),
     });
+    await telemetry.send();
 
     if (cmdObj.write) {
       await runDbMigrations();
@@ -267,6 +268,9 @@ export async function doEval(
       eventSource: 'cli',
       abortSignal: evaluateOptions.abortSignal,
     });
+
+    // Clear results from memory to avoid memory issues
+    evalRecord.clearResults();
 
     const wantsToShare = cmdObj.share && config.sharing;
 
@@ -458,6 +462,7 @@ export async function doEval(
       duration: Math.round((Date.now() - startTime) / 1000),
       isRedteam,
     });
+    await telemetry.send();
 
     if (cmdObj.watch) {
       if (initialization) {

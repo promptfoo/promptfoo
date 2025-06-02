@@ -12,7 +12,7 @@ jest.mock('../../../src/cache');
 
 describe('failApiCall', () => {
   it('should format OpenAI API errors', () => {
-    const error = new OpenAI.APIError(400, {}, 'Bad request', {});
+    const error = new OpenAI.APIError(400, {}, 'Bad request', new Headers());
     Object.defineProperty(error, 'type', {
       value: 'invalid_request_error',
       writable: true,

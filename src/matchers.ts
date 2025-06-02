@@ -435,7 +435,7 @@ export async function renderLlmRubricPrompt(
 }
 
 export async function matchesLlmRubric(
-  rubric: string,
+  rubric: string | object,
   llmOutput: string,
   grading?: GradingConfig,
   vars?: Record<string, string | object>,

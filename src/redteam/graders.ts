@@ -42,6 +42,7 @@ import { ImitationGrader } from './plugins/imitation';
 import { IndirectPromptInjectionGrader } from './plugins/indirectPromptInjection';
 import { IntentGrader } from './plugins/intent';
 import { MCPPluginGrader } from './plugins/mcp';
+import { OffTopicPluginGrader } from './plugins/offTopic';
 import { OverrelianceGrader } from './plugins/overreliance';
 import { PiiGrader } from './plugins/pii';
 import { PlinyGrader } from './plugins/pliny';
@@ -57,12 +58,14 @@ import { SqlInjectionGrader } from './plugins/sqlInjection';
 import { SsrfGrader } from './plugins/ssrf';
 import { ToolDiscoveryGrader } from './plugins/toolDiscovery';
 import { ToolDiscoveryMultiTurnGrader } from './plugins/toolDiscoveryMultiTurn';
+import { ToxicChatGrader } from './plugins/toxicchat';
 import { UnsafeBenchGrader } from './plugins/unsafebench';
 import type { RedteamAssertionTypes } from './types';
 
 export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   [REDTEAM_MEMORY_POISONING_PLUGIN_ID]: new MemoryPoisoningPluginGrader(),
   'promptfoo:redteam:mcp': new MCPPluginGrader(),
+  'promptfoo:redteam:off-topic': new OffTopicPluginGrader(),
   'promptfoo:redteam:ascii-smuggling': new AsciiSmugglingGrader(),
   'promptfoo:redteam:beavertails': new BeavertailsGrader(),
   'promptfoo:redteam:bias:gender': new GenderBiasGrader(),
@@ -127,6 +130,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:shell-injection': new ShellInjectionGrader(),
   'promptfoo:redteam:sql-injection': new SqlInjectionGrader(),
   'promptfoo:redteam:ssrf': new SsrfGrader(),
+  'promptfoo:redteam:toxic-chat': new ToxicChatGrader(),
   'promptfoo:redteam:unsafebench': new UnsafeBenchGrader(),
 };
 
