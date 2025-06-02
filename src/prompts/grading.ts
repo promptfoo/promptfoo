@@ -25,7 +25,7 @@ export const DEFAULT_GRADING_PROMPT = JSON.stringify([
   {
     role: 'user',
     content:
-      '<Output>\n{{output if output === output|string else output|dump}}\n</Output>\n<Rubric>\n{{rubric if rubric === rubric|string else rubric|dump}}\n</Rubric>',
+      '<Output>\n{{ output if output === output|string else output|dump }}\n</Output>\n<Rubric>\n{{ rubric if rubric === rubric|string else rubric|dump }}\n</Rubric>',
   },
 ]);
 

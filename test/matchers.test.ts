@@ -330,7 +330,7 @@ describe('matchesLlmRubric', () => {
     const rubric = { prompt: 'Describe the image' };
     const output = 'Sample output';
     const options: GradingConfig = {
-      rubricPrompt: 'Grade: {{rubric if rubric === rubric|string else rubric|dump}}',
+      rubricPrompt: 'Grade: {{ rubric if rubric === rubric|string else rubric|dump }}',
       provider: {
         id: () => 'test-provider',
         callApi: jest.fn().mockResolvedValue({
