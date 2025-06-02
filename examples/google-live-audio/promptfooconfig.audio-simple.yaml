@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Google Live Simple Audio Test
+
+prompts:
+  - 'Whisper and say hello'
+
+providers:
+  - id: 'google:live:gemini-2.0-flash-live-001'
+    config:
+      generationConfig:
+        response_modalities: ['audio']
+        outputAudioTranscription: {}
+      timeoutMs: 30000
+
+tests:
+  # Option 1: Use javascript assertion to check transcript via context
+  - assert:
+      - type: javascript
+        value: |
+          // Access the audio transcript from the provider response
+          if (context.providerResponse && context.providerResponse.audio && context.providerResponse.audio.transcript) {
+            return context.providerResponse.audio.transcript.toLowerCase().includes('hello');
+          }
+          return false;
+
+  # Option 2: Check that audio was generated
+  - assert:
+      - type: javascript
+        value: |
+          // Verify audio response was generated with transcript
+          if (context.providerResponse && context.providerResponse.audio && context.providerResponse.audio.transcript) {
+            return context.providerResponse.audio && 
+                  context.providerResponse.audio.data && 
+                  context.providerResponse.audio.transcript && 
+                  context.providerResponse.audio.transcript.length > 0;
+          }
+          return false;

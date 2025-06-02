@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Google Live Audio - Different Voice Options
+
+# This example demonstrates the different voices available in Google Live API
+# Available voices: Puck, Charon, Kore, Fenrir, Aoede, Leda, Orus, Zephyr
+
+prompts:
+  - 'Why was Gemini model by Google named Gemini?'
+
+providers:
+  - id: 'google:live:gemini-2.0-flash-live-001'
+    label: 'Puck Voice'
+    config:
+      generationConfig:
+        response_modalities: ['audio']
+        outputAudioTranscription: {}
+        speechConfig:
+          voiceConfig:
+            prebuiltVoiceConfig:
+              voiceName: 'Puck'
+      timeoutMs: 30000
+
+  - id: 'google:live:gemini-2.0-flash-live-001'
+    label: 'Charon Voice'
+    config:
+      generationConfig:
+        response_modalities: ['audio']
+        outputAudioTranscription: {}
+        speechConfig:
+          voiceConfig:
+            prebuiltVoiceConfig:
+              voiceName: 'Charon'
+      timeoutMs: 30000
+
+tests:
+  - assert:
+      - type: javascript
+        value: |
+          // Access the audio transcript from the provider response
+          if (context.providerResponse && context.providerResponse.audio && context.providerResponse.audio.transcript) {
+            return context.providerResponse.audio.transcript.toLowerCase().includes('gemini');
+          }
+          return false;

@@ -555,7 +555,7 @@ export class GoogleLiveProvider implements ApiProvider {
         resolve({ error: `WebSocket error for model ${this.modelName}: ${JSON.stringify(err)}` });
       };
 
-      ws.onclose = () => {
+      ws.onclose = (event: WebSocket.CloseEvent) => {
         logger.debug(
           `WebSocket connection closed. Code: ${event.code}, Reason: ${event.reason}, Clean: ${event.wasClean}`,
         );
