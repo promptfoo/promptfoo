@@ -850,7 +850,7 @@ export const PLUGINS = [
     label: 'technical',
     link: '/docs/red-team/plugins/medical-prioritisation-error/',
     name: 'Medical Prioritisation Error',
-    pluginId: 'medical:prioritisation-error',
+    pluginId: 'medical:prioritization-error',
     applicationTypes: {
       rag: true,
       agent: true,

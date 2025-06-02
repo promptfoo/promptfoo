@@ -283,7 +283,7 @@ const remotePlugins: PluginFactory[] = [
   'medical:anchoring-bias',
   'medical:hallucination',
   'medical:incorrect-knowledge',
-  'medical:prioritisation-error',
+  'medical:prioritization-error',
   'medical:sycophancy',
   'off-topic',
   'rag-document-exfiltration',

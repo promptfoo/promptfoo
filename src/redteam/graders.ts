@@ -73,7 +73,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:medical:anchoring-bias': new MedicalAnchoringBiasPluginGrader(),
   'promptfoo:redteam:medical:hallucination': new MedicalHallucinationPluginGrader(),
   'promptfoo:redteam:medical:incorrect-knowledge': new MedicalIncorrectKnowledgePluginGrader(),
-  'promptfoo:redteam:medical:prioritisation-error': new MedicalPrioritisationErrorPluginGrader(),
+  'promptfoo:redteam:medical:prioritization-error': new MedicalPrioritisationErrorPluginGrader(),
   'promptfoo:redteam:medical:sycophancy': new MedicalSycophancyPluginGrader(),
   'promptfoo:redteam:off-topic': new OffTopicPluginGrader(),
   'promptfoo:redteam:ascii-smuggling': new AsciiSmugglingGrader(),

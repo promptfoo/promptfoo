@@ -91,7 +91,7 @@ Tests for factually wrong medical information that could be harmful if followed.
 ❌ "Antibiotics are effective against viral infections"
 ```
 
-### 4. Medical Prioritisation Error (`medical:prioritisation-error`)
+### 4. Medical Prioritisation Error (`medical:prioritization-error`)
 
 **Severity: High**
 
@@ -148,7 +148,7 @@ redteam:
     - medical:hallucination
     - medical:anchoring-bias
     - medical:incorrect-knowledge
-    - medical:prioritisation-error
+    - medical:prioritization-error
     - medical:sycophancy
 
     # Or use all medical plugins

@@ -161,7 +161,7 @@ export const ADDITIONAL_PLUGINS = [
   'medical:anchoring-bias',
   'medical:hallucination',
   'medical:incorrect-knowledge',
-  'medical:prioritisation-error',
+  'medical:prioritization-error',
   'medical:sycophancy',
   'off-topic',
   'overreliance',
@@ -970,7 +970,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'medical:hallucination': 'Tests for fabricated medical facts, studies, or drug interactions',
   'medical:incorrect-knowledge':
     'Tests for factually wrong medical information that could cause harm',
-  'medical:prioritisation-error': 'Tests for poor medical prioritisation and triage decisions',
+  'medical:prioritization-error': 'Tests for poor medical prioritisation and triage decisions',
   'medical:sycophancy': 'Tests for agreeing with incorrect medical assumptions to be helpful',
   'off-topic':
     'Tests whether AI systems can be manipulated to go off-topic from their intended purpose',
@@ -1043,7 +1043,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'medical:anchoring-bias': 'Medical Anchoring Bias',
   'medical:hallucination': 'Medical Hallucination',
   'medical:incorrect-knowledge': 'Medical Incorrect Knowledge',
-  'medical:prioritisation-error': 'Medical Prioritisation Error',
+  'medical:prioritization-error': 'Medical Prioritisation Error',
   'medical:sycophancy': 'Medical Sycophancy',
   'off-topic': 'Off-Topic Manipulation',
   goat: 'Generative Offensive Agent Tester',
@@ -1153,7 +1153,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'medical:anchoring-bias': Severity.High,
   'medical:hallucination': Severity.Critical,
   'medical:incorrect-knowledge': Severity.Critical,
-  'medical:prioritisation-error': Severity.High,
+  'medical:prioritization-error': Severity.High,
   'medical:sycophancy': Severity.Medium,
   'off-topic': Severity.Medium,
   competitors: Severity.Low,
@@ -1356,7 +1356,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'medical:anchoring-bias': 'MedicalAnchoringBias',
   'medical:hallucination': 'MedicalHallucination',
   'medical:incorrect-knowledge': 'MedicalIncorrectKnowledge',
-  'medical:prioritisation-error': 'MedicalPrioritisationError',
+  'medical:prioritization-error': 'MedicalPrioritisationError',
   'medical:sycophancy': 'MedicalSycophancy',
   'off-topic': 'OffTopic',
   'divergent-repetition': 'DivergentRepetition',
@@ -1495,7 +1495,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests for fabricated medical facts, non-existent studies, made-up drug interactions, or other false medical information',
   'medical:incorrect-knowledge':
     'Tests for factually wrong medical information that could be harmful if followed',
-  'medical:prioritisation-error':
+  'medical:prioritization-error':
     'Tests for poor medical prioritisation and triage decisions that could delay critical care',
   'medical:sycophancy':
     'Tests for agreeing with incorrect medical assumptions or providing responses aligned with user desires at the expense of medical accuracy',
