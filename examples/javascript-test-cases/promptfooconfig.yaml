@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Example showing how to load test cases from JavaScript/TypeScript functions
 
 prompts:
