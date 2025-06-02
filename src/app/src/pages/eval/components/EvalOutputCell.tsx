@@ -111,170 +111,146 @@ function EvalOutputCell({
   let node: React.ReactNode | undefined;
   let failReasons: string[] = [];
 
-  if (output.audio) {
-    const audioDataSize = output.audio.data
-      ? Math.round((output.audio.data.length * 3) / 4 / 1024)
-      : 0;
-    const downloadUrl = `data:audio/${output.audio.format || 'wav'};base64,${output.audio.data}`;
+  // Handle failure messages by splitting the text at '---'
+  if (!output.pass && text.includes('---')) {
+    failReasons = (output.gradingResult?.componentResults || [])
+      .filter((result) => (result ? !result.pass : false))
+      .map((result) => result.reason);
+    text = text.split('---').slice(1).join('---');
+  }
 
+  if (showDiffs && firstOutput) {
+    let firstOutputText =
+      typeof firstOutput.text === 'string' ? firstOutput.text : JSON.stringify(firstOutput.text);
+
+    if (firstOutputText.includes('---')) {
+      firstOutputText = firstOutputText.split('---').slice(1).join('---');
+    }
+
+    let diffResult;
+    try {
+      // Try parsing the texts as JSON
+      JSON.parse(firstOutputText);
+      JSON.parse(text);
+      // If no errors are thrown, the texts are valid JSON
+      diffResult = diffJson(firstOutputText, text);
+    } catch {
+      // If an error is thrown, the texts are not valid JSON
+      if (firstOutputText.includes('. ') && text.includes('. ')) {
+        // If the texts contain a period, they are considered as prose
+        diffResult = diffSentences(firstOutputText, text);
+      } else {
+        // If the texts do not contain a period, use diffWords
+        diffResult = diffWords(firstOutputText, text);
+      }
+    }
+    node = (
+      <>
+        {diffResult.map(
+          (part: { added?: boolean; removed?: boolean; value: string }, index: number) =>
+            part.added ? (
+              <ins key={index}>{part.value}</ins>
+            ) : part.removed ? (
+              <del key={index}>{part.value}</del>
+            ) : (
+              <span key={index}>{part.value}</span>
+            ),
+        )}
+      </>
+    );
+  }
+
+  if (searchText) {
+    // Highlight search matches
+    try {
+      const regex = new RegExp(searchText, 'gi');
+      const matches: { start: number; end: number }[] = [];
+      let match;
+      while ((match = regex.exec(text)) !== null) {
+        matches.push({
+          start: match.index,
+          end: regex.lastIndex,
+        });
+      }
+      node = (
+        <>
+          {matches.length > 0 ? (
+            <>
+              <span key="text-before">{text.substring(0, matches[0].start)}</span>
+              {matches.map((range, index) => (
+                <>
+                  <span className="search-highlight" key={'match-' + index}>
+                    {text.substring(range.start, range.end)}
+                  </span>
+                  <span key={'text-after-' + index}>
+                    {text.substring(
+                      range.end,
+                      matches[index + 1] ? matches[index + 1].start : text.length,
+                    )}
+                  </span>
+                </>
+              ))}
+            </>
+          ) : (
+            <span key="no-match">{text}</span>
+          )}
+        </>
+      );
+    } catch (error) {
+      console.error('Invalid regular expression:', (error as Error).message);
+    }
+  } else if (
+    text.match(/^data:(image\/[a-z]+|application\/octet-stream|image\/svg\+xml);(base64,)?/)
+  ) {
+    node = (
+      <img
+        src={text}
+        alt={output.prompt}
+        style={{ width: '100%' }}
+        onClick={() => toggleLightbox(text)}
+      />
+    );
+  } else if (output.audio) {
     node = (
       <div className="audio-output">
-        <div className="audio-header">
-          <div className="audio-info">
-            <span className="audio-format-badge">
-              {(output.audio.format || 'wav').toUpperCase()}
-            </span>
-            <span className="audio-size">{audioDataSize}KB</span>
-            <span className="audio-source">Generated Audio</span>
-          </div>
-          <div className="audio-actions">
-            <a
-              href={downloadUrl}
-              download={`generated-audio-${Date.now()}.${output.audio.format || 'wav'}`}
-              className="download-link"
-              title="Download audio file"
-            >
-              ⬇ Download
-            </a>
-          </div>
-        </div>
-        <audio controls style={{ width: '100%' }} data-testid="audio-player" preload="metadata">
-          <source src={downloadUrl} type={`audio/${output.audio.format || 'wav'}`} />
+        <audio controls style={{ width: '100%' }} data-testid="audio-player">
+          <source
+            src={`data:audio/${output.audio.format || 'wav'};base64,${output.audio.data}`}
+            type={`audio/${output.audio.format || 'wav'}`}
+          />
           Your browser does not support the audio element.
         </audio>
         {output.audio.transcript && (
           <div className="transcript">
-            <div className="transcript-label">Transcript:</div>
-            <div className="transcript-content">{output.audio.transcript}</div>
+            <strong>Transcript:</strong> {output.audio.transcript}
           </div>
         )}
       </div>
     );
-  }
-  if (!node) {
-    if (!output.pass && text.includes('---')) {
-      failReasons = (output.gradingResult?.componentResults || [])
-        .filter((result) => (result ? !result.pass : false))
-        .map((result) => result.reason);
-      text = text.split('---').slice(1).join('---');
-    }
-
-    if (showDiffs && firstOutput) {
-      let firstOutputText =
-        typeof firstOutput.text === 'string' ? firstOutput.text : JSON.stringify(firstOutput.text);
-
-      if (firstOutputText.includes('---')) {
-        firstOutputText = firstOutputText.split('---').slice(1).join('---');
-      }
-
-      let diffResult;
-      try {
-        // Try parsing the texts as JSON
-        JSON.parse(firstOutputText);
-        JSON.parse(text);
-        // If no errors are thrown, the texts are valid JSON
-        diffResult = diffJson(firstOutputText, text);
-      } catch {
-        // If an error is thrown, the texts are not valid JSON
-        if (firstOutputText.includes('. ') && text.includes('. ')) {
-          // If the texts contain a period, they are considered as prose
-          diffResult = diffSentences(firstOutputText, text);
-        } else {
-          // If the texts do not contain a period, use diffWords
-          diffResult = diffWords(firstOutputText, text);
-        }
-      }
-      node = (
-        <>
-          {diffResult.map(
-            (part: { added?: boolean; removed?: boolean; value: string }, index: number) =>
-              part.added ? (
-                <ins key={index}>{part.value}</ins>
-              ) : part.removed ? (
-                <del key={index}>{part.value}</del>
-              ) : (
-                <span key={index}>{part.value}</span>
-              ),
-          )}
-        </>
-      );
-    }
-
-    if (searchText) {
-      // Highlight search matches
-      try {
-        const regex = new RegExp(searchText, 'gi');
-        const matches: { start: number; end: number }[] = [];
-        let match;
-        while ((match = regex.exec(text)) !== null) {
-          matches.push({
-            start: match.index,
-            end: regex.lastIndex,
-          });
-        }
-        node = (
-          <>
-            {matches.length > 0 ? (
-              <>
-                <span key="text-before">{text.substring(0, matches[0].start)}</span>
-                {matches.map((range, index) => (
-                  <>
-                    <span className="search-highlight" key={'match-' + index}>
-                      {text.substring(range.start, range.end)}
-                    </span>
-                    <span key={'text-after-' + index}>
-                      {text.substring(
-                        range.end,
-                        matches[index + 1] ? matches[index + 1].start : text.length,
-                      )}
-                    </span>
-                  </>
-                ))}
-              </>
-            ) : (
-              <span key="no-match">{text}</span>
-            )}
-          </>
-        );
-      } catch (error) {
-        console.error('Invalid regular expression:', (error as Error).message);
-      }
-    } else if (
-      text.match(/^data:(image\/[a-z]+|application\/octet-stream|image\/svg\+xml);(base64,)?/)
-    ) {
-      node = (
-        <img
-          src={text}
-          alt={output.prompt}
-          style={{ width: '100%' }}
-          onClick={() => toggleLightbox(text)}
-        />
-      );
-    } else if (renderMarkdown && !showDiffs) {
-      node = (
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
-          components={{
-            img: ({ src, alt }) => (
-              <img
-                loading="lazy"
-                src={src}
-                alt={alt}
-                onClick={() => toggleLightbox(src)}
-                style={{ cursor: 'pointer' }}
-              />
-            ),
-          }}
-        >
-          {text}
-        </ReactMarkdown>
-      );
-    } else if (prettifyJson) {
-      try {
-        node = <pre>{JSON.stringify(JSON.parse(text), null, 2)}</pre>;
-      } catch {
-        // Ignore because it's probably not JSON.
-      }
+  } else if (renderMarkdown && !showDiffs) {
+    node = (
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          img: ({ src, alt }) => (
+            <img
+              loading="lazy"
+              src={src}
+              alt={alt}
+              onClick={() => toggleLightbox(src)}
+              style={{ cursor: 'pointer' }}
+            />
+          ),
+        }}
+      >
+        {text}
+      </ReactMarkdown>
+    );
+  } else if (prettifyJson) {
+    try {
+      node = <pre>{JSON.stringify(JSON.parse(text), null, 2)}</pre>;
+    } catch {
+      // Ignore because it's probably not JSON.
     }
   }
 
