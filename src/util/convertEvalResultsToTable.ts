@@ -135,15 +135,7 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
             transcript: result.response.audio.transcript,
             format: result.response.audio.format,
           }
-        : result.response?.output?.audio
-          ? {
-              id: result.response.output.audio.id,
-              expiresAt: result.response.output.audio.expiresAt,
-              data: result.response.output.audio.data,
-              transcript: result.response.output.audio.transcript,
-              format: result.response.output.audio.format,
-            }
-          : undefined,
+        : undefined,
     };
     invariant(result.promptId, 'Prompt ID is required');
 
