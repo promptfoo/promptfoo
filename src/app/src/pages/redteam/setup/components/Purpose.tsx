@@ -3,7 +3,7 @@ import { useTelemetry } from '@app/hooks/useTelemetry';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
-import { Alert } from '@mui/material';
+import { Alert, Dialog, DialogActions, DialogContent, DialogTitle } from '@mui/material';
 import Accordion from '@mui/material/Accordion';
 import AccordionDetails from '@mui/material/AccordionDetails';
 import AccordionSummary from '@mui/material/AccordionSummary';
@@ -16,7 +16,11 @@ import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Typography from '@mui/material/Typography';
 import { alpha, useTheme } from '@mui/material/styles';
-import { EXAMPLE_APPLICATION_DEFINITION, useRedTeamConfig } from '../hooks/useRedTeamConfig';
+import {
+  EXAMPLE_APPLICATION_DEFINITION,
+  EXAMPLE_CONFIG,
+  useRedTeamConfig,
+} from '../hooks/useRedTeamConfig';
 import type { ApplicationDefinition } from '../types';
 
 interface PromptsProps {
@@ -25,12 +29,13 @@ interface PromptsProps {
 
 export default function Purpose({ onNext }: PromptsProps) {
   const theme = useTheme();
-  const { config, updateApplicationDefinition } = useRedTeamConfig();
+  const { config, updateApplicationDefinition, setFullConfig } = useRedTeamConfig();
   const { recordEvent } = useTelemetry();
   const [testMode, setTestMode] = useState<'application' | 'model'>('application');
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
     new Set(['Core Application Details']), // Expand the first section by default since it has required fields
   );
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
 
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_purpose' });
@@ -49,6 +54,20 @@ export default function Purpose({ onNext }: PromptsProps) {
         });
       }
       recordEvent('feature_used', { feature: 'redteam_test_mode_change', mode: newMode });
+    }
+  };
+
+  const loadExample = () => {
+    recordEvent('feature_used', { feature: 'redteam_config_example' });
+    setTestMode('application');
+    setFullConfig(EXAMPLE_CONFIG);
+    setConfirmDialogOpen(false);
+  };
+  const handleLoadExample = () => {
+    if (config.purpose || Object.values(config.applicationDefinition ?? {}).some((val) => val)) {
+      setConfirmDialogOpen(true);
+    } else {
+      loadExample();
     }
   };
 
@@ -100,12 +119,30 @@ export default function Purpose({ onNext }: PromptsProps) {
 
   return (
     <Box sx={{ width: '100%' }}>
+      <Dialog open={confirmDialogOpen} onClose={() => setConfirmDialogOpen(false)}>
+        <DialogTitle>Load Example Configuration?</DialogTitle>
+        <DialogContent>
+          Load example configuration with demo chat endpoint and sample application details? Current
+          settings will be replaced.
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmDialogOpen(false)}>Cancel</Button>
+          <Button onClick={loadExample} variant="contained" color="primary">
+            Load Example
+          </Button>
+        </DialogActions>
+      </Dialog>
       <Box sx={{ maxWidth: '1200px', width: '100%', px: 3 }}>
         <Stack direction="column" spacing={4}>
-          <Box sx={{ mb: 4 }}>
+          <Box
+            sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+          >
             <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold' }}>
               Usage Details
             </Typography>
+            <Button variant="outlined" onClick={handleLoadExample}>
+              Load Example
+            </Button>
           </Box>
 
           <ToggleButtonGroup
