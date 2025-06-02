@@ -1,4 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Llama Gpt Comparison example
+
 prompts:
   - file://prompts/chat_prompt.json
 

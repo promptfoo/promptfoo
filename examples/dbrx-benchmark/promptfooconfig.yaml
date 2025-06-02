@@ -1,4 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Dbrx Benchmark example
+
 prompts:
   - 'Think deeply and answer concisely: {{query}}'
 

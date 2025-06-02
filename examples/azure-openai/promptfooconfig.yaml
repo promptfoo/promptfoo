@@ -1,4 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Azure Openai example
+
 prompts:
   - 'Generate one very interesting fact about {{topic}}'
 

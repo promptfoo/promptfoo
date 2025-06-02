@@ -1,4 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Store And Reuse Outputs example
+
 prompts:
   - 'Respond to the user: {{message}}'
 

@@ -1,4 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Named Metrics example
+
 prompts:
   - 'Say this as though you are a pirate: {{body}}'
   - 'Say this as though you are a seafarer from the 17th century: {{body}}'

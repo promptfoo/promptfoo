@@ -1,4 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Csv Metadata example
+
 prompts:
   - 'Tell me about {{topic}}'
 

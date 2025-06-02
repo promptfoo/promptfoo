@@ -1,4 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Huggingface Similarity example
+
 prompts:
   - "You're a translator.  Translate this into {{language}}: {{input}}"
   - 'Speak in {{language}}: {{input}}'
