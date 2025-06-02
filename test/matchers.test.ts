@@ -330,7 +330,7 @@ describe('matchesLlmRubric', () => {
     const rubric = { prompt: 'Describe the image' };
     const output = 'Sample output';
     const options: GradingConfig = {
-      rubricPrompt: 'Grade: {{ rubric if rubric === rubric|string else rubric|dump  }}',
+      rubricPrompt: 'Grade: {{rubric if rubric === rubric|string else rubric|dump}}',
       provider: {
         id: () => 'test-provider',
         callApi: jest.fn().mockResolvedValue({
@@ -2193,7 +2193,7 @@ describe('tryParse and renderLlmRubricPrompt', () => {
   });
 
   it('should properly stringify objects', async () => {
-    const template = 'Source Text:\n{{input if input === input|string else input|dump  }}';
+    const template = 'Source Text:\n{{ input if input === input|string else input|dump }}';
     // Create objects that would typically cause the [object Object] issue
     const objects = [
       { name: 'Object 1', properties: { color: 'red', size: 'large' } },
@@ -2209,7 +2209,7 @@ describe('tryParse and renderLlmRubricPrompt', () => {
   });
 
   it('should make it possible to access nested object attributes', async () => {
-    const template = '{{  input[0].properties.color  }}';
+    const template = '{{input[0].properties.color}}';
     const objects = [
       { name: 'Object 1', properties: { color: 'red', size: 'large' } },
       { name: 'Object 2', properties: { color: 'blue', size: 'small' } },
@@ -2222,7 +2222,7 @@ describe('tryParse and renderLlmRubricPrompt', () => {
   });
 
   it('should handle mixed arrays of objects and primitives', async () => {
-    const template = 'Items: {{ items if items === items|string else items|dump }}';
+    const template = 'Items: {{items if items === items|string else items|dump}}';
     const mixedArray = ['string item', { name: 'Object item' }, 42, [1, 2, 3]];
 
     const result = await renderLlmRubricPrompt(template, { items: mixedArray });
