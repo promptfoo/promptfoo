@@ -2216,7 +2216,6 @@ describe('tryParse and renderLlmRubricPrompt', () => {
     ];
 
     const result = await renderLlmRubricPrompt(template, { input: objects });
-    console.log(result);
     expect(result).not.toContain('[object Object]');
     expect(result).toBe('red');
   });
