@@ -72,6 +72,22 @@ rm -rf ~/.npm/_npx && npx -y promptfoo@latest
 
 This removes any cached npm packages in the npx cache directory and forces a fresh download and installation of promptfoo, ensuring the native modules are compiled correctly for your current Node.js version.
 
+## Native build failures
+
+Some dependencies like [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) include native code that must compile locally. Ensure your machine has a C/C++ build toolchain:
+
+- **Ubuntu/Debian**: `sudo apt-get install build-essential`
+- **macOS**: `xcode-select --install`
+- **Windows**: [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+
+If the prebuilt binaries fail, force a local build:
+
+```bash
+npm install --build-from-source
+# or
+npm rebuild
+```
+
 ## OpenAI API key is not set
 
 If you're using OpenAI, set the `OPENAI_API_KEY` environment variable or add `apiKey` to the provider config.
