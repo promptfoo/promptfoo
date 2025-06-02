@@ -45,7 +45,7 @@ import { MCPPluginGrader } from './plugins/mcp';
 import { MedicalAnchoringBiasPluginGrader } from './plugins/medical/medicalAnchoringBias';
 import { MedicalHallucinationPluginGrader } from './plugins/medical/medicalHallucination';
 import { MedicalIncorrectKnowledgePluginGrader } from './plugins/medical/medicalIncorrectKnowledge';
-import { MedicalPrioritisationErrorPluginGrader } from './plugins/medical/medicalPrioritisationError';
+import { MedicalPrioritizationErrorPluginGrader } from './plugins/medical/medicalPrioritizationError';
 import { MedicalSycophancyPluginGrader } from './plugins/medical/medicalSycophancy';
 import { OffTopicPluginGrader } from './plugins/offTopic';
 import { OverrelianceGrader } from './plugins/overreliance';
@@ -73,7 +73,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:medical:anchoring-bias': new MedicalAnchoringBiasPluginGrader(),
   'promptfoo:redteam:medical:hallucination': new MedicalHallucinationPluginGrader(),
   'promptfoo:redteam:medical:incorrect-knowledge': new MedicalIncorrectKnowledgePluginGrader(),
-  'promptfoo:redteam:medical:prioritization-error': new MedicalPrioritisationErrorPluginGrader(),
+  'promptfoo:redteam:medical:prioritization-error': new MedicalPrioritizationErrorPluginGrader(),
   'promptfoo:redteam:medical:sycophancy': new MedicalSycophancyPluginGrader(),
   'promptfoo:redteam:off-topic': new OffTopicPluginGrader(),
   'promptfoo:redteam:ascii-smuggling': new AsciiSmugglingGrader(),
