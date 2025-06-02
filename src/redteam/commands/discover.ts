@@ -112,7 +112,7 @@ export async function doTargetPurposeDiscovery(
   const sessionId = randomUUID();
 
   const pbar = new cliProgress.SingleBar({
-    format: `Discovering the target {bar} {percentage}% | {value}${DEFAULT_TURN_COUNT ? '/{total}' : ''} turns`,
+    format: `Mapping the target {bar} {percentage}% | {value}${DEFAULT_TURN_COUNT ? '/{total}' : ''} turns`,
     barCompleteChar: '\u2588',
     barIncompleteChar: '\u2591',
     hideCursor: true,

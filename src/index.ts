@@ -5,7 +5,7 @@ import guardrails from './guardrails';
 import { runDbMigrations } from './migrate';
 import Eval from './models/eval';
 import { readProviderPromptMap, processPrompts } from './prompts';
-import { loadApiProvider, loadApiProviders } from './providers';
+import { loadApiProvider, loadApiProviders, resolveProvider } from './providers';
 import { extractEntities } from './redteam/extraction/entities';
 import { extractSystemPurpose } from './redteam/extraction/purpose';
 import { GRADERS } from './redteam/graders';
@@ -13,15 +13,9 @@ import { Plugins } from './redteam/plugins';
 import { RedteamPluginBase, RedteamGraderBase } from './redteam/plugins/base';
 import { Strategies } from './redteam/strategies';
 import telemetry from './telemetry';
-import type {
-  EvaluateOptions,
-  TestSuite,
-  EvaluateTestSuite,
-  ProviderOptions,
-  Scenario,
-} from './types';
+import type { EvaluateOptions, TestSuite, EvaluateTestSuite, Scenario } from './types';
+import type { ApiProvider } from './types/providers';
 import { readFilters, writeMultipleOutputs, writeOutput } from './util';
-import invariant from './util/invariant';
 import { readTests } from './util/testCaseReader';
 
 export * from './types';
@@ -33,12 +27,21 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     await runDbMigrations();
   }
 
+  const loadedProviders = await loadApiProviders(testSuite.providers, {
+    env: testSuite.env,
+  });
+  const providerMap: Record<string, ApiProvider> = {};
+  for (const p of loadedProviders) {
+    providerMap[p.id()] = p;
+    if (p.label) {
+      providerMap[p.label] = p;
+    }
+  }
+
   const constructedTestSuite: TestSuite = {
     ...testSuite,
     scenarios: testSuite.scenarios as Scenario[],
-    providers: await loadApiProviders(testSuite.providers, {
-      env: testSuite.env,
-    }),
+    providers: loadedProviders,
     tests: await readTests(testSuite.tests),
 
     nunjucksFilters: await readFilters(testSuite.nunjucksFilters || {}),
@@ -49,26 +52,18 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
 
   // Resolve nested providers
   if (constructedTestSuite.defaultTest?.options?.provider) {
-    if (typeof constructedTestSuite.defaultTest.options.provider === 'function') {
-      constructedTestSuite.defaultTest.options.provider = await loadApiProvider(
-        constructedTestSuite.defaultTest.options.provider,
-      );
-    } else if (typeof constructedTestSuite.defaultTest.options.provider === 'object') {
-      const casted = constructedTestSuite.defaultTest.options.provider as ProviderOptions;
-      invariant(casted.id, 'Provider object must have an id');
-      constructedTestSuite.defaultTest.options.provider = await loadApiProvider(casted.id, {
-        options: casted,
-      });
-    }
+    constructedTestSuite.defaultTest.options.provider = await resolveProvider(
+      constructedTestSuite.defaultTest.options.provider,
+      providerMap,
+      { env: testSuite.env },
+    );
   }
 
   for (const test of constructedTestSuite.tests || []) {
-    if (test.options?.provider && typeof test.options.provider === 'function') {
-      test.options.provider = await loadApiProvider(test.options.provider);
-    } else if (test.options?.provider && typeof test.options.provider === 'object') {
-      const casted = test.options.provider as ProviderOptions;
-      invariant(casted.id, 'Provider object must have an id');
-      test.options.provider = await loadApiProvider(casted.id, { options: casted });
+    if (test.options?.provider) {
+      test.options.provider = await resolveProvider(test.options.provider, providerMap, {
+        env: testSuite.env,
+      });
     }
     if (test.assert) {
       for (const assertion of test.assert) {
@@ -77,15 +72,9 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
         }
 
         if (assertion.provider) {
-          if (typeof assertion.provider === 'object') {
-            const casted = assertion.provider as ProviderOptions;
-            invariant(casted.id, 'Provider object must have an id');
-            assertion.provider = await loadApiProvider(casted.id, { options: casted });
-          } else if (typeof assertion.provider === 'string') {
-            assertion.provider = await loadApiProvider(assertion.provider);
-          } else {
-            throw new Error('Invalid provider type');
-          }
+          assertion.provider = await resolveProvider(assertion.provider, providerMap, {
+            env: testSuite.env,
+          });
         }
       }
     }
