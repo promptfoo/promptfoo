@@ -25,6 +25,8 @@ import {
 } from './util';
 import type { GeminiResponseData } from './util';
 
+const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
+
 class AIStudioGenericProvider implements ApiProvider {
   modelName: string;
 
@@ -51,9 +53,9 @@ class AIStudioGenericProvider implements ApiProvider {
   }
 
   getApiUrlDefault(): string {
-    return `https://generativelanguage.googleapis.com`;
+    return `https://${DEFAULT_API_HOST}`;
   }
-  
+
   getApiHost(): string | undefined {
     const apiHost =
       this.config.apiHost ||
