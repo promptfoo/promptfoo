@@ -296,6 +296,7 @@ export abstract class RedteamGraderBase {
 
     const vars = {
       ...test.metadata,
+      goal: test.metadata?.goal || prompt,
       prompt,
       entities: test.metadata?.entities ?? [],
       tools: provider?.config?.tools
