@@ -17,7 +17,7 @@ providers:
         speechConfig:
           voiceConfig:
             prebuiltVoiceConfig:
-              voiceName: 'Puck'
+              voiceName: 'Leda'
       timeoutMs: 30000
 
   - id: 'google:live:gemini-2.0-flash-live-001'

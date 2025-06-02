@@ -5,10 +5,10 @@ description: Google Live Audio - Affective Dialog (Emotion Adaptation)
 # Learn more about affective dialog at https://ai.google.dev/gemini-api/docs/live#affective-dialog
 
 prompts:
-  - label: 'Neutral Input'
-    raw: What is Promptfoo?
+  - label: 'Positive input'
+    raw: It's a new dawn, it's a new day, and I'm feeling good.
 
-  - label: 'Sad Input'
+  - label: 'Negative Input'
     raw: |
       I looked in the fridge and I found nothing. 
       I think someone ate my sandwich

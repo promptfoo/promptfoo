@@ -2,7 +2,7 @@
 description: Google Live Simple Audio Test
 
 prompts:
-  - 'Whisper and say hello'
+  - "How you doin'?"
 
 providers:
   - id: 'google:live:gemini-2.0-flash-live-001'
@@ -19,7 +19,7 @@ tests:
         value: |
           // Access the audio transcript from the provider response
           if (context.providerResponse && context.providerResponse.audio && context.providerResponse.audio.transcript) {
-            return context.providerResponse.audio.transcript.toLowerCase().includes('hello');
+            return context.providerResponse.audio.transcript.toLowerCase().includes('well');
           }
           return false;
 
