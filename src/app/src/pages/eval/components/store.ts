@@ -17,9 +17,7 @@ function computeHighlightCount(table: EvaluateTable | null): number {
     return 0;
   }
   return table.body.reduce((count, row) => {
-    return row.outputs.some((o) =>
-      o.gradingResult?.comment?.trim().startsWith('!highlight')
-    )
+    return row.outputs.some((o) => o.gradingResult?.comment?.trim().startsWith('!highlight'))
       ? count + 1
       : count;
   }, 0);
@@ -193,8 +191,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
   setTotalResultsCount: (count: number) => set(() => ({ totalResultsCount: count })),
 
   highlightedResultsCount: 0,
-  setHighlightedResultsCount: (count: number) =>
-    set(() => ({ highlightedResultsCount: count })),
+  setHighlightedResultsCount: (count: number) => set(() => ({ highlightedResultsCount: count })),
 
   isFetching: false,
 
