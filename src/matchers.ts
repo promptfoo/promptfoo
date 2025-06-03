@@ -1,7 +1,7 @@
 import path from 'path';
 import { loadFromJavaScriptFile } from './assertions/utils';
 import cliState from './cliState';
-import { getEnvString } from './envars';
+import { getEnvString, getEnvBool } from './envars';
 import logger from './logger';
 import {
   ANSWER_RELEVANCY_GENERATE,
@@ -381,7 +381,11 @@ async function loadRubricPrompt(
   return rubricPrompt;
 }
 
-function tryParse(content: string) {
+function tryParse(content: string | object) {
+  if (typeof content === 'object') {
+    return content;
+  }
+
   try {
     return JSON.parse(content);
   } catch {}
@@ -396,11 +400,39 @@ export async function renderLlmRubricPrompt(
   rubricPrompt: string,
   context: Record<string, string | object>,
 ) {
+  // Check if object template access is enabled
+  const enableObjectAccess = getEnvBool('PROMPTFOO_ENABLE_OBJECT_TEMPLATE_ACCESS', false);
+
+  let processedContext: Record<string, string | object>;
+
+  if (enableObjectAccess) {
+    // New behavior: pass objects directly for property access
+    processedContext = context;
+  } else {
+    // Default behavior: stringify objects to maintain compatibility
+    processedContext = Object.fromEntries(
+      Object.entries(context).map(([key, value]) => {
+        if (value && typeof value === 'object') {
+          // For arrays, stringify individual elements
+          if (Array.isArray(value)) {
+            return [
+              key,
+              value.map((item) => (typeof item === 'object' ? JSON.stringify(item) : item)),
+            ];
+          }
+          // For objects, stringify the entire object
+          return [key, JSON.stringify(value)];
+        }
+        return [key, value];
+      }),
+    );
+  }
+
   try {
     // Render every string scalar within the JSON
     // Does not render object keys (only values)
     const parsed = JSON.parse(rubricPrompt, (k, v) =>
-      typeof v === 'string' ? nunjucks.renderString(v, context) : v,
+      typeof v === 'string' ? nunjucks.renderString(v, processedContext) : v,
     );
     return JSON.stringify(parsed);
   } catch {
@@ -409,7 +441,7 @@ export async function renderLlmRubricPrompt(
   }
 
   // Legacy rendering for non-JSON prompts
-  return nunjucks.renderString(rubricPrompt, context);
+  return nunjucks.renderString(rubricPrompt, processedContext);
 }
 
 export async function matchesLlmRubric(

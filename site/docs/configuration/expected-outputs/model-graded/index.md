@@ -267,7 +267,7 @@ defaultTest:
           "role": "user",
           "content": [
             { "type": "image_url", "image_url": { "url": "{{image_url}}" } },
-            { "type": "text", "text": "Output: {{ output if output === output|string else output|dump }}\nRubric: {{ rubric if rubric === rubric|string else rubric|dump }}" }
+            { "type": "text", "text": "Output: {{ output }}\nRubric: {{ rubric }}" }
           ]
         }
       ]

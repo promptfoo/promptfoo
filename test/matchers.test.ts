@@ -327,7 +327,7 @@ describe('matchesLlmRubric', () => {
     const rubric = { prompt: 'Describe the image' };
     const output = 'Sample output';
     const options: GradingConfig = {
-      rubricPrompt: 'Grade: {{ rubric if rubric === rubric|string else rubric|dump }}',
+      rubricPrompt: 'Grade: {{ rubric }}',
       provider: {
         id: () => 'test-provider',
         callApi: jest.fn().mockResolvedValue({
@@ -2115,7 +2115,7 @@ describe('matchesModeration', () => {
 });
 
 describe('tryParse and renderLlmRubricPrompt', () => {
-  let tryParse: (content: string | null | undefined) => any;
+  let tryParse: (content: string | object | null | undefined) => any;
 
   beforeAll(async () => {
     const context: { capturedFn: null | Function } = { capturedFn: null };
@@ -2127,7 +2127,10 @@ describe('tryParse and renderLlmRubricPrompt', () => {
       },
     });
 
-    tryParse = function (content: string | null | undefined) {
+    tryParse = function (content: string | object | null | undefined) {
+      if (typeof content === 'object') {
+        return content;
+      }
       try {
         if (content === null || content === undefined) {
           return content;
@@ -2136,6 +2139,11 @@ describe('tryParse and renderLlmRubricPrompt', () => {
       } catch {}
       return content;
     };
+  });
+
+  afterEach(() => {
+    // Clean up environment variable after each test
+    delete process.env.PROMPTFOO_ENABLE_OBJECT_TEMPLATE_ACCESS;
   });
 
   it('should parse valid JSON', () => {
@@ -2158,6 +2166,11 @@ describe('tryParse and renderLlmRubricPrompt', () => {
     expect(tryParse(undefined)).toBeUndefined();
   });
 
+  it('should handle objects directly', () => {
+    const input = { key: 'value' };
+    expect(tryParse(input)).toEqual({ key: 'value' });
+  });
+
   it('should render strings inside JSON objects', async () => {
     const template = '{"role": "user", "content": "Hello {{name}}"}';
     const result = await renderLlmRubricPrompt(template, { name: 'World' });
@@ -2178,34 +2191,23 @@ describe('tryParse and renderLlmRubricPrompt', () => {
     expect(result).toBe('Hello World');
   });
 
-  it('should render default grading prompts correctly', async () => {
+  it('should stringify objects by default (PROMPTFOO_ENABLE_OBJECT_TEMPLATE_ACCESS=false)', async () => {
+    process.env.PROMPTFOO_ENABLE_OBJECT_TEMPLATE_ACCESS = 'false';
+
     const template = DEFAULT_GRADING_PROMPT;
     const complexObject = { output: 'bar', rubric: { reasoning: '123', priority: 'high' } };
     const result = await renderLlmRubricPrompt(template, complexObject);
     const parsed = JSON.parse(result);
     const userMessage = parsed.find((m: any) => m.role === 'user');
-    // To make it non-breaking, this should still be stringified JSON instead of [object Object]
+
+    // Objects should be stringified
     expect(userMessage.content).toContain('bar');
     expect(userMessage.content).toContain('{"reasoning":"123","priority":"high"}');
   });
 
-  it('should properly stringify objects', async () => {
-    const template = 'Source Text:\n{{ input if input === input|string else input|dump }}';
-    // Create objects that would typically cause the [object Object] issue
-    const objects = [
-      { name: 'Object 1', properties: { color: 'red', size: 'large' } },
-      { name: 'Object 2', properties: { color: 'blue', size: 'small' } },
-    ];
+  it('should allow object property access when enabled (PROMPTFOO_ENABLE_OBJECT_TEMPLATE_ACCESS=true)', async () => {
+    process.env.PROMPTFOO_ENABLE_OBJECT_TEMPLATE_ACCESS = 'true';
 
-    const result = await renderLlmRubricPrompt(template, { input: objects });
-
-    // With our fix, this should properly stringify the objects
-    expect(result).not.toContain('[object Object]');
-    expect(result).toContain(JSON.stringify(objects[0]));
-    expect(result).toContain(JSON.stringify(objects[1]));
-  });
-
-  it('should make it possible to access nested object attributes', async () => {
     const template = '{{input[0].properties.color}}';
     const objects = [
       { name: 'Object 1', properties: { color: 'red', size: 'large' } },
@@ -2217,8 +2219,28 @@ describe('tryParse and renderLlmRubricPrompt', () => {
     expect(result).toBe('red');
   });
 
-  it('should handle mixed arrays of objects and primitives', async () => {
-    const template = 'Items: {{items if items === items|string else items|dump}}';
+  it('should stringify objects when PROMPTFOO_ENABLE_OBJECT_TEMPLATE_ACCESS is disabled', async () => {
+    process.env.PROMPTFOO_ENABLE_OBJECT_TEMPLATE_ACCESS = 'false';
+
+    const template = 'Source Text:\n{{input}}';
+    // Create objects that would typically cause the [object Object] issue
+    const objects = [
+      { name: 'Object 1', properties: { color: 'red', size: 'large' } },
+      { name: 'Object 2', properties: { color: 'blue', size: 'small' } },
+    ];
+
+    const result = await renderLlmRubricPrompt(template, { input: objects });
+
+    // Objects should be stringified, not show [object Object]
+    expect(result).not.toContain('[object Object]');
+    expect(result).toContain(JSON.stringify(objects[0]));
+    expect(result).toContain(JSON.stringify(objects[1]));
+  });
+
+  it('should handle mixed arrays of objects and primitives when objects are stringified', async () => {
+    process.env.PROMPTFOO_ENABLE_OBJECT_TEMPLATE_ACCESS = 'false';
+
+    const template = 'Items: {{items}}';
     const mixedArray = ['string item', { name: 'Object item' }, 42, [1, 2, 3]];
 
     const result = await renderLlmRubricPrompt(template, { items: mixedArray });

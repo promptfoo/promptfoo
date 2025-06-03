@@ -24,8 +24,7 @@ export const DEFAULT_GRADING_PROMPT = JSON.stringify([
   },
   {
     role: 'user',
-    content:
-      '<Output>\n{{ output if output === output|string else output|dump }}\n</Output>\n<Rubric>\n{{ rubric if rubric === rubric|string else rubric|dump }}\n</Rubric>',
+    content: '<Output>\n{{ output }}\n</Output>\n<Rubric>\n{{ rubric }}\n</Rubric>',
   },
 ]);
 
@@ -62,15 +61,15 @@ export const PROMPTFOO_FACTUALITY_PROMPT = JSON.stringify([
       I need you to compare these answers:
 
       <question>
-      {{input if input === input|string else input|dump}}
+      {{input}}
       </question>
 
       <expert_answer>
-      {{ideal if ideal === ideal|string else ideal|dump}}
+      {{ideal}}
       </expert_answer>
 
       <submitted_answer>
-      {{completion if completion === completion|string else completion|dump}}
+      {{completion}}
       </submitted_answer>
 
       Please analyze the factual relationship between these answers according to the categories you've been given.`,
@@ -83,11 +82,11 @@ export const OPENAI_CLOSED_QA_PROMPT = JSON.stringify([
     content: `You are assessing a submitted answer on a given task based on a criterion. Here is the data:
 [BEGIN DATA]
 ***
-[Task]: {{input if input === input|string else input|dump}}
+[Task]: {{input}}
 ***
-[Submission]: {{completion if completion === completion|string else completion|dump}}
+[Submission]: {{completion}}
 ***
-[Criterion]: {{criteria if criteria === criteria|string else criteria|dump}}
+[Criterion]: {{criteria}}
 ***
 [END DATA]
 Does the submission meet the criterion? First, write out in a step by step manner your reasoning about the criterion to be sure that your conclusion is correct. Avoid simply stating the correct answers at the outset. Then print only the single character "Y" or "N" (without quotes or punctuation) on its own line corresponding to the correct answer. At the end, repeat just the letter again by itself on a new line.
@@ -114,7 +113,7 @@ Here are the pieces of text:
 
 {% for output in outputs %}
 <Text index="{{ loop.index0 }}">
-{{ output if output === output|string else output|dump }}
+{{ output }}
 </Text>
 {% endfor %}
 
