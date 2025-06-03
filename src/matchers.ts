@@ -397,11 +397,9 @@ function processContextForTemplating(
   enableObjectAccess: boolean,
 ): Record<string, string | object> {
   if (enableObjectAccess) {
-    // Pass objects directly for property access
     return context;
   }
 
-  // Stringify objects to maintain compatibility
   return Object.fromEntries(
     Object.entries(context).map(([key, value]) => {
       if (value && typeof value === 'object') {
@@ -422,7 +420,6 @@ export async function renderLlmRubricPrompt(
   rubricPrompt: string,
   context: Record<string, string | object>,
 ) {
-  // Check if object stringification is disabled (allowing direct object access)
   const enableObjectAccess = getEnvBool('PROMPTFOO_DISABLE_OBJECT_STRINGIFY', false);
   const processedContext = processContextForTemplating(context, enableObjectAccess);
 
