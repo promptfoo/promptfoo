@@ -96,26 +96,26 @@ const COMMAND = 'discover';
 // Utils
 // ========================================================
 
+// Helper function to check if a string value should be considered null
+const isNullLike = (value: string | null | undefined): boolean => {
+  return !value || value === 'null' || value.trim() === '';
+};
+
+// Helper function to clean tools array
+const cleanTools = (tools: Array<any> | null | undefined): Array<any> => {
+  if (!tools || !Array.isArray(tools)) {
+    return [];
+  }
+  return tools.filter((tool) => tool !== null && typeof tool === 'object');
+};
+
 /**
  * Normalizes a TargetPurposeDiscoveryResult by converting null-like values to actual null
  * and cleaning up empty or meaningless content.
  */
-function normalizeTargetPurposeDiscoveryResult(
+export function normalizeTargetPurposeDiscoveryResult(
   result: TargetPurposeDiscoveryResult,
 ): TargetPurposeDiscoveryResult {
-  // Helper function to check if a string value should be considered null
-  const isNullLike = (value: string | null | undefined): boolean => {
-    return !value || value === 'null' || value.trim() === '';
-  };
-
-  // Helper function to clean tools array
-  const cleanTools = (tools: Array<any> | null | undefined): Array<any> => {
-    if (!tools || !Array.isArray(tools)) {
-      return [];
-    }
-    return tools.filter((tool) => tool !== null && typeof tool === 'object');
-  };
-
   return {
     purpose: isNullLike(result.purpose) ? null : result.purpose,
     limitations: isNullLike(result.limitations) ? null : result.limitations,
@@ -476,5 +476,3 @@ export function discoverCommand(
       process.exit();
     });
 }
-
-export { LOG_PREFIX, COMMAND, normalizeTargetPurposeDiscoveryResult };
