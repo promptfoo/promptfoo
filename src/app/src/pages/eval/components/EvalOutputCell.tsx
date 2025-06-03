@@ -372,12 +372,139 @@ function EvalOutputCell({
     }
   }
 
+  const cellStyle = useMemo(() => {
+    const base = output.gradingResult?.comment?.startsWith('!highlight')
+      ? {
+          backgroundColor: 'var(--cell-highlight-color)',
+        }
+      : {};
+
+    return {
+      ...base,
+      '--max-image-width': `${maxImageWidth}px`,
+      '--max-image-height': `${maxImageHeight}px`,
+    } as CSSPropertiesWithCustomVars;
+  }, [output.gradingResult?.comment, maxImageWidth, maxImageHeight]);
+
+  // Style for main content area when highlighted
+  const contentStyle = useMemo(() => {
+    return output.gradingResult?.comment?.startsWith('!highlight')
+      ? { color: 'var(--cell-highlight-text-color)' }
+      : {};
+  }, [output.gradingResult?.comment]);
+
+  // Pass/fail badge creation
+  let passCount = 0;
+  let failCount = 0;
+  let errorCount = 0;
+  const gradingResult = output.gradingResult;
+
+  if (gradingResult) {
+    if (gradingResult.componentResults) {
+      gradingResult.componentResults.forEach((result) => {
+        if (result?.pass) {
+          passCount++;
+        } else {
+          failCount++;
+        }
+      });
+    } else {
+      passCount = gradingResult.pass ? 1 : 0;
+      failCount = gradingResult.pass ? 0 : 1;
+    }
+  } else if (output.pass) {
+    passCount = 1;
+  } else if (!output.pass) {
+    failCount = 1;
+  }
+
+  if (output.failureReason === ResultFailureReason.ERROR) {
+    errorCount = 1;
+  }
+
+  let passFailText;
+  if (errorCount === 1) {
+    passFailText = 'ERROR';
+  } else if (failCount === 1 && passCount === 1) {
+    passFailText = (
+      <>
+        {`${failCount} FAIL`} {`${passCount} PASS`}
+      </>
+    );
+  } else {
+    let failText = '';
+    if (failCount > 1 || (passCount > 1 && failCount > 0)) {
+      failText = `${failCount} FAIL`;
+    } else if (failCount === 1) {
+      failText = 'FAIL';
+    }
+
+    let passText = '';
+    if (passCount > 1 || (failCount > 1 && passCount > 0)) {
+      passText = `${passCount} PASS`;
+    } else if (passCount === 1 && failCount === 0) {
+      passText = 'PASS';
+    }
+    const separator = failText && passText ? ' ' : '';
+
+    passFailText = (
+      <>
+        {failText}
+        {separator}
+        {passText}
+      </>
+    );
+  }
+
+  const scoreString = scoreToString(output.score);
+
+  const getCombinedContextText = () => {
+    if (!output.gradingResult?.componentResults) {
+      return output.text;
+    }
+
+    return output.gradingResult.componentResults
+      .map((result, index) => {
+        const displayName = result.assertion?.metric || result.assertion?.type || 'unknown';
+        const value = result.assertion?.value || '';
+        return `Assertion ${index + 1} (${displayName}): ${value}`;
+      })
+      .join('\n\n');
+  };
+
+  const providerOverride = useMemo(() => {
+    const provider = output.testCase?.provider;
+    let testCaseProvider: string | null = null;
+
+    if (!provider) {
+      return null;
+    }
+
+    if (typeof provider === 'string') {
+      testCaseProvider = provider;
+    } else if (typeof provider === 'object' && 'id' in provider) {
+      const id = provider.id;
+      if (typeof id === 'string') {
+        testCaseProvider = id;
+      }
+    }
+
+    if (testCaseProvider) {
+      return (
+        <Tooltip title="Model override for this test" arrow placement="top">
+          <span className="provider pill">{testCaseProvider}</span>
+        </Tooltip>
+      );
+    }
+    return null;
+  }, [output]);
+
   const commentTextToDisplay = output.gradingResult?.comment?.startsWith('!highlight')
     ? output.gradingResult.comment.slice('!highlight'.length).trim()
     : output.gradingResult?.comment;
 
   const comment = commentTextToDisplay ? (
-    <div className="comment" onClick={handleCommentOpen}>
+    <div className="comment" onClick={handleCommentOpen} style={contentStyle}>
       {commentTextToDisplay}
     </div>
   ) : null;
@@ -486,127 +613,6 @@ function EvalOutputCell({
     </div>
   );
 
-  const cellStyle = useMemo(() => {
-    const base = output.gradingResult?.comment?.startsWith('!highlight')
-      ? {
-          backgroundColor: 'var(--cell-highlight-color)',
-          color: 'var(--cell-highlight-text-color)',
-        }
-      : {};
-
-    return {
-      ...base,
-      '--max-image-width': `${maxImageWidth}px`,
-      '--max-image-height': `${maxImageHeight}px`,
-    } as CSSPropertiesWithCustomVars;
-  }, [output.gradingResult?.comment, maxImageWidth, maxImageHeight]);
-
-  // Pass/fail badge creation
-  let passCount = 0;
-  let failCount = 0;
-  let errorCount = 0;
-  const gradingResult = output.gradingResult;
-
-  if (gradingResult) {
-    if (gradingResult.componentResults) {
-      gradingResult.componentResults.forEach((result) => {
-        if (result?.pass) {
-          passCount++;
-        } else {
-          failCount++;
-        }
-      });
-    } else {
-      passCount = gradingResult.pass ? 1 : 0;
-      failCount = gradingResult.pass ? 0 : 1;
-    }
-  } else if (output.pass) {
-    passCount = 1;
-  } else if (!output.pass) {
-    failCount = 1;
-  }
-
-  if (output.failureReason === ResultFailureReason.ERROR) {
-    errorCount = 1;
-  }
-
-  let passFailText;
-  if (errorCount === 1) {
-    passFailText = 'ERROR';
-  } else if (failCount === 1 && passCount === 1) {
-    passFailText = (
-      <>
-        {`${failCount} FAIL`} {`${passCount} PASS`}
-      </>
-    );
-  } else {
-    let failText = '';
-    if (failCount > 1 || (passCount > 1 && failCount > 0)) {
-      failText = `${failCount} FAIL`;
-    } else if (failCount === 1) {
-      failText = 'FAIL';
-    }
-
-    let passText = '';
-    if (passCount > 1 || (failCount > 1 && passCount > 0)) {
-      passText = `${passCount} PASS`;
-    } else if (passCount === 1 && failCount === 0) {
-      passText = 'PASS';
-    }
-    const separator = failText && passText ? ' ' : '';
-
-    passFailText = (
-      <>
-        {failText}
-        {separator}
-        {passText}
-      </>
-    );
-  }
-
-  const scoreString = scoreToString(output.score);
-
-  const getCombinedContextText = () => {
-    if (!output.gradingResult?.componentResults) {
-      return output.text;
-    }
-
-    return output.gradingResult.componentResults
-      .map((result, index) => {
-        const displayName = result.assertion?.metric || result.assertion?.type || 'unknown';
-        const value = result.assertion?.value || '';
-        return `Assertion ${index + 1} (${displayName}): ${value}`;
-      })
-      .join('\n\n');
-  };
-
-  const providerOverride = useMemo(() => {
-    const provider = output.testCase?.provider;
-    let testCaseProvider: string | null = null;
-
-    if (!provider) {
-      return null;
-    }
-
-    if (typeof provider === 'string') {
-      testCaseProvider = provider;
-    } else if (typeof provider === 'object' && 'id' in provider) {
-      const id = provider.id;
-      if (typeof id === 'string') {
-        testCaseProvider = id;
-      }
-    }
-
-    if (testCaseProvider) {
-      return (
-        <Tooltip title="Model override for this test" arrow placement="top">
-          <span className="provider pill">{testCaseProvider}</span>
-        </Tooltip>
-      );
-    }
-    return null;
-  }, [output]);
-
   return (
     <div className="cell" style={cellStyle}>
       {showPassFail && (
@@ -632,7 +638,9 @@ function EvalOutputCell({
           {output.prompt}
         </div>
       )}
-      <TruncatedText text={node || text} maxLength={maxTextLength} />
+      <div style={contentStyle}>
+        <TruncatedText text={node || text} maxLength={maxTextLength} />
+      </div>
       {comment}
       {detail}
       {actions}
