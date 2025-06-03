@@ -438,64 +438,54 @@ export async function doEval(
         completionDetails: tokenUsage.completionDetails,
       };
 
-      printBorder();
-      logger.info(chalk.bold('Token Usage Summary:'));
-
-      if (isRedteam) {
-        logger.info(
-          `  ${chalk.cyan('Probes:')} ${chalk.white.bold(tokenUsage.numRequests.toLocaleString())}`,
-        );
-      }
-
-      // Eval tokens
-      logger.info(`\n  ${chalk.yellow.bold('Evaluation:')}`);
-      logger.info(`    ${chalk.gray('Total:')} ${chalk.white(evalTokens.total.toLocaleString())}`);
-      logger.info(
-        `    ${chalk.gray('Prompt:')} ${chalk.white(evalTokens.prompt.toLocaleString())}`,
-      );
-      logger.info(
-        `    ${chalk.gray('Completion:')} ${chalk.white(evalTokens.completion.toLocaleString())}`,
-      );
-      if (evalTokens.cached > 0) {
-        logger.info(
-          `    ${chalk.gray('Cached:')} ${chalk.green(evalTokens.cached.toLocaleString())}`,
-        );
-      }
-      if (evalTokens.completionDetails.reasoning > 0) {
-        logger.info(
-          `    ${chalk.gray('Reasoning:')} ${chalk.white(evalTokens.completionDetails.reasoning.toLocaleString())}`,
-        );
-      }
-
-      // Grading tokens
-      if (tokenUsage.assertions.total > 0) {
-        logger.info(`\n  ${chalk.magenta.bold('Grading:')}`);
-        logger.info(
-          `    ${chalk.gray('Total:')} ${chalk.white(tokenUsage.assertions.total.toLocaleString())}`,
-        );
-        logger.info(
-          `    ${chalk.gray('Prompt:')} ${chalk.white(tokenUsage.assertions.prompt.toLocaleString())}`,
-        );
-        logger.info(
-          `    ${chalk.gray('Completion:')} ${chalk.white(tokenUsage.assertions.completion.toLocaleString())}`,
-        );
-        if (tokenUsage.assertions.cached > 0) {
-          logger.info(
-            `    ${chalk.gray('Cached:')} ${chalk.green(tokenUsage.assertions.cached.toLocaleString())}`,
-          );
-        }
-        if (tokenUsage.assertions.completionDetails?.reasoning > 0) {
-          logger.info(
-            `    ${chalk.gray('Reasoning:')} ${chalk.white(tokenUsage.assertions.completionDetails.reasoning.toLocaleString())}`,
-          );
-        }
-      }
-
-      // Grand total
       const combinedTotal = evalTokens.total + tokenUsage.assertions.total;
-      logger.info(
-        `\n  ${chalk.blue.bold('Grand Total:')} ${chalk.white.bold(combinedTotal.toLocaleString())} tokens`,
-      );
+
+      printBorder();
+      logger.info(dedent`
+        ${chalk.bold('Token Usage Summary:')}
+        ${
+          isRedteam
+            ? `
+          ${chalk.cyan('Probes:')} ${chalk.white.bold(tokenUsage.numRequests.toLocaleString())}
+        `
+            : ''
+        }
+          ${chalk.yellow.bold('Evaluation:')}
+            ${chalk.gray('Total:')} ${chalk.white(evalTokens.total.toLocaleString())}
+            ${chalk.gray('Prompt:')} ${chalk.white(evalTokens.prompt.toLocaleString())}
+            ${chalk.gray('Completion:')} ${chalk.white(evalTokens.completion.toLocaleString())}${
+              evalTokens.cached > 0
+                ? `
+            ${chalk.gray('Cached:')} ${chalk.green(evalTokens.cached.toLocaleString())}`
+                : ''
+            }${
+              evalTokens.completionDetails.reasoning > 0
+                ? `
+            ${chalk.gray('Reasoning:')} ${chalk.white(evalTokens.completionDetails.reasoning.toLocaleString())}`
+                : ''
+            }
+        ${
+          tokenUsage.assertions.total > 0
+            ? `
+          ${chalk.magenta.bold('Grading:')}
+            ${chalk.gray('Total:')} ${chalk.white(tokenUsage.assertions.total.toLocaleString())}
+            ${chalk.gray('Prompt:')} ${chalk.white(tokenUsage.assertions.prompt.toLocaleString())}
+            ${chalk.gray('Completion:')} ${chalk.white(tokenUsage.assertions.completion.toLocaleString())}${
+              tokenUsage.assertions.cached > 0
+                ? `
+            ${chalk.gray('Cached:')} ${chalk.green(tokenUsage.assertions.cached.toLocaleString())}`
+                : ''
+            }${
+              tokenUsage.assertions.completionDetails?.reasoning > 0
+                ? `
+            ${chalk.gray('Reasoning:')} ${chalk.white(tokenUsage.assertions.completionDetails.reasoning.toLocaleString())}`
+                : ''
+            }
+        `
+            : ''
+        }
+          ${chalk.blue.bold('Grand Total:')} ${chalk.white.bold(combinedTotal.toLocaleString())} tokens
+      `);
     }
 
     telemetry.record('command_used', {
