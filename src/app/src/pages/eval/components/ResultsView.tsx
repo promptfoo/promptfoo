@@ -605,14 +605,19 @@ export default function ResultsView({
           ) : (
             <>{filteredResultsCount} results</>
           )}
-          {highlightedResultsCount > 0 && (
-            <Chip
-              size="small"
-              label={`Highlighted: ${highlightedResultsCount}`}
-              sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
-            />
-          )}
         </Box>
+        {highlightedResultsCount > 0 && (
+          <Chip
+            size="small"
+            label={`${highlightedResultsCount} highlighted`}
+            sx={{
+              backgroundColor: 'rgba(25, 118, 210, 0.08)',
+              color: 'rgba(25, 118, 210, 1)',
+              border: '1px solid rgba(25, 118, 210, 0.2)',
+              fontWeight: 500,
+            }}
+          />
+        )}
         <Box flexGrow={1} />
         <Box display="flex" justifyContent="flex-end">
           <ResponsiveStack direction="row" spacing={2}>

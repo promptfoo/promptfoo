@@ -17,9 +17,10 @@ function computeHighlightCount(table: EvaluateTable | null): number {
     return 0;
   }
   return table.body.reduce((count, row) => {
-    return row.outputs.some((o) => o.gradingResult?.comment?.trim().startsWith('!highlight'))
-      ? count + 1
-      : count;
+    return (
+      count +
+      row.outputs.filter((o) => o.gradingResult?.comment?.trim().startsWith('!highlight')).length
+    );
   }, 0);
 }
 
@@ -63,7 +64,6 @@ interface TableState {
   setFilteredResultsCount: (count: number) => void;
 
   highlightedResultsCount: number;
-  setHighlightedResultsCount: (count: number) => void;
 
   totalResultsCount: number;
   setTotalResultsCount: (count: number) => void;
@@ -191,7 +191,6 @@ export const useTableStore = create<TableState>()((set, get) => ({
   setTotalResultsCount: (count: number) => set(() => ({ totalResultsCount: count })),
 
   highlightedResultsCount: 0,
-  setHighlightedResultsCount: (count: number) => set(() => ({ highlightedResultsCount: count })),
 
   isFetching: false,
 
