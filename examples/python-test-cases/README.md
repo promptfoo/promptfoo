@@ -29,6 +29,7 @@ tests:
 ## Requirements
 
 1. **Python Dependencies**:
+
    ```bash
    pip install pandas
    ```
@@ -49,13 +50,17 @@ promptfoo eval
 ## Features Demonstrated
 
 ### 1. Backward Compatibility
+
 The old format still works:
+
 ```yaml
 - file://test_cases.py:generate_simple_tests
 ```
 
 ### 2. Simple Configuration
+
 Pass configuration to customize test generation:
+
 ```yaml
 - path: file://test_cases.py:generate_simple_tests
   config:
@@ -63,7 +68,9 @@ Pass configuration to customize test generation:
 ```
 
 ### 3. Row Limiting
+
 Control how many test cases are generated:
+
 ```yaml
 - path: file://test_cases.py:generate_from_csv
   config:
@@ -77,14 +84,15 @@ The Python functions accept an optional `config` parameter:
 ```python
 def generate_simple_tests(config=None):
     languages = ["Spanish", "French"]  # defaults
-    
+
     if config:
         languages = config.get("languages", languages)
-    
+
     # Generate test cases using the configuration...
 ```
 
 This enables:
+
 - **Backward compatibility**: Existing generators work unchanged
 - **Flexible configuration**: Pass any parameters as JSON
 - **Reusable functions**: Same function, different configurations

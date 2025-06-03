@@ -18,7 +18,7 @@ interface DatabaseConfig {
 // Generate test cases dynamically from a database with optional configuration
 export async function generateFromDatabase(config?: DatabaseConfig) {
   // : Promise<TestCase[]> {
-  
+
   // Default configuration
   const defaultConfig = {
     dataset: 'basic_translations',
@@ -26,9 +26,9 @@ export async function generateFromDatabase(config?: DatabaseConfig) {
     languages: [],
     difficulty: 'basic' as const,
   };
-  
+
   const mergedConfig = { ...defaultConfig, ...config };
-  
+
   // Simulate different database queries based on configuration
   const mockDb = {
     query: async (dataset: string, difficulty: string) => {
@@ -38,13 +38,21 @@ export async function generateFromDatabase(config?: DatabaseConfig) {
             { input: 'Good night', language: 'Italian', expected: 'Buona notte' },
             { input: 'Thank you', language: 'German', expected: 'Danke' },
             { input: 'Hello', language: 'Spanish', expected: 'Hola' },
-            { input: 'Please', language: 'French', expected: 'S\'il vous plaît' },
+            { input: 'Please', language: 'French', expected: "S'il vous plaît" },
           ],
           intermediate: [
             { input: 'How much does this cost?', language: 'Italian', expected: 'Quanto costa?' },
-            { input: 'Where is the train station?', language: 'German', expected: 'Wo ist der Bahnhof?' },
+            {
+              input: 'Where is the train station?',
+              language: 'German',
+              expected: 'Wo ist der Bahnhof?',
+            },
             { input: 'Can you help me?', language: 'Spanish', expected: '¿Puedes ayudarme?' },
-            { input: 'I would like to order', language: 'French', expected: 'Je voudrais commander' },
+            {
+              input: 'I would like to order',
+              language: 'French',
+              expected: 'Je voudrais commander',
+            },
           ],
         },
         travel_phrases: {
@@ -55,25 +63,41 @@ export async function generateFromDatabase(config?: DatabaseConfig) {
             { input: 'Taxi', language: 'French', expected: 'Taxi' },
           ],
           intermediate: [
-            { input: 'I need a taxi to the airport', language: 'Italian', expected: 'Ho bisogno di un taxi per l\'aeroporto' },
-            { input: 'What time does the hotel close?', language: 'German', expected: 'Wann schließt das Hotel?' },
-            { input: 'Do you have a table for two?', language: 'Spanish', expected: '¿Tienen una mesa para dos?' },
-            { input: 'The bill, please', language: 'French', expected: 'L\'addition, s\'il vous plaît' },
+            {
+              input: 'I need a taxi to the airport',
+              language: 'Italian',
+              expected: "Ho bisogno di un taxi per l'aeroporto",
+            },
+            {
+              input: 'What time does the hotel close?',
+              language: 'German',
+              expected: 'Wann schließt das Hotel?',
+            },
+            {
+              input: 'Do you have a table for two?',
+              language: 'Spanish',
+              expected: '¿Tienen una mesa para dos?',
+            },
+            {
+              input: 'The bill, please',
+              language: 'French',
+              expected: "L'addition, s'il vous plaît",
+            },
           ],
         },
       };
-      
+
       return datasets[dataset]?.[difficulty] || datasets.basic_translations.basic;
     },
   };
 
   let results = await mockDb.query(mergedConfig.dataset, mergedConfig.difficulty);
-  
+
   // Apply language filtering if specified
   if (mergedConfig.languages.length > 0) {
-    results = results.filter(row => mergedConfig.languages.includes(row.language));
+    results = results.filter((row) => mergedConfig.languages.includes(row.language));
   }
-  
+
   // Apply result limiting
   results = results.slice(0, mergedConfig.max_results);
 

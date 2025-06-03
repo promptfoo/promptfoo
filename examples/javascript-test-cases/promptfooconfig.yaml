@@ -20,22 +20,22 @@ tests:
   # Load basic translations with language filtering
   - path: file://dynamicTests.ts:generateFromDatabase
     config:
-      dataset: "basic_translations"
-      difficulty: "basic"
-      languages: ["German", "Spanish"]
+      dataset: 'basic_translations'
+      difficulty: 'basic'
+      languages: ['German', 'Spanish']
       max_results: 3
 
   # Load intermediate difficulty travel phrases
   - path: file://dynamicTests.ts:generateFromDatabase
     config:
-      dataset: "travel_phrases"
-      difficulty: "intermediate"
+      dataset: 'travel_phrases'
+      difficulty: 'intermediate'
       max_results: 2
 
   # Load intermediate translations with specific languages
   - path: file://dynamicTests.ts:generateFromDatabase
     config:
-      dataset: "basic_translations"
-      difficulty: "intermediate"
-      languages: ["French"]
+      dataset: 'basic_translations'
+      difficulty: 'intermediate'
+      languages: ['French']
       max_results: 1

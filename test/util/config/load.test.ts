@@ -343,7 +343,9 @@ describe('combineConfigs', () => {
       },
     ]);
 
-    expect(result.tests?.[0]).toEqual({ vars: { topic: 'bananas' } });
+    expect(Array.isArray(result.tests)).toBe(true);
+    const tests = result.tests as any[];
+    expect(tests[0]).toEqual({ vars: { topic: 'bananas' } });
   });
 
   it('throws error for unsupported configuration file format', async () => {
