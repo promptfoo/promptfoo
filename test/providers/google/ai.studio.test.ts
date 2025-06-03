@@ -78,32 +78,53 @@ describe('AIStudioChatProvider', () => {
       expect(providerWithNoKey.getApiKey()).toBeUndefined();
     });
 
-    it('should handle API host from different sources and render with Nunjucks', () => {
+    it('should resolve API URL from various sources and render with Nunjucks', () => {
       const mockRenderString = jest.fn((str) => `rendered-${str}`);
       jest.mocked(templates.getNunjucksEngine).mockReturnValue({
         renderString: mockRenderString,
       } as any);
 
-      // From config
+      // From config.apiHost
       const providerWithConfigHost = new AIStudioChatProvider('gemini-pro', {
         config: { apiHost: 'custom.host.com' },
       });
-      expect(providerWithConfigHost.getApiHost()).toBe('rendered-custom.host.com');
+      expect(providerWithConfigHost.getApiUrl()).toBe('https://rendered-custom.host.com');
       expect(mockRenderString).toHaveBeenCalledWith('custom.host.com', {});
 
-      // From env override
+      // From env override: GOOGLE_API_HOST
       const providerWithEnvOverride = new AIStudioChatProvider('gemini-pro', {
         env: { GOOGLE_API_HOST: 'env.host.com' },
       });
-      expect(providerWithEnvOverride.getApiHost()).toBe('rendered-env.host.com');
+      expect(providerWithEnvOverride.getApiUrl()).toBe('https://rendered-env.host.com');
       expect(mockRenderString).toHaveBeenCalledWith('env.host.com', {});
 
-      // Default host
-      const providerWithDefaultHost = new AIStudioChatProvider('gemini-pro');
-      expect(providerWithDefaultHost.getApiHost()).toBe(
-        'rendered-generativelanguage.googleapis.com',
+      // From config.apiBaseUrl
+      const providerWithBaseUrl = new AIStudioChatProvider('gemini-pro', {
+        config: { apiBaseUrl: 'https://base.url.com' },
+      });
+      expect(providerWithBaseUrl.getApiUrl()).toBe('https://base.url.com');
+
+      // From env.GOOGLE_API_BASE_URL
+      const providerWithEnvBaseUrl = new AIStudioChatProvider('gemini-pro', {
+        env: { GOOGLE_API_BASE_URL: 'https://env-base.url.com' },
+      });
+      expect(providerWithEnvBaseUrl.getApiUrl()).toBe('https://env-base.url.com');
+
+      // Default URL fallback
+      const providerWithDefault = new AIStudioChatProvider('gemini-pro');
+      expect(providerWithDefault.getApiUrl()).toBe(
+        'https://rendered-generativelanguage.googleapis.com',
       );
-      expect(mockRenderString).toHaveBeenCalledWith('generativelanguage.googleapis.com', {});
+    });
+
+    it('should prioritize apiHost over apiBaseUrl', () => {
+      const provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiHost: 'host.googleapis.com',
+          apiBaseUrl: 'https://base.googleapis.com',
+        },
+      });
+      expect(provider.getApiUrl()).toBe('https://rendered-host.googleapis.com');
     });
 
     it('should handle custom provider ID', () => {
