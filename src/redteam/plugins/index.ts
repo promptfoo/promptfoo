@@ -133,6 +133,27 @@ function createPluginFactory<T extends PluginConfig>(
   };
 }
 
+/**
+ * Creates a plugin factory for a deprecated plugin.
+ * @param key - The deprecated plugin key.
+ * @param newKey - The new plugin key to use instead.
+ * @returns A plugin factory for the deprecated plugin.
+ */
+function createDeprecatedPluginFactory(key: string, newKey?: string): PluginFactory {
+  return {
+    key,
+    validate: () => {},
+    action: async () => {
+      logger.warn(
+        newKey
+          ? `\n${key} plugin is deprecated. Use ${newKey} instead.`
+          : `\n${key} plugin is deprecated.`,
+      );
+      return [];
+    },
+  };
+}
+
 const alignedHarmCategories = Object.keys(REDTEAM_PROVIDER_HARM_PLUGINS) as Array<
   keyof typeof REDTEAM_PROVIDER_HARM_PLUGINS
 >;
@@ -170,6 +191,7 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(ExcessiveAgencyPlugin, 'excessive-agency'),
   createPluginFactory(XSTestPlugin, 'xstest'),
   createPluginFactory(ToolDiscoveryPlugin, 'tool-discovery'),
+  createDeprecatedPluginFactory('tool-discovery:multi-turn', 'tool-discovery'),
   createPluginFactory(HarmbenchPlugin, 'harmbench'),
   createPluginFactory(ToxicChatPlugin, 'toxic-chat'),
   createPluginFactory(HallucinationPlugin, 'hallucination'),

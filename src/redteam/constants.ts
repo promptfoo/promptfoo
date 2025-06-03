@@ -193,9 +193,12 @@ export const STRATEGY_EXEMPT_PLUGINS = [
   ...DATASET_EXEMPT_PLUGINS,
 ] as const;
 
+const DEPRECATED_PLUGINS = ['tool-discovery:multi-turn'] as const;
+
 export type AgenticExemptPlugin = (typeof AGENTIC_EXEMPT_PLUGINS)[number];
 export type DatasetExemptPlugin = (typeof DATASET_EXEMPT_PLUGINS)[number];
 export type StrategyExemptPlugin = (typeof STRATEGY_EXEMPT_PLUGINS)[number];
+export type DeprecatedPlugin = (typeof DEPRECATED_PLUGINS)[number];
 
 export type Plugin =
   | AdditionalPlugin
@@ -204,7 +207,8 @@ export type Plugin =
   | ConfigRequiredPlugin
   | HarmPlugin
   | PIIPlugin
-  | AgenticPlugin;
+  | AgenticPlugin
+  | DeprecatedPlugin;
 
 export const DEFAULT_PLUGINS: ReadonlySet<Plugin> = new Set([
   ...[...BASE_PLUGINS, ...(Object.keys(HARM_PLUGINS) as HarmPlugin[]), ...PII_PLUGINS].sort(),
@@ -216,6 +220,7 @@ export const ALL_PLUGINS: readonly Plugin[] = [
     ...ADDITIONAL_PLUGINS,
     ...CONFIG_REQUIRED_PLUGINS,
     ...AGENTIC_PLUGINS,
+    ...DEPRECATED_PLUGINS,
   ]),
 ].sort() as Plugin[];
 
