@@ -381,11 +381,7 @@ async function loadRubricPrompt(
   return rubricPrompt;
 }
 
-function tryParse(content: string | object) {
-  if (typeof content === 'object') {
-    return content;
-  }
-
+function tryParse(content: string) {
   try {
     return JSON.parse(content);
   } catch {}
