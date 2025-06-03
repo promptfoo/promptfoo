@@ -2288,6 +2288,50 @@ describe('tryParse and renderLlmRubricPrompt', () => {
     const expected = 'statements:\nStatement 1\nStatement 2\nStatement 3';
     expect(result).toBe(expected);
   });
+
+  it('should stringify objects in arrays', async () => {
+    const template = 'Items: {{items}}';
+    const items = [{ name: 'Item 1', price: 10 }, 'string item', { name: 'Item 2', price: 20 }];
+
+    const result = await renderLlmRubricPrompt(template, { items });
+
+    expect(result).not.toContain('[object Object]');
+    expect(result).toContain(JSON.stringify(items[0]));
+    expect(result).toContain('string item');
+    expect(result).toContain(JSON.stringify(items[2]));
+  });
+
+  it('should stringify deeply nested objects and arrays', async () => {
+    const template = 'Complex data: {{data}}';
+    const data = {
+      products: [
+        {
+          name: 'Item 1',
+          price: 10,
+          details: {
+            color: 'red',
+            specs: { weight: '2kg', dimensions: { width: 10, height: 20 } },
+          },
+        },
+        'string item',
+        {
+          name: 'Item 2',
+          price: 20,
+          nested: [{ a: 1 }, { b: 2 }],
+          metadata: { tags: ['electronics', 'gadget'] },
+        },
+      ],
+    };
+
+    const result = await renderLlmRubricPrompt(template, { data });
+
+    expect(result).not.toContain('[object Object]');
+    expect(result).toContain('"specs":{"weight":"2kg"');
+    expect(result).toContain('"dimensions":{"width":10,"height":20}');
+    expect(result).toContain('[{"a":1},{"b":2}]');
+    expect(result).toContain('"tags":["electronics","gadget"]');
+    expect(result).toContain('string item');
+  });
 });
 
 describe('matchesGEval', () => {

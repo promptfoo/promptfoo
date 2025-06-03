@@ -59,6 +59,8 @@ If you see `[object Object]` in your LLM outputs or grading results, this means 
 **Example problem:**
 
 ```yaml
+prompts:
+  - 'Product: {{product}}'
 tests:
   - vars:
       product:
