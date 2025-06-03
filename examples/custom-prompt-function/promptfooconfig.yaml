@@ -13,7 +13,7 @@ prompts:
   - id: '*.txt'
     label: prompt_glob
   - '*.txt'
-  - 'file://./*.txt'
+  - 'file://*.txt'
 
   - id: file://prompt.yaml
     label: prompt_yaml
@@ -23,7 +23,7 @@ prompts:
     label: prompt_json
   - file://subfolder/prompt.json
 
-  - file://./subfolder/*.json
+  - file://subfolder/*.json
 
   - id: file://prompt.md
     label: markdown prompt
@@ -96,4 +96,4 @@ tests:
   - vars:
       topic: the Roman Empire
   - vars:
-      topic: file://./another_topic.txt
+      topic: file://another_topic.txt
