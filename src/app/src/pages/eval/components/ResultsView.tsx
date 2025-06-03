@@ -170,6 +170,7 @@ export default function ResultsView({
     setAuthor,
     filteredResultsCount,
     totalResultsCount,
+    highlightedResultsCount,
   } = useTableStore();
 
   const {
@@ -605,6 +606,18 @@ export default function ResultsView({
             <>{filteredResultsCount} results</>
           )}
         </Box>
+        {highlightedResultsCount > 0 && (
+          <Chip
+            size="small"
+            label={`${highlightedResultsCount} highlighted`}
+            sx={{
+              backgroundColor: 'rgba(25, 118, 210, 0.08)',
+              color: 'rgba(25, 118, 210, 1)',
+              border: '1px solid rgba(25, 118, 210, 0.2)',
+              fontWeight: 500,
+            }}
+          />
+        )}
         <Box flexGrow={1} />
         <Box display="flex" justifyContent="flex-end">
           <ResponsiveStack direction="row" spacing={2}>
