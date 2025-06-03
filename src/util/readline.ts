@@ -17,20 +17,29 @@ export function createReadlineInterface(): readline.Interface {
  */
 export async function promptUser(question: string): Promise<string> {
   return new Promise((resolve, reject) => {
+    let rl: readline.Interface | null = null;
+
     try {
-      const rl = createReadlineInterface();
+      rl = createReadlineInterface();
 
       // Handle errors
       rl.on('error', (err) => {
-        rl.close();
+        if (rl) {
+          rl.close();
+        }
         reject(err);
       });
 
       rl.question(question, (answer) => {
-        rl.close();
+        if (rl) {
+          rl.close();
+        }
         resolve(answer);
       });
     } catch (err) {
+      if (rl) {
+        rl.close();
+      }
       reject(err);
     }
   });

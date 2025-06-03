@@ -1,4 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Dynamic prompt generation using JavaScript functions
+
 prompts:
   - 'You are an angry pirate. Be concise and stay in character. Tell me about {{topic}}'
   - id: 'You are an angry pirate. Be concise and stay in character. Tell me about {{topic}}'
@@ -11,17 +13,17 @@ prompts:
   - id: '*.txt'
     label: prompt_glob
   - '*.txt'
-  - 'file://./*.txt'
+  - 'file://*.txt'
 
   - id: file://prompt.yaml
     label: prompt_yaml
   - file://prompt.yaml
 
-  - id: subfolder/prompt.json
+  - id: file://subfolder/prompt.json
     label: prompt_json
-  - subfolder/prompt.json
+  - file://subfolder/prompt.json
 
-  - file://./subfolder/*.json
+  - file://subfolder/*.json
 
   - id: file://prompt.md
     label: markdown prompt
@@ -79,7 +81,7 @@ providers:
   - echo
   # - id: anthropic:claude-3-7-sonnet-20250219
   #   label: Claude 3.7 Sonnet
-  # - id: openai:gpt-4o-mini
+  # - id: openai:gpt-4.1-mini
   #   label: GPT-4o Mini
   # config below is overridden by prompt functions with config
   # config:
@@ -94,4 +96,4 @@ tests:
   - vars:
       topic: the Roman Empire
   - vars:
-      topic: file://./another_topic.txt
+      topic: file://another_topic.txt
