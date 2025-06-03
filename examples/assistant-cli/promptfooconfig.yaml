@@ -1,4 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Basic LLM evaluation using CSV test cases
+
 prompts:
   - file://prompts.txt
 providers:

@@ -1,4 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: OpenAI factuality evaluation with ground truth comparison
+
 providers:
   - openai:gpt-4o-mini
 prompts:

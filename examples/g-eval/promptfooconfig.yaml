@@ -1,4 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: G-Eval criteria-based evaluation of LLM responses
+
 prompts:
   - 'Hello! How are you?'
 

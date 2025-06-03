@@ -1,4 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Replicate Lifeboat model for conversational responses
+
 prompts:
   - 'Respond to the user concisely: {{message}}'
 
