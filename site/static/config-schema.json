@@ -774,9 +774,25 @@
                       }
                     },
                     "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "type": "string"
+                      },
+                      "config": {}
+                    },
+                    "required": [
+                      "path"
+                    ],
+                    "additionalProperties": false
                   }
                 ]
               }
+            },
+            {
+              "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/2"
             }
           ]
         },

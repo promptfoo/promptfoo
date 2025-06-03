@@ -1,7 +1,11 @@
 import * as fs from 'fs';
 import path from 'path';
 import cliState from '../../src/cliState';
-import { maybeLoadFromExternalFile, getResolvedRelativePath } from '../../src/util/file';
+import {
+  maybeLoadFromExternalFile,
+  getResolvedRelativePath,
+  maybeLoadConfigFromExternalFile,
+} from '../../src/util/file';
 import { safeResolve, safeJoin } from '../../src/util/file.node';
 import {
   isJavascriptFile,
@@ -208,6 +212,22 @@ describe('file utilities', () => {
       expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve(basePath, 'test3.txt'), 'utf8');
 
       cliState.basePath = undefined;
+    });
+
+    it('should recursively load file references in objects', () => {
+      jest.mocked(fs.readFileSync).mockReturnValueOnce('{"foo": 1}').mockReturnValueOnce('bar');
+
+      const config = {
+        data: 'file://data.json',
+        nested: {
+          text: 'file://note.txt',
+        },
+      };
+
+      const result = maybeLoadConfigFromExternalFile(config);
+
+      expect(fs.readFileSync).toHaveBeenCalledTimes(2);
+      expect(result).toEqual({ data: { foo: 1 }, nested: { text: 'bar' } });
     });
   });
 

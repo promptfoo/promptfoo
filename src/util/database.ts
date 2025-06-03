@@ -98,7 +98,7 @@ export async function writeResultsToDatabase(
       .insert(datasetsTable)
       .values({
         id: datasetId,
-        tests: config.tests,
+        tests: Array.isArray(config.tests) ? config.tests : [],
       })
       .onConflictDoNothing()
       .run(),
@@ -290,7 +290,20 @@ export async function getTestCasesWithPredicate(
     const testCases = resultWrapper.config.tests;
     if (testCases && predicate(resultWrapper)) {
       const evalId = eval_.id;
-      const datasetId = sha256(JSON.stringify(testCases));
+      // For database storage, we need to handle the union type properly
+      // Only store actual test case arrays, not generator configs
+      let storableTestCases: string | Array<string | any>;
+      if (typeof testCases === 'string') {
+        storableTestCases = testCases;
+      } else if (Array.isArray(testCases)) {
+        storableTestCases = testCases;
+      } else {
+        // If it's a TestGeneratorConfig object, we can't store it directly
+        // This case should be rare as the database typically stores resolved tests
+        logger.warn('Skipping TestGeneratorConfig object in database storage');
+        continue;
+      }
+      const datasetId = sha256(JSON.stringify(storableTestCases));
 
       if (datasetId in groupedTestCases) {
         groupedTestCases[datasetId].recentEvalDate = new Date(
@@ -324,7 +337,7 @@ export async function getTestCasesWithPredicate(
         groupedTestCases[datasetId] = {
           id: datasetId,
           count: 1,
-          testCases,
+          testCases: storableTestCases,
           recentEvalDate: new Date(createdAt),
           recentEvalId: evalId,
           prompts: Object.values(promptsById),

@@ -718,6 +718,13 @@ export type AtomicTestCase<vars = Record<string, string | object>> = z.infer<
   typeof AtomicTestCaseSchema
 >;
 
+export const TestGeneratorConfigSchema = z.object({
+  path: z.string(),
+  config: z.any().optional(),
+});
+
+export type TestGeneratorConfig = z.infer<typeof TestGeneratorConfigSchema>;
+
 export const DerivedMetricSchema = z.object({
   // The name of this metric
   name: z.string(),
@@ -837,7 +844,13 @@ export const TestSuiteConfigSchema = z.object({
   ]),
 
   // Path to a test file, OR list of LLM prompt variations (aka "test case")
-  tests: z.union([z.string(), z.array(z.union([z.string(), TestCaseSchema]))]).optional(),
+  tests: z
+    .union([
+      z.string(),
+      z.array(z.union([z.string(), TestCaseSchema, TestGeneratorConfigSchema])),
+      TestGeneratorConfigSchema,
+    ])
+    .optional(),
 
   // Scenarios, groupings of data and tests to be evaluated
   scenarios: z.array(z.union([z.string(), ScenarioSchema])).optional(),
