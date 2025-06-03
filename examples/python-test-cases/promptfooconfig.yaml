@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Example showing how to load test cases from Python functions
+description: Example showing how to load test cases from Python functions with configuration
 
 prompts:
   - 'Translate the following text to {{target_language}}: {{text}}'
@@ -7,13 +7,47 @@ prompts:
 providers:
   - openai:gpt-4.1-mini
 
-# Demonstrate different ways to load test cases from Python
+# Demonstrate different ways to load test cases from Python with configuration
 tests:
-  # Load simple test cases
+  # 1. Simple generator with default configuration (backward compatibility)
   - file://test_cases.py:generate_simple_tests
 
-  # Load test cases from simulated CSV data
-  - file://test_cases.py:generate_from_csv
+  # 2. Simple generator with custom languages and phrases
+  - path: file://test_cases.py:generate_simple_tests
+    config:
+      languages: ['German', 'Italian']
+      phrases: ['Good morning', 'Thank you very much']
+      translations:
+        ("Good morning", "German"): 'Guten Morgen'
+        ("Good morning", "Italian"): 'Buongiorno'
+        ("Thank you very much", "German"): 'Vielen Dank'
+        ("Thank you very much", "Italian"): 'Grazie mille'
 
-  # Load systematically generated test cases from a class method
-  - file://test_cases.py:TestGenerator.generate_systematic_tests
+  # 3. CSV generator with custom data
+  - path: file://test_cases.py:generate_from_csv
+    config:
+      data:
+        source_text: ['Please', 'Excuse me', "I'm sorry"]
+        target_language: ['Spanish', 'French', 'Spanish']
+        expected_translation: ['Por favor', 'Excusez-moi', 'Lo siento']
+      max_cases: 3
+
+  # 4. CSV generator with language filtering
+  - path: file://test_cases.py:generate_from_csv
+    config:
+      filter_languages: ['French']
+      max_cases: 2
+
+  # 5. Systematic generator with basic difficulty
+  - path: file://test_cases.py:TestGenerator.generate_systematic_tests
+    config:
+      difficulty: 'basic'
+      languages: ['Spanish', 'French']
+      phrases: ['Hello', 'Thank you']
+
+  # 6. Systematic generator with intermediate difficulty and custom phrases
+  - path: file://test_cases.py:TestGenerator.generate_systematic_tests
+    config:
+      difficulty: 'intermediate'
+      languages: ['German']
+      phrases: ['How are you?', 'I would like to order', 'Where is the bathroom?']
