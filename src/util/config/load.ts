@@ -208,7 +208,10 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
       // Check the array for `prompt` vars
       (Array.isArray(ret.tests) &&
         ret.tests.some(
-          (test) => typeof test === 'object' && Object.keys(test.vars || {}).includes('prompt'),
+          (test) =>
+            typeof test === 'object' &&
+            'vars' in test &&
+            Object.keys(test.vars || {}).includes('prompt'),
         ));
 
     if (!hasAnyPrompt) {
@@ -279,6 +282,10 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       tests.push(...newTests);
     } else if (Array.isArray(config.tests)) {
       tests.push(...config.tests);
+    } else if (config.tests && typeof config.tests === 'object' && 'path' in config.tests) {
+      // Handle TestGeneratorConfig object
+      const newTests = await readTests(config.tests, path.dirname(configPaths[0]));
+      tests.push(...newTests);
     }
   }
 
