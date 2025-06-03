@@ -38,7 +38,7 @@ docker pull python:3.9-alpine
 Create a file named `promptfooconfig.yaml`:
 
 ```yaml
-prompts: code_generation_prompt.txt
+prompts: file://code_generation_prompt.txt
 
 providers:
   - ollama:chat:llama3:70b
