@@ -112,6 +112,161 @@ describe('mergeTargetPurposeDiscoveryResults', () => {
     expect(mergedPurpose).toContain('b');
     expect(mergedPurpose).toContain('user');
   });
+
+  it('should handle normalized data with null values', () => {
+    // Since normalization happens in doTargetPurposeDiscovery,
+    // this test simulates already-normalized data
+    const discovered = {
+      purpose: null,
+      limitations: null,
+      tools: [],
+      user: 'This is a valid user',
+    };
+    const mergedPurpose = mergeTargetPurposeDiscoveryResults(undefined, discovered);
+
+    expect(mergedPurpose).not.toContain('## Purpose');
+    expect(mergedPurpose).not.toContain('## Limitations');
+    expect(mergedPurpose).not.toContain('## Tools');
+    expect(mergedPurpose).toContain('## User');
+    expect(mergedPurpose).toContain('This is a valid user');
+  });
+
+  it('should handle normalized data with empty content', () => {
+    // Since normalization happens in doTargetPurposeDiscovery,
+    // this test simulates already-normalized data
+    const discovered = {
+      purpose: null,
+      limitations: null,
+      tools: [],
+      user: 'Valid user',
+    };
+    const mergedPurpose = mergeTargetPurposeDiscoveryResults(undefined, discovered);
+
+    expect(mergedPurpose).not.toContain('## Purpose');
+    expect(mergedPurpose).not.toContain('## Limitations');
+    expect(mergedPurpose).not.toContain('## Tools');
+    expect(mergedPurpose).toContain('## User');
+    expect(mergedPurpose).toContain('Valid user');
+  });
+
+  it('should handle normalized data with empty tools array', () => {
+    // Since normalization happens in doTargetPurposeDiscovery,
+    // this test simulates already-normalized data
+    const discovered = {
+      purpose: 'Valid purpose',
+      limitations: 'Valid limitations',
+      tools: [], // normalization would have cleaned this
+      user: 'Valid user',
+    };
+    const mergedPurpose = mergeTargetPurposeDiscoveryResults(undefined, discovered);
+
+    expect(mergedPurpose).toContain('## Purpose');
+    expect(mergedPurpose).toContain('## Limitations');
+    expect(mergedPurpose).not.toContain('## Tools');
+    expect(mergedPurpose).toContain('## User');
+  });
+
+  it('should include normalized data with valid tools', () => {
+    const discovered = {
+      purpose: 'Valid purpose',
+      limitations: 'Valid limitations',
+      tools: [{ name: 'tool1', description: 'desc1', arguments: [] }], // normalization would have cleaned out nulls
+      user: 'Valid user',
+    };
+    const mergedPurpose = mergeTargetPurposeDiscoveryResults(undefined, discovered);
+
+    expect(mergedPurpose).toContain('## Purpose');
+    expect(mergedPurpose).toContain('## Limitations');
+    expect(mergedPurpose).toContain('## Tools');
+    expect(mergedPurpose).toContain('tool1');
+    expect(mergedPurpose).toContain('## User');
+  });
+
+  it('should omit Agent Discovered Target Purpose section when no meaningful content is discovered', () => {
+    const discovered = {
+      purpose: null,
+      limitations: null,
+      tools: [],
+      user: null,
+    };
+    const mergedPurpose = mergeTargetPurposeDiscoveryResults('Human defined purpose', discovered);
+
+    expect(mergedPurpose).toContain('# Human Defined Target Purpose');
+    expect(mergedPurpose).toContain('Human defined purpose');
+    expect(mergedPurpose).not.toContain('# Agent Discovered Target Purpose');
+    expect(mergedPurpose).not.toContain('## Purpose');
+    expect(mergedPurpose).not.toContain('## Limitations');
+    expect(mergedPurpose).not.toContain('## Tools');
+    expect(mergedPurpose).not.toContain('## User');
+  });
+
+  it('should include Agent Discovered Target Purpose section when meaningful content exists', () => {
+    const discovered = {
+      purpose: 'Discovered purpose',
+      limitations: null,
+      tools: [],
+      user: null,
+    };
+    const mergedPurpose = mergeTargetPurposeDiscoveryResults('Human defined purpose', discovered);
+
+    expect(mergedPurpose).toContain('# Human Defined Target Purpose');
+    expect(mergedPurpose).toContain('# Agent Discovered Target Purpose');
+    expect(mergedPurpose).toContain('## Purpose');
+    expect(mergedPurpose).toContain('Discovered purpose');
+    expect(mergedPurpose).not.toContain('## Limitations');
+    expect(mergedPurpose).not.toContain('## Tools');
+    expect(mergedPurpose).not.toContain('## User');
+  });
+
+  it('should normalize string "null" values from server response', async () => {
+    const mockResponses = [
+      {
+        done: false,
+        question: 'What is your purpose?',
+        state: {
+          currentQuestionIndex: 0,
+          answers: [],
+        },
+      },
+      {
+        done: true,
+        purpose: {
+          purpose: 'null', // Server returns string "null"
+          limitations: 'null', // Server returns string "null"
+          tools: [],
+          user: 'null', // Server returns string "null"
+        },
+        state: {
+          currentQuestionIndex: 1,
+          answers: ['I cannot provide that information'],
+        },
+      },
+    ];
+
+    mockedFetchWithProxy.mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify(mockResponses.shift()), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    );
+
+    const target = {
+      id: () => 'test',
+      callApi: jest.fn().mockResolvedValue({ output: 'I cannot provide that information' }),
+    };
+
+    const discoveredPurpose = await doTargetPurposeDiscovery(target);
+
+    // Verify that string "null" values are normalized to actual null
+    expect(discoveredPurpose).toEqual({
+      purpose: null,
+      limitations: null,
+      tools: [],
+      user: null,
+    });
+  });
 });
 
 describe('doTargetPurposeDiscovery', () => {
@@ -261,6 +416,56 @@ describe('doTargetPurposeDiscovery', () => {
         },
       ],
       user: 'Test user',
+    });
+  });
+
+  it('should normalize string "null" values from server response', async () => {
+    const mockResponses = [
+      {
+        done: false,
+        question: 'What is your purpose?',
+        state: {
+          currentQuestionIndex: 0,
+          answers: [],
+        },
+      },
+      {
+        done: true,
+        purpose: {
+          purpose: 'null', // Server returns string "null"
+          limitations: 'null', // Server returns string "null"
+          tools: [],
+          user: 'null', // Server returns string "null"
+        },
+        state: {
+          currentQuestionIndex: 1,
+          answers: ['I cannot provide that information'],
+        },
+      },
+    ];
+
+    mockedFetchWithProxy.mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify(mockResponses.shift()), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    );
+
+    const target = {
+      id: () => 'test',
+      callApi: jest.fn().mockResolvedValue({ output: 'I cannot provide that information' }),
+    };
+
+    const discoveredPurpose = await doTargetPurposeDiscovery(target);
+
+    // Verify that string "null" values are normalized to actual null
+    expect(discoveredPurpose).toEqual({
+      purpose: null,
+      limitations: null,
+      tools: [],
+      user: null,
     });
   });
 });
