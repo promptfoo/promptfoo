@@ -4,7 +4,7 @@ description: Comparing local Ollama models with different prompts
 prompts:
   - id: file://prompts/openai_prompt.json
     label: openai_prompt
-  - id: prompts/llama_prompt.txt
+  - id: file://prompts/llama_prompt.txt
     label: llama_prompt
 
 providers:
