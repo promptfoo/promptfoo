@@ -91,6 +91,7 @@ export interface Tool {
 export interface CompletionOptions {
   apiKey?: string;
   apiHost?: string;
+  apiBaseUrl?: string;
   projectId?: string;
   region?: string;
   publisher?: string;

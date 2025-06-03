@@ -1,11 +1,11 @@
 import { fetchWithCache } from '../../src/cache';
 import {
-  removePrefix,
-  normalizeApostrophes,
-  isEmptyResponse,
-  isBasicRefusal,
   extractGoalFromPrompt,
   getShortPluginId,
+  isBasicRefusal,
+  isEmptyResponse,
+  normalizeApostrophes,
+  removePrefix,
 } from '../../src/redteam/util';
 
 jest.mock('../../src/cache');
@@ -173,5 +173,32 @@ describe('extractGoalFromPrompt', () => {
 
     const result = await extractGoalFromPrompt('', '');
     expect(result).toBe('empty goal');
+  });
+
+  it('should include plugin context when pluginId is provided', async () => {
+    jest.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      data: { intent: 'plugin-specific goal' },
+      deleteFromCache: async () => {},
+    });
+
+    const result = await extractGoalFromPrompt(
+      'innocent prompt',
+      'test purpose',
+      'indirect-prompt-injection',
+    );
+    expect(result).toBe('plugin-specific goal');
+
+    // Verify that the API was called with plugin context
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        body: expect.stringContaining('pluginContext'),
+      }),
+      expect.any(Number),
+    );
   });
 });

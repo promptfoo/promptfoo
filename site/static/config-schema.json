@@ -153,6 +153,9 @@
                             "GOOGLE_API_HOST": {
                               "type": "string"
                             },
+                            "GOOGLE_API_BASE_URL": {
+                              "type": "string"
+                            },
                             "GOOGLE_API_KEY": {
                               "type": "string"
                             },
