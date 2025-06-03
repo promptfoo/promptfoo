@@ -382,7 +382,6 @@ async function loadRubricPrompt(
 }
 
 function tryParse(content: string) {
-
   try {
     return JSON.parse(content);
   } catch {}
@@ -397,7 +396,6 @@ export async function renderLlmRubricPrompt(
   rubricPrompt: string,
   context: Record<string, string | object>,
 ) {
-  
   try {
     // Render every string scalar within the JSON
     // Does not render object keys (only values)

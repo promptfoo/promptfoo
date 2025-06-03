@@ -19,10 +19,7 @@ import {
   renderLlmRubricPrompt,
   matchesGEval,
 } from '../src/matchers';
-import { 
-  ANSWER_RELEVANCY_GENERATE, 
-  DEFAULT_GRADING_PROMPT,
-} from '../src/prompts';
+import { ANSWER_RELEVANCY_GENERATE, DEFAULT_GRADING_PROMPT } from '../src/prompts';
 import { HuggingfaceTextClassificationProvider } from '../src/providers/huggingface';
 import { OpenAiChatCompletionProvider } from '../src/providers/openai/chat';
 import { DefaultEmbeddingProvider, DefaultGradingProvider } from '../src/providers/openai/defaults';
