@@ -1,4 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Evaluating RAG responses using multiple quality metrics
+
 prompts:
   - |
     You are an internal corporate chatbot.

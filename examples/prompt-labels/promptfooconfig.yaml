@@ -1,4 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Using prompt labels for organized testing and comparison
+
 prompts:
   - id: file://prompts1.txt
     label: content_generation

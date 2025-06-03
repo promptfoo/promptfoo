@@ -1,4 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: External Python assertion files for output validation
+
 prompts:
   - 'Tell me about {{topic}} in three words'
 providers:
