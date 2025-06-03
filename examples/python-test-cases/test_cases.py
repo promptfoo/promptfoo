@@ -6,22 +6,24 @@ def generate_simple_tests(config=None):
     # Default values
     languages = ["Spanish", "French"]
     phrases = ["Hello", "Thank you"]
-    
+
     # Override with config if provided
     if config:
         languages = config.get("languages", languages)
         phrases = config.get("phrases", phrases)
-    
+
     test_cases = []
     for phrase in phrases:
         for lang in languages:
             test_case = {
                 "vars": {"text": phrase, "target_language": lang},
-                "assert": [{"type": "regex", "value": ".+"}],  # Just check for non-empty output
+                "assert": [
+                    {"type": "regex", "value": ".+"}
+                ],  # Just check for non-empty output
                 "description": f"Translate '{phrase}' to {lang}",
             }
             test_cases.append(test_case)
-    
+
     return test_cases
 
 
@@ -33,13 +35,13 @@ def generate_from_csv(config=None):
         "target_language": ["French", "Spanish", "German"],
         "expected_translation": ["Bonjour", "Gracias", "Auf Wiedersehen"],
     }
-    
+
     # Use custom data if provided in config
     if config and "data" in config:
         data = config["data"]
-    
+
     df = pd.DataFrame(data)
-    
+
     # Limit rows if specified in config
     if config and "max_rows" in config:
         df = df.head(config["max_rows"])
