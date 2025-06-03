@@ -97,11 +97,11 @@ It automatically loads `promptfooconfig.*`, but you can use a custom config file
 
 ## Extension Hooks
 
-promptfoo supports extension hooks that allow you to run custom code at specific points in the evaluation lifecycle. These hooks are defined in extension files specified in the `extensions` property of the configuration.
+promptfoo supports extension hooks that allow you to run custom code that modifies the evaluation state at specific points in the evaluation lifecycle. These hooks are defined in extension files specified in the `extensions` property of the configuration.
 
 ### Available Hooks
 
-| Hook Name  | Description                                   | Arguments                                         |
+| Hook Name  | Description                                   | `context` Argument Schema                         |
 | ---------- | --------------------------------------------- | ------------------------------------------------- |
 | beforeAll  | Runs before the entire test suite begins      | `{ suite: TestSuite }`                            |
 | afterAll   | Runs after the entire test suite has finished | `{ results: EvaluateResult[], suite: TestSuite }` |
@@ -131,7 +131,7 @@ When specifying an extension in the configuration, you must include the function
 Example extension file (Python):
 
 ```python
-def extension_hook(hook_name, context):
+def extension_hook(hook_name, context) -> dict:
     if hook_name == 'beforeAll':
         print(f"Setting up test suite: {context['suite'].get('description', '')}")
         # Perform any necessary setup
@@ -145,6 +145,8 @@ def extension_hook(hook_name, context):
     elif hook_name == 'afterEach':
         print(f"Test completed: {context['test'].get('description', '')}. Pass: {context['result'].get('success', False)}")
         # Clean up after individual test or log results
+
+    return context
 ```
 
 Example extension file (JavaScript):
@@ -167,12 +169,41 @@ async function extensionHook(hookName, context) {
     );
     // Clean up after individual test or log results
   }
+
+  return context;
 }
 
 module.exports = extensionHook;
 ```
 
 These hooks provide powerful extensibility to your promptfoo evaluations, allowing you to implement custom logic for setup, teardown, logging, or integration with other systems. The extension function receives the `hookName` and a `context` object, which contains relevant data for each hook type. You can use this information to perform actions specific to each stage of the evaluation process.
+
+### Mutable Context
+
+Each hook may mutate specific properties of its given `context` argument in order to modify evaluation state.
+
+#### `beforeAll`
+
+| Property                          | Type                       | Description                            |
+| --------------------------------- | -------------------------- | -------------------------------------- |
+| `context.suite.prompts`           | `Prompt[]`                 | The prompts to be evaluated.           |
+| `context.suite.providerPromptMap` | `Record<string, Prompt[]>` | A map of provider IDs to prompts.      |
+| `context.suite.tests`             | `TestCase[]`               | The test cases to be evaluated.        |
+| `context.suite.scenarios`         | `Scenario[]`               | The scenarios to be evaluated.         |
+| `context.suite.defaultTest`       | `TestCase`                 | The default test case to be evaluated. |
+| `context.suite.nunjucksFilters`   | `Record<string, FilePath>` | A map of Nunjucks filters.             |
+| `context.suite.derivedMetrics`    | `Record<string, string>`   | A map of derived metrics.              |
+| `context.suite.redteam`           | `Redteam[]`                | The red team to be evaluated.          |
+
+#### `beforeEach`
+
+| Property       | Type       | Description                    |
+| -------------- | ---------- | ------------------------------ |
+| `context.test` | `TestCase` | The test case to be evaluated. |
+
+#### `afterEach`
+
+#### `afterAll`
 
 ## Provider-related types
 
