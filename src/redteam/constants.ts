@@ -207,14 +207,13 @@ export type Plugin =
   | ConfigRequiredPlugin
   | HarmPlugin
   | PIIPlugin
-  | AgenticPlugin
-  | DeprecatedPlugin;
+  | AgenticPlugin;
 
 export const DEFAULT_PLUGINS: ReadonlySet<Plugin> = new Set([
   ...[...BASE_PLUGINS, ...(Object.keys(HARM_PLUGINS) as HarmPlugin[]), ...PII_PLUGINS].sort(),
 ] as const satisfies readonly Plugin[]);
 
-export const ALL_PLUGINS: readonly Plugin[] = [
+export const ALL_PLUGINS: readonly Exclude<Plugin, DeprecatedPlugin>[] = [
   ...new Set([
     ...DEFAULT_PLUGINS,
     ...ADDITIONAL_PLUGINS,
@@ -222,7 +221,7 @@ export const ALL_PLUGINS: readonly Plugin[] = [
     ...AGENTIC_PLUGINS,
     ...DEPRECATED_PLUGINS,
   ]),
-].sort() as Plugin[];
+].sort() as Exclude<Plugin, DeprecatedPlugin>[];
 
 export const FRAMEWORK_NAMES: Record<string, string> = {
   'mitre:atlas': 'MITRE ATLAS',
@@ -887,120 +886,122 @@ const _ALL_STRATEGIES = [
 export const ALL_STRATEGIES = [..._ALL_STRATEGIES].sort();
 export type Strategy = (typeof ALL_STRATEGIES)[number];
 
-export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
-  [MEMORY_POISONING_PLUGIN_ID]: 'Tests whether an agent is vulnerable to memory poisoning attacks',
-  'ascii-smuggling': 'Tests vulnerability to Unicode tag-based instruction smuggling attacks',
-  audio: 'Tests handling of audio content',
-  base64: 'Tests handling of Base64-encoded malicious payloads',
-  basic: 'Original plugin tests without any additional strategies or optimizations',
-  beavertails: 'Tests handling of malicious prompts from the BeaverTails dataset',
-  'best-of-n': 'Jailbreak technique published by Anthropic and Stanford',
-  bfla: 'Tests for broken function-level authorization vulnerabilities (OWASP API 5)',
-  'bias:gender': 'Tests handling of gender bias, stereotypes, and discrimination',
-  bola: 'Tests for broken object-level authorization vulnerabilities (OWASP API 1)',
-  cca: 'Tests for vulnerability to Context Compliance Attacks using fabricated conversation history',
-  citation: 'Exploits academic authority bias to bypass content filters',
-  competitors: 'Tests for unauthorized competitor mentions and endorsements',
-  contracts: 'Tests for unauthorized contractual commitments and legal exposure',
-  crescendo: 'Multi-turn attack strategy that gradually escalates malicious intent',
-  'cross-session-leak': 'Tests for information leakage between user sessions',
-  cyberseceval: "Tests prompt injection attacks from Meta's CyberSecEval dataset",
-  'debug-access': 'Tests for exposed debugging interfaces and commands',
-  default: 'Standard security testing plugins',
-  'divergent-repetition':
-    'Tests for training data leaks through repetitive pattern exploitation that causes model divergence',
-  donotanswer: 'Tests for vulnerabilities to Do Not Answer attacks',
-  'excessive-agency': 'Tests for unauthorized actions beyond defined system boundaries',
-  foundation: 'Tests a collection of plugins designed to run against foundation models',
-  gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
-  goat: 'Dynamic multi-turn attack generation using adversarial techniques',
-  hallucination: 'Tests for fabrication of false or misleading information',
-  harmbench: 'Tests for harmful content using the HarmBench dataset',
-  'toxic-chat': 'Tests handling of toxic prompts from the ToxicChat dataset',
-  harmful: 'Tests handling of malicious content across multiple categories',
-  'harmful:chemical-biological-weapons': 'Tests handling of WMD-related content',
-  'harmful:child-exploitation': 'Tests handling of child exploitation content',
-  'harmful:copyright-violations': 'Tests handling of intellectual property violations',
-  'harmful:cybercrime': 'Tests handling of cybercrime-related content',
-  'harmful:cybercrime:malicious-code': 'Tests creation of malicious code',
-  'harmful:graphic-content': 'Tests handling of graphic or violent content',
-  'harmful:harassment-bullying': 'Tests handling of harassment and bullying content',
-  'harmful:hate': 'Tests handling of hate speech and discriminatory content',
-  'harmful:illegal-activities': 'Tests handling of general illegal activities',
-  'harmful:illegal-drugs': 'Tests handling of illegal drug-related content',
-  'harmful:illegal-drugs:meth': 'Tests handling of methamphetamine-related content',
-  'harmful:indiscriminate-weapons': 'Tests handling of weapons-related content',
-  'harmful:insults': 'Tests handling of personal attacks and insults',
-  'harmful:intellectual-property': 'Tests handling of IP theft and violations',
-  'harmful:misinformation-disinformation': 'Tests handling of false information campaigns',
-  'harmful:non-violent-crime': 'Tests handling of non-violent criminal content',
-  'harmful:privacy': 'Tests handling of privacy violation attempts',
-  'harmful:profanity': 'Tests handling of profane or inappropriate language',
-  'harmful:radicalization': 'Tests handling of extremist content and recruitment',
-  'harmful:self-harm': 'Tests handling of self-harm and suicide content',
-  'harmful:sex-crime': 'Tests handling of sexual crime content',
-  'harmful:sexual-content': 'Tests handling of explicit sexual content',
-  'harmful:specialized-advice': 'Tests handling of unauthorized professional advice',
-  'harmful:unsafe-practices': 'Tests handling of dangerous activity instructions',
-  'harmful:violent-crime': 'Tests handling of violent crime content',
-  'harmful:weapons:ied': 'Tests handling of Improvised Explosive Devices',
-  hex: 'Tests handling of hex-encoded malicious payloads',
-  hijacking: 'Tests for unauthorized resource usage and purpose deviation',
-  homoglyph:
-    'Tests handling of homoglyph (visually similar Unicode characters) encoding to bypass filters',
-  image: 'Tests handling of image content',
-  imitation: 'Tests handling of unauthorized impersonation of entities',
-  'indirect-prompt-injection': 'Tests for injection vulnerabilities via untrusted variables',
-  intent: 'Tests for manipulation of system behavior via specific prompts',
-  jailbreak: 'Single-shot optimization of safety bypass techniques',
-  'jailbreak:composite': 'Combines multiple jailbreak techniques for enhanced effectiveness',
-  'jailbreak:likert': 'Uses Likert scale-based prompts to bypass content filters',
-  'jailbreak:tree': 'Tree-based search for optimal safety bypass vectors',
-  leetspeak: 'Tests handling of leetspeak-encoded malicious content',
-  'math-prompt': 'Tests handling of mathematical notation-based attacks',
-  morse: 'Tests handling of content encoded in Morse code to potentially bypass filters',
-  multilingual: 'Tests handling of attacks across multiple languages',
-  mcp: 'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
-  'off-topic':
-    'Tests whether AI systems can be manipulated to go off-topic from their intended purpose',
-  overreliance: 'Tests for overreliance on system assumptions',
-  pandamonium:
-    "[Experimental] Promptfoo's blackbox jailbreak. The latest and greatest jailbreak techniques, expertly tuned and crafted by Promptfoo's AI team.",
-  pii: 'Tests handling of personal identifiable information',
-  'pii:api-db': 'Tests for PII exposure via API/database access',
-  'pii:direct': 'Tests for direct PII exposure vulnerabilities',
-  'pii:session': 'Tests for PII exposure in session data',
-  'pii:social': 'Tests for PII exposure via social engineering',
-  piglatin: 'Tests handling of content translated to Pig Latin to potentially bypass filters',
-  camelcase: 'Tests handling of text transformed into camelCase to potentially bypass filters',
-  pliny: 'Tests handling of Pliny prompt injections',
-  policy: 'Tests compliance with custom security policies',
-  politics: 'Tests handling of political content and bias',
-  'prompt-extraction': 'Tests for system prompt disclosure vulnerabilities',
-  'prompt-injection': 'Tests for direct prompt injection vulnerabilities',
-  'rag-document-exfiltration': 'Tests for RAG document exfiltration',
-  'rag-poisoning': 'Tests for vulnerabilities to RAG retrieval poisoning attacks',
-  rbac: 'Tests role-based access control implementation',
-  'reasoning-dos':
-    'Tests for vulnerabilities to computational resource exhaustion through excessive reasoning patterns',
-  religion: 'Tests handling of religious content and bias',
-  retry:
-    'Automatically incorporates previously failed test cases to build a regression testing suite',
-  rot13: 'Tests handling of ROT13-encoded malicious content',
-  'shell-injection': 'Tests for command injection vulnerabilities',
-  'sql-injection': 'Tests for SQL injection vulnerabilities',
-  ssrf: 'Tests for server-side request forgery vulnerabilities',
-  'system-prompt-override': 'Tests for system prompt override vulnerabilities',
-  'tool-discovery': 'Tests for enumeration of available tools and function calls',
-  unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
-  xstest: 'Tests for XSTest attacks',
-  video: 'Tests handling of video content',
-  'other-encodings':
-    'Collection of alternative text transformation strategies (Morse code, Pig Latin, and camelCase) for testing evasion techniques',
-};
+export const subCategoryDescriptions: Record<Exclude<Plugin, DeprecatedPlugin> | Strategy, string> =
+  {
+    [MEMORY_POISONING_PLUGIN_ID]:
+      'Tests whether an agent is vulnerable to memory poisoning attacks',
+    'ascii-smuggling': 'Tests vulnerability to Unicode tag-based instruction smuggling attacks',
+    audio: 'Tests handling of audio content',
+    base64: 'Tests handling of Base64-encoded malicious payloads',
+    basic: 'Original plugin tests without any additional strategies or optimizations',
+    beavertails: 'Tests handling of malicious prompts from the BeaverTails dataset',
+    'best-of-n': 'Jailbreak technique published by Anthropic and Stanford',
+    bfla: 'Tests for broken function-level authorization vulnerabilities (OWASP API 5)',
+    'bias:gender': 'Tests handling of gender bias, stereotypes, and discrimination',
+    bola: 'Tests for broken object-level authorization vulnerabilities (OWASP API 1)',
+    cca: 'Tests for vulnerability to Context Compliance Attacks using fabricated conversation history',
+    citation: 'Exploits academic authority bias to bypass content filters',
+    competitors: 'Tests for unauthorized competitor mentions and endorsements',
+    contracts: 'Tests for unauthorized contractual commitments and legal exposure',
+    crescendo: 'Multi-turn attack strategy that gradually escalates malicious intent',
+    'cross-session-leak': 'Tests for information leakage between user sessions',
+    cyberseceval: "Tests prompt injection attacks from Meta's CyberSecEval dataset",
+    'debug-access': 'Tests for exposed debugging interfaces and commands',
+    default: 'Standard security testing plugins',
+    'divergent-repetition':
+      'Tests for training data leaks through repetitive pattern exploitation that causes model divergence',
+    donotanswer: 'Tests for vulnerabilities to Do Not Answer attacks',
+    'excessive-agency': 'Tests for unauthorized actions beyond defined system boundaries',
+    foundation: 'Tests a collection of plugins designed to run against foundation models',
+    gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
+    goat: 'Dynamic multi-turn attack generation using adversarial techniques',
+    hallucination: 'Tests for fabrication of false or misleading information',
+    harmbench: 'Tests for harmful content using the HarmBench dataset',
+    'toxic-chat': 'Tests handling of toxic prompts from the ToxicChat dataset',
+    harmful: 'Tests handling of malicious content across multiple categories',
+    'harmful:chemical-biological-weapons': 'Tests handling of WMD-related content',
+    'harmful:child-exploitation': 'Tests handling of child exploitation content',
+    'harmful:copyright-violations': 'Tests handling of intellectual property violations',
+    'harmful:cybercrime': 'Tests handling of cybercrime-related content',
+    'harmful:cybercrime:malicious-code': 'Tests creation of malicious code',
+    'harmful:graphic-content': 'Tests handling of graphic or violent content',
+    'harmful:harassment-bullying': 'Tests handling of harassment and bullying content',
+    'harmful:hate': 'Tests handling of hate speech and discriminatory content',
+    'harmful:illegal-activities': 'Tests handling of general illegal activities',
+    'harmful:illegal-drugs': 'Tests handling of illegal drug-related content',
+    'harmful:illegal-drugs:meth': 'Tests handling of methamphetamine-related content',
+    'harmful:indiscriminate-weapons': 'Tests handling of weapons-related content',
+    'harmful:insults': 'Tests handling of personal attacks and insults',
+    'harmful:intellectual-property': 'Tests handling of IP theft and violations',
+    'harmful:misinformation-disinformation': 'Tests handling of false information campaigns',
+    'harmful:non-violent-crime': 'Tests handling of non-violent criminal content',
+    'harmful:privacy': 'Tests handling of privacy violation attempts',
+    'harmful:profanity': 'Tests handling of profane or inappropriate language',
+    'harmful:radicalization': 'Tests handling of extremist content and recruitment',
+    'harmful:self-harm': 'Tests handling of self-harm and suicide content',
+    'harmful:sex-crime': 'Tests handling of sexual crime content',
+    'harmful:sexual-content': 'Tests handling of explicit sexual content',
+    'harmful:specialized-advice': 'Tests handling of unauthorized professional advice',
+    'harmful:unsafe-practices': 'Tests handling of dangerous activity instructions',
+    'harmful:violent-crime': 'Tests handling of violent crime content',
+    'harmful:weapons:ied': 'Tests handling of Improvised Explosive Devices',
+    hex: 'Tests handling of hex-encoded malicious payloads',
+    hijacking: 'Tests for unauthorized resource usage and purpose deviation',
+    homoglyph:
+      'Tests handling of homoglyph (visually similar Unicode characters) encoding to bypass filters',
+    image: 'Tests handling of image content',
+    imitation: 'Tests handling of unauthorized impersonation of entities',
+    'indirect-prompt-injection': 'Tests for injection vulnerabilities via untrusted variables',
+    intent: 'Tests for manipulation of system behavior via specific prompts',
+    jailbreak: 'Single-shot optimization of safety bypass techniques',
+    'jailbreak:composite': 'Combines multiple jailbreak techniques for enhanced effectiveness',
+    'jailbreak:likert': 'Uses Likert scale-based prompts to bypass content filters',
+    'jailbreak:tree': 'Tree-based search for optimal safety bypass vectors',
+    leetspeak: 'Tests handling of leetspeak-encoded malicious content',
+    'math-prompt': 'Tests handling of mathematical notation-based attacks',
+    morse: 'Tests handling of content encoded in Morse code to potentially bypass filters',
+    multilingual: 'Tests handling of attacks across multiple languages',
+    mcp: 'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
+    'off-topic':
+      'Tests whether AI systems can be manipulated to go off-topic from their intended purpose',
+    overreliance: 'Tests for overreliance on system assumptions',
+    pandamonium:
+      "[Experimental] Promptfoo's blackbox jailbreak. The latest and greatest jailbreak techniques, expertly tuned and crafted by Promptfoo's AI team.",
+    pii: 'Tests handling of personal identifiable information',
+    'pii:api-db': 'Tests for PII exposure via API/database access',
+    'pii:direct': 'Tests for direct PII exposure vulnerabilities',
+    'pii:session': 'Tests for PII exposure in session data',
+    'pii:social': 'Tests for PII exposure via social engineering',
+    piglatin: 'Tests handling of content translated to Pig Latin to potentially bypass filters',
+    camelcase: 'Tests handling of text transformed into camelCase to potentially bypass filters',
+    pliny: 'Tests handling of Pliny prompt injections',
+    policy: 'Tests compliance with custom security policies',
+    politics: 'Tests handling of political content and bias',
+    'prompt-extraction': 'Tests for system prompt disclosure vulnerabilities',
+    'prompt-injection': 'Tests for direct prompt injection vulnerabilities',
+    'rag-document-exfiltration': 'Tests for RAG document exfiltration',
+    'rag-poisoning': 'Tests for vulnerabilities to RAG retrieval poisoning attacks',
+    rbac: 'Tests role-based access control implementation',
+    'reasoning-dos':
+      'Tests for vulnerabilities to computational resource exhaustion through excessive reasoning patterns',
+    religion: 'Tests handling of religious content and bias',
+    retry:
+      'Automatically incorporates previously failed test cases to build a regression testing suite',
+    rot13: 'Tests handling of ROT13-encoded malicious content',
+    'shell-injection': 'Tests for command injection vulnerabilities',
+    'sql-injection': 'Tests for SQL injection vulnerabilities',
+    ssrf: 'Tests for server-side request forgery vulnerabilities',
+    'system-prompt-override': 'Tests for system prompt override vulnerabilities',
+    'tool-discovery': 'Tests for enumeration of available tools and function calls',
+    unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
+    xstest: 'Tests for XSTest attacks',
+    video: 'Tests handling of video content',
+    'other-encodings':
+      'Collection of alternative text transformation strategies (Morse code, Pig Latin, and camelCase) for testing evasion techniques',
+  };
 
 // These names are displayed in risk cards and in the table
-export const displayNameOverrides: Record<Plugin | Strategy, string> = {
+export const displayNameOverrides: Record<Exclude<Plugin, DeprecatedPlugin> | Strategy, string> = {
   [MEMORY_POISONING_PLUGIN_ID]: 'Agentic Memory Poisoning',
   'ascii-smuggling': 'ASCII Smuggling',
   audio: 'Audio Content',
@@ -1123,7 +1124,7 @@ export const severityDisplayNames: Record<Severity, string> = {
  * Default severity values for each plugin.
  * Use getRiskCategorySeverityMap() whenever possible to respect the user's severity settings.
  */
-export const riskCategorySeverityMap: Record<Plugin, Severity> = {
+export const riskCategorySeverityMap: Record<Exclude<Plugin, DeprecatedPlugin>, Severity> = {
   [MEMORY_POISONING_PLUGIN_ID]: Severity.High,
   'ascii-smuggling': Severity.Low,
   beavertails: Severity.Low,
@@ -1312,7 +1313,7 @@ export const categoryMapReverse = Object.entries(riskCategories).reduce(
 export const categoryLabels = Object.keys(categoryMapReverse);
 
 // Map from plugin name to metric name or harm category
-export const categoryAliases: Record<Plugin, string> = {
+export const categoryAliases: Record<Exclude<Plugin, DeprecatedPlugin>, string> = {
   [MEMORY_POISONING_PLUGIN_ID]: 'AgenticMemoryPoisoning',
   'ascii-smuggling': 'AsciiSmuggling',
   beavertails: 'BeaverTails',
@@ -1399,7 +1400,7 @@ export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
   {} as Record<string, string>,
 );
 
-export const pluginDescriptions: Record<Plugin, string> = {
+export const pluginDescriptions: Record<Exclude<Plugin, DeprecatedPlugin>, string> = {
   [MEMORY_POISONING_PLUGIN_ID]: 'Tests whether an agent is vulnerable to memory poisoning attacks',
   'ascii-smuggling': 'Tests for ASCII-based prompt smuggling vulnerabilities',
   beavertails: 'Tests handling of malicious prompts from the BeaverTails dataset',
