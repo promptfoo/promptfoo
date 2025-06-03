@@ -20,7 +20,7 @@ providers:
                   - fahrenheit
             required:
               - location
-  - id: openai:chat:gpt-4o-mini
+  - id: openai:chat:gpt-4.1-mini
     config:
       tools:
         - type: function
@@ -40,7 +40,7 @@ providers:
                     - fahrenheit
               required:
                 - location
-  - id: openai:chat:gpt-4o-mini
+  - id: openai:chat:gpt-4.1-mini
     config:
       tools: file://external_tools.yaml
   - id: groq:llama-3.3-70b-versatile

@@ -18,7 +18,7 @@ providers:
       - llama_prompt
     config:
       num_predict: 1024
-  - id: openai:gpt-4o-mini
+  - id: openai:gpt-4.1-mini
     prompts:
       - openai_prompt
 

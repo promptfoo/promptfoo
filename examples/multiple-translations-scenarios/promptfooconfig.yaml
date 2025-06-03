@@ -4,7 +4,7 @@ description: Multiple translation scenarios with different evaluation criteria
 prompts:
   - file://prompts.txt
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
   - openai:gpt-4o
 scenarios:
   - config:
