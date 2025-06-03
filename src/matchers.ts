@@ -396,37 +396,39 @@ function splitIntoSentences(text: string) {
   return text.split('\n').filter((sentence) => sentence.trim() !== '');
 }
 
+function processContextForTemplating(
+  context: Record<string, string | object>,
+  disableStringify: boolean,
+): Record<string, string | object> {
+  if (disableStringify) {
+    // Pass objects directly for property access
+    return context;
+  }
+
+  // Stringify objects to maintain compatibility
+  return Object.fromEntries(
+    Object.entries(context).map(([key, value]) => {
+      if (value && typeof value === 'object') {
+        if (Array.isArray(value)) {
+          return [
+            key,
+            value.map((item) => (item && typeof item === 'object' ? JSON.stringify(item) : item)),
+          ];
+        }
+        return [key, JSON.stringify(value)];
+      }
+      return [key, value];
+    }),
+  );
+}
+
 export async function renderLlmRubricPrompt(
   rubricPrompt: string,
   context: Record<string, string | object>,
 ) {
-  // Check if object template access is enabled
-  const enableObjectAccess = getEnvBool('PROMPTFOO_ENABLE_OBJECT_TEMPLATE_ACCESS', false);
-
-  let processedContext: Record<string, string | object>;
-
-  if (enableObjectAccess) {
-    // New behavior: pass objects directly for property access
-    processedContext = context;
-  } else {
-    // Default behavior: stringify objects to maintain compatibility
-    processedContext = Object.fromEntries(
-      Object.entries(context).map(([key, value]) => {
-        if (value && typeof value === 'object') {
-          // For arrays, stringify individual elements
-          if (Array.isArray(value)) {
-            return [
-              key,
-              value.map((item) => (typeof item === 'object' ? JSON.stringify(item) : item)),
-            ];
-          }
-          // For objects, stringify the entire object
-          return [key, JSON.stringify(value)];
-        }
-        return [key, value];
-      }),
-    );
-  }
+  // Check if object stringification is disabled (allowing direct object access)
+  const disableStringify = getEnvBool('PROMPTFOO_DISABLE_OBJECT_STRINGIFY', false);
+  const processedContext = processContextForTemplating(context, disableStringify);
 
   try {
     // Render every string scalar within the JSON

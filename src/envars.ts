@@ -48,7 +48,7 @@ export type EnvVars = {
   PROMPTFOO_STRIP_RESPONSE_OUTPUT?: boolean;
   PROMPTFOO_STRIP_TEST_VARS?: boolean;
   PROMPTFOO_TELEMETRY_DEBUG?: boolean;
-  PROMPTFOO_ENABLE_OBJECT_TEMPLATE_ACCESS?: boolean;
+  PROMPTFOO_DISABLE_OBJECT_STRINGIFY?: boolean;
 
   //=========================================================================
   // promptfoo configuration options
