@@ -398,9 +398,9 @@ function splitIntoSentences(text: string) {
 
 function processContextForTemplating(
   context: Record<string, string | object>,
-  disableStringify: boolean,
+  enableObjectAccess: boolean,
 ): Record<string, string | object> {
-  if (disableStringify) {
+  if (enableObjectAccess) {
     // Pass objects directly for property access
     return context;
   }
@@ -427,8 +427,8 @@ export async function renderLlmRubricPrompt(
   context: Record<string, string | object>,
 ) {
   // Check if object stringification is disabled (allowing direct object access)
-  const disableStringify = getEnvBool('PROMPTFOO_DISABLE_OBJECT_STRINGIFY', false);
-  const processedContext = processContextForTemplating(context, disableStringify);
+  const enableObjectAccess = getEnvBool('PROMPTFOO_DISABLE_OBJECT_STRINGIFY', false);
+  const processedContext = processContextForTemplating(context, enableObjectAccess);
 
   try {
     // Render every string scalar within the JSON
