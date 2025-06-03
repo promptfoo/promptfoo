@@ -51,7 +51,7 @@ tests:
       # $ref can be used as a shorthand to include reusable templates
       - $ref: '#/assertionTemplates/containsPirateNoise'
 
-outputPath: output.csv
+outputPath: file://output.csv
 
 assertionTemplates:
   containsPirateNoise:

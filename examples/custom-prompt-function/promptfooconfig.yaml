@@ -19,9 +19,9 @@ prompts:
     label: prompt_yaml
   - file://prompt.yaml
 
-  - id: subfolder/prompt.json
+  - id: file://subfolder/prompt.json
     label: prompt_json
-  - subfolder/prompt.json
+  - file://subfolder/prompt.json
 
   - file://./subfolder/*.json
 
