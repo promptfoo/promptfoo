@@ -5,7 +5,7 @@ prompts:
   - 'Translate the following text to {{target_language}}: {{text}}'
 
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
 
 # Demonstrate test generators with and without configuration
 tests:
