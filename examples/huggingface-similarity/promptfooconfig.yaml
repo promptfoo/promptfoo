@@ -5,7 +5,7 @@ prompts:
   - "You're a translator.  Translate this into {{language}}: {{input}}"
   - 'Speak in {{language}}: {{input}}'
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
   - openai:gpt-4
 tests:
   - vars:

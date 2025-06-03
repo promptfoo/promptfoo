@@ -12,7 +12,7 @@ providers:
     label: 4o
     prompts:
       - content_generation
-  - id: openai:gpt-4o-mini
+  - id: openai:gpt-4.1-mini
     label: '3.5'
     prompts:
       - knowledge_base_query

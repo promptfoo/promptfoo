@@ -9,7 +9,7 @@ providers:
     label: openai-gpt-4o-lowtemp
     config:
       temperature: 0
-  - id: openai:gpt-4o-mini
+  - id: openai:gpt-4.1-mini
     label: openai-gpt-4o-hightemp
     config:
       temperature: 1

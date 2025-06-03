@@ -5,7 +5,7 @@ prompts:
   - id: file://prompt.json
     label: multi-turn-conversation
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
 
 # Set up the system message for all tests
 defaultTest:
