@@ -196,7 +196,7 @@ describe('createDummyFiles', () => {
     const config = validationResult.data!;
     expect(config.tests).toBeDefined();
     expect(Array.isArray(config.tests)).toBe(true);
-    
+
     const tests = config.tests as any[];
     expect(tests.length).toBeGreaterThan(0);
 

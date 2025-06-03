@@ -244,15 +244,18 @@ describe('readStandaloneTestsFile', () => {
   });
 
   it('should load file references in config for JS generator', async () => {
-    const mockFn = jest.fn().mockResolvedValue([{ vars: { a: 1 } }]);
-    jest.mock('../../test_gen.js', () => mockFn, { virtual: true });
+    const mockResult = [{ vars: { a: 1 } }];
+    const mockFn = jest.fn().mockResolvedValue(mockResult);
+    jest.mock('../../test_config_gen.js', () => mockFn, { virtual: true });
 
+    jest.mocked(fs.existsSync).mockReturnValueOnce(true);
     jest.mocked(fs.readFileSync).mockReturnValueOnce('{"foo": "bar"}');
 
     const config = { data: 'file://config.json' };
-    await readStandaloneTestsFile('test_gen.js', '', config);
+    const result = await readStandaloneTestsFile('test_config_gen.js', '', config);
 
     expect(mockFn).toHaveBeenCalledWith({ data: { foo: 'bar' } });
+    expect(result).toEqual(mockResult);
   });
 
   it('should handle file:// prefix in file path', async () => {
@@ -374,6 +377,7 @@ describe('readStandaloneTestsFile', () => {
     const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
     mockRunPython.mockResolvedValueOnce(pythonResult);
 
+    jest.mocked(fs.existsSync).mockReturnValueOnce(true);
     jest.mocked(fs.readFileSync).mockReturnValueOnce('{"foo": "bar"}');
     const config = { data: 'file://config.json' };
     await readStandaloneTestsFile('test.py', '', config);
@@ -387,6 +391,7 @@ describe('readStandaloneTestsFile', () => {
 
   it('should throw error when Python file returns non-array', async () => {
     const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
+    mockRunPython.mockReset();
     mockRunPython.mockResolvedValueOnce({ not: 'an array' });
 
     await expect(readStandaloneTestsFile('test.py')).rejects.toThrow(
