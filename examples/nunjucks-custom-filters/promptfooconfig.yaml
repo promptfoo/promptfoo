@@ -4,7 +4,7 @@ description: Custom Nunjucks template filters for prompt generation
 prompts:
   - file://prompts.txt
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
 nunjucksFilters:
   allcaps: ./allcaps.js
 tests:

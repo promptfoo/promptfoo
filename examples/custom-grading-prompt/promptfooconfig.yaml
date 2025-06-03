@@ -4,7 +4,7 @@ description: Custom LLM-based grading with evaluation prompts
 prompts:
   - file://prompts.txt
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
 defaultTest:
   options:
     # ---

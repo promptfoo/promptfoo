@@ -130,8 +130,8 @@ description: DeepSeek R1 vs GPT-4o Red Team
 targets:
   - id: openrouter:deepseek/deepseek-r1
     label: deepseek-r1
-  - id: openai:gpt-4o-mini
-    label: gpt-4o-mini
+  - id: openai:gpt-4.1-mini
+    label: gpt-4.1-mini
 
 redteam:
 
