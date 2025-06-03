@@ -28,7 +28,7 @@ tests:
       - type: llm-rubric
         value: Do not apologize
   - vars:
-      riddle: 'You see a boat filled with people. It has not sunk, but when you look again you don't see a single person on the boat. Why?'
+      riddle: "You see a boat filled with people. It has not sunk, but when you look again you don't see a single person on the boat. Why?"
     assert:
       - type: llm-rubric
         value: explains that the people are below deck
