@@ -40,9 +40,6 @@ providers:
                     - fahrenheit
               required:
                 - location
-  - id: openai:chat:gpt-4.1-mini
-    config:
-      tools: file://external_tools.yaml
   - id: groq:llama-3.3-70b-versatile
     config:
       tools:
