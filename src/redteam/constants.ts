@@ -193,7 +193,7 @@ export const STRATEGY_EXEMPT_PLUGINS = [
   ...DATASET_EXEMPT_PLUGINS,
 ] as const;
 
-const DEPRECATED_PLUGINS = ['tool-discovery:multi-turn'] as const;
+export const DEPRECATED_PLUGINS = ['tool-discovery:multi-turn'] as const;
 
 export type AgenticExemptPlugin = (typeof AGENTIC_EXEMPT_PLUGINS)[number];
 export type DatasetExemptPlugin = (typeof DATASET_EXEMPT_PLUGINS)[number];

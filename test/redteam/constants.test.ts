@@ -33,6 +33,7 @@ import {
   AGENTIC_EXEMPT_PLUGINS,
   DATASET_EXEMPT_PLUGINS,
   STRATEGY_EXEMPT_PLUGINS,
+  DEPRECATED_PLUGINS,
 } from '../../src/redteam/constants';
 
 describe('constants', () => {
@@ -115,6 +116,7 @@ describe('constants', () => {
           ...ADDITIONAL_PLUGINS,
           ...CONFIG_REQUIRED_PLUGINS,
           ...AGENTIC_PLUGINS,
+          ...DEPRECATED_PLUGINS,
         ]),
       ].sort(),
     );
