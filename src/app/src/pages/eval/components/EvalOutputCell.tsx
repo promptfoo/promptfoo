@@ -487,12 +487,8 @@ function EvalOutputCell({
   );
 
   const cellStyle = useMemo(() => {
-    const base = output.gradingResult?.comment?.startsWith('!highlight')
-      ? {
-          backgroundColor: 'var(--cell-highlight-color)',
-          color: 'var(--cell-highlight-text-color)',
-        }
-      : {};
+    const base =
+      output.gradingResult?.comment === '!highlight' ? { backgroundColor: '#ffffeb' } : {};
 
     return {
       ...base,
