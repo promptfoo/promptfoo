@@ -108,20 +108,20 @@ export async function doGenerateRedteam(
 
   // Handle cloud config with target
   let loadedFromCloud = false;
-  let cloudConfig: UnifiedConfig | undefined;
+  let loadedCloudConfig: UnifiedConfig | undefined;
   if (configPath && UUID_REGEX.test(configPath)) {
     if (options.target && !UUID_REGEX.test(options.target)) {
       throw new Error('Invalid target ID, it must be a valid UUID');
     }
-    cloudConfig = await getConfigFromCloud(configPath, options.target);
+    loadedCloudConfig = await getConfigFromCloud(configPath, options.target);
 
     // backwards compatible for old cloud servers
     if (
       options.target &&
       UUID_REGEX.test(options.target) &&
-      (!cloudConfig.targets || cloudConfig.targets?.length === 0)
+      (!loadedCloudConfig.targets || loadedCloudConfig.targets?.length === 0)
     ) {
-      cloudConfig.targets = [{ id: `${CLOUD_PROVIDER_PREFIX}${options.target}`, config: {} }];
+      loadedCloudConfig.targets = [{ id: `${CLOUD_PROVIDER_PREFIX}${options.target}`, config: {} }];
     }
 
     loadedFromCloud = true;
@@ -164,13 +164,13 @@ export async function doGenerateRedteam(
   }
 
   let targetPurposeDiscoveryResult: TargetPurposeDiscoveryResult | undefined;
-  if (loadedFromCloud && cloudConfig) {
+  if (loadedFromCloud && loadedCloudConfig) {
     // Use cloud config through resolveConfigs to ensure proper type handling
     const resolved = await resolveConfigs(
       {
         config: [],
       },
-      cloudConfig,
+      loadedCloudConfig,
     );
     testSuite = resolved.testSuite;
     redteamConfig = resolved.config.redteam;

@@ -32,15 +32,18 @@ jest.mock('../../../src/envars', () => ({
   }),
 }));
 
-jest.mock('../../../src/globalConfig/cloud', () => ({
-  CloudConfig: jest.fn().mockImplementation(() => ({
-    isEnabled: jest.fn().mockReturnValue(false),
+jest.mock('../../../src/globalConfig/cloud', () => {
+  const mockCloudConfig = {
     getApiHost: jest.fn().mockReturnValue('https://api.promptfoo.app'),
-  })),
-  cloudConfig: {
-    getApiHost: jest.fn().mockReturnValue('https://api.promptfoo.app'),
-  },
-}));
+  };
+  return {
+    CloudConfig: jest.fn().mockImplementation(() => ({
+      isEnabled: jest.fn().mockReturnValue(false),
+      getApiHost: jest.fn().mockReturnValue('https://api.promptfoo.app'),
+    })),
+    cloudConfig: mockCloudConfig,
+  };
+});
 
 jest.mock('../../../src/redteam/commands/discover', () => ({
   doTargetPurposeDiscovery: jest.fn(),
@@ -1192,7 +1195,7 @@ describe('doGenerateRedteam', () => {
 
       expect(getConfigFromCloud).toHaveBeenCalledWith(configUUID, targetUUID);
       expect(synthesize).toHaveBeenCalledWith(expect.any(Object));
-      expect(writePromptfooConfig).toHaveBeenCalledWith(expect.any(Object), 'output.yaml');
+      expect(writePromptfooConfig).toHaveBeenCalledWith(expect.any(Object), 'output.yaml', expect.any(Array));
     });
 
     it('should throw error when target is used without cloud config UUID', async () => {
