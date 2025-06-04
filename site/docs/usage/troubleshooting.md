@@ -170,136 +170,85 @@ defaultTest:
 
 ## Timeout errors
 
-When running evals, you may encounter timeout errors, especially when using local providers or when running many concurrent requests. Promptfoo provides several timeout mechanisms to help you manage these issues effectively.
+When running evals, you may encounter timeout errors, especially when using local providers or when running many concurrent requests. Here's how to fix them:
 
-### Types of timeouts
+### Quick fixes
 
-#### 1. Individual evaluation step timeout
-
-Controls the maximum time allowed for each individual evaluation step (each provider call + assertion checking).
-
-**Environment variable:**
+**Problem: Individual requests are hanging or taking too long**
 ```bash
-export PROMPTFOO_EVAL_TIMEOUT_MS=30000  # 30 seconds per evaluation step
+export PROMPTFOO_EVAL_TIMEOUT_MS=30000  # 30 seconds per request
+npx promptfoo eval
 ```
 
-**Programmatic usage:**
-```javascript
-await evaluate(testSuite, evalRecord, { timeoutMs: 30000 });
-```
-
-**When to use:**
-- Provider calls are occasionally hanging or taking too long
-- You want to fail fast on individual slow requests
-- Testing against unreliable or slow APIs
-
-#### 2. Maximum total evaluation time
-
-Controls the maximum duration for the entire evaluation run, regardless of how many steps remain.
-
-**Environment variable:**
+**Problem: Evaluation is taking too long overall**
 ```bash
-export PROMPTFOO_MAX_EVAL_TIME_MS=300000  # 5 minutes total
+export PROMPTFOO_MAX_EVAL_TIME_MS=300000  # 5 minutes total limit
+npx promptfoo eval
 ```
 
-**Programmatic usage:**
-```javascript
-await evaluate(testSuite, evalRecord, { maxEvalTimeMs: 300000 });
-```
-
-**When to use:**
-- Running evaluations in CI/CD with strict time limits
-- Managing costs for expensive API calls
-- Preventing runaway evaluations in automated systems
-- Setting hard limits for batch processing jobs
-
-#### 3. Concurrency control
-
-Reduces the number of simultaneous requests to prevent overwhelming providers.
-
-**Command line:**
+**Problem: Provider is overwhelmed by concurrent requests**
 ```bash
-npx promptfoo eval -j 1  # Run with single concurrency
-npx promptfoo eval -j 4  # Run with 4 concurrent threads
+npx promptfoo eval -j 1  # Single request at a time
 ```
 
-### Timeout behavior
+### When to use each timeout
 
-**Individual step timeout:**
-- Each evaluation step that exceeds `timeoutMs` will be marked as failed
-- The evaluation continues with remaining steps
-- Error message: "Evaluation timed out after {timeoutMs}ms"
+- **`PROMPTFOO_EVAL_TIMEOUT_MS`** - Use when individual API calls hang (e.g., slow/unreliable providers)
+- **`PROMPTFOO_MAX_EVAL_TIME_MS`** - Use when you need hard time limits (e.g., CI/CD, cost control)
+- **`-j 1`** - Use when your provider can't handle multiple concurrent requests
 
-**Maximum evaluation time:**
-- When `maxEvalTimeMs` is exceeded, all remaining unprocessed evaluations are aborted
-- Aborted evaluations are marked as failed with timeout errors
-- The evaluation terminates early but saves all completed results
+<details>
+<summary>Advanced configuration examples</summary>
 
-### Configuration examples
-
-#### Basic timeout setup
+#### For CI/CD environments
 ```bash
-# Set individual step timeout to 10 seconds
-export PROMPTFOO_EVAL_TIMEOUT_MS=10000
-
-# Set maximum total evaluation time to 2 minutes  
-export PROMPTFOO_MAX_EVAL_TIME_MS=120000
-
-# Run with reduced concurrency
-npx promptfoo eval -j 2
-```
-
-#### CI/CD environment
-```bash
-# Strict timeouts for automated environments
+# Strict timeouts for automated systems
 export PROMPTFOO_EVAL_TIMEOUT_MS=15000      # 15 seconds per step
-export PROMPTFOO_MAX_EVAL_TIME_MS=600000    # 10 minutes total maximum
-
-npx promptfoo eval --output results.jsonl
+export PROMPTFOO_MAX_EVAL_TIME_MS=600000    # 10 minutes total
+npx promptfoo eval -j 2 --output results.jsonl
 ```
 
-#### Development environment
+#### For development
 ```bash
-# More lenient timeouts for development
+# More lenient timeouts for testing
 export PROMPTFOO_EVAL_TIMEOUT_MS=60000      # 1 minute per step
-export PROMPTFOO_MAX_EVAL_TIME_MS=1800000   # 30 minutes total maximum
-
+export PROMPTFOO_MAX_EVAL_TIME_MS=1800000   # 30 minutes total
 npx promptfoo eval --verbose
 ```
 
-### Troubleshooting timeout issues
+#### Programmatic usage
+```javascript
+await evaluate(testSuite, evalRecord, { 
+  timeoutMs: 30000,      // Individual step timeout
+  maxEvalTimeMs: 300000  // Total evaluation timeout
+});
+```
 
-1. **Check provider responsiveness:**
+</details>
+
+<details>
+<summary>Troubleshooting steps</summary>
+
+If timeouts aren't working as expected:
+
+1. **Test with minimal setup first:**
    ```bash
-   # Test with minimal setup first
    export PROMPTFOO_EVAL_TIMEOUT_MS=5000
    npx promptfoo eval -j 1
    ```
 
 2. **Gradually increase limits:**
    ```bash
-   # Start conservative and increase as needed
    export PROMPTFOO_EVAL_TIMEOUT_MS=30000
    export PROMPTFOO_MAX_EVAL_TIME_MS=600000
    ```
 
-3. **Monitor evaluation progress:**
+3. **Use verbose logging to see which steps are slow:**
    ```bash
-   # Use verbose logging to see which steps are slow
    npx promptfoo eval --verbose
    ```
 
-4. **Reduce concurrency for unstable providers:**
-   ```bash
-   # Single-threaded execution for debugging
-   npx promptfoo eval -j 1
-   ```
-
-### Default values
-
-- `PROMPTFOO_EVAL_TIMEOUT_MS`: 0 (no timeout)
-- `PROMPTFOO_MAX_EVAL_TIME_MS`: 0 (no limit)
-- Default concurrency: Based on system capabilities (typically 4-10 threads)
+</details>
 
 ## Debugging Python
 
