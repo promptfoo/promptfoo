@@ -141,7 +141,7 @@ describe('constants', () => {
   });
 
   it('AGENTIC_EXEMPT_PLUGINS should contain expected plugins', () => {
-    expect(AGENTIC_EXEMPT_PLUGINS).toEqual(['system-prompt-override', 'tool-discovery:multi-turn']);
+    expect(AGENTIC_EXEMPT_PLUGINS).toEqual(['system-prompt-override']);
   });
 
   it('DATASET_EXEMPT_PLUGINS should contain expected plugins', () => {
@@ -149,12 +149,7 @@ describe('constants', () => {
   });
 
   it('STRATEGY_EXEMPT_PLUGINS should combine agentic and dataset exempt plugins', () => {
-    const expectedPlugins = [
-      'system-prompt-override',
-      'tool-discovery:multi-turn',
-      'pliny',
-      'unsafebench',
-    ];
+    const expectedPlugins = ['system-prompt-override', 'pliny', 'unsafebench'];
 
     expect(STRATEGY_EXEMPT_PLUGINS).toEqual(expectedPlugins);
     expect(STRATEGY_EXEMPT_PLUGINS).toEqual([...AGENTIC_EXEMPT_PLUGINS, ...DATASET_EXEMPT_PLUGINS]);
