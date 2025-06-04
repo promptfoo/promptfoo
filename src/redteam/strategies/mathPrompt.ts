@@ -41,6 +41,7 @@ export async function generateMathPrompt(
           format:
             'Remote MathPrompt Generation {bar} {percentage}% | ETA: {eta}s | {value}/{total} batches',
           hideCursor: true,
+          gracefulExit: true,
         },
         Presets.shades_classic,
       );
@@ -146,6 +147,7 @@ export async function addMathPrompt(
       {
         format: 'Generating MathPrompt {bar} {percentage}% | ETA: {eta}s | {value}/{total}',
         hideCursor: true,
+        gracefulExit: true,
       },
       Presets.shades_classic,
     );
