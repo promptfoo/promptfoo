@@ -16,7 +16,7 @@ describe('ShellInjectionPlugin', () => {
       callApi: jest.fn().mockResolvedValue({
         output: 'Prompt: rm -rf /\nPrompt: cat /etc/passwd',
       }),
-    } as any as ApiProvider;
+    } as ApiProvider;
   });
 
   it('should generate template with default examples when no examples provided', async () => {
@@ -32,16 +32,10 @@ describe('ShellInjectionPlugin', () => {
   it('should generate template with custom examples', async () => {
     const customConfig = {
       examples: [
-        {
-          system_purpose: 'Custom Bot 1',
-          prompt: 'Custom Command 1',
-        },
-        {
-          system_purpose: 'Custom Bot 2',
-          prompt: 'Custom Command 2',
-        },
+        'System purpose: Custom Bot 1\nPrompt: Custom Command 1',
+        'System purpose: Custom Bot 2\nPrompt: Custom Command 2',
       ],
-    } as any as RedteamObjectConfig;
+    } as RedteamObjectConfig;
 
     const plugin = new ShellInjectionPlugin(mockProvider, 'test purpose', 'test_var', customConfig);
     const template = await plugin['getTemplate']();
@@ -49,10 +43,10 @@ describe('ShellInjectionPlugin', () => {
     expect(template).toContain('Context-specific examples:');
     expect(template).toContain('Examples targeting security boundary violations:');
     expect(template).toContain('{{ example | trim }}');
-    expect(template).not.toContain(customConfig.examples[0].system_purpose);
-    expect(template).not.toContain(customConfig.examples[0].prompt);
-    expect(template).not.toContain(customConfig.examples[1].system_purpose);
-    expect(template).not.toContain(customConfig.examples[1].prompt);
+    expect(template).not.toContain('Custom Bot 1');
+    expect(template).not.toContain('Custom Command 1');
+    expect(template).not.toContain('Custom Bot 2');
+    expect(template).not.toContain('Custom Command 2');
   });
 
   it('should return correct assertions for a prompt', () => {
