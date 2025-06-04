@@ -3,6 +3,17 @@ import type { TestCase } from '@promptfoo/types';
 
 export interface ApplicationDefinition {
   purpose?: string;
+  features?: string;
+  hasAccessTo?: string;
+  doesNotHaveAccessTo?: string;
+  userTypes?: string;
+  securityRequirements?: string;
+  exampleIdentifiers?: string;
+  industry?: string;
+  sensitiveDataTypes?: string;
+  criticalActions?: string;
+  forbiddenTopics?: string;
+  competitors?: string;
   systemPrompt?: string;
   redteamUser?: string;
   accessToData?: string;
@@ -10,6 +21,7 @@ export interface ApplicationDefinition {
   accessToActions?: string;
   forbiddenActions?: string;
   connectedSystems?: string;
+  attackConstraints?: string;
 }
 
 export interface Config {

@@ -11,7 +11,7 @@ prompts:
     Only output raw SQL code without markdown.
 
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
   - openai:gpt-4o
 
 tests:

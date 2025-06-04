@@ -9,9 +9,10 @@ import type winston from 'winston';
 import { MODEL_GRADED_ASSERTION_TYPES, runAssertions, runCompareAssertion } from './assertions';
 import { fetchWithCache, getCache } from './cache';
 import cliState from './cliState';
+import { FILE_METADATA_KEY } from './constants';
 import { updateSignalFile } from './database/signal';
 import { getEnvBool, getEnvInt, isCI, getEvalTimeoutMs } from './envars';
-import { renderPrompt, runExtensionHook } from './evaluatorHelpers';
+import { renderPrompt, runExtensionHook, collectFileMetadata } from './evaluatorHelpers';
 import logger from './logger';
 import type Eval from './models/eval';
 import { generateIdFromPrompt } from './models/prompt';
@@ -186,6 +187,10 @@ export async function runEval({
 
   // Set up the special _conversation variable
   const vars = test.vars || {};
+
+  // Collect file metadata for the test case before rendering the prompt.
+  const fileMetadata = collectFileMetadata(test.vars || vars);
+
   const conversationKey = `${provider.label || provider.id()}:${prompt.id}${test.metadata?.conversationId ? `:${test.metadata.conversationId}` : ''}`;
   const usesConversation = prompt.raw.includes('_conversation');
   if (
@@ -314,6 +319,7 @@ export async function runEval({
       metadata: {
         ...test.metadata,
         ...response.metadata,
+        [FILE_METADATA_KEY]: fileMetadata,
       },
       promptIdx,
       testIdx,
@@ -461,7 +467,7 @@ export function generateVarCombinations(
     if (typeof vars[key] === 'string' && vars[key].startsWith('file://')) {
       const filePath = vars[key].slice('file://'.length);
       const resolvedPath = path.resolve(cliState.basePath || '', filePath);
-      const filePaths = globSync(resolvedPath.replace(/\\/g, '/'));
+      const filePaths = globSync(resolvedPath.replace(/\\/g, '/')) || [];
       values = filePaths.map((path: string) => `file://${path}`);
       if (values.length === 0) {
         throw new Error(`No files found for variable ${key} at path ${resolvedPath}`);
@@ -1164,6 +1170,7 @@ class Evaluator {
             ? 'Group {groupId} [{bar}] {percentage}% | {value}/{total} | {activeThreads}/{maxThreads} threads | {provider} "{prompt}" {vars}'
             : 'Group {groupId} [{bar}] {percentage}% | {value}/{total} | {provider} "{prompt}" {vars}',
           hideCursor: true,
+          gracefulExit: true,
         },
         cliProgress.Presets.shades_classic,
       );
@@ -1355,7 +1362,7 @@ class Evaluator {
       progressBar.stop();
     }
 
-    this.evalRecord.setVars(vars);
+    this.evalRecord.setVars(Array.from(vars));
 
     await runExtensionHook(testSuite.extensions, 'afterAll', {
       prompts: this.evalRecord.prompts,

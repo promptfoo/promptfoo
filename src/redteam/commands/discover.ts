@@ -96,6 +96,34 @@ const COMMAND = 'discover';
 // Utils
 // ========================================================
 
+// Helper function to check if a string value should be considered null
+const isNullLike = (value: string | null | undefined): boolean => {
+  return !value || value === 'null' || value.trim() === '';
+};
+
+// Helper function to clean tools array
+const cleanTools = (tools: Array<any> | null | undefined): Array<any> => {
+  if (!tools || !Array.isArray(tools)) {
+    return [];
+  }
+  return tools.filter((tool) => tool !== null && typeof tool === 'object');
+};
+
+/**
+ * Normalizes a TargetPurposeDiscoveryResult by converting null-like values to actual null
+ * and cleaning up empty or meaningless content.
+ */
+export function normalizeTargetPurposeDiscoveryResult(
+  result: TargetPurposeDiscoveryResult,
+): TargetPurposeDiscoveryResult {
+  return {
+    purpose: isNullLike(result.purpose) ? null : result.purpose,
+    limitations: isNullLike(result.limitations) ? null : result.limitations,
+    user: isNullLike(result.user) ? null : result.user,
+    tools: cleanTools(result.tools),
+  };
+}
+
 /**
  * Queries Cloud for the purpose-discovery logic, sends each logic to the target,
  * and summarizes the results.
@@ -112,10 +140,11 @@ export async function doTargetPurposeDiscovery(
   const sessionId = randomUUID();
 
   const pbar = new cliProgress.SingleBar({
-    format: `Discovering the target {bar} {percentage}% | {value}${DEFAULT_TURN_COUNT ? '/{total}' : ''} turns`,
+    format: `Mapping the target {bar} {percentage}% | {value}${DEFAULT_TURN_COUNT ? '/{total}' : ''} turns`,
     barCompleteChar: '\u2588',
     barIncompleteChar: '\u2591',
     hideCursor: true,
+    gracefulExit: true,
   });
 
   pbar.start(DEFAULT_TURN_COUNT, 0);
@@ -215,7 +244,7 @@ export async function doTargetPurposeDiscovery(
   }
   pbar.stop();
 
-  return discoveryResult;
+  return discoveryResult ? normalizeTargetPurposeDiscoveryResult(discoveryResult) : undefined;
 }
 
 /**
@@ -228,6 +257,14 @@ export function mergeTargetPurposeDiscoveryResults(
   humanDefinedPurpose?: string,
   discoveryResult?: TargetPurposeDiscoveryResult,
 ): string {
+  // Check if there's any meaningful discovered content
+  const hasDiscoveredContent =
+    discoveryResult &&
+    (discoveryResult.purpose ||
+      discoveryResult.limitations ||
+      discoveryResult.user ||
+      (discoveryResult.tools && discoveryResult.tools.length > 0));
+
   return [
     humanDefinedPurpose &&
       dedent`
@@ -237,7 +274,7 @@ export function mergeTargetPurposeDiscoveryResults(
 
       ${humanDefinedPurpose}
     `,
-    discoveryResult &&
+    hasDiscoveredContent &&
       dedent`
       # Agent Discovered Target Purpose
 
@@ -264,6 +301,7 @@ export function mergeTargetPurposeDiscoveryResults(
       ${discoveryResult.limitations}
     `,
     discoveryResult?.tools &&
+      discoveryResult.tools.length > 0 &&
       dedent`
       ## Tools
 
@@ -404,7 +442,7 @@ export function discoverCommand(
             logger.info(chalk.bold(chalk.green('\nThe target believes its limitations to be:\n')));
             logger.info(discoveryResult.limitations);
           }
-          if (discoveryResult.tools) {
+          if (discoveryResult.tools && discoveryResult.tools.length > 0) {
             logger.info(chalk.bold(chalk.green('\nThe target divulged access to these tools:\n')));
             logger.info(JSON.stringify(discoveryResult.tools, null, 2));
           }
@@ -413,6 +451,18 @@ export function discoverCommand(
               chalk.bold(chalk.green('\nThe target believes the user of the application is:\n')),
             );
             logger.info(discoveryResult.user);
+          }
+
+          // If no meaningful information was discovered, inform the user
+          if (
+            !discoveryResult.purpose &&
+            !discoveryResult.limitations &&
+            (!discoveryResult.tools || discoveryResult.tools.length === 0) &&
+            !discoveryResult.user
+          ) {
+            logger.info(
+              chalk.yellow('\nNo meaningful information was discovered about the target.'),
+            );
           }
         }
       } catch (error) {

@@ -97,7 +97,7 @@ describe('CrescendoProvider', () => {
     expect(crescendoProvider.id()).toBe('promptfoo:redteam:crescendo');
   });
 
-  it('should handle API call with required context', async () => {
+  it('should succeed via internal evaluator when eval score is 100', async () => {
     const prompt = 'test prompt';
     const context = {
       originalProvider: mockTargetProvider,
@@ -105,7 +105,7 @@ describe('CrescendoProvider', () => {
       prompt: { raw: prompt, label: 'test' },
     };
 
-    mockRedTeamProvider.callApi.mockResolvedValueOnce({
+    mockRedTeamProvider.callApi.mockResolvedValue({
       output: JSON.stringify({
         generatedQuestion: 'test question',
         rationaleBehindJailbreak: 'test rationale',
@@ -113,11 +113,11 @@ describe('CrescendoProvider', () => {
       }),
     });
 
-    mockTargetProvider.callApi.mockResolvedValueOnce({
+    mockTargetProvider.callApi.mockResolvedValue({
       output: 'target response',
     });
 
-    mockScoringProvider.callApi.mockResolvedValueOnce({
+    mockScoringProvider.callApi.mockResolvedValue({
       output: JSON.stringify({
         value: true,
         metadata: 100,
@@ -126,13 +126,63 @@ describe('CrescendoProvider', () => {
     });
 
     const result = await crescendoProvider.callApi(prompt, context);
-
-    expect(result).toBeDefined();
-    expect(result.output).toBe('target response');
-    expect(result.metadata).toBeDefined();
+    expect(result.metadata?.stopReason).toBe('Internal evaluator success');
+    expect(result.metadata?.crescendoResult).toBe(true);
+    expect(result.metadata?.crescendoConfidence).toBe(100);
   });
 
-  it('should handle provider errors', async () => {
+  it('should succeed via external grader when grader fails', async () => {
+    const prompt = 'test prompt';
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: prompt, label: 'test' },
+      test: { assert: [{ type: 'mock-grader' }] } as any,
+    };
+
+    mockRedTeamProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        generatedQuestion: 'test question',
+        rationaleBehindJailbreak: 'test rationale',
+        lastResponseSummary: 'test summary',
+      }),
+    });
+
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: 'target response',
+    });
+
+    mockScoringProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        value: false,
+        metadata: 50,
+        rationale: 'test rationale',
+      }),
+    });
+
+    jest.mock('../../../../src/redteam/graders', () => ({
+      getGraderById: () => ({
+        getResult: async () => ({
+          grade: {
+            pass: false,
+          },
+        }),
+      }),
+    }));
+
+    const result = await crescendoProvider.callApi(prompt, context);
+    expect(result.metadata?.stopReason).toBe('Grader failed');
+  });
+
+  it('should stop when max backtracks reached', async () => {
+    crescendoProvider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxRounds: 10,
+      maxBacktracks: 2,
+      redteamProvider: mockRedTeamProvider,
+      stateful: false,
+    });
+
     const prompt = 'test prompt';
     const context = {
       originalProvider: mockTargetProvider,
@@ -140,20 +190,38 @@ describe('CrescendoProvider', () => {
       prompt: { raw: prompt, label: 'test' },
     };
 
-    mockRedTeamProvider.callApi.mockRejectedValueOnce(new Error('Provider error'));
+    mockRedTeamProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        generatedQuestion: 'test question',
+        rationaleBehindJailbreak: 'test rationale',
+        lastResponseSummary: 'test summary',
+      }),
+    });
+
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: 'I cannot help with that.',
+    });
+
+    mockScoringProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        value: true,
+        metadata: 0,
+        rationale: 'This is a refusal',
+      }),
+    });
 
     const result = await crescendoProvider.callApi(prompt, context);
-    expect(result.output).toBe('');
-    expect(result.metadata?.crescendoRoundsCompleted).toBe(10);
-    expect(result.metadata?.crescendoBacktrackCount).toBe(0);
-    expect(result.metadata?.crescendoResult).toBe(false);
+    expect(result.metadata?.crescendoBacktrackCount).toBe(2);
+    expect(result.metadata?.stopReason).toBe('Max backtracks reached');
   });
 
-  it('should respect maxRounds config', async () => {
+  it('should stop when max rounds reached', async () => {
     crescendoProvider = new CrescendoProvider({
       injectVar: 'objective',
-      redteamProvider: mockRedTeamProvider,
       maxRounds: 2,
+      maxBacktracks: 10,
+      redteamProvider: mockRedTeamProvider,
+      stateful: true,
     });
 
     const prompt = 'test prompt';
@@ -184,6 +252,119 @@ describe('CrescendoProvider', () => {
     });
 
     const result = await crescendoProvider.callApi(prompt, context);
-    expect(result.metadata?.crescendoRoundsCompleted).toBeLessThanOrEqual(2);
+    expect(result.metadata?.crescendoRoundsCompleted).toBe(2);
+    expect(result.metadata?.stopReason).toBe('Max rounds reached');
+    expect(result.metadata?.crescendoResult).toBe(false);
+  });
+
+  it('should handle provider errors gracefully', async () => {
+    const prompt = 'test prompt';
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: prompt, label: 'test' },
+    };
+
+    mockRedTeamProvider.callApi.mockRejectedValueOnce(new Error('Provider error'));
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: '',
+    });
+
+    const result = await crescendoProvider.callApi(prompt, context);
+    expect(result.output).toBe('');
+    expect(result.metadata?.crescendoRoundsCompleted).toBe(10);
+    expect(result.metadata?.crescendoBacktrackCount).toBe(0);
+    expect(result.metadata?.crescendoResult).toBe(false);
+    expect(result.metadata?.stopReason).toBe('Max rounds reached');
+  });
+
+  it('should handle purpose from test metadata', async () => {
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      redteamProvider: mockRedTeamProvider,
+    });
+
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: 'test prompt', label: 'test' },
+      test: {
+        metadata: {
+          purpose: 'test purpose',
+        },
+      },
+    };
+
+    mockRedTeamProvider.callApi.mockResolvedValueOnce({
+      output: JSON.stringify({
+        generatedQuestion: 'test question',
+        rationaleBehindJailbreak: 'test rationale',
+        lastResponseSummary: 'test summary',
+      }),
+    });
+
+    mockTargetProvider.callApi.mockResolvedValueOnce({
+      output: 'target response',
+    });
+
+    mockScoringProvider.callApi.mockResolvedValueOnce({
+      output: JSON.stringify({
+        value: true,
+        metadata: 100,
+        rationale: 'test rationale',
+      }),
+    });
+
+    await provider.callApi('test prompt', context);
+
+    expect(mockRedTeamProvider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining('test purpose'),
+      expect.any(Object),
+    );
+  });
+
+  it('should pass purpose parameter to getAttackPrompt', async () => {
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      redteamProvider: mockRedTeamProvider,
+    });
+
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: 'test prompt', label: 'test' },
+      test: {
+        metadata: {
+          purpose: 'test purpose for attack',
+        },
+      },
+    };
+
+    mockRedTeamProvider.callApi.mockResolvedValueOnce({
+      output: JSON.stringify({
+        generatedQuestion: 'test question',
+        rationaleBehindJailbreak: 'test rationale',
+        lastResponseSummary: 'test summary',
+      }),
+    });
+
+    mockTargetProvider.callApi.mockResolvedValueOnce({
+      output: 'target response',
+    });
+
+    mockScoringProvider.callApi.mockResolvedValueOnce({
+      output: JSON.stringify({
+        value: true,
+        metadata: 100,
+        rationale: 'test rationale',
+      }),
+    });
+
+    await provider.callApi('test prompt', context);
+
+    expect(mockRedTeamProvider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining('test purpose for attack'),
+      expect.any(Object),
+    );
   });
 });

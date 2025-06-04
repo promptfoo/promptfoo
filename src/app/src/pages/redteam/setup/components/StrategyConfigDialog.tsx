@@ -84,7 +84,6 @@ export default function StrategyConfigDialog({
       strategy === 'goat' ||
       strategy === 'crescendo' ||
       strategy === 'pandamonium' ||
-      strategy === 'tool-discovery:multi-turn' ||
       strategy === 'gcg' ||
       strategy === 'citation'
     ) {
@@ -435,28 +434,6 @@ export default function StrategyConfigDialog({
             placeholder="Max consecutive iterations without improvement (default: 25)"
             InputProps={{ inputProps: { min: 5, max: 50 } }}
             helperText="Stop after this many consecutive iterations without score improvement"
-          />
-        </Box>
-      );
-    } else if (strategy === 'tool-discovery:multi-turn') {
-      return (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <Typography variant="body2" color="text.secondary">
-            Configure the Multi-turn Tool Discovery strategy parameters.
-          </Typography>
-
-          <TextField
-            fullWidth
-            label="Maximum Rounds"
-            type="number"
-            value={localConfig.maxRounds || 15}
-            onChange={(e) => {
-              const value = e.target.value ? Number.parseInt(e.target.value, 10) : 15;
-              setLocalConfig({ ...localConfig, maxRounds: value });
-            }}
-            placeholder="Maximum conversation rounds (default: 15)"
-            InputProps={{ inputProps: { min: 5, max: 30 } }}
-            helperText="Maximum number of back-and-forth exchanges to perform"
           />
         </Box>
       );

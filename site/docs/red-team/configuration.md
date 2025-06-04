@@ -486,10 +486,10 @@ Note that this is separate from the "target" model(s), which are set in the top-
 
 A common use case is to use an alternative platform like [Azure](/docs/providers/azure/), [Bedrock](/docs/providers/aws-bedrock), or [HuggingFace](/docs/providers/huggingface/).
 
-You can also use a [custom HTTP endpoint](/docs/providers/http/), local models via [Ollama](/docs/providers/ollama/), or [a custom Python implementations](/docs/providers/python/). See the full list of available providers [here](/docs/providers/).
+You can also use a [custom HTTP endpoint](/docs/providers/http/), local models via [Ollama](/docs/providers/ollama/), or [a custom Python implementation](/docs/providers/python/). See the full list of available providers [here](/docs/providers/).
 
 :::warning
-Your choice of attack provider is extremely important for the quality of your redteam tests. We recommend using a state-of-the-art model such as GPT 4o.
+Your choice of attack provider is extremely important for the quality of your redteam tests. We recommend using a state-of-the-art model such as GPT 4.1.
 :::
 
 ### How attacks are generated
