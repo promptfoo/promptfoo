@@ -416,7 +416,7 @@ export class GoogleEmbeddingProvider extends AIStudioGenericProvider {
         url,
         {
           method: 'POST',
-          headers: { 
+          headers: {
             'Content-Type': 'application/json',
             ...this.config.headers, // Allow custom headers to be set
           },

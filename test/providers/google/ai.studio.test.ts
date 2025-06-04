@@ -1138,7 +1138,7 @@ describe('AIStudioChatProvider', () => {
           },
         },
       });
-  
+
       const mockResponse = {
         data: {
           candidates: [{ content: { parts: [{ text: 'response text' }] } }],
@@ -1150,16 +1150,16 @@ describe('AIStudioChatProvider', () => {
         },
         cached: false,
       };
-  
+
       jest.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
       jest.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
         contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
         coerced: false,
         systemInstruction: undefined,
       });
-  
+
       await provider.callGemini('test prompt');
-  
+
       expect(cache.fetchWithCache).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
