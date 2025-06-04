@@ -190,3 +190,5 @@ export async function addMathPrompt(
 
   return encodedTestCases;
 }
+
+export { DEFAULT_MATH_CONCEPTS, EXAMPLES };
