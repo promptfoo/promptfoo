@@ -144,6 +144,7 @@ export async function doTargetPurposeDiscovery(
     barCompleteChar: '\u2588',
     barIncompleteChar: '\u2591',
     hideCursor: true,
+    gracefulExit: true,
   });
 
   pbar.start(DEFAULT_TURN_COUNT, 0);
