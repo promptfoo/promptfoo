@@ -1195,7 +1195,11 @@ describe('doGenerateRedteam', () => {
 
       expect(getConfigFromCloud).toHaveBeenCalledWith(configUUID, targetUUID);
       expect(synthesize).toHaveBeenCalledWith(expect.any(Object));
-      expect(writePromptfooConfig).toHaveBeenCalledWith(expect.any(Object), 'output.yaml', expect.any(Array));
+      expect(writePromptfooConfig).toHaveBeenCalledWith(
+        expect.any(Object),
+        'output.yaml',
+        expect.any(Array),
+      );
     });
 
     it('should throw error when target is used without cloud config UUID', async () => {
