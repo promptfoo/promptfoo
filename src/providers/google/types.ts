@@ -92,14 +92,14 @@ export interface CompletionOptions {
   apiKey?: string;
   apiHost?: string;
   apiBaseUrl?: string;
+  headers?: { [key: string]: string }; // Custom headers for the request
   projectId?: string;
   region?: string;
   publisher?: string;
   apiVersion?: string;
   anthropicVersion?: string;
   anthropic_version?: string; // Alternative format
-  headers?: { [key: string]: string }; // Custom headers for the request
-
+  
   // https://ai.google.dev/api/rest/v1beta/models/streamGenerateContent#request-body
   context?: string;
   examples?: { input: string; output: string }[];
