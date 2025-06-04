@@ -9,10 +9,10 @@ providers:
 
 # Demonstrate test generators with and without configuration
 tests:
-  # 1. Basic generator without configuration (backward compatibility)
+  # 1. Basic generator with default languages (Spanish, French)
   - file://test_cases.py:generate_simple_tests
 
-  # 2. Same generator with custom languages to avoid duplicates
+  # 2. Same generator with different languages (German, Italian)
   - path: file://test_cases.py:generate_simple_tests
     config:
       languages: [German, Italian]

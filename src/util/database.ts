@@ -93,12 +93,24 @@ export async function writeResultsToDatabase(
 
   // Record dataset relation
   const datasetId = sha256(JSON.stringify(config.tests || []));
+  const testsForStorage = Array.isArray(config.tests) ? config.tests : [];
+
+  // Log when non-array tests are converted to empty array for database storage
+  if (config.tests && !Array.isArray(config.tests)) {
+    const testsType = typeof config.tests;
+    const hasPath =
+      typeof config.tests === 'object' && config.tests !== null && 'path' in config.tests;
+    logger.debug(
+      `Converting non-array test configuration to empty array for database storage. Type: ${testsType}, hasPath: ${hasPath}`,
+    );
+  }
+
   promises.push(
     db
       .insert(datasetsTable)
       .values({
         id: datasetId,
-        tests: Array.isArray(config.tests) ? config.tests : [],
+        tests: testsForStorage,
       })
       .onConflictDoNothing()
       .run(),

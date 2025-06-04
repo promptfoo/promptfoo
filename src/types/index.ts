@@ -718,9 +718,48 @@ export type AtomicTestCase<vars = Record<string, string | object>> = z.infer<
   typeof AtomicTestCaseSchema
 >;
 
+/**
+ * Configuration schema for test generators that accept parameters
+ *
+ * @example
+ * ```yaml
+ * tests:
+ *   - path: file://test_cases.py:generate_tests
+ *     config:
+ *       dataset: truthfulqa
+ *       split: validation
+ *       max_rows: 100
+ * ```
+ */
 export const TestGeneratorConfigSchema = z.object({
+  /** Path to the test generator function (e.g., file://path/to/tests.py:function_name) */
   path: z.string(),
-  config: z.any().optional(),
+  /**
+   * Configuration object passed to the generator function
+   * Common configuration options include:
+   * - dataset: string - Dataset identifier
+   * - split: string - Dataset split (train/validation/test)
+   * - max_rows: number - Maximum number of test cases to generate
+   * - languages: string[] - Array of target languages
+   * - difficulty: string - Difficulty level (basic/intermediate/advanced)
+   * - categories: string[] - Array of test categories
+   * - data: object - Custom data configuration
+   *
+   * Values can reference external files using file:// paths
+   */
+  config: z
+    .record(
+      z.string(),
+      z.union([
+        z.string(),
+        z.number(),
+        z.boolean(),
+        z.array(z.union([z.string(), z.number(), z.boolean()])),
+        z.record(z.string(), z.any()),
+        z.any(), // Allow for complex nested structures and file:// references
+      ]),
+    )
+    .optional(),
 });
 
 export type TestGeneratorConfig = z.infer<typeof TestGeneratorConfigSchema>;

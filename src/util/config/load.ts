@@ -36,6 +36,13 @@ import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
 import { readTest, readTests } from '../testCaseReader';
 
+/**
+ * Type guard to check if a test case has vars property
+ */
+function isTestCaseWithVars(test: unknown): test is { vars: Record<string, unknown> } {
+  return typeof test === 'object' && test !== null && 'vars' in test;
+}
+
 export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
   if (getEnvBool('PROMPTFOO_DISABLE_REF_PARSER')) {
     return rawConfig;
@@ -208,10 +215,7 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
       // Check the array for `prompt` vars
       (Array.isArray(ret.tests) &&
         ret.tests.some(
-          (test) =>
-            typeof test === 'object' &&
-            'vars' in test &&
-            Object.keys(test.vars || {}).includes('prompt'),
+          (test) => isTestCaseWithVars(test) && Object.keys(test.vars || {}).includes('prompt'),
         ));
 
     if (!hasAnyPrompt) {

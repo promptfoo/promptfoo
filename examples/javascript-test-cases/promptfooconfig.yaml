@@ -39,3 +39,11 @@ tests:
       difficulty: 'intermediate'
       languages: ['French']
       max_results: 1
+
+  # Load advanced difficulty translations to demonstrate full difficulty range
+  - path: file://dynamicTests.ts:generateFromDatabase
+    config:
+      dataset: 'basic_translations'
+      difficulty: 'advanced'
+      languages: ['Italian']
+      max_results: 1

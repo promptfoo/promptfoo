@@ -203,7 +203,7 @@ describe('createDummyFiles', () => {
     expect(typeof firstTest).toBe('object');
     expect(firstTest).toHaveProperty('vars');
 
-    const vars = firstTest.vars;
+    const { vars } = firstTest;
     expect(typeof vars).toBe('object');
     expect(vars).toHaveProperty('inquiry');
     expect(vars).toHaveProperty('context');
