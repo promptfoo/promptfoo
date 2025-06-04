@@ -49,10 +49,10 @@ describe('ShellInjectionPlugin', () => {
     expect(template).toContain('Context-specific examples:');
     expect(template).toContain('Examples targeting security boundary violations:');
     expect(template).toContain('{{ example | trim }}');
-    expect(template).not.toContain((customConfig as any).examples[0].system_purpose);
-    expect(template).not.toContain((customConfig as any).examples[0].prompt);
-    expect(template).not.toContain((customConfig as any).examples[1].system_purpose);
-    expect(template).not.toContain((customConfig as any).examples[1].prompt);
+    expect(template).not.toContain(customConfig.examples[0].system_purpose);
+    expect(template).not.toContain(customConfig.examples[0].prompt);
+    expect(template).not.toContain(customConfig.examples[1].system_purpose);
+    expect(template).not.toContain(customConfig.examples[1].prompt);
   });
 
   it('should return correct assertions for a prompt', () => {
