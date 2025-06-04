@@ -2,7 +2,7 @@
 description: IMDB Review Sentiment Analysis
 
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
 
 prompts:
   - label: Sentiment Analysis

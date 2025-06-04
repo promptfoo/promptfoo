@@ -141,7 +141,7 @@ describe('constants', () => {
   });
 
   it('AGENTIC_EXEMPT_PLUGINS should contain expected plugins', () => {
-    expect(AGENTIC_EXEMPT_PLUGINS).toEqual(['system-prompt-override', 'tool-discovery:multi-turn']);
+    expect(AGENTIC_EXEMPT_PLUGINS).toEqual(['system-prompt-override', 'agentic:memory-poisoning']);
   });
 
   it('DATASET_EXEMPT_PLUGINS should contain expected plugins', () => {
@@ -151,7 +151,7 @@ describe('constants', () => {
   it('STRATEGY_EXEMPT_PLUGINS should combine agentic and dataset exempt plugins', () => {
     const expectedPlugins = [
       'system-prompt-override',
-      'tool-discovery:multi-turn',
+      'agentic:memory-poisoning',
       'pliny',
       'unsafebench',
     ];

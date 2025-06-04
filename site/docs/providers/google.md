@@ -38,6 +38,7 @@ If you are using Google Vertex, see the [`vertex` provider](/docs/providers/vert
 
 - `GOOGLE_API_KEY` (required) - Google AI Studio API key
 - `GOOGLE_API_HOST` - used to override the Google API host, defaults to `generativelanguage.googleapis.com`
+- `GOOGLE_API_BASE_URL` - used to override the Google API base url, defaults to `https://generativelanguage.googleapis.com`
 
 ### Basic Configuration
 

@@ -27,7 +27,7 @@ promptfoo eval
 This example:
 
 - Tests two different ways to phrase a translation prompt
-- Compares outputs between GPT-4o and GPT-4o-mini
+- Compares outputs between GPT-4.1 and o4-mini
 - Uses two test cases with different languages and inputs
 
 The configuration in `promptfooconfig.yaml` shows:
