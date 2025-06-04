@@ -172,6 +172,7 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            ...this.config.headers, // Allow custom headers to be passed
           },
           body: JSON.stringify(body),
         },
@@ -288,6 +289,7 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            ...this.config.headers, // Allow custom headers to be set
           },
           body: JSON.stringify(body),
         },
@@ -414,7 +416,10 @@ export class GoogleEmbeddingProvider extends AIStudioGenericProvider {
         url,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...this.config.headers, // Allow custom headers to be set
+          },
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
