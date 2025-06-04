@@ -68,6 +68,7 @@ async function generateGcgPrompts(
 
       // Handle both single response and array of responses
       const responses = data.responses as string[];
+      const originalText = String(testCase.vars[injectVar]);
 
       const gcgTestCases = responses.map((response: string) => ({
         ...testCase,
@@ -82,6 +83,7 @@ async function generateGcgPrompts(
         metadata: {
           ...testCase.metadata,
           strategyId: 'gcg',
+          originalText,
         },
       }));
 

@@ -61,6 +61,8 @@ async function generateCitations(
         `Got remote citation generation result for case ${Number(index) + 1}: ${JSON.stringify(data)}`,
       );
 
+      const originalText = String(testCase.vars[injectVar]);
+
       const citationTestCase = {
         ...testCase,
         vars: {
@@ -80,6 +82,7 @@ async function generateCitations(
           ...testCase.metadata,
           citation: data.result.citation,
           strategyId: 'citation',
+          originalText,
         },
       };
 

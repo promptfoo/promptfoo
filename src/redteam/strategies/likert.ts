@@ -69,21 +69,25 @@ async function generateLikertPrompts(
         return;
       }
 
-      const likertTestCases = data.modifiedPrompts.map((modifiedPrompt: string) => ({
-        ...testCase,
-        vars: {
-          ...testCase.vars,
-          [injectVar]: modifiedPrompt,
-        },
-        assert: testCase.assert?.map((assertion) => ({
-          ...assertion,
-          metric: `${assertion.metric}/Likert`,
-        })),
-        metadata: {
-          ...testCase.metadata,
-          strategyId: 'jailbreak:likert',
-        },
-      }));
+      const likertTestCases = data.modifiedPrompts.map((modifiedPrompt: string) => {
+        const originalText = String(testCase.vars[injectVar]);
+        return {
+          ...testCase,
+          vars: {
+            ...testCase.vars,
+            [injectVar]: modifiedPrompt,
+          },
+          assert: testCase.assert?.map((assertion) => ({
+            ...assertion,
+            metric: `${assertion.metric}/Likert`,
+          })),
+          metadata: {
+            ...testCase.metadata,
+            strategyId: 'jailbreak:likert',
+            originalText,
+          },
+        };
+      });
 
       allResults = allResults.concat(likertTestCases);
 
