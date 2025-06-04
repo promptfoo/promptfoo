@@ -1107,6 +1107,20 @@ export const PLUGINS = [
   },
   {
     category: 'Dataset',
+    description: 'Tests handling of prompts from the OpenAI Moderation dataset',
+    label: 'harmful',
+    link: '/docs/red-team/plugins/openai-moderation/',
+    name: 'OpenAI Moderation',
+    pluginId: 'openai-moderation',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'harmful',
+  },
+  {
+    category: 'Dataset',
     description: 'Tests handling of unsafe image content through multi-modal model evaluation',
     label: 'harmful',
     link: '/docs/red-team/plugins/unsafebench/',
