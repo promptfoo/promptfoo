@@ -170,13 +170,136 @@ defaultTest:
 
 ## Timeout errors
 
-When running evals, you may encounter timeout errors, especially when using local providers or when running many concurrent requests. These timeouts can manifest as generic errors or as a lack of useful error messages.
+When running evals, you may encounter timeout errors, especially when using local providers or when running many concurrent requests. Promptfoo provides several timeout mechanisms to help you manage these issues effectively.
 
-To resolve timeout issues, try limiting concurrency by using the `-j 1` flag when running `promptfoo eval`. This reduces the number of simultaneous requests:
+### Types of timeouts
 
+#### 1. Individual evaluation step timeout
+
+Controls the maximum time allowed for each individual evaluation step (each provider call + assertion checking).
+
+**Environment variable:**
 ```bash
-npx promptfoo eval -j 1
+export PROMPTFOO_EVAL_TIMEOUT_MS=30000  # 30 seconds per evaluation step
 ```
+
+**Programmatic usage:**
+```javascript
+await evaluate(testSuite, evalRecord, { timeoutMs: 30000 });
+```
+
+**When to use:**
+- Provider calls are occasionally hanging or taking too long
+- You want to fail fast on individual slow requests
+- Testing against unreliable or slow APIs
+
+#### 2. Maximum total evaluation time
+
+Controls the maximum duration for the entire evaluation run, regardless of how many steps remain.
+
+**Environment variable:**
+```bash
+export PROMPTFOO_MAX_EVAL_TIME_MS=300000  # 5 minutes total
+```
+
+**Programmatic usage:**
+```javascript
+await evaluate(testSuite, evalRecord, { maxEvalTimeMs: 300000 });
+```
+
+**When to use:**
+- Running evaluations in CI/CD with strict time limits
+- Managing costs for expensive API calls
+- Preventing runaway evaluations in automated systems
+- Setting hard limits for batch processing jobs
+
+#### 3. Concurrency control
+
+Reduces the number of simultaneous requests to prevent overwhelming providers.
+
+**Command line:**
+```bash
+npx promptfoo eval -j 1  # Run with single concurrency
+npx promptfoo eval -j 4  # Run with 4 concurrent threads
+```
+
+### Timeout behavior
+
+**Individual step timeout:**
+- Each evaluation step that exceeds `timeoutMs` will be marked as failed
+- The evaluation continues with remaining steps
+- Error message: "Evaluation timed out after {timeoutMs}ms"
+
+**Maximum evaluation time:**
+- When `maxEvalTimeMs` is exceeded, all remaining unprocessed evaluations are aborted
+- Aborted evaluations are marked as failed with timeout errors
+- The evaluation terminates early but saves all completed results
+
+### Configuration examples
+
+#### Basic timeout setup
+```bash
+# Set individual step timeout to 10 seconds
+export PROMPTFOO_EVAL_TIMEOUT_MS=10000
+
+# Set maximum total evaluation time to 2 minutes  
+export PROMPTFOO_MAX_EVAL_TIME_MS=120000
+
+# Run with reduced concurrency
+npx promptfoo eval -j 2
+```
+
+#### CI/CD environment
+```bash
+# Strict timeouts for automated environments
+export PROMPTFOO_EVAL_TIMEOUT_MS=15000      # 15 seconds per step
+export PROMPTFOO_MAX_EVAL_TIME_MS=600000    # 10 minutes total maximum
+
+npx promptfoo eval --output results.jsonl
+```
+
+#### Development environment
+```bash
+# More lenient timeouts for development
+export PROMPTFOO_EVAL_TIMEOUT_MS=60000      # 1 minute per step
+export PROMPTFOO_MAX_EVAL_TIME_MS=1800000   # 30 minutes total maximum
+
+npx promptfoo eval --verbose
+```
+
+### Troubleshooting timeout issues
+
+1. **Check provider responsiveness:**
+   ```bash
+   # Test with minimal setup first
+   export PROMPTFOO_EVAL_TIMEOUT_MS=5000
+   npx promptfoo eval -j 1
+   ```
+
+2. **Gradually increase limits:**
+   ```bash
+   # Start conservative and increase as needed
+   export PROMPTFOO_EVAL_TIMEOUT_MS=30000
+   export PROMPTFOO_MAX_EVAL_TIME_MS=600000
+   ```
+
+3. **Monitor evaluation progress:**
+   ```bash
+   # Use verbose logging to see which steps are slow
+   npx promptfoo eval --verbose
+   ```
+
+4. **Reduce concurrency for unstable providers:**
+   ```bash
+   # Single-threaded execution for debugging
+   npx promptfoo eval -j 1
+   ```
+
+### Default values
+
+- `PROMPTFOO_EVAL_TIMEOUT_MS`: 0 (no timeout)
+- `PROMPTFOO_MAX_EVAL_TIME_MS`: 0 (no limit)
+- Default concurrency: Based on system capabilities (typically 4-10 threads)
 
 ## Debugging Python
 
