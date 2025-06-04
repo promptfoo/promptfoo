@@ -178,7 +178,8 @@ export async function doEval(
       };
     }
 
-    let maxConcurrency = cmdObj.maxConcurrency;
+    let maxConcurrency =
+      cmdObj.maxConcurrency ?? evaluateOptions.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY;
     const delay = cmdObj.delay ?? 0;
 
     if (delay > 0) {

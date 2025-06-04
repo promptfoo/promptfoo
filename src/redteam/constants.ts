@@ -182,7 +182,10 @@ export const CONFIG_REQUIRED_PLUGINS = ['intent', 'policy'] as const;
 export type ConfigRequiredPlugin = (typeof CONFIG_REQUIRED_PLUGINS)[number];
 
 // Agentic plugins that don't use strategies (standalone agentic plugins)
-export const AGENTIC_EXEMPT_PLUGINS = ['system-prompt-override'] as const;
+export const AGENTIC_EXEMPT_PLUGINS = [
+  'system-prompt-override',
+  MEMORY_POISONING_PLUGIN_ID,
+] as const;
 
 // Dataset plugins that don't use strategies (standalone dataset plugins)
 export const DATASET_EXEMPT_PLUGINS = ['pliny', 'unsafebench'] as const;
