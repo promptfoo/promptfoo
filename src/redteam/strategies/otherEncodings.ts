@@ -207,20 +207,24 @@ export function addOtherEncodings(
     }
   })();
 
-  return testCases.map((testCase) => ({
-    ...testCase,
-    assert: testCase.assert?.map((assertion) => ({
-      ...assertion,
-      metric: `${assertion.metric}/${encodingName}`,
-    })),
-    vars: {
-      ...testCase.vars,
-      [injectVar]: transformer(String(testCase.vars![injectVar])),
-    },
-    metadata: {
-      ...testCase.metadata,
-      strategyId: encodingType,
-      encodingType,
-    },
-  }));
+  return testCases.map((testCase) => {
+    const originalText = String(testCase.vars![injectVar]);
+    return {
+      ...testCase,
+      assert: testCase.assert?.map((assertion) => ({
+        ...assertion,
+        metric: `${assertion.metric}/${encodingName}`,
+      })),
+      vars: {
+        ...testCase.vars,
+        [injectVar]: transformer(originalText),
+      },
+      metadata: {
+        ...testCase.metadata,
+        strategyId: encodingType,
+        encodingType,
+        originalText,
+      },
+    };
+  });
 }

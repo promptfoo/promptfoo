@@ -125,6 +125,7 @@ export async function addImageToBase64(
       metadata: {
         ...testCase.metadata,
         strategyId: 'image',
+        originalText,
       },
     });
 

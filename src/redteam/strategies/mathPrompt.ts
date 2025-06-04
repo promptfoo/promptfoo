@@ -173,6 +173,7 @@ export async function addMathPrompt(
         metadata: {
           ...testCase.metadata,
           strategyId: 'math-prompt',
+          originalText,
         },
       });
 

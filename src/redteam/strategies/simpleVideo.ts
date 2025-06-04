@@ -202,6 +202,7 @@ export async function addVideoToBase64(
           metadata: {
             ...testCase.metadata,
             strategyId: 'video',
+            originalText,
           },
         });
       } catch (error) {

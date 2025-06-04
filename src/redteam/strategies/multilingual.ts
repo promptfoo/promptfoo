@@ -315,6 +315,7 @@ export async function addMultilingual(
             ...testCase.metadata,
             strategyId: 'multilingual',
             language: lang,
+            originalText,
           },
         });
       }

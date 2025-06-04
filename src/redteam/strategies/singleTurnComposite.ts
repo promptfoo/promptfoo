@@ -69,21 +69,25 @@ async function generateCompositePrompts(
         return;
       }
 
-      const compositeTestCases = data.modifiedPrompts.map((modifiedPrompt: string) => ({
-        ...testCase,
-        vars: {
-          ...testCase.vars,
-          [injectVar]: modifiedPrompt,
-        },
-        assert: testCase.assert?.map((assertion) => ({
-          ...assertion,
-          metric: `${assertion.metric}/Composite`,
-        })),
-        metadata: {
-          ...testCase.metadata,
-          strategyId: 'jailbreak:composite',
-        },
-      }));
+      const compositeTestCases = data.modifiedPrompts.map((modifiedPrompt: string) => {
+        const originalText = String(testCase.vars![injectVar]);
+        return {
+          ...testCase,
+          vars: {
+            ...testCase.vars,
+            [injectVar]: modifiedPrompt,
+          },
+          assert: testCase.assert?.map((assertion) => ({
+            ...assertion,
+            metric: `${assertion.metric}/Composite`,
+          })),
+          metadata: {
+            ...testCase.metadata,
+            strategyId: 'jailbreak:composite',
+            originalText,
+          },
+        };
+      });
 
       allResults = allResults.concat(compositeTestCases);
 
