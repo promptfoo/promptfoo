@@ -527,5 +527,5 @@ promptfoo will load environment variables from the `.env` in your current workin
 :::
 
 :::tip
-For detailed information on using timeout features, including configuration examples and troubleshooting tips, see [Timeout errors in the troubleshooting guide](/docs/usage/troubleshooting#timeout-errors).
+For detailed information on using timeout features, including configuration examples and troubleshooting tips, see [Timeout errors in the troubleshooting guide](/docs/usage/troubleshooting#how-to-triage-stuck-evals).
 :::
