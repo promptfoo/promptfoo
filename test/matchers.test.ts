@@ -2288,6 +2288,50 @@ describe('tryParse and renderLlmRubricPrompt', () => {
     const expected = 'statements:\nStatement 1\nStatement 2\nStatement 3';
     expect(result).toBe(expected);
   });
+
+  it('should stringify objects in arrays', async () => {
+    const template = 'Items: {{items}}';
+    const items = [{ name: 'Item 1', price: 10 }, 'string item', { name: 'Item 2', price: 20 }];
+
+    const result = await renderLlmRubricPrompt(template, { items });
+
+    expect(result).not.toContain('[object Object]');
+    expect(result).toContain(JSON.stringify(items[0]));
+    expect(result).toContain('string item');
+    expect(result).toContain(JSON.stringify(items[2]));
+  });
+
+  it('should stringify deeply nested objects and arrays', async () => {
+    const template = 'Complex data: {{data}}';
+    const data = {
+      products: [
+        {
+          name: 'Item 1',
+          price: 10,
+          details: {
+            color: 'red',
+            specs: { weight: '2kg', dimensions: { width: 10, height: 20 } },
+          },
+        },
+        'string item',
+        {
+          name: 'Item 2',
+          price: 20,
+          nested: [{ a: 1 }, { b: 2 }],
+          metadata: { tags: ['electronics', 'gadget'] },
+        },
+      ],
+    };
+
+    const result = await renderLlmRubricPrompt(template, { data });
+
+    expect(result).not.toContain('[object Object]');
+    expect(result).toContain('"specs":{"weight":"2kg"');
+    expect(result).toContain('"dimensions":{"width":10,"height":20}');
+    expect(result).toContain('[{"a":1},{"b":2}]');
+    expect(result).toContain('"tags":["electronics","gadget"]');
+    expect(result).toContain('string item');
+  });
 });
 
 describe('matchesGEval', () => {
@@ -2404,6 +2448,68 @@ describe('matchesGEval', () => {
       pass: false,
       score: 0.3,
       reason: 'The response lacks coherence',
+    });
+  });
+});
+
+describe('PROMPTFOO_DISABLE_OBJECT_STRINGIFY environment variable', () => {
+  afterEach(() => {
+    // Clean up environment variable after each test
+    delete process.env.PROMPTFOO_DISABLE_OBJECT_STRINGIFY;
+  });
+
+  describe('Default behavior (PROMPTFOO_DISABLE_OBJECT_STRINGIFY=false)', () => {
+    beforeEach(() => {
+      process.env.PROMPTFOO_DISABLE_OBJECT_STRINGIFY = 'false';
+    });
+
+    it('should stringify objects to prevent [object Object] issues', async () => {
+      const template = 'Product: {{product}}';
+      const product = { name: 'Headphones', price: 99.99 };
+
+      const result = await renderLlmRubricPrompt(template, { product });
+
+      expect(result).not.toContain('[object Object]');
+      expect(result).toBe(`Product: ${JSON.stringify(product)}`);
+    });
+
+    it('should stringify objects in arrays', async () => {
+      const template = 'Items: {{items}}';
+      const items = [{ name: 'Item 1', price: 10 }, 'string item', { name: 'Item 2', price: 20 }];
+
+      const result = await renderLlmRubricPrompt(template, { items });
+
+      expect(result).not.toContain('[object Object]');
+      expect(result).toContain(JSON.stringify(items[0]));
+      expect(result).toContain('string item');
+      expect(result).toContain(JSON.stringify(items[2]));
+    });
+  });
+
+  describe('Object access enabled (PROMPTFOO_DISABLE_OBJECT_STRINGIFY=true)', () => {
+    beforeEach(() => {
+      process.env.PROMPTFOO_DISABLE_OBJECT_STRINGIFY = 'true';
+    });
+
+    it('should allow direct object property access', async () => {
+      const template = 'Product: {{product.name}} - ${{product.price}}';
+      const product = { name: 'Headphones', price: 99.99 };
+
+      const result = await renderLlmRubricPrompt(template, { product });
+
+      expect(result).toBe('Product: Headphones - $99.99');
+    });
+
+    it('should allow array indexing and property access', async () => {
+      const template = 'First item: {{items[0].name}}';
+      const items = [
+        { name: 'First Item', price: 10 },
+        { name: 'Second Item', price: 20 },
+      ];
+
+      const result = await renderLlmRubricPrompt(template, { items });
+
+      expect(result).toBe('First item: First Item');
     });
   });
 });
