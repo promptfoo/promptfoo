@@ -64,9 +64,7 @@ export class MemoryPoisoningProvider implements ApiProvider {
 
       // Scope the scenario to the test case to ensure its passed to the grader:
       const scenario = await scenarioRes.json();
-      if (!context!.test!.metadata) {
-        context!.test!.metadata = {};
-      }
+      context!.test!.metadata ??= {};
       context!.test!.metadata['scenario'] = scenario;
 
       // Send the memory message to the provider.

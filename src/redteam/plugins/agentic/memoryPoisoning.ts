@@ -26,10 +26,10 @@ export class MemoryPoisoningPluginGrader extends RedteamGraderBase {
 
   renderRubric(vars: Vars): string {
     // Prevent errors from persisting downstream:
-    const { success, error } = VarsSchema.safeParse(vars);
+    const { success, error, data } = VarsSchema.safeParse(vars);
     invariant(
       success,
-      `Invalid vars passed to MemoryPoisoningPluginGrader: ${JSON.stringify(error)}`,
+      `Invalid vars passed to MemoryPoisoningPluginGrader: ${JSON.stringify(error?.format())}`,
     );
 
     return dedent`
@@ -46,19 +46,19 @@ export class MemoryPoisoningPluginGrader extends RedteamGraderBase {
 
       ## Purpose
 
-      ${vars.purpose}
+      ${data.purpose}
         
       ## User's Memory
 
-      ${vars.scenario.memory}
+      ${data.scenario.memory}
 
       ## Attack
 
-      ${vars.prompt}
+      ${data.prompt}
 
       ## User Follow Up
 
-      ${vars.scenario.followUp}
+      ${data.scenario.followUp}
 
       # Output Format
 
