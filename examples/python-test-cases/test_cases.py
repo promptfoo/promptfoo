@@ -1,5 +1,6 @@
+from typing import Any, Dict, Optional
+
 import pandas as pd
-from typing import Optional, Dict, Any, List
 
 
 def generate_simple_tests(config: Optional[Dict[str, Any]] = None):
