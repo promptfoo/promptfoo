@@ -1085,8 +1085,7 @@ class Evaluator {
         this.stats.errors++;
 
         // Update prompt metrics
-        const { promptIdx } = timeoutResult;
-        const metrics = prompts[promptIdx].metrics;
+        const { metrics } = prompts[evalStep.promptIdx];
         if (metrics) {
           metrics.testErrorCount += 1;
           metrics.totalLatencyMs += timeoutMs;
@@ -1426,7 +1425,7 @@ class Evaluator {
 
           await this.evalRecord.addResult(timeoutResult);
           this.stats.errors++;
-          const metrics = prompts[evalStep.promptIdx].metrics;
+          const { metrics } = prompts[evalStep.promptIdx];
           if (metrics) {
             metrics.testErrorCount += 1;
             metrics.totalLatencyMs += timeoutResult.latencyMs;
