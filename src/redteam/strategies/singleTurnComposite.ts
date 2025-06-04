@@ -69,7 +69,7 @@ async function generateCompositePrompts(
       }
 
       const compositeTestCases = data.modifiedPrompts.map((modifiedPrompt: string) => {
-        const originalText = String(testCase.vars[injectVar]);
+        const originalText = String(testCase.vars![injectVar]);
         return {
           ...testCase,
           vars: {

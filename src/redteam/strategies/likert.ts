@@ -70,7 +70,7 @@ async function generateLikertPrompts(
       }
 
       const likertTestCases = data.modifiedPrompts.map((modifiedPrompt: string) => {
-        const originalText = String(testCase.vars[injectVar]);
+        const originalText = String(testCase.vars![injectVar]);
         return {
           ...testCase,
           vars: {
