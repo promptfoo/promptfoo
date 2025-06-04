@@ -168,87 +168,36 @@ defaultTest:
           apiHost: xxx.openai.azure.com
 ```
 
-## Timeout errors
+## How to triage stuck evals
 
 When running evals, you may encounter timeout errors, especially when using local providers or when running many concurrent requests. Here's how to fix them:
 
+**Common use cases:**
+
+- Ensure evaluations complete within a time limit (useful for CI/CD)
+- Handle custom providers or providers that get stuck
+- Prevent runaway costs from long-running evaluations
+
+You can control two settings: timeout for individual test cases and timeout for the entire evaluation.
+
 ### Quick fixes
 
-**Problem: Individual requests are hanging or taking too long**
+**Set timeouts for individual requests and total evaluation time:**
+
 ```bash
 export PROMPTFOO_EVAL_TIMEOUT_MS=30000  # 30 seconds per request
-npx promptfoo eval
-```
-
-**Problem: Evaluation is taking too long overall**
-```bash
 export PROMPTFOO_MAX_EVAL_TIME_MS=300000  # 5 minutes total limit
+
 npx promptfoo eval
 ```
 
-**Problem: Provider is overwhelmed by concurrent requests**
-```bash
-npx promptfoo eval -j 1  # Single request at a time
+You can also set these values in your `.env` file or Promptfoo config file:
+
+```yaml title="promptfooconfig.yaml"
+env:
+  PROMPTFOO_EVAL_TIMEOUT_MS: 30000
+  PROMPTFOO_MAX_EVAL_TIME_MS: 300000
 ```
-
-### When to use each timeout
-
-- **`PROMPTFOO_EVAL_TIMEOUT_MS`** - Use when individual API calls hang (e.g., slow/unreliable providers)
-- **`PROMPTFOO_MAX_EVAL_TIME_MS`** - Use when you need hard time limits (e.g., CI/CD, cost control)
-- **`-j 1`** - Use when your provider can't handle multiple concurrent requests
-
-<details>
-<summary>Advanced configuration examples</summary>
-
-#### For CI/CD environments
-```bash
-# Strict timeouts for automated systems
-export PROMPTFOO_EVAL_TIMEOUT_MS=15000      # 15 seconds per step
-export PROMPTFOO_MAX_EVAL_TIME_MS=600000    # 10 minutes total
-npx promptfoo eval -j 2 --output results.jsonl
-```
-
-#### For development
-```bash
-# More lenient timeouts for testing
-export PROMPTFOO_EVAL_TIMEOUT_MS=60000      # 1 minute per step
-export PROMPTFOO_MAX_EVAL_TIME_MS=1800000   # 30 minutes total
-npx promptfoo eval --verbose
-```
-
-#### Programmatic usage
-```javascript
-await evaluate(testSuite, evalRecord, { 
-  timeoutMs: 30000,      // Individual step timeout
-  maxEvalTimeMs: 300000  // Total evaluation timeout
-});
-```
-
-</details>
-
-<details>
-<summary>Troubleshooting steps</summary>
-
-If timeouts aren't working as expected:
-
-1. **Test with minimal setup first:**
-   ```bash
-   export PROMPTFOO_EVAL_TIMEOUT_MS=5000
-   npx promptfoo eval -j 1
-   ```
-
-2. **Gradually increase limits:**
-   ```bash
-   export PROMPTFOO_EVAL_TIMEOUT_MS=30000
-   export PROMPTFOO_MAX_EVAL_TIME_MS=600000
-   ```
-
-3. **Use verbose logging to see which steps are slow:**
-   ```bash
-   npx promptfoo eval --verbose
-   ```
-
-</details>
 
 ## Debugging Python
 
