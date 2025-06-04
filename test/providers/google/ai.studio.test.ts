@@ -1132,7 +1132,9 @@ describe('AIStudioChatProvider', () => {
         config: {
           apiKey: 'test-key',
           headers: {
-            'X-Custom-Header': 'custom-value',
+            'X-Custom-Header1': 'custom-value1',
+            'X-Custom-Header2': 'custom-value2',
+            'X-Custom-Header3': 'custom-value3',
           },
         },
       });
@@ -1163,7 +1165,9 @@ describe('AIStudioChatProvider', () => {
         expect.objectContaining({
           headers: expect.objectContaining({
             'Content-Type': 'application/json',
-            'X-Custom-Header': 'custom-value',
+            'X-Custom-Header1': 'custom-value1',
+            'X-Custom-Header2': 'custom-value2',
+            'X-Custom-Header3': 'custom-value3',
           }),
         }),
         expect.any(Number),
