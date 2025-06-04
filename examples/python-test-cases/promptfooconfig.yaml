@@ -12,7 +12,7 @@ tests:
   # 1. Basic generator without configuration (backward compatibility)
   - file://test_cases.py:generate_simple_tests
 
-  # 2. Same generator with custom languages
+  # 2. Same generator with custom languages to avoid duplicates
   - path: file://test_cases.py:generate_simple_tests
     config:
       languages: [German, Italian]

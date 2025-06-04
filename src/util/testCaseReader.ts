@@ -384,12 +384,13 @@ export async function readTests(
     }
     // Points to a tests.{csv,json,yaml,yml,py,js,ts,mjs} or Google Sheet
     return readStandaloneTestsFile(tests, basePath);
-  } else if (typeof tests === 'object' && !Array.isArray(tests) && 'path' in tests) {
-    return readStandaloneTestsFile(
-      tests.path,
-      basePath,
-      tests.config ? maybeLoadConfigFromExternalFile(tests.config) : tests.config,
-    );
+  } else if (
+    typeof tests === 'object' &&
+    !Array.isArray(tests) &&
+    'path' in tests &&
+    typeof tests.path === 'string'
+  ) {
+    return readStandaloneTestsFile(tests.path, basePath, tests.config);
   }
   if (Array.isArray(tests)) {
     for (const globOrTest of tests) {
@@ -407,15 +408,7 @@ export async function readTests(
           ret.push(...(await loadTestsFromGlob(globOrTest, basePath)));
         }
       } else if ('path' in globOrTest) {
-        ret.push(
-          ...(await readStandaloneTestsFile(
-            globOrTest.path,
-            basePath,
-            globOrTest.config
-              ? maybeLoadConfigFromExternalFile(globOrTest.config)
-              : globOrTest.config,
-          )),
-        );
+        ret.push(...(await readStandaloneTestsFile(globOrTest.path, basePath, globOrTest.config)));
       } else {
         // Load individual TestCase
         ret.push(await readTest(globOrTest as TestCaseWithVarsFile, basePath));

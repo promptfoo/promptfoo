@@ -276,15 +276,17 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
   });
 
   const tests: UnifiedConfig['tests'] = [];
-  for (const config of configs) {
+  for (let i = 0; i < configs.length; i++) {
+    const config = configs[i];
+    const configPath = configPaths[i];
     if (typeof config.tests === 'string') {
-      const newTests = await readTests(config.tests, path.dirname(configPaths[0]));
+      const newTests = await readTests(config.tests, path.dirname(configPath));
       tests.push(...newTests);
     } else if (Array.isArray(config.tests)) {
       tests.push(...config.tests);
     } else if (config.tests && typeof config.tests === 'object' && 'path' in config.tests) {
       // Handle TestGeneratorConfig object
-      const newTests = await readTests(config.tests, path.dirname(configPaths[0]));
+      const newTests = await readTests(config.tests, path.dirname(configPath));
       tests.push(...newTests);
     }
   }

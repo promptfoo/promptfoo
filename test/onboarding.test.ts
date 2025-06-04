@@ -155,7 +155,6 @@ describe('createDummyFiles', () => {
     expect(validationResult.success).toBe(true);
 
     // Assert that validation was successful and config is defined
-    expect(validationResult.success).toBe(true);
     expect(validationResult.data).toBeDefined();
 
     const config = validationResult.data!;
@@ -190,7 +189,6 @@ describe('createDummyFiles', () => {
     expect(validationResult.success).toBe(true);
 
     // Assert that validation was successful and config is defined
-    expect(validationResult.success).toBe(true);
     expect(validationResult.data).toBeDefined();
 
     const config = validationResult.data!;

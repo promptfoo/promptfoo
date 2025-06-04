@@ -82,7 +82,9 @@ Control how many test cases are generated:
 The Python functions accept an optional `config` parameter:
 
 ```python
-def generate_simple_tests(config=None):
+from typing import Optional, Dict, Any
+
+def generate_simple_tests(config: Optional[Dict[str, Any]] = None):
     languages = ["Spanish", "French"]  # defaults
 
     if config:

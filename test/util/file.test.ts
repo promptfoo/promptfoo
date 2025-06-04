@@ -229,6 +229,43 @@ describe('file utilities', () => {
       expect(fs.readFileSync).toHaveBeenCalledTimes(2);
       expect(result).toEqual({ data: { foo: 1 }, nested: { text: 'bar' } });
     });
+
+    it('should handle arrays and nested structures', () => {
+      jest.mocked(fs.readFileSync).mockReturnValueOnce('test content');
+
+      const config = {
+        items: ['file://test.txt', 'normal string'],
+        nullValue: null,
+        emptyArray: [],
+        nested: {
+          deep: {
+            value: 'file://test.txt',
+          },
+        },
+      };
+
+      const result = maybeLoadConfigFromExternalFile(config);
+
+      expect(fs.readFileSync).toHaveBeenCalledTimes(2);
+      expect(result).toEqual({
+        items: ['test content', 'normal string'],
+        nullValue: null,
+        emptyArray: [],
+        nested: {
+          deep: {
+            value: 'test content',
+          },
+        },
+      });
+    });
+
+    it('should handle primitive values safely', () => {
+      expect(maybeLoadConfigFromExternalFile('normal string')).toBe('normal string');
+      expect(maybeLoadConfigFromExternalFile(42)).toBe(42);
+      expect(maybeLoadConfigFromExternalFile(true)).toBe(true);
+      expect(maybeLoadConfigFromExternalFile(null)).toBeNull();
+      expect(maybeLoadConfigFromExternalFile(undefined)).toBeUndefined();
+    });
   });
 
   describe('getResolvedRelativePath', () => {

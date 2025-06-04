@@ -1,7 +1,8 @@
 import pandas as pd
+from typing import Optional, Dict, Any, List
 
 
-def generate_simple_tests(config=None):
+def generate_simple_tests(config: Optional[Dict[str, Any]] = None):
     """Generate a simple set of test cases with optional configuration."""
     # Default values
     languages = ["Spanish", "French"]
@@ -27,7 +28,7 @@ def generate_simple_tests(config=None):
     return test_cases
 
 
-def generate_from_csv(config=None):
+def generate_from_csv(config: Optional[Dict[str, Any]] = None):
     """Generate test cases from CSV data with optional row limit."""
     # Default test data
     data = {

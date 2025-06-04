@@ -98,10 +98,10 @@ export function maybeLoadConfigFromExternalFile(config: any): any {
   if (Array.isArray(config)) {
     return config.map((item) => maybeLoadConfigFromExternalFile(item));
   }
-  if (config && typeof config === 'object') {
+  if (config && typeof config === 'object' && config !== null) {
     const result: Record<string, any> = {};
     for (const key of Object.keys(config)) {
-      result[key] = maybeLoadConfigFromExternalFile((config as any)[key]);
+      result[key] = maybeLoadConfigFromExternalFile(config[key]);
     }
     return result;
   }

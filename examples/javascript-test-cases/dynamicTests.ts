@@ -54,6 +54,28 @@ export async function generateFromDatabase(config?: DatabaseConfig) {
               expected: 'Je voudrais commander',
             },
           ],
+          advanced: [
+            {
+              input: 'Could you explain the historical significance of this monument?',
+              language: 'Italian',
+              expected: 'Potresti spiegare il significato storico di questo monumento?',
+            },
+            {
+              input: 'I would appreciate if you could provide detailed instructions.',
+              language: 'German',
+              expected: 'Ich wäre dankbar, wenn Sie detaillierte Anweisungen geben könnten.',
+            },
+            {
+              input: 'What are the implications of this economic policy?',
+              language: 'Spanish',
+              expected: '¿Cuáles son las implicaciones de esta política económica?',
+            },
+            {
+              input: 'The philosophical underpinnings of this theory are complex.',
+              language: 'French',
+              expected: 'Les fondements philosophiques de cette théorie sont complexes.',
+            },
+          ],
         },
         travel_phrases: {
           basic: [
@@ -84,10 +106,36 @@ export async function generateFromDatabase(config?: DatabaseConfig) {
               expected: "L'addition, s'il vous plaît",
             },
           ],
+          advanced: [
+            {
+              input: 'I need to arrange special dietary accommodations for my conference',
+              language: 'Italian',
+              expected: 'Devo organizzare sistemazioni dietetiche speciali per la mia conferenza',
+            },
+            {
+              input: 'Could you recommend luxury hotels with business centers?',
+              language: 'German',
+              expected: 'Könnten Sie Luxushotels mit Geschäftszentren empfehlen?',
+            },
+            {
+              input: 'We require a private dining room for our corporate event',
+              language: 'Spanish',
+              expected: 'Requerimos un comedor privado para nuestro evento corporativo',
+            },
+            {
+              input: 'Please arrange ground transportation with multilingual drivers',
+              language: 'French',
+              expected:
+                'Veuillez organiser le transport terrestre avec des chauffeurs multilingues',
+            },
+          ],
         },
       };
 
-      return datasets[dataset]?.[difficulty] || datasets.basic_translations.basic;
+      if (!datasets[dataset]?.[difficulty]) {
+        throw new Error(`Invalid dataset/difficulty combination: ${dataset}/${difficulty}`);
+      }
+      return datasets[dataset][difficulty];
     },
   };
 
