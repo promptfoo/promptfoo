@@ -147,6 +147,23 @@ describe('envars', () => {
       process.env.CUSTOM_BOOL_VAR = 'true';
       expect(getEnvBool('CUSTOM_BOOL_VAR' as EnvVarKey)).toBe(true);
     });
+
+    it('should handle PROMPTFOO_DISABLE_OBJECT_STRINGIFY environment variable', () => {
+      expect(getEnvBool('PROMPTFOO_DISABLE_OBJECT_STRINGIFY')).toBe(false);
+
+      process.env.PROMPTFOO_DISABLE_OBJECT_STRINGIFY = 'true';
+      expect(getEnvBool('PROMPTFOO_DISABLE_OBJECT_STRINGIFY')).toBe(true);
+
+      process.env.PROMPTFOO_DISABLE_OBJECT_STRINGIFY = 'false';
+      expect(getEnvBool('PROMPTFOO_DISABLE_OBJECT_STRINGIFY')).toBe(false);
+
+      cliState.config = {
+        env: {
+          PROMPTFOO_DISABLE_OBJECT_STRINGIFY: true as any,
+        },
+      };
+      expect(getEnvBool('PROMPTFOO_DISABLE_OBJECT_STRINGIFY')).toBe(true);
+    });
   });
 
   describe('getEnvInt', () => {
