@@ -92,6 +92,53 @@ export async function loadApiProvider(
 }
 
 /**
+ * Interface for loadApiProvider options that includes both required and optional properties
+ */
+interface LoadApiProviderOptions {
+  options?: ProviderOptions;
+  env?: any;
+}
+
+/**
+ * Helper function to resolve provider from various formats (string, object, function)
+ * Uses providerMap for optimization and falls back to loadApiProvider with proper context
+ */
+export async function resolveProvider(
+  provider: any,
+  providerMap: Record<string, ApiProvider>,
+  context: { env?: any } = {},
+): Promise<ApiProvider> {
+  // Guard clause for null or undefined provider values
+  if (provider == null) {
+    throw new Error('Provider cannot be null or undefined');
+  }
+
+  if (typeof provider === 'string') {
+    // Check providerMap first for optimization, then fall back to loadApiProvider with context
+    if (providerMap[provider]) {
+      return providerMap[provider];
+    }
+    return context.env
+      ? await loadApiProvider(provider, { env: context.env })
+      : await loadApiProvider(provider);
+  } else if (typeof provider === 'object') {
+    const casted = provider as ProviderOptions;
+    invariant(casted.id, 'Provider object must have an id');
+    const loadOptions: LoadApiProviderOptions = { options: casted };
+    if (context.env) {
+      loadOptions.env = context.env;
+    }
+    return await loadApiProvider(casted.id, loadOptions);
+  } else if (typeof provider === 'function') {
+    return context.env
+      ? await loadApiProvider(provider, { env: context.env })
+      : await loadApiProvider(provider);
+  } else {
+    throw new Error('Invalid provider type');
+  }
+}
+
+/**
  * Helper function to load providers from a file path.
  * This can handle both single provider and multiple providers in a file.
  */

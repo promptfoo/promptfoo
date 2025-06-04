@@ -335,6 +335,16 @@ export interface EvaluateSummaryV2 {
   stats: EvaluateStats;
 }
 
+export type EvalTableDTO = {
+  table: EvaluateTable;
+  totalCount: number;
+  filteredCount: number;
+  config: Partial<UnifiedConfig>;
+  author: string | null;
+  version: number;
+  id: string;
+};
+
 export interface ResultSuggestion {
   type: string;
   action: 'replace-prompt' | 'pre-filter' | 'post-filter' | 'note';
@@ -624,7 +634,7 @@ export const TestCaseSchema = z.object({
     .union([
       z
         .string()
-        .regex(new RegExp(`^file://.*\\.(${JAVASCRIPT_EXTENSIONS.join('|')}|py)(?::[\\w.]+)?$`)),
+        .regex(new RegExp(`^file://.*\\.(${JAVASCRIPT_EXTENSIONS?.join('|')}|py)(?::[\\w.]+)?$`)),
       z.custom<ScoringFunction>(),
     ])
     .optional(),

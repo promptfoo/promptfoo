@@ -1,6 +1,29 @@
 import type { RedteamPlugin, RedteamStrategy } from '@promptfoo/redteam/types';
 import type { TestCase } from '@promptfoo/types';
 
+export interface ApplicationDefinition {
+  purpose?: string;
+  features?: string;
+  hasAccessTo?: string;
+  doesNotHaveAccessTo?: string;
+  userTypes?: string;
+  securityRequirements?: string;
+  exampleIdentifiers?: string;
+  industry?: string;
+  sensitiveDataTypes?: string;
+  criticalActions?: string;
+  forbiddenTopics?: string;
+  competitors?: string;
+  systemPrompt?: string;
+  redteamUser?: string;
+  accessToData?: string;
+  forbiddenData?: string;
+  accessToActions?: string;
+  forbiddenActions?: string;
+  connectedSystems?: string;
+  attackConstraints?: string;
+}
+
 export interface Config {
   description: string;
   prompts: string[];
@@ -9,16 +32,7 @@ export interface Config {
   strategies: RedteamStrategy[];
   purpose?: string;
   numTests?: number;
-  applicationDefinition: {
-    purpose?: string;
-    systemPrompt?: string;
-    redteamUser?: string;
-    accessToData?: string;
-    forbiddenData?: string;
-    accessToActions?: string;
-    forbiddenActions?: string;
-    connectedSystems?: string;
-  };
+  applicationDefinition: ApplicationDefinition;
   entities: string[];
   defaultTest?: TestCase;
   extensions?: string[];

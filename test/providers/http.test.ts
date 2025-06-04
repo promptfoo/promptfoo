@@ -1339,7 +1339,13 @@ describe('HttpProvider', () => {
 
       const result = await provider.callApi('test');
 
-      expect(result).toEqual({ output: { chat_history: 'success' } });
+      expect(result).toEqual({
+        output: { chat_history: 'success' },
+        raw: JSON.stringify({ result: 'success' }),
+        metadata: {
+          http: { status: 200, statusText: 'OK', headers: {} },
+        },
+      });
     });
 
     it('should prefer transformResponse over responseParser when both are set', async () => {
@@ -1362,7 +1368,13 @@ describe('HttpProvider', () => {
 
       const result = await provider.callApi('test');
 
-      expect(result).toEqual({ output: { chat_history: 'from transformResponse' } });
+      expect(result).toEqual({
+        output: { chat_history: 'from transformResponse' },
+        raw: JSON.stringify({ result: 'success' }),
+        metadata: {
+          http: { status: 200, statusText: 'OK', headers: {} },
+        },
+      });
     });
 
     it('should handle string-based responseParser when transformResponse is not set', async () => {
@@ -1384,7 +1396,13 @@ describe('HttpProvider', () => {
 
       const result = await provider.callApi('test');
 
-      expect(result).toEqual({ output: 'success' });
+      expect(result).toEqual({
+        output: 'success',
+        raw: JSON.stringify({ result: 'success' }),
+        metadata: {
+          http: { status: 200, statusText: 'OK', headers: {} },
+        },
+      });
     });
   });
 
@@ -1418,6 +1436,78 @@ describe('HttpProvider', () => {
       'text',
       undefined,
       2,
+    );
+  });
+
+  it('should handle query parameters correctly when the URL already has query parameters', async () => {
+    const urlWithQueryParams = 'http://example.com/api?existing=param';
+    provider = new HttpProvider(urlWithQueryParams, {
+      config: {
+        method: 'GET',
+        queryParams: {
+          additional: 'parameter',
+          another: 'value',
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+
+    // URL should contain both the existing and new query parameters
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /http:\/\/example\.com\/api\?existing=param&additional=parameter&another=value/,
+      ),
+      expect.any(Object),
+      expect.any(Number),
+      'text',
+      undefined,
+      undefined,
+    );
+  });
+
+  it('should handle URL construction fallback for potentially malformed URLs', async () => {
+    // Create a URL with variable that when rendered doesn't fully qualify as a URL
+    const malformedUrl = 'relative/path/{{var}}';
+
+    provider = new HttpProvider(malformedUrl, {
+      config: {
+        method: 'GET',
+        queryParams: {
+          param: 'value',
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt', {
+      prompt: { raw: 'test prompt', label: 'test' },
+      vars: { var: 'test' },
+    });
+
+    // Should use the fallback mechanism to append query parameters
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      'relative/path/test?param=value',
+      expect.any(Object),
+      expect.any(Number),
+      'text',
+      undefined,
+      undefined,
     );
   });
 });
@@ -1855,7 +1945,11 @@ describe('response handling', () => {
     });
 
     expect(result.metadata).toEqual({
-      headers: mockHeaders,
+      http: {
+        headers: mockHeaders,
+        status: 200,
+        statusText: 'OK',
+      },
     });
     expect(result.raw).toEqual(mockData);
   });
@@ -1911,7 +2005,11 @@ describe('response handling', () => {
     });
 
     expect(result.raw).toEqual(mockData);
-    expect(result.metadata).toHaveProperty('headers', mockHeaders);
+    expect(result.metadata).toHaveProperty('http', {
+      headers: mockHeaders,
+      status: 200,
+      statusText: 'OK',
+    });
     expect(result.output).toEqual({ foo: 'bar' });
   });
 
@@ -1976,7 +2074,11 @@ describe('response handling', () => {
     // Verify transformed response and debug info
     expect(result.output).toEqual({ transformed: true });
     expect(result.raw).toEqual(mockData);
-    expect(result.metadata).toHaveProperty('headers', mockHeaders);
+    expect(result.metadata).toHaveProperty('http', {
+      headers: mockHeaders,
+      status: 200,
+      statusText: 'OK',
+    });
   });
 });
 

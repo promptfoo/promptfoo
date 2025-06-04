@@ -24,6 +24,7 @@ async function generateCitations(
         {
           format: 'Citation Generation {bar} {percentage}% | ETA: {eta}s | {value}/{total} cases',
           hideCursor: true,
+          gracefulExit: true,
         },
         Presets.shades_classic,
       );

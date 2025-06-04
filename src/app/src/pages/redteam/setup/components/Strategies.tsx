@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
@@ -351,7 +351,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
           </Typography>
         </Box>
         <Typography variant="body1" fontWeight="bold" color="primary.main">
-          {getEstimatedProbes(config)}
+          {getEstimatedProbes(config).toLocaleString()}
         </Typography>
         <Tooltip title="Probes are the number of requests to target application">
           <InfoOutlinedIcon sx={{ fontSize: 16, color: 'text.secondary', cursor: 'help' }} />

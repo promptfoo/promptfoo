@@ -11,7 +11,7 @@ import { loadApiProvider, loadApiProviders } from '../../src/providers';
 import { AnthropicCompletionProvider } from '../../src/providers/anthropic/completion';
 import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
 import { AzureCompletionProvider } from '../../src/providers/azure/completion';
-import { AwsBedrockCompletionProvider } from '../../src/providers/bedrock';
+import { AwsBedrockCompletionProvider } from '../../src/providers/bedrock/index';
 import {
   CloudflareAiChatCompletionProvider,
   CloudflareAiCompletionProvider,
@@ -1253,5 +1253,100 @@ describe('loadApiProvider', () => {
     await expect(loadApiProvider('alibaba:unknown-model')).rejects.toThrow(
       'Invalid Alibaba Cloud model: unknown-model',
     );
+  });
+});
+
+describe('resolveProvider', () => {
+  let mockProviderMap: Record<string, any>;
+  let mockProvider1: any;
+  let mockProvider2: any;
+
+  beforeEach(async () => {
+    mockProvider1 = {
+      id: () => 'provider-1',
+      label: 'Provider One',
+      callApi: jest.fn(),
+    };
+
+    mockProvider2 = {
+      id: () => 'provider-2',
+      callApi: jest.fn(),
+    };
+
+    mockProviderMap = {
+      'provider-1': mockProvider1,
+      'Provider One': mockProvider1,
+      'provider-2': mockProvider2,
+    };
+  });
+
+  it('should resolve provider by ID from providerMap', async () => {
+    const { resolveProvider } = await import('../../src/providers');
+
+    const result = await resolveProvider('provider-1', mockProviderMap);
+
+    expect(result).toBe(mockProvider1);
+  });
+
+  it('should resolve provider by label from providerMap', async () => {
+    const { resolveProvider } = await import('../../src/providers');
+
+    const result = await resolveProvider('Provider One', mockProviderMap);
+
+    expect(result).toBe(mockProvider1);
+  });
+
+  it('should throw error for null provider', async () => {
+    const { resolveProvider } = await import('../../src/providers');
+
+    await expect(resolveProvider(null, mockProviderMap)).rejects.toThrow(
+      'Provider cannot be null or undefined',
+    );
+  });
+
+  it('should throw error for undefined provider', async () => {
+    const { resolveProvider } = await import('../../src/providers');
+
+    await expect(resolveProvider(undefined, mockProviderMap)).rejects.toThrow(
+      'Provider cannot be null or undefined',
+    );
+  });
+
+  it('should throw error for invalid provider type', async () => {
+    const { resolveProvider } = await import('../../src/providers');
+
+    await expect(resolveProvider(123, mockProviderMap)).rejects.toThrow('Invalid provider type');
+  });
+
+  it('should handle empty providerMap gracefully', async () => {
+    const { resolveProvider } = await import('../../src/providers');
+
+    // This should fall back to loadApiProvider for a known provider type
+    // We'll test with 'echo' which is a simple provider type
+    const result = await resolveProvider('echo', {});
+
+    expect(result).toBeDefined();
+    expect(typeof result.id).toBe('function');
+    expect(typeof result.callApi).toBe('function');
+  });
+
+  it('should prioritize providerMap over loadApiProvider', async () => {
+    const { resolveProvider } = await import('../../src/providers');
+
+    // Test that 'echo' gets resolved from providerMap instead of loadApiProvider
+    const mockEchoProvider = {
+      id: () => 'echo-from-map',
+      callApi: jest.fn(),
+    };
+
+    const mapWithEcho = {
+      ...mockProviderMap,
+      echo: mockEchoProvider,
+    };
+
+    const result = await resolveProvider('echo', mapWithEcho);
+
+    expect(result).toBe(mockEchoProvider);
+    expect(result.id()).toBe('echo-from-map');
   });
 });

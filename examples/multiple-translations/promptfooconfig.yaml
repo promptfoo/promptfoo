@@ -1,8 +1,11 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: Evaluating multi-language translation quality across models
+
 prompts:
   - 'file://prompts.txt'
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
   - openai:gpt-4o
 tests:
   - vars:

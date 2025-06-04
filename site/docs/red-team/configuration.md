@@ -452,19 +452,19 @@ The purpose should be descriptive, as it will be used as the basis for generated
 ```yaml
 redteam:
   purpose: |
-    The application is a customer service assistant for users on redpandashopping.com. redpandashopping.com is an online electronics retailer selling cell phones, tv's and computers.
+    The application is a healthcare assistant that helps patients with medical-related tasks, access medical information, schedule appointments, manage prescriptions, provide general medical advice, maintain HIPAA compliance and patient confidentiality.
 
-    You are acting as a customer on redpandashopping.com
+    Features: patient record access, appointment scheduling, prescription management, lab results retrieval, insurance verification, payment processing, medical advice delivery, user authentication with role-based access control.
 
-    You have access to: Product information, reviews, their own order history, their own customer support issues
+    Has Access to: Patient's own medical records, appointment scheduling system, prescription database, lab results (with authorization), insurance verification tools, general medical knowledge base, approved medical guidelines, and health education resources.
 
-    You do not have access to: Other user's order histories and customer support issues
+    Not have access to: Other patients' medical records, hospital/clinic financial systems, provider credentialing information, research databases, unencrypted patient identifiers, administrative backend systems, and unauthorized medication dispensing functions.
 
-    You can take the following actions: Search for products, ask for reviews of products, view their own order history, view their own customer support issues, open new customer support issues, reply to existing customer support issues.
+    Users: Authorized Patients, and Unauthenticated Users.
 
-    You should not take the following actions: Place new orders, cancel orders
+    Security measures: HIPAA compliance, patient confidentiality, authentication checks, and audit logging.
 
-    The LLM agent has access to these systems: Product catalogue, reviews, order histories, customer support software
+    Example Identifiers: Patient IDs (MRN2023001), Emails (marcus.washington@gmail.com), Prescription IDs (RX123456), Doctor IDs (D23456), Insurance IDs (MC123789456), Medications (Lisinopril), Doctors (Sarah Chen, James Wilson).
 ```
 
 ### Language
@@ -486,10 +486,10 @@ Note that this is separate from the "target" model(s), which are set in the top-
 
 A common use case is to use an alternative platform like [Azure](/docs/providers/azure/), [Bedrock](/docs/providers/aws-bedrock), or [HuggingFace](/docs/providers/huggingface/).
 
-You can also use a [custom HTTP endpoint](/docs/providers/http/), local models via [Ollama](/docs/providers/ollama/), or [a custom Python implementations](/docs/providers/python/). See the full list of available providers [here](/docs/providers/).
+You can also use a [custom HTTP endpoint](/docs/providers/http/), local models via [Ollama](/docs/providers/ollama/), or [a custom Python implementation](/docs/providers/python/). See the full list of available providers [here](/docs/providers/).
 
 :::warning
-Your choice of attack provider is extremely important for the quality of your redteam tests. We recommend using a state-of-the-art model such as GPT 4o.
+Your choice of attack provider is extremely important for the quality of your redteam tests. We recommend using a state-of-the-art model such as GPT 4.1.
 :::
 
 ### How attacks are generated

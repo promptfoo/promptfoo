@@ -1,3 +1,7 @@
+---
+sidebar_label: Fireworks AI
+---
+
 # Fireworks AI
 
 [Fireworks AI](https://fireworks.ai) offers access to a diverse range of language models through an API that is fully compatible with the OpenAI interface.

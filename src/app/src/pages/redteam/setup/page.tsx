@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import CrispChat from '@app/components/CrispChat';
+import ErrorBoundary from '@app/components/ErrorBoundary';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
@@ -643,19 +644,29 @@ export default function RedTeamSetupPage() {
         </OuterSidebarContainer>
         <TabContent>
           <CustomTabPanel value={value} index={0}>
-            <Purpose onNext={handleNext} />
+            <ErrorBoundary name="Application Purpose Page">
+              <Purpose onNext={handleNext} />
+            </ErrorBoundary>
           </CustomTabPanel>
           <CustomTabPanel value={value} index={1}>
-            <Targets onNext={handleNext} onBack={handleBack} setupModalOpen={setupModalOpen} />
+            <ErrorBoundary name="Targets Page">
+              <Targets onNext={handleNext} onBack={handleBack} setupModalOpen={setupModalOpen} />
+            </ErrorBoundary>
           </CustomTabPanel>
           <CustomTabPanel value={value} index={2}>
-            <Plugins onNext={handleNext} onBack={handleBack} />
+            <ErrorBoundary name="Plugins Page">
+              <Plugins onNext={handleNext} onBack={handleBack} />
+            </ErrorBoundary>
           </CustomTabPanel>
           <CustomTabPanel value={value} index={3}>
-            <Strategies onNext={handleNext} onBack={handleBack} />
+            <ErrorBoundary name="Strategies Page">
+              <Strategies onNext={handleNext} onBack={handleBack} />
+            </ErrorBoundary>
           </CustomTabPanel>
           <CustomTabPanel value={value} index={4}>
-            <Review />
+            <ErrorBoundary name="Review Page">
+              <Review />
+            </ErrorBoundary>
           </CustomTabPanel>
         </TabContent>
       </Content>

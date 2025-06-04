@@ -18,6 +18,8 @@ import invariant from './util/invariant';
 import { getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
 
+export type FileMetadata = Record<string, { path: string; type: string; format?: string }>;
+
 export async function extractTextFromPDF(pdfPath: string): Promise<string> {
   logger.debug(`Extracting text from PDF: ${pdfPath}`);
   try {
@@ -79,6 +81,44 @@ function autoWrapRawIfPartialNunjucks(prompt: string): string {
   return prompt;
 }
 
+/**
+ * Collects metadata about file variables in the vars object.
+ * @param vars The variables object containing potential file references
+ * @returns An object mapping variable names to their file metadata
+ */
+export function collectFileMetadata(vars: Record<string, string | object>): FileMetadata {
+  const fileMetadata: FileMetadata = {};
+
+  for (const [varName, value] of Object.entries(vars)) {
+    if (typeof value === 'string' && value.startsWith('file://')) {
+      const filePath = path.resolve(cliState.basePath || '', value.slice('file://'.length));
+      const fileExtension = filePath.split('.').pop() || '';
+
+      if (isImageFile(filePath)) {
+        fileMetadata[varName] = {
+          path: value, // Keep the original file:// notation
+          type: 'image',
+          format: fileExtension,
+        };
+      } else if (isVideoFile(filePath)) {
+        fileMetadata[varName] = {
+          path: value,
+          type: 'video',
+          format: fileExtension,
+        };
+      } else if (isAudioFile(filePath)) {
+        fileMetadata[varName] = {
+          path: value,
+          type: 'audio',
+          format: fileExtension,
+        };
+      }
+    }
+  }
+
+  return fileMetadata;
+}
+
 export async function renderPrompt(
   prompt: Prompt,
   vars: Record<string, string | object>,
@@ -135,7 +175,7 @@ export async function renderPrompt(
           yaml.load(fs.readFileSync(filePath, 'utf8')) as string | object,
         );
       } else if (fileExtension === 'pdf' && !getEnvBool('PROMPTFOO_DISABLE_PDF_AS_TEXT')) {
-        telemetry.record('feature_used', {
+        telemetry.recordOnce('feature_used', {
           feature: 'extract_text_from_pdf',
         });
         vars[varName] = await extractTextFromPDF(filePath);
@@ -149,7 +189,7 @@ export async function renderPrompt(
             ? 'video'
             : 'audio';
 
-        telemetry.record('feature_used', {
+        telemetry.recordOnce('feature_used', {
           feature: `load_${fileType}_as_base64`,
         });
 
@@ -300,7 +340,7 @@ export async function runExtensionHook(
     return;
   }
 
-  telemetry.record('feature_used', {
+  telemetry.recordOnce('feature_used', {
     feature: 'extension_hook',
   });
 
