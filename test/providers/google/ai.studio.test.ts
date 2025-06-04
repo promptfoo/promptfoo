@@ -1126,5 +1126,50 @@ describe('AIStudioChatProvider', () => {
         false,
       );
     });
+
+    it('should pass custom headers to the Gemini API', async () => {
+      provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          headers: {
+            'X-Custom-Header': 'custom-value',
+          },
+        },
+      });
+  
+      const mockResponse = {
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response text' }] } }],
+          usageMetadata: {
+            promptTokenCount: 10,
+            candidatesTokenCount: 5,
+            totalTokenCount: 15,
+          },
+        },
+        cached: false,
+      };
+  
+      jest.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
+      jest.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+        contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+        coerced: false,
+        systemInstruction: undefined,
+      });
+  
+      await provider.callGemini('test prompt');
+  
+      expect(cache.fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'Content-Type': 'application/json',
+            'X-Custom-Header': 'custom-value',
+          }),
+        }),
+        expect.any(Number),
+        'json',
+        false,
+      );
+    });
   });
 });
