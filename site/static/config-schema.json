@@ -1367,6 +1367,16 @@
                         "type": "object",
                         "additionalProperties": {},
                         "description": "Plugin-specific configuration"
+                      },
+                      "severity": {
+                        "type": "string",
+                        "enum": [
+                          "critical",
+                          "high",
+                          "medium",
+                          "low"
+                        ],
+                        "description": "Severity level for this plugin"
                       }
                     },
                     "required": [
