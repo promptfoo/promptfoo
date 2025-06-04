@@ -141,7 +141,7 @@ describe('constants', () => {
   });
 
   it('AGENTIC_EXEMPT_PLUGINS should contain expected plugins', () => {
-    expect(AGENTIC_EXEMPT_PLUGINS).toEqual(['system-prompt-override']);
+    expect(AGENTIC_EXEMPT_PLUGINS).toEqual(['system-prompt-override', 'agentic:memory-poisoning']);
   });
 
   it('DATASET_EXEMPT_PLUGINS should contain expected plugins', () => {
@@ -149,7 +149,12 @@ describe('constants', () => {
   });
 
   it('STRATEGY_EXEMPT_PLUGINS should combine agentic and dataset exempt plugins', () => {
-    const expectedPlugins = ['system-prompt-override', 'pliny', 'unsafebench'];
+    const expectedPlugins = [
+      'system-prompt-override',
+      'agentic:memory-poisoning',
+      'pliny',
+      'unsafebench',
+    ];
 
     expect(STRATEGY_EXEMPT_PLUGINS).toEqual(expectedPlugins);
     expect(STRATEGY_EXEMPT_PLUGINS).toEqual([...AGENTIC_EXEMPT_PLUGINS, ...DATASET_EXEMPT_PLUGINS]);
