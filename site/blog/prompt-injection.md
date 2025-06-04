@@ -212,7 +212,7 @@ Many LLM architectures weren't designed with robust security as a primary focus.
 
 - Formal verification of LLM behavior
 - Built-in adversarial training
-- Architectures separating instruction processing from content generation (OpenAI's most recent attempt at this was `gpt-4o-mini`)
+- Architectures separating instruction processing from content generation (OpenAI's most recent attempt at this was `gpt-4.1-mini`)
 
 ## What's next?
 

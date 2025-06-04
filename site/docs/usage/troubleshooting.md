@@ -48,6 +48,64 @@ If you're still encountering memory issues after trying the above options, you c
 NODE_OPTIONS="--max-old-space-size=8192" npx promptfoo eval
 ```
 
+## Object template handling
+
+When working with complex data structures in templates, you might encounter issues with how objects are displayed or accessed in your prompts and grading rubrics.
+
+### `[object Object]` appears in outputs
+
+If you see `[object Object]` in your LLM outputs or grading results, this means JavaScript objects are being converted to their string representation without proper serialization. By default, promptfoo automatically stringifies objects to prevent this issue.
+
+**Example problem:**
+
+```yaml
+prompts:
+  - 'Product: {{product}}'
+tests:
+  - vars:
+      product:
+        name: 'Headphones'
+        price: 99.99
+# Results in: "Product: [object Object]" in outputs
+```
+
+**Default solution:** Objects are automatically converted to JSON strings:
+
+```
+Product: {"name":"Headphones","price":99.99}
+```
+
+### Accessing object properties in templates
+
+If you need to access specific properties of objects in your templates (like `{{ product.name }}`), you can enable direct object access:
+
+```bash
+export PROMPTFOO_DISABLE_OBJECT_STRINGIFY=true
+promptfoo eval
+```
+
+With this setting enabled, you can use object property access in templates:
+
+```yaml
+prompts:
+  - 'Product: {{ product.name }} costs ${{ product.price }}'
+# Results in: "Product: Headphones costs $99.99"
+```
+
+### When to use each approach
+
+**Use default behavior (stringified objects) when:**
+
+- You want objects as JSON strings in your prompts
+- Working with existing templates that expect JSON strings
+- You need maximum compatibility and don't want to see `[object Object]`
+
+**Use object property access (`PROMPTFOO_DISABLE_OBJECT_STRINGIFY=true`) when:**
+
+- You need to access specific properties like `{{ product.name }}`
+- Building new templates designed for object navigation
+- Working with complex nested data structures
+
 ## Node.js version mismatch error
 
 When running `npx promptfoo@latest`, you might encounter this error:

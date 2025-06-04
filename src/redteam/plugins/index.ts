@@ -45,7 +45,6 @@ import { RbacPlugin } from './rbac';
 import { ShellInjectionPlugin } from './shellInjection';
 import { SqlInjectionPlugin } from './sqlInjection';
 import { ToolDiscoveryPlugin } from './toolDiscovery';
-import { ToolDiscoveryMultiTurnPlugin } from './toolDiscoveryMultiTurn';
 import { ToxicChatPlugin } from './toxicchat';
 import { UnsafeBenchPlugin } from './unsafebench';
 import { XSTestPlugin } from './xstest';
@@ -171,7 +170,6 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(ExcessiveAgencyPlugin, 'excessive-agency'),
   createPluginFactory(XSTestPlugin, 'xstest'),
   createPluginFactory(ToolDiscoveryPlugin, 'tool-discovery'),
-  createPluginFactory(ToolDiscoveryMultiTurnPlugin, 'tool-discovery:multi-turn'),
   createPluginFactory(HarmbenchPlugin, 'harmbench'),
   createPluginFactory(ToxicChatPlugin, 'toxic-chat'),
   createPluginFactory(HallucinationPlugin, 'hallucination'),

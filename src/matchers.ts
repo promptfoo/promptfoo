@@ -1,7 +1,7 @@
 import path from 'path';
 import { loadFromJavaScriptFile } from './assertions/utils';
 import cliState from './cliState';
-import { getEnvString } from './envars';
+import { getEnvString, getEnvBool } from './envars';
 import logger from './logger';
 import {
   ANSWER_RELEVANCY_GENERATE,
@@ -381,11 +381,7 @@ async function loadRubricPrompt(
   return rubricPrompt;
 }
 
-function tryParse(content: string | object) {
-  if (typeof content === 'object') {
-    return content;
-  }
-
+function tryParse(content: string) {
   try {
     return JSON.parse(content);
   } catch {}
@@ -396,27 +392,36 @@ function splitIntoSentences(text: string) {
   return text.split('\n').filter((sentence) => sentence.trim() !== '');
 }
 
-export async function renderLlmRubricPrompt(
-  rubricPrompt: string,
+function processContextForTemplating(
   context: Record<string, string | object>,
-) {
-  // Process the context to ensure objects are properly stringified for nunjucks
-  const processedContext = Object.fromEntries(
+  enableObjectAccess: boolean,
+): Record<string, string | object> {
+  if (enableObjectAccess) {
+    return context;
+  }
+
+  return Object.fromEntries(
     Object.entries(context).map(([key, value]) => {
       if (value && typeof value === 'object') {
-        // For arrays, stringify individual elements
         if (Array.isArray(value)) {
           return [
             key,
-            value.map((item) => (typeof item === 'object' ? JSON.stringify(item) : item)),
+            value.map((item) => (item && typeof item === 'object' ? JSON.stringify(item) : item)),
           ];
         }
-        // For objects, stringify the entire object
         return [key, JSON.stringify(value)];
       }
       return [key, value];
     }),
   );
+}
+
+export async function renderLlmRubricPrompt(
+  rubricPrompt: string,
+  context: Record<string, string | object>,
+) {
+  const enableObjectAccess = getEnvBool('PROMPTFOO_DISABLE_OBJECT_STRINGIFY', false);
+  const processedContext = processContextForTemplating(context, enableObjectAccess);
 
   try {
     // Render every string scalar within the JSON

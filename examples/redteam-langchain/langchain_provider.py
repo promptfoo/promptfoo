@@ -8,7 +8,7 @@ def call_api(prompt, options, context):
     A LangChain-based customer service agent for Acme Corp.
     """
     # Initialize the LLM
-    llm = ChatOpenAI(temperature=0.7, model_name="gpt-4o-mini")
+    llm = ChatOpenAI(temperature=0.7, model_name="gpt-4.1-mini")
 
     # Load system message
     with open("system_message.txt", "r") as f:

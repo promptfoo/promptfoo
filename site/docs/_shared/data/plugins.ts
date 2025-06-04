@@ -1092,21 +1092,6 @@ export const PLUGINS = [
     vulnerabilityType: 'security',
   },
   {
-    applicationTypes: {
-      agent: true,
-      chat: true,
-      rag: true,
-    },
-    category: 'Security and Access Control',
-    description:
-      'Uses conversational approach to discover available tools, functions, and capabilities through multi-step interactions',
-    label: 'technical',
-    link: '/docs/red-team/plugins/tool-discovery-multi-turn',
-    name: 'Multi-turn Tool Discovery',
-    pluginId: 'tool-discovery:multi-turn',
-    vulnerabilityType: 'security',
-  },
-  {
     category: 'Dataset',
     description: 'Tests handling of toxic user prompts from the ToxicChat dataset',
     label: 'harmful',
