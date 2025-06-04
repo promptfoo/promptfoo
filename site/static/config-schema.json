@@ -781,7 +781,37 @@
                       "path": {
                         "type": "string"
                       },
-                      "config": {}
+                      "config": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": [
+                                  "string",
+                                  "number",
+                                  "boolean"
+                                ]
+                              }
+                            },
+                            {
+                              "type": "object",
+                              "additionalProperties": {}
+                            },
+                            {}
+                          ]
+                        }
+                      }
                     },
                     "required": [
                       "path"
