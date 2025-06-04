@@ -24,6 +24,7 @@ async function generateLikertPrompts(
           format:
             'Likert Jailbreak Generation {bar} {percentage}% | ETA: {eta}s | {value}/{total} cases',
           hideCursor: true,
+          gracefulExit: true,
         },
         Presets.shades_classic,
       );

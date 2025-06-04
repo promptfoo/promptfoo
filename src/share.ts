@@ -187,6 +187,7 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
   const progressBar = new cliProgress.SingleBar(
     {
       format: 'Sharing | {bar} | {percentage}% | {value}/{total} results',
+      gracefulExit: true,
     },
     cliProgress.Presets.shades_classic,
   );
