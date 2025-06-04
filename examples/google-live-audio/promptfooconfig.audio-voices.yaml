@@ -9,7 +9,7 @@ prompts:
 
 providers:
   - id: 'google:live:gemini-2.0-flash-live-001'
-    label: 'Puck Voice'
+    label: 'Leda Voice'
     config:
       generationConfig:
         response_modalities: ['audio']
