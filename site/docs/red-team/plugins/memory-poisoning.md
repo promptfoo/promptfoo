@@ -66,7 +66,7 @@ providers:
       transformResponse: 'json.message'
 
 prompts:
-  - '{{poisoned_message}}'
+  - '{{prompt}}'
 
 defaultTest:
   options:
