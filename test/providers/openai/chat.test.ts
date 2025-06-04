@@ -1229,10 +1229,10 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       class CustomProvider extends OpenAiChatCompletionProvider {
         constructor(modelName: string) {
           super(modelName, {
-            config: {
+            config: { 
               apiKeyEnvar: 'CUSTOM_PROVIDER_API_KEY',
-              apiBaseUrl: 'https://custom-api.example.com/v1',
-            },
+              apiBaseUrl: 'https://custom-api.example.com/v1'
+            }
           });
         }
 
@@ -1249,10 +1249,10 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       try {
         const provider = new CustomProvider('custom-model');
-
+        
         // Should show generic error message with custom API key variable
         await expect(provider.callApi('Test prompt')).rejects.toThrow(
-          'API key is not set. Set the CUSTOM_PROVIDER_API_KEY environment variable or add `apiKey` to the provider config.',
+          'API key is not set. Set the CUSTOM_PROVIDER_API_KEY environment variable or add `apiKey` to the provider config.'
         );
 
         // Should log generic message for unknown model
@@ -1266,6 +1266,50 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
           process.env.CUSTOM_PROVIDER_API_KEY = originalCustomEnv;
         }
       }
+    });
+
+    it('should work well with third-party providers that inherit from OpenAiChatCompletionProvider', async () => {
+      // Example similar to what providers like Anthropic or DeepSeek might do
+      class DeepSeekProvider extends OpenAiChatCompletionProvider {
+        constructor(modelName: string) {
+          super(modelName, {
+            config: { 
+              apiKeyEnvar: 'DEEPSEEK_API_KEY',
+              apiBaseUrl: 'https://api.deepseek.com/v1'
+            }
+          });
+        }
+
+        getApiUrlDefault(): string {
+          return 'https://api.deepseek.com/v1';
+        }
+      }
+
+      const mockResponse = {
+        data: {
+          choices: [{ message: { content: 'DeepSeek response' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new DeepSeekProvider('deepseek-chat');
+      const result = await provider.callApi('Test prompt');
+
+      // Verify the logging shows the correct API URL (not hardcoded OpenAI)
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        expect.stringContaining('Calling https://api.deepseek.com/v1 API:')
+      );
+
+      // Verify the response logging is generic
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        expect.stringContaining('\tcompletions API response:')
+      );
+
+      expect(result.output).toBe('DeepSeek response');
     });
 
     it('should log generic API call message using getApiUrl', async () => {
