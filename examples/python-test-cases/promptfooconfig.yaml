@@ -1,10 +1,11 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Example showing how to load test cases from Python functions
 
 prompts:
   - 'Translate the following text to {{target_language}}: {{text}}'
 
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
 
 # Demonstrate different ways to load test cases from Python
 tests:

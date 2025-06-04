@@ -467,7 +467,7 @@ export function generateVarCombinations(
     if (typeof vars[key] === 'string' && vars[key].startsWith('file://')) {
       const filePath = vars[key].slice('file://'.length);
       const resolvedPath = path.resolve(cliState.basePath || '', filePath);
-      const filePaths = globSync(resolvedPath.replace(/\\/g, '/'));
+      const filePaths = globSync(resolvedPath.replace(/\\/g, '/')) || [];
       values = filePaths.map((path: string) => `file://${path}`);
       if (values.length === 0) {
         throw new Error(`No files found for variable ${key} at path ${resolvedPath}`);
@@ -1361,7 +1361,7 @@ class Evaluator {
       progressBar.stop();
     }
 
-    this.evalRecord.setVars(vars);
+    this.evalRecord.setVars(Array.from(vars));
 
     await runExtensionHook(testSuite.extensions, 'afterAll', {
       prompts: this.evalRecord.prompts,

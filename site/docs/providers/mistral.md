@@ -1,3 +1,7 @@
+---
+sidebar_label: Mistral AI
+---
+
 # Mistral AI
 
 The [Mistral AI API](https://docs.mistral.ai/api/) offers access to various Mistral models.

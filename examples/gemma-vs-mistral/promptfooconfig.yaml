@@ -1,4 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Comparing Gemma and Mistral model performance
+
 prompts:
   - '{{message}}'
 
@@ -42,7 +44,7 @@ tests:
       - type: llm-rubric
         value: Do not apologize
   - vars:
-      message: 'You see a boat filled with people. It has not sunk, but when you look again you don’t see a single person on the boat. Why?'
+      message: "You see a boat filled with people. It has not sunk, but when you look again you don't see a single person on the boat. Why?"
     assert:
       - type: llm-rubric
         value: explains that the people are below deck, or they are all in a relationship
@@ -54,7 +56,7 @@ tests:
   - vars:
       message: >-
         I have keys but no locks. I have space but no room. You can enter, but
-        can’t go outside. What am I?
+        can't go outside. What am I?
     assert:
       - type: icontains
         value: keyboard
@@ -121,7 +123,7 @@ tests:
         value: David
   - vars:
       message: >-
-        I am light as a feather, but even the world's strongest man couldn’t
+        I am light as a feather, but even the world's strongest man couldn't
         hold me for much longer than a minute. What am I?
     assert:
       - type: contains

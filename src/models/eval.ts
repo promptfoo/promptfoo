@@ -76,17 +76,13 @@ FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')}))
     const results: { key: string }[] = await db.all(query);
     const vars = results.map((r) => r.key);
 
-    return new Set(vars);
+    return vars;
   }
 
-  static async setVars(evalId: string, vars: Set<string>) {
+  static async setVars(evalId: string, vars: string[]) {
     const db = getDb();
     try {
-      await db
-        .update(evalsTable)
-        .set({ vars: Array.from(vars) })
-        .where(eq(evalsTable.id, evalId))
-        .run();
+      await db.update(evalsTable).set({ vars }).where(eq(evalsTable.id, evalId)).run();
     } catch (e) {
       logger.error(`Error setting vars: ${vars} for eval ${evalId}: ${e}`);
     }
@@ -105,8 +101,8 @@ export default class Eval {
   prompts: CompletedPrompt[];
   oldResults?: EvaluateSummaryV2;
   persisted: boolean;
+  vars: string[];
   _resultsLoaded: boolean = false;
-  _vars: Set<string>;
 
   static async latest() {
     const db = getDb();
@@ -154,7 +150,7 @@ export default class Eval {
       prompts: eval_.prompts || [],
       datasetId,
       persisted: true,
-      vars: new Set(eval_.vars || []),
+      vars: eval_.vars || [],
     });
     if (eval_.results && 'table' in eval_.results) {
       evalInstance.oldResults = eval_.results as EvaluateSummaryV2;
@@ -309,7 +305,7 @@ export default class Eval {
       prompts?: CompletedPrompt[];
       datasetId?: string;
       persisted?: boolean;
-      vars?: Set<string>;
+      vars?: string[];
     },
   ) {
     const createdAt = opts?.createdAt || new Date();
@@ -322,7 +318,7 @@ export default class Eval {
     this.datasetId = opts?.datasetId;
     this.persisted = opts?.persisted || false;
     this._resultsLoaded = false;
-    this._vars = new Set(opts?.vars || []);
+    this.vars = opts?.vars || [];
   }
 
   version() {
@@ -362,16 +358,12 @@ export default class Eval {
     this.persisted = true;
   }
 
-  setVars(vars: Set<string>) {
-    this._vars = vars;
+  setVars(vars: string[]) {
+    this.vars = vars;
   }
 
   addVar(varName: string) {
-    this.vars.add(varName);
-  }
-
-  get vars(): Set<string> {
-    return this._vars;
+    this.vars.push(varName);
   }
 
   getPrompts() {

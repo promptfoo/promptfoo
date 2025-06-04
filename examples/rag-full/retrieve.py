@@ -10,7 +10,7 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 
 # Constants
 CHROMA_PATH: str = "db"
-OPENAI_AI_MODEL: str = "gpt-4o-mini"
+OPENAI_AI_MODEL: str = "gpt-4.1-mini"
 OPENAI_API_KEY: str | None = os.getenv("OPENAI_API_KEY")
 OPENAI_AI_EMBEDDING_MODEL: str = "text-embedding-3-large"
 
