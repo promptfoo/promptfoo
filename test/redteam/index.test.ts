@@ -19,6 +19,7 @@ import { Strategies, validateStrategies } from '../../src/redteam/strategies';
 import { DEFAULT_LANGUAGES } from '../../src/redteam/strategies/multilingual';
 import type { TestCaseWithPlugin } from '../../src/types';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
+import { extractVariablesFromTemplates } from '../../src/util/templates';
 
 jest.mock('cli-progress');
 jest.mock('../../src/providers');
@@ -62,6 +63,9 @@ describe('synthesize', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.mocked(extractVariablesFromTemplates).mockImplementation(
+      jest.requireActual('../../src/util/templates').extractVariablesFromTemplates,
+    );
     jest.mocked(extractEntities).mockResolvedValue(['entity1', 'entity2']);
     jest.mocked(extractSystemPurpose).mockResolvedValue('Test purpose');
     jest.mocked(loadApiProvider).mockResolvedValue(mockProvider);
@@ -75,6 +79,10 @@ describe('synthesize', () => {
       stop: jest.fn(),
       update: jest.fn(),
     } as any);
+  });
+
+  afterEach(() => {
+    jest.resetAllMocks();
   });
 
   // Input handling tests
@@ -540,6 +548,10 @@ describe('synthesize', () => {
       });
     });
 
+    afterEach(() => {
+      jest.resetAllMocks();
+    });
+
     it('should check API health when remote generation is enabled', async () => {
       await synthesize({
         language: 'en',
@@ -731,7 +743,7 @@ jest.mock('js-yaml');
 
 describe('resolvePluginConfig', () => {
   afterEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
   });
 
   it('should return an empty object if config is undefined', () => {
