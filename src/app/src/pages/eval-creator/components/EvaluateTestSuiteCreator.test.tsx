@@ -1,13 +1,17 @@
 import { render, screen, within, waitFor, waitForElementToBeRemoved } from '@testing-library/react';
 import React from 'react';
-import type { ProviderOptions, TestCase, TestSuiteConfig } from '@app/pages/eval/components/types';
 import { useStore } from '@app/stores/evalConfig';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
+import type {
+  ProviderOptions,
+  TestCase,
+  EvaluateOptions,
+  EnvOverrides,
+  Scenario,
+} from '@promptfoo/types';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import EvaluateTestSuiteCreator from './EvaluateTestSuiteCreator';
-
-// Assuming Scenario type might be here or needs to be defined/mocked
 
 // Mock child components
 vi.mock('./ConfigureEnvButton', () => ({
@@ -46,12 +50,6 @@ vi.mock('./YamlEditor', () => ({
   )),
 }));
 
-// Define a simple Scenario type if not readily available or to avoid complex imports
-interface Scenario {
-  description?: string;
-  // other properties if relevant
-}
-
 const renderWithTheme = (component: React.ReactNode) => {
   const theme = createTheme({ palette: { mode: 'light' } });
   return render(<ThemeProvider theme={theme}>{component}</ThemeProvider>);
@@ -64,13 +62,13 @@ const initialZustandState = useStore.getState();
 const defaultStoreValues = {
   description: '',
   providers: [] as ProviderOptions[],
-  prompts: [] as string[],
+  prompts: [] as any[],
   testCases: [] as TestCase[],
-  defaultTest: {} as Partial<TestCase>,
-  env: {} as Record<string, string>,
-  evaluateOptions: {} as Partial<TestSuiteConfig['evaluateOptions']>,
+  defaultTest: {} as TestCase,
+  env: {} as EnvOverrides,
+  evaluateOptions: {} as EvaluateOptions,
   scenarios: [] as Scenario[],
-  extensions: [] as any[],
+  extensions: [] as string[],
 };
 
 describe('EvaluateTestSuiteCreator', () => {
@@ -147,11 +145,11 @@ describe('EvaluateTestSuiteCreator', () => {
       providers: [{ id: 'provider1', label: 'Provider 1' }] as ProviderOptions[],
       prompts: ['Test Prompt {{var}}'],
       testCases: [{ vars: { var: 'value' } }] as TestCase[],
-      defaultTest: { assert: [{ type: 'equals', value: 'expected' }] } as Partial<TestCase>,
-      env: { API_KEY: 'testkey' },
-      evaluateOptions: { maxConcurrency: 5 },
-      scenarios: [{ description: 'Test Scenario' }] as Scenario[],
-      extensions: [{ type: 'custom-ext', config: {} }],
+      defaultTest: { assert: [{ type: 'equals', value: 'expected' }] } as TestCase,
+      env: { OPENAI_API_KEY: 'testkey' } as EnvOverrides,
+      evaluateOptions: { maxConcurrency: 5 } as EvaluateOptions,
+      scenarios: [{ description: 'Test Scenario', config: [], tests: [] }] as Scenario[],
+      extensions: ['file://path/to/extension.py:function_name'] as string[],
     };
     useStore.setState(nonEmptyState);
 
@@ -187,11 +185,11 @@ describe('EvaluateTestSuiteCreator', () => {
       providers: [{ id: 'provider1', label: 'Provider 1' }] as ProviderOptions[],
       prompts: ['Test Prompt {{var}}'],
       testCases: [{ vars: { var: 'value' } }] as TestCase[],
-      defaultTest: { assert: [{ type: 'equals', value: 'expected' }] } as Partial<TestCase>,
-      env: { API_KEY: 'testkey' },
-      evaluateOptions: { maxConcurrency: 5 },
-      scenarios: [{ description: 'Test Scenario' }] as Scenario[],
-      extensions: [{ type: 'custom-ext', config: {} }],
+      defaultTest: { assert: [{ type: 'equals', value: 'expected' }] } as TestCase,
+      env: { OPENAI_API_KEY: 'testkey' } as EnvOverrides,
+      evaluateOptions: { maxConcurrency: 5 } as EvaluateOptions,
+      scenarios: [{ description: 'Test Scenario', config: [], tests: [] }] as Scenario[],
+      extensions: ['file://path/to/extension.py:function_name'] as string[],
     };
     useStore.setState(nonEmptyState);
 
