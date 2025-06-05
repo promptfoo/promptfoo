@@ -57,8 +57,8 @@ Next, we can review the example configuration file and make changes to it.
    providers:
      - openai:gpt-4.1
      - openai:o4-mini
-     - anthropic:messages:claude-3-5-sonnet-20241022
-     - vertex:gemini-pro
+     - anthropic:messages:claude-sonnet-4-20250514
+     - vertex:gemini-2.5-pro-exp-03-25
      # Or use your own custom provider
      - file://path/to/custom/provider.py
    ```
@@ -67,7 +67,7 @@ Next, we can review the example configuration file and make changes to it.
 
    - `openai:gpt-4.1` for GPT-4.1
    - `openai:o4-mini` for OpenAI's o4-mini
-   - `anthropic:messages:claude-3-5-sonnet-20241022` for Anthropic's Claude
+   - `anthropic:messages:claude-sonnet-4-20250514` for Anthropic's Claude
    - `bedrock:us.meta.llama3-3-70b-instruct-v1:0` for Meta's Llama 3.3 70B via AWS Bedrock
 
    Most providers need authentication. For example, with OpenAI:
