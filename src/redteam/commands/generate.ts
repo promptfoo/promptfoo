@@ -146,17 +146,17 @@ export async function doGenerateRedteam(
     testSuite = resolved.testSuite;
     redteamConfig = resolved.config.redteam;
 
+    const providers = await loadApiProviders(resolved.config.providers ?? []);
+
     invariant(
-      (resolved.config.providers ?? []).length === 1,
-      'Generate must be run with a single provider. Please specify a single provider in the config file.',
+      providers.length === 1,
+      'Generation can only be run with a single provider. Please specify a single provider in the config file.',
     );
 
     if (
       !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_TARGET_DISCOVERY_AGENT', false) &&
       !neverGenerateRemote()
     ) {
-      const providers = await loadApiProviders(resolved.config.providers!);
-
       try {
         if (testSuite.prompts.length > 1) {
           logger.warn(
