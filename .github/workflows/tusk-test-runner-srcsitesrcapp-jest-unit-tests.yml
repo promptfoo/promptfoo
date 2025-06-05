@@ -1,6 +1,9 @@
 name: Tusk Test Runner - Jest unit tests (main repo)
 
 # Required for Tusk
+permissions:
+  contents: read
+
 on:
   workflow_dispatch:
     inputs:
