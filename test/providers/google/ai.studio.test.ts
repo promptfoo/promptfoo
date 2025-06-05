@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as cache from '../../../src/cache';
 import { AIStudioChatProvider } from '../../../src/providers/google/ai.studio';
 import * as util from '../../../src/providers/google/util';
+import { getNunjucksEngineForFilePath } from '../../../src/util/file';
 import * as templates from '../../../src/util/templates';
 
 jest.mock('../../../src/cache', () => ({
@@ -20,10 +21,25 @@ jest.mock('../../../src/util/templates', () => ({
 }));
 
 jest.mock('../../../src/util/file', () => ({
-  ...jest.requireActual('../../../src/util/file'),
-  getNunjucksEngineForFilePath: jest.fn(() => ({
-    renderString: jest.fn((str) => str),
-  })),
+  getNunjucksEngineForFilePath: jest.fn(),
+  maybeLoadFromExternalFile: jest.fn((input) => {
+    if (typeof input === 'string' && input.startsWith('file://')) {
+      // Simulate loading from file
+      const fs = require('fs');
+      const path = require('path');
+      const filePath = path.resolve(input.slice('file://'.length));
+
+      if (fs.existsSync(filePath)) {
+        const contents = fs.readFileSync(filePath, 'utf8');
+        if (filePath.endsWith('.json')) {
+          return JSON.parse(contents);
+        }
+        return contents;
+      }
+      throw new Error(`File does not exist: ${filePath}`);
+    }
+    return input;
+  }),
 }));
 
 jest.mock('glob', () => ({
@@ -41,6 +57,18 @@ describe('AIStudioChatProvider', () => {
   let provider: AIStudioChatProvider;
 
   beforeEach(() => {
+    jest.clearAllMocks();
+    jest.mocked(templates.getNunjucksEngine).mockReturnValue({
+      renderString: jest.fn((str) => str),
+    } as any);
+    jest.mocked(fs.existsSync).mockReset();
+    jest.mocked(fs.readFileSync).mockReset();
+    jest.mocked(fs.writeFileSync).mockReset();
+    jest.mocked(fs.statSync).mockReset();
+    jest.mocked(getNunjucksEngineForFilePath).mockReturnValue({
+      renderString: jest.fn((str) => str),
+    } as any);
+
     provider = new AIStudioChatProvider('gemini-pro', {
       config: {
         temperature: 0.7,
@@ -49,7 +77,6 @@ describe('AIStudioChatProvider', () => {
         topK: 40,
       },
     });
-    jest.clearAllMocks();
   });
 
   describe('constructor and configuration', () => {
@@ -118,6 +145,9 @@ describe('AIStudioChatProvider', () => {
     });
 
     it('should prioritize apiHost over apiBaseUrl', () => {
+      jest.mocked(templates.getNunjucksEngine).mockReturnValue({
+        renderString: jest.fn((str) => `rendered-${str}`),
+      } as any);
       const provider = new AIStudioChatProvider('gemini-pro', {
         config: {
           apiHost: 'host.googleapis.com',
@@ -221,6 +251,17 @@ describe('AIStudioChatProvider', () => {
 
   describe('non-Gemini models', () => {
     beforeEach(() => {
+      jest.clearAllMocks();
+      jest.mocked(templates.getNunjucksEngine).mockReturnValue({
+        renderString: jest.fn((str) => str),
+      } as any);
+      jest.mocked(fs.existsSync).mockReset();
+      jest.mocked(fs.readFileSync).mockReset();
+      jest.mocked(fs.writeFileSync).mockReset();
+      jest.mocked(fs.statSync).mockReset();
+      jest.mocked(getNunjucksEngineForFilePath).mockReturnValue({
+        renderString: jest.fn((str) => str),
+      } as any);
       provider = new AIStudioChatProvider('palm2', {
         config: {
           temperature: 0.7,
@@ -656,6 +697,9 @@ describe('AIStudioChatProvider', () => {
     });
 
     it('should handle function calling configuration', async () => {
+      jest.mocked(templates.getNunjucksEngine).mockReturnValue({
+        renderString: jest.fn((str) => `rendered-${str}`),
+      } as any);
       const tools = [
         {
           functionDeclarations: [
