@@ -55,9 +55,6 @@ jobs:
           # Please adapt the secret name accordingly if you have named it differently.
           authToken: ${{ secrets.TUSK_AUTH_TOKEN }}
 
-          # The directory containing the React app code using Vitest
-          appDir: 'src/app'
-
           # Vitest for the React app tests
           testFramework: 'Vitest'
 
@@ -68,8 +65,8 @@ jobs:
           lintScript: 'npx prettier --write {{file}} && npx eslint --fix {{file}} --no-warn-ignored'
 
           # The script to run Vitest tests for individual files
-          # Vitest can run specific test files using the run command
-          testScript: 'cd src/app && npm test -- run {{file}}'
+          # Use the workspace-aware test:app script and pass the relative file path within src/app
+          testScript: 'npm run test:app -- run $(echo "{{file}}" | sed "s|^src/app/||")'
 
           # The runner may run tests in parallel.
           # Set this value to 1 if you know that your tests should not be run concurrently.
