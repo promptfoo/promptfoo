@@ -24,6 +24,7 @@ async function generateGcgPrompts(
         {
           format: 'GCG Generation {bar} {percentage}% | ETA: {eta}s | {value}/{total} cases',
           hideCursor: true,
+          gracefulExit: true,
         },
         Presets.shades_classic,
       );
@@ -68,6 +69,7 @@ async function generateGcgPrompts(
 
       // Handle both single response and array of responses
       const responses = data.responses as string[];
+      const originalText = String(testCase.vars[injectVar]);
 
       const gcgTestCases = responses.map((response: string) => ({
         ...testCase,
@@ -82,6 +84,7 @@ async function generateGcgPrompts(
         metadata: {
           ...testCase.metadata,
           strategyId: 'gcg',
+          originalText,
         },
       }));
 
