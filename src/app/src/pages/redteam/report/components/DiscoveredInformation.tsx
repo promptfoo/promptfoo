@@ -27,21 +27,21 @@ interface Tool {
 
 const Row = ({ label, value }: { label: React.ReactNode; value: React.ReactNode }) => {
   return (
-    <TableRow sx={{ backgroundColor: (theme) => theme.palette.background.paper }}>
+    <TableRow sx={{ backgroundColor: 'white' }}>
       <TableCell
         variant="head"
         sx={{
           width: 200,
-          backgroundColor: (theme) => theme.palette.action.hover,
+          backgroundColor: (theme) => theme.palette.grey[50],
           borderRight: (theme) => `1px solid ${theme.palette.divider}`,
           color: 'inherit',
           fontWeight: 500,
           paddingLeft: 3,
         }}
       >
-        {label as React.ReactNode}
+        {label}
       </TableCell>
-      <TableCell sx={{ padding: 3 }}>{value as React.ReactNode}</TableCell>
+      <TableCell sx={{ padding: 3 }}>{value}</TableCell>
     </TableRow>
   );
 };
