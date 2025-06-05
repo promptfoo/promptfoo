@@ -3,17 +3,17 @@ import { PolicyPlugin, PolicyViolationGrader } from '../../../src/redteam/plugin
 import type { ApiProvider, AtomicTestCase } from '../../../src/types';
 
 describe('PolicyPlugin', () => {
-  const mockProvider = {
+  const mockProvider: ApiProvider = {
     id: () => 'test-provider',
     callApi: jest.fn().mockResolvedValue({ output: 'test output' }),
-  } as unknown as ApiProvider;
+  };
 
   const mockPurpose = 'Test purpose';
   const mockInjectVar = 'test-var';
   const mockPolicy = 'Test policy';
 
-  beforeEach(() => {
-    jest.clearAllMocks();
+  afterEach(() => {
+    jest.resetAllMocks();
   });
 
   it('should initialize with required parameters', () => {
@@ -38,11 +38,20 @@ describe('PolicyPlugin', () => {
     jest.mocked(mockProvider.callApi).mockResolvedValueOnce(mockApiResponse);
 
     const tests = await plugin.generateTests(1, 0);
-    expect(tests).toHaveLength(1);
-    expect(tests[0].metadata).toHaveProperty('policy', mockPolicy);
+
+    expect(tests).toEqual([
+      expect.objectContaining({
+        vars: expect.objectContaining({
+          [mockInjectVar]: expect.any(String),
+        }),
+        metadata: expect.objectContaining({
+          policy: mockPolicy,
+        }),
+      }),
+    ]);
   });
 
-  it('should generate tests with correct template', async () => {
+  it('should generate tests with correct template and call provider', async () => {
     const plugin = new PolicyPlugin(mockProvider, mockPurpose, mockInjectVar, {
       policy: mockPolicy,
     });
@@ -51,8 +60,10 @@ describe('PolicyPlugin', () => {
     jest.mocked(mockProvider.callApi).mockResolvedValueOnce(mockApiResponse);
 
     const tests = await plugin.generateTests(1, 0);
+
     expect(tests[0].vars).toHaveProperty(mockInjectVar);
     expect(mockProvider.callApi).toHaveBeenCalledWith(expect.stringContaining(mockPolicy));
+    expect(mockProvider.callApi).toHaveBeenCalledWith(expect.stringContaining(mockPurpose));
   });
 
   it('should handle multiple test generation', async () => {
@@ -72,21 +83,26 @@ describe('PolicyPlugin', () => {
       policy: mockPolicy,
     });
     const assertions = (plugin as any).getAssertions('Prompt: Something');
-    expect(Array.isArray(assertions)).toBe(true);
-    expect(assertions[0]).toHaveProperty('type', 'promptfoo:redteam:policy');
-    expect(assertions[0]).toHaveProperty('metric', 'PolicyViolation');
+
+    expect(assertions).toEqual([
+      expect.objectContaining({
+        type: 'promptfoo:redteam:policy',
+        metric: 'PolicyViolation',
+      }),
+    ]);
   });
 
-  it('should generate template containing updated formatting instructions', async () => {
+  it('should generate template with correct formatting instructions', async () => {
     const plugin = new PolicyPlugin(mockProvider, mockPurpose, mockInjectVar, {
       policy: mockPolicy,
     });
     const template = await (plugin as any).getTemplate();
-    expect(template).toContain('CRITICAL FORMATTING REQUIREMENTS:');
+
+    expect(template).toContain('FORMATTING:');
     expect(template).toContain('PromptBlock: ');
     expect(template).toContain('Prompt: ');
-    expect(template).toContain('no explanations, commentary, or markdown');
-    expect(template).toContain('Generate {{n}} diverse and creative prompts');
+    expect(template).toContain('No explanations or commentary');
+    expect(template).toContain('Generate {{n}}');
     expect(template).toContain(mockPurpose);
     expect(template).toContain(mockPolicy);
   });
@@ -98,20 +114,24 @@ describe('PolicyViolationGrader', () => {
     callApi: jest.fn(),
   } as unknown as ApiProvider;
 
-  beforeEach(() => {
-    jest.clearAllMocks();
+  afterEach(() => {
+    jest.resetAllMocks();
   });
 
-  it('should initialize with correct id', () => {
+  it('should initialize with correct properties', () => {
     const grader = new PolicyViolationGrader();
-    expect(grader.id).toBe('promptfoo:redteam:policy');
-  });
 
-  it('should have correct rubric format', () => {
-    const grader = new PolicyViolationGrader();
-    expect(grader.rubric).toContain('<system_purpose>');
-    expect(grader.rubric).toContain('<policy>');
-    expect(grader.rubric).toContain('Assessment criteria:');
+    expect({
+      id: grader.id,
+      hasSystemPurpose: grader.rubric.includes('<system_purpose>'),
+      hasPolicy: grader.rubric.includes('<policy>'),
+      hasAssessmentCriteria: grader.rubric.includes('Assessment criteria:'),
+    }).toEqual({
+      id: 'promptfoo:redteam:policy',
+      hasSystemPurpose: true,
+      hasPolicy: true,
+      hasAssessmentCriteria: true,
+    });
   });
 
   it('should handle missing policy in metadata', async () => {
@@ -124,18 +144,10 @@ describe('PolicyViolationGrader', () => {
       },
     } as AtomicTestCase;
 
-    // Patch the parent getResult to resolve quickly
-    jest.spyOn(PolicyViolationGrader.prototype, 'getResult').mockImplementationOnce(async function (
-      prompt: string,
-      llmOutput: string,
-      test: AtomicTestCase,
-      provider: ApiProvider | undefined,
-    ) {
-      return {
-        grade: { score: 1, reason: 'No violation', passed: true, pass: true },
-        rubric: `No specific policy provided`,
-      } as any;
-    });
+    jest.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValueOnce({
+      grade: { score: 1, reason: 'No violation', passed: true, pass: true },
+      rubric: 'No specific policy provided',
+    } as any);
 
     const result = await grader.getResult(
       'test prompt',
@@ -144,8 +156,15 @@ describe('PolicyViolationGrader', () => {
       mockProvider,
     );
 
-    expect(result.grade).toBeDefined();
-    expect(result.rubric).toContain('No specific policy provided');
+    expect(result).toEqual({
+      grade: expect.objectContaining({
+        score: 1,
+        reason: 'No violation',
+        passed: true,
+        pass: true,
+      }),
+      rubric: 'No specific policy provided',
+    });
   });
 
   it('should preserve other metadata when grading', async () => {
@@ -160,17 +179,10 @@ describe('PolicyViolationGrader', () => {
       },
     } as AtomicTestCase;
 
-    jest.spyOn(PolicyViolationGrader.prototype, 'getResult').mockImplementationOnce(async function (
-      prompt: string,
-      llmOutput: string,
-      test: AtomicTestCase,
-      provider: ApiProvider | undefined,
-    ) {
-      return {
-        grade: { score: 1, reason: 'No violation', passed: true, pass: true },
-        rubric: `Rubric for policy: ${test.metadata?.policy}`,
-      } as any;
-    });
+    jest.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValueOnce({
+      grade: { score: 1, reason: 'No violation', passed: true, pass: true },
+      rubric: `Rubric for policy: ${testWithExtraMetadata.metadata?.policy}`,
+    } as any);
 
     const result = await grader.getResult(
       'test prompt',
@@ -180,7 +192,13 @@ describe('PolicyViolationGrader', () => {
     );
 
     expect(result.grade).toBeDefined();
-    expect(testWithExtraMetadata.metadata).toHaveProperty('extraField', 'extra value');
+    expect(testWithExtraMetadata.metadata).toEqual(
+      expect.objectContaining({
+        policy: 'test policy',
+        purpose: 'test purpose',
+        extraField: 'extra value',
+      }),
+    );
   });
 
   it('should handle failed grading attempts gracefully', async () => {
@@ -195,20 +213,12 @@ describe('PolicyViolationGrader', () => {
     } as AtomicTestCase;
 
     jest
-      .spyOn(PolicyViolationGrader.prototype, 'getResult')
-      .mockImplementationOnce(async function () {
-        throw new Error('Grading failed');
-      });
+      .spyOn(RedteamGraderBase.prototype, 'getResult')
+      .mockRejectedValueOnce(new Error('Grading failed'));
 
-    let errorCaught = false;
-    try {
-      await grader.getResult('test prompt', 'test output', testCase, mockProvider);
-    } catch (err) {
-      errorCaught = true;
-      // eslint-disable-next-line jest/no-conditional-expect
-      expect((err as Error).message).toBe('Grading failed');
-    }
-    expect(errorCaught).toBe(true);
+    await expect(
+      grader.getResult('test prompt', 'test output', testCase, mockProvider),
+    ).rejects.toThrow('Grading failed');
   });
 
   it('should handle empty output from provider', async () => {
@@ -222,22 +232,22 @@ describe('PolicyViolationGrader', () => {
       },
     } as AtomicTestCase;
 
-    jest.spyOn(PolicyViolationGrader.prototype, 'getResult').mockImplementationOnce(async function (
-      prompt: string,
-      llmOutput: string,
-      test: AtomicTestCase,
-      provider: ApiProvider | undefined,
-    ) {
-      return {
-        grade: { score: 1, reason: 'Empty output', passed: true, pass: true },
-        rubric: 'Some rubric',
-      } as any;
-    });
+    jest.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValueOnce({
+      grade: { score: 1, reason: 'Empty output', passed: true, pass: true },
+      rubric: 'Some rubric',
+    } as any);
 
     const result = await grader.getResult('test prompt', '', testCase, mockProvider);
 
-    expect(result.grade).toBeDefined();
-    expect(result.grade.reason).toBe('Empty output');
+    expect(result).toEqual({
+      grade: expect.objectContaining({
+        score: 1,
+        reason: 'Empty output',
+        passed: true,
+        pass: true,
+      }),
+      rubric: 'Some rubric',
+    });
   });
 
   it('should call super.getResult with correct policy in metadata', async () => {
@@ -253,27 +263,30 @@ describe('PolicyViolationGrader', () => {
 
     const superGetResult = jest
       .spyOn(RedteamGraderBase.prototype, 'getResult')
-      .mockImplementationOnce(async function (
-        prompt: string,
-        llmOutput: string,
-        test: AtomicTestCase,
-        provider: ApiProvider | undefined,
-        options?: any,
-      ) {
-        return {
-          grade: { score: 0, reason: 'Violated', passed: false, pass: false },
-          rubric: 'rubric',
-        } as any;
-      });
+      .mockResolvedValueOnce({
+        grade: { score: 0, reason: 'Violated', passed: false, pass: false },
+        rubric: 'rubric',
+      } as any);
 
     const result = await grader.getResult('prompt', 'output', testCase, mockProvider);
-    expect(result.grade).toBeDefined();
-    expect(result.rubric).toBe('rubric');
+
+    expect(result).toEqual({
+      grade: expect.objectContaining({
+        score: 0,
+        reason: 'Violated',
+        passed: false,
+        pass: false,
+      }),
+      rubric: 'rubric',
+    });
     expect(superGetResult).toHaveBeenCalledWith(
       'prompt',
       'output',
       expect.objectContaining({
-        metadata: expect.objectContaining({ policy: 'test policy', purpose: 'test purpose' }),
+        metadata: expect.objectContaining({
+          policy: 'test policy',
+          purpose: 'test purpose',
+        }),
       }),
       mockProvider,
       undefined,
@@ -292,23 +305,22 @@ describe('PolicyViolationGrader', () => {
 
     const superGetResult = jest
       .spyOn(RedteamGraderBase.prototype, 'getResult')
-      .mockImplementationOnce(async function (
-        prompt: string,
-        llmOutput: string,
-        test: AtomicTestCase,
-        provider: ApiProvider | undefined,
-        options?: any,
-      ) {
-        return {
-          grade: { score: 1, reason: 'No violation', passed: true, pass: true },
-
-          rubric: (test.metadata && (test.metadata as any).policy) || 'No specific policy provided',
-        } as any;
-      });
+      .mockResolvedValueOnce({
+        grade: { score: 1, reason: 'No violation', passed: true, pass: true },
+        rubric: 'No specific policy provided',
+      } as any);
 
     const result = await grader.getResult('prompt', 'output', testCase, mockProvider);
-    expect(result.grade).toBeDefined();
-    expect(result.rubric).toBe('No specific policy provided');
+
+    expect(result).toEqual({
+      grade: expect.objectContaining({
+        score: 1,
+        reason: 'No violation',
+        passed: true,
+        pass: true,
+      }),
+      rubric: 'No specific policy provided',
+    });
     expect(superGetResult).toHaveBeenCalledWith(
       'prompt',
       'output',
