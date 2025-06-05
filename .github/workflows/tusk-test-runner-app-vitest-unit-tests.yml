@@ -1,4 +1,4 @@
-name: Tusk Test Runner - Jest unit tests (main repo)
+name: Tusk Test Runner - Vitest unit tests (src/app)
 
 # Required for Tusk
 on:
@@ -32,11 +32,6 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
-      - name: Use Python 3.13
-        uses: actions/setup-python@v5
-        with:
-          python-version: 3.13
-
       - name: Install Dependencies
         run: npm ci
 
@@ -58,24 +53,21 @@ jobs:
           # Please adapt the secret name accordingly if you have named it differently.
           authToken: ${{ secrets.TUSK_AUTH_TOKEN }}
 
-          # The directory containing your service code. This covers the main src directory
-          # but excludes src/app which uses Vitest (should have separate workflow)
-          appDir: 'src,test'
+          # The directory containing the React app code using Vitest
+          appDir: 'src/app'
 
-          # Jest for the main repository tests
-          testFramework: 'Jest'
+          # Vitest for the React app tests
+          testFramework: 'Vitest'
 
-          # Test file regex to match Jest test files in the main repo
-          # Excludes src/app which uses Vitest and has separate package.json
-          testFileRegex: '^(test|src)/.*\.(test|spec)\.(js|jsx|ts|tsx)$'
+          # Test file regex to match Vitest test files in src/app
+          testFileRegex: '^src/app/.*\.(test|spec)\.(js|jsx|ts|tsx)$'
 
-          # The script to run to lint the code
-          # Using the project's actual lint commands from package.json
+          # The script to run to lint the code for React/TypeScript files
           lintScript: 'npx prettier --write {{file}} && npx eslint --fix {{file}} --no-warn-ignored'
 
-          # The script to run Jest tests for individual files
-          # Jest can run specific test files directly
-          testScript: 'npx jest {{file}} --passWithNoTests'
+          # The script to run Vitest tests for individual files
+          # Vitest can run specific test files using the run command
+          testScript: 'cd src/app && npm test -- run {{file}}'
 
           # The runner may run tests in parallel.
           # Set this value to 1 if you know that your tests should not be run concurrently.
