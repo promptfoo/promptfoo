@@ -186,6 +186,10 @@ const EvaluateOptionsSchema = z.object({
    * Timeout in milliseconds for each evaluation step. Default is 0 (no timeout).
    */
   timeoutMs: z.number().optional(),
+  /**
+   * Maximum runtime in milliseconds for the entire evaluation. Default is 0 (no limit).
+   */
+  maxEvalTimeMs: z.number().optional(),
 });
 export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & { abortSignal?: AbortSignal };
 

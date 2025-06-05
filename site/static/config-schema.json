@@ -1510,6 +1510,9 @@
             },
             "timeoutMs": {
               "type": "number"
+            },
+            "maxEvalTimeMs": {
+              "type": "number"
             }
           },
           "additionalProperties": false

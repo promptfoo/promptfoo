@@ -1,6 +1,13 @@
 import cliState from '../src/cliState';
 import type { EnvVarKey } from '../src/envars';
-import { getEnvString, getEnvBool, getEnvInt, getEnvFloat, isCI } from '../src/envars';
+import {
+  getEnvString,
+  getEnvBool,
+  getEnvInt,
+  getEnvFloat,
+  isCI,
+  getMaxEvalTimeMs,
+} from '../src/envars';
 
 describe('envars', () => {
   const originalEnv = process.env;
@@ -333,6 +340,48 @@ describe('envars', () => {
       };
 
       expect(isCI()).toBe(true);
+    });
+  });
+
+  describe('getMaxEvalTimeMs', () => {
+    it('should return default value when environment variable is not set', () => {
+      expect(getMaxEvalTimeMs()).toBe(0);
+      expect(getMaxEvalTimeMs(5000)).toBe(5000);
+    });
+
+    it('should return parsed integer value from environment variable', () => {
+      process.env.PROMPTFOO_MAX_EVAL_TIME_MS = '10000';
+      expect(getMaxEvalTimeMs()).toBe(10000);
+    });
+
+    it('should handle invalid values', () => {
+      process.env.PROMPTFOO_MAX_EVAL_TIME_MS = 'invalid';
+      expect(getMaxEvalTimeMs(5000)).toBe(5000);
+    });
+
+    it('should prioritize cliState.config.env over process.env', () => {
+      process.env.PROMPTFOO_MAX_EVAL_TIME_MS = '5000';
+      cliState.config = {
+        env: {
+          PROMPTFOO_MAX_EVAL_TIME_MS: 10000 as any,
+        },
+      };
+      expect(getMaxEvalTimeMs()).toBe(10000);
+    });
+
+    it('should floor floating point values', () => {
+      process.env.PROMPTFOO_MAX_EVAL_TIME_MS = '1234.56';
+      expect(getMaxEvalTimeMs()).toBe(1234);
+    });
+
+    it('should handle negative values', () => {
+      process.env.PROMPTFOO_MAX_EVAL_TIME_MS = '-1000';
+      expect(getMaxEvalTimeMs()).toBe(-1000);
+    });
+
+    it('should handle empty string', () => {
+      process.env.PROMPTFOO_MAX_EVAL_TIME_MS = '';
+      expect(getMaxEvalTimeMs(1000)).toBe(1000);
     });
   });
 });
