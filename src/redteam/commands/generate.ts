@@ -133,7 +133,7 @@ export async function doGenerateRedteam(
   }
 
   let targetPurposeDiscoveryResult: TargetPurposeDiscoveryResult | undefined;
-  let pluginSeverityOverrides: Map<Plugin, Severity> = new Map();
+  const pluginSeverityOverrides: Map<Plugin, Severity> = new Map();
   let pluginSeverityOverridesId: string | undefined;
 
   if (configPath) {
