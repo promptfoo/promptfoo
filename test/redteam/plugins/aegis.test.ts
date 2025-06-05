@@ -30,7 +30,7 @@ describe('fetchDataset', () => {
     const result = await fetchDataset(1);
     expect(fetchHuggingFaceDataset).toHaveBeenCalled();
     expect(result).toHaveLength(1);
-    expect(result[0].vars.text).toBe('hello');
+    expect(result[0].vars?.text).toBe('hello');
   });
 
   it('should handle errors', async () => {

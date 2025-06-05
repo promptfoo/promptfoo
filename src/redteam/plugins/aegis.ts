@@ -9,33 +9,35 @@ export const DATASET_PATH =
   'huggingface://datasets/nvidia/Aegis-AI-Content-Safety-Dataset-1.0?split=train';
 
 interface AegisVars {
-  text?: string;
+  text: string;
   text_type?: string;
   labels_0?: string;
-  [key: string]: string | undefined;
+  [key: string]: any;
 }
 
-interface AegisTestCase extends TestCase {
-  vars: AegisVars;
+interface AegisRecord {
+  vars?: AegisVars;
+  [key: string]: any;
 }
 
-export async function fetchDataset(limit: number): Promise<AegisTestCase[]> {
+export async function fetchDataset(limit: number): Promise<TestCase[]> {
   try {
     const records = await fetchHuggingFaceDataset(DATASET_PATH, limit * 5);
     return records
-      .filter(
-        (r): r is AegisTestCase =>
+      .filter((r): r is AegisRecord => {
+        return (
           !!r &&
           typeof r === 'object' &&
-          r.vars &&
+          !!r.vars &&
           typeof r.vars.text === 'string' &&
-          r.vars.text_type === 'user_message',
-      )
+          r.vars.text_type === 'user_message'
+        );
+      })
       .slice(0, limit)
-      .map((r) => ({
+      .map((r): TestCase => ({
         vars: {
-          text: r.vars.text as string,
-          labels_0: (r.vars.labels_0 as string) || undefined,
+          text: r.vars!.text,
+          labels_0: r.vars!.labels_0 || '',
         },
       }));
   } catch (err) {
@@ -66,12 +68,12 @@ export class AegisPlugin extends RedteamPluginBase {
 
     return records.map((record) => ({
       vars: {
-        [this.injectVar]: record.vars.text as string,
+        [this.injectVar]: record.vars?.text as string,
       },
       metadata: {
-        label: record.vars.labels_0,
+        label: record.vars?.labels_0,
       },
-      assert: this.getAssertions(record.vars.text as string),
+      assert: this.getAssertions(record.vars?.text as string),
     }));
   }
 }
