@@ -1,13 +1,17 @@
+import { CLOUD_PROVIDER_PREFIX } from '../../src/constants';
 import { fetchWithProxy } from '../../src/fetch';
 import { cloudConfig } from '../../src/globalConfig/cloud';
-import { makeRequest, getProviderFromCloud, getConfigFromCloud } from '../../src/util/cloud';
+import {
+  makeRequest,
+  getProviderFromCloud,
+  getConfigFromCloud,
+  isCloudProvider,
+  getCloudDatabaseId,
+  getPluginSeverityOverridesFromCloud,
+} from '../../src/util/cloud';
 
 jest.mock('../../src/fetch');
 jest.mock('../../src/globalConfig/cloud');
-jest.mock('../../src/util/cloud', () => ({
-  ...jest.requireActual('../../src/util/cloud'),
-  cloudCanBuildFormattedConfig: jest.fn().mockResolvedValue(true),
-}));
 
 describe('cloud utils', () => {
   const mockFetchWithProxy = jest.mocked(fetchWithProxy);
@@ -77,20 +81,6 @@ describe('cloud utils', () => {
     });
 
     it('should handle API host without trailing slash', async () => {
-      mockCloudConfig.getApiHost.mockReturnValue('https://api.example.com');
-
-      const path = 'test/path';
-      const method = 'GET';
-
-      await makeRequest(path, method);
-
-      expect(mockFetchWithProxy).toHaveBeenCalledWith(
-        'https://api.example.com/api/v1/test/path',
-        expect.any(Object),
-      );
-    });
-
-    it('should handle API host with trailing slash', async () => {
       mockCloudConfig.getApiHost.mockReturnValue('https://api.example.com');
 
       const path = 'test/path';
@@ -203,6 +193,27 @@ describe('cloud utils', () => {
       );
     });
 
+    it('should use name as label when label is missing', async () => {
+      const mockProvider = {
+        name: 'Test Provider',
+        config: {
+          id: 'test-provider',
+        },
+      };
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        json: () => Promise.resolve(mockProvider),
+        ok: true,
+      } as Response);
+
+      const result = await getProviderFromCloud('test-provider');
+
+      expect(result).toEqual({
+        id: 'test-provider',
+        label: 'Test Provider',
+      });
+    });
+
     it('should throw error when cloud config is not enabled', async () => {
       mockCloudConfig.isEnabled.mockReturnValue(false);
 
@@ -219,20 +230,17 @@ describe('cloud utils', () => {
       );
     });
 
-    it('should throw error when provider has no id', async () => {
+    it('should throw error when provider response is invalid', async () => {
       const mockProvider = {
         config: {
           label: 'Test Provider',
-          // Missing id field
         },
       };
 
       mockFetchWithProxy.mockResolvedValueOnce({
-        json: () => Promise.resolve({ buildDate: '2025-03-011' }),
-      } as Response);
-
-      mockFetchWithProxy.mockResolvedValueOnce({
         json: () => Promise.resolve(mockProvider),
+        ok: true,
+        text: () => Promise.resolve('Invalid response'),
       } as Response);
 
       await expect(getProviderFromCloud('test-provider')).rejects.toThrow(
@@ -316,11 +324,103 @@ describe('cloud utils', () => {
       mockFetchWithProxy.mockResolvedValueOnce({
         ok: false,
         statusText: 'Not Found',
-        json: () => Promise.resolve({}),
+        text: () => Promise.resolve('Not found'),
       } as Response);
 
       await expect(getConfigFromCloud('test-config')).rejects.toThrow(
         'Failed to fetch config from cloud: test-config.',
+      );
+    });
+  });
+
+  describe('isCloudProvider', () => {
+    it('should return true for cloud provider paths', () => {
+      expect(isCloudProvider(`${CLOUD_PROVIDER_PREFIX}test-id`)).toBe(true);
+    });
+
+    it('should return false for non-cloud provider paths', () => {
+      expect(isCloudProvider('local/provider')).toBe(false);
+      expect(isCloudProvider('')).toBe(false);
+    });
+  });
+
+  describe('getCloudDatabaseId', () => {
+    it('should extract database ID from cloud provider path', () => {
+      expect(getCloudDatabaseId(`${CLOUD_PROVIDER_PREFIX}test-id`)).toBe('test-id');
+    });
+
+    it('should handle empty ID', () => {
+      expect(getCloudDatabaseId(CLOUD_PROVIDER_PREFIX)).toBe('');
+    });
+  });
+
+  describe('getPluginSeverityOverridesFromCloud', () => {
+    beforeEach(() => {
+      mockCloudConfig.isEnabled.mockReturnValue(true);
+    });
+
+    it('should fetch and parse plugin severity overrides successfully', async () => {
+      const mockResponse = {
+        association: {
+          id: 'test-set',
+          members: [
+            { pluginId: 'plugin1', severity: 'high' },
+            { pluginId: 'plugin2', severity: 'low' },
+          ],
+        },
+      };
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        json: () => Promise.resolve(mockResponse),
+        ok: true,
+      } as Response);
+
+      const result = await getPluginSeverityOverridesFromCloud('test-provider');
+
+      expect(result).toEqual({
+        id: 'test-set',
+        severities: {
+          plugin1: 'high',
+          plugin2: 'low',
+        },
+      });
+    });
+
+    it('should return null when no overrides exist', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        json: () => Promise.resolve({}),
+        ok: true,
+      } as Response);
+
+      const result = await getPluginSeverityOverridesFromCloud('test-provider');
+      expect(result).toBeNull();
+    });
+
+    it('should throw error when cloud config is not enabled', async () => {
+      mockCloudConfig.isEnabled.mockReturnValue(false);
+
+      await expect(getPluginSeverityOverridesFromCloud('test-provider')).rejects.toThrow(
+        'Could not fetch plugin severity overrides from cloud. Cloud config is not enabled.',
+      );
+    });
+
+    it('should throw error when fetch fails', async () => {
+      mockFetchWithProxy.mockRejectedValueOnce(new Error('Network error'));
+
+      await expect(getPluginSeverityOverridesFromCloud('test-provider')).rejects.toThrow(
+        'Failed to fetch plugin severity overrides from cloud.',
+      );
+    });
+
+    it('should throw error when response is not ok', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: false,
+        statusText: 'Not Found',
+        text: () => Promise.resolve('Not found'),
+      } as Response);
+
+      await expect(getPluginSeverityOverridesFromCloud('test-provider')).rejects.toThrow(
+        'Failed to fetch plugin severity overrides from cloud.',
       );
     });
   });
