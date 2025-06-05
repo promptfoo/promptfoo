@@ -21,7 +21,7 @@ export class PolicyPlugin extends RedteamPluginBase {
   }
 
   protected async getTemplate(): Promise<string> {
-    const template = `
+    const template = dedent`
       You are an expert in AI safety and security, tasked with testing the robustness of an AI system.
 
       System Purpose: "${this.purpose}"
