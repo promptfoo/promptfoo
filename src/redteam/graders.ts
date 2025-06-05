@@ -11,6 +11,15 @@ import { ContractsGrader } from './plugins/contracts';
 import { CrossSessionLeakGrader } from './plugins/crossSessionLeak';
 import { DebugAccessGrader } from './plugins/debugAccess';
 import { DivergentRepetitionGrader } from './plugins/divergentRepetition';
+import { BiometricCategorisationGrader } from './plugins/eu-ai-act/biometricCategorisation';
+import { BiometricEmotionGrader } from './plugins/eu-ai-act/biometricEmotion';
+import { BiometricInferenceGrader } from './plugins/eu-ai-act/biometricInference';
+import { DatasetShiftGrader } from './plugins/eu-ai-act/datasetShift';
+import { DeepfakeDisclosureGrader } from './plugins/eu-ai-act/deepfakeDisclosure';
+import { ExplainabilityGrader } from './plugins/eu-ai-act/explainability';
+import { IdentityAiDisclosureGrader } from './plugins/eu-ai-act/identityAiDisclosure';
+import { LawenforcementBiometricIdGrader } from './plugins/eu-ai-act/lawenforcementBiometricId';
+import { LawenforcementPredictivePolicingGrader } from './plugins/eu-ai-act/lawenforcementPredictivePolicing';
 import { ExcessiveAgencyGrader } from './plugins/excessiveAgency';
 import { HallucinationGrader } from './plugins/hallucination';
 import { HarmbenchGrader } from './plugins/harmbench';
@@ -65,6 +74,9 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   [REDTEAM_MEMORY_POISONING_PLUGIN_ID]: new MemoryPoisoningPluginGrader(),
   'promptfoo:redteam:mcp': new MCPPluginGrader(),
   'promptfoo:redteam:off-topic': new OffTopicPluginGrader(),
+  'promptfoo:redteam:biometric:categorisation': new BiometricCategorisationGrader(),
+  'promptfoo:redteam:biometric:emotion': new BiometricEmotionGrader(),
+  'promptfoo:redteam:biometric:inference': new BiometricInferenceGrader(),
   'promptfoo:redteam:ascii-smuggling': new AsciiSmugglingGrader(),
   'promptfoo:redteam:beavertails': new BeavertailsGrader(),
   'promptfoo:redteam:bias:gender': new GenderBiasGrader(),
@@ -74,9 +86,12 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:competitors': new CompetitorsGrader(),
   'promptfoo:redteam:contracts': new ContractsGrader(),
   'promptfoo:redteam:cross-session-leak': new CrossSessionLeakGrader(),
+  'promptfoo:redteam:dataset-shift': new DatasetShiftGrader(),
   'promptfoo:redteam:debug-access': new DebugAccessGrader(),
+  'promptfoo:redteam:deepfake:disclosure': new DeepfakeDisclosureGrader(),
   'promptfoo:redteam:divergent-repetition': new DivergentRepetitionGrader(),
   'promptfoo:redteam:excessive-agency': new ExcessiveAgencyGrader(),
+  'promptfoo:redteam:explainability': new ExplainabilityGrader(),
   'promptfoo:redteam:tool-discovery': new ToolDiscoveryGrader(),
   'promptfoo:redteam:hallucination': new HallucinationGrader(),
   'promptfoo:redteam:harmbench': new HarmbenchGrader(),
@@ -108,9 +123,13 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:harmful:violent-crime': new ViolentCrimeGrader(),
   'promptfoo:redteam:harmful:weapons:ied': new HarmfulGrader(),
   'promptfoo:redteam:hijacking': new HijackingGrader(),
+  'promptfoo:redteam:identity:ai-disclosure': new IdentityAiDisclosureGrader(),
   'promptfoo:redteam:imitation': new ImitationGrader(),
   'promptfoo:redteam:indirect-prompt-injection': new IndirectPromptInjectionGrader(),
   'promptfoo:redteam:intent': new IntentGrader(),
+  'promptfoo:redteam:lawenforcement:biometric-id': new LawenforcementBiometricIdGrader(),
+  'promptfoo:redteam:lawenforcement:predictive-policing':
+    new LawenforcementPredictivePolicingGrader(),
   'promptfoo:redteam:overreliance': new OverrelianceGrader(),
   'promptfoo:redteam:pii': new PiiGrader(),
   'promptfoo:redteam:pii:api-db': new PiiGrader(),

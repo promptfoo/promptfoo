@@ -164,6 +164,54 @@ export const PLUGINS = [
     isRemote: true,
   },
   {
+    category: 'Compliance and Legal',
+    description:
+      'Tests for inappropriate inference of protected characteristics from biometric or personal data (EU AI Act Article 5)',
+    label: 'security',
+    link: '/docs/red-team/plugins/biometric-categorisation/',
+    name: 'Biometric Categorisation',
+    pluginId: 'biometric:categorisation',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'privacy',
+    isRemote: true,
+  },
+  {
+    category: 'Trust and Safety',
+    description:
+      'Tests for emotion recognition from biometric data such as facial expressions or voice patterns (EU AI Act Article 5)',
+    label: 'security',
+    link: '/docs/red-team/plugins/biometric-emotion/',
+    name: 'Biometric Emotion Recognition',
+    pluginId: 'biometric:emotion',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'privacy',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests for attempts to identify real people from biometric data such as photos or voice samples (EU AI Act Article 5)',
+    label: 'security',
+    link: '/docs/red-team/plugins/biometric-inference/',
+    name: 'Biometric Inference',
+    pluginId: 'biometric:inference',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'privacy',
+    isRemote: true,
+  },
+  {
     category: 'Security and Access Control',
     description: 'Broken Object Level Authorization (BOLA) tests',
     label: 'technical',
@@ -252,6 +300,22 @@ export const PLUGINS = [
     vulnerabilityType: 'security',
   },
   {
+    category: 'Compliance and Legal',
+    description:
+      'Tests AI system robustness on out-of-distribution samples such as obscure languages or specialized domains (EU AI Act Article 15)',
+    label: 'security',
+    link: '/docs/red-team/plugins/dataset-shift/',
+    name: 'Dataset Shift',
+    pluginId: 'dataset-shift',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
     category: 'Security and Access Control',
     description: 'Attempts to access or use debugging commands',
     label: 'technical',
@@ -264,6 +328,22 @@ export const PLUGINS = [
       chat: false,
     },
     vulnerabilityType: 'security',
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests whether AI systems properly label synthetic media as artificial as required under EU AI Act Article 50 §3-4',
+    label: 'security',
+    link: '/docs/red-team/plugins/deepfake-disclosure/',
+    name: 'Deepfake Disclosure',
+    pluginId: 'deepfake:disclosure',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'misinformation and misuse',
+    isRemote: true,
   },
   {
     category: 'Security and Access Control',
@@ -307,6 +387,22 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'misinformation and misuse',
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests whether AI systems can articulate brief rationales for their responses as required under EU AI Act Annex IV §2 (f)',
+    label: 'security',
+    link: '/docs/red-team/plugins/explainability/',
+    name: 'Explainability Testing',
+    pluginId: 'explainability',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
   },
   {
     category: 'Brand',
@@ -741,6 +837,22 @@ export const PLUGINS = [
     isRemote: true,
   },
   {
+    category: 'Compliance and Legal',
+    description:
+      'Tests whether AI systems properly disclose their artificial nature when asked about identity as required under EU AI Act Article 50',
+    label: 'security',
+    link: '/docs/red-team/plugins/identity-ai-disclosure/',
+    name: 'AI Identity Disclosure',
+    pluginId: 'identity:ai-disclosure',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'misinformation and misuse',
+    isRemote: true,
+  },
+  {
     category: 'Brand',
     description: 'Imitates people, brands, or organizations',
     label: 'brand',
@@ -783,6 +895,38 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'custom',
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests for law enforcement biometric identification requests for face/fingerprint matching in CCTV or criminal databases (EU AI Act Article 5)',
+    label: 'security',
+    link: '/docs/red-team/plugins/lawenforcement-biometric-id/',
+    name: 'Law Enforcement Biometric ID',
+    pluginId: 'lawenforcement:biometric-id',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'privacy',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests for algorithmic crime-risk scoring from profiling alone such as demographic or geographic profiling without sufficient lawful basis (EU AI Act Article 5)',
+    label: 'security',
+    link: '/docs/red-team/plugins/lawenforcement-predictive-policing/',
+    name: 'Law Enforcement Predictive Policing',
+    pluginId: 'lawenforcement:predictive-policing',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'privacy',
+    isRemote: true,
   },
   {
     category: 'Security and Access Control',
