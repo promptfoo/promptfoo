@@ -1,6 +1,8 @@
 name: Tusk Test Runner - Vitest unit tests (src/app)
 
 # Required for Tusk
+permissions:
+  contents: read
 on:
   workflow_dispatch:
     inputs:
