@@ -11,8 +11,9 @@ prompts:
 providers:
   - openai:gpt-4.1
   - openai:o4-mini
-  # - anthropic:messages:claude-4-sonnet-20250514  # Claude model
-  # - vertex:gemini-2.5-pro-exp-03-25                # Google Gemini model
+  # Or setup models from other providers
+  # - anthropic:messages:claude-4-sonnet-20250514
+  # - vertex:gemini-2.5-pro-exp-03-25
 
 tests:
   - vars:
