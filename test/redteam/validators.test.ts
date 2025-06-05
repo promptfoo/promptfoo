@@ -170,7 +170,7 @@ describe('redteamPluginSchema', () => {
     }
 
     const errorMessage = result.error.errors[0].message;
-    expect(errorMessage).toContain('Custom plugins must start with file://');
+    expect(errorMessage).toContain('Invalid plugin id');
     expect(errorMessage).toContain('built-in plugins');
   });
 
@@ -183,7 +183,7 @@ describe('redteamPluginSchema', () => {
     }
 
     const errorMessage = result.error.errors[0].message;
-    expect(errorMessage).toContain('Custom plugins must start with file://');
+    expect(errorMessage).toContain('Invalid plugin id');
     expect(errorMessage).toContain('built-in plugins');
   });
 
@@ -199,7 +199,7 @@ describe('redteamPluginSchema', () => {
     }
 
     const errorMessage = result.error.errors[0].message;
-    expect(errorMessage).toContain('Custom plugins must start with file://');
+    expect(errorMessage).toContain('Invalid plugin id');
     expect(errorMessage).toContain('built-in plugins');
   });
 });
@@ -1071,23 +1071,7 @@ describe('RedteamConfigSchema transform', () => {
         RedteamConfigSchema.parse({
           plugins: ['custom/path/without/file/protocol.js'],
         }),
-      ).toThrow(
-        JSON.stringify(
-          [
-            {
-              code: 'invalid_string',
-              validation: {
-                startsWith: 'file://',
-              },
-              message:
-                'Custom plugins must start with file:// (or use one of the built-in plugins)',
-              path: ['plugins', 0],
-            },
-          ],
-          null,
-          2,
-        ),
-      );
+      ).toThrow(/Invalid plugin id/);
     });
   });
 

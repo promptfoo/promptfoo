@@ -6,7 +6,6 @@ import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import * as path from 'path';
 import process from 'process';
-import { fromError } from 'zod-validation-error';
 import { readAssertions } from '../../assertions';
 import { validateAssertions } from '../../assertions/validateAssertions';
 import cliState from '../../cliState';
@@ -163,18 +162,48 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
       .extend({ prompts: UnifiedConfigSchema.innerType().innerType().shape.prompts.optional() });
     const validationResult = UnifiedConfigSchemaWithoutPrompts.safeParse(dereferencedConfig);
     if (!validationResult.success) {
-      logger.warn(
-        `Invalid configuration file ${configPath}:\n${fromError(validationResult.error).message}`,
-      );
+      // Filter out redteam plugin validation errors since they will be validated later
+      const filteredErrors = validationResult.error.issues.filter((error) => {
+        return !(
+          error.path.includes('redteam') &&
+          error.path.includes('plugins') &&
+          error.message.includes('Invalid plugin id')
+        );
+      });
+
+      if (filteredErrors.length > 0) {
+        // Create a new ZodError with only the non-redteam plugin errors
+        const { ZodError } = await import('zod');
+        const filteredError = new ZodError(filteredErrors);
+        const { fromError } = await import('zod-validation-error');
+        logger.warn(
+          `Invalid configuration file ${configPath}:\n${fromError(filteredError).message}`,
+        );
+      }
     }
     ret = dereferencedConfig;
   } else if (isJavascriptFile(configPath)) {
     const imported = await importModule(configPath);
     const validationResult = UnifiedConfigSchema.safeParse(imported);
     if (!validationResult.success) {
-      logger.warn(
-        `Invalid configuration file ${configPath}:\n${fromError(validationResult.error).message}`,
-      );
+      // Filter out redteam plugin validation errors since they will be validated later
+      const filteredErrors = validationResult.error.issues.filter((error) => {
+        return !(
+          error.path.includes('redteam') &&
+          error.path.includes('plugins') &&
+          error.message.includes('Invalid plugin id')
+        );
+      });
+
+      if (filteredErrors.length > 0) {
+        // Create a new ZodError with only the non-redteam plugin errors
+        const { ZodError } = await import('zod');
+        const filteredError = new ZodError(filteredErrors);
+        const { fromError } = await import('zod-validation-error');
+        logger.warn(
+          `Invalid configuration file ${configPath}:\n${fromError(filteredError).message}`,
+        );
+      }
     }
     ret = imported as UnifiedConfig;
   } else {

@@ -43,8 +43,13 @@ export const RedteamPluginObjectSchema = z.object({
           });
         }
       }),
-      z.string().startsWith('file://', {
-        message: 'Custom plugins must start with file:// (or use one of the built-in plugins)',
+      z.string().superRefine((val, ctx) => {
+        if (!val.startsWith('file://')) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Invalid plugin id "${val}". Custom plugins must start with file:// or be one of the built-in plugins: ${pluginOptions.join(', ')}`,
+          });
+        }
       }),
     ])
     .describe('Name of the plugin'),
@@ -74,8 +79,13 @@ export const RedteamPluginSchema = z.union([
           });
         }
       }),
-      z.string().startsWith('file://', {
-        message: 'Custom plugins must start with file:// (or use one of the built-in plugins)',
+      z.string().superRefine((val, ctx) => {
+        if (!val.startsWith('file://')) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Invalid plugin id "${val}". Custom plugins must start with file:// or be one of the built-in plugins: ${pluginOptions.join(', ')}`,
+          });
+        }
       }),
     ])
     .describe('Name of the plugin or path to custom plugin'),

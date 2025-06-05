@@ -38,6 +38,12 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     delete process.env.AWS_BEDROCK_MAX_RETRIES;
+    delete process.env.HTTP_PROXY;
+    delete process.env.HTTPS_PROXY;
+    delete process.env.http_proxy;
+    delete process.env.https_proxy;
+    delete process.env.npm_config_http_proxy;
+    delete process.env.npm_config_https_proxy;
   });
 
   afterEach(() => {
