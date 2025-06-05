@@ -45,6 +45,11 @@ export async function getProviderFromCloud(id: string): Promise<ProviderOptions 
     logger.debug(`Provider fetched from cloud: ${id}`);
     logger.debug(`Provider from cloud: ${JSON.stringify(body, null, 2)}`);
 
+    // If no label is provided and a name is, use the name:
+    if (!body.config.label && body.name) {
+      body.config.label = body.name;
+    }
+
     const provider = ProviderOptionsSchema.parse(body.config);
     // The provider options schema has ID field as optional but we know it's required for cloud providers
     invariant(provider.id, `Provider ${id} has no id in ${body.config}`);
