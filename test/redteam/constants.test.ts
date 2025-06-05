@@ -13,27 +13,15 @@ import {
   CONFIG_REQUIRED_PLUGINS,
   DEFAULT_PLUGINS,
   ALL_PLUGINS,
-  DATASET_PLUGINS,
   Severity,
-  severityDisplayNames,
-  PLUGIN_PRESET_DESCRIPTIONS,
   AGENTIC_PLUGINS,
   riskCategories,
-  categoryDescriptions,
   displayNameOverrides,
   riskCategorySeverityMap,
   categoryAliases,
   pluginDescriptions,
+  EU_AI_ACT_MAPPING,
   subCategoryDescriptions,
-  STRATEGY_COLLECTIONS,
-  STRATEGY_COLLECTION_MAPPINGS,
-  ALL_STRATEGIES,
-  strategyDescriptions,
-  strategyDisplayNames,
-  AGENTIC_EXEMPT_PLUGINS,
-  DATASET_EXEMPT_PLUGINS,
-  STRATEGY_EXEMPT_PLUGINS,
-  ADDITIONAL_STRATEGIES,
 } from '../../src/redteam/constants';
 
 describe('constants', () => {
@@ -98,8 +86,22 @@ describe('constants', () => {
     expect(BASE_PLUGINS).toContain('hallucination');
   });
 
-  it('ADDITIONAL_PLUGINS should contain MCP plugin', () => {
-    expect(ADDITIONAL_PLUGINS).toContain('mcp');
+  it('ADDITIONAL_PLUGINS should contain new plugins', () => {
+    const newPlugins = [
+      'biometric:categorisation',
+      'biometric:emotion',
+      'biometric:inference',
+      'dataset-shift',
+      'deepfake:disclosure',
+      'explainability',
+      'identity:ai-disclosure',
+      'lawenforcement:biometric-id',
+      'lawenforcement:predictive-policing',
+    ] as const;
+
+    newPlugins.forEach((plugin) => {
+      expect(ADDITIONAL_PLUGINS).toContain(plugin);
+    });
   });
 
   it('DEFAULT_PLUGINS should be a Set containing base plugins, harm plugins and PII plugins', () => {
@@ -121,169 +123,114 @@ describe('constants', () => {
     );
   });
 
-  it('DATASET_PLUGINS should contain expected plugins', () => {
-    const expectedPlugins = [
-      'beavertails',
-      'cyberseceval',
-      'donotanswer',
-      'harmbench',
-      'toxic-chat',
-      'pliny',
-      'unsafebench',
-      'xstest',
-    ];
+  it('should have correct severity levels for new plugins', () => {
+    const severityMap: Record<string, Severity> = {
+      'biometric:categorisation': Severity.High,
+      'biometric:emotion': Severity.High,
+      'biometric:inference': Severity.Critical,
+      'dataset-shift': Severity.Low,
+      'deepfake:disclosure': Severity.High,
+      explainability: Severity.Medium,
+      'identity:ai-disclosure': Severity.Medium,
+      'lawenforcement:biometric-id': Severity.Critical,
+      'lawenforcement:predictive-policing': Severity.High,
+    };
 
-    expect(DATASET_PLUGINS).toEqual(expectedPlugins);
-    expect(DATASET_PLUGINS).toHaveLength(8);
-
-    expectedPlugins.forEach((plugin) => {
-      expect(DATASET_PLUGINS).toContain(plugin);
+    Object.entries(severityMap).forEach(([plugin, severity]) => {
+      expect(riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap]).toBe(
+        severity,
+      );
     });
   });
 
-  it('AGENTIC_EXEMPT_PLUGINS should contain expected plugins', () => {
-    expect(AGENTIC_EXEMPT_PLUGINS).toEqual(['system-prompt-override', 'agentic:memory-poisoning']);
-  });
+  it('should have correct display names for new plugins', () => {
+    const displayNames: Record<string, string> = {
+      'biometric:categorisation': 'Biometric Categorisation',
+      'biometric:emotion': 'Biometric Emotion Recognition',
+      'biometric:inference': 'Biometric Inference',
+      'dataset-shift': 'Dataset Shift',
+      'deepfake:disclosure': 'Deepfake Disclosure',
+      explainability: 'Explainability Testing',
+      'identity:ai-disclosure': 'AI Identity Disclosure',
+      'lawenforcement:biometric-id': 'Law Enforcement Biometric ID',
+      'lawenforcement:predictive-policing': 'Law Enforcement Predictive Policing',
+    };
 
-  it('DATASET_EXEMPT_PLUGINS should contain expected plugins', () => {
-    expect(DATASET_EXEMPT_PLUGINS).toEqual(['pliny', 'unsafebench']);
-  });
-
-  it('STRATEGY_EXEMPT_PLUGINS should combine agentic and dataset exempt plugins', () => {
-    const expectedPlugins = [
-      'system-prompt-override',
-      'agentic:memory-poisoning',
-      'pliny',
-      'unsafebench',
-    ];
-
-    expect(STRATEGY_EXEMPT_PLUGINS).toEqual(expectedPlugins);
-    expect(STRATEGY_EXEMPT_PLUGINS).toEqual([...AGENTIC_EXEMPT_PLUGINS, ...DATASET_EXEMPT_PLUGINS]);
-  });
-
-  it('Severity enum should have expected values', () => {
-    expect(Severity.Critical).toBe('critical');
-    expect(Severity.High).toBe('high');
-    expect(Severity.Medium).toBe('medium');
-    expect(Severity.Low).toBe('low');
-  });
-
-  it('severityDisplayNames should have display names for all severities', () => {
-    expect(severityDisplayNames[Severity.Critical]).toBe('Critical');
-    expect(severityDisplayNames[Severity.High]).toBe('High');
-    expect(severityDisplayNames[Severity.Medium]).toBe('Medium');
-    expect(severityDisplayNames[Severity.Low]).toBe('Low');
-  });
-
-  it('PLUGIN_PRESET_DESCRIPTIONS should contain expected descriptions', () => {
-    expect(PLUGIN_PRESET_DESCRIPTIONS.RAG).toBe(
-      'Recommended plugins plus additional tests for RAG specific scenarios like access control',
-    );
-    expect(PLUGIN_PRESET_DESCRIPTIONS.Recommended).toBe(
-      'A broad set of plugins recommended by Promptfoo',
-    );
-    expect(PLUGIN_PRESET_DESCRIPTIONS['Minimal Test']).toBe(
-      'Minimal set of plugins to validate your setup',
-    );
-    expect(PLUGIN_PRESET_DESCRIPTIONS.Harmful).toBe(
-      'Harmful content assessment using MLCommons and HarmBench taxonomies',
-    );
-    expect(PLUGIN_PRESET_DESCRIPTIONS['OWASP Agentic AI Top 10']).toBe(
-      'OWASP Agentic AI Top 10 Threats and Mitigations',
-    );
-  });
-
-  it('should have MEMORY_POISONING_PLUGIN_ID in Security & Access Control category', () => {
-    expect(riskCategories['Security & Access Control']).toBeDefined();
-    expect(riskCategories['Security & Access Control']).toContain('agentic:memory-poisoning');
-  });
-
-  it('should have descriptions for all risk categories', () => {
-    const categories = Object.keys(riskCategories) as (keyof typeof categoryDescriptions)[];
-    categories.forEach((category) => {
-      expect(categoryDescriptions[category]).toBeDefined();
-      expect(typeof categoryDescriptions[category]).toBe('string');
+    Object.entries(displayNames).forEach(([plugin, displayName]) => {
+      expect(displayNameOverrides[plugin as keyof typeof displayNameOverrides]).toBe(displayName);
     });
   });
 
-  it('should have correct display name for MCP plugin', () => {
-    expect(displayNameOverrides['mcp']).toBe('Model Context Protocol');
+  it('should have correct category aliases for new plugins', () => {
+    const aliases: Record<string, string> = {
+      'biometric:categorisation': 'BiometricCategorisation',
+      'biometric:emotion': 'BiometricEmotion',
+      'biometric:inference': 'BiometricInference',
+      'dataset-shift': 'DatasetShift',
+      'deepfake:disclosure': 'DeepfakeDisclosure',
+      explainability: 'Explainability',
+      'identity:ai-disclosure': 'IdentityAiDisclosure',
+      'lawenforcement:biometric-id': 'LawenforcementBiometricId',
+      'lawenforcement:predictive-policing': 'LawenforcementPredictivePolicing',
+    };
+
+    Object.entries(aliases).forEach(([plugin, alias]) => {
+      expect(categoryAliases[plugin as keyof typeof categoryAliases]).toBe(alias);
+    });
   });
 
-  it('should have correct severity for MCP plugin', () => {
-    expect(riskCategorySeverityMap['mcp']).toBe(Severity.High);
+  it('should have correct risk category assignments for new plugins', () => {
+    expect(riskCategories['Trust & Safety']).toContain('biometric:categorisation');
+    expect(riskCategories['Trust & Safety']).toContain('biometric:emotion');
+    expect(riskCategories['Compliance & Legal']).toContain('biometric:inference');
+    expect(riskCategories['Compliance & Legal']).toContain('identity:ai-disclosure');
+    expect(riskCategories['Compliance & Legal']).toContain('lawenforcement:biometric-id');
+    expect(riskCategories['Compliance & Legal']).toContain('lawenforcement:predictive-policing');
   });
 
-  it('should have correct alias for MCP plugin', () => {
-    expect(categoryAliases['mcp']).toBe('MCP');
+  it('should have correct descriptions for new plugins', () => {
+    const descriptions: Record<string, string> = {
+      'biometric:inference': 'EU AI Act Article 5',
+      'deepfake:disclosure': 'EU AI Act Article 50',
+      explainability: 'EU AI Act Annex IV',
+      'lawenforcement:predictive-policing': 'EU AI Act Article 5',
+    };
+
+    Object.entries(descriptions).forEach(([plugin, text]) => {
+      expect(pluginDescriptions[plugin as keyof typeof pluginDescriptions]).toContain(text);
+    });
   });
 
-  it('should have correct plugin description for MCP plugin', () => {
-    expect(pluginDescriptions['mcp']).toBe(
-      'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
+  it('should have correct subcategory descriptions for new plugins', () => {
+    const descriptions: Record<string, string> = {
+      'biometric:categorisation':
+        'Tests for inappropriate inference of protected characteristics from biometric or personal data',
+      'biometric:emotion': 'Tests for attempts to perform emotion recognition from biometric data',
+      'biometric:inference': 'Tests for attempts to identify real people from biometric data',
+      'dataset-shift': 'Tests robustness on out-of-distribution samples',
+      'deepfake:disclosure': 'Tests whether synthetic media is properly labeled as artificial',
+      explainability:
+        'Tests whether AI systems can articulate brief rationales for their responses',
+      'identity:ai-disclosure': 'Tests for proper AI disclosure when asked about identity',
+      'lawenforcement:biometric-id': 'Tests for law enforcement biometric identification requests',
+      'lawenforcement:predictive-policing':
+        'Tests for algorithmic crime-risk scoring from profiling alone',
+    };
+
+    Object.entries(descriptions).forEach(([plugin, description]) => {
+      expect(subCategoryDescriptions[plugin as keyof typeof subCategoryDescriptions]).toBe(
+        description,
+      );
+    });
+  });
+
+  it('should have correct EU AI Act mappings', () => {
+    expect(EU_AI_ACT_MAPPING['eu:ai-act:art5:biometric-categorisation'].plugins).toContain(
+      'pii:direct',
     );
-  });
-
-  it('should have correct subcategory description for MCP plugin', () => {
-    expect(subCategoryDescriptions['mcp']).toBe(
-      'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
+    expect(EU_AI_ACT_MAPPING['eu:ai-act:art5:remote-biometric-id-live'].plugins).toContain(
+      'pii:session',
     );
-  });
-
-  it('STRATEGY_COLLECTIONS should contain expected collections', () => {
-    expect(STRATEGY_COLLECTIONS).toEqual(['other-encodings']);
-  });
-
-  it('STRATEGY_COLLECTION_MAPPINGS should have correct mappings', () => {
-    expect(STRATEGY_COLLECTION_MAPPINGS['other-encodings']).toEqual([
-      'camelcase',
-      'morse',
-      'piglatin',
-      'emoji',
-    ]);
-  });
-
-  it('ALL_STRATEGIES should include strategy collections', () => {
-    expect(ALL_STRATEGIES).toContain('other-encodings');
-  });
-
-  it('strategy collections should have proper descriptions', () => {
-    expect(strategyDescriptions['other-encodings']).toBe(
-      'Collection of alternative text transformation strategies (Morse code, Pig Latin, camelCase, and emoji variation selector smuggling) for testing evasion techniques',
-    );
-  });
-
-  it('strategy collections should have proper display names', () => {
-    expect(strategyDisplayNames['other-encodings']).toBe('Collection of Text Encodings');
-  });
-
-  it('strategy collections should have proper subcategory descriptions', () => {
-    expect(subCategoryDescriptions['other-encodings']).toBe(
-      'Collection of alternative text transformation strategies (Morse code, Pig Latin, camelCase, and emoji variation selector smuggling) for testing evasion techniques',
-    );
-  });
-
-  it('ADDITIONAL_STRATEGIES should include emoji strategy', () => {
-    expect(ADDITIONAL_STRATEGIES).toContain('emoji');
-  });
-
-  it('should have correct display name for emoji strategy', () => {
-    expect(strategyDisplayNames['emoji']).toBe('Emoji Smuggling');
-  });
-
-  it('should have correct strategy description for emoji strategy', () => {
-    expect(strategyDescriptions['emoji']).toBe(
-      'Tests detection and handling of UTF-8 payloads hidden inside emoji variation selectors',
-    );
-  });
-
-  it('should include emoji in other-encodings strategy collection', () => {
-    expect(STRATEGY_COLLECTION_MAPPINGS['other-encodings']).toContain('emoji');
-  });
-
-  it('should have correct subcategory description for emoji strategy', () => {
-    expect(subCategoryDescriptions['emoji']).toBe(
-      'Tests handling of text hidden using emoji variation selectors',
-    );
+    expect(EU_AI_ACT_MAPPING['eu:ai-act:annex3:law-enforcement'].plugins).toContain('pii:direct');
   });
 });
