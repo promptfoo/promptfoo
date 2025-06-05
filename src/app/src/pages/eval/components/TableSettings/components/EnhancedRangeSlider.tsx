@@ -26,7 +26,7 @@ interface EnhancedRangeSliderProps {
   onChangeCommitted?: (value: number) => void;
   disabled?: boolean;
   tooltipText?: string;
-  icon?: JSX.Element | null;
+  icon?: React.ReactNode;
 }
 
 const EnhancedRangeSlider: React.FC<EnhancedRangeSliderProps> = ({
@@ -144,11 +144,7 @@ const EnhancedRangeSlider: React.FC<EnhancedRangeSliderProps> = ({
               color: theme.palette.primary.main,
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center',
-              lineHeight: 0,
               fontSize: '1.1rem',
-              minWidth: 20,
-              marginRight: tokens.spacing.margin.tiny,
             }}
           >
             {icon}

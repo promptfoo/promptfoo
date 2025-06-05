@@ -27,12 +27,12 @@ interface Tool {
 
 const Row = ({ label, value }: { label: React.ReactNode; value: React.ReactNode }) => {
   return (
-    <TableRow sx={{ backgroundColor: 'white' }}>
+    <TableRow sx={{ backgroundColor: (theme) => theme.palette.background.paper }}>
       <TableCell
         variant="head"
         sx={{
           width: 200,
-          backgroundColor: (theme) => theme.palette.grey[50],
+          backgroundColor: (theme) => theme.palette.action.hover,
           borderRight: (theme) => `1px solid ${theme.palette.divider}`,
           color: 'inherit',
           fontWeight: 500,
