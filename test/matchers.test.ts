@@ -71,6 +71,7 @@ const Grader = new TestGrader();
 
 describe('matchesSimilarity', () => {
   beforeEach(() => {
+    jest.restoreAllMocks();
     jest.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockImplementation((text) => {
       if (text === 'Expected output' || text === 'Sample output') {
         return Promise.resolve({
@@ -88,7 +89,7 @@ describe('matchesSimilarity', () => {
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    jest.clearAllMocks();
   });
 
   it('should pass when similarity is above the threshold', async () => {
@@ -263,9 +264,16 @@ describe('matchesLlmRubric', () => {
   const mockFileContent = 'This is an external rubric prompt';
 
   beforeEach(() => {
+    jest.restoreAllMocks();
     jest.clearAllMocks();
     jest.mocked(fs.existsSync).mockReturnValue(true);
     jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
+    cliState.config = undefined;
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+    cliState.config = undefined;
   });
 
   it('should pass when the grading provider returns a passing result', async () => {
@@ -1023,11 +1031,12 @@ describe('matchesLlmRubric', () => {
 
 describe('matchesFactuality', () => {
   beforeEach(() => {
+    jest.restoreAllMocks();
     jest.clearAllMocks();
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    jest.clearAllMocks();
   });
 
   it('should pass when the factuality check passes with legacy format', async () => {
@@ -1817,11 +1826,12 @@ describe('matchesClassification', () => {
 
 describe('matchesContextRelevance', () => {
   beforeEach(() => {
+    jest.restoreAllMocks();
     jest.clearAllMocks();
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    jest.clearAllMocks();
   });
 
   it('should pass when the relevance score is above the threshold', async () => {
@@ -1883,11 +1893,12 @@ describe('matchesContextRelevance', () => {
 
 describe('matchesContextFaithfulness', () => {
   beforeEach(() => {
+    jest.restoreAllMocks();
     jest.clearAllMocks();
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    jest.clearAllMocks();
   });
 
   it('should pass when the faithfulness score is above the threshold', async () => {
@@ -1967,11 +1978,12 @@ describe('matchesContextFaithfulness', () => {
 
 describe('matchesContextRecall', () => {
   beforeEach(() => {
+    jest.restoreAllMocks();
     jest.clearAllMocks();
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    jest.clearAllMocks();
   });
 
   it('should pass when the recall score is above the threshold', async () => {
@@ -2038,6 +2050,7 @@ describe('matchesModeration', () => {
   };
 
   beforeEach(() => {
+    jest.restoreAllMocks();
     // Clear all environment variables
     delete process.env.OPENAI_API_KEY;
     delete process.env.REPLICATE_API_KEY;
@@ -2045,7 +2058,7 @@ describe('matchesModeration', () => {
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    jest.clearAllMocks();
   });
 
   it('should skip moderation when assistant response is empty', async () => {
@@ -2377,7 +2390,7 @@ describe('matchesGEval', () => {
   });
 
   it('should handle custom rubric prompts', async () => {
-    jest.resetAllMocks();
+    jest.restoreAllMocks();
 
     const mockCallApi = jest
       .fn()

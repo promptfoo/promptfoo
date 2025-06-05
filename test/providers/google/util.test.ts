@@ -1,18 +1,43 @@
+import { jest } from '@jest/globals';
 import * as fs from 'fs';
-import { GoogleAuth } from 'google-auth-library';
-import * as nunjucks from 'nunjucks';
-import logger from '../../../src/logger';
+import nunjucks from 'nunjucks';
+import * as path from 'path';
+import { logger } from '../../../src/logger';
 import type { Tool } from '../../../src/providers/google/types';
 import {
   maybeCoerceToGeminiFormat,
   geminiFormatAndSystemInstructions,
-  getGoogleClient,
-  hasGoogleDefaultCredentials,
   loadFile,
   parseStringObject,
   validateFunctionCall,
   normalizeTools,
 } from '../../../src/providers/google/util';
+import type {
+  getGoogleClient,
+  hasGoogleDefaultCredentials,
+} from '../../../src/providers/google/util';
+
+// Mock fs module before any imports that use it
+jest.mock('fs', () => ({
+  ...jest.requireActual('fs'),
+  existsSync: jest.fn((filePath: string) => {
+    const realFs = jest.requireActual('fs') as typeof fs;
+    return realFs.existsSync(filePath);
+  }),
+  readFileSync: jest.fn((filePath: string, encoding: any) => {
+    const realFs = jest.requireActual('fs') as typeof fs;
+    return realFs.readFileSync(filePath, encoding);
+  }),
+  writeFileSync: jest.fn((filePath: string, data: any) => {
+    const realFs = jest.requireActual('fs') as typeof fs;
+    return realFs.writeFileSync(filePath, data);
+  }),
+  unlinkSync: jest.fn((filePath: string) => {
+    const realFs = jest.requireActual('fs') as typeof fs;
+    return realFs.unlinkSync(filePath);
+  }),
+  statSync: jest.fn(),
+}));
 
 jest.mock('google-auth-library');
 
@@ -20,27 +45,53 @@ jest.mock('glob', () => ({
   globSync: jest.fn().mockReturnValue([]),
 }));
 
-jest.mock('fs', () => ({
-  existsSync: jest.fn().mockImplementation((path) => {
-    if (path === 'file://system_instruction.json') {
-      return true;
-    }
-    return false;
-  }),
-  readFileSync: jest.fn().mockImplementation((path) => {
-    if (path === 'file://system_instruction.json') {
-      return 'system instruction';
-    }
-    throw new Error(`Mock file not found: ${path}`);
-  }),
-  writeFileSync: jest.fn(),
-  statSync: jest.fn(),
-}));
-
 describe('util', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     (global as any).cachedAuth = undefined;
+
+    // Create temporary test files
+    const fpJson = path.join(process.cwd(), 'fp.json');
+    const systemInstructionJson = path.join(process.cwd(), 'system_instruction.json');
+
+    fs.writeFileSync(
+      fpJson,
+      JSON.stringify([
+        {
+          functionDeclarations: [
+            {
+              name: 'fakeTool',
+              description: 'fake tool description',
+            },
+          ],
+        },
+      ]),
+    );
+
+    fs.writeFileSync(
+      systemInstructionJson,
+      JSON.stringify({
+        parts: [{ text: 'system instruction' }],
+      }),
+    );
+  });
+
+  afterEach(() => {
+    // Clean up temporary test files
+    const fpJson = path.join(process.cwd(), 'fp.json');
+    const systemInstructionJson = path.join(process.cwd(), 'system_instruction.json');
+
+    try {
+      fs.unlinkSync(fpJson);
+    } catch {
+      // File might not exist, ignore
+    }
+
+    try {
+      fs.unlinkSync(systemInstructionJson);
+    } catch {
+      // File might not exist, ignore
+    }
   });
 
   describe('parseStringObject', () => {
@@ -724,6 +775,15 @@ describe('util', () => {
   });
 
   describe('getGoogleClient', () => {
+    let getGoogleClientFn: typeof getGoogleClient;
+    let GoogleAuth: any;
+
+    beforeEach(async () => {
+      jest.resetModules();
+      ({ getGoogleClient: getGoogleClientFn } = await import('../../../src/providers/google/util'));
+      ({ GoogleAuth } = await import('google-auth-library'));
+    });
+
     it('should create and return Google client', async () => {
       const mockClient = { name: 'mockClient' };
       const mockProjectId = 'test-project';
@@ -734,7 +794,7 @@ describe('util', () => {
 
       jest.mocked(GoogleAuth).mockImplementation(() => mockAuth as any);
 
-      const result = await getGoogleClient();
+      const result = await getGoogleClientFn();
       expect(result).toEqual({
         client: mockClient,
         projectId: mockProjectId,
@@ -751,15 +811,26 @@ describe('util', () => {
 
       jest.mocked(GoogleAuth).mockImplementation(() => mockAuth as any);
 
-      await getGoogleClient();
+      await getGoogleClientFn();
       const googleAuthCalls = jest.mocked(GoogleAuth).mock.calls.length;
 
-      await getGoogleClient();
+      await getGoogleClientFn();
       expect(jest.mocked(GoogleAuth).mock.calls).toHaveLength(googleAuthCalls);
     });
   });
 
   describe('hasGoogleDefaultCredentials', () => {
+    let hasGoogleDefaultCredentialsFn: typeof hasGoogleDefaultCredentials;
+    let GoogleAuth: any;
+
+    beforeEach(async () => {
+      jest.resetModules();
+      ({ hasGoogleDefaultCredentials: hasGoogleDefaultCredentialsFn } = await import(
+        '../../../src/providers/google/util'
+      ));
+      ({ GoogleAuth } = await import('google-auth-library'));
+    });
+
     it('should return true when credentials are available', async () => {
       const mockAuth = {
         getClient: jest.fn().mockResolvedValue({}),
@@ -768,7 +839,7 @@ describe('util', () => {
 
       jest.mocked(GoogleAuth).mockImplementation(() => mockAuth as any);
 
-      const result = await hasGoogleDefaultCredentials();
+      const result = await hasGoogleDefaultCredentialsFn();
       expect(result).toBe(true);
     });
   });
@@ -810,12 +881,8 @@ describe('util', () => {
         ']';
       const context_vars = {};
 
-      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-      jest.spyOn(fs, 'readFileSync').mockReturnValue(tools);
       const result = loadFile(config_var, context_vars);
       expect(result).toEqual(JSON.parse(tools));
-      expect(fs.existsSync).toHaveBeenCalledWith(expect.stringContaining('fp.json'));
-      expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('fp.json'), 'utf8');
     });
   });
 
@@ -877,9 +944,6 @@ describe('util', () => {
 
     it('should handle filepath system messages in variables', async () => {
       const prompt = [{ role: 'user', parts: [{ text: 'user message' }] }];
-      const system_instruction = JSON.stringify({ parts: [{ text: 'system instruction' }] });
-      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-      jest.spyOn(fs, 'readFileSync').mockReturnValue(system_instruction);
 
       const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
         JSON.stringify(prompt),

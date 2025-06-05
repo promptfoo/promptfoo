@@ -15,6 +15,7 @@ import {
   readTests,
   readTestFiles,
 } from '../../src/util/testCaseReader';
+import type { readStandaloneTestsFile as ReadStandaloneTestsFile } from '../../src/util/testCaseReader';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
@@ -63,7 +64,11 @@ jest.mock('../../src/integrations/huggingfaceDatasets', () => ({
 
 describe('readStandaloneTestsFile', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
+  });
+
+  afterEach(() => {
+    jest.resetAllMocks();
   });
 
   it('should read CSV file and return test cases', async () => {
@@ -368,7 +373,11 @@ describe('readStandaloneTestsFile', () => {
 
 describe('readTest', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
+  });
+
+  afterEach(() => {
+    jest.resetAllMocks();
   });
 
   it('readTest with string input (path to test config)', async () => {
@@ -476,6 +485,10 @@ describe('readTests', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     jest.mocked(globSync).mockReturnValue([]);
+  });
+
+  afterEach(() => {
+    jest.resetAllMocks();
   });
 
   it('readTests with string input (CSV file path)', async () => {
@@ -991,6 +1004,13 @@ describe('testCaseFromCsvRow', () => {
 });
 
 describe('readVarsFiles', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+  });
+
+  afterEach(() => {
+    jest.resetAllMocks();
+  });
   it('should read variables from a single YAML file', async () => {
     const yamlContent = 'var1: value1\nvar2: value2';
     jest.mocked(fs.readFileSync).mockReturnValue(yamlContent);
@@ -1008,7 +1028,7 @@ describe('readVarsFiles', () => {
       .mocked(fs.readFileSync)
       .mockReturnValueOnce(yamlContent1)
       .mockReturnValueOnce(yamlContent2);
-    jest.mocked(globSync).mockReturnValue(['vars1.yaml', 'vars2.yaml']);
+    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob as string] as any);
 
     const result = await readTestFiles(['vars1.yaml', 'vars2.yaml']);
 
@@ -1018,6 +1038,10 @@ describe('readVarsFiles', () => {
 
 describe('loadTestsFromGlob', () => {
   beforeEach(() => {
+    jest.resetAllMocks();
+  });
+
+  afterEach(() => {
     jest.resetAllMocks();
   });
 
@@ -1057,8 +1081,8 @@ describe('CSV parsing with JSON fields', () => {
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
-    jest.resetModules();
+    jest.resetAllMocks();
+    jest.unmock('csv-parse/sync');
   });
 
   it('should parse CSV file containing properly escaped JSON fields in strict mode', async () => {
@@ -1125,7 +1149,7 @@ my_test_label,What is the date?,{"answer":""},file://../get_context.py`;
       throw error;
     });
 
-    jest.mock('csv-parse/sync', () => ({
+    jest.doMock('csv-parse/sync', () => ({
       parse: mockParse,
     }));
 
@@ -1133,8 +1157,13 @@ my_test_label,What is the date?,{"answer":""},file://../get_context.py`;
 my_test_label,What is the date?,"{\""answer\"":""""}",file://../get_context.py`;
 
     jest.spyOn(fs, 'readFileSync').mockReturnValue(csvContent);
-    const { readStandaloneTestsFile } = await import('../../src/util/testCaseReader');
-    await expect(readStandaloneTestsFile('dummy.csv')).rejects.toThrow('Some other CSV error');
+    let readStandaloneTestsFileFn: typeof ReadStandaloneTestsFile;
+    await jest.isolateModulesAsync(async () => {
+      ({ readStandaloneTestsFile: readStandaloneTestsFileFn } = await import(
+        '../../src/util/testCaseReader'
+      ));
+    });
+    await expect(readStandaloneTestsFileFn!('dummy.csv')).rejects.toThrow('Some other CSV error');
 
     jest.mocked(fs.readFileSync).mockRestore();
   });

@@ -29,7 +29,7 @@ describe('parseScriptParts', () => {
 
 describe('getFileHashes', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
   });
 
   it('should return file hashes for existing files', () => {
@@ -94,8 +94,8 @@ describe('ScriptCompletionProvider', () => {
   let provider: ScriptCompletionProvider;
 
   beforeEach(() => {
+    jest.resetAllMocks();
     provider = new ScriptCompletionProvider('node script.js');
-    jest.clearAllMocks();
     jest.mocked(cacheModule.getCache).mockReset();
     jest.mocked(cacheModule.isCacheEnabled).mockReset();
   });
