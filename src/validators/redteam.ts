@@ -16,6 +16,7 @@ import {
   PII_PLUGINS,
   type Plugin,
   type Strategy,
+  Severity,
 } from '../redteam/constants';
 import type { RedteamFileConfig, RedteamPluginObject, RedteamStrategy } from '../redteam/types';
 import { isJavascriptFile } from '../util/fileExtensions';
@@ -54,6 +55,7 @@ export const RedteamPluginObjectSchema = z.object({
     .default(DEFAULT_NUM_TESTS_PER_PLUGIN)
     .describe('Number of tests to generate for this plugin'),
   config: z.record(z.unknown()).optional().describe('Plugin-specific configuration'),
+  severity: z.nativeEnum(Severity).optional().describe('Severity level for this plugin'),
 });
 
 /**
@@ -215,14 +217,22 @@ export const RedteamConfigSchema = z
     const pluginMap = new Map<string, RedteamPluginObject>();
     const strategySet = new Set<Strategy>();
 
-    const addPlugin = (id: string, config: any, numTests: number | undefined) => {
-      const key = `${id}:${JSON.stringify(config)}`;
+    const addPlugin = (
+      id: string,
+      config: any,
+      numTests: number | undefined,
+      severity?: Severity,
+    ) => {
+      const key = `${id}:${JSON.stringify(config)}:${severity || ''}`;
       const pluginObject: RedteamPluginObject = { id };
       if (numTests !== undefined || data.numTests !== undefined) {
         pluginObject.numTests = numTests ?? data.numTests;
       }
       if (config !== undefined) {
         pluginObject.config = config;
+      }
+      if (severity !== undefined) {
+        pluginObject.severity = severity;
       }
       pluginMap.set(key, pluginObject);
     };
@@ -231,47 +241,63 @@ export const RedteamConfigSchema = z
       collection: string[] | ReadonlySet<Plugin>,
       config: any,
       numTests: number | undefined,
+      severity?: Severity,
     ) => {
       (Array.isArray(collection) ? collection : Array.from(collection)).forEach((item) => {
         // Only add the plugin if it doesn't already exist or if the existing one has undefined numTests
-        const existingPlugin = pluginMap.get(`${item}:${JSON.stringify(config)}`);
+        const existingPlugin = pluginMap.get(`${item}:${JSON.stringify(config)}:${severity || ''}`);
         if (!existingPlugin || existingPlugin.numTests === undefined) {
-          addPlugin(item, config, numTests);
+          addPlugin(item, config, numTests, severity);
         }
       });
     };
 
-    const handleCollectionExpansion = (id: string, config: any, numTests: number | undefined) => {
+    const handleCollectionExpansion = (
+      id: string,
+      config: any,
+      numTests: number | undefined,
+      severity?: Severity,
+    ) => {
       if (id === 'foundation') {
-        expandCollection([...FOUNDATION_PLUGINS], config, numTests);
+        expandCollection([...FOUNDATION_PLUGINS], config, numTests, severity);
       } else if (id === 'harmful') {
-        expandCollection(Object.keys(HARM_PLUGINS), config, numTests);
+        expandCollection(Object.keys(HARM_PLUGINS), config, numTests, severity);
       } else if (id === 'pii') {
-        expandCollection([...PII_PLUGINS], config, numTests);
+        expandCollection([...PII_PLUGINS], config, numTests, severity);
       } else if (id === 'default') {
-        expandCollection([...REDTEAM_DEFAULT_PLUGINS], config, numTests);
+        expandCollection([...REDTEAM_DEFAULT_PLUGINS], config, numTests, severity);
       }
     };
 
     const handlePlugin = (plugin: string | RedteamPluginObject) => {
       const pluginObj =
         typeof plugin === 'string'
-          ? { id: plugin, numTests: data.numTests, config: undefined }
+          ? { id: plugin, numTests: data.numTests, config: undefined, severity: undefined }
           : { ...plugin, numTests: plugin.numTests ?? data.numTests };
 
       if (ALIASED_PLUGIN_MAPPINGS[pluginObj.id]) {
         Object.values(ALIASED_PLUGIN_MAPPINGS[pluginObj.id]).forEach(({ plugins, strategies }) => {
           plugins.forEach((id) => {
             if (COLLECTIONS.includes(id as any)) {
-              handleCollectionExpansion(id, pluginObj.config, pluginObj.numTests);
+              handleCollectionExpansion(
+                id,
+                pluginObj.config,
+                pluginObj.numTests,
+                pluginObj.severity,
+              );
             } else {
-              addPlugin(id, pluginObj.config, pluginObj.numTests);
+              addPlugin(id, pluginObj.config, pluginObj.numTests, pluginObj.severity);
             }
           });
           strategies.forEach((strategy) => strategySet.add(strategy as Strategy));
         });
       } else if (COLLECTIONS.includes(pluginObj.id as any)) {
-        handleCollectionExpansion(pluginObj.id, pluginObj.config, pluginObj.numTests);
+        handleCollectionExpansion(
+          pluginObj.id,
+          pluginObj.config,
+          pluginObj.numTests,
+          pluginObj.severity,
+        );
       } else {
         const mapping = Object.entries(ALIASED_PLUGIN_MAPPINGS).find(([, value]) =>
           Object.keys(value).includes(pluginObj.id),
@@ -280,16 +306,21 @@ export const RedteamConfigSchema = z
           const [, aliasedMapping] = mapping;
           aliasedMapping[pluginObj.id].plugins.forEach((id) => {
             if (COLLECTIONS.includes(id as any)) {
-              handleCollectionExpansion(id, pluginObj.config, pluginObj.numTests);
+              handleCollectionExpansion(
+                id,
+                pluginObj.config,
+                pluginObj.numTests,
+                pluginObj.severity,
+              );
             } else {
-              addPlugin(id, pluginObj.config, pluginObj.numTests);
+              addPlugin(id, pluginObj.config, pluginObj.numTests, pluginObj.severity);
             }
           });
           aliasedMapping[pluginObj.id].strategies.forEach((strategy) =>
             strategySet.add(strategy as Strategy),
           );
         } else {
-          addPlugin(pluginObj.id, pluginObj.config, pluginObj.numTests);
+          addPlugin(pluginObj.id, pluginObj.config, pluginObj.numTests, pluginObj.severity);
         }
       }
     };

@@ -1367,6 +1367,16 @@
                         "type": "object",
                         "additionalProperties": {},
                         "description": "Plugin-specific configuration"
+                      },
+                      "severity": {
+                        "type": "string",
+                        "enum": [
+                          "critical",
+                          "high",
+                          "medium",
+                          "low"
+                        ],
+                        "description": "Severity level for this plugin"
                       }
                     },
                     "required": [
@@ -1398,6 +1408,7 @@
                           "citation",
                           "crescendo",
                           "default",
+                          "emoji",
                           "gcg",
                           "goat",
                           "hex",
@@ -1445,7 +1456,7 @@
                   }
                 ]
               },
-              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports audio, base64, basic, best-of-n, camelcase, citation, crescendo, default, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak:composite, jailbreak:likert, jailbreak:tree, leetspeak, math-prompt, morse, multilingual, other-encodings, pandamonium, piglatin, prompt-injection, retry, rot13, video",
+              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports audio, base64, basic, best-of-n, camelcase, citation, crescendo, default, emoji, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak:composite, jailbreak:likert, jailbreak:tree, leetspeak, math-prompt, morse, multilingual, other-encodings, pandamonium, piglatin, prompt-injection, retry, rot13, video",
               "default": [
                 "default"
               ]
