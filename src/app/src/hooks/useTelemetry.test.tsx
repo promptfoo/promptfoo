@@ -12,7 +12,6 @@ const TEST_EVENT: TelemetryEventTypes = 'command_used';
 const TEST_PROPS = { foo: 'bar' };
 
 describe('useTelemetry', () => {
-  const originalEnv = import.meta.env.VITE_PROMPTFOO_DISABLE_TELEMETRY;
   const consoleError = console.error;
 
   beforeEach(() => {
@@ -21,12 +20,12 @@ describe('useTelemetry', () => {
   });
 
   afterEach(() => {
-    import.meta.env.VITE_PROMPTFOO_DISABLE_TELEMETRY = originalEnv;
     console.error = consoleError;
+    vi.unstubAllEnvs();
   });
 
   it('calls callApi when telemetry is enabled', async () => {
-    import.meta.env.VITE_PROMPTFOO_DISABLE_TELEMETRY = 'false';
+    vi.stubEnv('VITE_PROMPTFOO_DISABLE_TELEMETRY', 'false');
     const { result } = renderHook(() => useTelemetry());
 
     await act(async () => {
@@ -37,7 +36,7 @@ describe('useTelemetry', () => {
   });
 
   it('does not call callApi when telemetry is disabled', async () => {
-    import.meta.env.VITE_PROMPTFOO_DISABLE_TELEMETRY = 'true';
+    vi.stubEnv('VITE_PROMPTFOO_DISABLE_TELEMETRY', 'true');
     const { result } = renderHook(() => useTelemetry());
 
     await act(async () => {
@@ -48,7 +47,7 @@ describe('useTelemetry', () => {
   });
 
   it('logs error when callApi rejects', async () => {
-    import.meta.env.VITE_PROMPTFOO_DISABLE_TELEMETRY = 'false';
+    vi.stubEnv('VITE_PROMPTFOO_DISABLE_TELEMETRY', 'false');
     vi.mocked(callApi).mockRejectedValueOnce(new Error('network'));
     const { result } = renderHook(() => useTelemetry());
 
