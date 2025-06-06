@@ -79,7 +79,6 @@ type CommonOptions = {
 export interface RedteamCliGenerateOptions extends CommonOptions {
   cache: boolean;
   config?: string;
-  target?: string;
   defaultConfig: Record<string, unknown>;
   defaultConfigPath?: string;
   envFile?: string;

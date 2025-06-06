@@ -130,7 +130,6 @@ export const RedteamGenerateOptionsSchema = z.object({
     .describe('Additional strategies to include'),
   cache: z.boolean().describe('Whether to use caching'),
   config: z.string().optional().describe('Path to the configuration file'),
-  target: z.string().optional().describe('Cloud provider target ID'),
   defaultConfig: z.record(z.unknown()).describe('Default configuration object'),
   defaultConfigPath: z.string().optional().describe('Path to the default configuration file'),
   delay: z
