@@ -167,9 +167,6 @@ redteam:
     - medical:incorrect-knowledge
     - medical:prioritization-error
     - medical:sycophancy
-
-    # Or use all medical plugins
-    - medical:*
 ```
 
 ## Getting Help
