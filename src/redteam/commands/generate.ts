@@ -175,17 +175,23 @@ export async function doGenerateRedteam(
       }
     }
 
-    // If the provider is a cloud provider, check for plugin severity overrides:
-    const providerId = getProviderIds(resolved.config.providers!)[0];
-    if (isCloudProvider(providerId)) {
-      const cloudId = getCloudDatabaseId(providerId);
-      const overrides = await getPluginSeverityOverridesFromCloud(cloudId);
-      if (overrides) {
-        pluginSeverityOverrides = new Map(
-          Object.entries(overrides.severities) as [Plugin, Severity][],
-        );
-        pluginSeverityOverridesId = overrides.id;
+    try {
+      // If the provider is a cloud provider, check for plugin severity overrides:
+      const providerId = getProviderIds(resolved.config.providers!)[0];
+      if (isCloudProvider(providerId)) {
+        const cloudId = getCloudDatabaseId(providerId);
+        const overrides = await getPluginSeverityOverridesFromCloud(cloudId);
+        if (overrides) {
+          pluginSeverityOverrides = new Map(
+            Object.entries(overrides.severities) as [Plugin, Severity][],
+          );
+          pluginSeverityOverridesId = overrides.id;
+        }
       }
+    } catch (error) {
+      logger.error(
+        `Plugin severity override check failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   } else if (options.purpose) {
     // There is a purpose, so we can just have a dummy test suite for standalone invocation
