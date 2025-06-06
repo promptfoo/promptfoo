@@ -1,0 +1,11 @@
+promptfoo_team:
+  name: promptfoo Team
+  title: Development Team
+  url: https://github.com/promptfoo
+  image_url: /img/logo-panda.svg
+
+maintainer:
+  name: promptfoo Maintainers
+  title: Core Maintainers
+  url: https://github.com/promptfoo/promptfoo
+  image_url: /img/logo-panda.svg 
