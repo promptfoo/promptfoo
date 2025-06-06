@@ -1287,6 +1287,11 @@ export const riskCategories: Record<string, Plugin[]> = {
     'harmful:radicalization',
     'harmful:self-harm',
     'harmful:sexual-content',
+    'medical:hallucination',
+    'medical:anchoring-bias',
+    'medical:incorrect-knowledge',
+    'medical:prioritization-error',
+    'medical:sycophancy',
   ],
 
   Brand: [

@@ -60,6 +60,7 @@ export type VulnerabilityType =
   | 'criminal'
   | 'custom'
   | 'harmful'
+  | 'medical'
   | 'misinformation and misuse'
   | 'privacy'
   | 'security';
@@ -811,7 +812,7 @@ export const PLUGINS = [
       agent: true,
       chat: true,
     },
-    vulnerabilityType: 'harmful',
+    vulnerabilityType: 'medical',
     isRemote: true,
   },
   {
@@ -826,7 +827,7 @@ export const PLUGINS = [
       agent: true,
       chat: true,
     },
-    vulnerabilityType: 'harmful',
+    vulnerabilityType: 'medical',
     isRemote: true,
   },
   {
@@ -841,7 +842,7 @@ export const PLUGINS = [
       agent: true,
       chat: true,
     },
-    vulnerabilityType: 'harmful',
+    vulnerabilityType: 'medical',
     isRemote: true,
   },
   {
@@ -856,7 +857,7 @@ export const PLUGINS = [
       agent: true,
       chat: true,
     },
-    vulnerabilityType: 'harmful',
+    vulnerabilityType: 'medical',
     isRemote: true,
   },
   {
@@ -871,7 +872,7 @@ export const PLUGINS = [
       agent: true,
       chat: true,
     },
-    vulnerabilityType: 'security',
+    vulnerabilityType: 'medical',
     isRemote: true,
   },
   {
