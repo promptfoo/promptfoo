@@ -247,12 +247,13 @@ npx promptfoo@latest eval --config multimodal-config.yaml
 
 ## 🔗 See Also
 
-- [Model Scanner Documentation](/docs/model-audit/)
+- [Model Scanner Command Documentation](/docs/usage/command-line/#promptfoo-scan-model)
 - [Audio Strategy Guide](/docs/red-team/strategies/audio/)
-- [Image Conversion Strategy](/docs/red-team/strategies/image/)
-- [Base64 Image Loading](/docs/configuration/datasets/#image-data)
-- [Multimodal Live Functions](/docs/providers/google/#live-functions)
-- [WebUI Filtering Guide](/docs/usage/web-ui/#filtering)
+- [Image Strategy Documentation](/docs/red-team/strategies/image/)
+- [Base64 Strategy Guide](/docs/red-team/strategies/base64/)
+- [Configuration Datasets](/docs/configuration/datasets/)
+- [Google Live API Documentation](/docs/providers/google/#google-live-api)
+- [Web UI Features](/docs/usage/web-ui/)
 
 ---
 

@@ -220,7 +220,7 @@ npx promptfoo@latest scan-model
 - [Target Discovery Guide](/docs/red-team/discovery/)
 - [xAI Provider Documentation](/docs/providers/xai/)
 - [Validation Command Reference](/docs/usage/command-line/#promptfoo-validate)
-- [Server-Side Features](/docs/usage/web-ui/#performance)
+- [Server-Side Features](/docs/usage/web-ui/)
 - [Goal-Based Testing](/docs/red-team/strategies/)
 
 ---
