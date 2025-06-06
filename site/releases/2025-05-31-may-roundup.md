@@ -1,7 +1,7 @@
 ---
 slug: may-2025-roundup
-title: May 2025 Roundup - A Month of Major Breakthroughs
-description: Six releases featuring xAI integration, target discovery agents, validation tooling, and groundbreaking red team capabilities
+title: May 2025 Roundup - Quality Assurance Tools
+description: Six releases featuring xAI integration, target discovery agents, validation tooling, and new red team capabilities
 authors: [promptfoo_team]
 tags: [roundup, may-2025, xai, target-discovery, validation, red-team, monthly-summary]
 keywords:
@@ -16,15 +16,15 @@ keywords:
 date: 2025-05-31T23:59
 ---
 
-# May 2025 Roundup: A Month of Major Breakthroughs
+# May 2025 Roundup - Quality Assurance Tools
 
-May 2025 was an extraordinary month for promptfoo, with **6 major releases** that introduced groundbreaking capabilities across AI safety, eval tooling, and developer experience. From revolutionary target discovery agents to xAI integration, let's dive into the month's most significant innovations.
+May 2025 included **6 major releases** (v0.113.2 → v0.114.2) that added AI safety, eval tooling, and developer experience improvements. The releases include target discovery agents, xAI integration, and validation tools.
 
 <!-- truncate -->
 
 :::info May 2025 Highlights
 
-This month introduced the **target discovery agent** and **validation command** - two game-changing capabilities that revolutionized AI safety testing and quality assurance.
+This month added the **target discovery agent** and **validation command** for AI safety testing and quality assurance.
 
 :::
 
@@ -33,14 +33,14 @@ This month introduced the **target discovery agent** and **validation command** 
 - **6 Major Releases** (v0.113.2 → v0.114.2)
 - **3 New Model Providers** (xAI, Claude 4 expansion)
 - **5 New Red Team Capabilities** (Target discovery, off-topic testing, goal-based attacks)
-- **2 Major Performance Improvements** (Server-side pagination, enhanced exports)
-- **1 Revolutionary Tool** (Validation command)
+- **2 Performance Improvements** (Server-side pagination, enhanced exports)
+- **1 New Tool** (Validation command)
 
-## 🚀 Breakthrough Innovations
+## 🚀 New Features
 
 ### 🎯 Target Discovery Agent (v0.114.1)
 
-The crown jewel of May's releases was the **intelligent target discovery agent** - a game-changing capability that automatically discovers and analyzes targets for red team testing.
+Added intelligent target discovery agent that automatically discovers and analyzes targets for red team testing:
 
 ```yaml
 redteam:
@@ -52,15 +52,15 @@ redteam:
   purpose: 'Test e-commerce chatbot for vulnerabilities'
 ```
 
-:::tip AI-Powered Security
+:::tip
 
-This AI-powered system improves test coverage and effectiveness by intelligently identifying potential vulnerability points, making red teaming more systematic and comprehensive.
+This AI-powered system improves test coverage and effectiveness by intelligently identifying potential vulnerability points.
 
 :::
 
 ### 🌐 xAI Integration & Model Context Protocol (v0.114.0, v0.114.1)
 
-May saw the introduction of **xAI integration** with image provider and live search support, plus groundbreaking **Model Context Protocol (MCP)** support for OpenAI:
+Added xAI integration with image provider and live search support, plus Model Context Protocol (MCP) support for OpenAI:
 
 ```yaml
 providers:
@@ -74,18 +74,17 @@ providers:
           protocol: "mcp"
 ```
 
-### ⚡ Validation Command - Prevention Over Reaction (v0.114.0)
+### ⚡ Validation Command (v0.114.0)
 
-A completely new approach to quality assurance with the **validate command**:
+Added new command for quality assurance that validates configurations before running evals:
 
 ```bash
-# Catch configuration issues before they cause problems
 npx promptfoo@latest validate
 ```
 
-This tool validates configurations before running evals, preventing costly mistakes and improving developer confidence.
+Use this tool to catch configuration issues before they cause problems and improve developer confidence.
 
-## 🛡️ Advanced Red Team Capabilities
+## 🛡️ Red Team Capabilities
 
 ### 🎯 Off-Topic Testing (v0.114.2)
 
@@ -100,7 +99,7 @@ redteam:
 
 ### 🎯 Goal-Based Attacks (v0.114.2)
 
-Revolutionary approach allowing security teams to set specific goals for red team attacks:
+New approach allowing security teams to set specific goals for red team attacks:
 
 ```yaml
 redteam:
@@ -111,7 +110,7 @@ redteam:
     - 'Bypass content filters'
 ```
 
-:::warning Advanced Attack Strategies
+:::warning
 
 Goal-based attacks enable focused security testing by allowing teams to specify exact objectives for red team operations.
 
@@ -119,22 +118,22 @@ Goal-based attacks enable focused security testing by allowing teams to specify 
 
 ### 🧠 Enhanced Intent Processing (v0.113.2, v0.113.3)
 
-Critical improvements to intent grading and gender bias detection, making eval more accurate and fair.
+Improvements to intent grading and gender bias detection for more accurate and fair eval.
 
-## 🔧 Developer Experience Revolution
+## 🔧 Developer Experience
 
 ### ⚡ Server-Side Pagination (v0.113.4)
 
-A massive performance breakthrough enabling handling of **thousands of eval results** with smooth UI interactions:
+Performance improvement enabling handling of thousands of eval results with smooth UI interactions:
 
-- Dramatic performance improvement for large datasets
-- Advanced filtering capabilities
-- Enhanced search across results
-- Better scalability for enterprise use
+- Improved performance for large datasets
+- Enhanced filtering capabilities
+- Better search across results
+- Improved scalability for enterprise use
 
 ### 📊 Enhanced Data Export (v0.113.4, v0.114.2)
 
-Comprehensive improvements to data analysis capabilities:
+Improvements to data analysis capabilities:
 
 ```bash
 # Multiple export formats with rich metadata
@@ -142,14 +141,14 @@ npx promptfoo@latest export --format csv --include-scores
 npx promptfoo@latest export --format json
 ```
 
-- **Pass/fail scoring** in CSV exports
-- **JSON download** options
-- **Plugin and strategy IDs** for better traceability
+- Pass/fail scoring in CSV exports
+- JSON download options
+- Plugin and strategy IDs for better traceability
 - More detailed export options for external analysis
 
 ### 🌍 Universal Environment Variables (v0.114.0)
 
-Complete flexibility in configuration management:
+Added complete flexibility in configuration management:
 
 ```yaml title="promptfooconfig.yaml"
 env:
@@ -165,7 +164,7 @@ providers:
 
 ### 🔮 Claude 4 Support (v0.114.0)
 
-Added Claude 4 support across **three major cloud providers**:
+Added Claude 4 support across three major cloud providers:
 
 - Anthropic direct
 - AWS Bedrock
@@ -173,7 +172,7 @@ Added Claude 4 support across **three major cloud providers**:
 
 ### 🚀 Enhanced HTTP Provider (v0.114.1)
 
-Comprehensive metadata support for better debugging:
+Added comprehensive metadata support for better debugging:
 
 ```yaml
 providers:
@@ -184,15 +183,15 @@ providers:
 
 Raw output, status codes, and response metadata now included for enhanced analysis.
 
-## 🐛 Critical Stability Improvements
+## 🐛 Fixes & Stability
 
 ### 🔧 Core Infrastructure (v0.113.2, v0.113.3)
 
-- **Intent grader fixes** for better eval accuracy
-- **Zod error handling** improvements
-- **Red team file loading** from cloud configurations
-- **Gender bias plugin** accuracy improvements
-- **Environment variable resolution** fixes
+- Intent grader fixes for better eval accuracy
+- Zod error handling improvements
+- Red team file loading from cloud configurations
+- Gender bias plugin accuracy improvements
+- Environment variable resolution fixes
 
 ### 🔄 Telemetry & Performance (v0.113.2)
 
@@ -200,9 +199,9 @@ Raw output, status codes, and response metadata now included for enhanced analys
 - Comprehensive dependency updates
 - Enhanced build reliability
 
-## 📦 Get Started
+## 📦 Getting Started
 
-Experience all of May's innovations:
+Install the latest version:
 
 ```bash
 npm install -g promptfoo@latest
@@ -213,22 +212,22 @@ Or use with npx:
 ```bash
 npx promptfoo@latest eval
 npx promptfoo@latest validate
-npx promptfoo@latest model-scan
+npx promptfoo@latest scan-model
 ```
 
 ## 🔗 See Also
 
 - [Target Discovery Guide](/docs/red-team/discovery/)
 - [xAI Provider Documentation](/docs/providers/xai/)
-- [Validation Command Reference](/docs/usage/validation/)
+- [Validation Command Reference](/docs/usage/command-line/#promptfoo-validate)
 - [Server-Side Features](/docs/usage/web-ui/#performance)
 - [Goal-Based Testing](/docs/red-team/strategies/)
 
 ---
 
-May 2025 demonstrated promptfoo's commitment to pushing the boundaries of AI eval and safety. With 6 major releases introducing revolutionary capabilities, the platform continues to lead the way in making AI systems safer, more reliable, and easier to evaluate at scale.
+May 2025 added AI safety testing capabilities and quality assurance tools to promptfoo. These features help make AI systems safer, more reliable, and easier to evaluate at scale.
 
-**What's your favorite May 2025 feature?** Join the discussion on [Discord](https://discord.gg/promptfoo) or [GitHub](https://github.com/promptfoo/promptfoo).
+Share your experience with the new features on [Discord](https://discord.gg/promptfoo) or [GitHub](https://github.com/promptfoo/promptfoo).
 
 ---
 

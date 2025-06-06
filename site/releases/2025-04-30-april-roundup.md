@@ -1,7 +1,7 @@
 ---
 slug: april-2025-roundup
-title: April 2025 Roundup - Building the Foundation for Advanced AI Evaluation
-description: Major releases with METEOR & GLEU metrics, Cerebras & Grok-3 providers, DoNotAnswer & XSTest plugins, and GPT-4.1 grading improvements
+title: April 2025 Roundup - Advanced Evaluation Features
+description: METEOR & GLEU metrics, Cerebras & Grok-3 providers, DoNotAnswer & XSTest plugins, and GPT-4.1 grading improvements
 authors: [promptfoo_team]
 tags: [roundup, april-2025, meteor, gleu, cerebras, grok-3, donotanswer, xstest, monthly-summary]
 keywords:
@@ -9,15 +9,15 @@ keywords:
 date: 2025-04-30T23:59
 ---
 
-# April 2025 Roundup: Building the Foundation for Advanced AI Evaluation
+# April 2025 Roundup - Advanced Evaluation Features
 
-April 2025 marked a pivotal month in promptfoo's evolution, with **5 major releases** that introduced advanced eval metrics, groundbreaking security testing capabilities, and next-generation model providers. From METEOR scoring to homoglyph attacks, let's explore how April laid the foundation for the future of AI eval.
+April 2025 included **5 major releases** (v0.110.0 → v0.112.1) that added advanced eval metrics, security testing capabilities, and new model providers. The releases include METEOR scoring, Cerebras integration, and security plugins.
 
 <!-- truncate -->
 
 :::info April 2025 Highlights
 
-This month introduced **METEOR and GLEU metrics** for sophisticated text evaluation, plus revolutionary **DoNotAnswer and XSTest plugins** for comprehensive safety testing.
+This month added **METEOR and GLEU metrics** for text evaluation and **DoNotAnswer and XSTest plugins** for security testing.
 
 :::
 
@@ -26,14 +26,14 @@ This month introduced **METEOR and GLEU metrics** for sophisticated text evaluat
 - **5 Major Releases** (v0.110.0 → v0.112.1)
 - **4 New Evaluation Metrics** (METEOR, GLEU, enhanced LLM rubric)
 - **3 New Model Providers** (Cerebras, Grok-3, AWS Bedrock Knowledge Base)
-- **3 Revolutionary Security Plugins** (DoNotAnswer, XSTest, homoglyph strategy)
-- **1 Major Grading Upgrade** (GPT-4.1)
+- **3 New Security Plugins** (DoNotAnswer, XSTest, homoglyph strategy)
+- **1 Grading Upgrade** (GPT-4.1)
 
-## 🎯 Revolutionary Evaluation Metrics
+## 🎯 Evaluation Metrics
 
 ### 📐 METEOR & GLEU Scoring (v0.112.0, v0.110.0)
 
-April introduced two sophisticated eval metrics that revolutionized text quality assessment:
+Added two new eval metrics for text quality assessment:
 
 **METEOR (Metric for Evaluation of Translation with Explicit ORdering):**
 
@@ -59,15 +59,15 @@ tests:
         threshold: 0.7
 ```
 
-:::tip Advanced Metrics
+:::tip
 
-These metrics provide more nuanced eval capabilities, particularly valuable for translation, summarization, and content generation tasks.
+These metrics provide enhanced eval capabilities for translation, summarization, and content generation tasks.
 
 :::
 
-### 🧠 GPT-4.1 Grading Revolution (v0.111.0)
+### 🧠 GPT-4.1 Grading (v0.111.0)
 
-The upgrade to **GPT-4.1 for grading** marked a significant leap in eval accuracy and capabilities, providing more sophisticated assessment of AI outputs across all domains.
+Upgraded grading to use GPT-4.1 for improved eval accuracy across all domains.
 
 ### 📋 Enhanced LLM Rubric (v0.111.0)
 
@@ -89,11 +89,11 @@ tests:
           {{rubric}}
 ```
 
-## 🚀 Next-Generation Model Providers
+## 🚀 Model Providers
 
 ### ⚡ Cerebras Integration (v0.112.0)
 
-April introduced the **Cerebras provider** for high-performance AI model eval:
+Added Cerebras provider for high-performance AI model eval:
 
 ```yaml
 providers:
@@ -104,7 +104,7 @@ providers:
 
 ### 🌌 Grok-3 Support (v0.110.0)
 
-Added **Grok-3 model** support for advanced AI evals:
+Added Grok-3 model support for advanced AI evals:
 
 ```yaml
 providers:
@@ -115,7 +115,7 @@ providers:
 
 ### 🏗️ AWS Bedrock Knowledge Base (v0.110.0)
 
-Integrated **AWS Bedrock Knowledge Base** support for enhanced context-aware evals:
+Integrated AWS Bedrock Knowledge Base support for context-aware evals:
 
 ```yaml
 providers:
@@ -125,11 +125,11 @@ providers:
       region: "us-east-1"
 ```
 
-## 🛡️ Advanced Security Testing Arsenal
+## 🛡️ Security Testing Features
 
 ### 🚫 DoNotAnswer Plugin (v0.111.0)
 
-Revolutionary plugin implementing the **DoNotAnswer dataset** for testing models' ability to refuse inappropriate requests:
+Added plugin implementing the DoNotAnswer dataset for testing models' ability to refuse inappropriate requests:
 
 ```yaml
 redteam:
@@ -140,7 +140,7 @@ redteam:
 
 ### 🔍 XSTest Plugin (v0.111.0, v0.111.1)
 
-Comprehensive **cross-site scripting vulnerability testing** for web-based AI systems:
+Added cross-site scripting vulnerability testing for web-based AI systems:
 
 ```yaml
 redteam:
@@ -151,7 +151,7 @@ redteam:
 
 ### 🎭 Homoglyph Strategy (v0.112.0)
 
-Innovative red teaming strategy using **homoglyphs** (visually similar characters) to test model robustness:
+New red teaming strategy using homoglyphs (visually similar characters) to test model robustness:
 
 ```yaml
 redteam:
@@ -162,17 +162,17 @@ redteam:
     - harmful
 ```
 
-:::warning Visual Deception Attacks
+:::warning
 
 Homoglyph strategies test models against visual deception attacks using characters that look identical but have different Unicode values.
 
 :::
 
-## ⚡ Performance & Infrastructure Breakthroughs
+## ⚡ Performance & Infrastructure
 
 ### 🗃️ Universal Environment Variable Override (v0.112.0)
 
-Complete flexibility in configuration management:
+Added complete flexibility in configuration management:
 
 ```yaml title="promptfooconfig.yaml"
 env:
@@ -194,17 +194,17 @@ Search queries now persisted in URLs for better user experience and result shari
 - Improved data export capabilities
 - Better integration with external analysis tools
 
-## 🎨 WebUI Excellence
+## 🎨 WebUI Improvements
 
 ### ⚓ Anchor Links to Rows (v0.111.0)
 
-Added **anchor link functionality** to specific rows in eval results with automatic scroll-to-top behavior for better navigation and result sharing.
+Added anchor link functionality to specific rows in eval results with automatic scroll-to-top behavior for better navigation and result sharing.
 
 ### ⚡ Enhanced Quick Selector (v0.111.0)
 
-Improved **Eval Quick Selector (Cmd+K)** for better navigation and usability throughout the interface.
+Improved Eval Quick Selector (Cmd+K) for better navigation and usability throughout the interface.
 
-## 🐛 Critical Stability & Bug Fixes
+## 🐛 Fixes & Stability
 
 ### 🔐 Authentication & Sharing (v0.110.0)
 
@@ -228,7 +228,7 @@ Improved **Eval Quick Selector (Cmd+K)** for better navigation and usability thr
 
 ## 📦 Getting Started
 
-Experience April's innovations:
+Install the latest version:
 
 ```bash
 npm install -g promptfoo@latest
@@ -243,14 +243,14 @@ npx promptfoo@latest eval --config config-with-meteor.yaml
 # Test security with new plugins
 npx promptfoo@latest redteam --plugins donotanswer,xstest
 
-# Leverage new providers
+# Use new providers
 npx promptfoo@latest eval --provider cerebras:llama-3.1-8b
 ```
 
 ## 🔗 See Also
 
-- [METEOR Scoring Guide](/docs/configuration/expected-outputs/meteor/)
-- [GLEU Metric Documentation](/docs/configuration/expected-outputs/gleu/)
+- [METEOR Scoring Guide](/docs/configuration/expected-outputs/deterministic/#meteor)
+- [GLEU Metric Documentation](/docs/configuration/expected-outputs/deterministic/#gleu)
 - [DoNotAnswer Plugin Guide](/docs/red-team/plugins/donotanswer/)
 - [XSTest Plugin Documentation](/docs/red-team/plugins/xstest/)
 - [Cerebras Provider Setup](/docs/providers/cerebras/)
@@ -258,9 +258,9 @@ npx promptfoo@latest eval --provider cerebras:llama-3.1-8b
 
 ---
 
-April 2025 established promptfoo as the definitive platform for advanced AI eval and security testing. With sophisticated metrics, comprehensive security testing capabilities, and next-generation provider support, the foundation was laid for the revolutionary developments that would follow in May and beyond.
+April 2025 added advanced eval metrics, security testing capabilities, and new provider support to promptfoo. These features support more sophisticated AI evaluation and security testing workflows.
 
-**Which April innovation has had the biggest impact on your workflow?** Share your experience on [Discord](https://discord.gg/promptfoo) or [GitHub](https://github.com/promptfoo/promptfoo).
+Share your experience with the new features on [Discord](https://discord.gg/promptfoo) or [GitHub](https://github.com/promptfoo/promptfoo).
 
 ---
 

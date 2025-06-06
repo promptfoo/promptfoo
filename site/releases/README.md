@@ -1,143 +1,16 @@
-# Release Notes Guidelines
-
-This directory contains release notes for promptfoo. Release notes are published automatically to the `/releases/` section of the website.
-
-## File Naming Convention
-
-Release note files should follow this naming pattern:
-
-```YYYY-MM-DD-vX.Y.Z.md
-
-```
-
-Examples:
-
-- `2025-01-15-v0.70.0.md`
-- `2025-02-03-v0.70.1.md`
-- `2025-03-10-v0.71.0.md`
-
-## Front Matter Template
-
-Each release note must include proper front matter:
-
-```yaml
----
-slug: vX.Y.Z
-title: promptfoo vX.Y.Z
-description: Brief description of key changes in this release
-authors: [promptfoo_team]
-tags: [release, feature1, feature2, bugfix]
-image: /img/releases/vX.Y.Z-banner.png # Optional
-date: YYYY-MM-DDTHH:MM
----
-```
-
-## Content Structure
-
-Follow this structure for consistent release notes:
-
-1. **Title and Introduction** - Brief overview of the release
-2. **<!-- truncate -->** - Docusaurus blog truncation marker
-3. **🚀 New Features** - Major new functionality
-4. **🐛 Bug Fixes** - Important fixes with issue links
-5. **🔧 Improvements** - Enhancements and optimizations
-6. **⚠️ Breaking Changes** - Any breaking changes with migration guidance
-7. **📦 Installation** - Installation/upgrade instructions
-8. **🙏 Community Contributions** - Thank contributors
-9. **What's Next** - Preview of upcoming features
-
-## Writing Guidelines
-
-### Use Clear Headings
-
-- Use descriptive section headings with emojis for visual appeal
-- Organize content by impact (features > fixes > improvements)
-
-### Include Code Examples
-
-When showing configuration changes or new features:
-
-```yaml title="promptfooconfig.yaml"
-# Example configuration
-```
-
-### Link to Resources
-
-- Link to relevant documentation
-- Include GitHub issue numbers for bug fixes
-- Reference migration guides for breaking changes
-
-### Breaking Changes
-
-Always include migration guidance for breaking changes:
-
-```markdown
-:::tip Migration Helper
-
-Run `npx promptfoo@latest config migrate` to automatically update your configuration files.
-
-:::
-```
-
-### Performance Claims
-
-Include specific metrics when mentioning performance improvements:
-
-- "40% faster evaluation runs"
-- "25% reduction in memory usage"
-
-## Best Practices
-
-### SEO Optimization
-
-- Write descriptive titles and descriptions
-- Use relevant tags
-- Include keywords naturally
-
-### Community Focus
-
-- Thank contributors by name with GitHub links
-- Highlight community-requested features
-- Include links to community resources (Discord, GitHub)
-
-### Forward-Looking
-
-- End with "What's Next" section
-- Build excitement for future releases
-- Encourage community engagement
-
-## Publishing Process
-
-1. Create the release note file in this directory
-2. Add high-quality banner image to `/static/img/releases/` (optional)
-3. Commit and push to the main branch
-4. The release note will automatically appear at `/releases/`
-
-## RSS Feed
-
-Release notes are automatically included in the RSS feed at `/releases/rss.xml`, allowing users to subscribe to updates.
-
-## Authors
-
-Update the `authors.yml` file to add new team members who will be authoring release notes.
-
----
-
-For questions about release notes, reach out to the documentation team or refer to the [Docusaurus documentation guidelines](https://docusaurus.io/docs/blog).
-
 # Monthly Release Roundups Guidelines
 
-This directory contains monthly roundups of promptfoo releases. These comprehensive summaries are published automatically to the `/releases/` section of the website and highlight key developments, major features, and important updates from each month.
+This directory contains monthly roundups of Promptfoo releases. These comprehensive summaries publish automatically to the `/releases/` section of the website and highlight key developments, major features, and important updates from each month.
 
 ## File Naming Convention
 
-Monthly roundup files should follow this naming pattern:
-
-```YYYY-MM-DD-month-roundup.md
+Name monthly roundup files using this pattern:
 
 ```
+YYYY-MM-DD-month-roundup.md
+```
 
-Where the date should be the last day of the month being summarized.
+Use the last day of the month being summarized as the date.
 
 Examples:
 
@@ -147,7 +20,7 @@ Examples:
 
 ## Front Matter Template
 
-Each monthly roundup must include proper front matter:
+Include this front matter in each monthly roundup:
 
 ```yaml
 ---
@@ -157,26 +30,33 @@ description: Brief summary of the month's key developments (under 160 chars for 
 authors: [promptfoo_team]
 tags: [roundup, month-yyyy, key-feature1, key-feature2, monthly-summary]
 keywords: [feature1, feature2, feature3, monthly, roundup]
-image: /img/releases/month-YYYY-banner.png # Optional
 date: YYYY-MM-DDTHH:MM
 ---
 ```
 
+:::note
+
+Format the `keywords` field as an array and use the `T` separator with specific time (typically `T23:59` for end of month).
+
+:::
+
 ## Content Structure
 
-Follow this structure for consistent monthly roundups:
+Structure monthly roundups consistently:
 
 1. **Title and Introduction** - Overview of the month's significance and theme
 2. **<!-- truncate -->** - Docusaurus blog truncation marker
-3. **📊 Month YYYY By The Numbers** - Key statistics (X releases, Y features, etc.)
-4. **🚀 Major Breakthroughs** - Most significant new features and capabilities
-5. **🛡️ Security & Safety Advances** - Red team and safety improvements
-6. **⚡ Performance & Infrastructure** - Technical improvements and optimizations
-7. **🎨 Developer Experience** - UX/DX enhancements and usability improvements
-8. **🐛 Critical Fixes** - Important bug fixes and stability improvements
-9. **📦 Getting Started** - Installation/upgrade instructions with examples
-10. **🔗 See Also** - Links to relevant documentation and resources
-11. **Community Engagement** - Call to action for feedback and discussion
+3. **:::info Month YYYY Highlights** - Callout box with key developments
+4. **📊 Month YYYY By The Numbers** - Key statistics (X releases, Y features, etc.)
+5. **🚀 Major Features** - Most significant new features and capabilities
+6. **🛡️ Security & Safety Advances** - Red team and safety improvements
+7. **⚡ Performance & Infrastructure** - Technical improvements and optimizations
+8. **🎨 Developer Experience / WebUI** - UX/DX enhancements and usability improvements
+9. **🐛 Fixes & Stability** - Important bug fixes and stability improvements
+10. **📦 Getting Started** - Installation/upgrade instructions with examples
+11. **🔗 See Also** - Links to relevant documentation and resources
+12. **Conclusion & Community Engagement** - Summary and call to action
+13. **Navigation Links** - Previous/Next roundup references
 
 ## Writing Guidelines
 
@@ -186,13 +66,30 @@ Follow this structure for consistent monthly roundups:
 - **Highlight the biggest impacts** rather than listing every minor change
 - **Show progression** and how features build on each other across releases
 - **Include key statistics** like "X major releases" and "Y new features"
-- **Create compelling narratives** with themed titles like "The Multimodal Security Revolution"
+- **Use matter-of-fact descriptions** with direct, action-oriented language
+
+### Tone and Language
+
+- **Use direct, factual language** - avoid promotional terms like "revolutionary," "groundbreaking," or "game-changing"
+- **Be action-oriented** - clearly outline what users can do with new features
+- **Avoid overselling** - describe features objectively without superlatives
+- **Write for evergreen value** - focus on practical capabilities rather than momentary excitement
+- **Use imperative mood** for instructions (e.g., "Install the package" instead of "You should install the package")
+
+### Version Number References
+
+Include version numbers in parentheses when referencing features:
+
+- "Model scanner command (v0.107.0)"
+- "Advanced metrics (v0.112.0, v0.110.0)"
+- "Major releases (v0.106.0 → v0.107.0)"
 
 ### Use Clear Headings
 
 - Use descriptive section headings with emojis for visual appeal
-- Organize content by impact (major breakthroughs > improvements > fixes)
+- Organize content by impact (major features > improvements > fixes)
 - Group related features from different releases into cohesive sections
+- Avoid promotional language in headings
 
 ### Include Code Examples
 
@@ -204,24 +101,24 @@ redteam:
   plugins:
     - new-plugin-from-this-month
   strategies:
-    - breakthrough-strategy
+    - new-strategy
 ```
 
 ### Link to Resources
 
 - Link to relevant documentation for featured capabilities
-- Include GitHub issue/PR numbers for major features when relevant
+- Include GitHub issue/Pull Request numbers for major features when relevant
 - Reference specific version numbers within the roundup text
 - Cross-link between monthly roundups for feature evolution stories
 
 ### Cross-Month Continuity
 
-Always include references to feature progression:
+Include references to feature progression using neutral language:
 
 ```markdown
-:::info Building on March's Foundation
+:::info
 
-The new validation command builds on March's model scanner, creating a comprehensive quality assurance toolkit.
+The validation command builds on March's model scanner, creating a comprehensive quality assurance toolkit.
 
 :::
 ```
@@ -230,15 +127,15 @@ The new validation command builds on March's model scanner, creating a comprehen
 
 Include specific metrics when mentioning performance improvements:
 
-- "40% faster evaluation runs with server-side pagination"
-- "25% reduction in memory usage across WebUI components"
+- "Improved performance for large datasets with server-side pagination"
+- "Enhanced memory usage across WebUI components"
 - "X major releases in Y days" statistics
 
 ## Best Practices
 
 ### SEO Optimization
 
-- Write compelling titles with clear themes ("March 2025: The Multimodal Security Revolution")
+- Write descriptive titles with clear feature focus ("March 2025: Multimodal Security Features")
 - Keep descriptions under 160 characters for optimal search results
 - Use relevant tags that group related months and features
 - Include keywords naturally in the content
@@ -254,10 +151,21 @@ Include specific metrics when mentioning performance improvements:
 
 ### Monthly Narrative
 
-- **Create themes** that tie the month's releases together
-- **Show evolution** of how features built upon each other
-- **Build excitement** for what the cumulative changes enable
-- **Include "looking ahead"** references to next month's focus areas
+- **Create clear themes** that tie the month's releases together
+- **Show feature evolution** across multiple releases
+- **Focus on practical benefits** that the cumulative changes enable
+- **Include actionable next steps** for users
+
+### Navigation Structure
+
+End each roundup with cross-references:
+
+```markdown
+---
+
+**Previous Roundups**: [March 2025](/releases/march-2025-roundup) • [April 2025](/releases/april-2025-roundup)  
+**Next**: [June 2025](/releases/june-2025-roundup) • July 2025 Roundup (coming soon)
+```
 
 ## Publishing Process
 
@@ -281,10 +189,10 @@ Monthly roundups are automatically included in the RSS feed at `/releases/rss.xm
 
 ## Authors
 
-Update the `authors.yml` file to add new team members who will be authoring monthly roundups.
+Update the `authors.yml` file to add new team members who will be authoring monthly roundups. Current authors available:
 
 ---
 
-**Note:** These are monthly roundups, not individual release notes. For detailed version-specific changes, refer to the [GitHub releases page](https://github.com/promptfoo/promptfoo/releases) or individual release changelogs.
+**Note:** These are monthly roundups summarizing multiple releases. For detailed version-specific changes, refer to the [GitHub releases page](https://github.com/promptfoo/promptfoo/releases) or individual release changelogs.
 
 For questions about release roundups, reach out to the documentation team or refer to the [Docusaurus documentation guidelines](https://docusaurus.io/docs/blog).

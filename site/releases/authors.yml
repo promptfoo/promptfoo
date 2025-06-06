@@ -9,3 +9,69 @@ maintainer:
   title: Core Maintainers
   url: https://github.com/promptfoo/promptfoo
   image_url: /img/logo-panda.svg
+
+ian_webster:
+  name: Ian Webster
+  title: CEO & Co-founder
+  url: https://github.com/promptfoo
+  image_url: /img/team/ian.jpeg
+
+michael_dangelo:
+  name: Michael D'Angelo
+  title: CTO & Co-founder
+  url: https://github.com/promptfoo
+  image_url: /img/team/michael.jpeg
+
+steve_klein:
+  name: Steve Klein
+  title: Staff Engineer
+  url: https://github.com/promptfoo
+  image_url: /img/team/steve.jpeg
+
+matthew_bou:
+  name: Matthew Bou
+  title: Enterprise GTM Lead
+  url: https://github.com/promptfoo
+  image_url: /img/team/matt.jpeg
+
+ben_shipley:
+  name: Ben Shipley
+  title: Enterprise GTM Lead
+  url: https://github.com/promptfoo
+  image_url: /img/team/ben.jpeg
+
+vanessa_sauter:
+  name: Vanessa Sauter
+  title: Principal Solutions Architect
+  url: https://github.com/promptfoo
+  image_url: /img/team/vanessa.jpeg
+
+guangshuo_zang:
+  name: Guangshuo Zang
+  title: Staff Engineer
+  url: https://github.com/promptfoo
+  image_url: /img/team/shuo.jpeg
+
+faizan_minhas:
+  name: Faizan Minhas
+  title: Senior Engineer
+  url: https://github.com/promptfoo
+  image_url: /img/team/faizan.jpeg
+
+will_holley:
+  name: Will Holley
+  title: Senior Engineer
+  url: https://github.com/promptfoo
+  image_url: /img/team/will.jpg
+
+asmi_gulati:
+  name: Asmi Gulati
+  title: AI Red Team
+  url: https://aisimplyexplained.com/
+  image_url: /img/team/asmi.jpeg
+
+tabs_fakier:
+  name: Tabs Fakier
+  title: Founding Developer Advocate
+  url: https://ladyofcode.com
+  image_url: /img/team/tabs.jpeg
