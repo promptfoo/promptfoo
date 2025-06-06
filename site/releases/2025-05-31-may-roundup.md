@@ -4,7 +4,15 @@ title: May 2025 Roundup - A Month of Major Breakthroughs
 description: Six releases featuring xAI integration, target discovery agents, validation tooling, and groundbreaking red team capabilities
 authors: [promptfoo_team]
 tags: [roundup, may-2025, xai, target-discovery, validation, red-team, monthly-summary]
-keywords: [xAI, target discovery, validation command, off-topic testing, goal-based attacks, server-side pagination]
+keywords:
+  [
+    xAI,
+    target discovery,
+    validation command,
+    off-topic testing,
+    goal-based attacks,
+    server-side pagination,
+  ]
 date: 2025-05-31T23:59
 ---
 
@@ -31,6 +39,7 @@ This month introduced the **target discovery agent** and **validation command** 
 ## 🚀 Breakthrough Innovations
 
 ### 🎯 Target Discovery Agent (v0.114.1)
+
 The crown jewel of May's releases was the **intelligent target discovery agent** - a game-changing capability that automatically discovers and analyzes targets for red team testing.
 
 ```yaml
@@ -40,7 +49,7 @@ redteam:
   strategies:
     - crescendo
     - goat
-  purpose: "Test e-commerce chatbot for vulnerabilities"
+  purpose: 'Test e-commerce chatbot for vulnerabilities'
 ```
 
 :::tip AI-Powered Security
@@ -50,6 +59,7 @@ This AI-powered system improves test coverage and effectiveness by intelligently
 :::
 
 ### 🌐 xAI Integration & Model Context Protocol (v0.114.0, v0.114.1)
+
 May saw the introduction of **xAI integration** with image provider and live search support, plus groundbreaking **Model Context Protocol (MCP)** support for OpenAI:
 
 ```yaml
@@ -65,6 +75,7 @@ providers:
 ```
 
 ### ⚡ Validation Command - Prevention Over Reaction (v0.114.0)
+
 A completely new approach to quality assurance with the **validate command**:
 
 ```bash
@@ -77,16 +88,18 @@ This tool validates configurations before running evals, preventing costly mista
 ## 🛡️ Advanced Red Team Capabilities
 
 ### 🎯 Off-Topic Testing (v0.114.2)
+
 New plugin to test if AI systems stay focused and avoid being led into unrelated conversations:
 
 ```yaml
 redteam:
   plugins:
     - off-topic
-  purpose: "Test customer service chatbot"
+  purpose: 'Test customer service chatbot'
 ```
 
 ### 🎯 Goal-Based Attacks (v0.114.2)
+
 Revolutionary approach allowing security teams to set specific goals for red team attacks:
 
 ```yaml
@@ -94,8 +107,8 @@ redteam:
   strategies:
     - goal-based
   goals:
-    - "Extract personal information"
-    - "Bypass content filters"
+    - 'Extract personal information'
+    - 'Bypass content filters'
 ```
 
 :::warning Advanced Attack Strategies
@@ -105,19 +118,22 @@ Goal-based attacks enable focused security testing by allowing teams to specify 
 :::
 
 ### 🧠 Enhanced Intent Processing (v0.113.2, v0.113.3)
+
 Critical improvements to intent grading and gender bias detection, making eval more accurate and fair.
 
 ## 🔧 Developer Experience Revolution
 
 ### ⚡ Server-Side Pagination (v0.113.4)
+
 A massive performance breakthrough enabling handling of **thousands of eval results** with smooth UI interactions:
 
 - Dramatic performance improvement for large datasets
-- Advanced filtering capabilities  
+- Advanced filtering capabilities
 - Enhanced search across results
 - Better scalability for enterprise use
 
 ### 📊 Enhanced Data Export (v0.113.4, v0.114.2)
+
 Comprehensive improvements to data analysis capabilities:
 
 ```bash
@@ -132,6 +148,7 @@ npx promptfoo@latest export --format json
 - More detailed export options for external analysis
 
 ### 🌍 Universal Environment Variables (v0.114.0)
+
 Complete flexibility in configuration management:
 
 ```yaml title="promptfooconfig.yaml"
@@ -147,12 +164,15 @@ providers:
 ## 🤖 Model Provider Expansion
 
 ### 🔮 Claude 4 Support (v0.114.0)
+
 Added Claude 4 support across **three major cloud providers**:
+
 - Anthropic direct
-- AWS Bedrock  
+- AWS Bedrock
 - Google Vertex AI
 
 ### 🚀 Enhanced HTTP Provider (v0.114.1)
+
 Comprehensive metadata support for better debugging:
 
 ```yaml
@@ -167,6 +187,7 @@ Raw output, status codes, and response metadata now included for enhanced analys
 ## 🐛 Critical Stability Improvements
 
 ### 🔧 Core Infrastructure (v0.113.2, v0.113.3)
+
 - **Intent grader fixes** for better eval accuracy
 - **Zod error handling** improvements
 - **Red team file loading** from cloud configurations
@@ -174,6 +195,7 @@ Raw output, status codes, and response metadata now included for enhanced analys
 - **Environment variable resolution** fixes
 
 ### 🔄 Telemetry & Performance (v0.113.2)
+
 - Telemetry rollback for stable data collection
 - Comprehensive dependency updates
 - Enhanced build reliability
@@ -211,4 +233,4 @@ May 2025 demonstrated promptfoo's commitment to pushing the boundaries of AI eva
 ---
 
 **Previous Roundups**: [April 2025](/releases/april-2025-roundup) • [March 2025](/releases/march-2025-roundup)  
-**Next**: June 2025 Roundup (coming soon) 
+**Next**: June 2025 Roundup (coming soon)

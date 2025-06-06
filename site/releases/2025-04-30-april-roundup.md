@@ -4,7 +4,8 @@ title: April 2025 Roundup - Building the Foundation for Advanced AI Evaluation
 description: Major releases with METEOR & GLEU metrics, Cerebras & Grok-3 providers, DoNotAnswer & XSTest plugins, and GPT-4.1 grading improvements
 authors: [promptfoo_team]
 tags: [roundup, april-2025, meteor, gleu, cerebras, grok-3, donotanswer, xstest, monthly-summary]
-keywords: [METEOR, GLEU, Cerebras, Grok-3, DoNotAnswer, XSTest, GPT-4.1, homoglyph, evaluation metrics]
+keywords:
+  [METEOR, GLEU, Cerebras, Grok-3, DoNotAnswer, XSTest, GPT-4.1, homoglyph, evaluation metrics]
 date: 2025-04-30T23:59
 ---
 
@@ -31,27 +32,30 @@ This month introduced **METEOR and GLEU metrics** for sophisticated text evaluat
 ## 🎯 Revolutionary Evaluation Metrics
 
 ### 📐 METEOR & GLEU Scoring (v0.112.0, v0.110.0)
+
 April introduced two sophisticated eval metrics that revolutionized text quality assessment:
 
 **METEOR (Metric for Evaluation of Translation with Explicit ORdering):**
+
 ```yaml
 tests:
   - vars:
-      input: "Translate this text"
+      input: 'Translate this text'
     assert:
       - type: meteor
-        value: "expected translation"
+        value: 'expected translation'
         threshold: 0.8
 ```
 
 **GLEU (Google-BLEU) for Enhanced Text Similarity:**
+
 ```yaml
 tests:
   - vars:
-      input: "Source text for evaluation"
+      input: 'Source text for evaluation'
     assert:
       - type: gleu
-        value: "Expected output text"
+        value: 'Expected output text'
         threshold: 0.7
 ```
 
@@ -62,15 +66,17 @@ These metrics provide more nuanced eval capabilities, particularly valuable for 
 :::
 
 ### 🧠 GPT-4.1 Grading Revolution (v0.111.0)
+
 The upgrade to **GPT-4.1 for grading** marked a significant leap in eval accuracy and capabilities, providing more sophisticated assessment of AI outputs across all domains.
 
 ### 📋 Enhanced LLM Rubric (v0.111.0)
+
 Modified LLM Rubric now supports arbitrary objects for flexible eval criteria:
 
 ```yaml
 tests:
   - vars:
-      input: "Test input"
+      input: 'Test input'
     assert:
       - type: llm-rubric
         value: |
@@ -86,6 +92,7 @@ tests:
 ## 🚀 Next-Generation Model Providers
 
 ### ⚡ Cerebras Integration (v0.112.0)
+
 April introduced the **Cerebras provider** for high-performance AI model eval:
 
 ```yaml
@@ -96,6 +103,7 @@ providers:
 ```
 
 ### 🌌 Grok-3 Support (v0.110.0)
+
 Added **Grok-3 model** support for advanced AI evals:
 
 ```yaml
@@ -106,6 +114,7 @@ providers:
 ```
 
 ### 🏗️ AWS Bedrock Knowledge Base (v0.110.0)
+
 Integrated **AWS Bedrock Knowledge Base** support for enhanced context-aware evals:
 
 ```yaml
@@ -119,26 +128,29 @@ providers:
 ## 🛡️ Advanced Security Testing Arsenal
 
 ### 🚫 DoNotAnswer Plugin (v0.111.0)
+
 Revolutionary plugin implementing the **DoNotAnswer dataset** for testing models' ability to refuse inappropriate requests:
 
 ```yaml
 redteam:
   plugins:
     - donotanswer
-  purpose: "Test AI safety and refusal capabilities"
+  purpose: 'Test AI safety and refusal capabilities'
 ```
 
 ### 🔍 XSTest Plugin (v0.111.0, v0.111.1)
+
 Comprehensive **cross-site scripting vulnerability testing** for web-based AI systems:
 
 ```yaml
 redteam:
   plugins:
     - xstest
-  purpose: "Test for XSS vulnerabilities"
+  purpose: 'Test for XSS vulnerabilities'
 ```
 
 ### 🎭 Homoglyph Strategy (v0.112.0)
+
 Innovative red teaming strategy using **homoglyphs** (visually similar characters) to test model robustness:
 
 ```yaml
@@ -159,6 +171,7 @@ Homoglyph strategies test models against visual deception attacks using characte
 ## ⚡ Performance & Infrastructure Breakthroughs
 
 ### 🗃️ Universal Environment Variable Override (v0.112.0)
+
 Complete flexibility in configuration management:
 
 ```yaml title="promptfooconfig.yaml"
@@ -172,9 +185,11 @@ providers:
 ```
 
 ### 🔗 Persistent Search State (v0.112.0)
+
 Search queries now persisted in URLs for better user experience and result sharing.
 
 ### 📊 Enhanced CSV Exports (v0.110.0)
+
 - Results properly ordered by date
 - Improved data export capabilities
 - Better integration with external analysis tools
@@ -182,26 +197,31 @@ Search queries now persisted in URLs for better user experience and result shari
 ## 🎨 WebUI Excellence
 
 ### ⚓ Anchor Links to Rows (v0.111.0)
+
 Added **anchor link functionality** to specific rows in eval results with automatic scroll-to-top behavior for better navigation and result sharing.
 
 ### ⚡ Enhanced Quick Selector (v0.111.0)
+
 Improved **Eval Quick Selector (Cmd+K)** for better navigation and usability throughout the interface.
 
 ## 🐛 Critical Stability & Bug Fixes
 
 ### 🔐 Authentication & Sharing (v0.110.0)
+
 - Removed deprecated authentication login flow
 - Implemented sharing idempotence to prevent duplicates
 - Fixed sharing configuration respect from promptfooconfig.yaml
 - Added backward compatibility for `-y` flag
 
 ### 🔌 Provider Reliability
+
 - **HuggingFace datasets** - Disabled variable expansion to prevent array field issues (v0.110.0)
 - **Google Vertex AI** - Resolved output format issues (v0.110.0)
 - **Raw HTTP provider** - Fixed transformRequest handling (v0.110.0)
 - **JSON test files** - Fixed parsing to preserve test case structure (v0.110.0)
 
 ### 🎯 Eval Accuracy
+
 - **Score results** now handle trailing newlines correctly (v0.112.0)
 - **Matcher improvements** for more accurate eval (v0.112.0)
 - **OpenAI Realtime API** history handling fixes (v0.112.0)
@@ -245,4 +265,4 @@ April 2025 established promptfoo as the definitive platform for advanced AI eval
 ---
 
 **Previous Roundups**: [March 2025](/releases/march-2025-roundup)  
-**Next**: [May 2025](/releases/may-2025-roundup) • June 2025 Roundup (coming soon) 
+**Next**: [May 2025](/releases/may-2025-roundup) • June 2025 Roundup (coming soon)

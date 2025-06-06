@@ -3,8 +3,19 @@ slug: march-2025-roundup
 title: March 2025 Roundup - The Multimodal Security Revolution
 description: Major releases introducing model scanner, audio/image red team strategies, and multimodal capabilities for advanced AI security testing
 authors: [promptfoo_team]
-tags: [roundup, march-2025, model-scanner, multimodal, audio-strategy, image-strategy, base64, monthly-summary]
-keywords: [model scanner, audio strategy, multimodal AI, red team, security testing, image attacks, base64]
+tags:
+  [
+    roundup,
+    march-2025,
+    model-scanner,
+    multimodal,
+    audio-strategy,
+    image-strategy,
+    base64,
+    monthly-summary,
+  ]
+keywords:
+  [model scanner, audio strategy, multimodal AI, red team, security testing, image attacks, base64]
 date: 2025-03-31T23:59
 ---
 
@@ -31,6 +42,7 @@ This month introduced the **model scanner command** and **audio-based red teamin
 ## 🔍 Revolutionary Model Security Scanner
 
 ### 🛡️ Model Scan Command - The Game Changer (v0.107.0)
+
 March's crown jewel was the introduction of the **model scanner command** - a comprehensive AI security assessment tool that fundamentally changed how teams approach model vulnerability testing:
 
 ```bash
@@ -45,6 +57,7 @@ The model scanner provides systematic vulnerability assessment across multiple a
 :::
 
 This tool provides:
+
 - **Systematic vulnerability assessment** across multiple attack vectors
 - **Automated security testing** with comprehensive reporting
 - **Enterprise-ready scanning** for production AI systems
@@ -53,6 +66,7 @@ This tool provides:
 ## 🎭 Multimodal Security Breakthrough
 
 ### 🎵 Audio Strategy - First of Its Kind (v0.107.0)
+
 March introduced the world's first **audio-based red teaming strategy** for testing multimodal model vulnerabilities:
 
 ```yaml
@@ -61,16 +75,18 @@ redteam:
     - audio
   plugins:
     - harmful
-  purpose: "Test multimodal AI safety with audio attacks"
+  purpose: 'Test multimodal AI safety with audio attacks'
 ```
 
 This revolutionary approach:
+
 - **Tests audio input handling** for security vulnerabilities
 - **Challenges multimodal boundaries** with cross-modal attacks
 - **Validates speech processing** security in AI systems
 - **Pioneers new attack vectors** for comprehensive testing
 
 ### 🖼️ Convert to Image Strategy - Visual Deception (v0.107.0)
+
 A groundbreaking strategy that **converts text attacks to images** to test visual input processing:
 
 ```yaml
@@ -80,7 +96,7 @@ redteam:
     - image-jailbreak
   plugins:
     - harmful
-  purpose: "Test visual input security"
+  purpose: 'Test visual input security'
 ```
 
 :::warning Cross-Modal Vulnerabilities
@@ -92,6 +108,7 @@ Image conversion attacks can bypass text-based filters by encoding malicious con
 ## 🚀 Advanced Multimodal Capabilities
 
 ### 🔄 Live Sequential Function Calls (v0.107.0)
+
 Revolutionary **multimodal live sequential function calls** for complex interactive evals:
 
 ```yaml title="promptfooconfig.yaml"
@@ -107,6 +124,7 @@ providers:
 ```
 
 This enables:
+
 - **Complex multimodal workflows** with sequential processing
 - **Interactive eval scenarios** with real-time responses
 - **Advanced function chaining** for sophisticated testing
@@ -115,6 +133,7 @@ This enables:
 ## 📸 Advanced Image Processing
 
 ### 🔤 Base64 Image Loader (v0.106.0)
+
 Revolutionary **base64 image loading** capabilities enabling seamless integration with various image sources:
 
 ```yaml
@@ -123,10 +142,11 @@ prompts:
     Analyze this image: {{imageData}}
 tests:
   - vars:
-      imageData: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..."
+      imageData: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...'
 ```
 
 This breakthrough provides:
+
 - **Universal image compatibility** across formats and sources
 - **Embedded image support** in configuration files
 - **Dynamic image loading** for automated testing workflows
@@ -135,21 +155,23 @@ This breakthrough provides:
 ## ⚙️ Dynamic Configuration Revolution
 
 ### 🔧 Prompt Function Config Returns (v0.106.0)
+
 A fundamental advancement allowing **prompt functions to return configuration objects** alongside content:
 
 ```javascript title="prompts/dynamic-prompt.js"
-module.exports = function(vars) {
+module.exports = function (vars) {
   return {
     content: `Analyze: ${vars.input}`,
     config: {
       temperature: vars.complexity > 0.5 ? 0.8 : 0.2,
-      max_tokens: vars.length === 'long' ? 2000 : 500
-    }
+      max_tokens: vars.length === 'long' ? 2000 : 500,
+    },
   };
 };
 ```
 
 This innovation enables:
+
 - **Dynamic configuration** based on eval context
 - **Adaptive parameter tuning** for different test scenarios
 - **Intelligent prompt optimization** based on input characteristics
@@ -158,20 +180,25 @@ This innovation enables:
 ## 🎨 Enhanced User Experience
 
 ### 📊 Metadata Filtering Revolution (v0.107.0)
+
 Advanced **metadata filtering in ResultsTable** for sophisticated data analysis:
+
 - **Custom metadata queries** for targeted analysis
 - **Advanced filtering capabilities** across eval results
 - **Enhanced search functionality** with metadata integration
 - **Professional analytics workflows** for enterprise users
 
 ### 📥 Download Failed Tests Dialog (v0.107.0)
+
 New **dialog for downloading failed test cases** enabling:
+
 - **Targeted failure analysis** with easy export
 - **Quality assurance workflows** for systematic debugging
 - **Enhanced debugging capabilities** with detailed failure data
 - **Streamlined error investigation** processes
 
 ### 🌐 Server Environment Enhancement (v0.107.0)
+
 Server now **automatically loads .env files** on startup for easier configuration management:
 
 ```bash
@@ -183,21 +210,25 @@ npx promptfoo@latest view --port 3000
 ## 🔧 Provider & Infrastructure Advances
 
 ### 🤖 DeepSeek Provider Enhancements (v0.107.0)
+
 - **Bedrock support** for DeepSeek models
 - **Reasoning context integration** into output for transparency
 - **Enhanced DeepSeek capabilities** across multiple platforms
 
 ### ☁️ Azure Reasoning Models (v0.107.0)
+
 Improved support for **Azure reasoning models** with updated documentation and enhanced integration.
 
 ## 🐛 Critical Fixes & Stability
 
 ### 🔧 Eval Accuracy (v0.107.0)
+
 - **Fixed metadata merging** between test cases and provider responses
 - **Enhanced remote grading** with assertion data inclusion
 - **Updated moderation flags** and test case metadata handling
 
 ### 🌐 Provider Reliability (v0.107.0)
+
 - **HTTP provider headers** - Fixed environment variable substitution
 - **Self-hosting URL display** corrections
 - **WebUI report plugins** - Fixed missing plugins in report view
@@ -240,4 +271,4 @@ March 2025 revolutionized AI eval by introducing systematic model security scann
 
 ---
 
-**Next**: [April 2025](/releases/april-2025-roundup) • [May 2025](/releases/may-2025-roundup) • June 2025 Roundup (coming soon) 
+**Next**: [April 2025](/releases/april-2025-roundup) • [May 2025](/releases/may-2025-roundup) • June 2025 Roundup (coming soon)
