@@ -10,7 +10,7 @@ import { fromError } from 'zod-validation-error';
 import { synthesize } from '../';
 import { disableCache } from '../../cache';
 import cliState from '../../cliState';
-import { VERSION, CLOUD_PROVIDER_PREFIX } from '../../constants';
+import { VERSION } from '../../constants';
 import { getEnvBool } from '../../envars';
 import { getAuthor, getUserEmail } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
@@ -19,7 +19,6 @@ import { loadApiProviders } from '../../providers';
 import telemetry from '../../telemetry';
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types';
 import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
-import { getConfigFromCloud } from '../../util/cloud';
 import { resolveConfigs } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/manage';
 import invariant from '../../util/invariant';
@@ -44,8 +43,6 @@ import {
   doTargetPurposeDiscovery,
   mergeTargetPurposeDiscoveryResults,
 } from './discover';
-
-const UUID_REGEX = /^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$/;
 
 function getConfigHash(configPath: string): string {
   const content = fs.readFileSync(configPath, 'utf8');
@@ -106,43 +103,9 @@ export async function doGenerateRedteam(
   const configPath = options.config || options.defaultConfigPath;
   const outputPath = options.output || 'redteam.yaml';
 
-  // Handle cloud config with target
-  let loadedFromCloud = false;
-  let loadedCloudConfig: UnifiedConfig | undefined;
-  if (configPath && UUID_REGEX.test(configPath)) {
-    if (options.target && !UUID_REGEX.test(options.target)) {
-      throw new Error('Invalid target ID, it must be a valid UUID');
-    }
-    loadedCloudConfig = await getConfigFromCloud(configPath, options.target);
-
-    // backwards compatible for old cloud servers
-    if (
-      options.target &&
-      UUID_REGEX.test(options.target) &&
-      (!loadedCloudConfig.targets || loadedCloudConfig.targets?.length === 0)
-    ) {
-      loadedCloudConfig.targets = [{ id: `${CLOUD_PROVIDER_PREFIX}${options.target}`, config: {} }];
-    }
-
-    loadedFromCloud = true;
-    // We'll process the cloud config below
-  } else if (options.target) {
-    logger.error(
-      `Target ID (-t) can only be used when -c is used with a cloud config UUID. To use a cloud target inside of a config set the id of the target to ${CLOUD_PROVIDER_PREFIX}${options.target}.`,
-    );
-    process.exitCode = 1;
-    return null;
-  }
-
   // Check for updates to the config file and decide whether to generate
-  let shouldGenerate = options.force || loadedFromCloud;
-  if (
-    !loadedFromCloud &&
-    !options.force &&
-    fs.existsSync(outputPath) &&
-    configPath &&
-    fs.existsSync(configPath)
-  ) {
+  let shouldGenerate = options.force;
+  if (!options.force && fs.existsSync(outputPath) && configPath && fs.existsSync(configPath)) {
     // Skip hash check for .burp files since they're not YAML
     if (!outputPath.endsWith('.burp')) {
       const redteamContent = yaml.load(
@@ -164,47 +127,7 @@ export async function doGenerateRedteam(
   }
 
   let targetPurposeDiscoveryResult: TargetPurposeDiscoveryResult | undefined;
-  if (loadedFromCloud && loadedCloudConfig) {
-    // Use cloud config through resolveConfigs to ensure proper type handling
-    const resolved = await resolveConfigs(
-      {
-        config: [],
-      },
-      loadedCloudConfig,
-    );
-    testSuite = resolved.testSuite;
-    redteamConfig = resolved.config.redteam;
-
-    // If automatic purpose discovery is enabled for cloud configs
-    if (
-      !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_TARGET_DISCOVERY_AGENT', false) &&
-      !neverGenerateRemote() &&
-      resolved.config.providers &&
-      Array.isArray(resolved.config.providers)
-    ) {
-      invariant(
-        resolved.config.providers.length > 0,
-        'At least one provider must be provided in the config',
-      );
-      const providers = await loadApiProviders(resolved.config.providers);
-      try {
-        if (testSuite.prompts.length > 1) {
-          logger.warn(
-            'More than one prompt provided, only the first prompt will be used for purpose discovery',
-          );
-        }
-        logger.info('Starting Target Discovery Agent');
-        targetPurposeDiscoveryResult = await doTargetPurposeDiscovery(
-          providers[0],
-          testSuite.prompts[0],
-        );
-      } catch (error) {
-        logger.error(
-          `Target Discovery Agent failed from error, skipping: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-    }
-  } else if (configPath) {
+  if (configPath) {
     const resolved = await resolveConfigs(
       {
         config: [configPath],
@@ -629,7 +552,6 @@ export function redteamGenerateCommand(
     .option('--force', 'Force generation even if no changes are detected', false)
     .option('--no-progress-bar', 'Do not show progress bar')
     .option('--burp-escape-json', 'Escape quotes in Burp payloads', false)
-    .option('-t, --target <id>', 'Cloud provider target ID to run the scan on')
     .action((opts: Partial<RedteamCliGenerateOptions>): void => {
       if (opts.remote) {
         cliState.remote = true;
