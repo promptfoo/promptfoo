@@ -1,12 +1,19 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: 'Getting started'
+# Optionally set API keys here instead of exporting environment variables.
+# Never commit real keys to source control.
+# env:
+#   OPENAI_API_KEY: sk-...
 prompts:
   - 'Convert this English to {{language}}: {{input}}'
   - 'Translate to {{language}}: {{input}}'
 
 providers:
-  - openai:gpt-4o-mini
-  - openai:gpt-4o
+  - openai:gpt-4.1
+  - openai:o4-mini
+  # Or setup models from other providers
+  # - anthropic:messages:claude-4-sonnet-20250514
+  # - vertex:gemini-2.5-pro-exp-03-25
 
 tests:
   - vars:

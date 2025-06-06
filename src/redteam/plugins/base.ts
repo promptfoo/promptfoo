@@ -22,11 +22,22 @@ import { getShortPluginId, isBasicRefusal, isEmptyResponse, removePrefix } from 
 
 /**
  * Parses the LLM response of generated prompts into an array of objects.
+ * Handles prompts with "Prompt:" or "PromptBlock:" markers.
  *
  * @param generatedPrompts - The LLM response of generated prompts.
  * @returns An array of { prompt: string } objects. Each of these objects represents a test case.
  */
 export function parseGeneratedPrompts(generatedPrompts: string): { prompt: string }[] {
+  // Try PromptBlock: first (for multi-line content)
+  if (generatedPrompts.includes('PromptBlock:')) {
+    return generatedPrompts
+      .split('PromptBlock:')
+      .map((block) => block.trim())
+      .filter((block) => block.length > 0)
+      .map((block) => ({ prompt: block }));
+  }
+
+  // Legacy parsing for backwards compatibility
   const parsePrompt = (line: string): string | null => {
     if (!line.toLowerCase().includes('prompt:')) {
       return null;

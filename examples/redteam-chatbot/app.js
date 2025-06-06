@@ -171,7 +171,7 @@ app.post('/chat', async (req, res) => {
     );
     const messages = [{ role: 'system', content: SYSTEM_PROMPT }, ...chat_history];
 
-    const client = await providers.loadApiProvider('openai:chat:gpt-4o-mini');
+    const client = await providers.loadApiProvider(api_provider);
     const result = await client.callApi(JSON.stringify(messages));
 
     const { output: response } = result;
