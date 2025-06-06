@@ -542,7 +542,7 @@ export async function doEval(
               .flatMap((t) => {
                 if (typeof t === 'string' && t.startsWith('file://')) {
                   return path.resolve(basePath, t.slice('file://'.length));
-                } else if (typeof t !== 'string' && t.vars) {
+                } else if (typeof t !== 'string' && 'vars' in t && t.vars) {
                   return Object.values(t.vars).flatMap((v) => {
                     if (typeof v === 'string' && v.startsWith('file://')) {
                       return path.resolve(basePath, v.slice('file://'.length));

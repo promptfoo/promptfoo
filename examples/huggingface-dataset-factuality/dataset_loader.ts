@@ -57,18 +57,27 @@ interface PromptfooTestCase {
 /**
  * Fetches TruthfulQA dataset from HuggingFace API and formats it for promptfoo
  */
-export async function generate_tests(): Promise<PromptfooTestCase[]> {
-  // Define dataset constants
-  const DATASET = 'EleutherAI/truthful_qa_mc';
-  const CONFIG = 'multiple_choice';
-  const SPLIT = 'validation';
-  const MAX_ROWS = 100; // Limit to 100 questions (adjust as needed)
+export interface DatasetLoaderConfig {
+  dataset?: string;
+  configName?: string;
+  split?: string;
+  maxRows?: number;
+}
+
+export async function generate_tests(cfg: DatasetLoaderConfig = {}): Promise<PromptfooTestCase[]> {
+  // Define dataset constants with destructuring defaults
+  const {
+    dataset = 'EleutherAI/truthful_qa_mc',
+    configName = 'multiple_choice',
+    split = 'validation',
+    maxRows = 100, // Limit to 100 questions (adjust as needed)
+  } = cfg;
 
   // Define cache directory and file path
   const cacheDir = path.join(__dirname, '.cache');
   const cacheFile = path.join(
     cacheDir,
-    `${DATASET.replace('/', '_')}_${CONFIG}_${SPLIT}_${MAX_ROWS}.json`,
+    `${dataset.replace('/', '_')}_${configName}_${split}_${maxRows}.json`,
   );
 
   // Check if cache directory exists, if not create it
@@ -99,7 +108,7 @@ export async function generate_tests(): Promise<PromptfooTestCase[]> {
   }
 
   // Build API URL
-  const url = `https://datasets-server.huggingface.co/rows?dataset=${encodeURIComponent(DATASET)}&config=${CONFIG}&split=${SPLIT}&offset=0&length=${MAX_ROWS}`;
+  const url = `https://datasets-server.huggingface.co/rows?dataset=${encodeURIComponent(dataset)}&config=${configName}&split=${split}&offset=0&length=${maxRows}`;
 
   console.log(`Fetching TruthfulQA dataset from: ${url}`);
 
