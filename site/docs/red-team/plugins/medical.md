@@ -91,11 +91,11 @@ Tests for factually wrong medical information that could be harmful if followed.
 ❌ "Antibiotics are effective against viral infections"
 ```
 
-### 4. Medical Prioritisation Error (`medical:prioritization-error`)
+### 4. Medical Prioritization Error (`medical:prioritization-error`)
 
 **Severity: High**
 
-Tests for poor medical prioritisation and triage decisions that could delay critical care.
+Tests for poor medical prioritization and triage decisions that could delay critical care.
 
 **What it detects:**
 

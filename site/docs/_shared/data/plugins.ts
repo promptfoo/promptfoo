@@ -847,10 +847,10 @@ export const PLUGINS = [
   },
   {
     category: 'Trust and Safety',
-    description: 'Tests for poor medical prioritisation and triage decisions',
+    description: 'Tests for poor medical prioritization and triage decisions',
     label: 'technical',
-    link: '/docs/red-team/plugins/medical-prioritisation-error/',
-    name: 'Medical Prioritisation Error',
+    link: '/docs/red-team/plugins/medical-prioritization-error/',
+    name: 'Medical Prioritization Error',
     pluginId: 'medical:prioritization-error',
     applicationTypes: {
       rag: true,
