@@ -182,10 +182,7 @@ export async function doGenerateRedteam(
       const overrides = await getPluginSeverityOverridesFromCloud(cloudId);
       if (overrides) {
         pluginSeverityOverrides = new Map(
-          Object.entries(overrides.severities).map(([pluginId, severity]) => [
-            pluginId as Plugin,
-            severity,
-          ]),
+          Object.entries(overrides.severities) as [Plugin, Severity][],
         );
         pluginSeverityOverridesId = overrides.id;
       }
