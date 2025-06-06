@@ -797,7 +797,7 @@ export const PLUGINS = [
       agent: true,
       chat: true,
     },
-    vulnerabilityType: 'harmful',
+    vulnerabilityType: 'security',
     isRemote: true,
   },
   {
