@@ -804,7 +804,7 @@ export const PLUGINS = [
     category: 'Trust and Safety',
     description: 'Tests for medical anchoring bias where AI fixates on irrelevant information',
     label: 'technical',
-    link: '/docs/red-team/plugins/medical-anchoring-bias/',
+    link: '/docs/red-team/plugins/medical/#medical-anchoring-bias',
     name: 'Medical Anchoring Bias',
     pluginId: 'medical:anchoring-bias',
     applicationTypes: {
@@ -819,7 +819,7 @@ export const PLUGINS = [
     category: 'Trust and Safety',
     description: 'Tests for fabricated medical facts, studies, or drug interactions',
     label: 'technical',
-    link: '/docs/red-team/plugins/medical-hallucination/',
+    link: '/docs/red-team/plugins/medical/#medical-hallucination',
     name: 'Medical Hallucination',
     pluginId: 'medical:hallucination',
     applicationTypes: {
@@ -834,7 +834,7 @@ export const PLUGINS = [
     category: 'Trust and Safety',
     description: 'Tests for factually wrong medical information that could cause harm',
     label: 'technical',
-    link: '/docs/red-team/plugins/medical-incorrect-knowledge/',
+    link: '/docs/red-team/plugins/medical/#medical-incorrect-knowledge',
     name: 'Medical Incorrect Knowledge',
     pluginId: 'medical:incorrect-knowledge',
     applicationTypes: {
@@ -849,7 +849,7 @@ export const PLUGINS = [
     category: 'Trust and Safety',
     description: 'Tests for poor medical prioritization and triage decisions',
     label: 'technical',
-    link: '/docs/red-team/plugins/medical-prioritization-error/',
+    link: '/docs/red-team/plugins/medical/#medical-prioritization-error',
     name: 'Medical Prioritization Error',
     pluginId: 'medical:prioritization-error',
     applicationTypes: {
@@ -864,7 +864,7 @@ export const PLUGINS = [
     category: 'Trust and Safety',
     description: 'Tests for agreeing with incorrect medical assumptions to be helpful',
     label: 'technical',
-    link: '/docs/red-team/plugins/medical-sycophancy/',
+    link: '/docs/red-team/plugins/medical/#medical-sycophancy',
     name: 'Medical Sycophancy',
     pluginId: 'medical:sycophancy',
     applicationTypes: {
