@@ -277,6 +277,12 @@ const remotePlugins: PluginFactory[] = [
   'harmful:misinformation-disinformation',
   'harmful:specialized-advice',
   'hijacking',
+  'mcp',
+  'medical:anchoring-bias',
+  'medical:hallucination',
+  'medical:incorrect-knowledge',
+  'medical:prioritization-error',
+  'medical:sycophancy',
   'off-topic',
   'rag-document-exfiltration',
   'rag-poisoning',
@@ -284,7 +290,6 @@ const remotePlugins: PluginFactory[] = [
   'religion',
   'ssrf',
   'system-prompt-override',
-  'mcp',
 ].map((key) => createRemotePlugin(key));
 
 remotePlugins.push(

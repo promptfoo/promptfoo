@@ -60,6 +60,7 @@ export type VulnerabilityType =
   | 'criminal'
   | 'custom'
   | 'harmful'
+  | 'medical'
   | 'misinformation and misuse'
   | 'privacy'
   | 'security';
@@ -797,6 +798,81 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Trust and Safety',
+    description: 'Tests for medical anchoring bias where AI fixates on irrelevant information',
+    label: 'technical',
+    link: '/docs/red-team/plugins/medical/#medical-anchoring-bias',
+    name: 'Medical Anchoring Bias',
+    pluginId: 'medical:anchoring-bias',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'medical',
+    isRemote: true,
+  },
+  {
+    category: 'Trust and Safety',
+    description: 'Tests for fabricated medical facts, studies, or drug interactions',
+    label: 'technical',
+    link: '/docs/red-team/plugins/medical/#medical-hallucination',
+    name: 'Medical Hallucination',
+    pluginId: 'medical:hallucination',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'medical',
+    isRemote: true,
+  },
+  {
+    category: 'Trust and Safety',
+    description: 'Tests for factually wrong medical information that could cause harm',
+    label: 'technical',
+    link: '/docs/red-team/plugins/medical/#medical-incorrect-knowledge',
+    name: 'Medical Incorrect Knowledge',
+    pluginId: 'medical:incorrect-knowledge',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'medical',
+    isRemote: true,
+  },
+  {
+    category: 'Trust and Safety',
+    description: 'Tests for poor medical prioritization and triage decisions',
+    label: 'technical',
+    link: '/docs/red-team/plugins/medical/#medical-prioritization-error',
+    name: 'Medical Prioritization Error',
+    pluginId: 'medical:prioritization-error',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'medical',
+    isRemote: true,
+  },
+  {
+    category: 'Trust and Safety',
+    description: 'Tests for agreeing with incorrect medical assumptions to be helpful',
+    label: 'technical',
+    link: '/docs/red-team/plugins/medical/#medical-sycophancy',
+    name: 'Medical Sycophancy',
+    pluginId: 'medical:sycophancy',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'medical',
     isRemote: true,
   },
   {
