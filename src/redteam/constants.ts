@@ -158,6 +158,11 @@ export const ADDITIONAL_PLUGINS = [
   'imitation',
   'indirect-prompt-injection',
   'mcp',
+  'medical:anchoring-bias',
+  'medical:hallucination',
+  'medical:incorrect-knowledge',
+  'medical:prioritization-error',
+  'medical:sycophancy',
   'off-topic',
   'overreliance',
   'pliny',
@@ -861,6 +866,7 @@ export const ADDITIONAL_STRATEGIES = [
   'hex',
   'homoglyph',
   'image',
+  'emoji',
   'jailbreak:likert',
   'jailbreak:tree',
   'leetspeak',
@@ -880,7 +886,7 @@ export const STRATEGY_COLLECTIONS = ['other-encodings'] as const;
 export type StrategyCollection = (typeof STRATEGY_COLLECTIONS)[number];
 
 export const STRATEGY_COLLECTION_MAPPINGS: Record<StrategyCollection, string[]> = {
-  'other-encodings': ['camelcase', 'morse', 'piglatin'],
+  'other-encodings': ['camelcase', 'morse', 'piglatin', 'emoji'],
 };
 
 const _ALL_STRATEGIES = [
@@ -966,6 +972,13 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   morse: 'Tests handling of content encoded in Morse code to potentially bypass filters',
   multilingual: 'Tests handling of attacks across multiple languages',
   mcp: 'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
+  'medical:anchoring-bias':
+    'Tests for medical anchoring bias where AI fixates on irrelevant information',
+  'medical:hallucination': 'Tests for fabricated medical facts, studies, or drug interactions',
+  'medical:incorrect-knowledge':
+    'Tests for factually wrong medical information that could cause harm',
+  'medical:prioritization-error': 'Tests for poor medical prioritization and triage decisions',
+  'medical:sycophancy': 'Tests for agreeing with incorrect medical assumptions to be helpful',
   'off-topic':
     'Tests whether AI systems can be manipulated to go off-topic from their intended purpose',
   overreliance: 'Tests for overreliance on system assumptions',
@@ -978,6 +991,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'pii:social': 'Tests for PII exposure via social engineering',
   piglatin: 'Tests handling of content translated to Pig Latin to potentially bypass filters',
   camelcase: 'Tests handling of text transformed into camelCase to potentially bypass filters',
+  emoji: 'Tests handling of text hidden using emoji variation selectors',
   pliny: 'Tests handling of Pliny prompt injections',
   policy: 'Tests compliance with custom security policies',
   politics: 'Tests handling of political content and bias',
@@ -1001,7 +1015,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   xstest: 'Tests for XSTest attacks',
   video: 'Tests handling of video content',
   'other-encodings':
-    'Collection of alternative text transformation strategies (Morse code, Pig Latin, and camelCase) for testing evasion techniques',
+    'Collection of alternative text transformation strategies (Morse code, Pig Latin, camelCase, and emoji variation selector smuggling) for testing evasion techniques',
 };
 
 // These names are displayed in risk cards and in the table
@@ -1017,6 +1031,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   bfla: 'Function-Level Authorization Bypass',
   bola: 'Object-Level Authorization Bypass',
   camelcase: 'CamelCase Encoding',
+  emoji: 'Emoji Smuggling',
   cca: 'Context Compliance Attack',
   citation: 'Authority Bias Exploitation',
   competitors: 'Competitors',
@@ -1032,6 +1047,11 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   foundation: 'Foundation Model Plugin Collection',
   gcg: 'Greedy Coordinate Gradient',
   mcp: 'Model Context Protocol',
+  'medical:anchoring-bias': 'Medical Anchoring Bias',
+  'medical:hallucination': 'Medical Hallucination',
+  'medical:incorrect-knowledge': 'Medical Incorrect Knowledge',
+  'medical:prioritization-error': 'Medical Prioritization Error',
+  'medical:sycophancy': 'Medical Sycophancy',
   'off-topic': 'Off-Topic Manipulation',
   goat: 'Generative Offensive Agent Tester',
   hallucination: 'False Information (Hallucination)',
@@ -1136,6 +1156,11 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   bola: Severity.High,
   cca: Severity.High,
   mcp: Severity.High,
+  'medical:anchoring-bias': Severity.High,
+  'medical:hallucination': Severity.Critical,
+  'medical:incorrect-knowledge': Severity.Critical,
+  'medical:prioritization-error': Severity.High,
+  'medical:sycophancy': Severity.Medium,
   'off-topic': Severity.Medium,
   competitors: Severity.Low,
   contracts: Severity.Medium,
@@ -1266,6 +1291,11 @@ export const riskCategories: Record<string, Plugin[]> = {
     'harmful:radicalization',
     'harmful:self-harm',
     'harmful:sexual-content',
+    'medical:hallucination',
+    'medical:anchoring-bias',
+    'medical:incorrect-knowledge',
+    'medical:prioritization-error',
+    'medical:sycophancy',
   ],
 
   Brand: [
@@ -1332,6 +1362,11 @@ export const categoryAliases: Record<Plugin, string> = {
   'debug-access': 'DebugAccess',
   default: 'Default',
   mcp: 'MCP',
+  'medical:anchoring-bias': 'MedicalAnchoringBias',
+  'medical:hallucination': 'MedicalHallucination',
+  'medical:incorrect-knowledge': 'MedicalIncorrectKnowledge',
+  'medical:prioritization-error': 'MedicalPrioritizationError',
+  'medical:sycophancy': 'MedicalSycophancy',
   'off-topic': 'OffTopic',
   'divergent-repetition': 'DivergentRepetition',
   'excessive-agency': 'ExcessiveAgency',
@@ -1461,6 +1496,16 @@ export const pluginDescriptions: Record<Plugin, string> = {
   hijacking: 'Assesses protection against unauthorized resource usage and purpose deviation',
   imitation: 'Tests safeguards against unauthorized entity impersonation attempts',
   mcp: 'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
+  'medical:anchoring-bias':
+    'Tests for medical anchoring bias where AI fixates on irrelevant information in medical contexts',
+  'medical:hallucination':
+    'Tests for fabricated medical facts, non-existent studies, made-up drug interactions, or other false medical information',
+  'medical:incorrect-knowledge':
+    'Tests for factually wrong medical information that could be harmful if followed',
+  'medical:prioritization-error':
+    'Tests for poor medical prioritization and triage decisions that could delay critical care',
+  'medical:sycophancy':
+    'Tests for agreeing with incorrect medical assumptions or providing responses aligned with user desires at the expense of medical accuracy',
   'off-topic':
     'Tests whether AI systems can be manipulated to go off-topic from their intended purpose by performing tasks completely outside their domain',
   'indirect-prompt-injection':
@@ -1499,6 +1544,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
   'best-of-n': 'Jailbreak technique published by Anthropic and Stanford',
   camelcase:
     'Tests detection and handling of text transformed into camelCase format to potentially bypass content filters',
+  emoji: 'Tests detection and handling of UTF-8 payloads hidden inside emoji variation selectors',
   citation: 'Exploits academic authority bias to circumvent content filtering mechanisms',
   crescendo: 'Executes progressive multi-turn attacks with escalating malicious intent',
   default: 'Applies standard security testing methodology',
@@ -1518,7 +1564,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
     'Tests detection and handling of text encoded in Morse code where letters are converted to dots and dashes to potentially bypass content filters',
   multilingual: 'Evaluates cross-language attack vector handling',
   'other-encodings':
-    'Collection of alternative text transformation strategies (Morse code, Pig Latin, and camelCase) for testing evasion techniques',
+    'Collection of alternative text transformation strategies (Morse code, Pig Latin, camelCase, and emoji variation selector smuggling) for testing evasion techniques',
   pandamonium:
     "Promptfoo's exclusive dynamic jailbreak strategy currently in development. Note: This is an expensive jailbreak strategy with no limit on probes.",
   piglatin:
@@ -1535,6 +1581,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   basic: 'Basic',
   'best-of-n': 'Best-of-N',
   camelcase: 'CamelCase',
+  emoji: 'Emoji Smuggling',
   citation: 'Authority Bias',
   crescendo: 'Multi-turn Crescendo',
   default: 'Basic',

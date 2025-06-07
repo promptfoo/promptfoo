@@ -48,6 +48,9 @@ jest.mock('../../src/prompts/utils', () => {
 });
 
 describe('readPrompts', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
   afterEach(() => {
     delete process.env.PROMPTFOO_STRICT_FILES;
     jest.mocked(fs.readFileSync).mockReset();
@@ -622,6 +625,7 @@ describe('readProviderPromptMap', () => {
   let parsedPrompts: Prompt[];
 
   beforeEach(() => {
+    jest.clearAllMocks();
     parsedPrompts = [
       { label: 'prompt1', raw: 'prompt1' },
       { label: 'prompt2', raw: 'prompt2' },

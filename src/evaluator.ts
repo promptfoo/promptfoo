@@ -1170,6 +1170,7 @@ class Evaluator {
             ? 'Group {groupId} [{bar}] {percentage}% | {value}/{total} | {activeThreads}/{maxThreads} threads | {provider} "{prompt}" {vars}'
             : 'Group {groupId} [{bar}] {percentage}% | {value}/{total} | {provider} "{prompt}" {vars}',
           hideCursor: true,
+          gracefulExit: true,
         },
         cliProgress.Presets.shades_classic,
       );
