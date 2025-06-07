@@ -66,6 +66,7 @@ jest.mock('../../../src/providers', () => ({
       cleanup: jest.fn(),
     },
   ]),
+  getProviderIds: jest.fn().mockReturnValue(['test-provider']),
 }));
 
 describe('doGenerateRedteam', () => {
