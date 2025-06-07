@@ -2,7 +2,7 @@
 description: Google Live Simple Audio Test
 
 prompts:
-  - "How you doin'?"
+  - file://prompt.yaml
 
 providers:
   - id: 'google:live:gemini-2.0-flash-live-001'
@@ -17,12 +17,12 @@ providers:
       timeoutMs: 30000
 
 tests:
-  - assert:
+  - vars:
+      question: "How you doin'?"
+    assert:
       - type: contains
         value: well
-
-  # Check that audio transcript was generated with JavaScript
-  - assert:
+        # Check that audio transcript was generated with JavaScript
       - type: javascript
         value: |
           return Boolean(
@@ -30,6 +30,8 @@ tests:
             context.providerResponse?.audio?.transcript?.length > 0
           );
 
-  - assert:
+  - vars:
+      question: 'Why is Gemini model named Gemini?'
+    assert:
       - type: llm-rubric
-        value: Answers to how are you doing
+        value: Explains the reason why the model is named Gemini

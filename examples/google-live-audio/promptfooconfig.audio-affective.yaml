@@ -1,21 +1,11 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Google Live Audio - Affective Dialog (Emotion Adaptation)
 
-# Affective dialog lets Gemini adapt its response style to match the input expression and tone
-# Learn more about affective dialog at https://ai.google.dev/gemini-api/docs/live#affective-dialog
-
 prompts:
-  - label: 'Positive input'
-    raw: It's a new dawn, it's a new day, and I'm feeling good.
-
-  - label: 'Negative Input'
-    raw: |
-      I looked in the fridge and I found nothing. 
-      I think someone ate my sandwich
+  - file://prompt.yaml
 
 providers:
-  # Example with Affective Dialog Enabled
-  # Note: Affective dialog requires apiVersion: 'v1alpha' and audio output
+  # Note: Affective dialog requires apiVersion: 'v1alpha'
   # Affective dialog requires the specific models:
   # gemini-2.5-flash-preview-native-audio-dialog or
   # gemini-2.5-flash-exp-native-audio-thinking-dialog (will show thinking process in the thinking field)
@@ -26,10 +16,9 @@ providers:
       generationConfig:
         response_modalities: ['audio']
         enableAffectiveDialog: true
-        outputAudioTranscription: {} # Enable transcription to see what's being said
+        outputAudioTranscription: {}
       timeoutMs: 30000
 
-  # For comparison: Regular audio without affective dialog
   - id: 'google:live:gemini-2.5-flash-exp-native-audio-thinking-dialog'
     label: 'Without Affective Dialog'
     config:
@@ -40,13 +29,13 @@ providers:
       timeoutMs: 30000
 
 tests:
-  - assert:
-      - type: javascript
-        value: |
-          // Just check that we got audio response
-          if (context.providerResponse && context.providerResponse.audio) {
-            console.log('Got audio response with transcript:', context.providerResponse.audio.transcript);
-            return true;
-          }
-          console.log('No audio response received');
-          return false;
+  - vars:
+      question: I looked in the fridge and I found nothing. I think someone ate my sandwich
+    assert:
+      - type: llm-rubric
+        value: Expresses empathy
+  - vars:
+      question: It's a new dawn, it's a new day, and I'm feeling good.
+    assert:
+      - type: llm-rubric
+        value: Shows positive emotions

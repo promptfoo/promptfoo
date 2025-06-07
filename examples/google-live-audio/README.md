@@ -44,8 +44,6 @@ The affective dialog configuration in `promptfooconfig.audio-affective.yaml` dem
 promptfoo eval -c promptfooconfig.audio-affective.yaml -j 3
 ```
 
-This example uses `gemini-2.5-flash-exp-native-audio-thinking-dialog` model which shows the thinking process
-
 > Note: Rate limits of 3 concurrent sessions per API key apply to Gemini 2.5 flash with native audio models, which is why we use `-j 3` to limit concurrency.
 
 
