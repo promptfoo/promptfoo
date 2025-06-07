@@ -9,7 +9,7 @@ These examples demonstrate how to use promptfoo with Google's WebSocket-based Li
 ## Prerequisites
 
 - promptfoo CLI installed (`npm install -g promptfoo` or `brew install promptfoo`)
-- Google AI Studio API key set as `GOOGLE_API_KEY`
+- Google AI Studio API key set as the environment variable `GOOGLE_API_KEY`
 
 You can obtain a Google AI Studio API key from the [Google AI Studio website](https://ai.google.dev/).
 
