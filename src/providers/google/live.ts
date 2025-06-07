@@ -150,7 +150,7 @@ export class GoogleLiveProvider implements ApiProvider {
         }
       };
 
-      let apiVersion = this.config.apiVersion;
+      let {apiVersion} = this.config;
       if (!apiVersion) {
         apiVersion = 'v1alpha';
       }
