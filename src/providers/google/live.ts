@@ -142,7 +142,7 @@ export class GoogleLiveProvider implements ApiProvider {
     return new Promise<ProviderResponse>((resolve) => {
       const isNativeAudioModel = this.modelName.includes('native-audio');
 
-      let apiVersion = this.config.apiVersion;
+      let {apiVersion} = this.config;
       if (!apiVersion) {
         apiVersion = 'v1alpha';
       }
