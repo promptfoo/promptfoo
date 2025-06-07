@@ -182,7 +182,7 @@ export class GoogleLiveProvider implements ApiProvider {
       const timeout = setTimeout(() => {
         logger.error('WebSocket connection timed out after 30 seconds');
         ws.close();
-        safeResolve({ error: 'WebSocket connection timed out' });
+        safeResolve({ error: 'WebSocket request timed out' });
       }, this.config.timeoutMs || 30000);
 
       const finalizeResponse = async () => {
