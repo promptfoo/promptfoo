@@ -87,7 +87,7 @@ function CodeDisplay({
             p: 2,
             overflowX: 'auto',
             overflowY: 'auto',
-            maxHeight: maxHeight,
+            maxHeight,
           }}
         >
           {isCode ? (
