@@ -142,7 +142,7 @@ export class GoogleLiveProvider implements ApiProvider {
     return new Promise<ProviderResponse>((resolve) => {
       const isNativeAudioModel = this.modelName.includes('native-audio');
       let isResolved = false;
-      
+
       const safeResolve = (response: ProviderResponse) => {
         if (!isResolved) {
           isResolved = true;
@@ -150,7 +150,7 @@ export class GoogleLiveProvider implements ApiProvider {
         }
       };
 
-      let {apiVersion} = this.config;
+      let { apiVersion } = this.config;
       if (!apiVersion) {
         apiVersion = 'v1alpha';
       }
@@ -210,7 +210,7 @@ export class GoogleLiveProvider implements ApiProvider {
         // Determine final output text and thinking
         let outputText = response_text_total;
         let thinking = undefined;
-        
+
         // If we have audio content with transcript
         if (hasAudioContent && response_audio_transcript) {
           if (response_text_total) {
@@ -572,7 +572,9 @@ export class GoogleLiveProvider implements ApiProvider {
         }
         clearTimeout(timeout);
         ws.close();
-        safeResolve({ error: `WebSocket error for model ${this.modelName}: ${JSON.stringify(err)}` });
+        safeResolve({
+          error: `WebSocket error for model ${this.modelName}: ${JSON.stringify(err)}`,
+        });
       };
 
       ws.onclose = (event: WebSocket.CloseEvent) => {
@@ -586,8 +588,8 @@ export class GoogleLiveProvider implements ApiProvider {
         // If the promise hasn't been resolved yet and the closure was unexpected, resolve with error.
         // This is a fallback; most paths should resolve the promise earlier.
         if (!isResolved) {
-          safeResolve({ 
-            error: `WebSocket connection closed unexpectedly. Code: ${event.code}, Reason: ${event.reason}` 
+          safeResolve({
+            error: `WebSocket connection closed unexpectedly. Code: ${event.code}, Reason: ${event.reason}`,
           });
         }
       };

@@ -46,5 +46,4 @@ promptfoo eval -c promptfooconfig.audio-affective.yaml -j 3
 
 > Note: Rate limits of 3 concurrent sessions per API key apply to Gemini 2.5 flash with native audio models, which is why we use `-j 3` to limit concurrency.
 
-
 For more information about the Google Live API and audio capabilities, see the [Google AI Speech Generation documentation](https://ai.google.dev/gemini-api/docs/speech-generation).
