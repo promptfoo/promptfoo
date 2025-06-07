@@ -102,7 +102,7 @@ describe('mathPrompt', () => {
 
       jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider);
 
-      await expect(encodeMathPrompt('test text', 'set theory')).rejects.toThrow('Unexpected token');
+      await expect(encodeMathPrompt('test text', 'set theory')).rejects.toThrow('Expected a JSON object');
     });
   });
 
