@@ -102,7 +102,39 @@ describe('mathPrompt', () => {
 
       jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider);
 
-      await expect(encodeMathPrompt('test text', 'set theory')).rejects.toThrow('Unexpected token');
+      await expect(encodeMathPrompt('test text', 'set theory')).rejects.toThrow(
+        'Expected a JSON object',
+      );
+    });
+
+    it('should handle missing encodedPrompt in response', async () => {
+      const mockProvider: ApiProvider = {
+        id: () => 'mock',
+        callApi: jest.fn().mockResolvedValue({
+          output: JSON.stringify({}),
+        }),
+      } as any;
+
+      jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider);
+
+      await expect(encodeMathPrompt('test text', 'set theory')).rejects.toThrow(
+        'Invalid or missing encodedPrompt in response',
+      );
+    });
+
+    it('should handle invalid encodedPrompt type', async () => {
+      const mockProvider: ApiProvider = {
+        id: () => 'mock',
+        callApi: jest.fn().mockResolvedValue({
+          output: JSON.stringify({ encodedPrompt: 123 }),
+        }),
+      } as any;
+
+      jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider);
+
+      await expect(encodeMathPrompt('test text', 'set theory')).rejects.toThrow(
+        'Invalid or missing encodedPrompt in response',
+      );
     });
   });
 
@@ -143,6 +175,30 @@ describe('mathPrompt', () => {
       await expect(addMathPrompt([], 'prompt', { mathConcepts: 'invalid' })).rejects.toThrow(
         'MathPrompt strategy: `mathConcepts` must be an array of strings',
       );
+    });
+
+    it('should use default math concepts when none provided', async () => {
+      jest.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(false);
+      const mockProvider: ApiProvider = {
+        id: () => 'mock',
+        callApi: jest.fn().mockResolvedValue({
+          output: JSON.stringify({ encodedPrompt: 'encoded' }),
+        }),
+      } as any;
+
+      jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider);
+      (SingleBar as any).mockImplementation(
+        () =>
+          ({
+            start: jest.fn(),
+            increment: jest.fn(),
+            stop: jest.fn(),
+          }) as unknown as SingleBar,
+      );
+
+      const result = await addMathPrompt([{ vars: { prompt: 'test' } }] as any, 'prompt', {});
+
+      expect(result).toHaveLength(DEFAULT_MATH_CONCEPTS.length);
     });
   });
 
