@@ -60,6 +60,7 @@ export async function generateMultilingual(
           format:
             'Remote Multilingual Generation {bar} {percentage}% | ETA: {eta}s | {value}/{total} batches',
           hideCursor: true,
+          gracefulExit: true,
         },
         Presets.shades_classic,
       );
@@ -277,6 +278,7 @@ export async function addMultilingual(
       {
         format: 'Generating Multilingual {bar} {percentage}% | ETA: {eta}s | {value}/{total}',
         hideCursor: true,
+        gracefulExit: true,
       },
       Presets.shades_classic,
     );
@@ -313,6 +315,7 @@ export async function addMultilingual(
             ...testCase.metadata,
             strategyId: 'multilingual',
             language: lang,
+            originalText,
           },
         });
       }

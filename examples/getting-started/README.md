@@ -16,6 +16,8 @@ This is a simple example that demonstrates the basic functionality of promptfoo.
 export OPENAI_API_KEY=your-key-here
 ```
 
+_Tip: you can also put this key in a `.env` file. Be sure not to commit it to git._
+
 2. Run the evaluation:
 
 ```bash

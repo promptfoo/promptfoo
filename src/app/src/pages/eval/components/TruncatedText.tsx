@@ -1,5 +1,14 @@
 import React from 'react';
 
+// Helper type to access children from React element props
+interface ReactElementWithChildren extends React.ReactElement {
+  props: { children?: React.ReactNode } & Record<string, any>;
+}
+
+function isReactElementWithChildren(node: React.ReactNode): node is ReactElementWithChildren {
+  return React.isValidElement(node) && 'children' in node.props;
+}
+
 function textLength(node: React.ReactNode): number {
   if (typeof node === 'string' || typeof node === 'number') {
     return node.toString().length;
@@ -7,7 +16,7 @@ function textLength(node: React.ReactNode): number {
   if (Array.isArray(node)) {
     return node.reduce((acc, child) => acc + textLength(child), 0);
   }
-  if (React.isValidElement(node) && node.props.children) {
+  if (isReactElementWithChildren(node)) {
     return React.Children.toArray(node.props.children).reduce(
       (acc: number, child) => acc + textLength(child),
       0,
@@ -47,7 +56,7 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
       }
       return nodes;
     }
-    if (React.isValidElement(node) && node.props.children) {
+    if (isReactElementWithChildren(node)) {
       const childLength = textLength(node.props.children);
       if (childLength > maxLength - length) {
         return React.cloneElement(node, {

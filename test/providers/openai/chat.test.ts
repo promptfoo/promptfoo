@@ -1,9 +1,12 @@
 import { disableCache, enableCache, fetchWithCache } from '../../../src/cache';
+import logger from '../../../src/logger';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 
 jest.mock('../../../src/cache');
+jest.mock('../../../src/logger');
 
 const mockFetchWithCache = jest.mocked(fetchWithCache);
+const mockLogger = jest.mocked(logger);
 
 describe('OpenAI Provider', () => {
   beforeEach(() => {
@@ -16,6 +19,10 @@ describe('OpenAI Provider', () => {
   });
 
   describe('OpenAiChatCompletionProvider', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
     it('should call API successfully', async () => {
       const mockResponse = {
         data: {
@@ -1170,6 +1177,191 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(result.output).toBe('Model responded with text instead of audio');
       expect(result.audio).toBeUndefined(); // No audio returned
       expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+    });
+
+    it('should use generic error message with fallback when apiKeyEnvar is undefined', async () => {
+      // Clear any existing API key environment variables
+      const originalEnv = process.env.OPENAI_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+
+      try {
+        const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+
+        await expect(provider.callApi('Test prompt')).rejects.toThrow(
+          'API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
+        );
+      } finally {
+        // Restore original environment
+        if (originalEnv) {
+          process.env.OPENAI_API_KEY = originalEnv;
+        }
+      }
+    });
+
+    it('should use custom apiKeyEnvar in error message when provided', async () => {
+      // Clear any existing API key environment variables
+      const originalEnv = process.env.OPENAI_API_KEY;
+      const originalCustomEnv = process.env.CUSTOM_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+      delete process.env.CUSTOM_API_KEY;
+
+      try {
+        const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+          config: { apiKeyEnvar: 'CUSTOM_API_KEY' },
+        });
+
+        await expect(provider.callApi('Test prompt')).rejects.toThrow(
+          'API key is not set. Set the CUSTOM_API_KEY environment variable or add `apiKey` to the provider config.',
+        );
+      } finally {
+        // Restore original environment
+        if (originalEnv) {
+          process.env.OPENAI_API_KEY = originalEnv;
+        }
+        if (originalCustomEnv) {
+          process.env.CUSTOM_API_KEY = originalCustomEnv;
+        }
+      }
+    });
+
+    it('should demonstrate improved logging for inherited classes', async () => {
+      // Create a mock class that extends OpenAiChatCompletionProvider
+      class CustomProvider extends OpenAiChatCompletionProvider {
+        constructor(modelName: string) {
+          super(modelName, {
+            config: {
+              apiKeyEnvar: 'CUSTOM_PROVIDER_API_KEY',
+              apiBaseUrl: 'https://custom-api.example.com/v1',
+            },
+          });
+        }
+
+        getApiUrlDefault(): string {
+          return 'https://custom-api.example.com/v1';
+        }
+      }
+
+      // Clear environment variables
+      const originalEnv = process.env.OPENAI_API_KEY;
+      const originalCustomEnv = process.env.CUSTOM_PROVIDER_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+      delete process.env.CUSTOM_PROVIDER_API_KEY;
+
+      try {
+        const provider = new CustomProvider('custom-model');
+
+        // Should show generic error message with custom API key variable
+        await expect(provider.callApi('Test prompt')).rejects.toThrow(
+          'API key is not set. Set the CUSTOM_PROVIDER_API_KEY environment variable or add `apiKey` to the provider config.',
+        );
+
+        // Should log generic message for unknown model
+        expect(mockLogger.debug).toHaveBeenCalledWith('Using unknown chat model: custom-model');
+      } finally {
+        // Restore original environment
+        if (originalEnv) {
+          process.env.OPENAI_API_KEY = originalEnv;
+        }
+        if (originalCustomEnv) {
+          process.env.CUSTOM_PROVIDER_API_KEY = originalCustomEnv;
+        }
+      }
+    });
+
+    it('should work well with third-party providers that inherit from OpenAiChatCompletionProvider', async () => {
+      // Example similar to what providers like Anthropic or DeepSeek might do
+      class DeepSeekProvider extends OpenAiChatCompletionProvider {
+        constructor(modelName: string) {
+          super(modelName, {
+            config: {
+              apiKeyEnvar: 'DEEPSEEK_API_KEY',
+              apiBaseUrl: 'https://api.deepseek.com/v1',
+            },
+          });
+        }
+
+        getApiUrlDefault(): string {
+          return 'https://api.deepseek.com/v1';
+        }
+      }
+
+      const mockResponse = {
+        data: {
+          choices: [{ message: { content: 'DeepSeek response' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new DeepSeekProvider('deepseek-chat');
+      const result = await provider.callApi('Test prompt');
+
+      // Verify the logging shows the correct API URL (not hardcoded OpenAI)
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        expect.stringContaining('Calling https://api.deepseek.com/v1 API:'),
+      );
+
+      // Verify the response logging is generic
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        expect.stringContaining('\tcompletions API response:'),
+      );
+
+      expect(result.output).toBe('DeepSeek response');
+    });
+
+    it('should log generic API call message using getApiUrl', async () => {
+      const mockResponse = {
+        data: {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      await provider.callApi('Test prompt');
+
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        expect.stringMatching(/^Calling https:\/\/.*\/v1 API:/),
+      );
+    });
+
+    it('should log generic completions API response message', async () => {
+      const mockResponse = {
+        data: {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      await provider.callApi('Test prompt');
+
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        expect.stringContaining('\tcompletions API response:'),
+      );
+    });
+
+    it('should log generic message for unknown chat models', () => {
+      new OpenAiChatCompletionProvider('unknown-model');
+
+      expect(mockLogger.debug).toHaveBeenCalledWith('Using unknown chat model: unknown-model');
+    });
+
+    it('should not log unknown model message for known OpenAI models', () => {
+      new OpenAiChatCompletionProvider('gpt-4o-mini');
+
+      expect(mockLogger.debug).not.toHaveBeenCalledWith(expect.stringContaining('unknown'));
     });
   });
 });
