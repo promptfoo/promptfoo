@@ -10,28 +10,26 @@ providers:
       generationConfig:
         response_modalities: ['audio']
         outputAudioTranscription: {}
+      speechConfig:
+        voiceConfig:
+          prebuiltVoiceConfig:
+            voiceName: 'Charon'
       timeoutMs: 30000
 
 tests:
-  # Option 1: Use javascript assertion to check transcript via context
   - assert:
-      - type: javascript
-        value: |
-          // Access the audio transcript from the provider response
-          if (context.providerResponse && context.providerResponse.audio && context.providerResponse.audio.transcript) {
-            return context.providerResponse.audio.transcript.toLowerCase().includes('well');
-          }
-          return false;
+      - type: contains
+        value: well
 
-  # Option 2: Check that audio was generated
+  # Check that audio transcript was generated with JavaScript
   - assert:
       - type: javascript
         value: |
-          // Verify audio response was generated with transcript
-          if (context.providerResponse && context.providerResponse.audio && context.providerResponse.audio.transcript) {
-            return context.providerResponse.audio && 
-                  context.providerResponse.audio.data && 
-                  context.providerResponse.audio.transcript && 
-                  context.providerResponse.audio.transcript.length > 0;
-          }
-          return false;
+          return Boolean(
+            context.providerResponse?.audio?.data &&
+            context.providerResponse?.audio?.transcript?.length > 0
+          );
+
+  - assert:
+      - type: llm-rubric
+        value: Answers to how are you doing

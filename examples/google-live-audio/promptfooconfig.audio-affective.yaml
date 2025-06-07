@@ -18,7 +18,7 @@ providers:
   # Note: Affective dialog requires apiVersion: 'v1alpha' and audio output
   # Affective dialog requires the specific models:
   # gemini-2.5-flash-preview-native-audio-dialog or
-  # gemini-2.5-flash-exp-native-audio-thinking-dialog (will show thinking process in the text field)
+  # gemini-2.5-flash-exp-native-audio-thinking-dialog (will show thinking process in the thinking field)
   - id: 'google:live:gemini-2.5-flash-exp-native-audio-thinking-dialog'
     label: 'With Affective Dialog'
     config:

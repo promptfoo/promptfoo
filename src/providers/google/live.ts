@@ -141,6 +141,14 @@ export class GoogleLiveProvider implements ApiProvider {
 
     return new Promise<ProviderResponse>((resolve) => {
       const isNativeAudioModel = this.modelName.includes('native-audio');
+      let isResolved = false;
+      
+      const safeResolve = (response: ProviderResponse) => {
+        if (!isResolved) {
+          isResolved = true;
+          resolve(response);
+        }
+      };
 
       let apiVersion = this.config.apiVersion;
       if (!apiVersion) {
@@ -156,7 +164,6 @@ export class GoogleLiveProvider implements ApiProvider {
       let response_audio_transcript = '';
       let hasAudioContent = false;
       const function_calls_total: FunctionCall[] = [];
-      let audioCompletionTimer: NodeJS.Timeout | null = null;
       let statefulApiState: any = undefined;
 
       const isTextExpected =
@@ -171,23 +178,18 @@ export class GoogleLiveProvider implements ApiProvider {
       const hasOutputTranscription = !!this.config.generationConfig?.outputAudioTranscription;
       const hasInputTranscription = !!this.config.generationConfig?.inputAudioTranscription;
 
+      // Set a standard 30-second timeout for the WebSocket connection (like OpenAI)
       const timeout = setTimeout(() => {
-        logger.error(`WebSocket request timed out after ${this.config.timeoutMs || 10000}ms`);
-        logger.error(
-          `Current state - hasTextStreamEnded: ${hasTextStreamEnded}, hasAudioStreamEnded: ${hasAudioStreamEnded}`,
-        );
+        logger.error('WebSocket connection timed out after 30 seconds');
         ws.close();
-        resolve({ error: 'WebSocket request timed out' });
-      }, this.config.timeoutMs || 10000);
+        safeResolve({ error: 'WebSocket connection timed out' });
+      }, this.config.timeoutMs || 30000);
 
       const finalizeResponse = async () => {
         if (ws.readyState === WebSocket.OPEN) {
           ws.close();
         }
         clearTimeout(timeout);
-        if (audioCompletionTimer) {
-          clearTimeout(audioCompletionTimer);
-        }
 
         // Retrieve final state from stateful API before shutting down
         if (this.config.functionToolStatefulApi) {
@@ -205,11 +207,28 @@ export class GoogleLiveProvider implements ApiProvider {
           statefulApi.kill();
         }
 
+        // Determine final output text and thinking
+        let outputText = response_text_total;
+        let thinking = undefined;
+        
+        // If we have audio content with transcript
+        if (hasAudioContent && response_audio_transcript) {
+          if (response_text_total) {
+            // Separate thinking from main output
+            thinking = response_text_total;
+            outputText = response_audio_transcript;
+          } else {
+            // Use transcript as the primary output text
+            outputText = response_audio_transcript;
+          }
+        }
+
         const result: ProviderResponse = {
           output: {
-            text: response_text_total,
+            text: outputText,
             toolCall: { functionCalls: function_calls_total },
             statefulApiState,
+            ...(thinking && { thinking }),
           },
           metadata: {},
         };
@@ -221,7 +240,7 @@ export class GoogleLiveProvider implements ApiProvider {
             transcript: response_audio_transcript || response_text_total || undefined,
           };
         }
-        resolve(result);
+        safeResolve(result);
       };
 
       ws.onopen = () => {
@@ -305,20 +324,6 @@ export class GoogleLiveProvider implements ApiProvider {
             clearTimeout(timeout);
             if (isAudioExpected) {
               hasAudioStreamEnded = false;
-              if (audioCompletionTimer) {
-                clearTimeout(audioCompletionTimer);
-              }
-              audioCompletionTimer = setTimeout(() => {
-                if (hasAudioContent || isAudioExpected) {
-                  hasAudioStreamEnded = true;
-                }
-                if (hasTextStreamEnded && hasAudioStreamEnded) {
-                  finalizeResponse().catch((err) => {
-                    logger.error(`Error in finalizeResponse: ${err}`);
-                    resolve({ error: `Error finalizing response: ${err}` });
-                  });
-                }
-              }, 1500);
             }
             return;
           }
@@ -327,7 +332,7 @@ export class GoogleLiveProvider implements ApiProvider {
         } else {
           logger.warn(`Unexpected event.data type: ${typeof event.data}`);
           ws.close();
-          resolve({ error: 'Unexpected response data format' });
+          safeResolve({ error: 'Unexpected response data format' });
           return;
         }
 
@@ -338,7 +343,7 @@ export class GoogleLiveProvider implements ApiProvider {
           if (response.error) {
             logger.error(`Google Live API error: ${JSON.stringify(response.error)}`);
             ws.close();
-            resolve({ error: `Google Live API error: ${JSON.stringify(response.error)}` });
+            safeResolve({ error: `Google Live API error: ${JSON.stringify(response.error)}` });
             return;
           }
 
@@ -383,20 +388,6 @@ export class GoogleLiveProvider implements ApiProvider {
                 clearTimeout(timeout);
                 if (isAudioExpected) {
                   hasAudioStreamEnded = false;
-                  if (audioCompletionTimer) {
-                    clearTimeout(audioCompletionTimer);
-                  }
-                  audioCompletionTimer = setTimeout(() => {
-                    if (hasAudioContent || isAudioExpected) {
-                      hasAudioStreamEnded = true;
-                    }
-                    if (hasTextStreamEnded && hasAudioStreamEnded) {
-                      finalizeResponse().catch((err) => {
-                        logger.error(`Error in finalizeResponse: ${err}`);
-                        resolve({ error: `Error finalizing response: ${err}` });
-                      });
-                    }
-                  }, 1500);
                 }
               }
             }
@@ -422,7 +413,7 @@ export class GoogleLiveProvider implements ApiProvider {
             if (hasTextStreamEnded && hasAudioStreamEnded) {
               finalizeResponse().catch((err) => {
                 logger.error(`Error in finalizeResponse: ${err}`);
-                resolve({ error: `Error finalizing response: ${err}` });
+                safeResolve({ error: `Error finalizing response: ${err}` });
               });
               return;
             }
@@ -439,17 +430,7 @@ export class GoogleLiveProvider implements ApiProvider {
               if (hasOutputTranscription || hasInputTranscription) {
                 hasAudioStreamEnded = true;
               } else if (hasAudioContent) {
-                if (!audioCompletionTimer) {
-                  audioCompletionTimer = setTimeout(() => {
-                    hasAudioStreamEnded = true;
-                    if (hasTextStreamEnded && hasAudioStreamEnded) {
-                      finalizeResponse().catch((err) => {
-                        logger.error(`Error in finalizeResponse: ${err}`);
-                        resolve({ error: `Error finalizing response: ${err}` });
-                      });
-                    }
-                  }, 500);
-                }
+                hasAudioStreamEnded = true;
               } else {
                 hasAudioStreamEnded = true;
               }
@@ -457,7 +438,7 @@ export class GoogleLiveProvider implements ApiProvider {
             if (hasTextStreamEnded && hasAudioStreamEnded) {
               finalizeResponse().catch((err) => {
                 logger.error(`Error in finalizeResponse: ${err}`);
-                resolve({ error: `Error finalizing response: ${err}` });
+                safeResolve({ error: `Error finalizing response: ${err}` });
               });
               return;
             }
@@ -546,9 +527,6 @@ export class GoogleLiveProvider implements ApiProvider {
             ]?.audioCompletionSignal
           ) {
             hasAudioStreamEnded = true;
-            if (audioCompletionTimer) {
-              clearTimeout(audioCompletionTimer);
-            }
           } else if (
             !response.setupComplete &&
             !response.serverContent &&
@@ -573,7 +551,7 @@ export class GoogleLiveProvider implements ApiProvider {
               if (hasTextStreamEnded && hasAudioStreamEnded) {
                 finalizeResponse().catch((err) => {
                   logger.error(`Error in finalizeResponse: ${err}`);
-                  resolve({ error: `Error finalizing response: ${err}` });
+                  safeResolve({ error: `Error finalizing response: ${err}` });
                 });
               }
             }
@@ -581,7 +559,7 @@ export class GoogleLiveProvider implements ApiProvider {
         } catch (err) {
           logger.error(`Failed to process WebSocket response: ${JSON.stringify(err)}`);
           ws.close();
-          resolve({ error: `Failed to process WebSocket response: ${JSON.stringify(err)}` });
+          safeResolve({ error: `Failed to process WebSocket response: ${JSON.stringify(err)}` });
         }
       };
 
@@ -594,7 +572,7 @@ export class GoogleLiveProvider implements ApiProvider {
         }
         clearTimeout(timeout);
         ws.close();
-        resolve({ error: `WebSocket error for model ${this.modelName}: ${JSON.stringify(err)}` });
+        safeResolve({ error: `WebSocket error for model ${this.modelName}: ${JSON.stringify(err)}` });
       };
 
       ws.onclose = (event: WebSocket.CloseEvent) => {
@@ -605,11 +583,13 @@ export class GoogleLiveProvider implements ApiProvider {
           statefulApi.kill('SIGTERM');
         }
         clearTimeout(timeout);
-        if (audioCompletionTimer) {
-          clearTimeout(audioCompletionTimer);
-        }
-        // If the promise hasn't been resolved yet and the closure was unexpected, reject.
+        // If the promise hasn't been resolved yet and the closure was unexpected, resolve with error.
         // This is a fallback; most paths should resolve the promise earlier.
+        if (!isResolved) {
+          safeResolve({ 
+            error: `WebSocket connection closed unexpectedly. Code: ${event.code}, Reason: ${event.reason}` 
+          });
+        }
       };
     });
   }
