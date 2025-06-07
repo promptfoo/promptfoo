@@ -9,13 +9,13 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import IconButton from '@mui/material/IconButton';
 import Link from '@mui/material/Link';
+import Paper from '@mui/material/Paper';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
-import TextareaAutosize from '@mui/material/TextareaAutosize';
 import Typography from '@mui/material/Typography';
 import { ellipsize } from '../../../../../util/text';
 import ChatMessages, { type Message } from './ChatMessages';
@@ -25,10 +25,112 @@ import type { GradingResult } from './types';
 // Common style object for copy buttons
 const copyButtonSx = {
   position: 'absolute',
-  right: '8px',
-  top: '4px',
-  bgcolor: 'rgba(255, 255, 255, 0.7)',
+  right: 8,
+  top: 8,
+  bgcolor: 'background.paper',
+  boxShadow: 1,
+  '&:hover': {
+    bgcolor: 'action.hover',
+    boxShadow: 2,
+  },
 };
+
+// Code display component
+interface CodeDisplayProps {
+  content: string;
+  title: string;
+  maxHeight?: number;
+  onCopy: () => void;
+  copied: boolean;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
+  showCopyButton?: boolean;
+}
+
+function CodeDisplay({
+  content,
+  title,
+  maxHeight = 400,
+  onCopy,
+  copied,
+  onMouseEnter,
+  onMouseLeave,
+  showCopyButton = false,
+}: CodeDisplayProps) {
+  // Detect if content looks like code (JSON or markdown)
+  const isCode = content.includes('{') || content.includes('#');
+
+  return (
+    <Box mb={2}>
+      <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 500 }}>
+        {title}
+      </Typography>
+      <Paper
+        variant="outlined"
+        sx={{
+          position: 'relative',
+          bgcolor: 'grey.50',
+          border: '1px solid',
+          borderColor: 'divider',
+          borderRadius: 1,
+          overflow: 'hidden',
+          '&:hover': {
+            borderColor: 'primary.main',
+            bgcolor: 'grey.100',
+          },
+        }}
+        onMouseEnter={onMouseEnter}
+        onMouseLeave={onMouseLeave}
+      >
+        <Box
+          sx={{
+            p: 2,
+            overflowX: 'auto',
+            overflowY: 'auto',
+            maxHeight: maxHeight,
+          }}
+        >
+          {isCode ? (
+            <pre
+              style={{
+                margin: 0,
+                fontFamily: 'monospace',
+                fontSize: '0.875rem',
+                lineHeight: 1.6,
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+              }}
+            >
+              {content}
+            </pre>
+          ) : (
+            <Typography
+              variant="body1"
+              sx={{
+                fontSize: '0.875rem',
+                lineHeight: 1.6,
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+              }}
+            >
+              {content}
+            </Typography>
+          )}
+        </Box>
+        {showCopyButton && (
+          <IconButton
+            size="small"
+            onClick={onCopy}
+            sx={copyButtonSx}
+            aria-label={`Copy ${title.toLowerCase()}`}
+          >
+            {copied ? <CheckIcon fontSize="small" /> : <ContentCopyIcon fontSize="small" />}
+          </IconButton>
+        )}
+      </Paper>
+    </Box>
+  );
+}
 
 function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[] }) {
   const [expandedValues, setExpandedValues] = useState<{ [key: number]: boolean }>({});
@@ -57,8 +159,10 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
 
   return (
     <Box mt={2}>
-      <Typography variant="subtitle1">Assertions</Typography>
-      <TableContainer>
+      <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 500 }}>
+        Assertions
+      </Typography>
+      <TableContainer component={Paper} variant="outlined">
         <Table>
           <TableHead>
             <TableRow>
@@ -234,111 +338,48 @@ export default function EvalOutputPromptDialog({
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="lg">
       <DialogTitle>Details{provider && `: ${provider}`}</DialogTitle>
       <DialogContent>
-        <Box
-          mb={2}
-          position="relative"
+        <CodeDisplay
+          content={prompt}
+          title="Prompt"
+          onCopy={() => copyToClipboard(prompt)}
+          copied={copied}
           onMouseEnter={() => setHoveredElement('prompt')}
           onMouseLeave={() => setHoveredElement(null)}
-        >
-          <Typography variant="subtitle1" style={{ marginBottom: '1rem' }}>
-            Prompt
-          </Typography>
-          <div style={{ position: 'relative' }}>
-            <TextareaAutosize
-              readOnly
-              value={prompt}
-              style={{ width: '100%', padding: '0.75rem' }}
-              maxRows={20}
-            />
-            {(hoveredElement === 'prompt' || copied) && (
-              <IconButton
-                onClick={() => copyToClipboard(prompt)}
-                sx={copyButtonSx}
-                size="small"
-                aria-label="Copy prompt"
-              >
-                {copied ? <CheckIcon /> : <ContentCopyIcon />}
-              </IconButton>
-            )}
-          </div>
-        </Box>
+          showCopyButton={hoveredElement === 'prompt' || copied}
+        />
         {metadata?.redteamFinalPrompt && (
-          <Box
-            my={2}
-            position="relative"
+          <CodeDisplay
+            content={metadata.redteamFinalPrompt}
+            title="Modified User Input (Red Team)"
+            onCopy={() => copyFieldToClipboard('redteamFinalPrompt', metadata.redteamFinalPrompt)}
+            copied={copiedFields['redteamFinalPrompt'] || false}
             onMouseEnter={() => setHoveredElement('redteamFinalPrompt')}
             onMouseLeave={() => setHoveredElement(null)}
-          >
-            <Typography variant="subtitle1" style={{ marginBottom: '1rem', marginTop: '1rem' }}>
-              Modified User Input (Red Team)
-            </Typography>
-            <div style={{ position: 'relative' }}>
-              <TextareaAutosize
-                readOnly
-                maxRows={20}
-                value={metadata.redteamFinalPrompt}
-                style={{ width: '100%', padding: '0.75rem' }}
-              />
-              {(hoveredElement === 'redteamFinalPrompt' || copiedFields['redteamFinalPrompt']) && (
-                <IconButton
-                  onClick={() =>
-                    copyFieldToClipboard('redteamFinalPrompt', metadata.redteamFinalPrompt)
-                  }
-                  sx={{
-                    ...copyButtonSx,
-                    top: '8px',
-                  }}
-                  size="small"
-                  aria-label="Copy modified user input"
-                >
-                  {copiedFields['redteamFinalPrompt'] ? <CheckIcon /> : <ContentCopyIcon />}
-                </IconButton>
-              )}
-            </div>
-          </Box>
+            showCopyButton={
+              hoveredElement === 'redteamFinalPrompt' || copiedFields['redteamFinalPrompt']
+            }
+          />
         )}
         {output && (
-          <Box
-            my={2}
-            position="relative"
+          <CodeDisplay
+            content={output}
+            title="Output"
+            onCopy={() => copyFieldToClipboard('output', output)}
+            copied={copiedFields['output'] || false}
             onMouseEnter={() => setHoveredElement('output')}
             onMouseLeave={() => setHoveredElement(null)}
-          >
-            <Typography variant="subtitle1" style={{ marginBottom: '1rem', marginTop: '1rem' }}>
-              Output
-            </Typography>
-            <div style={{ position: 'relative' }}>
-              <TextareaAutosize
-                readOnly
-                maxRows={20}
-                value={output}
-                style={{ width: '100%', padding: '0.75rem' }}
-              />
-              {(hoveredElement === 'output' || copiedFields['output']) && (
-                <IconButton
-                  onClick={() => copyFieldToClipboard('output', output)}
-                  sx={{
-                    ...copyButtonSx,
-                    top: '8px',
-                  }}
-                  size="small"
-                  aria-label="Copy output"
-                >
-                  {copiedFields['output'] ? <CheckIcon /> : <ContentCopyIcon />}
-                </IconButton>
-              )}
-            </div>
-          </Box>
+            showCopyButton={hoveredElement === 'output' || copiedFields['output']}
+          />
         )}
         {citationsData && <Citations citations={citationsData} />}
         <AssertionResults gradingResults={gradingResults} />
         {parsedMessages && parsedMessages.length > 0 && <ChatMessages messages={parsedMessages} />}
         {metadata && Object.keys(metadata).filter((key) => key !== 'citations').length > 0 && (
           <Box my={2}>
-            <Typography variant="subtitle1" style={{ marginBottom: '1rem', marginTop: '1rem' }}>
+            <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 500 }}>
               Metadata
             </Typography>
-            <TableContainer>
+            <TableContainer component={Paper} variant="outlined">
               <Table size="small">
                 <TableHead>
                   <TableRow>
