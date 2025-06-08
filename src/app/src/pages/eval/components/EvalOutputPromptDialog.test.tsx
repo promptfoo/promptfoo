@@ -51,13 +51,13 @@ describe('EvalOutputPromptDialog', () => {
   it('displays prompt content', () => {
     render(<EvalOutputPromptDialog {...defaultProps} />);
     expect(screen.getByText('Prompt')).toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: /prompt/i })).toHaveValue('Test prompt');
+    expect(screen.getByDisplayValue('Test prompt')).toBeInTheDocument();
   });
 
   it('displays output when provided', () => {
     render(<EvalOutputPromptDialog {...defaultProps} />);
     expect(screen.getByText('Output')).toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: /output/i })).toHaveValue('Test output');
+    expect(screen.getByDisplayValue('Test output')).toBeInTheDocument();
   });
 
   it('displays assertion results table with metrics when provided', () => {
@@ -110,7 +110,7 @@ describe('EvalOutputPromptDialog', () => {
     fireEvent.mouseEnter(screen.getByText('Prompt').parentElement!);
 
     // Get the button by its aria-label
-    const copyButton = screen.getByRole('button', { name: /copy prompt/i });
+    const copyButton = screen.getByLabelText('Copy prompt');
     await userEvent.click(copyButton);
 
     expect(mockClipboard.writeText).toHaveBeenCalledWith('Test prompt');
