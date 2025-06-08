@@ -25,8 +25,8 @@ import type { GradingResult } from './types';
 // Common style object for copy buttons
 const copyButtonSx = {
   position: 'absolute',
-  right: 8,
-  top: 8,
+  right: '8px',
+  top: '8px',
   bgcolor: 'background.paper',
   boxShadow: 1,
   '&:hover': {
@@ -35,11 +35,24 @@ const copyButtonSx = {
   },
 };
 
+// Common typography styles
+const subtitleTypographySx = {
+  mb: 1,
+  fontWeight: 500,
+};
+
+const textContentTypographySx = {
+  fontSize: '0.875rem',
+  lineHeight: 1.6,
+  whiteSpace: 'pre-wrap',
+  wordBreak: 'break-word',
+};
+
 // Code display component
 interface CodeDisplayProps {
   content: string;
   title: string;
-  maxHeight?: number;
+  maxHeight?: string | number;
   onCopy: () => void;
   copied: boolean;
   onMouseEnter?: () => void;
@@ -57,26 +70,34 @@ function CodeDisplay({
   onMouseLeave,
   showCopyButton = false,
 }: CodeDisplayProps) {
-  // Detect if content looks like code (JSON or markdown)
-  const isCode = content.includes('{') || content.includes('#');
+  // Improved code detection logic
+  const isCode =
+    /^[\s]*[{\[]/.test(content) || // JSON-like (starts with { or [)
+    /^#\s/.test(content) || // Markdown headers (starts with # )
+    /```/.test(content) || // Code blocks (contains ```)
+    /^\s*[\w-]+\s*:/.test(content) || // YAML/config-like (key: value)
+    /^\s*<\w+/.test(content) || // XML/HTML-like (starts with <tag)
+    content.includes('function ') || // JavaScript functions
+    content.includes('class ') || // Class definitions
+    content.includes('import ') || // Import statements
+    /^\s*def\s+/.test(content) || // Python functions
+    /^\s*\w+\s*\(/.test(content); // Function calls
 
   return (
     <Box mb={2}>
-      <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 500 }}>
+      <Typography variant="subtitle1" sx={subtitleTypographySx}>
         {title}
       </Typography>
       <Paper
         variant="outlined"
         sx={{
           position: 'relative',
-          bgcolor: 'grey.50',
-          border: '1px solid',
-          borderColor: 'divider',
+          bgcolor: 'background.default',
           borderRadius: 1,
           overflow: 'hidden',
           '&:hover': {
             borderColor: 'primary.main',
-            bgcolor: 'grey.100',
+            bgcolor: 'action.hover',
           },
         }}
         onMouseEnter={onMouseEnter}
@@ -104,15 +125,7 @@ function CodeDisplay({
               {content}
             </pre>
           ) : (
-            <Typography
-              variant="body1"
-              sx={{
-                fontSize: '0.875rem',
-                lineHeight: 1.6,
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
-              }}
-            >
+            <Typography variant="body1" sx={textContentTypographySx}>
               {content}
             </Typography>
           )}
@@ -159,7 +172,7 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
 
   return (
     <Box mt={2}>
-      <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 500 }}>
+      <Typography variant="subtitle1" sx={subtitleTypographySx}>
         Assertions
       </Typography>
       <TableContainer component={Paper} variant="outlined">
@@ -376,7 +389,7 @@ export default function EvalOutputPromptDialog({
         {parsedMessages && parsedMessages.length > 0 && <ChatMessages messages={parsedMessages} />}
         {metadata && Object.keys(metadata).filter((key) => key !== 'citations').length > 0 && (
           <Box my={2}>
-            <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 500 }}>
+            <Typography variant="subtitle1" sx={subtitleTypographySx}>
               Metadata
             </Typography>
             <TableContainer component={Paper} variant="outlined">
