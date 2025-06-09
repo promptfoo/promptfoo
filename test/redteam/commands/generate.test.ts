@@ -32,18 +32,15 @@ jest.mock('../../../src/envars', () => ({
   }),
 }));
 
-jest.mock('../../../src/globalConfig/cloud', () => {
-  const mockCloudConfig = {
+jest.mock('../../../src/globalConfig/cloud', () => ({
+  CloudConfig: jest.fn().mockImplementation(() => ({
+    isEnabled: jest.fn().mockReturnValue(false),
     getApiHost: jest.fn().mockReturnValue('https://api.promptfoo.app'),
-  };
-  return {
-    CloudConfig: jest.fn().mockImplementation(() => ({
-      isEnabled: jest.fn().mockReturnValue(false),
-      getApiHost: jest.fn().mockReturnValue('https://api.promptfoo.app'),
-    })),
-    cloudConfig: mockCloudConfig,
-  };
-});
+  })),
+  cloudConfig: {
+    getApiHost: jest.fn().mockReturnValue('https://api.promptfoo.app'),
+  },
+}));
 
 jest.mock('../../../src/redteam/commands/discover', () => ({
   doTargetPurposeDiscovery: jest.fn(),
@@ -69,10 +66,6 @@ jest.mock('../../../src/providers', () => ({
       cleanup: jest.fn(),
     },
   ]),
-}));
-
-jest.mock('../../../src/util/cloud', () => ({
-  getConfigFromCloud: jest.fn(),
 }));
 
 describe('doGenerateRedteam', () => {
@@ -1145,150 +1138,6 @@ describe('doGenerateRedteam', () => {
       'output.yaml',
       expect.any(Array),
     );
-  });
-
-  describe('target option', () => {
-    beforeEach(() => {
-      jest.clearAllMocks();
-    });
-
-    it('should use target option to set cloud target when UUID is provided', async () => {
-      const configUUID = '12345678-1234-1234-1234-123456789012';
-      const targetUUID = '87654321-4321-4321-4321-210987654321';
-
-      const mockCloudConfig: any = {
-        prompts: [{ raw: 'Test prompt', label: 'Test label' }],
-        providers: [{ id: 'test-provider' }],
-        tests: [],
-        redteam: {
-          plugins: ['harmful:hate'],
-          strategies: [],
-        },
-      };
-
-      const { getConfigFromCloud } = jest.requireMock('../../../src/util/cloud');
-      jest.mocked(getConfigFromCloud).mockResolvedValue(mockCloudConfig);
-
-      jest.mocked(synthesize).mockResolvedValue({
-        testCases: [
-          {
-            vars: { input: 'Test input' },
-            assert: [{ type: 'equals', value: 'Test output' }],
-            metadata: { pluginId: 'redteam' },
-          },
-        ],
-        purpose: 'Test purpose',
-        entities: [],
-        injectVar: 'input',
-      });
-
-      const options: RedteamCliGenerateOptions = {
-        config: configUUID,
-        target: targetUUID,
-        output: 'output.yaml',
-        cache: true,
-        defaultConfig: {},
-        write: false,
-      };
-
-      await doGenerateRedteam(options);
-
-      expect(getConfigFromCloud).toHaveBeenCalledWith(configUUID, targetUUID);
-      expect(synthesize).toHaveBeenCalledWith(expect.any(Object));
-      expect(writePromptfooConfig).toHaveBeenCalledWith(
-        expect.any(Object),
-        'output.yaml',
-        expect.any(Array),
-      );
-    });
-
-    it('should throw error when target is used without cloud config UUID', async () => {
-      const configPath = 'local-config.yaml';
-      const targetUUID = '87654321-4321-4321-4321-210987654321';
-
-      const options: RedteamCliGenerateOptions = {
-        config: configPath,
-        target: targetUUID,
-        cache: true,
-        defaultConfig: {},
-        write: false,
-      };
-
-      const result = await doGenerateRedteam(options);
-
-      expect(result).toBeNull();
-      expect(logger.error).toHaveBeenCalledWith(
-        expect.stringContaining(
-          'Target ID (-t) can only be used when -c is used with a cloud config UUID',
-        ),
-      );
-    });
-
-    it('should throw error when target is not a UUID', async () => {
-      const configUUID = '12345678-1234-1234-1234-123456789012';
-      const invalidTarget = 'not-a-uuid';
-
-      const options: RedteamCliGenerateOptions = {
-        config: configUUID,
-        target: invalidTarget,
-        cache: true,
-        defaultConfig: {},
-        write: false,
-      };
-
-      await expect(doGenerateRedteam(options)).rejects.toThrow(
-        'Invalid target ID, it must be a valid UUID',
-      );
-    });
-
-    it('should handle backwards compatibility with empty targets and a valid target UUID', async () => {
-      const configUUID = '12345678-1234-1234-1234-123456789012';
-      const targetUUID = '87654321-4321-4321-4321-210987654321';
-
-      const mockCloudConfig: any = {
-        prompts: [{ raw: 'Test prompt', label: 'Test label' }],
-        providers: [],
-        tests: [],
-        redteam: {
-          plugins: ['harmful:hate'],
-          strategies: [],
-        },
-        // No targets array
-      };
-
-      const { getConfigFromCloud } = jest.requireMock('../../../src/util/cloud');
-      jest.mocked(getConfigFromCloud).mockResolvedValue(mockCloudConfig);
-
-      jest.mocked(synthesize).mockResolvedValue({
-        testCases: [
-          {
-            vars: { input: 'Test input' },
-            assert: [{ type: 'equals', value: 'Test output' }],
-            metadata: { pluginId: 'redteam' },
-          },
-        ],
-        purpose: 'Test purpose',
-        entities: [],
-        injectVar: 'input',
-      });
-
-      const options: RedteamCliGenerateOptions = {
-        config: configUUID,
-        target: targetUUID,
-        output: 'output.yaml',
-        cache: true,
-        defaultConfig: {},
-        write: false,
-      };
-
-      await doGenerateRedteam(options);
-
-      expect(getConfigFromCloud).toHaveBeenCalledWith(configUUID, targetUUID);
-      // Verify that the target was added for backwards compatibility
-      expect(mockCloudConfig.targets).toEqual([
-        { id: `promptfoo://provider/${targetUUID}`, config: {} },
-      ]);
-    });
   });
 
   describe('header comments', () => {
