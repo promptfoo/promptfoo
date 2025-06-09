@@ -33,6 +33,7 @@ import invariant from '../util/invariant';
 import { BrowserBehavior, openBrowser } from '../util/server';
 import { configsRouter } from './routes/configs';
 import { evalRouter } from './routes/eval';
+import { modelAuditRouter } from './routes/modelAudit';
 import { providersRouter } from './routes/providers';
 import { redteamRouter } from './routes/redteam';
 import { userRouter } from './routes/user';
@@ -180,6 +181,7 @@ export function createApp() {
   app.use('/api/redteam', redteamRouter);
   app.use('/api/user', userRouter);
   app.use('/api/configs', configsRouter);
+  app.use('/api/model-audit', modelAuditRouter);
 
   app.post('/api/telemetry', async (req: Request, res: Response): Promise<void> => {
     try {
