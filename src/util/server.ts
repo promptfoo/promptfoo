@@ -1,7 +1,7 @@
 import opener from 'opener';
-import readline from 'readline';
 import { VERSION, getDefaultPort } from '../constants';
 import logger from '../logger';
+import { promptYesNo } from './readline';
 
 export enum BrowserBehavior {
   ASK = 0,
@@ -9,40 +9,6 @@ export enum BrowserBehavior {
   SKIP = 2,
   OPEN_TO_REPORT = 3,
   OPEN_TO_REDTEAM_CREATE = 4,
-}
-
-/**
- * Prompts the user with a question and returns a Promise that resolves with their answer
- */
-export async function promptUser(question: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    try {
-      const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout,
-      });
-
-      rl.question(question, (answer) => {
-        rl.close();
-        resolve(answer);
-      });
-    } catch (err) {
-      reject(err);
-    }
-  });
-}
-
-/**
- * Prompts the user with a yes/no question and returns a Promise that resolves with a boolean
- */
-export async function promptYesNo(question: string, defaultYes = false): Promise<boolean> {
-  const suffix = defaultYes ? '(Y/n): ' : '(y/N): ';
-  const answer = await promptUser(`${question} ${suffix}`);
-
-  if (defaultYes) {
-    return !answer.toLowerCase().startsWith('n');
-  }
-  return answer.toLowerCase().startsWith('y');
 }
 
 export async function checkServerRunning(port = getDefaultPort()): Promise<boolean> {

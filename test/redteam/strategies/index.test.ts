@@ -22,6 +22,8 @@ describe('validateStrategies', () => {
       { id: 'video' },
       { id: 'morse' },
       { id: 'piglatin' },
+      { id: 'camelcase' },
+      { id: 'emoji' },
     ];
     await expect(validateStrategies(validStrategies)).resolves.toBeUndefined();
   });
@@ -98,6 +100,32 @@ describe('loadStrategy', () => {
     const strategy = await loadStrategy('piglatin');
     expect(strategy).toBeDefined();
     expect(strategy.id).toBe('piglatin');
+  });
+
+  it('should load camelcase strategy', async () => {
+    const strategy = await loadStrategy('camelcase');
+    expect(strategy).toBeDefined();
+    expect(strategy.id).toBe('camelcase');
+  });
+
+  it('should load emoji strategy', async () => {
+    const strategy = await loadStrategy('emoji');
+    expect(strategy).toBeDefined();
+    expect(strategy.id).toBe('emoji');
+  });
+
+  it('should call emoji strategy action with correct parameters', async () => {
+    const strategy = await loadStrategy('emoji');
+    const testCases: TestCaseWithPlugin[] = [
+      { vars: { test: 'value' }, metadata: { pluginId: 'test' } },
+    ];
+    const injectVar = 'inject';
+    const config = {};
+
+    await strategy.action(testCases, injectVar, config);
+
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Adding emoji encoding'));
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Added'));
   });
 
   it('should throw error for non-existent strategy', async () => {

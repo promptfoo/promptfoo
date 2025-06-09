@@ -55,17 +55,19 @@ Next, we can review the example configuration file and make changes to it.
 
    ```yaml
    providers:
-     - openai:o3-mini
-     - anthropic:messages:claude-3-5-sonnet-20241022
-     - vertex:gemini-pro
+     - openai:gpt-4.1
+     - openai:o4-mini
+     - anthropic:messages:claude-sonnet-4-20250514
+     - vertex:gemini-2.5-pro-exp-03-25
      # Or use your own custom provider
      - file://path/to/custom/provider.py
    ```
 
    Each provider is specified using a simple format: `provider_name:model_name`. For example:
 
-   - `openai:o3-mini` for OpenAI's o3-mini
-   - `anthropic:messages:claude-3-5-sonnet-20241022` for Anthropic's Claude
+   - `openai:gpt-4.1` for GPT-4.1
+   - `openai:o4-mini` for OpenAI's o4-mini
+   - `anthropic:messages:claude-sonnet-4-20250514` for Anthropic's Claude
    - `bedrock:us.meta.llama3-3-70b-instruct-v1:0` for Meta's Llama 3.3 70B via AWS Bedrock
 
    Most providers need authentication. For example, with OpenAI:
@@ -283,7 +285,7 @@ You can also output a nice [spreadsheet](https://docs.google.com/spreadsheets/d/
 
 ### Model quality
 
-In [this next example](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-4o-vs-4o-mini), we evaluate the difference between GPT 4o and GPT 4o mini outputs for a given prompt:
+In [this next example](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-4o-vs-4o-mini), we evaluate the difference between GPT-4.1 and o4-mini outputs for a given prompt:
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
@@ -292,7 +294,7 @@ prompts:
 
 # Set the LLMs we want to test
 providers:
-  - openai:gpt-4.1-mini
+  - openai:o4-mini
   - openai:gpt-4.1
 ```
 
@@ -301,24 +303,24 @@ A simple `npx promptfoo@latest eval` will run the example. Also note that you ca
 <Tabs groupId="promptfoo-command">
   <TabItem value="npx" label="npx" default>
     <CodeBlock language="bash">
-      npx promptfoo@latest eval -p prompts.txt -r openai:gpt-4.1-mini openai:gpt-4.1 -o output.html
+      npx promptfoo@latest eval -p prompts.txt -r openai:o4-mini openai:gpt-4.1 -o output.html
     </CodeBlock>
   </TabItem>
   <TabItem value="npm" label="npm">
     <CodeBlock language="bash">
-      promptfoo eval -p prompts.txt -r openai:gpt-4.1-mini openai:gpt-4.1 -o output.html
+      promptfoo eval -p prompts.txt -r openai:o4-mini openai:gpt-4.1 -o output.html
     </CodeBlock>
   </TabItem>
   <TabItem value="brew" label="brew">
     <CodeBlock language="bash">
-      promptfoo eval -p prompts.txt -r openai:gpt-4.1-mini openai:gpt-4.1 -o output.html
+      promptfoo eval -p prompts.txt -r openai:o4-mini openai:gpt-4.1 -o output.html
     </CodeBlock>
   </TabItem>
 </Tabs>
 
 Produces this HTML table:
 
-![Side-by-side evaluation of LLM model quality, gpt-4.1 vs gpt-4.1-mini, html output](https://user-images.githubusercontent.com/310310/235490527-e0c31f40-00a0-493a-8afc-8ed6322bb5ca.png)
+![Side-by-side evaluation of LLM model quality, gpt-4.1 vs o4-mini, html output](https://user-images.githubusercontent.com/310310/235490527-e0c31f40-00a0-493a-8afc-8ed6322bb5ca.png)
 
 Full setup and output [here](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-4o-vs-4o-mini).
 

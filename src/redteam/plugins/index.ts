@@ -46,7 +46,7 @@ import { RbacPlugin } from './rbac';
 import { ShellInjectionPlugin } from './shellInjection';
 import { SqlInjectionPlugin } from './sqlInjection';
 import { ToolDiscoveryPlugin } from './toolDiscovery';
-import { ToolDiscoveryMultiTurnPlugin } from './toolDiscoveryMultiTurn';
+import { ToxicChatPlugin } from './toxicchat';
 import { UnsafeBenchPlugin } from './unsafebench';
 import { XSTestPlugin } from './xstest';
 
@@ -171,8 +171,8 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(ExcessiveAgencyPlugin, 'excessive-agency'),
   createPluginFactory(XSTestPlugin, 'xstest'),
   createPluginFactory(ToolDiscoveryPlugin, 'tool-discovery'),
-  createPluginFactory(ToolDiscoveryMultiTurnPlugin, 'tool-discovery:multi-turn'),
   createPluginFactory(HarmbenchPlugin, 'harmbench'),
+  createPluginFactory(ToxicChatPlugin, 'toxic-chat'),
   createPluginFactory(AegisPlugin, 'aegis'),
   createPluginFactory(HallucinationPlugin, 'hallucination'),
   createPluginFactory(ImitationPlugin, 'imitation'),
@@ -259,7 +259,7 @@ function createRemotePlugin<T extends PluginConfig>(
         },
       }));
 
-      if (key.startsWith('harmful:')) {
+      if (key.startsWith('harmful:') || key.startsWith('bias:')) {
         return testsWithMetadata.map((testCase) => ({
           ...testCase,
           assert: getHarmfulAssertions(key as HarmPlugin),
@@ -272,7 +272,6 @@ function createRemotePlugin<T extends PluginConfig>(
 const remotePlugins: PluginFactory[] = [
   MEMORY_POISONING_PLUGIN_ID,
   'ascii-smuggling',
-  'bias:gender',
   'bfla',
   'bola',
   'cca',
@@ -280,13 +279,19 @@ const remotePlugins: PluginFactory[] = [
   'harmful:misinformation-disinformation',
   'harmful:specialized-advice',
   'hijacking',
+  'mcp',
+  'medical:anchoring-bias',
+  'medical:hallucination',
+  'medical:incorrect-knowledge',
+  'medical:prioritization-error',
+  'medical:sycophancy',
+  'off-topic',
   'rag-document-exfiltration',
   'rag-poisoning',
   'reasoning-dos',
   'religion',
   'ssrf',
   'system-prompt-override',
-  'mcp',
 ].map((key) => createRemotePlugin(key));
 
 remotePlugins.push(

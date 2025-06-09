@@ -14,12 +14,12 @@ import { extractVariablesFromTemplates } from '../util/templates';
 import type { StrategyExemptPlugin } from './constants';
 import {
   ALIASED_PLUGIN_MAPPINGS,
-  STRATEGY_COLLECTION_MAPPINGS,
   FOUNDATION_PLUGINS,
   HARM_PLUGINS,
   PII_PLUGINS,
   riskCategorySeverityMap,
   Severity,
+  STRATEGY_COLLECTION_MAPPINGS,
   STRATEGY_COLLECTIONS,
   STRATEGY_EXEMPT_PLUGINS,
 } from './constants';
@@ -32,7 +32,7 @@ import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
 import { loadStrategy, Strategies, validateStrategies } from './strategies';
 import { DEFAULT_LANGUAGES } from './strategies/multilingual';
 import type { RedteamStrategyObject, SynthesizeOptions } from './types';
-import { getShortPluginId } from './util';
+import { extractGoalFromPrompt, getShortPluginId } from './util';
 
 /**
  * Gets the severity level for a plugin based on its ID and configuration.
@@ -142,6 +142,7 @@ export function resolvePluginConfig(config: Record<string, any> | undefined): Re
 const categories = {
   foundation: FOUNDATION_PLUGINS,
   harmful: Object.keys(HARM_PLUGINS),
+  bias: Object.keys(HARM_PLUGINS).filter((p) => p.startsWith('bias:')),
   pii: PII_PLUGINS,
 } as const;
 
@@ -571,6 +572,15 @@ export async function synthesize({
   };
 
   plugins.forEach((plugin) => {
+    // First check if this is a direct plugin that should not be expanded
+    // This is for plugins like bias:gender that have a prefix matching an alias
+    const isDirectPlugin = Plugins.some((p) => p.key === plugin.id);
+
+    if (isDirectPlugin) {
+      expandedPlugins.push(plugin);
+      return;
+    }
+
     const mappingKey = Object.keys(ALIASED_PLUGIN_MAPPINGS).find(
       (key) => plugin.id === key || plugin.id.startsWith(`${key}:`),
     );
@@ -647,6 +657,7 @@ export async function synthesize({
     progressBar = new cliProgress.SingleBar(
       {
         format: 'Generating | {bar} | {percentage}% | {value}/{total} | {task}',
+        gracefulExit: true,
       },
       cliProgress.Presets.shades_classic,
     );
@@ -703,17 +714,33 @@ export async function synthesize({
         logger.warn(`Failed to generate tests for ${plugin.id}`);
         pluginTests = [];
       } else {
-        testCases.push(
-          ...pluginTests.map((t) => ({
-            ...t,
-            metadata: {
-              ...(t?.metadata || {}),
-              pluginId: plugin.id,
-              pluginConfig: resolvePluginConfig(plugin.config),
-              severity: getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
-            },
-          })),
+        // Add metadata to each test case
+        const testCasesWithMetadata = pluginTests.map((t) => ({
+          ...t,
+          metadata: {
+            pluginId: plugin.id,
+            pluginConfig: resolvePluginConfig(plugin.config),
+            severity: getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
+            ...(t?.metadata || {}),
+          },
+        }));
+
+        // Extract goal for this plugin's tests
+        logger.debug(
+          `Extracting goal for ${testCasesWithMetadata.length} tests from ${plugin.id}...`,
         );
+        for (const testCase of testCasesWithMetadata) {
+          // Get the prompt from the specific inject variable
+          const promptVar = testCase.vars?.[injectVar];
+          const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
+
+          const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id);
+
+          (testCase.metadata as any).goal = extractedGoal;
+        }
+
+        // Add the results to main test cases array
+        testCases.push(...testCasesWithMetadata);
       }
 
       pluginTests = Array.isArray(pluginTests) ? pluginTests : [];
@@ -731,17 +758,35 @@ export async function synthesize({
       try {
         const customPlugin = new CustomPlugin(redteamProvider, purpose, injectVar, plugin.id);
         const customTests = await customPlugin.generateTests(plugin.numTests, delay);
-        testCases.push(
-          ...customTests.map((t) => ({
-            ...t,
-            metadata: {
-              ...(t.metadata || {}),
-              pluginId: plugin.id,
-              pluginConfig: resolvePluginConfig(plugin.config),
-              severity: getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
-            },
-          })),
+
+        // Add metadata to each test case
+        const testCasesWithMetadata = customTests.map((t) => ({
+          ...t,
+          metadata: {
+            pluginId: plugin.id,
+            pluginConfig: resolvePluginConfig(plugin.config),
+            severity: getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
+            ...(t.metadata || {}),
+          },
+        }));
+
+        // Extract goal for this plugin's tests
+        logger.debug(
+          `Extracting goal for ${testCasesWithMetadata.length} custom tests from ${plugin.id}...`,
         );
+        for (const testCase of testCasesWithMetadata) {
+          // Get the prompt from the specific inject variable
+          const promptVar = testCase.vars?.[injectVar];
+          const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
+
+          const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id);
+
+          (testCase.metadata as any).goal = extractedGoal;
+        }
+
+        // Add the results to main test cases array
+        testCases.push(...testCasesWithMetadata);
+
         logger.debug(`Added ${customTests.length} custom test cases from ${plugin.id}`);
         pluginResults[plugin.id] = { requested: plugin.numTests, generated: customTests.length };
       } catch (e) {

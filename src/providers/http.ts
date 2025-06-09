@@ -666,7 +666,12 @@ export class HttpProvider implements ApiProvider {
           'Content-Type is not application/json, but body is an object or array. The body must be a string if the Content-Type is not application/json.',
         );
       }
-      if (typeof body === 'string' && contentTypeIsJson(headers)) {
+
+      try {
+        if (typeof body === 'string' && contentTypeIsJson(headers)) {
+          JSON.parse(body);
+        }
+      } catch {
         logger.warn(
           `[HTTP Provider] Content-Type is application/json, but body is a string. This is likely to cause unexpected results. It should be an object or array. Body: ${body} headers: ${safeJsonStringify(headers)}`,
         );
@@ -811,12 +816,14 @@ export class HttpProvider implements ApiProvider {
     );
 
     const ret: ProviderResponse = {};
-    if (context?.debug) {
-      ret.raw = response.data;
-      ret.metadata = {
-        headers: response.headers,
-      };
-    }
+    ret.raw = response.data;
+    ret.metadata = {
+      http: {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers || {},
+      },
+    };
 
     const rawText = response.data as string;
     let parsedData;

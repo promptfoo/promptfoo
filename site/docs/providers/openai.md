@@ -560,17 +560,48 @@ providers:
 
 #### External file references
 
-To make it easier to manage large JSON schemas, external file references are supported:
+To make it easier to manage large JSON schemas, external file references are supported for `response_format` in both Chat and Responses APIs. This is particularly useful for:
+
+- Reusing complex JSON schemas across multiple configurations
+- Managing large schemas in separate files for better organization
+- Version controlling schemas independently from configuration files
 
 ```yaml
 config:
   response_format: file://./path/to/response_format.json
 ```
 
-For a complete example, see the [OpenAI Structured Output example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-structured-output) or initialize it with:
+The external file should contain the complete `response_format` configuration object:
+
+```json title="response_format.json"
+{
+  "type": "json_schema",
+  "name": "event_extraction",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "event_name": { "type": "string" },
+      "date": { "type": "string" },
+      "location": { "type": "string" }
+    },
+    "required": ["event_name", "date", "location"],
+    "additionalProperties": false
+  }
+}
+```
+
+For a complete example with the Chat API, see the [OpenAI Structured Output example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-structured-output) or initialize it with:
 
 ```bash
 npx promptfoo@latest init --example openai-structured-output
+```
+
+For an example with the Responses API, see the [OpenAI Responses API example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-responses) and run:
+
+```bash
+npx promptfoo@latest init --example openai-responses
+cd openai-responses
+npx promptfoo@latest eval -c promptfooconfig.external-format.yaml
 ```
 
 ## Supported environment variables
@@ -926,6 +957,128 @@ The Responses API configuration supports these parameters in addition to standar
 | `store`                | Whether to store the response for later retrieval | true       | Boolean                             |
 | `truncation`           | Strategy to handle context window overflow        | 'disabled' | 'auto', 'disabled'                  |
 | `reasoning`            | Configuration for reasoning models                | None       | Object with `effort` field          |
+
+### MCP (Model Context Protocol) Support
+
+The Responses API supports OpenAI's MCP integration, allowing models to use remote MCP servers to perform tasks. MCP tools enable access to external services and APIs through a standardized protocol.
+
+#### Basic MCP Configuration
+
+To use MCP tools with the Responses API, add them to the `tools` array:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:gpt-4.1-2025-04-14
+    config:
+      tools:
+        - type: mcp
+          server_label: deepwiki
+          server_url: https://mcp.deepwiki.com/mcp
+          require_approval: never
+```
+
+#### MCP Tool Configuration Options
+
+| Parameter          | Description                             | Required | Options                                  |
+| ------------------ | --------------------------------------- | -------- | ---------------------------------------- |
+| `type`             | Tool type (must be 'mcp')               | Yes      | 'mcp'                                    |
+| `server_label`     | Label to identify the MCP server        | Yes      | Any string                               |
+| `server_url`       | URL of the remote MCP server            | Yes      | Valid URL                                |
+| `require_approval` | Approval settings for tool calls        | No       | 'never' or object with approval settings |
+| `allowed_tools`    | Specific tools to allow from the server | No       | Array of tool names                      |
+| `headers`          | Custom headers for authentication       | No       | Object with header key-value pairs       |
+
+#### Authentication with MCP Servers
+
+Most MCP servers require authentication. Use the `headers` parameter to provide API keys or tokens:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:gpt-4.1-2025-04-14
+    config:
+      tools:
+        - type: mcp
+          server_label: stripe
+          server_url: https://mcp.stripe.com
+          headers:
+            Authorization: 'Bearer sk-test_...'
+          require_approval: never
+```
+
+#### Filtering MCP Tools
+
+To limit which tools are available from an MCP server, use the `allowed_tools` parameter:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:gpt-4.1-2025-04-14
+    config:
+      tools:
+        - type: mcp
+          server_label: deepwiki
+          server_url: https://mcp.deepwiki.com/mcp
+          allowed_tools: ['ask_question']
+          require_approval: never
+```
+
+#### Approval Settings
+
+By default, OpenAI requires approval before sharing data with MCP servers. You can configure approval settings:
+
+```yaml title="promptfooconfig.yaml"
+# Never require approval for all tools
+providers:
+  - id: openai:responses:gpt-4.1-2025-04-14
+    config:
+      tools:
+        - type: mcp
+          server_label: deepwiki
+          server_url: https://mcp.deepwiki.com/mcp
+          require_approval: never
+
+# Never require approval for specific tools only
+providers:
+  - id: openai:responses:gpt-4.1-2025-04-14
+    config:
+      tools:
+        - type: mcp
+          server_label: deepwiki
+          server_url: https://mcp.deepwiki.com/mcp
+          require_approval:
+            never:
+              tool_names: ["ask_question", "read_wiki_structure"]
+```
+
+#### Complete MCP Example
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+prompts:
+  - 'What are the transport protocols supported in the MCP specification for {{repo}}?'
+
+providers:
+  - id: openai:responses:gpt-4.1-2025-04-14
+    config:
+      tools:
+        - type: mcp
+          server_label: deepwiki
+          server_url: https://mcp.deepwiki.com/mcp
+          require_approval: never
+          allowed_tools: ['ask_question']
+
+tests:
+  - vars:
+      repo: modelcontextprotocol/modelcontextprotocol
+    assert:
+      - type: contains
+        value: 'transport protocols'
+```
+
+For a complete working example, see the [OpenAI MCP example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-mcp) or initialize it with:
+
+```bash
+npx promptfoo@latest init --example openai-mcp
+```
 
 ### Reasoning Models
 

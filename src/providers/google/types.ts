@@ -91,6 +91,8 @@ export interface Tool {
 export interface CompletionOptions {
   apiKey?: string;
   apiHost?: string;
+  apiBaseUrl?: string;
+  headers?: { [key: string]: string }; // Custom headers for the request
   projectId?: string;
   region?: string;
   publisher?: string;

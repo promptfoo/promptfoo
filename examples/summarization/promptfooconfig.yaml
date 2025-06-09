@@ -5,7 +5,7 @@ prompts:
   - 'Summarize this article concisely: {{article}}'
 
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
   - openai:gpt-4o
 
 tests:

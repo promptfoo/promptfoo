@@ -6,27 +6,38 @@ import type {
   ApiProvider,
   Assertion,
   AssertionValue,
+  AtomicTestCase,
+  GradingResult,
   PluginConfig,
   ResultSuggestion,
   TestCase,
 } from '../../types';
-import type { AtomicTestCase, GradingResult } from '../../types';
 import { maybeLoadToolsFromExternalFile } from '../../util';
 import { retryWithDeduplication, sampleArray } from '../../util/generation';
 import invariant from '../../util/invariant';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { redteamProviderManager } from '../providers/shared';
-import { getShortPluginId, removePrefix } from '../util';
-import { isBasicRefusal, isEmptyResponse } from '../util';
+import { getShortPluginId, isBasicRefusal, isEmptyResponse, removePrefix } from '../util';
 
 /**
  * Parses the LLM response of generated prompts into an array of objects.
+ * Handles prompts with "Prompt:" or "PromptBlock:" markers.
  *
  * @param generatedPrompts - The LLM response of generated prompts.
  * @returns An array of { prompt: string } objects. Each of these objects represents a test case.
  */
 export function parseGeneratedPrompts(generatedPrompts: string): { prompt: string }[] {
+  // Try PromptBlock: first (for multi-line content)
+  if (generatedPrompts.includes('PromptBlock:')) {
+    return generatedPrompts
+      .split('PromptBlock:')
+      .map((block) => block.trim())
+      .filter((block) => block.length > 0)
+      .map((block) => ({ prompt: block }));
+  }
+
+  // Legacy parsing for backwards compatibility
   const parsePrompt = (line: string): string | null => {
     if (!line.toLowerCase().includes('prompt:')) {
       return null;
@@ -296,6 +307,7 @@ export abstract class RedteamGraderBase {
 
     const vars = {
       ...test.metadata,
+      goal: test.metadata?.goal || prompt,
       prompt,
       entities: test.metadata?.entities ?? [],
       tools: provider?.config?.tools

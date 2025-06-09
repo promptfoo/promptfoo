@@ -1,3 +1,7 @@
+---
+sidebar_label: Choosing the right temperature for your LLM
+---
+
 # Choosing the right temperature for your LLM
 
 The `temperature`` setting in language models is like a dial that adjusts how predictable or surprising the responses from the model will be, helping application developers fine-tune the AI's creativity to suit different tasks.

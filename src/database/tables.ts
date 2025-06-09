@@ -65,6 +65,7 @@ export const evalsTable = sqliteTable(
     results: text('results', { mode: 'json' }).$type<EvaluateSummaryV2 | object>().notNull(),
     config: text('config', { mode: 'json' }).$type<Partial<UnifiedConfig>>().notNull(),
     prompts: text('prompts', { mode: 'json' }).$type<CompletedPrompt[]>(),
+    vars: text('vars', { mode: 'json' }).$type<string[]>(),
   },
   (table) => ({
     createdAtIdx: index('evals_created_at_idx').on(table.createdAt),
@@ -114,6 +115,26 @@ export const evalResultsTable = sqliteTable(
   },
   (table) => ({
     evalIdIdx: index('eval_result_eval_id_idx').on(table.evalId),
+    testIdxIdx: index('eval_result_test_idx').on(table.testIdx),
+
+    responseIdx: index('eval_result_response_idx').on(table.response),
+
+    gradingResultReasonIdx: index('eval_result_grading_result_reason_idx').on(
+      sql`json_extract(${table.gradingResult}, '$.reason')`,
+    ),
+    gradingResultCommentIdx: index('eval_result_grading_result_comment_idx').on(
+      sql`json_extract(${table.gradingResult}, '$.comment')`,
+    ),
+    testCaseVarsIdx: index('eval_result_test_case_vars_idx').on(
+      sql`json_extract(${table.testCase}, '$.vars')`,
+    ),
+    testCaseMetadataIdx: index('eval_result_test_case_metadata_idx').on(
+      sql`json_extract(${table.metadata}, '$')`,
+    ),
+    namedScoresIdx: index('eval_result_named_scores_idx').on(
+      sql`json_extract(${table.namedScores}, '$')`,
+    ),
+    metadataIdx: index('eval_result_metadata_idx').on(sql`json_extract(${table.metadata}, '$')`),
   }),
 );
 

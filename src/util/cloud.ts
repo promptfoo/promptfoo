@@ -6,12 +6,10 @@ import type { ProviderOptions } from '../types/providers';
 import { ProviderOptionsSchema } from '../validators/providers';
 import invariant from './invariant';
 
-const CHUNKED_RESULTS_BUILD_DATE = new Date('2025-01-10');
-
 export function makeRequest(path: string, method: string, body?: any): Promise<Response> {
   const apiHost = cloudConfig.getApiHost();
   const apiKey = cloudConfig.getApiKey();
-  const url = `${apiHost}/${path}`;
+  const url = `${apiHost}/api/v1/${path.startsWith('/') ? path.slice(1) : path}`;
   try {
     return fetchWithProxy(url, {
       method,
@@ -27,23 +25,6 @@ export function makeRequest(path: string, method: string, body?: any): Promise<R
   }
 }
 
-export async function targetApiBuildDate(): Promise<Date | null> {
-  try {
-    const response = await makeRequest('version', 'GET');
-
-    const data = await response.json();
-
-    const { buildDate } = data;
-    logger.debug(`[targetApiBuildDate] ${buildDate}`);
-    if (buildDate) {
-      return new Date(buildDate);
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
 export async function getProviderFromCloud(id: string): Promise<ProviderOptions & { id: string }> {
   if (!cloudConfig.isEnabled()) {
     throw new Error(
@@ -51,7 +32,7 @@ export async function getProviderFromCloud(id: string): Promise<ProviderOptions 
     );
   }
   try {
-    const response = await makeRequest(`api/providers/${id}`, 'GET');
+    const response = await makeRequest(`providers/${id}`, 'GET');
 
     if (!response.ok) {
       const errorMessage = await response.text();
@@ -84,7 +65,7 @@ export async function getConfigFromCloud(id: string, providerId?: string): Promi
   }
   try {
     const response = await makeRequest(
-      `api/redteam/configs/${id}/unified${providerId ? `?providerId=${providerId}` : ''}`,
+      `redteam/configs/${id}/unified${providerId ? `?providerId=${providerId}` : ''}`,
       'GET',
     );
     if (!response.ok) {
@@ -103,9 +84,4 @@ export async function getConfigFromCloud(id: string, providerId?: string): Promi
     logger.error(String(e));
     throw new Error(`Failed to fetch config from cloud: ${id}.`);
   }
-}
-
-export async function cloudCanAcceptChunkedResults(): Promise<boolean> {
-  const buildDate = await targetApiBuildDate();
-  return buildDate != null && buildDate > CHUNKED_RESULTS_BUILD_DATE;
 }
