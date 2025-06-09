@@ -4,7 +4,6 @@ import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import telemetry from '../../telemetry';
 import type { Assertion, AssertionSet, AtomicTestCase } from '../../types';
 import type {
   ApiProvider,
@@ -42,18 +41,14 @@ export interface ExtractAttackFailureResponse {
 }
 
 interface GoatConfig {
-  injectVar?: string;
-  maxTurns?: number;
-  excludeTargetOutputFromAgenticAttackGeneration?: boolean;
-  stateful?: boolean;
+  injectVar: string;
+  maxTurns: number;
+  excludeTargetOutputFromAgenticAttackGeneration: boolean;
+  stateful: boolean;
 }
 
 export default class GoatProvider implements ApiProvider {
   readonly config: GoatConfig;
-  private maxTurns: number;
-  private readonly injectVar: string;
-  private readonly stateful: boolean;
-  private readonly excludeTargetOutputFromAgenticAttackGeneration: boolean;
 
   id() {
     return 'promptfoo:redteam:goat';
@@ -63,7 +58,6 @@ export default class GoatProvider implements ApiProvider {
     options: ProviderOptions & {
       maxTurns?: number;
       injectVar?: string;
-
       stateful?: boolean;
       excludeTargetOutputFromAgenticAttackGeneration?: boolean;
     } = {},
@@ -71,13 +65,13 @@ export default class GoatProvider implements ApiProvider {
     if (neverGenerateRemote()) {
       throw new Error(`GOAT strategy requires remote grading to be enabled`);
     }
-    this.stateful = options.stateful ?? false;
+    invariant(typeof options.injectVar === 'string', 'Expected injectVar to be set');
     this.config = {
-      maxTurns: options.maxTurns,
+      maxTurns: options.maxTurns || 5,
       injectVar: options.injectVar,
-      stateful: this.stateful,
+      stateful: options.stateful ?? false,
       excludeTargetOutputFromAgenticAttackGeneration:
-        options.excludeTargetOutputFromAgenticAttackGeneration,
+        options.excludeTargetOutputFromAgenticAttackGeneration ?? false,
     };
     logger.debug(
       `[GOAT] Constructor options: ${JSON.stringify({
@@ -85,12 +79,6 @@ export default class GoatProvider implements ApiProvider {
         maxTurns: options.maxTurns,
         stateful: options.stateful,
       })}`,
-    );
-    invariant(typeof options.injectVar === 'string', 'Expected injectVar to be set');
-    this.injectVar = options.injectVar;
-    this.maxTurns = options.maxTurns || 5;
-    this.excludeTargetOutputFromAgenticAttackGeneration = Boolean(
-      options.excludeTargetOutputFromAgenticAttackGeneration,
     );
   }
 
@@ -131,13 +119,13 @@ export default class GoatProvider implements ApiProvider {
     let previousAttackerMessage = '';
     let previousTargetOutput = '';
 
-    for (let turn = 0; turn < this.maxTurns; turn++) {
+    for (let turn = 0; turn < this.config.maxTurns; turn++) {
       try {
         let body: string;
         let failureReason: string | undefined;
-        if (this.excludeTargetOutputFromAgenticAttackGeneration && turn > 0) {
+        if (this.config.excludeTargetOutputFromAgenticAttackGeneration && turn > 0) {
           body = JSON.stringify({
-            goal: context?.test?.metadata?.goal || context?.vars[this.injectVar],
+            goal: context?.test?.metadata?.goal || context?.vars[this.config.injectVar],
             targetOutput: previousTargetOutput,
             attackAttempt: previousAttackerMessage,
             task: 'extract-goat-failure',
@@ -161,9 +149,9 @@ export default class GoatProvider implements ApiProvider {
         }
 
         body = JSON.stringify({
-          goal: context?.test?.metadata?.goal || context?.vars[this.injectVar],
+          goal: context?.test?.metadata?.goal || context?.vars[this.config.injectVar],
           i: turn,
-          messages: this.excludeTargetOutputFromAgenticAttackGeneration
+          messages: this.config.excludeTargetOutputFromAgenticAttackGeneration
             ? messages.filter((m) => m.role !== 'assistant')
             : messages,
           prompt: context?.prompt?.raw,
@@ -171,7 +159,7 @@ export default class GoatProvider implements ApiProvider {
           version: VERSION,
           email: getUserEmail(),
           excludeTargetOutputFromAgenticAttackGeneration:
-            this.excludeTargetOutputFromAgenticAttackGeneration,
+            this.config.excludeTargetOutputFromAgenticAttackGeneration,
           failureReason,
           purpose: context?.test?.metadata?.purpose,
         });
@@ -195,7 +183,7 @@ export default class GoatProvider implements ApiProvider {
 
         const targetVars = {
           ...context.vars,
-          [this.injectVar]: attackerMessage.content,
+          [this.config.injectVar]: attackerMessage.content,
         };
 
         const renderedAttackerPrompt = await renderPrompt(
@@ -224,7 +212,7 @@ export default class GoatProvider implements ApiProvider {
         `,
         );
 
-        const targetPrompt = this.stateful
+        const targetPrompt = this.config.stateful
           ? messages[messages.length - 1].content
           : JSON.stringify(messages);
         logger.debug(`GOAT turn ${turn} target prompt: ${renderedAttackerPrompt}`);
