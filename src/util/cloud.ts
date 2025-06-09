@@ -111,10 +111,7 @@ export async function getPluginSeverityOverridesFromCloud(cloudProviderId: strin
     );
   }
   try {
-    const response = await makeRequest(
-      `/redteam/plugins/severity-sets/providers/${cloudProviderId}`,
-      'GET',
-    );
+    const response = await makeRequest(`/providers/${cloudProviderId}`, 'GET');
 
     if (!response.ok) {
       const errorMessage = await response.text();
@@ -126,13 +123,32 @@ export async function getPluginSeverityOverridesFromCloud(cloudProviderId: strin
 
     const body = await response.json();
 
-    if (body.association) {
-      logger.debug(
-        `Plugin severity overrides fetched from cloud: ${JSON.stringify(body, null, 2)}`,
+    if (body.pluginSeveritySetId) {
+      // Fetch the plugin severity set from the cloud:
+      const pluginSeveritySetResponse = await makeRequest(
+        `/redteam/plugins/severity-sets/${body.pluginSeveritySetId}`,
+        'GET',
       );
+
+      if (!pluginSeveritySetResponse.ok) {
+        const errorMessage = await pluginSeveritySetResponse.text();
+        logger.error(
+          `[Cloud] Failed to fetch plugin severity set from cloud: ${errorMessage}. HTTP Status: ${pluginSeveritySetResponse.status} -- ${pluginSeveritySetResponse.statusText}.`,
+        );
+        throw new Error(
+          `Failed to fetch plugin severity set from cloud: ${pluginSeveritySetResponse.statusText}`,
+        );
+      }
+
+      const { pluginSeveritySet } = await pluginSeveritySetResponse.json();
+
+      logger.debug(
+        `Plugin severity overrides ${pluginSeveritySet.id} fetched from cloud: ${JSON.stringify(pluginSeveritySet.members, null, 2)}`,
+      );
+
       return {
-        id: body.association.id,
-        severities: body.association.members.reduce(
+        id: pluginSeveritySet.id,
+        severities: pluginSeveritySet.members.reduce(
           (acc: Record<Plugin, Severity>, member: { pluginId: Plugin; severity: Severity }) => ({
             ...acc,
             [member.pluginId]: member.severity,
