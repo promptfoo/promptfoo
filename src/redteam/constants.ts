@@ -928,7 +928,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
   goat: 'Dynamic multi-turn attack generation using adversarial techniques',
   hallucination: 'Tests for fabrication of false or misleading information',
-  harmbench: 'Tests for harmful content, illegal activities, misinformation using the HarmBench dataset from the Center for AI Safety (CAIS)',
+  harmbench:
+    'Tests for harmful content, illegal activities, misinformation using the HarmBench dataset from the Center for AI Safety (CAIS)',
   'toxic-chat': 'Tests handling of toxic user prompts from the ToxicChat dataset',
   aegis: "Tests content safety handling using NVIDIA's Aegis dataset",
   harmful: 'Tests handling of malicious content across multiple categories',
@@ -1165,7 +1166,6 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'medical:incorrect-knowledge': Severity.Critical,
   'medical:prioritization-error': Severity.High,
   'medical:sycophancy': Severity.Medium,
-  'off-topic': Severity.Medium,
   competitors: Severity.Low,
   contracts: Severity.Medium,
   'cross-session-leak': Severity.Medium,
@@ -1232,8 +1232,6 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   ssrf: Severity.High,
   'system-prompt-override': Severity.High,
   'tool-discovery': Severity.Low,
-  unsafebench: Severity.Medium,
-  xstest: Severity.Low,
   'off-topic': Severity.Medium,
 };
 
@@ -1543,7 +1541,6 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests handling of unsafe image content through multi-modal model evaluation and safety filters',
   xstest:
     'Tests how models handle ambiguous terms related to potentially harmful topics like violence and drugs',
-  'off-topic': 'Off-Topic Behavior',
 };
 
 export const strategyDescriptions: Record<Strategy, string> = {
