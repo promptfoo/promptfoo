@@ -90,11 +90,7 @@ export default function AdvancedOptionsDialog({
             {localOptions.blacklist.length > 0 && (
               <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 2 }}>
                 {localOptions.blacklist.map((pattern, index) => (
-                  <Chip
-                    key={index}
-                    label={pattern}
-                    onDelete={() => handleRemoveBlacklist(index)}
-                  />
+                  <Chip key={index} label={pattern} onDelete={() => handleRemoveBlacklist(index)} />
                 ))}
               </Stack>
             )}

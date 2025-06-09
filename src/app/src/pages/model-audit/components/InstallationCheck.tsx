@@ -11,8 +11,7 @@ export default function InstallationCheck() {
           ModelAudit Not Installed
         </Typography>
         <Typography variant="body1" color="text.secondary" paragraph>
-          The ModelAudit Python package is required to scan ML models for security
-          vulnerabilities.
+          The ModelAudit Python package is required to scan ML models for security vulnerabilities.
         </Typography>
         <Paper sx={{ p: 3, bgcolor: 'grey.100', maxWidth: 500, mx: 'auto', my: 3 }}>
           <Typography variant="body1" fontFamily="monospace" fontWeight={500}>

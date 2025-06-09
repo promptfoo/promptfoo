@@ -56,17 +56,17 @@ export default function SecurityFindings({
 
   const handleDownloadResults = () => {
     const csvHeaders = ['Severity', 'Message', 'Location', 'Details'];
-    const csvRows = scanResults.issues.map(issue => {
+    const csvRows = scanResults.issues.map((issue) => {
       const details = issue.details ? JSON.stringify(issue.details).replace(/"/g, '""') : '';
       const location = issue.location || issue.details?.path || '';
       return [
         issue.severity,
         `"${issue.message.replace(/"/g, '""')}"`,
         `"${location.replace(/"/g, '""')}"`,
-        `"${details}"`
+        `"${details}"`,
       ].join(',');
     });
-    
+
     const csvContent = [csvHeaders.join(','), ...csvRows].join('\n');
     const dataUri = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csvContent);
     const exportFileDefaultName = `model-audit-${new Date().toISOString().split('T')[0]}.csv`;
@@ -89,26 +89,18 @@ export default function SecurityFindings({
       {scanResults.issues.length > 0 && (
         <Alert severity="info" sx={{ mb: 2 }}>
           Total issues found: {scanResults.issues.length} (including{' '}
-          {scanResults.issues.filter((i) => i.severity === 'debug').length} debug
-          messages)
+          {scanResults.issues.filter((i) => i.severity === 'debug').length} debug messages)
         </Alert>
       )}
 
-      <Stack
-        direction="row"
-        justifyContent="space-between"
-        alignItems="center"
-        sx={{ mb: 3 }}
-      >
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
         <Typography variant="h5" fontWeight={600}>
           Security Findings
         </Typography>
         <Stack direction="row" spacing={2}>
           <Select
             value={selectedSeverity || 'all'}
-            onChange={(e) =>
-              onSeverityChange(e.target.value === 'all' ? null : e.target.value)
-            }
+            onChange={(e) => onSeverityChange(e.target.value === 'all' ? null : e.target.value)}
             size="small"
             sx={{ minWidth: 150 }}
           >
@@ -118,19 +110,11 @@ export default function SecurityFindings({
             <MenuItem value="info">Info Only</MenuItem>
             <MenuItem value="debug">Debug Only</MenuItem>
           </Select>
-          <Button
-            variant="outlined"
-            onClick={handleDownloadResults}
-            startIcon={<DownloadIcon />}
-          >
+          <Button variant="outlined" onClick={handleDownloadResults} startIcon={<DownloadIcon />}>
             Export Report
           </Button>
           {scanResults.rawOutput && (
-            <Button
-              variant="outlined"
-              onClick={onToggleRawOutput}
-              startIcon={<CodeIcon />}
-            >
+            <Button variant="outlined" onClick={onToggleRawOutput} startIcon={<CodeIcon />}>
               {showRawOutput ? 'Hide' : 'Show'} Raw Output
             </Button>
           )}
@@ -184,18 +168,11 @@ export default function SecurityFindings({
               <Stack direction="row" spacing={2} alignItems="flex-start">
                 {getSeverityIcon(issue.severity)}
                 <Box sx={{ flexGrow: 1 }}>
-                  <Stack
-                    direction="row"
-                    spacing={2}
-                    alignItems="center"
-                    sx={{ mb: 1 }}
-                  >
+                  <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 1 }}>
                     <Typography variant="body1" fontWeight={600}>
                       {issue.message}
                     </Typography>
-                    <SeverityBadge severity={issue.severity}>
-                      {issue.severity}
-                    </SeverityBadge>
+                    <SeverityBadge severity={issue.severity}>{issue.severity}</SeverityBadge>
                   </Stack>
                   {(issue.location || (issue.details && issue.details.path)) && (
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
@@ -204,10 +181,7 @@ export default function SecurityFindings({
                   )}
                   {issue.details && (
                     <Collapse in={true}>
-                      <Paper
-                        sx={{ p: 2, mt: 2, bgcolor: 'grey.50' }}
-                        variant="outlined"
-                      >
+                      <Paper sx={{ p: 2, mt: 2, bgcolor: 'grey.50' }} variant="outlined">
                         <Typography
                           variant="caption"
                           component="pre"

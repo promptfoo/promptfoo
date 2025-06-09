@@ -1,18 +1,8 @@
 import React from 'react';
-import {
-  PlayArrow as PlayArrowIcon,
-  Settings as SettingsIcon,
-} from '@mui/icons-material';
-import {
-  Alert,
-  Box,
-  Button,
-  CircularProgress,
-  Stack,
-  Typography,
-} from '@mui/material';
-import PathSelector from './PathSelector';
+import { PlayArrow as PlayArrowIcon, Settings as SettingsIcon } from '@mui/icons-material';
+import { Alert, Box, Button, CircularProgress, Stack, Typography } from '@mui/material';
 import type { ScanPath } from '../ModelAudit.types';
+import PathSelector from './PathSelector';
 
 interface ConfigurationTabProps {
   paths: ScanPath[];
@@ -39,20 +29,11 @@ export default function ConfigurationTab({
 }: ConfigurationTabProps) {
   return (
     <Box>
-      <Stack
-        direction="row"
-        justifyContent="space-between"
-        alignItems="center"
-        sx={{ mb: 3 }}
-      >
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
         <Typography variant="h5" fontWeight={600}>
           Select Models
         </Typography>
-        <Button
-          variant="outlined"
-          startIcon={<SettingsIcon />}
-          onClick={onShowOptions}
-        >
+        <Button variant="outlined" startIcon={<SettingsIcon />} onClick={onShowOptions}>
           Advanced Options
         </Button>
       </Stack>

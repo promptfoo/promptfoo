@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { callApi } from '@app/utils/api';
-import {
-  Security as SecurityIcon,
-} from '@mui/icons-material';
+import { Security as SecurityIcon } from '@mui/icons-material';
 import {
   Box,
   CircularProgress,
@@ -14,13 +12,13 @@ import {
   Tabs,
   Typography,
 } from '@mui/material';
-import { useModelAuditStore } from './store';
 import type { ScanPath, ScanOptions, ScanResult } from './ModelAudit.types';
-import InstallationCheck from './components/InstallationCheck';
 import AdvancedOptionsDialog from './components/AdvancedOptionsDialog';
-import ScannedFilesDialog from './components/ScannedFilesDialog';
 import ConfigurationTab from './components/ConfigurationTab';
+import InstallationCheck from './components/InstallationCheck';
 import ResultsTab from './components/ResultsTab';
+import ScannedFilesDialog from './components/ScannedFilesDialog';
+import { useModelAuditStore } from './store';
 
 export default function ModelAudit() {
   const [paths, setPaths] = useState<ScanPath[]>([]);
@@ -108,7 +106,6 @@ export default function ModelAudit() {
     }
   };
 
-
   if (modelAuditInstalled === null) {
     return (
       <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -126,80 +123,80 @@ export default function ModelAudit() {
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
-        {/* Header */}
-        <Box sx={{ mb: 4 }}>
-          <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 1 }}>
-            <SecurityIcon sx={{ fontSize: 40, color: 'primary.main' }} />
-            <Typography variant="h4" fontWeight={700}>
-              Model Security Scanner
-            </Typography>
-          </Stack>
-          <Typography variant="body1" color="text.secondary" sx={{ ml: 7 }}>
-            Scan your ML models for security vulnerabilities and potential risks
+      {/* Header */}
+      <Box sx={{ mb: 4 }}>
+        <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 1 }}>
+          <SecurityIcon sx={{ fontSize: 40, color: 'primary.main' }} />
+          <Typography variant="h4" fontWeight={700}>
+            Model Audit
           </Typography>
-        </Box>
+        </Stack>
+        <Typography variant="body1" color="text.secondary" sx={{ ml: 7 }}>
+          Scan model files for security vulnerabilities and potential risks
+        </Typography>
+      </Box>
 
-        {/* Main Content Card */}
-        <Paper sx={{ overflow: 'hidden' }}>
-          <Tabs
-            value={activeTab}
-            onChange={(_, val) => setActiveTab(val)}
-            sx={{
-              borderBottom: 1,
-              borderColor: 'divider',
-              px: 3,
-              bgcolor: 'grey.50',
-            }}
-          >
-            <Tab label="Configuration" />
-            <Tab label="Results" disabled={!scanResults} />
-          </Tabs>
+      {/* Main Content Card */}
+      <Paper sx={{ overflow: 'hidden' }}>
+        <Tabs
+          value={activeTab}
+          onChange={(_, val) => setActiveTab(val)}
+          sx={{
+            borderBottom: 1,
+            borderColor: 'divider',
+            px: 3,
+            bgcolor: 'grey.50',
+          }}
+        >
+          <Tab label="Configuration" />
+          <Tab label="Results" disabled={!scanResults} />
+        </Tabs>
 
-          {/* Configuration Tab */}
-          <Fade in={activeTab === 0}>
-            <Box sx={{ display: activeTab === 0 ? 'block' : 'none', p: 4 }}>
-              <ConfigurationTab
-                paths={paths}
-                onAddPath={handleAddPath}
-                onRemovePath={handleRemovePath}
-                onShowOptions={() => setShowOptionsDialog(true)}
-                onScan={handleScan}
-                isScanning={isScanning}
-                error={error}
-                onClearError={() => setError(null)}
-                currentWorkingDir={currentWorkingDir}
+        {/* Configuration Tab */}
+        <Fade in={activeTab === 0}>
+          <Box sx={{ display: activeTab === 0 ? 'block' : 'none', p: 4 }}>
+            <ConfigurationTab
+              paths={paths}
+              onAddPath={handleAddPath}
+              onRemovePath={handleRemovePath}
+              onShowOptions={() => setShowOptionsDialog(true)}
+              onScan={handleScan}
+              isScanning={isScanning}
+              error={error}
+              onClearError={() => setError(null)}
+              currentWorkingDir={currentWorkingDir}
+            />
+          </Box>
+        </Fade>
+
+        {/* Results Tab */}
+        <Fade in={activeTab === 1}>
+          <Box sx={{ display: activeTab === 1 ? 'block' : 'none', p: 4 }}>
+            {scanResults && (
+              <ResultsTab
+                scanResults={scanResults}
+                onShowFilesDialog={() => setShowFilesDialog(true)}
               />
-            </Box>
-          </Fade>
+            )}
+          </Box>
+        </Fade>
+      </Paper>
 
-          {/* Results Tab */}
-          <Fade in={activeTab === 1}>
-            <Box sx={{ display: activeTab === 1 ? 'block' : 'none', p: 4 }}>
-              {scanResults && (
-                <ResultsTab 
-                  scanResults={scanResults} 
-                  onShowFilesDialog={() => setShowFilesDialog(true)} 
-                />
-              )}
-            </Box>
-          </Fade>
-        </Paper>
+      {/* Advanced Options Dialog */}
+      <AdvancedOptionsDialog
+        open={showOptionsDialog}
+        onClose={() => setShowOptionsDialog(false)}
+        scanOptions={scanOptions}
+        onOptionsChange={setScanOptions}
+      />
 
-        {/* Advanced Options Dialog */}
-        <AdvancedOptionsDialog
-          open={showOptionsDialog}
-          onClose={() => setShowOptionsDialog(false)}
-          scanOptions={scanOptions}
-          onOptionsChange={setScanOptions}
-        />
-
-        {/* Scanned Files Dialog */}
-        <ScannedFilesDialog
-          open={showFilesDialog}
-          onClose={() => setShowFilesDialog(false)}
-          scanResults={scanResults}
-          paths={paths}
-        />
-      </Container>
+      {/* Scanned Files Dialog */}
+      <ScannedFilesDialog
+        open={showFilesDialog}
+        onClose={() => setShowFilesDialog(false)}
+        scanResults={scanResults}
+        paths={paths}
+      />
+    </Container>
   );
 }

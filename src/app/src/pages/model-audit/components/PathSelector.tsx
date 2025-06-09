@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
+import { callApi } from '@app/utils/api';
 import {
   Clear as ClearIcon,
   Delete as DeleteIcon,
   InsertDriveFile as FileIcon,
   Folder as FolderIcon,
   CloudUpload as CloudUploadIcon,
-  Business as BusinessIcon,
   Storage as StorageIcon,
   GitHub as GitHubIcon,
   Lock as LockIcon,
   Cloud as CloudIcon,
+  Computer as ComputerIcon,
 } from '@mui/icons-material';
 import {
   Alert,
@@ -28,6 +29,9 @@ import {
   Paper,
   Grid,
   Tooltip,
+  Tabs,
+  Tab,
+  Badge,
 } from '@mui/material';
 import type { ScanPath } from '../ModelAudit.types';
 import { useModelAuditStore } from '../store';
@@ -46,212 +50,289 @@ export default function PathSelector({
   currentWorkingDir,
 }: PathSelectorProps) {
   const [pathInput, setPathInput] = useState('');
+  const [activeTab, setActiveTab] = useState(0);
   const { recentScans, clearRecentScans } = useModelAuditStore();
 
-  const handleAddPath = (input: string) => {
+  const handleAddPath = async (input: string) => {
     const trimmedPath = input.trim();
     if (!trimmedPath) {
       return;
     }
 
-    const isDirectory = trimmedPath.endsWith('/') || !trimmedPath.includes('.');
-    const name = trimmedPath.split('/').pop() || trimmedPath;
+    try {
+      // Check path type using the API
+      const response = await callApi('/model-audit/check-path', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ path: trimmedPath }),
+      });
 
-    onAddPath({
-      path: trimmedPath,
-      type: isDirectory ? 'directory' : 'file',
-      name,
-    });
+      const data = await response.json();
+
+      if (data.exists) {
+        // Use the actual type from the filesystem
+        onAddPath({
+          path: trimmedPath,
+          type: data.type,
+          name: data.name || trimmedPath.split('/').pop() || trimmedPath,
+        });
+      } else {
+        // Path doesn't exist, make a best guess based on the input
+        // If it ends with a slash, treat as directory
+        const isDirectory = trimmedPath.endsWith('/');
+        const name = trimmedPath.split('/').pop() || trimmedPath;
+
+        onAddPath({
+          path: trimmedPath,
+          type: isDirectory ? 'directory' : 'file',
+          name,
+        });
+      }
+    } catch (error) {
+      console.error('Error checking path:', error);
+      // Fallback to simple logic if API call fails
+      const isDirectory = trimmedPath.endsWith('/');
+      const name = trimmedPath.split('/').pop() || trimmedPath;
+
+      onAddPath({
+        path: trimmedPath,
+        type: isDirectory ? 'directory' : 'file',
+        name,
+      });
+    }
+
     setPathInput('');
+  };
+
+  const tabIcon = (icon: React.ReactElement, isLocked: boolean = false) => {
+    if (isLocked) {
+      return (
+        <Badge
+          badgeContent={<LockIcon sx={{ fontSize: 10 }} />}
+          sx={{
+            '& .MuiBadge-badge': {
+              right: -3,
+              top: 3,
+              padding: 0,
+              minWidth: 12,
+              height: 12,
+            },
+          }}
+        >
+          {icon}
+        </Badge>
+      );
+    }
+    return icon;
   };
 
   return (
     <Box>
-      {currentWorkingDir && (
-        <Alert severity="info" sx={{ mb: 3 }}>
-          <Typography variant="body2">
-            <strong>Current directory:</strong> {currentWorkingDir}
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            Relative paths will be resolved from this directory
-          </Typography>
-        </Alert>
+      <Tabs
+        value={activeTab}
+        onChange={(_, newValue) => setActiveTab(newValue)}
+        sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+      >
+        <Tab label="Local Files" icon={tabIcon(<ComputerIcon />)} iconPosition="start" />
+        <Tooltip title="Cloud storage integration is available in Promptfoo Enterprise">
+          <span>
+            <Tab
+              label="Cloud Storage"
+              icon={tabIcon(<CloudIcon />, true)}
+              iconPosition="start"
+              disabled
+              sx={{ opacity: 0.6 }}
+            />
+          </span>
+        </Tooltip>
+        <Tooltip title="Git repository integration is available in Promptfoo Enterprise">
+          <span>
+            <Tab
+              label="Git Repositories"
+              icon={tabIcon(<GitHubIcon />, true)}
+              iconPosition="start"
+              disabled
+              sx={{ opacity: 0.6 }}
+            />
+          </span>
+        </Tooltip>
+        <Tooltip title="Model registry integration is available in Promptfoo Enterprise">
+          <span>
+            <Tab
+              label="Model Registries"
+              icon={tabIcon(<StorageIcon />, true)}
+              iconPosition="start"
+              disabled
+              sx={{ opacity: 0.6 }}
+            />
+          </span>
+        </Tooltip>
+      </Tabs>
+
+      {/* Local Files Tab */}
+      {activeTab === 0 && (
+        <Box>
+          {currentWorkingDir && (
+            <Alert severity="info" sx={{ mb: 3 }}>
+              <Typography variant="body2">
+                <strong>Current directory:</strong> {currentWorkingDir}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Relative paths will be resolved from this directory
+              </Typography>
+            </Alert>
+          )}
+
+          <Box sx={{ mb: 3 }}>
+            <TextField
+              fullWidth
+              label="Add model path"
+              placeholder="Examples: ./model.pkl, /path/to/models/, ../data/model.h5"
+              value={pathInput}
+              onChange={(e) => setPathInput(e.target.value)}
+              onKeyPress={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleAddPath(pathInput);
+                }
+              }}
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <Button onClick={() => handleAddPath(pathInput)} disabled={!pathInput.trim()}>
+                      Add
+                    </Button>
+                  </InputAdornment>
+                ),
+              }}
+              helperText="Enter a file path or directory path. Press Enter or click Add."
+            />
+          </Box>
+        </Box>
       )}
 
-      <Box sx={{ mb: 3 }}>
-        <TextField
-          fullWidth
-          label="Add model path"
-          placeholder="Examples: ./model.pkl, /path/to/models/, ../data/model.h5"
-          value={pathInput}
-          onChange={(e) => setPathInput(e.target.value)}
-          onKeyPress={(e) => {
-            if (e.key === 'Enter') {
-              handleAddPath(pathInput);
-            }
-          }}
-          InputProps={{
-            endAdornment: (
-              <InputAdornment position="end">
-                <Button onClick={() => handleAddPath(pathInput)} disabled={!pathInput.trim()}>
-                  Add
-                </Button>
-              </InputAdornment>
-            ),
-          }}
-          helperText="Enter a file path or directory path. Press Enter or click Add."
-        />
-      </Box>
+      {/* Cloud Storage Tab */}
+      {activeTab === 1 && (
+        <Box sx={{ p: 4 }}>
+          <Box sx={{ textAlign: 'center', mb: 4 }}>
+            <CloudIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
+            <Typography variant="h6" color="text.disabled" gutterBottom>
+              Cloud Storage Integration
+            </Typography>
+            <Typography variant="body2" color="text.secondary" paragraph>
+              Scan models directly from cloud storage providers with automatic authentication and
+              secure access.
+            </Typography>
+          </Box>
 
-      {/* Enterprise Storage Options */}
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 2 }}>
-          Other Storage Options
-        </Typography>
-        <Grid container spacing={2}>
-          <Grid item xs={12} sm={6} md={4}>
-            <Tooltip title="S3 bucket integration is available in Promptfoo Enterprise">
-              <Paper
-                sx={{
-                  p: 2,
-                  textAlign: 'center',
-                  cursor: 'not-allowed',
-                  opacity: 0.5,
-                  position: 'relative',
-                }}
-              >
-                <CloudUploadIcon sx={{ fontSize: 32, color: 'text.disabled', mb: 1 }} />
-                <Typography variant="body2" color="text.disabled">
-                  AWS S3 Buckets
+          <Grid container spacing={3}>
+            <Grid item xs={12} md={4}>
+              <Paper sx={{ p: 3, textAlign: 'center', bgcolor: 'grey.50' }}>
+                <CloudUploadIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
+                <Typography variant="subtitle1" gutterBottom>
+                  AWS S3
                 </Typography>
-                <Box sx={{ position: 'absolute', top: 8, right: 8 }}>
-                  <LockIcon fontSize="small" color="disabled" />
-                </Box>
-              </Paper>
-            </Tooltip>
-          </Grid>
-          <Grid item xs={12} sm={6} md={4}>
-            <Tooltip title="Azure Blob Storage integration is available in Promptfoo Enterprise">
-              <Paper
-                sx={{
-                  p: 2,
-                  textAlign: 'center',
-                  cursor: 'not-allowed',
-                  opacity: 0.5,
-                  position: 'relative',
-                }}
-              >
-                <CloudIcon sx={{ fontSize: 32, color: 'text.disabled', mb: 1 }} />
-                <Typography variant="body2" color="text.disabled">
-                  Azure Blob Storage
+                <Typography variant="body2" color="text.secondary">
+                  IAM roles, credentials management
                 </Typography>
-                <Box sx={{ position: 'absolute', top: 8, right: 8 }}>
-                  <LockIcon fontSize="small" color="disabled" />
-                </Box>
-              </Paper>
-            </Tooltip>
-          </Grid>
-          <Grid item xs={12} sm={6} md={4}>
-            <Tooltip title="Google Cloud Storage integration is available in Promptfoo Enterprise">
-              <Paper
-                sx={{
-                  p: 2,
-                  textAlign: 'center',
-                  cursor: 'not-allowed',
-                  opacity: 0.5,
-                  position: 'relative',
-                }}
-              >
-                <CloudIcon sx={{ fontSize: 32, color: 'text.disabled', mb: 1 }} />
-                <Typography variant="body2" color="text.disabled">
-                  Google Cloud Storage
+                <Typography variant="caption" display="block" sx={{ mt: 1 }}>
+                  <code>s3://bucket/models/</code>
                 </Typography>
-                <Box sx={{ position: 'absolute', top: 8, right: 8 }}>
-                  <LockIcon fontSize="small" color="disabled" />
-                </Box>
               </Paper>
-            </Tooltip>
-          </Grid>
-          <Grid item xs={12} sm={6} md={4}>
-            <Tooltip title="Git repository integration is available in Promptfoo Enterprise">
-              <Paper
-                sx={{
-                  p: 2,
-                  textAlign: 'center',
-                  cursor: 'not-allowed',
-                  opacity: 0.5,
-                  position: 'relative',
-                }}
-              >
-                <GitHubIcon sx={{ fontSize: 32, color: 'text.disabled', mb: 1 }} />
-                <Typography variant="body2" color="text.disabled">
-                  Git Repositories
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <Paper sx={{ p: 3, textAlign: 'center', bgcolor: 'grey.50' }}>
+                <CloudIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
+                <Typography variant="subtitle1" gutterBottom>
+                  Azure Blob
                 </Typography>
-                <Box sx={{ position: 'absolute', top: 8, right: 8 }}>
-                  <LockIcon fontSize="small" color="disabled" />
-                </Box>
-              </Paper>
-            </Tooltip>
-          </Grid>
-          <Grid item xs={12} sm={6} md={4}>
-            <Tooltip title="MLflow registry integration is available in Promptfoo Enterprise">
-              <Paper
-                sx={{
-                  p: 2,
-                  textAlign: 'center',
-                  cursor: 'not-allowed',
-                  opacity: 0.5,
-                  position: 'relative',
-                }}
-              >
-                <StorageIcon sx={{ fontSize: 32, color: 'text.disabled', mb: 1 }} />
-                <Typography variant="body2" color="text.disabled">
-                  Model Registries
+                <Typography variant="body2" color="text.secondary">
+                  Managed identity, SAS tokens
                 </Typography>
-                <Box sx={{ position: 'absolute', top: 8, right: 8 }}>
-                  <LockIcon fontSize="small" color="disabled" />
-                </Box>
-              </Paper>
-            </Tooltip>
-          </Grid>
-          <Grid item xs={12} sm={6} md={4}>
-            <Tooltip title="Network file share integration is available in Promptfoo Enterprise">
-              <Paper
-                sx={{
-                  p: 2,
-                  textAlign: 'center',
-                  cursor: 'not-allowed',
-                  opacity: 0.5,
-                  position: 'relative',
-                }}
-              >
-                <BusinessIcon sx={{ fontSize: 32, color: 'text.disabled', mb: 1 }} />
-                <Typography variant="body2" color="text.disabled">
-                  Network Shares
+                <Typography variant="caption" display="block" sx={{ mt: 1 }}>
+                  <code>az://container/path/</code>
                 </Typography>
-                <Box sx={{ position: 'absolute', top: 8, right: 8 }}>
-                  <LockIcon fontSize="small" color="disabled" />
-                </Box>
               </Paper>
-            </Tooltip>
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <Paper sx={{ p: 3, textAlign: 'center', bgcolor: 'grey.50' }}>
+                <CloudIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
+                <Typography variant="subtitle1" gutterBottom>
+                  Google Cloud
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Service accounts, workload identity
+                </Typography>
+                <Typography variant="caption" display="block" sx={{ mt: 1 }}>
+                  <code>gs://bucket/models/</code>
+                </Typography>
+              </Paper>
+            </Grid>
           </Grid>
-        </Grid>
-        <Box sx={{ mt: 2, textAlign: 'center' }}>
-          <Typography variant="caption" color="text.secondary">
-            <LockIcon fontSize="inherit" sx={{ verticalAlign: 'middle', mr: 0.5 }} />
-            Enterprise features enable scanning models from cloud storage, repositories, and
-            registries.{' '}
-            <a
+
+          <Box sx={{ textAlign: 'center', mt: 4 }}>
+            <Button
+              variant="outlined"
               href="https://promptfoo.dev/docs/guides/enterprise"
               target="_blank"
-              rel="noopener noreferrer"
-              style={{ color: 'inherit' }}
+              startIcon={<LockIcon />}
             >
-              Learn more
-            </a>
-          </Typography>
+              Available in Enterprise
+            </Button>
+          </Box>
         </Box>
-      </Box>
+      )}
+
+      {/* Git Repositories Tab */}
+      {activeTab === 2 && (
+        <Box sx={{ p: 4, textAlign: 'center' }}>
+          <GitHubIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
+          <Typography variant="h6" color="text.disabled" gutterBottom>
+            Git Repository Integration
+          </Typography>
+          <Typography variant="body2" color="text.secondary" paragraph>
+            Scan models directly from GitHub, GitLab, or Bitbucket repositories with OAuth
+            integration.
+          </Typography>
+          <Typography variant="body2" color="text.secondary" paragraph>
+            Configure paths like: <code>github:org/repo/path/to/model.pkl</code>
+          </Typography>
+          <Button
+            variant="outlined"
+            href="https://promptfoo.dev/docs/guides/enterprise"
+            target="_blank"
+            startIcon={<LockIcon />}
+          >
+            Available in Enterprise
+          </Button>
+        </Box>
+      )}
+
+      {/* Model Registries Tab */}
+      {activeTab === 3 && (
+        <Box sx={{ p: 4, textAlign: 'center' }}>
+          <StorageIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
+          <Typography variant="h6" color="text.disabled" gutterBottom>
+            Model Registry Integration
+          </Typography>
+          <Typography variant="body2" color="text.secondary" paragraph>
+            Connect to MLflow, Weights & Biases, Neptune, and other model registries.
+          </Typography>
+          <Typography variant="body2" color="text.secondary" paragraph>
+            Scan models by registry URI: <code>mlflow://model-name/version</code>
+          </Typography>
+          <Button
+            variant="outlined"
+            href="https://promptfoo.dev/docs/guides/enterprise"
+            target="_blank"
+            startIcon={<LockIcon />}
+          >
+            Available in Enterprise
+          </Button>
+        </Box>
+      )}
 
       {recentScans.length > 0 && (
         <Box sx={{ mb: 2 }}>

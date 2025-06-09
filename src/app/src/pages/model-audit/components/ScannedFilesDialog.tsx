@@ -1,8 +1,5 @@
 import React from 'react';
-import {
-  InsertDriveFile as FileIcon,
-  Folder as FolderIcon,
-} from '@mui/icons-material';
+import { InsertDriveFile as FileIcon, Folder as FolderIcon } from '@mui/icons-material';
 import {
   Box,
   Button,
@@ -50,7 +47,7 @@ export default function ScannedFilesDialog({
                 <ListItemIcon>
                   <FileIcon fontSize="small" />
                 </ListItemIcon>
-                <ListItemText 
+                <ListItemText
                   primary={file}
                   primaryTypographyProps={{ fontSize: '0.875rem', fontFamily: 'monospace' }}
                 />
@@ -68,9 +65,13 @@ export default function ScannedFilesDialog({
                   {paths.map((path, index) => (
                     <ListItem key={index} sx={{ py: 0.5 }}>
                       <ListItemIcon>
-                        {path.type === 'directory' ? <FolderIcon fontSize="small" /> : <FileIcon fontSize="small" />}
+                        {path.type === 'directory' ? (
+                          <FolderIcon fontSize="small" />
+                        ) : (
+                          <FileIcon fontSize="small" />
+                        )}
                       </ListItemIcon>
-                      <ListItemText 
+                      <ListItemText
                         primary={path.path}
                         secondary={path.type}
                         primaryTypographyProps={{ fontSize: '0.875rem', fontFamily: 'monospace' }}
