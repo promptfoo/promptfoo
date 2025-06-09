@@ -41,7 +41,15 @@ export interface ExtractAttackFailureResponse {
   task: string;
 }
 
+interface GoatConfig {
+  injectVar?: string;
+  maxTurns?: number;
+  excludeTargetOutputFromAgenticAttackGeneration?: boolean;
+  stateful?: boolean;
+}
+
 export default class GoatProvider implements ApiProvider {
+  readonly config: GoatConfig;
   private maxTurns: number;
   private readonly injectVar: string;
   private readonly stateful: boolean;
@@ -55,8 +63,7 @@ export default class GoatProvider implements ApiProvider {
     options: ProviderOptions & {
       maxTurns?: number;
       injectVar?: string;
-      // @deprecated
-      stateless?: boolean;
+
       stateful?: boolean;
       excludeTargetOutputFromAgenticAttackGeneration?: boolean;
     } = {},
@@ -64,7 +71,14 @@ export default class GoatProvider implements ApiProvider {
     if (neverGenerateRemote()) {
       throw new Error(`GOAT strategy requires remote grading to be enabled`);
     }
-    this.stateful = options.stateful ?? (options.stateless == null ? true : !options.stateless);
+    this.stateful = options.stateful ?? false;
+    this.config = {
+      maxTurns: options.maxTurns,
+      injectVar: options.injectVar,
+      stateful: options.stateful,
+      excludeTargetOutputFromAgenticAttackGeneration:
+        options.excludeTargetOutputFromAgenticAttackGeneration,
+    };
     logger.debug(
       `[GOAT] Constructor options: ${JSON.stringify({
         injectVar: options.injectVar,
@@ -72,12 +86,6 @@ export default class GoatProvider implements ApiProvider {
         stateful: options.stateful,
       })}`,
     );
-    if (options.stateless !== undefined) {
-      telemetry.recordOnce('feature_used', {
-        feature: 'stateless',
-        state: String(options.stateless),
-      });
-    }
     invariant(typeof options.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = options.injectVar;
     this.maxTurns = options.maxTurns || 5;
