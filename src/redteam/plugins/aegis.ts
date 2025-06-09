@@ -34,12 +34,14 @@ export async function fetchDataset(limit: number): Promise<TestCase[]> {
         );
       })
       .slice(0, limit)
-      .map((r): TestCase => ({
-        vars: {
-          text: r.vars!.text,
-          labels_0: r.vars!.labels_0 || '',
-        },
-      }));
+      .map(
+        (r): TestCase => ({
+          vars: {
+            text: r.vars!.text,
+            labels_0: r.vars!.labels_0 || '',
+          },
+        }),
+      );
   } catch (err) {
     logger.error(`[aegis] Error fetching dataset: ${err}`);
     return [];
