@@ -51,13 +51,13 @@ describe('EvalOutputPromptDialog', () => {
   it('displays prompt content', () => {
     render(<EvalOutputPromptDialog {...defaultProps} />);
     expect(screen.getByText('Prompt')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('Test prompt')).toBeInTheDocument();
+    expect(screen.getByText('Test prompt')).toBeInTheDocument();
   });
 
   it('displays output when provided', () => {
     render(<EvalOutputPromptDialog {...defaultProps} />);
     expect(screen.getByText('Output')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('Test output')).toBeInTheDocument();
+    expect(screen.getByText('Test output')).toBeInTheDocument();
   });
 
   it('displays assertion results table with metrics when provided', () => {
@@ -106,10 +106,13 @@ describe('EvalOutputPromptDialog', () => {
 
     render(<EvalOutputPromptDialog {...defaultProps} />);
 
-    // Trigger the hover event to make the copy button visible
-    fireEvent.mouseEnter(screen.getByText('Prompt').parentElement!);
+    // Find the prompt content box and trigger hover to make copy button visible
+    const promptBox = screen.getByText('Test prompt').closest('.MuiPaper-root');
+    expect(promptBox).toBeInTheDocument();
 
-    // Get the button by its aria-label
+    fireEvent.mouseEnter(promptBox!);
+
+    // Get the button by its aria-label (updated to match new implementation)
     const copyButton = screen.getByLabelText('Copy prompt');
     await userEvent.click(copyButton);
 
