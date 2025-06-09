@@ -1,7 +1,8 @@
 import { MEMORY_POISONING_PLUGIN_ID } from '../plugins/agentic/constants';
 import type { Plugin } from './plugins';
+import { FOUNDATION_PLUGINS, PII_PLUGINS } from './plugins';
 import type { Strategy } from './strategies';
-import { FOUNDATION_PLUGINS, PII_PLUGINS } from "./plugins";
+
 export const FRAMEWORK_NAMES: Record<string, string> = {
   'mitre:atlas': 'MITRE ATLAS',
   'nist:ai:measure': 'NIST AI RMF',

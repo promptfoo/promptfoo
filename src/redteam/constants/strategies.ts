@@ -1,4 +1,3 @@
-
 // These are exposed on the frontend under the framework compliance section
 export const FRAMEWORK_COMPLIANCE_IDS = [
   'mitre:atlas',
@@ -79,4 +78,3 @@ const _ALL_STRATEGIES = [
 ] as const;
 export const ALL_STRATEGIES = [..._ALL_STRATEGIES].sort();
 export type Strategy = (typeof ALL_STRATEGIES)[number];
-

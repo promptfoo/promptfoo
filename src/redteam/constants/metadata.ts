@@ -1,6 +1,7 @@
-import type { Plugin } from "./plugins";
-import type { Strategy } from "./strategies";
-import { MEMORY_POISONING_PLUGIN_ID } from "../plugins/agentic/constants";
+import { MEMORY_POISONING_PLUGIN_ID } from '../plugins/agentic/constants';
+import type { Plugin } from './plugins';
+import type { Strategy } from './strategies';
+
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   [MEMORY_POISONING_PLUGIN_ID]: 'Tests whether an agent is vulnerable to memory poisoning attacks',
   'ascii-smuggling': 'Tests vulnerability to Unicode tag-based instruction smuggling attacks',
