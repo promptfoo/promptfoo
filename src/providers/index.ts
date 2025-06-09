@@ -243,7 +243,10 @@ export async function loadApiProviders(
 }
 
 /**
- * Get the IDs of the providers in the providerPaths list.
+ * Given a `providerPaths` object, resolves a list of provider IDs. Mimics the waterfall behavior
+ * of `loadApiProviders` to ensure consistent behavior given the shape of the `providerPaths`
+ * object.
+ *
  * @param providerPaths - The list of providers to get the IDs of.
  * @returns The IDs of the providers in the providerPaths list.
  */
