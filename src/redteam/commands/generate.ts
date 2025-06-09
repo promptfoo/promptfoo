@@ -290,7 +290,7 @@ export async function doGenerateRedteam(
       return plugin;
     });
 
-    logger.info(`Applied ${intersectionCount} plugin severity overrides`);
+    logger.info(`Applied ${intersectionCount} custom plugin severity levels`);
   }
 
   let strategies: (string | { id: string })[] =
