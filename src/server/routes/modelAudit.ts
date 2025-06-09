@@ -26,37 +26,37 @@ modelAuditRouter.get('/check-installed', async (req: Request, res: Response): Pr
 modelAuditRouter.post('/check-path', async (req: Request, res: Response): Promise<void> => {
   try {
     const { path: inputPath } = req.body;
-    
+
     if (!inputPath) {
       res.status(400).json({ error: 'No path provided' });
       return;
     }
-    
+
     // Handle home directory expansion
     let expandedPath = inputPath;
     if (expandedPath.startsWith('~/')) {
       expandedPath = path.join(os.homedir(), expandedPath.slice(2));
     }
-    
+
     const absolutePath = path.isAbsolute(expandedPath)
       ? expandedPath
       : path.resolve(process.cwd(), expandedPath);
-    
+
     // Check if path exists
     if (!fs.existsSync(absolutePath)) {
       res.json({ exists: false, type: null });
       return;
     }
-    
+
     // Get path stats
     const stats = fs.statSync(absolutePath);
     const type = stats.isDirectory() ? 'directory' : 'file';
-    
-    res.json({ 
-      exists: true, 
+
+    res.json({
+      exists: true,
       type,
       absolutePath,
-      name: path.basename(absolutePath)
+      name: path.basename(absolutePath),
     });
   } catch (error) {
     logger.error(`Error checking path: ${error}`);
