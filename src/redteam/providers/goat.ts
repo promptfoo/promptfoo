@@ -75,7 +75,7 @@ export default class GoatProvider implements ApiProvider {
     this.config = {
       maxTurns: options.maxTurns,
       injectVar: options.injectVar,
-      stateful: options.stateful,
+      stateful: this.stateful,
       excludeTargetOutputFromAgenticAttackGeneration:
         options.excludeTargetOutputFromAgenticAttackGeneration,
     };
