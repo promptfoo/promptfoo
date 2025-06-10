@@ -4,6 +4,7 @@ This module provides functionality for handling extension hooks in promptfoo.
 It allows for executing custom actions before and after test suites and
 individual evaluations, as well as running setup and teardown commands.
 """
+
 import logging
 import os
 from datetime import datetime
@@ -78,7 +79,9 @@ def extension_hook(hook_name: str, context: dict) -> Optional[dict]:
         logging.info("Preparing test")
 
         # All languages are now pirate:
-        context["test"]["vars"]["language"] = f'Pirate {context["test"]["vars"]["language"]}'
+        context["test"]["vars"]["language"] = (
+            f"Pirate {context['test']['vars']['language']}"
+        )
 
         return context
 
