@@ -32,8 +32,8 @@
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.15.31",
     "@types/prismjs": "^1.26.5",
-    "@types/react": "^19.1.5",
-    "@types/react-dom": "^19.1.5",
+    "@types/react": "^19.1.7",
+    "@types/react-dom": "^19.1.6",
     "@types/react-router-dom": "^5.3.3",
     "@types/react-syntax-highlighter": "^15.5.13",
     "@types/uuid": "^10.0.0",
@@ -79,13 +79,13 @@
   "overrides": {
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "@types/react": "^19.0.2",
-    "@types/react-dom": "^19.0.2"
+    "@types/react": "^19.1.7",
+    "@types/react-dom": "^19.1.6"
   },
   "resolutions": {
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "@types/react": "^19.1.5",
-    "@types/react-dom": "^19.1.5"
+    "@types/react": "^19.1.7",
+    "@types/react-dom": "^19.1.6"
   }
 }

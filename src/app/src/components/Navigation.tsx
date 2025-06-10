@@ -1,6 +1,6 @@
 import React, { useState, forwardRef } from 'react';
 import type { LinkProps } from 'react-router-dom';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import EngineeringIcon from '@mui/icons-material/Engineering';
@@ -57,12 +57,7 @@ const NavSection = styled(Box)({
 
 function NavLink({ href, label }: { href: string; label: string }) {
   const location = useLocation();
-  const navigate = useNavigate();
   const isActive = location.pathname.startsWith(href);
-
-  const handleClick = () => {
-    navigate(href);
-  };
 
   return (
     <NavButton component={RouterLink} to={href} className={isActive ? 'active' : ''}>
@@ -75,7 +70,6 @@ function CreateDropdown() {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const open = Boolean(anchorEl);
   const location = useLocation();
-  const navigate = useNavigate();
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -83,11 +77,6 @@ function CreateDropdown() {
 
   const handleClose = () => {
     setAnchorEl(null);
-  };
-
-  const handleNavigation = (path: string) => {
-    navigate(path);
-    handleClose();
   };
 
   const isActive = ['/setup', '/redteam/setup'].some((route) =>
@@ -131,7 +120,6 @@ function EvalsDropdown() {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const open = Boolean(anchorEl);
   const location = useLocation();
-  const navigate = useNavigate();
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -139,11 +127,6 @@ function EvalsDropdown() {
 
   const handleClose = () => {
     setAnchorEl(null);
-  };
-
-  const handleNavigation = (path: string) => {
-    navigate(path);
-    handleClose();
   };
 
   const isActive = ['/eval', '/evals'].some((route) => location.pathname.startsWith(route));

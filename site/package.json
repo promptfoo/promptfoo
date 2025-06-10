@@ -30,8 +30,8 @@
     "@mui/icons-material": "^6.4.12",
     "@segment/ajv-human-errors": "^2.15.0",
     "@tsconfig/docusaurus": "^2.0.3",
-    "@types/react": "^19.1.5",
-    "@types/react-dom": "^19.1.5",
+    "@types/react": "^19.1.7",
+    "@types/react-dom": "^19.1.6",
     "canvas-confetti": "^1.9.3",
     "clsx": "^2.1.1",
     "dedent": "^1.6.0",
@@ -60,5 +60,9 @@
   },
   "dependencies": {
     "swiper": "^11.2.8"
+  },
+  "resolutions": {
+    "@types/react": "^19.1.7",
+    "@types/react-dom": "^19.1.6"
   }
 }

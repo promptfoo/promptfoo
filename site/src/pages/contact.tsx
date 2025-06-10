@@ -49,20 +49,25 @@ interface TabPanelProps {
 function TabPanel(props: TabPanelProps) {
   const { children, value, index, ...other } = props;
 
+  if (value !== index) {
+    return null;
+  }
+
   return (
     <div
       role="tabpanel"
-      hidden={value !== index}
       id={`contact-tabpanel-${index}`}
       aria-labelledby={`contact-tab-${index}`}
       {...other}
     >
-      {value === index && <Box sx={{ py: 3 }}>{children}</Box>}
+      <div style={{ paddingTop: 24, paddingBottom: 24 }}>
+        {children}
+      </div>
     </div>
   );
 }
 
-function Contact(): React.JSX.Element {
+function Contact(): JSX.Element {
   const isDarkTheme = useColorMode().colorMode === 'dark';
   const [tabValue, setTabValue] = useState(0);
 
@@ -197,7 +202,7 @@ function Contact(): React.JSX.Element {
   );
 }
 
-export default function Page(): React.JSX.Element {
+export default function Page(): JSX.Element {
   return (
     <Layout title="Contact Us" description="Schedule a meeting with the promptfoo team">
       <Contact />
