@@ -11,8 +11,6 @@
   "license": "MIT",
   "dependencies": {
     "express": "^5.1.0",
-    "promptfoo": "file:../..",
-    "crypto": "*",
-    "fs": "*"
+    "promptfoo": "^0.114.7"
   }
 }
