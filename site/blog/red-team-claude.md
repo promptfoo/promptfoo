@@ -1,5 +1,5 @@
 ---
-date: 2025-01-07
+date: 2025-05-22
 image: /img/blog/red-team-claude.png
 ---
 
