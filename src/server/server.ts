@@ -61,9 +61,7 @@ function setJavaScriptMimeType(req: Request, res: Response, next: express.NextFu
  */
 function handleServerError(error: NodeJS.ErrnoException, port: number): void {
   if (error.code === 'EADDRINUSE') {
-    logger.error(
-      `Port ${port} is already in use. Do you have another Promptfoo instance running?`,
-    );
+    logger.error(`Port ${port} is already in use. Do you have another Promptfoo instance running?`);
   } else {
     logger.error(`Failed to start server: ${error.message}`);
   }
