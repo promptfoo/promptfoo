@@ -7,6 +7,7 @@ individual evaluations, as well as running setup and teardown commands.
 import logging
 import os
 from datetime import datetime
+from typing import Optional
 
 # Set up logging only if it hasn't been set up already
 if not logging.getLogger().handlers:
@@ -23,7 +24,7 @@ if not logging.getLogger().handlers:
 counter = 0
 
 
-def extension_hook(hook_name: str, context: dict) -> dict:
+def extension_hook(hook_name: str, context: dict) -> Optional[dict]:
     """Handles different extension hooks for promptfoo.
 
     This function is called at various points during the test execution process.
@@ -36,7 +37,8 @@ def extension_hook(hook_name: str, context: dict) -> dict:
             The contents of this dictionary vary depending on the hook being called.
 
     Returns:
-        context (dict): The updated context.
+        context (Optional[dict]): The "beforeAll" and "beforeEach" hooks should return the context object,
+            while the "afterAll" and "afterEach" hooks should not return anything.
 
     Global Variables:
         counter (int): Keeps track of the number of tests completed.
@@ -70,11 +72,15 @@ def extension_hook(hook_name: str, context: dict) -> dict:
         # Add an additional default assertion to the suite:
         context["suite"]["defaultTest"]["assert"].append({"type": "is-json"})
 
+        return context
+
     elif hook_name == "beforeEach":
         logging.info("Preparing test")
 
         # All languages are now pirate:
-        context["test"]["vars"]["language"] = f"Pirate {context["test"]["vars"]["language"]}"
+        context["test"]["vars"]["language"] = f'Pirate {context["test"]["vars"]["language"]}'
+
+        return context
 
     elif hook_name == "afterEach":
         result = context.get("result", {})
@@ -102,5 +108,3 @@ def extension_hook(hook_name: str, context: dict) -> dict:
         logging.info(f"Total token usage: {total_token_usage}")
 
     logging.info("")  # Add a blank line for readability between hooks
-
-    return context
