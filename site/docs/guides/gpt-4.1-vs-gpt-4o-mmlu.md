@@ -8,13 +8,13 @@ sidebar_label: GPT-4.1 vs GPT-4o MMLU
 
 # GPT-4.1 vs GPT-4o: MMLU Benchmark Comparison
 
-OpenAI's [GPT-4.1](https://openai.com/index/introducing-gpt-4-1-in-the-api/) delivers significant improvements over GPT-4o, scoring **90.2% on MMLU** compared to GPT-4o's 85.7% - a **4.5 percentage point** improvement on this academic reasoning benchmark.
+OpenAI's [GPT-4.1](https://openai.com/index/introducing-gpt-4-1-in-the-api/) scores **90.2% on MMLU** vs GPT-4o's 85.7% - a **4.5 point improvement** on academic reasoning.
 
-This guide shows you how to reproduce and validate these results using promptfoo's MMLU evaluation framework.
+**MMLU** (Massive Multitask Language Understanding) tests language models across 57 academic subjects including mathematics, physics, history, law, and medicine using multiple-choice questions.
+
+This guide shows you how to reproduce these results using promptfoo.
 
 :::tip Quick Start
-
-Get started immediately with our pre-configured example:
 
 ```bash
 npx promptfoo@latest init --example openai-gpt-4.1-vs-gpt-4o-mmlu
@@ -25,27 +25,20 @@ npx promptfoo@latest init --example openai-gpt-4.1-vs-gpt-4o-mmlu
 ## Prerequisites
 
 - [promptfoo CLI installed](/docs/installation)
-- OpenAI API key (set as `OPENAI_API_KEY` environment variable)
-- Hugging Face account for MMLU dataset access
+- OpenAI API key (set as `OPENAI_API_KEY`)
+- [Hugging Face token](https://huggingface.co/settings/tokens) (set as `HF_TOKEN`)
 
-## Step 1: Quick Setup
+## Step 1: Basic Setup
 
-Initialize a new comparison project:
+Initialize and configure:
 
 ```bash
 npx promptfoo@latest init gpt-4.1-mmlu-comparison
 cd gpt-4.1-mmlu-comparison
-```
-
-Create your Hugging Face token at [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens) and set it:
-
-```bash
 export HF_TOKEN=your_token_here
 ```
 
-## Step 2: Basic Configuration
-
-Start with a minimal comparison setup:
+Create a minimal configuration:
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -54,12 +47,12 @@ description: GPT-4.1 vs GPT-4o MMLU comparison
 prompts:
   - |
     Question: {{question}}
-
+    
     A) {{choices[0]}}
     B) {{choices[1]}}
     C) {{choices[2]}}
     D) {{choices[3]}}
-
+    
     Answer:
 
 providers:
@@ -67,40 +60,26 @@ providers:
   - openai:gpt-4o
 
 tests:
-  - huggingface://datasets/cais/mmlu?split=test&subset=abstract_algebra&limit=50
+  - huggingface://datasets/cais/mmlu?split=test&subset=abstract_algebra&limit=5
 ```
 
-## Step 3: Run Your First Eval
-
-Execute the comparison:
+## Step 2: Run and View Results
 
 ```bash
 npx promptfoo@latest eval
-```
-
-View results in your browser:
-
-```bash
 npx promptfoo@latest view
 ```
 
-:::note Expected Results
+You should see GPT-4.1 outperforming GPT-4o on reasoning questions.
 
-Based on [OpenAI's benchmarks](https://openai.com/index/introducing-gpt-4-1-in-the-api/), you should see GPT-4.1 outperforming GPT-4o on reasoning-heavy questions.
+## Step 3: Improve with Chain-of-Thought
 
-:::
-
-## Step 4: Enhanced Configuration
-
-Improve evaluation quality with research-backed techniques:
+Research shows [Chain-of-Thought prompting improves reasoning by 15-19%](https://arxiv.org/abs/2406.01574). Update your prompt:
 
 ```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: GPT-4.1 vs GPT-4o MMLU comparison with enhanced prompting
-
 prompts:
   - |
-    You are an expert test taker. Please solve the following multiple choice question step by step.
+    You are an expert test taker. Solve this step by step.
 
     Question: {{question}}
 
@@ -110,7 +89,7 @@ prompts:
     C) {{choices[2]}}
     D) {{choices[3]}}
 
-    Think through this step by step, then provide your final answer in the format "Therefore, the answer is A/B/C/D."
+    Think through this step by step, then provide your final answer as "Therefore, the answer is A/B/C/D."
 
 providers:
   - id: openai:gpt-4.1
@@ -127,142 +106,95 @@ defaultTest:
     - type: latency
       threshold: 60000
     - type: llm-rubric
-      value: Response includes clear step-by-step reasoning
+      value: Response includes step-by-step reasoning
     - type: regex
       value: 'Therefore, the answer is [ABCD]'
 
 tests:
-  # Start with reasoning-heavy subjects where improvements are most visible
   - huggingface://datasets/cais/mmlu?split=test&subset=abstract_algebra&limit=10
   - huggingface://datasets/cais/mmlu?split=test&subset=formal_logic&limit=10
 ```
 
-:::tip Why Chain-of-Thought?
+## Step 4: Scale Your Evaluation
 
-Research from [MMLU-Pro](https://arxiv.org/abs/2406.01574) shows Chain-of-Thought prompting provides **15-19% improvement** on reasoning tasks compared to direct answering.
-
-:::
-
-## Step 5: Scale Your Evaluation
-
-Add more subjects to get comprehensive results:
+Add more subjects for comprehensive testing:
 
 ```yaml
 tests:
-  # Mathematics & Logic (reasoning-heavy)
+  # Mathematics & Logic
   - huggingface://datasets/cais/mmlu?split=test&subset=abstract_algebra&limit=20
   - huggingface://datasets/cais/mmlu?split=test&subset=college_mathematics&limit=20
   - huggingface://datasets/cais/mmlu?split=test&subset=formal_logic&limit=20
-
-  # Sciences
+  
+  # Sciences  
   - huggingface://datasets/cais/mmlu?split=test&subset=physics&limit=15
   - huggingface://datasets/cais/mmlu?split=test&subset=chemistry&limit=15
-
-  # Professional domains
-  - huggingface://datasets/cais/mmlu?split=test&subset=jurisprudence&limit=10
 ```
 
-## Understanding the Results
+## Understanding Your Results
 
-### Key Metrics to Monitor
+### What to Look For
 
-- **Accuracy**: Percentage of correct answers per subject
-- **Reasoning Quality**: Step-by-step explanation clarity (via LLM rubric)
-- **Format Compliance**: Adherence to requested answer format
-- **Latency**: Response time per question
+- **Accuracy**: GPT-4.1 should score higher across subjects
+- **Reasoning Quality**: Look for clearer step-by-step explanations 
+- **Format Compliance**: Better adherence to answer format
+- **Consistency**: More reliable performance across question types
 
-### Expected Improvements in GPT-4.1
+### Why GPT-4.1 Improves
 
-Based on [OpenAI's research](https://openai.com/index/introducing-gpt-4-1-in-the-api/):
+GPT-4.1's gains come from:
+- Better mathematical reasoning
+- Improved instruction following  
+- Reduced hallucination
+- Enhanced long-context understanding
 
-- **Enhanced Mathematical Reasoning**: Better handling of abstract algebra and calculus
-- **Improved Instruction Following**: More consistent format compliance
-- **Reduced Hallucination**: Less tendency to provide confident but incorrect answers
-- **Better Long Context**: Improved comprehension of complex academic concepts
+## Troubleshooting
 
-## Advanced Optimization
+**Dataset errors?** Verify `HF_TOKEN` is set correctly.
 
-### Robust Answer Extraction
+**Low pass rates?** Check your regex pattern matches the prompt format.
 
-Add sophisticated answer parsing for production use:
+**High latency?** Reduce `max_tokens` or increase the timeout threshold.
+
+**Need help?** See [configuration docs](/docs/configuration) or [OpenAI provider guide](/docs/providers/openai).
+
+## Cost Optimization
+
+GPT-4.1 is 26% cheaper than GPT-4o with better performance. Enable caching for repeated runs:
+
+```bash
+npx promptfoo@latest eval --cache
+```
+
+## Advanced: Custom Answer Extraction
+
+For production use, add robust answer parsing:
 
 ```yaml
 defaultTest:
   assert:
     - type: javascript
       value: |
-        // Multi-pattern answer extraction with fallbacks
+        // Extract answer with fallbacks
         const patterns = [
-          /(Therefore|Thus|So).{0,50}answer is.{0,10}([ABCD])/i,
-          /answer.{0,10}([ABCD])/i,
+          /Therefore, the answer is ([ABCD])/i,
+          /answer is ([ABCD])/i,
           /\b([ABCD])\b/g
         ];
-
-        let modelChoice = null;
-        for (const pattern of patterns.slice(0, -1)) {
+        
+        for (const pattern of patterns) {
           const match = output.match(pattern);
           if (match) {
-            modelChoice = match[match.length - 1];
-            break;
+            return { pass: true, score: 1, reason: `Found: ${match[1] || match[0]}` };
           }
         }
-
-        if (!modelChoice) {
-          const allMatches = output.match(patterns[patterns.length - 1]);
-          if (allMatches?.length > 0) {
-            modelChoice = allMatches[allMatches.length - 1];
-          }
-        }
-
-        return {
-          pass: !!modelChoice,
-          score: modelChoice ? 1 : 0,
-          reason: modelChoice ? `Extracted: ${modelChoice}` : "Could not extract answer"
-        };
+        
+        return { pass: false, score: 0, reason: "No answer found" };
 ```
-
-### Cost Optimization
-
-Enable caching for repeated evaluations:
-
-```bash
-npx promptfoo@latest eval --cache
-```
-
-:::info Cost Benefits
-
-GPT-4.1 offers [better performance at lower cost](https://openai.com/index/introducing-gpt-4-1-in-the-api/):
-
-- **26% less expensive** than GPT-4o for median queries
-- **75% prompt caching discount** for repeated context
-
-:::
-
-## Troubleshooting
-
-### Common Issues
-
-- **Dataset access errors**: Verify your `HF_TOKEN` is set correctly
-- **Low pass rates**: Check that regex patterns match your prompt format
-- **High latency**: Reduce `max_tokens` or increase `threshold` in assertions
-
-### Getting Help
-
-- [Configuration reference](/docs/configuration)
-- [OpenAI provider docs](/docs/providers/openai)
-- [Hugging Face dataset integration](/docs/guides/datasets)
-
-## Next Steps
-
-1. **Compare prompting strategies**: Test [few-shot vs zero-shot approaches](/docs/configuration/guide#prompts)
-2. **Add custom metrics**: Implement [domain-specific assertions](/docs/configuration/expected-outputs)
-3. **Scale evaluation**: Use [distributed testing](/docs/configuration/guide#performance) for comprehensive benchmarks
-4. **Share results**: Create [shareable reports](/docs/usage/sharing) with your team
 
 ## See Also
 
-- [MMLU Dataset Documentation](https://huggingface.co/datasets/cais/mmlu)
-- [GPT-4o vs GPT-4o Mini Comparison](/docs/guides/gpt-4-vs-gpt-4o)
-- [OpenAI Provider Configuration](/docs/providers/openai)
-- [LLM Evaluation Best Practices](/docs/getting-started)
-- [MMLU-Pro Research Paper](https://arxiv.org/abs/2406.01574)
+- [MMLU Dataset](https://huggingface.co/datasets/cais/mmlu)
+- [GPT-4o vs GPT-4o Mini](/docs/guides/gpt-4-vs-gpt-4o)  
+- [OpenAI Provider](/docs/providers/openai)
+- [MMLU-Pro Research](https://arxiv.org/abs/2406.01574)
