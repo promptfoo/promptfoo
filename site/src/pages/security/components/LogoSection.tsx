@@ -8,7 +8,7 @@ const logos = [
   { src: '/img/brands/microsoft-logo.svg', alt: 'Microsoft' },
 ];
 
-export default function LogoSection(): React.JSX.Element {
+export default function LogoSection(): JSX.Element {
   return (
     <section className={styles.logoSection}>
       <div className={styles.container}>

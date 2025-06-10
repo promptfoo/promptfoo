@@ -300,7 +300,7 @@ function AsSeenOnSection() {
   );
 }
 
-export default function Home(): React.JSX.Element {
+export default function Home(): JSX.Element {
   const [getStartedUrl, setGetStartedUrl] = React.useState('/docs/intro/');
 
   React.useEffect(() => {

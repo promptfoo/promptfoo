@@ -345,7 +345,7 @@ function CallToActionSection() {
   );
 }
 
-export default function RedTeaming(): React.JSX.Element {
+export default function RedTeaming(): JSX.Element {
   return (
     <Layout
       title="AI Red Teaming"

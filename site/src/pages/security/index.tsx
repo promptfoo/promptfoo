@@ -9,7 +9,7 @@ import Stats from './components/Stats';
 import WhyPromptfoo from './components/WhyPromptfoo';
 import styles from './styles.module.css';
 
-export default function SecurityLandingPage(): React.JSX.Element {
+export default function SecurityLandingPage(): JSX.Element {
   return (
     <Layout
       title="Generative AI Security"

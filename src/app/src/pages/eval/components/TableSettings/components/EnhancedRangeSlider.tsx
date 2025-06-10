@@ -26,7 +26,7 @@ interface EnhancedRangeSliderProps {
   onChangeCommitted?: (value: number) => void;
   disabled?: boolean;
   tooltipText?: string;
-  icon?: React.JSX.Element;
+  icon?: JSX.Element;
 }
 
 const EnhancedRangeSlider: React.FC<EnhancedRangeSliderProps> = ({

@@ -49,18 +49,15 @@ interface TabPanelProps {
 function TabPanel(props: TabPanelProps) {
   const { children, value, index, ...other } = props;
 
-  if (value !== index) {
-    return null;
-  }
-
   return (
     <div
       role="tabpanel"
+      hidden={value !== index}
       id={`contact-tabpanel-${index}`}
       aria-labelledby={`contact-tab-${index}`}
       {...other}
     >
-      <div style={{ paddingTop: 24, paddingBottom: 24 }}>{children}</div>
+      {value === index && <div style={{ paddingTop: 24, paddingBottom: 24 }}>{children}</div>}
     </div>
   );
 }

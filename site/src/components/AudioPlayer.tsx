@@ -11,7 +11,7 @@ export default function AudioPlayer({
   audioData,
   format = 'wav',
   transcript,
-}: AudioPlayerProps): React.JSX.Element {
+}: AudioPlayerProps): JSX.Element {
   const audioRef = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {

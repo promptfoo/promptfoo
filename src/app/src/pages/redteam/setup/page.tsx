@@ -112,7 +112,7 @@ const TabPanel = styled(Box)(({ theme }) => ({
 }));
 
 interface TabPanelProps {
-  children?: React.JSX.Element | React.JSX.Element[];
+  children?: JSX.Element | JSX.Element[];
   index: number;
   value: number;
 }
@@ -120,18 +120,15 @@ interface TabPanelProps {
 function CustomTabPanel(props: TabPanelProps) {
   const { children, value, index, ...other } = props;
 
-  if (value !== index) {
-    return null;
-  }
-
   return (
     <TabPanel
       role="tabpanel"
+      hidden={value !== index}
       id={`vertical-tabpanel-${index}`}
       aria-labelledby={`vertical-tab-${index}`}
       {...other}
     >
-      {React.isValidElement(children) ? children : <>{children}</>}
+      {value === index && (React.isValidElement(children) ? children : <>{children}</>)}
     </TabPanel>
   );
 }

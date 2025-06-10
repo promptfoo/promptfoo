@@ -64,7 +64,7 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
   urlError,
   setUrlError,
   updateFullTarget,
-}): React.JSX.Element => {
+}): JSX.Element => {
   const theme = useTheme();
   const darkMode = theme.palette.mode === 'dark';
 
