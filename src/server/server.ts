@@ -40,6 +40,36 @@ import { userRouter } from './routes/user';
 // Prompts cache
 let allPrompts: PromptWithMetadata[] | null = null;
 
+// JavaScript file extensions that need proper MIME type
+const JS_EXTENSIONS = new Set(['.js', '.mjs', '.cjs']);
+
+/**
+ * Middleware to set proper MIME types for JavaScript files.
+ * This is necessary because some browsers (especially Arc) enforce strict MIME type checking
+ * and will refuse to execute scripts with incorrect MIME types for security reasons.
+ */
+function setJavaScriptMimeType(req: Request, res: Response, next: express.NextFunction): void {
+  const ext = path.extname(req.path);
+  if (JS_EXTENSIONS.has(ext)) {
+    res.setHeader('Content-Type', 'application/javascript');
+  }
+  next();
+}
+
+/**
+ * Handles server startup errors with proper logging and graceful shutdown.
+ */
+function handleServerError(error: NodeJS.ErrnoException, port: number): void {
+  if (error.code === 'EADDRINUSE') {
+    logger.error(
+      `Port ${port} is already in use. Do you have another Promptfoo instance running?`,
+    );
+  } else {
+    logger.error(`Failed to start server: ${error.message}`);
+  }
+  process.exit(1);
+}
+
 export function createApp() {
   const app = express();
 
@@ -204,14 +234,7 @@ export function createApp() {
   // overwrite dynamic routes.
 
   // Configure proper MIME types for JavaScript files
-  // This is necessary because some browsers (especially Arc) enforce strict MIME type checking
-  // and will refuse to execute scripts with incorrect MIME types for security reasons
-  app.use((req, res, next) => {
-    if (req.path.endsWith('.js') || req.path.endsWith('.mjs') || req.path.endsWith('.cjs')) {
-      res.setHeader('Content-Type', 'application/javascript');
-    }
-    next();
-  });
+  app.use(setJavaScriptMimeType);
 
   app.use(express.static(staticDir));
 
@@ -251,20 +274,9 @@ export async function startServer(
     socket.emit('init', await getLatestEval(filterDescription));
   });
 
+  // Consolidated error handling for server startup
   httpServer
-    .listen(port, (error?: Error) => {
-      if (error) {
-        if ((error as NodeJS.ErrnoException).code === 'EADDRINUSE') {
-          logger.error(
-            `Port ${port} is already in use. Do you have another Promptfoo instance running?`,
-          );
-          process.exit(1);
-        } else {
-          logger.error(`Failed to start server: ${error.message}`);
-          process.exit(1);
-        }
-        return;
-      }
+    .listen(port, () => {
       const url = `http://localhost:${port}`;
       logger.info(`Server running at ${url} and monitoring for new evals.`);
       openBrowser(browserBehavior, port).catch((err) => {
@@ -272,14 +284,6 @@ export async function startServer(
       });
     })
     .on('error', (error: NodeJS.ErrnoException) => {
-      if (error.code === 'EADDRINUSE') {
-        logger.error(
-          `Port ${port} is already in use. Do you have another Promptfoo instance running?`,
-        );
-        process.exit(1);
-      } else {
-        logger.error(`Failed to start server: ${error.message}`);
-        process.exit(1);
-      }
+      handleServerError(error, port);
     });
 }
