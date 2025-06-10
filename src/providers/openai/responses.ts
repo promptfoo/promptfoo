@@ -26,7 +26,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'o1-mini',
     'o1-pro',
     'o3-pro',
-    'o3-pro-2025-04-16',
+    'o3-pro-2025-06-10',
     'o3',
     'o3-2025-04-16',
     'o4-mini',
