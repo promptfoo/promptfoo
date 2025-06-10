@@ -73,7 +73,7 @@ Supported parameters include:
 | `functions`             | Allows you to define custom functions. Each function should be an object with a `name`, optional `description`, and `parameters`.                                                                                                                                                                 |
 | `functionToolCallbacks` | A map of function tool names to function callbacks. Each callback should accept a string and return a string or a `Promise<string>`.                                                                                                                                                              |
 | `headers`               | Additional headers to include in the request.                                                                                                                                                                                                                                                     |
-| `max_tokens`            | Controls the maximum length of the output in tokens. Not valid for reasoning models (o1, o3-mini).                                                                                                                                                                                                |
+| `max_tokens`            | Controls the maximum length of the output in tokens. Not valid for reasoning models (o1, o3-mini, o3-pro).                                                                                                                                                                                                |
 | `organization`          | Your OpenAI organization key.                                                                                                                                                                                                                                                                     |
 | `passthrough`           | A flexible object that allows passing arbitrary parameters directly to the OpenAI API request body. Useful for experimental, new, or provider-specific parameters not yet explicitly supported in promptfoo. This parameter is merged into the final API request and can override other settings. |
 | `presence_penalty`      | Applies a penalty to new tokens (tokens that haven't appeared in the input), making them less likely to appear in the output.                                                                                                                                                                     |
@@ -84,7 +84,7 @@ Supported parameters include:
 | `tool_choice`           | Controls whether the AI should use a tool. See [OpenAI Tools documentation](https://platform.openai.com/docs/api-reference/chat/create#chat-create-tools)                                                                                                                                         |
 | `tools`                 | Allows you to define custom tools. See [OpenAI Tools documentation](https://platform.openai.com/docs/api-reference/chat/create#chat-create-tools)                                                                                                                                                 |
 | `top_p`                 | Controls the nucleus sampling, a method that helps control the randomness of the AI's output.                                                                                                                                                                                                     |
-| `max_completion_tokens` | Maximum number of tokens to generate for reasoning models (o1, o3-mini).                                                                                                                                                                                                                          |
+| `max_completion_tokens` | Maximum number of tokens to generate for reasoning models (o1, o3-mini, o3-pro).                                                                                                                                                                                                                          |
 | `reasoning_effort`      | Allows you to control how long the reasoning model thinks before answering, 'low', 'medium' or 'high'.                                                                                                                                                                                            |
 
 Here are the type declarations of `config` parameters:
@@ -166,9 +166,9 @@ providers:
   - id: openai:chat:gpt-4.1-nano-2025-04-14 # Nano
 ```
 
-### Reasoning Models (o1, o3-mini)
+### Reasoning Models (o1, o3-mini, o3-pro)
 
-Reasoning models, like `o1` and `o3-mini`, are new large language models trained with reinforcement learning to perform complex reasoning. These models excel in complex problem solving, coding, scientific reasoning, and multi-step planning for agentic workflows.
+Reasoning models, like `o1`, `o3-mini`, and `o3-pro`, are new large language models trained with reinforcement learning to perform complex reasoning. These models excel in complex problem solving, coding, scientific reasoning, and multi-step planning for agentic workflows.
 
 When using reasoning models, there are important differences in how tokens are handled:
 
@@ -925,6 +925,7 @@ The Responses API supports a wide range of models, including:
 - `o1` - Powerful reasoning model
 - `o1-mini` - Smaller, more affordable reasoning model
 - `o1-pro` - Enhanced reasoning model with more compute
+- `o3-pro` - Highest-tier reasoning model
 - `o3` - OpenAI's most powerful reasoning model
 - `o3-mini` - Smaller, more affordable reasoning model
 - `o4-mini` - Latest fast, cost-effective reasoning model
@@ -1082,7 +1083,7 @@ npx promptfoo@latest init --example openai-mcp
 
 ### Reasoning Models
 
-When using reasoning models like `o1`, `o1-pro`, `o3`, `o3-mini`, or `o4-mini`, you can control the reasoning effort:
+When using reasoning models like `o1`, `o1-pro`, `o3`, `o3-pro`, `o3-mini`, or `o4-mini`, you can control the reasoning effort:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
