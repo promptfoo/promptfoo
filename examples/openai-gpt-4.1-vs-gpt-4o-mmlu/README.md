@@ -66,9 +66,6 @@ This comparison evaluates both models on reasoning tasks from the MMLU benchmark
 
 1. **Abstract Algebra**: Advanced mathematical reasoning and algebraic structures
 2. **Formal Logic**: Logical statement analysis and proof construction
-3. **High School Mathematics**: Core problem-solving and mathematical concepts
-4. **College Mathematics**: Advanced mathematical reasoning including calculus and analysis
-5. **Logical Fallacies**: Identification of flaws in reasoning and argumentation
 
 Each subject uses 10 questions to keep the test manageable. You can edit this in `promptfooconfig.yaml`.
 
@@ -98,7 +95,7 @@ The configuration in `promptfooconfig.yaml`:
    - Clear final answer format (A/B/C/D)
 3. **Model Configuration**:
    - Low temperature (0.1) for consistent reasoning
-   - 500 max tokens for detailed explanations
+   - 1000 max tokens for detailed explanations
 4. **Evaluation Metrics**:
    - Accuracy across subjects
    - Reasoning quality

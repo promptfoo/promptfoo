@@ -67,7 +67,7 @@ providers:
   - openai:gpt-4o
 
 tests:
-  - huggingface://datasets/cais/mmlu?split=test&subset=abstract_algebra&limit=5
+  - huggingface://datasets/cais/mmlu?split=test&subset=abstract_algebra&limit=50
 ```
 
 ## Step 3: Run Your First Eval
