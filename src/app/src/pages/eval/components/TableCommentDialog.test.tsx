@@ -18,15 +18,11 @@ describe('CommentDialog', () => {
     onChange: vi.fn(),
   };
 
-  const renderWithTheme = (component: JSX.Element) => {
+  const renderWithTheme = (component: React.ReactNode) => {
     const theme = createTheme({
       palette: { mode: 'light' },
     });
-    return render(
-      <ThemeProvider theme={theme}>
-        <>{component}</>
-      </ThemeProvider>,
-    );
+    return render(<ThemeProvider theme={theme}>{component}</ThemeProvider>);
   };
 
   it('renders correctly when open', () => {

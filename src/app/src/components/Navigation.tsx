@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, forwardRef } from 'react';
 import type { LinkProps } from 'react-router-dom';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import EngineeringIcon from '@mui/icons-material/Engineering';
@@ -21,6 +21,12 @@ import DarkMode from './DarkMode';
 import InfoModal from './InfoModal';
 import Logo from './Logo';
 import './Navigation.css';
+
+// Create a properly typed forwarded ref component for MUI compatibility
+const RouterLink = forwardRef<HTMLAnchorElement, LinkProps>((props, ref) => (
+  <Link ref={ref} {...props} />
+));
+RouterLink.displayName = 'RouterLink';
 
 const NavButton = styled(Button)<Partial<ButtonProps> & Partial<LinkProps>>(({ theme }) => ({
   color: theme.palette.text.primary,
@@ -59,7 +65,7 @@ function NavLink({ href, label }: { href: string; label: string }) {
   };
 
   return (
-    <NavButton onClick={handleClick} className={isActive ? 'active' : ''}>
+    <NavButton component={RouterLink} to={href} className={isActive ? 'active' : ''}>
       {label}
     </NavButton>
   );
@@ -110,8 +116,12 @@ function CreateDropdown() {
           },
         }}
       >
-        <MenuItem onClick={() => handleNavigation('/setup')}>Eval</MenuItem>
-        <MenuItem onClick={() => handleNavigation('/redteam/setup')}>Red team</MenuItem>
+        <MenuItem onClick={handleClose} component={RouterLink} to="/setup">
+          Eval
+        </MenuItem>
+        <MenuItem onClick={handleClose} component={RouterLink} to="/redteam/setup">
+          Red team
+        </MenuItem>
       </Menu>
     </>
   );
@@ -148,8 +158,12 @@ function EvalsDropdown() {
         Evals
       </NavButton>
       <Menu anchorEl={anchorEl} open={open} onClose={handleClose}>
-        <MenuItem onClick={() => handleNavigation('/eval')}>Latest Eval</MenuItem>
-        <MenuItem onClick={() => handleNavigation('/evals')}>All Evals</MenuItem>
+        <MenuItem onClick={handleClose} component={RouterLink} to="/eval">
+          Latest Eval
+        </MenuItem>
+        <MenuItem onClick={handleClose} component={RouterLink} to="/evals">
+          All Evals
+        </MenuItem>
       </Menu>
     </>
   );

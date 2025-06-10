@@ -27,12 +27,12 @@ interface Tool {
 
 const Row = ({ label, value }: { label: React.ReactNode; value: React.ReactNode }) => {
   return (
-    <TableRow sx={{ backgroundColor: 'white' }}>
+    <TableRow sx={{ backgroundColor: (theme) => theme.palette.background.paper }}>
       <TableCell
         variant="head"
         sx={{
           width: 200,
-          backgroundColor: (theme) => theme.palette.grey[50],
+          backgroundColor: (theme) => theme.palette.action.hover,
           borderRight: (theme) => `1px solid ${theme.palette.divider}`,
           color: 'inherit',
           fontWeight: 500,
@@ -95,7 +95,13 @@ export default function DiscoveredInformation({
       <Box>
         <TableContainer
           component={Paper}
-          sx={{ mt: 2, mb: 2, boxShadow: 0, background: 'rgba(0,0,0,0.01)', borderRadius: 2 }}
+          sx={{
+            mt: 2,
+            mb: 2,
+            boxShadow: 0,
+            backgroundColor: (theme) => theme.palette.background.default,
+            borderRadius: 2,
+          }}
           elevation={0}
         >
           <Table size="small" aria-label="discovered information table">
