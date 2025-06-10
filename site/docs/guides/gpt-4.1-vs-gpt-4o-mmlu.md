@@ -59,6 +59,14 @@ providers:
   - openai:gpt-4.1
   - openai:gpt-4o
 
+defaultTest:
+  assert:
+    - type: llm-rubric
+      value: |
+        Compare the model's answer to the correct answer: {{answer}}.
+        The model should select the correct choice and show clear reasoning.
+        Score as PASS if the answer is correct.
+
 tests:
   - huggingface://datasets/cais/mmlu?split=test&subset=abstract_algebra&limit=5
 ```
@@ -74,7 +82,7 @@ You should see GPT-4.1 outperforming GPT-4o on reasoning questions.
 
 ## Step 3: Improve with Chain-of-Thought
 
-Research shows [Chain-of-Thought prompting improves reasoning by 15-19%](https://arxiv.org/abs/2406.01574). Update your prompt:
+Chain-of-Thought prompting significantly improves reasoning performance. Update your prompt:
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
@@ -106,7 +114,13 @@ defaultTest:
     - type: latency
       threshold: 60000
     - type: llm-rubric
-      value: Response includes step-by-step reasoning
+      value: |
+        Compare the model's answer to the correct answer: {{answer}}.
+        Check if the model:
+        1. Shows step-by-step reasoning
+        2. Arrives at the correct conclusion
+        3. Uses the requested format
+        Score as PASS if the answer is correct and reasoning is clear.
     - type: regex
       value: 'Therefore, the answer is [ABCD]'
 
@@ -158,39 +172,14 @@ GPT-4.1's gains come from:
 
 **Need help?** See [configuration docs](/docs/configuration) or [OpenAI provider guide](/docs/providers/openai).
 
-## Cost Optimization
+## Next Steps
 
-GPT-4.1 is 26% cheaper than GPT-4o with better performance. Enable caching for repeated runs:
+Ready to go deeper? Try these advanced techniques:
 
-```bash
-npx promptfoo@latest eval --cache
-```
-
-## Advanced: Custom Answer Extraction
-
-For production use, add robust answer parsing:
-
-```yaml
-defaultTest:
-  assert:
-    - type: javascript
-      value: |
-        // Extract answer with fallbacks
-        const patterns = [
-          /Therefore, the answer is ([ABCD])/i,
-          /answer is ([ABCD])/i,
-          /\b([ABCD])\b/g
-        ];
-        
-        for (const pattern of patterns) {
-          const match = output.match(pattern);
-          if (match) {
-            return { pass: true, score: 1, reason: `Found: ${match[1] || match[0]}` };
-          }
-        }
-        
-        return { pass: false, score: 0, reason: "No answer found" };
-```
+1. **Compare multiple prompting strategies** - Test few-shot vs zero-shot approaches
+2. **Explore MMLU-Pro** - A more challenging version with 10 answer choices and complex reasoning questions
+3. **Add domain-specific assertions** - Create custom metrics for your use cases  
+4. **Scale with distributed testing** - Run comprehensive benchmarks across all 57 MMLU subjects
 
 ## See Also
 
