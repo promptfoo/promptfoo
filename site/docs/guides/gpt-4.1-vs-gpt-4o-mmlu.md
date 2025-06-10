@@ -54,13 +54,13 @@ description: GPT-4.1 vs GPT-4o MMLU comparison
 prompts:
   - |
     Question: {{question}}
-    
+
     A) {{choices[0]}}
     B) {{choices[1]}}
     C) {{choices[2]}}
     D) {{choices[3]}}
-    
-    Answer: 
+
+    Answer:
 
 providers:
   - openai:gpt-4.1
@@ -129,7 +129,7 @@ defaultTest:
     - type: llm-rubric
       value: Response includes clear step-by-step reasoning
     - type: regex
-      value: "Therefore, the answer is [ABCD]"
+      value: 'Therefore, the answer is [ABCD]'
 
 tests:
   # Start with reasoning-heavy subjects where improvements are most visible
@@ -153,11 +153,11 @@ tests:
   - huggingface://datasets/cais/mmlu?split=test&subset=abstract_algebra&limit=20
   - huggingface://datasets/cais/mmlu?split=test&subset=college_mathematics&limit=20
   - huggingface://datasets/cais/mmlu?split=test&subset=formal_logic&limit=20
-  
+
   # Sciences
   - huggingface://datasets/cais/mmlu?split=test&subset=physics&limit=15
   - huggingface://datasets/cais/mmlu?split=test&subset=chemistry&limit=15
-  
+
   # Professional domains
   - huggingface://datasets/cais/mmlu?split=test&subset=jurisprudence&limit=10
 ```
@@ -197,7 +197,7 @@ defaultTest:
           /answer.{0,10}([ABCD])/i,
           /\b([ABCD])\b/g
         ];
-        
+
         let modelChoice = null;
         for (const pattern of patterns.slice(0, -1)) {
           const match = output.match(pattern);
@@ -206,14 +206,14 @@ defaultTest:
             break;
           }
         }
-        
+
         if (!modelChoice) {
           const allMatches = output.match(patterns[patterns.length - 1]);
           if (allMatches?.length > 0) {
             modelChoice = allMatches[allMatches.length - 1];
           }
         }
-        
+
         return {
           pass: !!modelChoice,
           score: modelChoice ? 1 : 0,
@@ -232,6 +232,7 @@ npx promptfoo@latest eval --cache
 :::info Cost Benefits
 
 GPT-4.1 offers [better performance at lower cost](https://openai.com/index/introducing-gpt-4-1-in-the-api/):
+
 - **26% less expensive** than GPT-4o for median queries
 - **75% prompt caching discount** for repeated context
 
