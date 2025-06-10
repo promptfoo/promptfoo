@@ -69,7 +69,20 @@ ${
       }
       return parsed;
     } else if (typeof result === 'object') {
-      if (!isGradingResult(result)) {
+      const obj: Record<string, any> = result as any;
+
+      // Support snake_case keys from Python dataclass
+      if (obj.pass_ !== undefined && obj.pass === undefined) {
+        obj.pass = obj.pass_;
+      }
+      if (obj.named_scores && obj.namedScores === undefined) {
+        obj.namedScores = obj.named_scores;
+      }
+      if (obj.component_results && obj.componentResults === undefined) {
+        obj.componentResults = obj.component_results;
+      }
+
+      if (!isGradingResult(obj)) {
         throw new Error(
           `Python assertion must return a boolean, number, or {pass, score, reason} object. Got instead:\n${JSON.stringify(
             result,
@@ -78,7 +91,7 @@ ${
           )}`,
         );
       }
-      const pythonGradingResult = result as Omit<GradingResult, 'assertion'>;
+      const pythonGradingResult = obj as Omit<GradingResult, 'assertion'>;
       if (assertion.threshold && pythonGradingResult.score < assertion.threshold) {
         pythonGradingResult.pass = false;
         const scoreMessage = `Python score ${pythonGradingResult.score} is less than threshold ${assertion.threshold}`;

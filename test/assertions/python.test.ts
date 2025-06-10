@@ -397,4 +397,36 @@ describe('Python file references', () => {
       score: 0,
     });
   });
+
+  it('should map snake_case keys returned from python', async () => {
+    const pythonResult = {
+      pass_: true,
+      score: 1,
+      reason: 'ok',
+      named_scores: { accuracy: 0.9 },
+    };
+
+    jest.mocked(runPython).mockResolvedValueOnce(pythonResult as any);
+
+    const fileAssertion: Assertion = {
+      type: 'python',
+      value: 'file:///path/to/assert.py',
+    };
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+    const providerResponse = { output: 'Expected output' };
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'A prompt',
+      provider,
+      assertion: fileAssertion,
+      test: {} as AtomicTestCase,
+      providerResponse,
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      namedScores: { accuracy: 0.9 },
+    });
+  });
 });
