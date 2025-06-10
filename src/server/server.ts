@@ -276,7 +276,6 @@ export async function startServer(
     socket.emit('init', await getLatestEval(filterDescription));
   });
 
-  // Consolidated error handling for server startup
   httpServer
     .listen(port, () => {
       const url = `http://localhost:${port}`;
