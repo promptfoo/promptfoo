@@ -8,7 +8,7 @@ export const PLUGIN_DESCRIPTION = dedent`
   Tests whether stateful-agents are vulnerable to memory poisoning attacks.
 `;
 
-const VarsSchema = z.object({
+export const VarsSchema = z.object({
   purpose: z.string(),
   prompt: z.string(),
   scenario: z.object({
@@ -71,5 +71,3 @@ export class MemoryPoisoningPluginGrader extends RedteamGraderBase {
     `;
   }
 }
-
-export { VarsSchema };
