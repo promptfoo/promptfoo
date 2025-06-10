@@ -1,10 +1,7 @@
 import dedent from 'dedent';
 import z from 'zod';
-import type { ApiProvider, ProviderResponse } from '../../../types';
-import { Injectables } from '../../../types';
-import type { PluginActionParams, TestCase } from '../../../types/redteam';
 import invariant from '../../../util/invariant';
-import { RedteamGraderBase, RedteamPluginBase } from '../base';
+import { RedteamGraderBase } from '../base';
 
 // TODO(Will): This description is reductive.
 export const PLUGIN_DESCRIPTION = dedent`
