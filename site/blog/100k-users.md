@@ -1,6 +1,6 @@
 ---
 image: /img/blog/launch-announcement.png
-date: 2025-06-03
+date: 2025-06-10
 ---
 
 # Celebrating 100,000 Users: Promptfoo's Journey and the Shift to Red Teaming
