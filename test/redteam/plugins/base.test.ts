@@ -29,6 +29,11 @@ class TestPlugin extends RedteamPluginBase {
   protected async getTemplate(): Promise<string> {
     return 'Test template with {{ purpose }} for {{ n }} prompts';
   }
+
+  protected async getTestGenerationInstructions(): Promise<string> {
+    return (this.config.testGenerationInstructions as string) || '';
+  }
+
   protected getAssertions(prompt: string): Assertion[] {
     return [{ type: 'contains', value: prompt }];
   }
@@ -253,6 +258,125 @@ describe('RedteamPluginBase', () => {
       await plugin.generateTests(1);
       expect(provider.callApi).toHaveBeenCalledWith(expect.stringContaining('<Modifiers>'));
       expect(provider.callApi).toHaveBeenCalledWith(expect.stringContaining('language: German'));
+    });
+  });
+
+  describe('test generation instructions', () => {
+    it('should use combined template when test generation instructions are provided', async () => {
+      const pluginWithInstructions = new TestPlugin(provider, 'test purpose', 'testVar', {
+        testGenerationInstructions:
+          'Focus on healthcare-specific attacks using medical terminology.',
+      });
+
+      await pluginWithInstructions.generateTests(1);
+
+      expect(provider.callApi).toHaveBeenCalledWith(
+        expect.stringContaining('Test template with test purpose for 1 prompts'),
+      );
+      expect(provider.callApi).toHaveBeenCalledWith(
+        expect.stringContaining('Additional Test Generation Instructions:'),
+      );
+      expect(provider.callApi).toHaveBeenCalledWith(
+        expect.stringContaining('Focus on healthcare-specific attacks using medical terminology.'),
+      );
+    });
+
+    it('should use base template when test generation instructions are empty', async () => {
+      const pluginWithoutInstructions = new TestPlugin(provider, 'test purpose', 'testVar', {
+        testGenerationInstructions: '',
+      });
+
+      await pluginWithoutInstructions.generateTests(1);
+
+      expect(provider.callApi).toHaveBeenCalledWith(
+        expect.stringContaining('Test template with test purpose for 1 prompts'),
+      );
+      expect(provider.callApi).toHaveBeenCalledWith(
+        expect.not.stringContaining('Additional Test Generation Instructions:'),
+      );
+    });
+
+    it('should use base template when test generation instructions are undefined', async () => {
+      const pluginWithoutInstructions = new TestPlugin(provider, 'test purpose', 'testVar', {});
+
+      await pluginWithoutInstructions.generateTests(1);
+
+      expect(provider.callApi).toHaveBeenCalledWith(
+        expect.stringContaining('Test template with test purpose for 1 prompts'),
+      );
+      expect(provider.callApi).toHaveBeenCalledWith(
+        expect.not.stringContaining('Additional Test Generation Instructions:'),
+      );
+    });
+
+    it('should properly format combined template with instructions', async () => {
+      const pluginWithInstructions = new TestPlugin(provider, 'test purpose', 'testVar', {
+        testGenerationInstructions: 'Use realistic scenarios\nFocus on domain-specific attacks',
+      });
+
+      const combinedTemplate = await pluginWithInstructions['getCombinedTemplate']();
+
+      expect(combinedTemplate).toBe(
+        dedent`
+        Test template with {{ purpose }} for {{ n }} prompts
+
+        Additional Test Generation Instructions:
+        Use realistic scenarios
+        Focus on domain-specific attacks
+      `.trim(),
+      );
+    });
+
+    it('should return base template when instructions are whitespace only', async () => {
+      const pluginWithWhitespace = new TestPlugin(provider, 'test purpose', 'testVar', {
+        testGenerationInstructions: '   \n\t  ',
+      });
+
+      const combinedTemplate = await pluginWithWhitespace['getCombinedTemplate']();
+
+      expect(combinedTemplate).toBe('Test template with {{ purpose }} for {{ n }} prompts');
+    });
+
+    it('should work with both instructions and modifiers', async () => {
+      const pluginWithBoth = new TestPlugin(provider, 'test purpose', 'testVar', {
+        testGenerationInstructions: 'Focus on healthcare attacks',
+        language: 'Spanish',
+        modifiers: {
+          tone: 'professional',
+        },
+      });
+
+      await pluginWithBoth.generateTests(1);
+
+      const callArg = jest.mocked(provider.callApi).mock.calls[0][0];
+
+      // Should contain the base template
+      expect(callArg).toContain('Test template with test purpose for 1 prompts');
+
+      // Should contain the test generation instructions
+      expect(callArg).toContain('Additional Test Generation Instructions:');
+      expect(callArg).toContain('Focus on healthcare attacks');
+
+      // Should contain the modifiers section
+      expect(callArg).toContain('<Modifiers>');
+      expect(callArg).toContain('language: Spanish');
+      expect(callArg).toContain('tone: professional');
+    });
+
+    it('should handle multiline instructions correctly', async () => {
+      const multilineInstructions = `Line 1: Focus on realistic scenarios
+Line 2: Use domain-specific terminology
+Line 3: Consider compliance requirements`;
+
+      const pluginWithMultiline = new TestPlugin(provider, 'test purpose', 'testVar', {
+        testGenerationInstructions: multilineInstructions,
+      });
+
+      const combinedTemplate = await pluginWithMultiline['getCombinedTemplate']();
+
+      expect(combinedTemplate).toContain('Line 1: Focus on realistic scenarios');
+      expect(combinedTemplate).toContain('Line 2: Use domain-specific terminology');
+      expect(combinedTemplate).toContain('Line 3: Consider compliance requirements');
     });
   });
 

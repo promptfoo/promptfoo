@@ -102,11 +102,38 @@ export abstract class RedteamPluginBase {
   protected abstract getTemplate(): Promise<string>;
 
   /**
+   * Additional instructions for test generation.
+   * These instructions will be appended to the template to provide
+   * domain-specific guidance for generating attacks.
+   */
+  protected abstract getTestGenerationInstructions(): Promise<string>;
+
+  /**
    * Abstract method to get assertions for a given prompt.
    * @param prompt - The prompt to generate assertions for.
    * @returns An array of Assertion objects.
    */
   protected abstract getAssertions(prompt: string): Assertion[];
+
+  /**
+   * Combines the base template with test generation instructions.
+   * @returns A promise that resolves to the combined template string.
+   */
+  protected async getCombinedTemplate(): Promise<string> {
+    const baseTemplate = await this.getTemplate();
+    const instructions = await this.getTestGenerationInstructions();
+
+    if (!instructions.trim()) {
+      return baseTemplate;
+    }
+
+    return dedent`
+      ${baseTemplate.trim()}
+
+      Additional Test Generation Instructions:
+      ${instructions.trim()}
+    `.trim();
+  }
 
   /**
    * Generates test cases based on the plugin's configuration.
@@ -118,7 +145,7 @@ export abstract class RedteamPluginBase {
   async generateTests(
     n: number,
     delayMs: number = 0,
-    templateGetter: () => Promise<string> = this.getTemplate.bind(this),
+    templateGetter: () => Promise<string> = this.getCombinedTemplate.bind(this),
   ): Promise<TestCase[]> {
     logger.debug(`Generating ${n} test cases`);
     const batchSize = 20;

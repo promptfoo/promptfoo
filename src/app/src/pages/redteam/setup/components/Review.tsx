@@ -57,7 +57,8 @@ export default function Review() {
   const theme = useTheme();
   const { recordEvent } = useTelemetry();
   const [isYamlDialogOpen, setIsYamlDialogOpen] = React.useState(false);
-  const yamlContent = useMemo(() => generateOrderedYaml(config), [config]);
+  const yamlContent = generateOrderedYaml(config);
+
   const [isRunning, setIsRunning] = React.useState(false);
   const [logs, setLogs] = React.useState<string[]>([]);
   const [evalId, setEvalId] = React.useState<string | null>(null);

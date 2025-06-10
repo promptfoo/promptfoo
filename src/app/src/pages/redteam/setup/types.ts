@@ -22,6 +22,7 @@ export interface ApplicationDefinition {
   forbiddenActions?: string;
   connectedSystems?: string;
   attackConstraints?: string;
+  testGenerationInstructions?: string;
 }
 
 export interface Config {
@@ -29,6 +30,7 @@ export interface Config {
   prompts: string[];
   target: ProviderOptions;
   plugins: (RedteamPlugin | { id: string; config?: any })[];
+  testGenerationInstructions?: string;
   strategies: RedteamStrategy[];
   purpose?: string;
   numTests?: number;

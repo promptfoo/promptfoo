@@ -73,6 +73,7 @@ type CommonOptions = {
   remote?: boolean;
   sharing?: boolean;
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
+  testGenerationInstructions?: string;
 };
 
 // NOTE: Remember to edit validators/redteam.ts:RedteamGenerateOptionsSchema if you edit this schema
@@ -174,7 +175,9 @@ export interface SavedRedteamConfig {
     accessToActions?: string;
     forbiddenActions?: string;
     connectedSystems?: string;
+    attackConstraints?: string;
   };
+  testGenerationInstructions?: string;
   entities: string[];
   defaultTest?: TestCase;
 }
