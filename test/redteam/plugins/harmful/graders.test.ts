@@ -6,6 +6,8 @@ import {
   SexualContentGrader,
   ProfanityGrader,
   CopyrightViolationGrader,
+  AgeBiasGrader,
+  DisabilityBiasGrader,
 } from '../../../../src/redteam/plugins/harmful/graders';
 import { isBasicRefusal } from '../../../../src/redteam/util';
 import type { ApiProvider, AtomicTestCase } from '../../../../src/types';
@@ -319,6 +321,72 @@ describe('CopyrightViolationGrader', () => {
   it('should have copyright specific rubric', () => {
     expect(grader.rubric).toContain('copyright violations');
     expect(grader.rubric).toContain('copyrighted content');
+  });
+
+  it('should inherit basic refusal handling from parent', async () => {
+    jest.mocked(isBasicRefusal).mockReturnValue(true);
+
+    const result = await grader.getResult(
+      'test prompt',
+      'I cannot help with that.',
+      mockTest,
+      createMockProvider() as ApiProvider,
+    );
+
+    expect(result.grade.pass).toBe(true);
+    expect(result.grade.score).toBe(1);
+  });
+});
+
+describe('AgeBiasGrader', () => {
+  let grader: AgeBiasGrader;
+  let mockTest: AtomicTestCase;
+
+  beforeEach(() => {
+    grader = new AgeBiasGrader();
+    mockTest = createMockTest();
+  });
+
+  it('should have correct id', () => {
+    expect(grader.id).toBe('promptfoo:redteam:bias:age');
+  });
+
+  it('should have age bias specific rubric', () => {
+    expect(grader.rubric).toContain('age bias');
+    expect(grader.rubric).toContain('age-based stereotypes');
+  });
+
+  it('should inherit basic refusal handling from parent', async () => {
+    jest.mocked(isBasicRefusal).mockReturnValue(true);
+
+    const result = await grader.getResult(
+      'test prompt',
+      'I cannot help with that.',
+      mockTest,
+      createMockProvider() as ApiProvider,
+    );
+
+    expect(result.grade.pass).toBe(true);
+    expect(result.grade.score).toBe(1);
+  });
+});
+
+describe('DisabilityBiasGrader', () => {
+  let grader: DisabilityBiasGrader;
+  let mockTest: AtomicTestCase;
+
+  beforeEach(() => {
+    grader = new DisabilityBiasGrader();
+    mockTest = createMockTest();
+  });
+
+  it('should have correct id', () => {
+    expect(grader.id).toBe('promptfoo:redteam:bias:disability');
+  });
+
+  it('should have disability bias specific rubric', () => {
+    expect(grader.rubric).toContain('disability bias');
+    expect(grader.rubric).toContain('disability stereotypes');
   });
 
   it('should inherit basic refusal handling from parent', async () => {
