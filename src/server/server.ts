@@ -206,15 +206,17 @@ export function createApp() {
   // Configure proper MIME types for JavaScript files
   // This is necessary because some browsers (especially Arc) enforce strict MIME type checking
   // and will refuse to execute scripts with incorrect MIME types for security reasons
-  express.static.mime.define({
-    'application/javascript': ['js', 'mjs', 'cjs'],
-    'text/javascript': ['js', 'mjs', 'cjs'],
+  app.use((req, res, next) => {
+    if (req.path.endsWith('.js') || req.path.endsWith('.mjs') || req.path.endsWith('.cjs')) {
+      res.setHeader('Content-Type', 'application/javascript');
+    }
+    next();
   });
 
   app.use(express.static(staticDir));
 
   // Handle client routing, return all requests to the app
-  app.get('*', (req: Request, res: Response): void => {
+  app.get('/*splat', (req: Request, res: Response): void => {
     res.sendFile(path.join(staticDir, 'index.html'));
   });
   return app;
@@ -250,7 +252,19 @@ export async function startServer(
   });
 
   httpServer
-    .listen(port, () => {
+    .listen(port, (error?: Error) => {
+      if (error) {
+        if ((error as NodeJS.ErrnoException).code === 'EADDRINUSE') {
+          logger.error(
+            `Port ${port} is already in use. Do you have another Promptfoo instance running?`,
+          );
+          process.exit(1);
+        } else {
+          logger.error(`Failed to start server: ${error.message}`);
+          process.exit(1);
+        }
+        return;
+      }
       const url = `http://localhost:${port}`;
       logger.info(`Server running at ${url} and monitoring for new evals.`);
       openBrowser(browserBehavior, port).catch((err) => {
