@@ -519,6 +519,8 @@ describe('resolveVariables', () => {
 describe('runExtensionHook', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Reset the transform mock to return undefined by default
+    jest.mocked(transform).mockResolvedValue(undefined);
   });
 
   describe('beforeAll', () => {
@@ -640,6 +642,11 @@ describe('runExtensionHook', () => {
     });
 
     describe('extensions provided', () => {
+      beforeEach(() => {
+        // Reset the mock to return undefined for these tests
+        jest.mocked(transform).mockResolvedValue(undefined);
+      });
+
       it('should call transform for each extension', async () => {
         const extensions = ['ext1', 'ext2', 'ext3'];
         await runExtensionHook(extensions, hookName, context);
@@ -682,8 +689,6 @@ describe('runExtensionHook', () => {
       });
     });
   });
-
-  // TODO: Copy over logic for beforeEach, afterEach, afterAll.
 });
 
 describe('collectFileMetadata', () => {

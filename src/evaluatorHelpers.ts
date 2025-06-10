@@ -336,6 +336,12 @@ export async function renderPrompt(
   }
 }
 
+// ================================
+// Extension Hooks
+// ================================
+
+// TODO(chore): Move the extension hooks logic into a separate file.
+
 const BeforeAllExtensionHookContextSchema = z.object({
   suite: TestSuiteSchema,
 });
@@ -427,18 +433,6 @@ export async function runExtensionHook<HookName extends keyof HookContextMap>(
       );
       break;
     }
-    // case 'afterEach':
-    //   invariant(
-    //     AfterEachExtensionHookContextSchema.safeParse(context).success,
-    //     `Invalid context passed to afterEach hook`,
-    //   );
-    //   break;
-    // case 'afterAll':
-    //   invariant(
-    //     AfterAllExtensionHookContextSchema.safeParse(context).success,
-    //     `Invalid context passed to afterAll hook`,
-    //   );
-    //   break;
   }
 
   // TODO(Will): It would be nice if this logged the hooks used.
@@ -468,7 +462,9 @@ export async function runExtensionHook<HookName extends keyof HookContextMap>(
             };
           } else {
             logger.error(parsed.error.message);
-            throw new Error(`[${extension}] Invalid context returned by beforeAll hook`);
+            throw new Error(
+              `[${extension}] Invalid context returned by beforeAll hook: ${parsed.error.message}`,
+            );
           }
           break;
         }
@@ -479,14 +475,12 @@ export async function runExtensionHook<HookName extends keyof HookContextMap>(
             (updatedContext as BeforeEachExtensionHookContext) = { test: parsed.data.test };
           } else {
             logger.error(parsed.error.message);
-            throw new Error(`[${extension}] Invalid context returned by beforeEach hook`);
+            throw new Error(
+              `[${extension}] Invalid context returned by beforeEach hook: ${parsed.error.message}`,
+            );
           }
           break;
         }
-        case 'afterEach':
-          continue;
-        case 'afterAll':
-          continue;
       }
     } else {
       // Backwards compatibility: no-op if the extension does not return a value.
