@@ -52,7 +52,7 @@ vi.mock('./YamlEditor', () => ({
 
 const renderWithTheme = (component: React.ReactNode) => {
   const theme = createTheme({ palette: { mode: 'light' } });
-  return render(<ThemeProvider theme={theme}>{component}</ThemeProvider>);
+  return render(<ThemeProvider theme={theme}>{component as any}</ThemeProvider>);
 };
 
 // Capture the true initial state structure from the store, including functions

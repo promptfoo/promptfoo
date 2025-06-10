@@ -22,7 +22,7 @@ describe('CommentDialog', () => {
     const theme = createTheme({
       palette: { mode: 'light' },
     });
-    return render(<ThemeProvider theme={theme}>{component}</ThemeProvider>);
+    return render(<ThemeProvider theme={theme}>{component as any}</ThemeProvider>);
   };
 
   it('renders correctly when open', () => {
