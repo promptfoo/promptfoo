@@ -78,7 +78,7 @@ describe('ResultsTable Metrics Display', () => {
     setFilterMode: vi.fn(),
   };
 
-  const renderWithProviders = (ui: React.ReactElement) => {
+  const renderWithProviders = (ui: React.ReactElement<any>) => {
     return render(ui);
   };
 

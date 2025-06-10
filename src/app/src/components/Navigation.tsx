@@ -1,5 +1,4 @@
-import React, { useState, forwardRef } from 'react';
-import type { LinkProps } from 'react-router-dom';
+import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
@@ -22,13 +21,7 @@ import InfoModal from './InfoModal';
 import Logo from './Logo';
 import './Navigation.css';
 
-// Create a properly typed forwarded ref component for MUI compatibility
-const RouterLink = forwardRef<HTMLAnchorElement, LinkProps>((props, ref) => (
-  <Link ref={ref} {...props} />
-));
-RouterLink.displayName = 'RouterLink';
-
-const NavButton = styled(Button)<Partial<ButtonProps> & Partial<LinkProps>>(({ theme }) => ({
+const NavButton = styled(Button)<ButtonProps>(({ theme }) => ({
   color: theme.palette.text.primary,
   '&:hover': {
     backgroundColor: theme.palette.action.hover,
@@ -60,9 +53,9 @@ function NavLink({ href, label }: { href: string; label: string }) {
   const isActive = location.pathname.startsWith(href);
 
   return (
-    <NavButton component={RouterLink} to={href} className={isActive ? 'active' : ''}>
-      {label}
-    </NavButton>
+    <Link to={href} style={{ textDecoration: 'none' }}>
+      <NavButton className={isActive ? 'active' : ''}>{label}</NavButton>
+    </Link>
   );
 }
 
@@ -105,11 +98,18 @@ function CreateDropdown() {
           },
         }}
       >
-        <MenuItem onClick={handleClose} component={RouterLink} to="/setup">
-          Eval
+        <MenuItem onClick={handleClose}>
+          <Link to="/setup" style={{ textDecoration: 'none', color: 'inherit', width: '100%' }}>
+            Eval
+          </Link>
         </MenuItem>
-        <MenuItem onClick={handleClose} component={RouterLink} to="/redteam/setup">
-          Red team
+        <MenuItem onClick={handleClose}>
+          <Link
+            to="/redteam/setup"
+            style={{ textDecoration: 'none', color: 'inherit', width: '100%' }}
+          >
+            Red team
+          </Link>
         </MenuItem>
       </Menu>
     </>
@@ -141,11 +141,15 @@ function EvalsDropdown() {
         Evals
       </NavButton>
       <Menu anchorEl={anchorEl} open={open} onClose={handleClose}>
-        <MenuItem onClick={handleClose} component={RouterLink} to="/eval">
-          Latest Eval
+        <MenuItem onClick={handleClose}>
+          <Link to="/eval" style={{ textDecoration: 'none', color: 'inherit', width: '100%' }}>
+            Latest Eval
+          </Link>
         </MenuItem>
-        <MenuItem onClick={handleClose} component={RouterLink} to="/evals">
-          All Evals
+        <MenuItem onClick={handleClose}>
+          <Link to="/evals" style={{ textDecoration: 'none', color: 'inherit', width: '100%' }}>
+            All Evals
+          </Link>
         </MenuItem>
       </Menu>
     </>

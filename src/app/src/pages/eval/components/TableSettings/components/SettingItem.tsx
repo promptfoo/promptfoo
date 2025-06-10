@@ -125,7 +125,7 @@ const SettingItem: React.FC<SettingItemProps> = ({
               width: '100%',
             }}
           >
-            {icon && (
+            {icon ? (
               <Box
                 sx={{
                   color: theme.palette.primary.main,
@@ -138,9 +138,9 @@ const SettingItem: React.FC<SettingItemProps> = ({
                   marginRight: tokens.spacing.margin.tiny,
                 }}
               >
-                {icon}
+                {React.isValidElement(icon) ? icon : <>{icon}</>}
               </Box>
-            )}
+            ) : null}
             <Typography
               variant="body2"
               id={labelId}

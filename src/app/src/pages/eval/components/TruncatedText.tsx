@@ -6,7 +6,12 @@ interface ReactElementWithChildren extends React.ReactElement {
 }
 
 function isReactElementWithChildren(node: React.ReactNode): node is ReactElementWithChildren {
-  return React.isValidElement(node) && 'children' in node.props;
+  return (
+    React.isValidElement(node) &&
+    typeof node.props === 'object' &&
+    node.props !== null &&
+    'children' in node.props
+  );
 }
 
 function textLength(node: React.ReactNode): number {

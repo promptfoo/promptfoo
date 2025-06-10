@@ -39,9 +39,9 @@ const Row = ({ label, value }: { label: React.ReactNode; value: React.ReactNode 
           paddingLeft: 3,
         }}
       >
-        {label}
+        {label as any}
       </TableCell>
-      <TableCell sx={{ padding: 3 }}>{value}</TableCell>
+      <TableCell sx={{ padding: 3 }}>{value as any}</TableCell>
     </TableRow>
   );
 };

@@ -26,7 +26,7 @@ interface EnhancedRangeSliderProps {
   onChangeCommitted?: (value: number) => void;
   disabled?: boolean;
   tooltipText?: string;
-  icon?: React.ReactNode;
+  icon?: JSX.Element;
 }
 
 const EnhancedRangeSlider: React.FC<EnhancedRangeSliderProps> = ({
@@ -138,7 +138,7 @@ const EnhancedRangeSlider: React.FC<EnhancedRangeSliderProps> = ({
         spacing={tokens.spacing.stack.medium}
         mb={tokens.spacing.margin.element}
       >
-        {icon && (
+        {icon ? (
           <Box
             sx={{
               color: theme.palette.primary.main,
@@ -147,9 +147,9 @@ const EnhancedRangeSlider: React.FC<EnhancedRangeSliderProps> = ({
               fontSize: '1.1rem',
             }}
           >
-            {icon}
+            {React.isValidElement(icon) ? icon : <>{icon}</>}
           </Box>
-        )}
+        ) : null}
         <Typography
           variant="body1"
           fontWeight={500}

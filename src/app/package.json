@@ -27,17 +27,18 @@
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.0",
-    "@testing-library/user-event": "^14.6.1",
-    "@types/diff": "^7.0.2",
+    "@testing-library/user-event": "^14.5.2",
     "@types/fuzzysearch": "^1.0.2",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.15.31",
     "@types/prismjs": "^1.26.5",
-    "@types/react": "^18.3.23",
-    "@types/react-dom": "^18.3.7",
+    "@types/react": "^19.1.7",
+    "@types/react-dom": "^19.1.6",
     "@types/react-router-dom": "^5.3.3",
     "@types/react-syntax-highlighter": "^15.5.13",
     "@types/uuid": "^10.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.34.0",
+    "@typescript-eslint/parser": "^8.34.0",
     "@vitejs/plugin-react": "^4.5.2",
     "@vitest/coverage-v8": "^3.2.3",
     "ansi-to-html": "^0.7.2",
@@ -56,8 +57,8 @@
     "jsdom": "^26.1.0",
     "jspdf": "^3.0.1",
     "prismjs": "^1.30.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
     "react-error-boundary": "^4.1.2",
     "react-markdown": "^9.0.3",
     "react-router-dom": "^7.6.2",
@@ -74,5 +75,17 @@
     "vite-plugin-node-polyfills": "^0.23.0",
     "vitest": "^3.2.3",
     "zustand": "^5.0.5"
+  },
+  "overrides": {
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "@types/react": "^19.1.7",
+    "@types/react-dom": "^19.1.6"
+  },
+  "resolutions": {
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "@types/react": "^19.1.7",
+    "@types/react-dom": "^19.1.6"
   }
 }
