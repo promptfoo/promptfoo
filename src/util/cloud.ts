@@ -93,6 +93,9 @@ export function isCloudProvider(providerPath: string): boolean {
 }
 
 export function getCloudDatabaseId(providerPath: string): string {
+  if (!isCloudProvider(providerPath)) {
+    throw new Error(`Provider path ${providerPath} is not a cloud provider.`);
+  }
   return providerPath.slice(CLOUD_PROVIDER_PREFIX.length);
 }
 
