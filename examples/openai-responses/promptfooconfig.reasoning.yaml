@@ -12,8 +12,8 @@ providers:
       max_output_tokens: 1000
       reasoning_effort: 'high'
 
-  - id: openai:responses:o3
-    label: o3-reasoning
+  - id: openai:responses:o3-pro
+    label: o3-pro-reasoning
     config:
       max_output_tokens: 2000
       reasoning_effort: 'high'

@@ -128,6 +128,13 @@ export const OPENAI_CHAT_MODELS = [
       output: 4.4 / 1e6,
     },
   })),
+  ...['o3-pro', 'o3-pro-2025-06-10'].map((model) => ({
+    id: model,
+    cost: {
+      input: 20 / 1e6,
+      output: 80 / 1e6,
+    },
+  })),
   ...[
     'gpt-4o-audio-preview',
     'gpt-4o-audio-preview-2024-12-17',
