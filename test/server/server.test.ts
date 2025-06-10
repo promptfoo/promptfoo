@@ -26,8 +26,6 @@ jest.mock('../../src/util/database', () => ({
   }),
 }));
 
-jest.mock('../../src/logger');
-
 describe('/api/remote-health endpoint', () => {
   let app: ReturnType<typeof createApp>;
 

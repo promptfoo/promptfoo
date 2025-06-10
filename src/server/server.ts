@@ -48,7 +48,11 @@ const JS_EXTENSIONS = new Set(['.js', '.mjs', '.cjs']);
  * This is necessary because some browsers (especially Arc) enforce strict MIME type checking
  * and will refuse to execute scripts with incorrect MIME types for security reasons.
  */
-function setJavaScriptMimeType(req: Request, res: Response, next: express.NextFunction): void {
+export function setJavaScriptMimeType(
+  req: Request,
+  res: Response,
+  next: express.NextFunction,
+): void {
   const ext = path.extname(req.path);
   if (JS_EXTENSIONS.has(ext)) {
     res.setHeader('Content-Type', 'application/javascript');
@@ -59,7 +63,7 @@ function setJavaScriptMimeType(req: Request, res: Response, next: express.NextFu
 /**
  * Handles server startup errors with proper logging and graceful shutdown.
  */
-function handleServerError(error: NodeJS.ErrnoException, port: number): void {
+export function handleServerError(error: NodeJS.ErrnoException, port: number): void {
   if (error.code === 'EADDRINUSE') {
     logger.error(`Port ${port} is already in use. Do you have another Promptfoo instance running?`);
   } else {
@@ -285,5 +289,3 @@ export async function startServer(
       handleServerError(error, port);
     });
 }
-
-export { allPrompts, JS_EXTENSIONS, setJavaScriptMimeType, handleServerError };
