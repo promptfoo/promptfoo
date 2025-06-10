@@ -143,7 +143,7 @@ export async function getPluginSeverityOverridesFromCloud(cloudProviderId: strin
         );
       }
 
-      const { pluginSeveritySet } = await pluginSeveritySetResponse.json();
+      const pluginSeveritySet = await pluginSeveritySetResponse.json();
 
       logger.debug(
         `Plugin severity overrides ${pluginSeveritySet.id} fetched from cloud: ${JSON.stringify(pluginSeveritySet.members, null, 2)}`,
