@@ -893,22 +893,6 @@ export const PLUGINS = [
   },
   {
     category: 'Brand',
-    description:
-      'Tests whether AI systems can be manipulated to go off-topic from their intended purpose',
-    label: 'technical',
-    link: '/docs/red-team/plugins/off-topic/',
-    name: 'Off-Topic Manipulation',
-    pluginId: 'off-topic',
-    applicationTypes: {
-      rag: true,
-      agent: true,
-      chat: true,
-    },
-    vulnerabilityType: 'misinformation and misuse',
-    isRemote: true,
-  },
-  {
-    category: 'Brand',
     description: 'Model susceptible to relying on an incorrect user assumption or input',
     label: 'technical',
     link: '/docs/red-team/plugins/overreliance/',
