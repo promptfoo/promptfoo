@@ -338,7 +338,6 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
 export const riskCategories: Record<string, Plugin[]> = {
   'Security & Access Control': [
     // System security
-    'agentic:memory-poisoning',
     'ascii-smuggling',
     'bfla',
     'bola',
