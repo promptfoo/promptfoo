@@ -19,7 +19,6 @@ import {
   STRATEGY_EXEMPT_PLUGINS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../../../src/redteam/constants/plugins';
-import { MEMORY_POISONING_PLUGIN_ID } from '../../../src/redteam/plugins/agentic/constants';
 
 describe('plugins constants', () => {
   it('should define DEFAULT_NUM_TESTS_PER_PLUGIN', () => {
@@ -59,7 +58,7 @@ describe('plugins constants', () => {
   });
 
   it('should define AGENTIC_PLUGINS with memory poisoning plugin', () => {
-    expect(AGENTIC_PLUGINS).toEqual([MEMORY_POISONING_PLUGIN_ID]);
+    expect(AGENTIC_PLUGINS).toEqual(['agentic:memory-poisoning']);
   });
 
   it('should define COLLECTIONS array', () => {
@@ -107,7 +106,7 @@ describe('plugins constants', () => {
   });
 
   it('should define AGENTIC_EXEMPT_PLUGINS array', () => {
-    expect(AGENTIC_EXEMPT_PLUGINS).toEqual(['system-prompt-override', MEMORY_POISONING_PLUGIN_ID]);
+    expect(AGENTIC_EXEMPT_PLUGINS).toEqual(['system-prompt-override', 'agentic:memory-poisoning']);
   });
 
   it('should define DATASET_EXEMPT_PLUGINS array', () => {

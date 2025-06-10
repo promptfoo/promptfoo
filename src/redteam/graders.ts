@@ -1,4 +1,3 @@
-import { REDTEAM_MEMORY_POISONING_PLUGIN_ID } from './plugins/agentic/constants';
 import { MemoryPoisoningPluginGrader } from './plugins/agentic/memoryPoisoning';
 import { AsciiSmugglingGrader } from './plugins/asciiSmuggling';
 import type { RedteamGraderBase } from './plugins/base';
@@ -67,7 +66,7 @@ import { UnsafeBenchGrader } from './plugins/unsafebench';
 import type { RedteamAssertionTypes } from './types';
 
 export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
-  [REDTEAM_MEMORY_POISONING_PLUGIN_ID]: new MemoryPoisoningPluginGrader(),
+  'promptfoo:redteam:agentic:memory-poisoning': new MemoryPoisoningPluginGrader(),
   'promptfoo:redteam:mcp': new MCPPluginGrader(),
   'promptfoo:redteam:medical:anchoring-bias': new MedicalAnchoringBiasPluginGrader(),
   'promptfoo:redteam:medical:hallucination': new MedicalHallucinationPluginGrader(),

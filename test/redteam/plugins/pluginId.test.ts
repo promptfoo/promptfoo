@@ -4,6 +4,7 @@ import {
   ALL_PLUGINS,
   BASE_PLUGINS,
   ADDITIONAL_PLUGINS,
+  AGENTIC_PLUGINS,
   CONFIG_REQUIRED_PLUGINS,
   HARM_PLUGINS,
   PII_PLUGINS,
@@ -137,6 +138,7 @@ describe('Plugin IDs', () => {
           const allPluginsList = [
             ...BASE_PLUGINS,
             ...ADDITIONAL_PLUGINS,
+            ...AGENTIC_PLUGINS,
             ...CONFIG_REQUIRED_PLUGINS,
             ...PII_PLUGINS,
             'pii', // Add the general pii plugin

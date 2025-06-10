@@ -9,7 +9,6 @@ import type {
   ProviderResponse,
 } from '../../../types/providers';
 import invariant from '../../../util/invariant';
-import { REDTEAM_MEMORY_POISONING_PLUGIN_ID } from '../../plugins/agentic/constants';
 import { getRemoteGenerationUrl } from '../../remoteGeneration';
 import { messagesToRedteamHistory } from '../shared';
 
@@ -17,7 +16,7 @@ export class MemoryPoisoningProvider implements ApiProvider {
   constructor(readonly config: ProviderOptions) {}
 
   id() {
-    return REDTEAM_MEMORY_POISONING_PLUGIN_ID;
+    return 'promptfoo:redteam:agentic:memory-poisoning';
   }
 
   /**

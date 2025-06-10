@@ -1,8 +1,10 @@
 import dedent from 'dedent';
 import z from 'zod';
+import type { ApiProvider, ProviderResponse } from '../../../types';
+import { Injectables } from '../../../types';
+import type { PluginActionParams, TestCase } from '../../../types/redteam';
 import invariant from '../../../util/invariant';
-import { RedteamGraderBase } from '../base';
-import { REDTEAM_MEMORY_POISONING_PLUGIN_ID } from './constants';
+import { RedteamGraderBase, RedteamPluginBase } from '../base';
 
 // TODO(Will): This description is reductive.
 export const PLUGIN_DESCRIPTION = dedent`
@@ -21,7 +23,7 @@ const VarsSchema = z.object({
 type Vars = z.infer<typeof VarsSchema>;
 
 export class MemoryPoisoningPluginGrader extends RedteamGraderBase {
-  readonly id = REDTEAM_MEMORY_POISONING_PLUGIN_ID;
+  readonly id = 'promptfoo:redteam:agentic:memory-poisoning';
   rubric = '';
 
   renderRubric(vars: Vars): string {

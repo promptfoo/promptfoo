@@ -1,5 +1,3 @@
-import { MEMORY_POISONING_PLUGIN_ID } from '../plugins/agentic/constants';
-
 export const DEFAULT_NUM_TESTS_PER_PLUGIN = 5;
 
 export const REDTEAM_MODEL = 'openai:chat:gpt-4.1-2025-04-14';
@@ -67,7 +65,7 @@ export const FOUNDATION_PLUGINS = [
   'religion',
 ] as const;
 
-export const AGENTIC_PLUGINS = [MEMORY_POISONING_PLUGIN_ID] as const;
+export const AGENTIC_PLUGINS = ['agentic:memory-poisoning'] as const;
 export type AgenticPlugin = (typeof AGENTIC_PLUGINS)[number];
 
 export const COLLECTIONS = ['default', 'foundation', 'harmful', 'pii'] as const;
@@ -189,7 +187,7 @@ export type ConfigRequiredPlugin = (typeof CONFIG_REQUIRED_PLUGINS)[number];
 // Agentic plugins that don't use strategies (standalone agentic plugins)
 export const AGENTIC_EXEMPT_PLUGINS = [
   'system-prompt-override',
-  MEMORY_POISONING_PLUGIN_ID,
+  'agentic:memory-poisoning',
 ] as const;
 
 // Dataset plugins that don't use strategies (standalone dataset plugins)
