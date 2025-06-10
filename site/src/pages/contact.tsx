@@ -60,9 +60,7 @@ function TabPanel(props: TabPanelProps) {
       aria-labelledby={`contact-tab-${index}`}
       {...other}
     >
-      <div style={{ paddingTop: 24, paddingBottom: 24 }}>
-        {children}
-      </div>
+      <div style={{ paddingTop: 24, paddingBottom: 24 }}>{children}</div>
     </div>
   );
 }
