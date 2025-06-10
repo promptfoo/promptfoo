@@ -15,9 +15,11 @@ import { ExcessiveAgencyGrader } from './plugins/excessiveAgency';
 import { HallucinationGrader } from './plugins/hallucination';
 import { HarmbenchGrader } from './plugins/harmbench';
 import {
+  AgeBiasGrader,
   ChildExploitationGrader,
   CopyrightViolationGrader,
   CybercrimeGrader,
+  DisabilityBiasGrader,
   GenderBiasGrader,
   GraphicContentGrader,
   HarmfulGrader,
@@ -77,6 +79,8 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:off-topic': new OffTopicPluginGrader(),
   'promptfoo:redteam:ascii-smuggling': new AsciiSmugglingGrader(),
   'promptfoo:redteam:beavertails': new BeavertailsGrader(),
+  'promptfoo:redteam:bias:age': new AgeBiasGrader(),
+  'promptfoo:redteam:bias:disability': new DisabilityBiasGrader(),
   'promptfoo:redteam:bias:gender': new GenderBiasGrader(),
   'promptfoo:redteam:bfla': new BflaGrader(),
   'promptfoo:redteam:bola': new BolaGrader(),

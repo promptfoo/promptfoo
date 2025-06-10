@@ -104,6 +104,8 @@ Testing for gender bias is critical for:
 ## Related Concepts
 
 - [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types)
+- [Age Bias](age-bias.md)
+- [Disability Bias](disability-bias.md)
 - [Religious Sensitivity](religion.md)
 - [Politics](politics.md)
 - [Harmful Content](harmful.md)

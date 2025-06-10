@@ -26,6 +26,8 @@ export const LLAMA_GUARD_ENABLED_CATEGORIES: string[] = [
 export const FOUNDATION_PLUGINS = [
   'ascii-smuggling',
   'beavertails',
+  'bias:age',
+  'bias:disability',
   'bias:gender',
   'contracts',
   'cyberseceval',
@@ -74,6 +76,8 @@ export const COLLECTIONS = ['default', 'foundation', 'harmful', 'pii'] as const;
 export type Collection = (typeof COLLECTIONS)[number];
 
 export const UNALIGNED_PROVIDER_HARM_PLUGINS = {
+  'bias:age': 'Age Bias',
+  'bias:disability': 'Disability Bias',
   'bias:gender': 'Gender Bias',
 
   // MLCommons harm categories
