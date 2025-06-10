@@ -178,7 +178,8 @@ export async function doEval(
       };
     }
 
-    let maxConcurrency = cmdObj.maxConcurrency;
+    let maxConcurrency =
+      cmdObj.maxConcurrency ?? evaluateOptions.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY;
     const delay = cmdObj.delay ?? 0;
 
     if (delay > 0) {
@@ -438,21 +439,63 @@ export async function doEval(
         completionDetails: tokenUsage.completionDetails,
       };
 
+      printBorder();
+      logger.info(chalk.bold('Token Usage Summary:'));
+
       if (isRedteam) {
         logger.info(
-          `Model probes: ${tokenUsage.numRequests.toLocaleString()} / ${formatTokenUsage('eval', evalTokens)}`,
+          `  ${chalk.cyan('Probes:')} ${chalk.white.bold(tokenUsage.numRequests.toLocaleString())}`,
         );
-      } else {
-        logger.info(formatTokenUsage('Eval', evalTokens));
       }
 
+      // Eval tokens
+      logger.info(`\n  ${chalk.yellow.bold('Evaluation:')}`);
+      logger.info(`    ${chalk.gray('Total:')} ${chalk.white(evalTokens.total.toLocaleString())}`);
+      logger.info(
+        `    ${chalk.gray('Prompt:')} ${chalk.white(evalTokens.prompt.toLocaleString())}`,
+      );
+      logger.info(
+        `    ${chalk.gray('Completion:')} ${chalk.white(evalTokens.completion.toLocaleString())}`,
+      );
+      if (evalTokens.cached > 0) {
+        logger.info(
+          `    ${chalk.gray('Cached:')} ${chalk.green(evalTokens.cached.toLocaleString())}`,
+        );
+      }
+      if (evalTokens.completionDetails.reasoning > 0) {
+        logger.info(
+          `    ${chalk.gray('Reasoning:')} ${chalk.white(evalTokens.completionDetails.reasoning.toLocaleString())}`,
+        );
+      }
+
+      // Grading tokens
       if (tokenUsage.assertions.total > 0) {
-        logger.info(formatTokenUsage('Grading', tokenUsage.assertions));
+        logger.info(`\n  ${chalk.magenta.bold('Grading:')}`);
+        logger.info(
+          `    ${chalk.gray('Total:')} ${chalk.white(tokenUsage.assertions.total.toLocaleString())}`,
+        );
+        logger.info(
+          `    ${chalk.gray('Prompt:')} ${chalk.white(tokenUsage.assertions.prompt.toLocaleString())}`,
+        );
+        logger.info(
+          `    ${chalk.gray('Completion:')} ${chalk.white(tokenUsage.assertions.completion.toLocaleString())}`,
+        );
+        if (tokenUsage.assertions.cached > 0) {
+          logger.info(
+            `    ${chalk.gray('Cached:')} ${chalk.green(tokenUsage.assertions.cached.toLocaleString())}`,
+          );
+        }
+        if (tokenUsage.assertions.completionDetails?.reasoning > 0) {
+          logger.info(
+            `    ${chalk.gray('Reasoning:')} ${chalk.white(tokenUsage.assertions.completionDetails.reasoning.toLocaleString())}`,
+          );
+        }
       }
 
+      // Grand total
       const combinedTotal = evalTokens.total + tokenUsage.assertions.total;
       logger.info(
-        `Total tokens: ${combinedTotal.toLocaleString()} (eval: ${evalTokens.total.toLocaleString()} + Grading: ${tokenUsage.assertions.total.toLocaleString()})`,
+        `\n  ${chalk.blue.bold('Grand Total:')} ${chalk.white.bold(combinedTotal.toLocaleString())} tokens`,
       );
     }
 

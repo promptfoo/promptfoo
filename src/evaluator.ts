@@ -1177,6 +1177,7 @@ class Evaluator {
             ? 'Group {groupId} [{bar}] {percentage}% | {value}/{total} | {activeThreads}/{maxThreads} threads | {provider} "{prompt}" {vars}'
             : 'Group {groupId} [{bar}] {percentage}% | {value}/{total} | {provider} "{prompt}" {vars}',
           hideCursor: true,
+          gracefulExit: true,
         },
         cliProgress.Presets.shades_classic,
       );
@@ -1368,7 +1369,7 @@ class Evaluator {
       progressBar.stop();
     }
 
-    this.evalRecord.setVars(vars);
+    this.evalRecord.setVars(Array.from(vars));
 
     await runExtensionHook(this.testSuite.extensions, 'afterAll', {
       prompts: this.evalRecord.prompts,

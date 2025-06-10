@@ -29,6 +29,7 @@ import {
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   DEFAULT_STRATEGIES,
   REDTEAM_MODEL,
+  type Severity,
 } from '../constants';
 import { shouldGenerateRemote, neverGenerateRemote } from '../remoteGeneration';
 import type {
@@ -137,7 +138,7 @@ export async function doGenerateRedteam(
     redteamConfig = resolved.config.redteam;
 
     if (
-      !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_TARGET_DISCOVERY_AGENT', false) &&
+      !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_TARGET_DISCOVERY_AGENT', true) &&
       !neverGenerateRemote() &&
       resolved.config.providers &&
       Array.isArray(resolved.config.providers)
@@ -207,6 +208,7 @@ export async function doGenerateRedteam(
         id: string;
         numTests: number | undefined;
         config?: Record<string, any>;
+        severity?: Severity;
       } = {
         // Handle both string-style ('pluginName') and object-style ({ id: 'pluginName' }) plugins
         id: typeof plugin === 'string' ? plugin : plugin.id,
@@ -218,8 +220,13 @@ export async function doGenerateRedteam(
       };
 
       // If plugin has additional config options, include them
-      if (typeof plugin === 'object' && plugin.config) {
-        pluginConfig.config = plugin.config;
+      if (typeof plugin === 'object') {
+        if (plugin.config) {
+          pluginConfig.config = plugin.config;
+        }
+        if (plugin.severity) {
+          pluginConfig.severity = plugin.severity;
+        }
       }
 
       return pluginConfig;
