@@ -104,7 +104,7 @@ export default function SecurityFindings({
             size="small"
             sx={{ minWidth: 150 }}
           >
-            <MenuItem value="all">All (excl. Debug)</MenuItem>
+            <MenuItem value="all">All</MenuItem>
             <MenuItem value="error">Errors Only</MenuItem>
             <MenuItem value="warning">Warnings Only</MenuItem>
             <MenuItem value="info">Info Only</MenuItem>

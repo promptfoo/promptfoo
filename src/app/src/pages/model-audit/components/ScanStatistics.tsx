@@ -28,7 +28,7 @@ export default function ScanStatistics({
     {
       severity: 'error',
       icon: ErrorIcon,
-      label: 'Critical Issues',
+      label: 'Critical',
       color: theme.palette.error.main,
       count: scanResults.issues.filter((i) => i.severity === 'error').length,
     },
