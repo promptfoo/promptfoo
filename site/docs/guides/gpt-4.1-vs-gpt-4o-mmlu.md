@@ -8,9 +8,9 @@ OpenAI released [GPT-4.1](https://openai.com/index/introducing-gpt-4-1-in-the-ap
 
 This guide will walk you through comparing GPT-4.1 and GPT-4o using the Massive Multitask Language Understanding (MMLU) benchmark in promptfoo. MMLU is a comprehensive test of language understanding across 57 academic subjects including mathematics, physics, history, law, medicine, and more.
 
-The end result will be a side-by-side comparison that looks like this:
+The end result will be a side-by-side comparison showing performance differences between the models across multiple academic domains.
 
-![GPT-4.1 vs GPT-4o MMLU comparison](/img/docs/gpt-4.1-vs-gpt-4o-mmlu.png)
+<!-- TODO: Add screenshot showing GPT-4.1 vs GPT-4o MMLU comparison results -->
 
 ## Prerequisites
 
