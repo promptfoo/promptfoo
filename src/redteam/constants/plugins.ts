@@ -214,9 +214,14 @@ export type Plugin =
   | PIIPlugin
   | AgenticPlugin;
 
-export const DEFAULT_PLUGINS: ReadonlySet<Plugin> = new Set(
-  [...BASE_PLUGINS, ...(Object.keys(HARM_PLUGINS) as HarmPlugin[]), ...PII_PLUGINS].sort(),
-) as ReadonlySet<Plugin>;
+export const DEFAULT_PLUGINS: ReadonlySet<Plugin> = new Set([
+  ...[...BASE_PLUGINS, ...(Object.keys(HARM_PLUGINS) as HarmPlugin[]), ...PII_PLUGINS].sort(),
+] as const satisfies readonly Plugin[]);
+
+export const ALL_PLUGINS: readonly Plugin[] = [
+  ...new Set([
+    ...DEFAULT_PLUGINS,
+    ...ADDITIONAL_PLUGINS,
     ...CONFIG_REQUIRED_PLUGINS,
     ...AGENTIC_PLUGINS,
   ]),

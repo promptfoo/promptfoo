@@ -70,11 +70,11 @@ export const STRATEGY_COLLECTION_MAPPINGS: Record<StrategyCollection, string[]> 
   'other-encodings': ['camelcase', 'morse', 'piglatin', 'emoji'],
 };
 
-export const ALL_STRATEGIES = [...new Set([
+const _ALL_STRATEGIES = [
   'default',
   ...DEFAULT_STRATEGIES,
   ...ADDITIONAL_STRATEGIES,
   ...STRATEGY_COLLECTIONS,
-])].sort() as const;
-
+] as const;
+export const ALL_STRATEGIES = Array.from(new Set(_ALL_STRATEGIES)).sort();
 export type Strategy = (typeof ALL_STRATEGIES)[number];
