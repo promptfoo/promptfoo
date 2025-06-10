@@ -167,7 +167,7 @@
     "supertest": "^7.1.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3",
-    "typescript-eslint": "^8.33.0",
+    "typescript-eslint": "^8.34.0",
     "zod-to-json-schema": "^3.24.5"
   },
   "dependencies": {
