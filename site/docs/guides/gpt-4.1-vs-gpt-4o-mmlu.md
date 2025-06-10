@@ -14,49 +14,49 @@ OpenAI's [GPT-4.1](https://openai.com/index/introducing-gpt-4-1-in-the-api/) sco
 
 This guide shows you how to reproduce these results using promptfoo.
 
-When OpenAI announced GPT-4.1 in April 2025, they didn't just mention MMLU performance in passing—they made it a headline feature. The 90.2% vs 85.7% score improvement was front and center in their model card, positioning this as a major leap in academic reasoning capabilities.
+OpenAI's GPT-4.1 announcement prominently featured the 90.2% vs 85.7% MMLU score improvement. MMLU (Massive Multitask Language Understanding) covers 57 academic subjects from abstract algebra to formal logic, testing models' ability to reason through complex problems rather than simply pattern match.
 
-This makes MMLU the perfect benchmark to recreate. It's not just any academic test—MMLU covers 57 subjects from abstract algebra to formal logic, requiring models to demonstrate genuine reasoning rather than simple pattern matching. When a model performs better on MMLU, it means it can think through complex problems more systematically.
+MMLU serves as an effective benchmark for comparing reasoning capabilities because it requires systematic thinking across diverse academic domains. The 4.5-point improvement that OpenAI highlighted indicates enhanced performance in mathematical reasoning, scientific knowledge, and logical analysis.
 
-What makes this particularly interesting is that OpenAI specifically chose to highlight MMLU over other benchmarks. They could have emphasized coding performance, general knowledge, or creative writing. Instead, they spotlighted academic reasoning—suggesting they see this as GPT-4.1's key differentiator.
-
-By recreating these exact results with promptfoo, you can verify whether OpenAI's claims hold up in practice and see firsthand where GPT-4.1's reasoning improvements matter most for your own use cases.
+This guide recreates those benchmark results using promptfoo, allowing you to verify the claimed performance differences and evaluate whether the improvements justify upgrading for your specific use cases.
 
 ## Model Timeline & Key Differences
 
-### GPT-4o: The Omnimodal Pioneer
+### GPT-4o
 
 **Released: May 13, 2024**
 
-GPT-4o ("o" for "omni") introduced true multimodal capabilities, processing text, audio, images, and video in a single unified model. Key capabilities:
+GPT-4o ("o" for "omni") introduced multimodal capabilities, processing text, audio, images, and video in a single model. Specifications:
 
 - **Context Window**: 128,000 tokens
-- **MMLU Score**: 88.7% (state-of-the-art at release)
+- **MMLU Score**: 88.7%
 - **Knowledge Cutoff**: October 2023
 - **Real-time Voice**: 320ms average response time
-- **Breakthrough**: First model with native audio-to-audio processing
+- **Audio Processing**: Native audio-to-audio processing
 
-### GPT-4.1: The Reasoning Enhancement
+### GPT-4.1
 
 **Released: April 14, 2025**
 
-GPT-4.1 represents a significant leap in reasoning capabilities and efficiency. Major improvements:
+GPT-4.1 includes improvements in reasoning capabilities and efficiency. Specifications:
 
 - **Context Window**: 1,000,000 tokens (8x larger than GPT-4o)
 - **MMLU Score**: 90.2% (+1.5 points vs GPT-4o's 88.7%)
 - **Knowledge Cutoff**: June 2024 (8 months more recent)
 - **Cost**: 26% cheaper than GPT-4o for median queries
-- **Key Gains**: Enhanced coding (+60% on internal benchmarks), instruction following, long document processing
+- **Performance Gains**: Enhanced coding (+60% on internal benchmarks), instruction following, long document processing
 
-### Why GPT-4.1 Outperforms GPT-4o
+### GPT-4.1 Performance Improvements
 
-1. **Advanced Reasoning Architecture**: Better mathematical and logical reasoning
-2. **Improved Training**: More recent data with enhanced reasoning patterns
-3. **Reduced Hallucination**: More reliable outputs with better fact verification
-4. **Long Context Understanding**: Million-token window enables complex document analysis
-5. **Enterprise Optimizations**: Better performance on business-critical tasks
+GPT-4.1 outperforms GPT-4o through:
 
-**Real-world Impact**: Companies report 17-53% accuracy improvements in document review, coding, and complex analysis tasks.
+1. **Reasoning Architecture**: Improved mathematical and logical reasoning
+2. **Training Data**: More recent data with enhanced reasoning patterns
+3. **Output Reliability**: Reduced hallucination rates
+4. **Context Processing**: Million-token window for complex document analysis
+5. **Task Performance**: Optimized for business applications
+
+Companies report 17-53% accuracy improvements in document review, coding, and complex analysis tasks when using GPT-4.1 compared to GPT-4o.
 
 :::tip Quick Start
 
@@ -123,6 +123,10 @@ npx promptfoo@latest view
 ```
 
 You should see GPT-4.1 outperforming GPT-4o on reasoning questions.
+
+![GPT-4.1 vs GPT-4o MMLU Results](/img/docs/gpt-4.1-vs-gpt-4o-mmlu-results.png)
+
+The results above show GPT-4.1 achieving a 92.5% pass rate on MMLU questions, demonstrating the improved reasoning capabilities compared to GPT-4o.
 
 ## Step 3: Improve with Chain-of-Thought
 
@@ -209,16 +213,6 @@ GPT-4.1's **4.5-point MMLU gain** comes from targeted improvements in academic r
 - **Context Retention**: Better handling of lengthy academic passages and complex questions
 
 **Key MMLU subjects showing largest gains**: Abstract Algebra (+7%), Formal Logic (+6%), College Mathematics (+5%)
-
-## Troubleshooting
-
-**Dataset errors?** Verify `HF_TOKEN` is set correctly.
-
-**Low pass rates?** Check your regex pattern matches the prompt format.
-
-**High latency?** Reduce `max_tokens` or increase the timeout threshold.
-
-**Need help?** See [configuration docs](/docs/configuration) or [OpenAI provider guide](/docs/providers/openai).
 
 ## Next Steps
 
