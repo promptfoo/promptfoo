@@ -97,16 +97,16 @@ It automatically loads `promptfooconfig.*`, but you can use a custom config file
 
 ## Extension Hooks
 
-promptfoo supports extension hooks that allow you to run custom code that modifies the evaluation state at specific points in the evaluation lifecycle. These hooks are defined in extension files specified in the `extensions` property of the configuration.
+Promptfoo supports extension hooks that allow you to run custom code that modifies the evaluation state at specific points in the evaluation lifecycle. These hooks are defined in extension files specified in the `extensions` property of the configuration.
 
 ### Available Hooks
 
-| Hook Name  | Description                                   | `context` Argument Schema                         |
-| ---------- | --------------------------------------------- | ------------------------------------------------- |
-| beforeAll  | Runs before the entire test suite begins      | `{ suite: TestSuite }`                            |
-| afterAll   | Runs after the entire test suite has finished | `{ results: EvaluateResult[], suite: TestSuite }` |
-| beforeEach | Runs before each individual test              | `{ test: TestCase }`                              |
-| afterEach  | Runs after each individual test               | `{ test: TestCase, result: EvaluateResult }`      |
+| Name       | Description                                   | Context                                           | Mutable Context |
+| ---------- | --------------------------------------------- | ------------------------------------------------- | --------------- |
+| beforeAll  | Runs before the entire test suite begins      | `{ suite: TestSuite }`                            | True            |
+| afterAll   | Runs after the entire test suite has finished | `{ results: EvaluateResult[], suite: TestSuite }` | False           |
+| beforeEach | Runs before each individual test              | `{ test: TestCase }`                              | True            |
+| afterEach  | Runs after each individual test               | `{ test: TestCase, result: EvaluateResult }`      | False           |
 
 ### Implementing Hooks
 
@@ -128,49 +128,95 @@ extensions:
 When specifying an extension in the configuration, you must include the function name after the file path, separated by a colon (`:`). This tells promptfoo which function to call in the extension file.
 :::
 
-Example extension file (Python):
+Python example extension file:
 
 ```python
-def extension_hook(hook_name, context) -> dict:
+from typing import Optional
+
+def extension_hook(hook_name, context) -> Optional[dict]:
+    # Perform any necessary setup
     if hook_name == 'beforeAll':
         print(f"Setting up test suite: {context['suite'].get('description', '')}")
-        # Perform any necessary setup
+
+        # Add an additional test case to the suite:
+        context["suite"]["tests"].append(
+            {
+                "vars": {
+                    "body": "It's a beautiful day",
+                    "language": "Spanish",
+                },
+                "assert": [{"type": "contains", "value": "Es un día hermoso."}],
+            }
+        )
+
+        # Add an additional default assertion to the suite:
+        context["suite"]["defaultTest"]["assert"].append({"type": "is-json"})
+
+        return context
+
+    # Perform any necessary teardown or reporting
     elif hook_name == 'afterAll':
         print(f"Test suite completed: {context['suite'].get('description', '')}")
         print(f"Total tests: {len(context['results'])}")
-        # Perform any necessary teardown or reporting
+
+    # Prepare for individual test
     elif hook_name == 'beforeEach':
         print(f"Running test: {context['test'].get('description', '')}")
-        # Prepare for individual test
+
+        # Change all languages to pirate-dialect
+        context["test"]["vars"]["language"] = f'Pirate {context["test"]["vars"]["language"]}'
+
+        return context
+
+    # Clean up after individual test or log results
     elif hook_name == 'afterEach':
         print(f"Test completed: {context['test'].get('description', '')}. Pass: {context['result'].get('success', False)}")
-        # Clean up after individual test or log results
 
-    return context
+
 ```
 
-Example extension file (JavaScript):
+JavaScript example extension file:
 
 ```javascript
 async function extensionHook(hookName, context) {
+  // Perform any necessary setup
   if (hookName === 'beforeAll') {
     console.log(`Setting up test suite: ${context.suite.description || ''}`);
-    // Perform any necessary setup
-  } else if (hookName === 'afterAll') {
+
+    // Add an additional test case to the suite:
+    context.suite.tests.push({
+      vars: {
+        body: "It's a beautiful day",
+        language: 'Spanish',
+      },
+      assert: [{ type: 'contains', value: 'Es un día hermoso.' }],
+    });
+
+    return context;
+  }
+
+  // Perform any necessary teardown or reporting
+  else if (hookName === 'afterAll') {
     console.log(`Test suite completed: ${context.suite.description || ''}`);
     console.log(`Total tests: ${context.results.length}`);
-    // Perform any necessary teardown or reporting
-  } else if (hookName === 'beforeEach') {
+  }
+
+  // Prepare for individual test
+  else if (hookName === 'beforeEach') {
     console.log(`Running test: ${context.test.description || ''}`);
-    // Prepare for individual test
-  } else if (hookName === 'afterEach') {
+
+    // Change all languages to pirate-dialect
+    context.test.vars.language = `Pirate ${context.test.vars.language}`;
+
+    return context;
+  }
+
+  // Clean up after individual test or log results
+  else if (hookName === 'afterEach') {
     console.log(
       `Test completed: ${context.test.description || ''}. Pass: ${context.result.success || false}`,
     );
-    // Clean up after individual test or log results
   }
-
-  return context;
 }
 
 module.exports = extensionHook;
@@ -180,9 +226,9 @@ These hooks provide powerful extensibility to your promptfoo evaluations, allowi
 
 ### Mutable Context
 
-Each hook may mutate specific properties of its given `context` argument in order to modify evaluation state.
+The beforeAll and beforeEach hooks may mutate specific properties of their respective `context` arguments in order to modify evaluation state. To persist these changes, the hook must return the modified context.
 
-#### `beforeAll`
+#### beforeAll
 
 | Property                          | Type                       | Description                            |
 | --------------------------------- | -------------------------- | -------------------------------------- |
@@ -195,15 +241,11 @@ Each hook may mutate specific properties of its given `context` argument in orde
 | `context.suite.derivedMetrics`    | `Record<string, string>`   | A map of derived metrics.              |
 | `context.suite.redteam`           | `Redteam[]`                | The red team to be evaluated.          |
 
-#### `beforeEach`
+#### beforeEach
 
 | Property       | Type       | Description                    |
 | -------------- | ---------- | ------------------------------ |
 | `context.test` | `TestCase` | The test case to be evaluated. |
-
-#### `afterEach`
-
-#### `afterAll`
 
 ## Provider-related types
 
