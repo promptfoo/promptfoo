@@ -108,9 +108,7 @@ describe('GolangProvider', () => {
     mockExistsSync.mockImplementation(
       (p: fs.PathLike) => p.toString() === '/absolute/path/to/go.mod' || true,
     );
-    mockReaddirSync.mockReturnValue([
-      { name: 'test.go', isDirectory: () => false },
-    ] as unknown as fs.Dirent[]);
+    mockReaddirSync.mockReturnValue([{ name: 'test.go', isDirectory: () => false }] as any);
     mockMkdirSync.mockImplementation(() => undefined);
 
     mockExec.mockImplementation(((cmd: string, callback: any) => {
@@ -647,9 +645,7 @@ describe('GolangProvider', () => {
           // Some code
         }`;
 
-      mockReaddirSync.mockReturnValue([
-        { name: 'main.go', isDirectory: () => false },
-      ] as unknown as fs.Dirent[]);
+      mockReaddirSync.mockReturnValue([{ name: 'main.go', isDirectory: () => false }] as any);
 
       mockReadFileSync.mockImplementation((p: fs.PathOrFileDescriptor) => {
         if (p.toString().endsWith('main.go')) {
@@ -693,12 +689,12 @@ describe('GolangProvider', () => {
       // Mock a nested directory structure
       mockReaddirSync.mockImplementation((p: fs.PathOrFileDescriptor) => {
         if (p.toString().includes('nested')) {
-          return [{ name: 'nested-file.go', isDirectory: () => false }] as unknown as fs.Dirent[];
+          return [{ name: 'nested-file.go', isDirectory: () => false }] as any;
         }
         return [
           { name: 'test.go', isDirectory: () => false },
           { name: 'nested', isDirectory: () => true },
-        ] as unknown as fs.Dirent[];
+        ] as any;
       });
 
       // Track created directories and copied files
@@ -742,9 +738,7 @@ describe('GolangProvider', () => {
         config: { basePath: '/absolute/path/to' },
       });
 
-      mockReaddirSync.mockReturnValue([
-        { name: 'main.go', isDirectory: () => false },
-      ] as unknown as fs.Dirent[]);
+      mockReaddirSync.mockReturnValue([{ name: 'main.go', isDirectory: () => false }] as any);
 
       mockCopyFileSync.mockImplementation(() => {
         throw new Error('Failed to copy file');

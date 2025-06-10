@@ -524,9 +524,8 @@ describe('EvalOutputCell highlight toggle functionality', () => {
     expect(cellElement).toBeInTheDocument();
 
     // Check that the cell does not have highlight background color
-    expect(cellElement).not.toHaveStyle({
-      backgroundColor: 'var(--cell-highlight-color)',
-    });
+    const style = cellElement!.getAttribute('style') || '';
+    expect(style).not.toContain('var(--cell-highlight-color)');
   });
 
   it('displays comment text without !highlight prefix in comment display', () => {
@@ -860,9 +859,8 @@ describe('EvalOutputCell cell highlighting styling', () => {
 
     // Cell should not have highlight background
     const cellElement = container.querySelector('.cell');
-    expect(cellElement).not.toHaveStyle({
-      backgroundColor: 'var(--cell-highlight-color)',
-    });
+    const style = cellElement!.getAttribute('style') || '';
+    expect(style).not.toContain('var(--cell-highlight-color)');
   });
 
   it('maintains text visibility during highlight state transitions', async () => {
