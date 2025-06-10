@@ -81,6 +81,7 @@ Based on OpenAI's benchmark results, you should observe:
 - **Improvement**: 4.5 percentage point gain with GPT-4.1
 
 GPT-4.1 should demonstrate superior performance in:
+
 - Mathematical reasoning tasks
 - Logical analysis and formal logic
 - Complex multi-step problem solving
@@ -116,11 +117,11 @@ You can modify the test by editing `promptfooconfig.yaml`:
      - huggingface://datasets/cais/mmlu?split=test&subset=physics&limit=10
      - huggingface://datasets/cais/mmlu?split=test&subset=chemistry&limit=10
      - huggingface://datasets/cais/mmlu?split=test&subset=biology&limit=10
-     
+
      # Humanities
      - huggingface://datasets/cais/mmlu?split=test&subset=world_history&limit=10
      - huggingface://datasets/cais/mmlu?split=test&subset=philosophy&limit=10
-     
+
      # Professional domains
      - huggingface://datasets/cais/mmlu?split=test&subset=jurisprudence&limit=10
      - huggingface://datasets/cais/mmlu?split=test&subset=clinical_knowledge&limit=10
@@ -169,8 +170,8 @@ You can modify the test by editing `promptfooconfig.yaml`:
    providers:
      - id: openai:gpt-4.1
        config:
-         temperature: 0.0  # Even more deterministic
-         max_tokens: 1000  # Allow longer explanations
+         temperature: 0.0 # Even more deterministic
+         max_tokens: 1000 # Allow longer explanations
    ```
 
 5. **Modify quality requirements**:
@@ -203,6 +204,7 @@ You can modify the test by editing `promptfooconfig.yaml`:
 ### Cost Analysis
 
 GPT-4.1 offers better performance at lower cost:
+
 - 26% less expensive than GPT-4o for median queries
 - 75% prompt caching discount for repeated context
 - Improved efficiency with higher accuracy per dollar spent
@@ -212,4 +214,4 @@ GPT-4.1 offers better performance at lower cost:
 - [GPT-4.1 vs GPT-4o MMLU Guide](/docs/guides/gpt-4.1-vs-gpt-4o-mmlu)
 - [OpenAI provider documentation](https://promptfoo.dev/docs/providers/openai)
 - [MMLU benchmark details](https://huggingface.co/datasets/cais/mmlu)
-- [GPT-4.1 announcement](https://openai.com/index/introducing-gpt-4-1-in-the-api/) 
+- [GPT-4.1 announcement](https://openai.com/index/introducing-gpt-4-1-in-the-api/)

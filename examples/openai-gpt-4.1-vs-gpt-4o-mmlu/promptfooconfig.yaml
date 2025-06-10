@@ -19,9 +19,9 @@ prompts:
 providers:
   - id: openai:gpt-4.1
     config:
-      temperature: 0.1  # Low temperature for consistent reasoning
-      max_tokens: 1000  # Sufficient for detailed explanations
-      top_p: 0.95      # Slightly constrained vocabulary for more focused answers
+      temperature: 0.1 # Low temperature for consistent reasoning
+      max_tokens: 1000 # Sufficient for detailed explanations
+      top_p: 0.95 # Slightly constrained vocabulary for more focused answers
   - id: openai:gpt-4o
     config:
       temperature: 0.1
@@ -33,7 +33,7 @@ defaultTest:
     # Performance metrics
     - type: latency
       threshold: 60000
-    
+
     # Content quality checks
     - type: llm-rubric
       value: |
@@ -43,15 +43,15 @@ defaultTest:
         3. Provides logical justification for the chosen answer
         4. Demonstrates domain knowledge relevant to the question
         Score as PASS if response meets at least 3 of 4 criteria.
-    
+
     # Answer format validation - multiple patterns for robustness
     - type: regex
-      value: "(Therefore|Thus|So|Hence),?.{0,20}(answer is|correct answer is|solution is).{0,10}[ABCD]"
-    
+      value: '(Therefore|Thus|So|Hence),?.{0,20}(answer is|correct answer is|solution is).{0,10}[ABCD]'
+
     # Fallback: Check for any clear letter choice
     - type: regex
       value: "\\b[ABCD]\\b"
-    
+
     # Accuracy check against ground truth (when available)
     - type: javascript
       value: |
@@ -61,9 +61,9 @@ defaultTest:
           /answer.{0,10}([ABCD])/i,
           /\b([ABCD])\b/g
         ];
-        
+
         let modelChoice = null;
-        
+
         // Try each pattern in order of preference
         for (const pattern of patterns.slice(0, -1)) {
           const match = output.match(pattern);
@@ -72,7 +72,7 @@ defaultTest:
             break;
           }
         }
-        
+
         // Last resort: find all letter choices and take the last one
         if (!modelChoice) {
           const allMatches = output.match(patterns[patterns.length - 1]);
@@ -80,11 +80,11 @@ defaultTest:
             modelChoice = allMatches[allMatches.length - 1];
           }
         }
-        
+
         if (!modelChoice) {
           return { pass: false, score: 0, reason: "Could not extract answer choice from response" };
         }
-        
+
         // Check against ground truth if available
         if (typeof answer !== 'undefined' && answer !== null) {
           const correctChoice = ['A', 'B', 'C', 'D'][answer];
@@ -96,10 +96,10 @@ defaultTest:
             metadata: { modelChoice, correctChoice, isCorrect }
           };
         }
-        
+
         return { pass: true, score: 1, reason: `Successfully extracted answer: ${modelChoice}` };
 
 tests:
   # Reasoning-heavy STEM subjects (where CoT shows most benefit)
   - huggingface://datasets/cais/mmlu?split=test&subset=abstract_algebra&config=abstract_algebra&limit=10
-  - huggingface://datasets/cais/mmlu?split=test&subset=formal_logic&config=formal_logic&limit=10 
+  - huggingface://datasets/cais/mmlu?split=test&subset=formal_logic&config=formal_logic&limit=10

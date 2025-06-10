@@ -139,18 +139,23 @@ npx promptfoo@latest view
 The evaluation will provide several key metrics:
 
 ### Accuracy
+
 GPT-4.1 should demonstrate higher accuracy across MMLU subjects, particularly in:
+
 - **Mathematics**: Abstract algebra, college mathematics
-- **Logic**: Formal logic, logical fallacies  
+- **Logic**: Formal logic, logical fallacies
 - **Reasoning**: Multi-step problem solving
 
 ### Response Quality
+
 Look for improvements in:
+
 - **Reasoning clarity**: GPT-4.1's enhanced instruction following should produce clearer step-by-step explanations
 - **Format adherence**: Better compliance with the requested answer format
 - **Consistency**: More reliable performance across different question types
 
 ### Latency
+
 Monitor response times. GPT-4.1 offers comparable or improved latency while delivering higher accuracy.
 
 ## Customizing Your Evaluation
@@ -165,11 +170,11 @@ tests:
   - huggingface://datasets/cais/mmlu?split=test&subset=physics&limit=10
   - huggingface://datasets/cais/mmlu?split=test&subset=chemistry&limit=10
   - huggingface://datasets/cais/mmlu?split=test&subset=biology&limit=10
-  
+
   # Humanities
   - huggingface://datasets/cais/mmlu?split=test&subset=world_history&limit=10
   - huggingface://datasets/cais/mmlu?split=test&subset=philosophy&limit=10
-  
+
   # Professional domains
   - huggingface://datasets/cais/mmlu?split=test&subset=jurisprudence&limit=10
   - huggingface://datasets/cais/mmlu?split=test&subset=clinical_knowledge&limit=10
@@ -183,8 +188,8 @@ Fine-tune model behavior for optimal performance:
 providers:
   - id: openai:gpt-4.1
     config:
-      temperature: 0.1  # Lower temperature for more consistent reasoning
-      max_tokens: 500   # Sufficient tokens for step-by-step explanations
+      temperature: 0.1 # Lower temperature for more consistent reasoning
+      max_tokens: 500 # Sufficient tokens for step-by-step explanations
   - id: openai:gpt-4o
     config:
       temperature: 0.1
@@ -228,25 +233,32 @@ prompts:
 Based on OpenAI's benchmark results, you should observe:
 
 ### Enhanced Reasoning
+
 GPT-4.1's 90.2% MMLU score represents substantial improvement in:
+
 - **Mathematical reasoning**: Better handling of abstract algebra and calculus problems
 - **Scientific knowledge**: Improved understanding of physics, chemistry, and biology concepts
 - **Logical analysis**: More accurate identification of logical fallacies and formal logic problems
 
 ### Instruction Following
+
 GPT-4.1's improved instruction following should result in:
+
 - **Better format compliance**: More consistent use of the requested answer format
 - **Clearer explanations**: Step-by-step reasoning that's easier to follow
 - **Reduced hallucination**: Less tendency to provide incorrect information with high confidence
 
 ### Long Context Understanding
+
 For complex MMLU questions with lengthy context, GPT-4.1's 1M token context window and improved attention should show:
+
 - **Better context retention**: More accurate responses to questions requiring information from earlier in the prompt
 - **Improved comprehension**: Better understanding of nuanced academic concepts
 
 ## Cost Considerations
 
 GPT-4.1 offers better performance at lower cost:
+
 - **26% less expensive** than GPT-4o for median queries
 - **75% prompt caching discount** for repeated context (increased from 50%)
 - **No additional cost** for long context requests beyond standard per-token pricing
@@ -254,6 +266,7 @@ GPT-4.1 offers better performance at lower cost:
 ## Best Practices
 
 ### Start Small
+
 Begin with 10 questions per subject to validate your setup, then scale up:
 
 ```yaml
@@ -262,6 +275,7 @@ tests:
 ```
 
 ### Monitor Quality
+
 Use the built-in assertions to ensure response quality:
 
 ```yaml
@@ -276,6 +290,7 @@ defaultTest:
 ```
 
 ### Cache for Efficiency
+
 Enable prompt caching to reduce costs on repeated evaluations:
 
 ```bash
@@ -297,4 +312,4 @@ While benchmarks provide valuable insights, testing on your specific use cases r
 - [GPT-4.1 vs GPT-4o MMLU Guide](/docs/guides/gpt-4.1-vs-gpt-4o-mmlu)
 - [OpenAI provider documentation](https://promptfoo.dev/docs/providers/openai)
 - [MMLU benchmark details](https://huggingface.co/datasets/cais/mmlu)
-- [GPT-4.1 announcement](https://openai.com/index/introducing-gpt-4-1-in-the-api/) 
+- [GPT-4.1 announcement](https://openai.com/index/introducing-gpt-4-1-in-the-api/)
