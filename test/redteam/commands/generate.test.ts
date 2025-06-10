@@ -8,6 +8,7 @@ import {
   mergeTargetPurposeDiscoveryResults,
 } from '../../../src/redteam/commands/discover';
 import { doGenerateRedteam } from '../../../src/redteam/commands/generate';
+import { Severity } from '../../../src/redteam/constants';
 import type { RedteamCliGenerateOptions, RedteamPluginObject } from '../../../src/redteam/types';
 import type { ApiProvider } from '../../../src/types';
 import * as configModule from '../../../src/util/config/load';
@@ -352,6 +353,81 @@ describe('doGenerateRedteam', () => {
           expect.objectContaining({ id: 'competitors', numTests: 1 }),
           expect.objectContaining({ id: 'contracts', numTests: 1 }),
           expect.objectContaining({ id: 'overreliance', numTests: 3 }),
+        ]),
+        prompts: ['Test prompt'],
+        strategies: [],
+      }),
+    );
+  });
+
+  it('should properly handle severity property in plugin objects', async () => {
+    jest.mocked(configModule.resolveConfigs).mockResolvedValue({
+      basePath: '/mock/path',
+      testSuite: {
+        prompts: [{ raw: 'Test prompt', label: 'Test label' }],
+        providers: [],
+      },
+      config: {
+        redteam: {
+          numTests: 5,
+          plugins: [
+            'contracts' as unknown as RedteamPluginObject,
+            { id: 'competitors', severity: Severity.Low },
+            { id: 'overreliance', numTests: 3, severity: Severity.High },
+            { id: 'harmful:hate', config: { customOption: true }, severity: Severity.Medium },
+          ],
+          strategies: [],
+        },
+      },
+    });
+
+    jest.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        prompts: [{ raw: 'Test prompt' }],
+        providers: [],
+        tests: [],
+      }),
+    );
+
+    jest.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        {
+          vars: { input: 'Test input' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+          metadata: { pluginId: 'redteam' },
+        },
+      ],
+      purpose: 'Test purpose',
+      entities: ['Test entity'],
+      injectVar: 'input',
+    });
+
+    const options: RedteamCliGenerateOptions = {
+      output: 'output.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: true,
+      force: true,
+      purpose: 'Test purpose',
+      config: 'config.yaml',
+    };
+
+    await doGenerateRedteam(options);
+
+    expect(synthesize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        language: undefined,
+        numTests: 5,
+        plugins: expect.arrayContaining([
+          expect.objectContaining({ id: 'contracts', numTests: 5 }), // string plugin without severity
+          expect.objectContaining({ id: 'competitors', numTests: 5, severity: Severity.Low }),
+          expect.objectContaining({ id: 'overreliance', numTests: 3, severity: Severity.High }),
+          expect.objectContaining({
+            id: 'harmful:hate',
+            numTests: 5,
+            severity: Severity.Medium,
+            config: { customOption: true },
+          }),
         ]),
         prompts: ['Test prompt'],
         strategies: [],

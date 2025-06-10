@@ -55,7 +55,7 @@ export const RedteamPluginObjectSchema = z.object({
     .default(DEFAULT_NUM_TESTS_PER_PLUGIN)
     .describe('Number of tests to generate for this plugin'),
   config: z.record(z.unknown()).optional().describe('Plugin-specific configuration'),
-  severity: z.nativeEnum(Severity).optional().describe('Severity of the plugin'),
+  severity: z.nativeEnum(Severity).optional().describe('Severity level for this plugin'),
 });
 
 /**

@@ -154,7 +154,7 @@ export async function doGenerateRedteam(
     );
 
     if (
-      !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_TARGET_DISCOVERY_AGENT', false) &&
+      !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_TARGET_DISCOVERY_AGENT', true) &&
       !neverGenerateRemote()
     ) {
       try {
