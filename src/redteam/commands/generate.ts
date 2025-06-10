@@ -277,6 +277,7 @@ export async function doGenerateRedteam(
   }
   invariant(plugins && Array.isArray(plugins) && plugins.length > 0, 'No plugins found');
 
+  // Apply plugin severity overrides
   if (pluginSeverityOverrides.size > 0) {
     let intersectionCount = 0;
     plugins = plugins.map((plugin) => {
