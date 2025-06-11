@@ -728,6 +728,30 @@ You can set up the provider in several ways:
 
 For more detailed information on configuration options, refer to the [ProviderOptions documentation](/docs/configuration/reference/#provideroptions).
 
+### Configuration Precedence
+
+Configuration values can be set in multiple ways, with the following precedence (highest to lowest):
+
+1. **Command-line flags** - Override all other settings
+
+   ```bash
+   promptfoo redteam run --provider openai:chat:gpt-4.1-mini --num-tests 10
+   ```
+
+2. **Environment variables** - Override config file settings
+
+   ```bash
+   export PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true
+   export OPENAI_API_KEY=your-key-here
+   ```
+
+3. **Configuration file** (`promptfooconfig.yaml`) - Base configuration
+   ```yaml
+   redteam:
+     provider: openai:gpt-4.1
+     numTests: 5
+   ```
+
 ## Best Practices
 
 1. Start with a configuration created by `promptfoo redteam init`
