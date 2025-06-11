@@ -398,12 +398,13 @@ describe('Python file references', () => {
     });
   });
 
-  it('should map snake_case keys returned from python', async () => {
+  it('should map snake_case keys from python dataclass to camelCase', async () => {
     const pythonResult = {
       pass_: true,
       score: 1,
       reason: 'ok',
       named_scores: { accuracy: 0.9 },
+      component_results: [{ id: 1 }],
     };
 
     jest.mocked(runPython).mockResolvedValueOnce(pythonResult as any);
@@ -426,7 +427,9 @@ describe('Python file references', () => {
     expect(result).toMatchObject({
       pass: true,
       score: 1,
+      reason: 'ok',
       namedScores: { accuracy: 0.9 },
+      componentResults: [{ id: 1 }],
     });
   });
 });
