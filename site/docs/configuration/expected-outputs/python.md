@@ -176,6 +176,16 @@ class GradingResult:
     named_scores: Optional[Dict[str, float]] = None  # Appear as metrics in the UI
 ```
 
+:::tip Snake case support
+promptfoo automatically maps snake_case field names from Python to their camelCase equivalents used internally:
+
+- `pass_` → `pass`
+- `named_scores` → `namedScores`
+- `component_results` → `componentResults`
+
+This means you can use either naming convention in your Python code, and both will work correctly.
+:::
+
 ## Overriding the Python binary
 
 By default, promptfoo will run `python` in your shell. Make sure `python` points to the appropriate executable.

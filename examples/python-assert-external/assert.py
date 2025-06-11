@@ -16,24 +16,26 @@ def get_assert(output, context):
     }
 
     # Or include nested assertions...
+    # Note: Both camelCase and snake_case field names are supported
+    # This example uses snake_case (pass_, component_results, named_scores)
     result = {
-        "pass": True,
+        "pass_": True,  # 'pass' is a reserved keyword in Python
         "score": 0.75,
         "reason": "Looks good to me",
-        "componentResults": [
+        "component_results": [
             {
-                "pass": "bananas" in output.lower(),
+                "pass_": "bananas" in output.lower(),
                 "score": 0.5,
                 "reason": "Contains banana",
-                "namedScores": {
+                "named_scores": {
                     "Uses banana": 1.0,
                 },
             },
             {
-                "pass": "yellow" in output.lower(),
+                "pass_": "yellow" in output.lower(),
                 "score": 0.5,
                 "reason": "Contains yellow",
-                "namedScores": {
+                "named_scores": {
                     "Yellowish": 0.66,
                 },
             },
