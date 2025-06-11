@@ -3,7 +3,7 @@ import path from 'path';
 import { ProxyAgent, setGlobalDispatcher } from 'undici';
 import cliState from '../src/cliState';
 import { VERSION } from '../src/constants';
-import { getEnvBool, getEnvString } from '../src/envars';
+import { getEnvBool, getEnvInt, getEnvString } from '../src/envars';
 import {
   fetchWithProxy,
   fetchWithRetries,
@@ -13,6 +13,7 @@ import {
   sanitizeUrl,
 } from '../src/fetch';
 import logger from '../src/logger';
+import { REQUEST_TIMEOUT_MS } from '../src/providers/shared';
 import { sleep } from '../src/util/time';
 import { createMockResponse } from './util/utils';
 
@@ -330,6 +331,7 @@ describe('fetchWithProxy', () => {
         ca: mockCertContent,
         rejectUnauthorized: true,
       },
+      headersTimeout: REQUEST_TIMEOUT_MS,
     });
     expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
   });
@@ -371,6 +373,7 @@ describe('fetchWithProxy', () => {
       requestTls: {
         rejectUnauthorized: true,
       },
+      headersTimeout: REQUEST_TIMEOUT_MS,
     });
     expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
   });
@@ -407,6 +410,7 @@ describe('fetchWithProxy', () => {
       requestTls: {
         rejectUnauthorized: false,
       },
+      headersTimeout: REQUEST_TIMEOUT_MS,
     });
     expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
   });
@@ -467,6 +471,7 @@ describe('fetchWithProxy', () => {
         ca: mockCertContent,
         rejectUnauthorized: true,
       },
+      headersTimeout: REQUEST_TIMEOUT_MS,
     });
     expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
 
@@ -532,6 +537,7 @@ describe('fetchWithProxy', () => {
         requestTls: {
           rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
         },
+        headersTimeout: REQUEST_TIMEOUT_MS,
       });
       expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
 
@@ -568,6 +574,7 @@ describe('fetchWithProxy', () => {
         requestTls: {
           rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
         },
+        headersTimeout: REQUEST_TIMEOUT_MS,
       });
       expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
 

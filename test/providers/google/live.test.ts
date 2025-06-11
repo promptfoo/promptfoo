@@ -617,6 +617,7 @@ describe('GoogleLiveProvider', () => {
       metadata: {},
     });
     expect(mockedAxios.get).toHaveBeenCalledTimes(6);
+    expect(mockedAxios.get).toHaveBeenLastCalledWith('http://127.0.0.1:5000/get_state');
   });
   describe('Python executable integration', () => {
     it('should handle Python executable validation correctly', async () => {
@@ -852,6 +853,196 @@ describe('GoogleLiveProvider', () => {
       await providerWithCleanup.callApi('Test prompt');
 
       expect(mockProcess.kill).toHaveBeenCalledWith('SIGTERM');
+    });
+  });
+
+  describe('Audio configurations', () => {
+    it('should correctly format proactivity configuration', async () => {
+      provider = new GoogleLiveProvider('gemini-2.5-flash-preview-native-audio-dialog', {
+        config: {
+          apiVersion: 'v1alpha',
+          generationConfig: {
+            response_modalities: ['audio'],
+            proactivity: {
+              proactiveAudio: true,
+            },
+          },
+          timeoutMs: 500,
+          apiKey: 'test-api-key',
+        },
+      });
+
+      jest.mocked(WebSocket).mockImplementation(() => {
+        setTimeout(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        }, 10);
+        return mockWs;
+      });
+
+      await provider.callApi('test prompt');
+
+      expect(mockWs.send).toHaveBeenCalledWith(
+        expect.stringContaining('"proactivity":{"proactive_audio":true}'),
+      );
+    });
+
+    it('should correctly format enableAffectiveDialog configuration', async () => {
+      provider = new GoogleLiveProvider('gemini-2.5-flash-exp-native-audio-thinking-dialog', {
+        config: {
+          apiVersion: 'v1alpha',
+          generationConfig: {
+            response_modalities: ['audio'],
+            enableAffectiveDialog: true,
+          },
+          timeoutMs: 500,
+          apiKey: 'test-api-key',
+        },
+      });
+
+      jest.mocked(WebSocket).mockImplementation(() => {
+        setTimeout(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        }, 10);
+        return mockWs;
+      });
+
+      await provider.callApi('test prompt');
+
+      expect(mockWs.send).toHaveBeenCalledWith(
+        expect.stringContaining('"enable_affective_dialog":true'),
+      );
+    });
+
+    it('should correctly format outputAudioTranscription configuration', async () => {
+      const transcriptionConfig = {
+        includeTextualContent: true,
+        language: 'en-US',
+      };
+
+      provider = new GoogleLiveProvider('gemini-2.5-flash-preview-native-audio-dialog', {
+        config: {
+          generationConfig: {
+            response_modalities: ['audio'],
+            outputAudioTranscription: transcriptionConfig,
+          },
+          timeoutMs: 500,
+          apiKey: 'test-api-key',
+        },
+      });
+
+      jest.mocked(WebSocket).mockImplementation(() => {
+        setTimeout(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        }, 10);
+        return mockWs;
+      });
+
+      await provider.callApi('test prompt');
+
+      expect(mockWs.send).toHaveBeenCalledWith(
+        expect.stringContaining(
+          '"output_audio_transcription":{"includeTextualContent":true,"language":"en-US"}',
+        ),
+      );
+    });
+
+    it('should correctly format inputAudioTranscription configuration', async () => {
+      const transcriptionConfig = {
+        autoDetectLanguage: true,
+      };
+
+      provider = new GoogleLiveProvider('gemini-2.5-flash-preview-native-audio-dialog', {
+        config: {
+          generationConfig: {
+            response_modalities: ['audio'],
+            inputAudioTranscription: transcriptionConfig,
+          },
+          timeoutMs: 500,
+          apiKey: 'test-api-key',
+        },
+      });
+
+      jest.mocked(WebSocket).mockImplementation(() => {
+        setTimeout(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        }, 10);
+        return mockWs;
+      });
+
+      await provider.callApi('test prompt');
+
+      expect(mockWs.send).toHaveBeenCalledWith(
+        expect.stringContaining('"input_audio_transcription":{"autoDetectLanguage":true}'),
+      );
+    });
+
+    it('should handle all audio configurations together', async () => {
+      provider = new GoogleLiveProvider('gemini-2.5-flash-preview-native-audio-dialog', {
+        config: {
+          apiVersion: 'v1alpha',
+          generationConfig: {
+            response_modalities: ['audio'],
+            proactivity: {
+              proactiveAudio: true,
+            },
+            enableAffectiveDialog: true,
+            outputAudioTranscription: {
+              includeTextualContent: true,
+            },
+            inputAudioTranscription: {
+              autoDetectLanguage: true,
+            },
+          },
+          timeoutMs: 500,
+          apiKey: 'test-api-key',
+        },
+      });
+
+      jest.mocked(WebSocket).mockImplementation(() => {
+        setTimeout(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        }, 10);
+        return mockWs;
+      });
+
+      await provider.callApi('test prompt');
+
+      const sentMessage = JSON.parse(mockWs.send.mock.calls[0][0] as string);
+      const generationConfig = sentMessage.setup.generation_config;
+
+      expect(generationConfig.proactivity).toEqual({ proactive_audio: true });
+      expect(generationConfig.enable_affective_dialog).toBe(true);
+      expect(sentMessage.setup.output_audio_transcription).toEqual({ includeTextualContent: true });
+      expect(sentMessage.setup.input_audio_transcription).toEqual({ autoDetectLanguage: true });
+    });
+
+    it('should not include audio configurations when they are not specified', async () => {
+      provider = new GoogleLiveProvider('gemini-2.5-flash-preview-native-audio-dialog', {
+        config: {
+          generationConfig: {
+            response_modalities: ['audio'],
+          },
+          timeoutMs: 500,
+          apiKey: 'test-api-key',
+        },
+      });
+
+      jest.mocked(WebSocket).mockImplementation(() => {
+        setTimeout(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        }, 10);
+        return mockWs;
+      });
+
+      await provider.callApi('test prompt');
+
+      const sentMessage = JSON.parse(mockWs.send.mock.calls[0][0] as string);
+      const generationConfig = sentMessage.setup.generation_config;
+
+      expect(generationConfig.proactivity).toBeUndefined();
+      expect(generationConfig.enable_affective_dialog).toBeUndefined();
+      expect(generationConfig.output_audio_transcription).toBeUndefined();
+      expect(generationConfig.input_audio_transcription).toBeUndefined();
     });
   });
 });
