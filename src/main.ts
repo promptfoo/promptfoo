@@ -96,7 +96,7 @@ async function main() {
   // Alphabetical order
   authCommand(program);
   cacheCommand(program);
-  registerCanaryCommand(program);
+  registerCanaryCommand(program, defaultConfig, defaultConfigPath);
   configCommand(program);
   debugCommand(program, defaultConfig, defaultConfigPath);
   deleteCommand(program);

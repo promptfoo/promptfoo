@@ -3,7 +3,7 @@ import type { Command } from 'commander';
 import { generateShortProviderHash } from '../canary';
 import logger from '../logger';
 import telemetry from '../telemetry';
-import type { ApiProvider, ProviderOptions } from '../types';
+import type { ApiProvider, ProviderOptions, UnifiedConfig } from '../types';
 import { setupEnv } from '../util';
 import { makeRequest } from '../util/cloud';
 import { resolveConfigs } from '../util/config/load';
@@ -14,6 +14,8 @@ interface CanaryTokensResponse {
 }
 
 interface ProbesResponse {
+  status: number;
+  statusText: string;
   probes: { type: string; message: string }[];
   detectionPatterns: { pattern: string; confidence?: number; type: string; description?: string }[];
 }
@@ -31,8 +33,8 @@ async function sendCanaryToSingleProvider(
   logger.debug(`Generated provider hash: ${providerHash}`);
 
   // Get canary payload from server
-  const response = (await makeRequest('POST', '/api/v1/task', {
-    task: 'GENERATE_CANARY',
+  const response = (await makeRequest('/task', 'POST', {
+    task: 'generate-canary',
     hash: providerHash,
   })) as unknown as CanaryTokensResponse;
 
@@ -126,13 +128,15 @@ async function checkCanaryForSingleProvider(
   logger.debug(`Generated provider hash for checking: ${providerHash}`);
 
   // Get probe messages and detection patterns from server
-  const response = (await makeRequest('POST', '/api/v1/task', {
-    task: 'GENERATE_CANARY_PROBES',
+  const response = (await makeRequest('/task', 'POST', {
+    task: 'generate-canary-probes',
     hash: providerHash,
   })) as unknown as ProbesResponse;
 
   if (!response || !response.probes || !response.detectionPatterns) {
-    throw new Error('Failed to generate canary check probes from server');
+    throw new Error(
+      `Failed to generate canary check probes from server: HTTP ${response.status} ${response.statusText} ${JSON.stringify(response)}`,
+    );
   }
 
   // Select probes based on check mode
@@ -391,7 +395,11 @@ async function checkCanary(
 /**
  * Register the canary command
  */
-export default function registerCommand(program: Command) {
+export default function registerCommand(
+  program: Command,
+  defaultConfig: Partial<UnifiedConfig>,
+  defaultConfigPath: string | undefined,
+) {
   const command = program
     .command('canary')
     .description(
@@ -437,7 +445,10 @@ Examples:
         }
 
         // Load config and providers
-        const { testSuite } = await resolveConfigs({ config: options.config }, {});
+        const { testSuite } = await resolveConfigs(
+          { config: options.config || (defaultConfigPath ? [defaultConfigPath] : undefined) },
+          defaultConfig,
+        );
 
         const _result = await sendCanary(testSuite.providers, options.message, repeat);
         process.exit(0);
@@ -472,7 +483,10 @@ Examples:
         }
 
         // Load config and providers
-        const { testSuite } = await resolveConfigs({ config: options.config }, {});
+        const { testSuite } = await resolveConfigs(
+          { config: options.config || (defaultConfigPath ? [defaultConfigPath] : undefined) },
+          defaultConfig,
+        );
 
         const result = await checkCanary(testSuite.providers, options.mode);
 
