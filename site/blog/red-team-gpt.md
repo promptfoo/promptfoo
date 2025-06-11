@@ -1,6 +1,6 @@
 ---
 date: 2025-06-07
-image: /img/blog/gpt-4.1-red-team.png
+image: /img/blog/gpt-red-team.png
 ---
 
 # How to Red Team GPT

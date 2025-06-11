@@ -65,6 +65,13 @@ describe('metadata constants', () => {
     it('should have matching category labels', () => {
       expect(categoryLabels).toEqual(Object.keys(categoryMapReverse));
     });
+
+    it('should not include duplicate plugin ids within a category', () => {
+      Object.entries(riskCategories).forEach(([category, plugins]) => {
+        const uniquePlugins = new Set(plugins);
+        expect(uniquePlugins.size).toBe(plugins.length);
+      });
+    });
   });
 
   describe('Category aliases', () => {
