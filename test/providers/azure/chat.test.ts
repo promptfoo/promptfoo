@@ -400,7 +400,6 @@ describe('AzureChatCompletionProvider', () => {
           headers: customHeaders,
         },
       });
-      (provider as any).authHeaders = { 'api-key': 'test-key' };
 
       await provider.callApi('test prompt');
 

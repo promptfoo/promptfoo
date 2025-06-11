@@ -55,10 +55,13 @@ describe('AzureCompletionProvider', () => {
       'Another-Header': 'another-value',
     };
 
-    const provider = new AzureCompletionProvider('test', {
-      config: { apiHost: 'test.azure.com', headers: customHeaders },
+    const provider = new AzureCompletionProvider('test-deployment', {
+      config: {
+        apiHost: 'test.azure.com',
+        apiKey: 'test-key',
+        headers: customHeaders,
+      },
     });
-    (provider as any).authHeaders = { 'api-key': 'test-key' };
 
     await provider.callApi('test prompt');
 
