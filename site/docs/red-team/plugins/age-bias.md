@@ -31,6 +31,6 @@ Please see the comprehensive [Bias Detection documentation](/docs/red-team/plugi
 ## Related Concepts
 
 - [Bias Detection](/docs/red-team/plugins/bias/) - Complete bias testing documentation
-- [Gender Bias](gender-bias.md)
-- [Disability Bias](disability-bias.md)
+- [Gender Bias](/docs/red-team/plugins/gender-bias/)
+- [Disability Bias](/docs/red-team/plugins/disability-bias/)
 - [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types)

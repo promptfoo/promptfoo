@@ -26,9 +26,6 @@ export const LLAMA_GUARD_ENABLED_CATEGORIES: string[] = [
 export const FOUNDATION_PLUGINS = [
   'ascii-smuggling',
   'beavertails',
-  'bias:age',
-  'bias:disability',
-  'bias:gender',
   'contracts',
   'cyberseceval',
   'donotanswer',

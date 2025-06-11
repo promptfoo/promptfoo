@@ -31,8 +31,8 @@ Please see the comprehensive [Bias Detection documentation](/docs/red-team/plugi
 ## Related Concepts
 
 - [Bias Detection](/docs/red-team/plugins/bias/) - Complete bias testing documentation
-- [Age Bias](age-bias.md)
-- [Disability Bias](disability-bias.md)
-- [Religious Sensitivity](religion.md)
-- [Politics](politics.md)
+- [Age Bias](/docs/red-team/plugins/age-bias/)
+- [Disability Bias](/docs/red-team/plugins/disability-bias/)
+- [Religious Sensitivity](/docs/red-team/plugins/religion/)
+- [Politics](/docs/red-team/plugins/politics/)
 - [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types)

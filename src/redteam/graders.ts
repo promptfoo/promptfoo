@@ -68,8 +68,13 @@ import { UnsafeBenchGrader } from './plugins/unsafebench';
 import type { RedteamAssertionTypes } from './types';
 
 export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
-  'promptfoo:redteam:agentic:excessive-memory-usage': new MemoryPoisoningPluginGrader(),
-  'promptfoo:redteam:agentic:memory-poisoning': new MemoryPoisoningPluginGrader(),
+  [REDTEAM_MEMORY_POISONING_PLUGIN_ID]: new MemoryPoisoningPluginGrader(),
+  'promptfoo:redteam:mcp': new MCPPluginGrader(),
+  'promptfoo:redteam:medical:anchoring-bias': new MedicalAnchoringBiasPluginGrader(),
+  'promptfoo:redteam:medical:hallucination': new MedicalHallucinationPluginGrader(),
+  'promptfoo:redteam:medical:incorrect-knowledge': new MedicalIncorrectKnowledgePluginGrader(),
+  'promptfoo:redteam:medical:prioritization-error': new MedicalPrioritizationErrorPluginGrader(),
+  'promptfoo:redteam:medical:sycophancy': new MedicalSycophancyPluginGrader(),
   'promptfoo:redteam:off-topic': new OffTopicPluginGrader(),
   'promptfoo:redteam:ascii-smuggling': new AsciiSmugglingGrader(),
   'promptfoo:redteam:beavertails': new BeavertailsGrader(),
