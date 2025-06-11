@@ -118,10 +118,10 @@ export async function getPluginSeverityOverridesFromCloud(cloudProviderId: strin
 
     if (!response.ok) {
       const errorMessage = await response.text();
-      logger.error(
-        `[Cloud] Failed to fetch severities from cloud: ${errorMessage}. HTTP Status: ${response.status} -- ${response.statusText}.`,
-      );
-      throw new Error(`Failed to fetch severities from cloud: ${response.statusText}`);
+      const formattedErrorMessage = `Failed to provider from cloud: ${errorMessage}. HTTP Status: ${response.status} -- ${response.statusText}.`;
+
+      logger.error(`[Cloud] ${formattedErrorMessage}`);
+      throw new Error(formattedErrorMessage);
     }
 
     const body = await response.json();
@@ -135,12 +135,10 @@ export async function getPluginSeverityOverridesFromCloud(cloudProviderId: strin
 
       if (!pluginSeveritySetResponse.ok) {
         const errorMessage = await pluginSeveritySetResponse.text();
-        logger.error(
-          `[Cloud] Failed to fetch plugin severity set from cloud: ${errorMessage}. HTTP Status: ${pluginSeveritySetResponse.status} -- ${pluginSeveritySetResponse.statusText}.`,
-        );
-        throw new Error(
-          `Failed to fetch plugin severity set from cloud: ${pluginSeveritySetResponse.statusText}`,
-        );
+        const formattedErrorMessage = `Failed to fetch plugin severity set from cloud: ${errorMessage}. HTTP Status: ${pluginSeveritySetResponse.status} -- ${pluginSeveritySetResponse.statusText}.`;
+
+        logger.error(`[Cloud] ${formattedErrorMessage}`);
+        throw new Error(formattedErrorMessage);
       }
 
       const pluginSeveritySet = await pluginSeveritySetResponse.json();
