@@ -53,6 +53,18 @@ describe('Mistral', () => {
       expect(customProvider.config).toEqual({ temperature: 0.7 });
     });
 
+    it('should support new Magistral reasoning models', () => {
+      const magistralSmallProvider = new MistralChatCompletionProvider('magistral-small-2506');
+      expect(magistralSmallProvider.modelName).toBe('magistral-small-2506');
+      expect(magistralSmallProvider.config).toEqual({});
+
+      const magistralMediumProvider = new MistralChatCompletionProvider('magistral-medium-latest', {
+        config: { temperature: 0.7, max_tokens: 40960 },
+      });
+      expect(magistralMediumProvider.modelName).toBe('magistral-medium-latest');
+      expect(magistralMediumProvider.config).toEqual({ temperature: 0.7, max_tokens: 40960 });
+    });
+
     it('should call Mistral API and return output with correct structure', async () => {
       const mockResponse = {
         choices: [{ message: { content: 'Test output' } }],
@@ -90,6 +102,28 @@ describe('Mistral', () => {
         cached: false,
         cost: expect.any(Number),
       });
+    });
+
+    it('should calculate cost correctly for Magistral models', async () => {
+      const magistralSmallProvider = new MistralChatCompletionProvider('magistral-small-2506');
+      jest.spyOn(magistralSmallProvider, 'getApiKey').mockReturnValue('fake-api-key');
+
+      const mockResponse = {
+        choices: [{ message: { content: 'Reasoning response' } }],
+        usage: { total_tokens: 1000, prompt_tokens: 100, completion_tokens: 900 },
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await magistralSmallProvider.callApi('Test reasoning prompt');
+
+      // Magistral Small: $0.5/M input, $1.5/M output
+      // 100 prompt tokens * 0.5/1M + 900 completion tokens * 1.5/1M = 0.00005 + 0.00135 = 0.0014
+      expect(result.cost).toBeCloseTo(0.0014, 6);
     });
 
     it('should use cache when enabled', async () => {

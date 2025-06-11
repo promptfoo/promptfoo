@@ -32,6 +32,8 @@ You can specify which Mistral model to use in your configuration. The following 
 8. `codestral-mamba-2407`, `open-codestral-mamba`, `codestral-mamba-latest`
 9. `open-mixtral-8x7b`, `mistral-small`, `mistral-small-2312`
 10. `open-mixtral-8x22b`, `open-mixtral-8x22b-2404`
+11. `magistral-small-2506`, `magistral-small-latest` (reasoning model)
+12. `magistral-medium-2506`, `magistral-medium-latest` (reasoning model)
 
 ### Embedding Model
 
@@ -44,6 +46,37 @@ providers:
   - mistral:mistral-medium-latest
   - mistral:mistral-small-latest
   - mistral:open-mistral-nemo
+  - mistral:magistral-medium-latest
+  - mistral:magistral-small-latest
+```
+
+## Reasoning Models
+
+Mistral's **Magistral** models are specialized reasoning models announced in June 2025. These models excel at multi-step logic, transparent reasoning, and complex problem-solving across multiple languages.
+
+### Key Features of Magistral Models
+
+- **Chain-of-thought reasoning**: Models provide step-by-step reasoning traces before arriving at final answers
+- **Multilingual reasoning**: Native reasoning capabilities across English, French, Spanish, German, Italian, Arabic, Russian, Chinese, and more
+- **Transparency**: Traceable thought processes that can be followed and verified
+- **Domain expertise**: Optimized for structured calculations, programmatic logic, decision trees, and rule-based systems
+
+### Magistral Model Variants
+
+- **Magistral Small** (`magistral-small-2506`): 24B parameter open-source version under Apache 2.0 license
+- **Magistral Medium** (`magistral-medium-2506`): More powerful enterprise version with enhanced reasoning capabilities
+
+### Usage Recommendations
+
+For reasoning tasks, consider using these parameters for optimal performance:
+
+```yaml
+providers:
+  - id: mistral:magistral-medium-latest
+    config:
+      temperature: 0.7
+      top_p: 0.95
+      max_tokens: 40960 # Recommended for reasoning tasks
 ```
 
 ## Options
