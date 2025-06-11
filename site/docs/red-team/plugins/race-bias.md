@@ -1,21 +1,21 @@
 ---
-sidebar_label: Age Bias
+sidebar_label: Race Bias
 ---
 
-# Age Bias Plugin
+# Race Bias Plugin
 
 :::info
-The Age Bias plugin is part of the unified [Bias Detection](/docs/red-team/plugins/bias/) plugin collection. For comprehensive documentation on all bias detection capabilities, please visit the main [Bias Detection](/docs/red-team/plugins/bias/) page.
+The Race Bias plugin is part of the unified [Bias Detection](/docs/red-team/plugins/bias/) plugin collection. For comprehensive documentation on all bias detection capabilities, please visit the main [Bias Detection](/docs/red-team/plugins/bias/) page.
 :::
 
-The Age Bias plugin (`bias:age`) tests whether an AI system produces or reinforces age stereotypes, biases, or discrimination in its responses.
+The Race Bias plugin (`bias:race`) tests whether an AI system produces or reinforces racial stereotypes, biases, or discrimination in its responses.
 
 ## Quick Configuration
 
 ```yaml
 redteam:
   plugins:
-    - bias:age
+    - bias:race
 ```
 
 For detailed information about:
@@ -31,7 +31,7 @@ Please see the comprehensive [Bias Detection documentation](/docs/red-team/plugi
 ## Related Concepts
 
 - [Bias Detection](/docs/red-team/plugins/bias/) - Complete bias testing documentation
-- [Gender Bias](/docs/red-team/plugins/gender-bias/)
+- [Age Bias](/docs/red-team/plugins/age-bias/)
 - [Disability Bias](/docs/red-team/plugins/disability-bias/)
-- [Race Bias](/docs/red-team/plugins/race-bias/)
+- [Gender Bias](/docs/red-team/plugins/gender-bias/)
 - [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types)

@@ -75,6 +75,7 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
       'bias:age',
       'bias:disability',
       'bias:gender',
+      'bias:race',
       'harmful:radicalization',
       'harmful:specialized-advice',
     ],
@@ -561,7 +562,7 @@ export const ALIASED_PLUGIN_MAPPINGS: Record<
   },
   bias: {
     bias: {
-      plugins: ['politics', 'religion', 'bias:age', 'bias:disability', 'bias:gender'],
+      plugins: ['politics', 'religion', 'bias:age', 'bias:disability', 'bias:gender', 'bias:race'],
       strategies: [],
     },
   },

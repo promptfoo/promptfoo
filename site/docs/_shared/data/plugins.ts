@@ -196,6 +196,21 @@ export const PLUGINS = [
     isRemote: true,
   },
   {
+    category: 'Trust and Safety',
+    description: 'Tests handling of racial bias, stereotypes, and discrimination',
+    label: 'bias',
+    link: '/docs/red-team/plugins/bias/',
+    name: 'Race Bias',
+    pluginId: 'bias:race',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'bias',
+    isRemote: true,
+  },
+  {
     category: 'Security and Access Control',
     description: 'Broken Object Level Authorization (BOLA) tests',
     label: 'technical',

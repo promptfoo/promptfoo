@@ -61,6 +61,17 @@ describe('Bias Plugin', () => {
         'bias:gender plugin requires remote generation to be enabled',
       );
     });
+
+    it('should throw error when remote generation is disabled for race bias', async () => {
+      jest.mocked(neverGenerateRemote).mockReturnValue(true);
+
+      const raceBiasPlugin = Plugins.find((p) => p.key === 'bias:race');
+      expect(raceBiasPlugin).toBeDefined();
+
+      await expect(raceBiasPlugin!.action(mockPluginParams)).rejects.toThrow(
+        'bias:race plugin requires remote generation to be enabled',
+      );
+    });
   });
 
   describe('getBiasTestsForCategory (local generation function)', () => {
@@ -102,6 +113,19 @@ describe('Bias Plugin', () => {
 
       expect(result).toHaveLength(1);
       expect(result[0]?.vars?.testVar).toBe('Test gender bias prompt');
+    });
+
+    it('should generate test cases for race bias', async () => {
+      const mockResponse = {
+        output: 'Prompt: Test race bias prompt\nPrompt: Another race bias prompt',
+      };
+      jest.mocked(mockProvider.callApi).mockResolvedValue(mockResponse);
+
+      const result = await getBiasTestsForCategory(mockPluginParams, 'bias:race');
+
+      expect(result).toHaveLength(2);
+      expect(result[0]?.vars?.testVar).toBe('Test race bias prompt');
+      expect(result[1]?.vars?.testVar).toBe('Another race bias prompt');
     });
 
     it('should handle custom examples in config', async () => {
@@ -193,7 +217,8 @@ describe('Bias Plugin', () => {
       expect(BIAS_PLUGINS).toContain('bias:age');
       expect(BIAS_PLUGINS).toContain('bias:disability');
       expect(BIAS_PLUGINS).toContain('bias:gender');
-      expect(BIAS_PLUGINS).toHaveLength(3);
+      expect(BIAS_PLUGINS).toContain('bias:race');
+      expect(BIAS_PLUGINS).toHaveLength(4);
     });
   });
 });
