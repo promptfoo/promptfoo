@@ -9,7 +9,7 @@ jest.mock('../../../src/cache', () => ({
 }));
 
 describe('AzureCompletionProvider', () => {
-  beforeEach(() => {
+  afterEach(() => {
     jest.clearAllMocks();
   });
 
@@ -56,32 +56,29 @@ describe('AzureCompletionProvider', () => {
     const customHeaders = {
       'X-Test-Header': 'test-value',
       'Another-Header': 'another-value',
-      'api-key': 'foo', // Simulate config.headers providing a different api-key
     };
 
-    const provider = new AzureCompletionProvider('test', {
+    const provider = new AzureCompletionProvider('test-deployment', {
       config: {
         apiHost: 'test.azure.com',
+        apiKey: 'test-key',
         headers: customHeaders,
       },
     });
-    // Patch: ensure api-key is 'test-key' for this test
-    (provider as any).authHeaders = { 'api-key': 'test-key' };
 
     await provider.callApi('test prompt');
 
-    const expectedHeaders = {
-      'Content-Type': 'application/json',
-      'api-key': 'foo',
-      'X-Test-Header': 'test-value',
-      'Another-Header': 'another-value',
-    };
-
-    const actualCall = jest.mocked(fetchWithCache).mock.calls[0];
-    // Patch: allow for possible different order of keys
-    expect(actualCall[1]?.headers as any).toMatchObject(expectedHeaders);
-    expect(Object.keys((actualCall[1]?.headers as any) || {})).toEqual(
-      expect.arrayContaining(Object.keys(expectedHeaders)),
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'Content-Type': 'application/json',
+          'api-key': 'test-key',
+          'X-Test-Header': 'test-value',
+          'Another-Header': 'another-value',
+        }),
+      }),
+      expect.any(Number),
     );
   });
 
@@ -118,7 +115,7 @@ describe('AzureCompletionProvider', () => {
   });
 
   it('should handle missing API host', async () => {
-    // Patch: Simulate fetchWithCache throwing due to missing API host
+    // Simulate fetchWithCache throwing due to missing API host
     jest.mocked(fetchWithCache).mockImplementationOnce(() => {
       throw new Error('Azure API host must be set.');
     });
@@ -229,7 +226,6 @@ describe('AzureCompletionProvider', () => {
     expect(body.logprobs).toBe(3);
   });
 
-  // Additional test: ensure that config.headers override authHeaders
   it('should allow config.headers to override authHeaders', async () => {
     jest.mocked(fetchWithCache).mockResolvedValueOnce({
       data: {
@@ -239,20 +235,26 @@ describe('AzureCompletionProvider', () => {
       cached: false,
     } as any);
 
-    const provider = new AzureCompletionProvider('test', {
+    const provider = new AzureCompletionProvider('test-deployment', {
       config: {
         apiHost: 'test.azure.com',
+        apiKey: 'test-key',
         headers: { 'api-key': 'override-key', Extra: 'foo' },
       },
     });
-    (provider as any).authHeaders = { 'api-key': 'test-key' };
 
     await provider.callApi('test prompt');
 
-    const actualCall = jest.mocked(fetchWithCache).mock.calls[0];
-    const actualHeaders = actualCall[1]?.headers as any;
-    expect(actualHeaders['api-key']).toBe('override-key');
-    expect(actualHeaders['Extra']).toBe('foo');
-    expect(actualHeaders['Content-Type']).toBe('application/json');
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'Content-Type': 'application/json',
+          'api-key': 'override-key',
+          Extra: 'foo',
+        }),
+      }),
+      expect.any(Number),
+    );
   });
 });
