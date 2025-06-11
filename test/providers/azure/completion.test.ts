@@ -1,9 +1,6 @@
 import { fetchWithCache } from '../../../src/cache';
 import { AzureCompletionProvider } from '../../../src/providers/azure/completion';
 
-// Patch: always use the same api-key for the custom headers test
-// Removed unused variable 'originalAuthHeaders'
-
 jest.mock('../../../src/cache', () => ({
   fetchWithCache: jest.fn(),
 }));
