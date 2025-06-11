@@ -58,13 +58,17 @@ describe('AzureCompletionProvider', () => {
 
     await provider.callApi('test prompt');
 
-    const callArgs = jest.mocked(fetchWithCache).mock.calls[0][1]!;
-    expect(callArgs).toBeDefined();
-    expect(callArgs.headers).toBeDefined();
-    const headers = callArgs.headers as Record<string, string>;
-    expect(headers['X-Test-Header']).toBe('test-value');
-    expect(headers['Another-Header']).toBe('another-value');
-    expect(headers['api-key']).toBe('test-key');
-    expect(headers['Content-Type']).toBe('application/json');
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'Content-Type': 'application/json',
+          'api-key': 'test-key',
+          'X-Test-Header': 'test-value',
+          'Another-Header': 'another-value',
+        }),
+      }),
+      expect.any(Number),
+    );
   });
 });
