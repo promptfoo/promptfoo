@@ -925,6 +925,7 @@ The Responses API supports a wide range of models, including:
 - `o1` - Powerful reasoning model
 - `o1-mini` - Smaller, more affordable reasoning model
 - `o1-pro` - Enhanced reasoning model with more compute
+- `o3-pro` - Highest-tier reasoning model
 - `o3` - OpenAI's most powerful reasoning model
 - `o3-mini` - Smaller, more affordable reasoning model
 - `o4-mini` - Latest fast, cost-effective reasoning model
