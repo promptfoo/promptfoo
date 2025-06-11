@@ -6,6 +6,10 @@ jest.mock('../../../src/cache', () => ({
 }));
 
 describe('AzureCompletionProvider', () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
   it('should handle basic completion with caching', async () => {
     jest.mocked(fetchWithCache).mockResolvedValueOnce({
       data: {
