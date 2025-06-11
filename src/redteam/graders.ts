@@ -4,6 +4,7 @@ import { AsciiSmugglingGrader } from './plugins/asciiSmuggling';
 import type { RedteamGraderBase } from './plugins/base';
 import { BeavertailsGrader } from './plugins/beavertails';
 import { BflaGrader } from './plugins/bfla';
+import { BiasGrader } from './plugins/bias';
 import { BolaGrader } from './plugins/bola';
 import { CompetitorsGrader } from './plugins/competitors';
 import { CcaGrader } from './plugins/contextComplianceAttack';
@@ -15,12 +16,9 @@ import { ExcessiveAgencyGrader } from './plugins/excessiveAgency';
 import { HallucinationGrader } from './plugins/hallucination';
 import { HarmbenchGrader } from './plugins/harmbench';
 import {
-  AgeBiasGrader,
   ChildExploitationGrader,
   CopyrightViolationGrader,
   CybercrimeGrader,
-  DisabilityBiasGrader,
-  GenderBiasGrader,
   GraphicContentGrader,
   HarmfulGrader,
   HarmfulPrivacyGrader,
@@ -29,6 +27,7 @@ import {
   IllegalDrugsGrader,
   IndiscriminateWeaponsGrader,
   InsultsGrader,
+  MisinformationDisinformationGrader,
   NonViolentCrimeGrader,
   ProfanityGrader,
   RadicalizationGrader,
@@ -69,19 +68,12 @@ import { UnsafeBenchGrader } from './plugins/unsafebench';
 import type { RedteamAssertionTypes } from './types';
 
 export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
-  [REDTEAM_MEMORY_POISONING_PLUGIN_ID]: new MemoryPoisoningPluginGrader(),
-  'promptfoo:redteam:mcp': new MCPPluginGrader(),
-  'promptfoo:redteam:medical:anchoring-bias': new MedicalAnchoringBiasPluginGrader(),
-  'promptfoo:redteam:medical:hallucination': new MedicalHallucinationPluginGrader(),
-  'promptfoo:redteam:medical:incorrect-knowledge': new MedicalIncorrectKnowledgePluginGrader(),
-  'promptfoo:redteam:medical:prioritization-error': new MedicalPrioritizationErrorPluginGrader(),
-  'promptfoo:redteam:medical:sycophancy': new MedicalSycophancyPluginGrader(),
+  'promptfoo:redteam:agentic:excessive-memory-usage': new MemoryPoisoningPluginGrader(),
+  'promptfoo:redteam:agentic:memory-poisoning': new MemoryPoisoningPluginGrader(),
   'promptfoo:redteam:off-topic': new OffTopicPluginGrader(),
   'promptfoo:redteam:ascii-smuggling': new AsciiSmugglingGrader(),
   'promptfoo:redteam:beavertails': new BeavertailsGrader(),
-  'promptfoo:redteam:bias:age': new AgeBiasGrader(),
-  'promptfoo:redteam:bias:disability': new DisabilityBiasGrader(),
-  'promptfoo:redteam:bias:gender': new GenderBiasGrader(),
+  'promptfoo:redteam:bias': new BiasGrader(),
   'promptfoo:redteam:bfla': new BflaGrader(),
   'promptfoo:redteam:bola': new BolaGrader(),
   'promptfoo:redteam:cca': new CcaGrader(),
@@ -109,7 +101,8 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:harmful:indiscriminate-weapons': new IndiscriminateWeaponsGrader(),
   'promptfoo:redteam:harmful:insults': new InsultsGrader(),
   'promptfoo:redteam:harmful:intellectual-property': new CopyrightViolationGrader(),
-  'promptfoo:redteam:harmful:misinformation-disinformation': new HarmfulGrader(),
+  'promptfoo:redteam:harmful:misinformation-disinformation':
+    new MisinformationDisinformationGrader(),
   'promptfoo:redteam:harmful:non-violent-crime': new NonViolentCrimeGrader(),
   'promptfoo:redteam:harmful:privacy': new HarmfulPrivacyGrader(),
   'promptfoo:redteam:harmful:profanity': new ProfanityGrader(),

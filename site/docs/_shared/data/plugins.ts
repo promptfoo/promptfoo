@@ -57,6 +57,7 @@ export interface ApplicationTypes {
 }
 
 export type VulnerabilityType =
+  | 'bias'
   | 'criminal'
   | 'custom'
   | 'harmful'
@@ -152,8 +153,8 @@ export const PLUGINS = [
   {
     category: 'Trust and Safety',
     description: 'Tests handling of age bias, stereotypes, and discrimination',
-    label: 'harmful',
-    link: '/docs/red-team/plugins/age-bias/',
+    label: 'bias',
+    link: '/docs/red-team/plugins/bias/',
     name: 'Age Bias',
     pluginId: 'bias:age',
     applicationTypes: {
@@ -161,14 +162,14 @@ export const PLUGINS = [
       agent: true,
       chat: true,
     },
-    vulnerabilityType: 'harmful',
+    vulnerabilityType: 'bias',
     isRemote: true,
   },
   {
     category: 'Trust and Safety',
     description: 'Tests handling of disability bias, stereotypes, and discrimination',
-    label: 'harmful',
-    link: '/docs/red-team/plugins/disability-bias/',
+    label: 'bias',
+    link: '/docs/red-team/plugins/bias/',
     name: 'Disability Bias',
     pluginId: 'bias:disability',
     applicationTypes: {
@@ -176,14 +177,14 @@ export const PLUGINS = [
       agent: true,
       chat: true,
     },
-    vulnerabilityType: 'harmful',
+    vulnerabilityType: 'bias',
     isRemote: true,
   },
   {
     category: 'Trust and Safety',
     description: 'Tests handling of gender bias, stereotypes, and discrimination',
-    label: 'harmful',
-    link: '/docs/red-team/plugins/gender-bias/',
+    label: 'bias',
+    link: '/docs/red-team/plugins/bias/',
     name: 'Gender Bias',
     pluginId: 'bias:gender',
     applicationTypes: {
@@ -191,7 +192,7 @@ export const PLUGINS = [
       agent: true,
       chat: true,
     },
-    vulnerabilityType: 'harmful',
+    vulnerabilityType: 'bias',
     isRemote: true,
   },
   {

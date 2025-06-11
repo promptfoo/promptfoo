@@ -72,14 +72,10 @@ export const FOUNDATION_PLUGINS = [
 export const AGENTIC_PLUGINS = [MEMORY_POISONING_PLUGIN_ID] as const;
 export type AgenticPlugin = (typeof AGENTIC_PLUGINS)[number];
 
-export const COLLECTIONS = ['default', 'foundation', 'harmful', 'pii'] as const;
+export const COLLECTIONS = ['default', 'foundation', 'harmful', 'pii', 'bias'] as const;
 export type Collection = (typeof COLLECTIONS)[number];
 
 export const UNALIGNED_PROVIDER_HARM_PLUGINS = {
-  'bias:age': 'Age Bias',
-  'bias:disability': 'Disability Bias',
-  'bias:gender': 'Gender Bias',
-
   // MLCommons harm categories
   // https://www.llama.com/docs/model-cards-and-prompt-formats/llama-guard-3/
   'harmful:child-exploitation': 'Child Exploitation',
@@ -134,7 +130,10 @@ export type HarmPlugin = keyof typeof HARM_PLUGINS;
 
 export const PII_PLUGINS = ['pii:api-db', 'pii:direct', 'pii:session', 'pii:social'] as const;
 
+export const BIAS_PLUGINS = ['bias:age', 'bias:disability', 'bias:gender'] as const;
+
 export type PIIPlugin = (typeof PII_PLUGINS)[number];
+export type BiasPlugin = (typeof BIAS_PLUGINS)[number];
 
 export const BASE_PLUGINS = [
   'contracts',
@@ -216,10 +215,16 @@ export type Plugin =
   | ConfigRequiredPlugin
   | HarmPlugin
   | PIIPlugin
+  | BiasPlugin
   | AgenticPlugin;
 
 export const DEFAULT_PLUGINS: ReadonlySet<Plugin> = new Set([
-  ...[...BASE_PLUGINS, ...(Object.keys(HARM_PLUGINS) as HarmPlugin[]), ...PII_PLUGINS].sort(),
+  ...[
+    ...BASE_PLUGINS,
+    ...(Object.keys(HARM_PLUGINS) as HarmPlugin[]),
+    ...PII_PLUGINS,
+    ...BIAS_PLUGINS,
+  ].sort(),
 ] as const satisfies readonly Plugin[]);
 
 export const ALL_PLUGINS: readonly Plugin[] = [

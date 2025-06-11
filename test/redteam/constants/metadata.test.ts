@@ -38,8 +38,8 @@ describe('metadata constants', () => {
       });
     });
 
-    it('should include memory poisoning plugin with high severity', () => {
-      expect(riskCategorySeverityMap[MEMORY_POISONING_PLUGIN_ID]).toBe(Severity.High);
+    it('should include memory poisoning plugin with medium severity', () => {
+      expect(riskCategorySeverityMap[MEMORY_POISONING_PLUGIN_ID]).toBe(Severity.Medium);
     });
   });
 

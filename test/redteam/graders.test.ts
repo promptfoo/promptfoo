@@ -1,8 +1,8 @@
 import { getGraderById } from '../../src/redteam/graders';
 import { AsciiSmugglingGrader } from '../../src/redteam/plugins/asciiSmuggling';
 import { BeavertailsGrader } from '../../src/redteam/plugins/beavertails';
+import { BiasGrader } from '../../src/redteam/plugins/bias';
 import { HarmfulGrader } from '../../src/redteam/plugins/harmful/graders';
-import { AgeBiasGrader, DisabilityBiasGrader } from '../../src/redteam/plugins/harmful/graders';
 import { OffTopicPluginGrader } from '../../src/redteam/plugins/offTopic';
 import { PlinyGrader } from '../../src/redteam/plugins/pliny';
 import { ToolDiscoveryGrader } from '../../src/redteam/plugins/toolDiscovery';
@@ -35,11 +35,8 @@ describe('getGraderById', () => {
     const toxicChatGrader = getGraderById('promptfoo:redteam:toxic-chat');
     expect(toxicChatGrader).toBeInstanceOf(ToxicChatGrader);
 
-    const ageBiasGrader = getGraderById('promptfoo:redteam:bias:age');
-    expect(ageBiasGrader).toBeInstanceOf(AgeBiasGrader);
-
-    const disabilityBiasGrader = getGraderById('promptfoo:redteam:bias:disability');
-    expect(disabilityBiasGrader).toBeInstanceOf(DisabilityBiasGrader);
+    const biasGrader = getGraderById('promptfoo:redteam:bias');
+    expect(biasGrader).toBeInstanceOf(BiasGrader);
   });
 
   it('should return harmful grader for IDs starting with promptfoo:redteam:harmful', () => {
