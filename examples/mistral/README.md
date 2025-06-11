@@ -16,6 +16,7 @@ This example requires:
 
 ## What This Example Shows
 
+- **Mathematical Reasoning**: AIME2024 competition problems with Magistral models
 - **Model Comparison**: Compare Mistral's different model capabilities
 - **Reasoning Models**: Showcase Magistral Small and Medium for complex problems
 - **Chat Capabilities**: General conversation and task completion
@@ -71,3 +72,37 @@ This example showcases several advanced promptfoo features:
 - **Mixed scenarios** from simple chat to complex reasoning
 
 The evaluation uses Mistral models end-to-end, providing a comprehensive view of their ecosystem capabilities.
+
+## Available Configurations
+
+This example includes multiple configuration files for different use cases:
+
+### Mathematical Reasoning
+
+- **`promptfooconfig.aime2024.yaml`** - Advanced mathematical competition problems (AIME2024 dataset)
+- **`promptfooconfig.reasoning.yaml`** - Step-by-step logical problem solving
+
+### Model Capabilities
+
+- **`promptfooconfig.comparison.yaml`** - Compare reasoning across all Mistral models
+- **`promptfooconfig.code-generation.yaml`** - Multi-language programming with Codestral
+- **`promptfooconfig.multimodal.yaml`** - Vision and text processing with Pixtral
+
+### Advanced Features
+
+- **`promptfooconfig.tool-use.yaml`** - Function calling and tool integration
+- **`promptfooconfig.json-mode.yaml`** - Structured JSON output generation
+- **`promptfooconfig.yaml`** - Main example with evaluation using Mistral models
+
+Run any specific configuration:
+
+```bash
+npx promptfoo@latest eval -c promptfooconfig.aime2024.yaml  # Mathematical reasoning
+npx promptfoo@latest eval -c promptfooconfig.comparison.yaml  # Model comparison
+```
+
+## Additional Resources
+
+- **[Magistral AIME2024 Reasoning Guide](/docs/guides/mistral-magistral-aime2024)** - Comprehensive guide to mathematical reasoning evaluation
+- **[Mistral Provider Documentation](/docs/providers/mistral)** - Complete API reference and configuration options
+- **[Mistral Magistral Announcement](https://mistral.ai/news/magistral/)** - Official announcement and technical details

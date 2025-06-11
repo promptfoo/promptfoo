@@ -620,6 +620,7 @@ npx promptfoo@latest init --example mistral
 
 **Individual Examples:**
 
+- **[AIME2024 Mathematical Reasoning](https://github.com/promptfoo/promptfoo/blob/main/examples/mistral/promptfooconfig.aime2024.yaml)** - Evaluate Magistral models on advanced mathematical competition problems
 - **[Model Comparison](https://github.com/promptfoo/promptfoo/blob/main/examples/mistral/promptfooconfig.comparison.yaml)** - Compare reasoning across Magistral and traditional models
 - **[Function Calling](https://github.com/promptfoo/promptfoo/blob/main/examples/mistral/promptfooconfig.tool-use.yaml)** - Demonstrate tool use and function calling
 - **[JSON Mode](https://github.com/promptfoo/promptfoo/blob/main/examples/mistral/promptfooconfig.json-mode.yaml)** - Structured output generation
@@ -632,6 +633,9 @@ npx promptfoo@latest init --example mistral
 ```bash
 # Try the basic comparison
 npx promptfoo@latest eval -c https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/mistral/promptfooconfig.comparison.yaml
+
+# Test mathematical reasoning with Magistral models
+npx promptfoo@latest eval -c https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/mistral/promptfooconfig.aime2024.yaml
 
 # Test reasoning capabilities
 npx promptfoo@latest eval -c https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/mistral/promptfooconfig.reasoning.yaml
