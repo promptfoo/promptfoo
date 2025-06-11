@@ -1,51 +1,59 @@
 ---
-title: Celebrating 100,000 Users: Promptfoo's Journey and the Shift to Red Teaming
+title: "Celebrating 100,000 Users: Promptfoo's Journey, Red Teaming, and the Future of AI Security"
 description: Promptfoo reaches 100K users! Learn about our journey from prompt evaluation to AI red teaming and what's next for AI security.
 image: /img/blog/100k-users-milestone.jpg
 keywords: [promptfoo, AI security, red teaming, LLM evaluation, prompt engineering, AI agents, model context protocol]
-date: 2024-06-10
+date: 2025-06-10
 ---
 
 # Celebrating 100,000 Users: Promptfoo's Journey and the Shift to Red Teaming
 
-We're thrilled to announce that promptfoo now has over **100,000** users! This milestone reflects our incredible community of developers, enterprises, and AI enthusiasts who trust us to build secure and reliable AI applications.
+We're thrilled to announce that promptfoo now has over **100,000** users! This milestone reflects our incredible community of developers, enterprises, and AI enthusiasts who trust us to help build reliable and secure AI applications.
 
-Promptfoo was born out of a simple idea: prompt engineering should be systematic and measurable. Since our first open-source release in 2023, we've focused on giving developers the tools to evaluate prompts with confidence. Along the way, we discovered that testing wasn't enough—teams also needed a way to proactively identify vulnerabilities. That realization sparked our deeper investment in AI red teaming.
+Promptfoo was born out of a simple idea: prompt engineering should be systematic and measurable. Since our first open-source release in 2023, we've focused on giving developers the tools to evaluate models and prompts with confidence. Along the way, we discovered that happy path testing wasn't enough—teams also needed a way to proactively identify vulnerabilities. That realization sparked our deep investment in AI red teaming and GenAI Application Security.
 
 <!-- truncate -->
 
 ## How We Started
 
-Promptfoo founder Ian Webster began the project while leading AI engineering at Discord, where ensuring reliable model behavior was a daily challenge. I joined shortly after, bringing experience in scaling machine learning products. Together, we set out to create an open-source toolkit that removes guesswork from prompt engineering.
+Promptfoo founder [Ian Webster](https://www.linkedin.com/in/ianww) began Promptfoo while leading AI engineering at Discord, where ensuring reliable model behavior was a daily challenge. Co-founder [Michael D'Angelo](https://www.linkedin.com/in/michaelldangelo/) joined shortly after, bringing experience in scaling machine learning products. Together, they set out to create a simple, declarative open-source toolkit for Application Development teams that removes guesswork from prompt engineering.
 
-## The Shift to Red Teaming
+As the GenAI applications 
 
-As the ecosystem matured, users asked for more than just eval. They wanted to know how their prompts would hold up against adversarial attacks. Today, red teaming is a cornerstone of promptfoo. Our framework simulates malicious inputs—prompt injections, toxic content, and more—so teams can fix weaknesses before they ship.
+- barrier to shipping applications in production.
+They wanted to know how their prompts would hold up against adversarial attacks. Today, red teaming is a cornerstone of promptfoo. Promptfoo simulates application-context specific malicious inputs—prompt injections, toxic content, and more—so teams can fix weaknesses before they ship.
 
-Red teaming matters because it elevates AI security beyond basic testing. By anticipating how attackers might exploit a model, developers can build applications that withstand real-world threats.
+We were the first to adapt AI-specific penetration testing techniques to application prompts, allowing teams to simulate real-world attacks before deployment. This approach has proven essential as AI systems face increasingly sophisticated adversarial attempts.
 
 ## Embracing AI Agents and Multi-Agent Systems
 
 The AI landscape continues to evolve rapidly, with new paradigms emerging. Recently, we've witnessed a significant shift toward AI agents and multi-agent systems—autonomous models capable of performing complex, multi-step tasks. Recognizing this shift, promptfoo expanded its capabilities to support agentic systems, empowering developers to evaluate and secure these advanced applications effectively.
 
-Promptfoo now provides specialized tools to simulate and test multi-agent interactions, ensuring coherent and safe agent behavior across various tasks and environments. Our comprehensive eval metrics help developers verify that agents perform intended actions without unintended consequences, maintaining safety, reliability, and consistency.
+Promptfoo now provides specialized tools to simulate and test multi-agent interactions, ensuring coherent and safe agent behavior across various tasks and environments. Red-teaming helps developers verify that agents perform intended actions without unintended consequences, maintaining safety, reliability, and consistency.
 
-## Model Context Protocol (MCP)
+## Industry Recognition and Educational Impact
 
-To better support the evolving ecosystem, we've introduced Model Context Protocol (MCP). MCP provides a structured way to manage and communicate context, eval criteria, and security requirements across different AI systems and environments. It enhances collaboration, consistency, and efficiency, enabling teams to integrate advanced testing and red teaming seamlessly into their workflows.
+Our approach has gained recognition across the AI community. Leading platforms have integrated promptfoo into their official learning materials:
 
-MCP is particularly valuable in complex deployments involving multiple models, agents, or integrated systems, as it streamlines communication and ensures that security checks and evals remain aligned and comprehensive.
+- **OpenAI** featured promptfoo in Build Hour tutorials, noting how it makes prompt testing "faster and more straightforward"
+- **Anthropic** created a prompt eval course using our framework
+- **AWS** launched Workshop Studio courses on LLM eval with promptfoo and Amazon Bedrock
+- **IBM Skills Network** developed hands-on projects for model selection and regression testing
+
+These partnerships have helped educate thousands of developers while validating our approach to systematic AI testing.
 
 ## Where We Stand Today
 
-Promptfoo is now trusted by individual developers, startups, and over two dozen Fortune 500 companies. Our users rely on promptfoo to:
+Promptfoo is now trusted by individual developers, startups, and dozens of Fortune 500 companies. Our users rely on promptfoo to:
 
 - Test prompts across multiple LLM providers
 - Perform red teaming to detect vulnerabilities
 - Benchmark models and track quality metrics
 - Integrate AI security testing into CI/CD pipelines
 
-This growth has been fueled by an active open-source community, regular releases, and educational collaborations with organizations like OpenAI, Anthropic, AWS, and IBM.
+This growth has been fueled by an active open-source community, regular releases, and educational collaborations with organizations like OpenAI, Anthropic, and AWS.
+
+Our framework supports a wide range of models and APIs—from OpenAI and Anthropic to local LLMs—with flexible evaluation plugins that teams can tailor to their specific domains. Whether it's preventing a fintech assistant from divulging private data or ensuring a game's AI character adheres to content guidelines, promptfoo provides the safety net teams need.
 
 ## Looking Ahead
 
@@ -53,16 +61,17 @@ Reaching 100,000 users is just the beginning. Here's what's next for promptfoo:
 
 - **Democratizing advanced AI security.** We're working to make red teaming techniques accessible to every builder
 - **Enhanced agent and multi-agent testing capabilities.** Expect deeper support for simulating complex agent interactions and security scenarios
-- **Next-gen user experience.** Expect more automation around vulnerability detection and a richer analytics dashboard
-- **Expanding coverage.** As new models and modalities appear, promptfoo will continue to support them so your applications stay protected
+- **Next-gen user experience.** Expect more automation around vulnerability detection and a shift left towards resolving problems before they are in main.
+- **Expanding coverage.** As new models, modalities, APIs, and attacks appear, promptfoo will continue to support them so your applications stay protected
 
 ## Join Us and Get Involved
 
 We're committed to being the best open-source LLM red teaming and eval tool available. We invite you to:
 
-- [**Follow us on GitHub**](https://github.com/promptfoo/promptfoo) to stay updated and contribute
+- [**Follow us on GitHub**](https://github.com/promptfoo/promptfoo) to stay updated and contribute (We will send you SWAG as a thank you)
 - Reach out with your ideas, feedback, or collaborations—we'd love to hear from you!
 - Spread the word and help grow our community even further
+- Join our discord
 
 ## Thank You
 
