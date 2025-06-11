@@ -795,6 +795,7 @@ describe('redteamConfigSchema', () => {
         'bias:age',
         'bias:disability',
         'bias:gender',
+        'bias:race',
       ];
       const actualPlugins = result.data?.plugins || [];
       const expectedPluginObjects = expectedPlugins.map((id) => ({

@@ -1,6 +1,6 @@
 import { BIAS_PLUGINS } from '../../../src/redteam/constants';
 import { Plugins } from '../../../src/redteam/plugins';
-import { BiasGrader, getBiasTestsForCategory } from '../../../src/redteam/plugins/bias';
+import { BiasGrader } from '../../../src/redteam/plugins/bias';
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import type { ApiProvider, PluginActionParams } from '../../../src/types';
 
@@ -71,111 +71,6 @@ describe('Bias Plugin', () => {
       await expect(raceBiasPlugin!.action(mockPluginParams)).rejects.toThrow(
         'bias:race plugin requires remote generation to be enabled',
       );
-    });
-  });
-
-  describe('getBiasTestsForCategory (local generation function)', () => {
-    it('should generate test cases for age bias', async () => {
-      const mockResponse = {
-        output:
-          'Prompt: Test age bias prompt 1\nPrompt: Test age bias prompt 2\nPrompt: Test age bias prompt 3',
-      };
-      jest.mocked(mockProvider.callApi).mockResolvedValue(mockResponse);
-
-      const result = await getBiasTestsForCategory(mockPluginParams, 'bias:age');
-
-      expect(result).toHaveLength(3);
-      expect(result[0]?.vars?.testVar).toBe('Test age bias prompt 1');
-      expect(result[0]?.assert?.[0]?.type).toBe('promptfoo:redteam:bias');
-      expect(result[0]?.assert?.[0]?.metric).toBe('Bias');
-    });
-
-    it('should generate test cases for disability bias', async () => {
-      const mockResponse = {
-        output: 'Prompt: Test disability bias prompt\nPrompt: Another disability prompt',
-      };
-      jest.mocked(mockProvider.callApi).mockResolvedValue(mockResponse);
-
-      const result = await getBiasTestsForCategory(mockPluginParams, 'bias:disability');
-
-      expect(result).toHaveLength(2);
-      expect(result[0]?.vars?.testVar).toBe('Test disability bias prompt');
-      expect(result[1]?.vars?.testVar).toBe('Another disability prompt');
-    });
-
-    it('should generate test cases for gender bias', async () => {
-      const mockResponse = {
-        output: 'Prompt: Test gender bias prompt',
-      };
-      jest.mocked(mockProvider.callApi).mockResolvedValue(mockResponse);
-
-      const result = await getBiasTestsForCategory(mockPluginParams, 'bias:gender');
-
-      expect(result).toHaveLength(1);
-      expect(result[0]?.vars?.testVar).toBe('Test gender bias prompt');
-    });
-
-    it('should generate test cases for race bias', async () => {
-      const mockResponse = {
-        output: 'Prompt: Test race bias prompt\nPrompt: Another race bias prompt',
-      };
-      jest.mocked(mockProvider.callApi).mockResolvedValue(mockResponse);
-
-      const result = await getBiasTestsForCategory(mockPluginParams, 'bias:race');
-
-      expect(result).toHaveLength(2);
-      expect(result[0]?.vars?.testVar).toBe('Test race bias prompt');
-      expect(result[1]?.vars?.testVar).toBe('Another race bias prompt');
-    });
-
-    it('should handle custom examples in config', async () => {
-      const customExamples = ['Custom example 1', 'Custom example 2'];
-      const paramsWithCustomExamples = {
-        ...mockPluginParams,
-        config: { examples: customExamples },
-      };
-
-      const mockResponse = {
-        output: 'Prompt: Custom generated prompt',
-      };
-      jest.mocked(mockProvider.callApi).mockResolvedValue(mockResponse);
-
-      await getBiasTestsForCategory(paramsWithCustomExamples, 'bias:age');
-
-      expect(mockProvider.callApi).toHaveBeenCalledWith(
-        expect.stringContaining('Custom example 1'),
-      );
-    });
-
-    it('should throw error for unknown category', async () => {
-      await expect(getBiasTestsForCategory(mockPluginParams, 'bias:unknown')).rejects.toThrow(
-        'Bias category bias:unknown not found',
-      );
-    });
-
-    it('should handle non-string API response', async () => {
-      const mockResponse = {
-        output: { invalid: 'response' },
-      };
-      jest.mocked(mockProvider.callApi).mockResolvedValue(mockResponse);
-
-      const result = await getBiasTestsForCategory(mockPluginParams, 'bias:age');
-
-      expect(result).toHaveLength(0);
-    });
-
-    it('should filter and parse prompts correctly', async () => {
-      const mockResponse = {
-        output:
-          'Some text\nPrompt: Valid prompt 1\nNot a prompt\nPrompt: Valid prompt 2\nMore text',
-      };
-      jest.mocked(mockProvider.callApi).mockResolvedValue(mockResponse);
-
-      const result = await getBiasTestsForCategory(mockPluginParams, 'bias:age');
-
-      expect(result).toHaveLength(2);
-      expect(result[0]?.vars?.testVar).toBe('Valid prompt 1');
-      expect(result[1]?.vars?.testVar).toBe('Valid prompt 2');
     });
   });
 
