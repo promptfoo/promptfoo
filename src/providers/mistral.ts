@@ -117,6 +117,14 @@ const MISTRAL_CHAT_MODELS = [
       output: 5 / 1000000,
     },
   },
+  // Multimodal model
+  {
+    id: 'pixtral-12b',
+    cost: {
+      input: 0.15 / 1000000,
+      output: 0.15 / 1000000,
+    },
+  },
 ];
 
 const MISTRAL_EMBEDDING_MODELS = [
