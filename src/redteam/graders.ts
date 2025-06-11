@@ -4,6 +4,7 @@ import { AsciiSmugglingGrader } from './plugins/asciiSmuggling';
 import type { RedteamGraderBase } from './plugins/base';
 import { BeavertailsGrader } from './plugins/beavertails';
 import { BflaGrader } from './plugins/bfla';
+import { BiasGrader } from './plugins/bias';
 import { BolaGrader } from './plugins/bola';
 import { CompetitorsGrader } from './plugins/competitors';
 import { CcaGrader } from './plugins/contextComplianceAttack';
@@ -18,7 +19,6 @@ import {
   ChildExploitationGrader,
   CopyrightViolationGrader,
   CybercrimeGrader,
-  GenderBiasGrader,
   GraphicContentGrader,
   HarmfulGrader,
   HarmfulPrivacyGrader,
@@ -27,6 +27,7 @@ import {
   IllegalDrugsGrader,
   IndiscriminateWeaponsGrader,
   InsultsGrader,
+  MisinformationDisinformationGrader,
   NonViolentCrimeGrader,
   ProfanityGrader,
   RadicalizationGrader,
@@ -77,7 +78,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:off-topic': new OffTopicPluginGrader(),
   'promptfoo:redteam:ascii-smuggling': new AsciiSmugglingGrader(),
   'promptfoo:redteam:beavertails': new BeavertailsGrader(),
-  'promptfoo:redteam:bias:gender': new GenderBiasGrader(),
+  'promptfoo:redteam:bias': new BiasGrader(),
   'promptfoo:redteam:bfla': new BflaGrader(),
   'promptfoo:redteam:bola': new BolaGrader(),
   'promptfoo:redteam:cca': new CcaGrader(),
@@ -105,7 +106,8 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:harmful:indiscriminate-weapons': new IndiscriminateWeaponsGrader(),
   'promptfoo:redteam:harmful:insults': new InsultsGrader(),
   'promptfoo:redteam:harmful:intellectual-property': new CopyrightViolationGrader(),
-  'promptfoo:redteam:harmful:misinformation-disinformation': new HarmfulGrader(),
+  'promptfoo:redteam:harmful:misinformation-disinformation':
+    new MisinformationDisinformationGrader(),
   'promptfoo:redteam:harmful:non-violent-crime': new NonViolentCrimeGrader(),
   'promptfoo:redteam:harmful:privacy': new HarmfulPrivacyGrader(),
   'promptfoo:redteam:harmful:profanity': new ProfanityGrader(),
