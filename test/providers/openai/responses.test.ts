@@ -24,6 +24,7 @@ describe('OpenAiResponsesProvider', () => {
 
   it('should support various model names', () => {
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o1-pro');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3-pro');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4o');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3-mini');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4.1');
@@ -1629,6 +1630,53 @@ describe('OpenAiResponsesProvider', () => {
     expect(body.reasoning).toEqual({ effort: 'high' });
     expect(body.max_output_tokens).toBe(2000);
     expect(body.temperature).toBeUndefined(); // o3 model should not have temperature
+  });
+
+  it('should configure o3-pro model correctly with reasoning parameters', async () => {
+    const mockApiResponse = {
+      id: 'resp_abc123',
+      status: 'completed',
+      model: 'o3-pro',
+      output: [
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [
+            {
+              type: 'output_text',
+              text: 'Response from o3-pro model',
+            },
+          ],
+        },
+      ],
+      usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
+    };
+
+    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new OpenAiResponsesProvider('o3-pro', {
+      config: {
+        apiKey: 'test-key',
+        reasoning_effort: 'high',
+        max_output_tokens: 2000,
+      },
+    });
+
+    await provider.callApi('Test prompt');
+
+    const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+    const reqOptions = mockCall[1] as { body: string };
+    const body = JSON.parse(reqOptions.body);
+
+    expect(body.model).toBe('o3-pro');
+    expect(body.reasoning).toEqual({ effort: 'high' });
+    expect(body.max_output_tokens).toBe(2000);
+    expect(body.temperature).toBeUndefined(); // o3-pro model should not have temperature
   });
 
   it('should configure o4-mini model correctly with reasoning parameters', async () => {
