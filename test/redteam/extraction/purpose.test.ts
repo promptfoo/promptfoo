@@ -1,6 +1,6 @@
 import { fetchWithCache } from '../../../src/cache';
 import { VERSION } from '../../../src/constants';
-import { extractSystemPurpose } from '../../../src/redteam/extraction/purpose';
+import { DEFAULT_PURPOSE, extractSystemPurpose } from '../../../src/redteam/extraction/purpose';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 import type { ApiProvider } from '../../../src/types';
 
@@ -99,6 +99,6 @@ describe('System Purpose Extractor', () => {
 
   it('should return default message for empty prompts array', async () => {
     const result = await extractSystemPurpose(provider, []);
-    expect(result).toBe('An AI system');
+    expect(result).toBe(DEFAULT_PURPOSE);
   });
 });
