@@ -39,7 +39,7 @@ The Policy plugin generates test cases based on the custom policy provided. It c
 
 ### Prompt Formatting
 
-The plugin automatically selects the appropriate prompt format:
+The Policy plugin automatically selects the appropriate prompt format based on the system type:
 
 - **Simple format (`Prompt:`)** - Used for most systems with single-line test cases
 - **Multi-line format (`PromptBlock:`)** - Used for log analysis systems with structured data
