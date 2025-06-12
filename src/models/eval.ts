@@ -653,20 +653,36 @@ export default class Eval {
       stats.tokenUsage.total += prompt.metrics?.tokenUsage.total || 0;
       stats.tokenUsage.numRequests += prompt.metrics?.tokenUsage.numRequests || 0;
 
-      stats.tokenUsage.completionDetails.reasoning! +=
-        prompt.metrics?.tokenUsage.completionDetails?.reasoning || 0;
-      stats.tokenUsage.completionDetails.acceptedPrediction! +=
-        prompt.metrics?.tokenUsage.completionDetails?.acceptedPrediction || 0;
-      stats.tokenUsage.completionDetails.rejectedPrediction! +=
-        prompt.metrics?.tokenUsage.completionDetails?.rejectedPrediction || 0;
+      if (prompt.metrics?.tokenUsage.completionDetails && stats.tokenUsage.completionDetails) {
+        if (stats.tokenUsage.completionDetails.reasoning !== undefined) {
+          stats.tokenUsage.completionDetails.reasoning +=
+            prompt.metrics?.tokenUsage.completionDetails?.reasoning || 0;
+        }
+        if (stats.tokenUsage.completionDetails.acceptedPrediction !== undefined) {
+          stats.tokenUsage.completionDetails.acceptedPrediction +=
+            prompt.metrics?.tokenUsage.completionDetails?.acceptedPrediction || 0;
+        }
+        if (stats.tokenUsage.completionDetails.rejectedPrediction !== undefined) {
+          stats.tokenUsage.completionDetails.rejectedPrediction +=
+            prompt.metrics?.tokenUsage.completionDetails?.rejectedPrediction || 0;
+        }
+      }
 
       // Add assertion token usage from prompt metrics
-      if (prompt.metrics?.tokenUsage.assertions) {
-        stats.tokenUsage.assertions.total! += prompt.metrics.tokenUsage.assertions.total || 0;
-        stats.tokenUsage.assertions.prompt! += prompt.metrics.tokenUsage.assertions.prompt || 0;
-        stats.tokenUsage.assertions.completion! +=
-          prompt.metrics.tokenUsage.assertions.completion || 0;
-        stats.tokenUsage.assertions.cached! += prompt.metrics.tokenUsage.assertions.cached || 0;
+      if (prompt.metrics?.tokenUsage.assertions && stats.tokenUsage.assertions) {
+        if (stats.tokenUsage.assertions.total !== undefined) {
+          stats.tokenUsage.assertions.total += prompt.metrics.tokenUsage.assertions.total || 0;
+        }
+        if (stats.tokenUsage.assertions.prompt !== undefined) {
+          stats.tokenUsage.assertions.prompt += prompt.metrics.tokenUsage.assertions.prompt || 0;
+        }
+        if (stats.tokenUsage.assertions.completion !== undefined) {
+          stats.tokenUsage.assertions.completion +=
+            prompt.metrics.tokenUsage.assertions.completion || 0;
+        }
+        if (stats.tokenUsage.assertions.cached !== undefined) {
+          stats.tokenUsage.assertions.cached += prompt.metrics.tokenUsage.assertions.cached || 0;
+        }
       }
     }
 
