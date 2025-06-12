@@ -3487,5 +3487,32 @@ describe('Token Estimation', () => {
       // Should use raw text when output is not a string
       expect(result.tokenUsage!.completion).toBeGreaterThan(0);
     });
+
+    it('should fall back to raw text when transformResponse returns an object', async () => {
+      const provider = new HttpProvider('http://test.com', {
+        config: {
+          method: 'POST',
+          body: { prompt: '{{prompt}}' },
+          tokenEstimation: {
+            enabled: true,
+          },
+          transformResponse: 'json', // returns the whole object, not a string
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ message: 'Hello world' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.tokenUsage).toBeDefined();
+      // Should use raw text when output is not a string
+      expect(result.tokenUsage!.completion).toBeGreaterThan(0);
+    });
   });
 });

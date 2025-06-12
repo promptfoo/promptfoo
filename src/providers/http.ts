@@ -115,7 +115,7 @@ export function needsSignatureRefresh(
 
 export const TokenEstimationConfigSchema = z.object({
   enabled: z.boolean().default(false),
-  multiplier: z.number().default(1.3),
+  multiplier: z.number().min(0.01).default(1.3),
 });
 
 export type TokenEstimationConfig = z.infer<typeof TokenEstimationConfigSchema>;
@@ -906,40 +906,7 @@ export class HttpProvider implements ApiProvider {
     }
     const parsedOutput = (await this.transformResponse)(parsedData, rawText, { response });
 
-    // Estimate tokens if enabled
-    let estimatedTokenUsage: Partial<TokenUsage> | undefined;
-    if (this.config.tokenEstimation?.enabled) {
-      const promptText = typeof transformedPrompt === 'string' ? transformedPrompt : prompt;
-      const completionText =
-        typeof parsedOutput === 'string'
-          ? parsedOutput
-          : parsedOutput?.output && typeof parsedOutput.output === 'string'
-            ? parsedOutput.output
-            : rawText;
-      estimatedTokenUsage = await this.estimateTokenUsage(promptText, completionText);
-    }
-
-    if (parsedOutput?.output) {
-      const result = {
-        ...ret,
-        ...parsedOutput,
-      };
-      // Add estimated token usage if available and not already present
-      if (estimatedTokenUsage && !result.tokenUsage) {
-        result.tokenUsage = estimatedTokenUsage;
-      }
-      return result;
-    }
-
-    const result = {
-      ...ret,
-      output: parsedOutput,
-    };
-    // Add estimated token usage if available
-    if (estimatedTokenUsage && !result.tokenUsage) {
-      result.tokenUsage = estimatedTokenUsage;
-    }
-    return result;
+    return this.processResponseWithTokenEstimation(ret, parsedOutput, rawText, transformedPrompt, prompt);
   }
 
   private async callApiWithRawRequest(
@@ -1012,16 +979,37 @@ export class HttpProvider implements ApiProvider {
 
     const parsedOutput = (await this.transformResponse)(parsedData, rawText, { response });
 
+    return this.processResponseWithTokenEstimation(ret, parsedOutput, rawText, transformedPrompt, prompt);
+  }
+
+  /**
+   * Extracts completion text from parsed output with fallback to raw text
+   */
+  private getCompletionText(parsedOutput: any, rawText: string): string {
+    if (typeof parsedOutput === 'string') {
+      return parsedOutput;
+    }
+    if (parsedOutput?.output && typeof parsedOutput.output === 'string') {
+      return parsedOutput.output;
+    }
+    return rawText;
+  }
+
+  /**
+   * Processes response and adds token estimation if enabled
+   */
+  private async processResponseWithTokenEstimation(
+    ret: ProviderResponse,
+    parsedOutput: any,
+    rawText: string,
+    transformedPrompt: any,
+    prompt: string,
+  ): Promise<ProviderResponse> {
     // Estimate tokens if enabled
     let estimatedTokenUsage: Partial<TokenUsage> | undefined;
     if (this.config.tokenEstimation?.enabled) {
       const promptText = typeof transformedPrompt === 'string' ? transformedPrompt : prompt;
-      const completionText =
-        typeof parsedOutput === 'string'
-          ? parsedOutput
-          : parsedOutput?.output && typeof parsedOutput.output === 'string'
-            ? parsedOutput.output
-            : rawText;
+      const completionText = this.getCompletionText(parsedOutput, rawText);
       estimatedTokenUsage = await this.estimateTokenUsage(promptText, completionText);
     }
 
