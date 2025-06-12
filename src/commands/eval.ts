@@ -69,58 +69,27 @@ export function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
 /**
  * Format token usage for display in CLI output
  */
-export function formatTokenUsage(
-  usageOrType: TokenUsage | string,
-  legacyUsage?: Partial<TokenUsage>,
-): string {
-  // Handle backward compatibility: if first param is string, it's the old API
-  let usage: Partial<TokenUsage>;
-  let includeType = false;
-
-  if (typeof usageOrType === 'string' && legacyUsage) {
-    // Old API: formatTokenUsage(type, usage)
-    usage = legacyUsage;
-    includeType = true;
-  } else {
-    // New API: formatTokenUsage(usage)
-    usage = usageOrType as TokenUsage;
-  }
-
+export function formatTokenUsage(usage: Partial<TokenUsage>): string {
   const parts = [];
 
   if (usage.total !== undefined) {
-    const totalText = includeType
-      ? `${usageOrType as string} tokens: ${usage.total.toLocaleString()}`
-      : `${usage.total.toLocaleString()} total`;
-    parts.push(totalText);
+    parts.push(`${usage.total.toLocaleString()} total`);
   }
 
   if (usage.prompt !== undefined) {
-    const promptText = includeType
-      ? `Prompt tokens: ${usage.prompt.toLocaleString()}`
-      : `${usage.prompt.toLocaleString()} prompt`;
-    parts.push(promptText);
+    parts.push(`${usage.prompt.toLocaleString()} prompt`);
   }
 
   if (usage.completion !== undefined) {
-    const completionText = includeType
-      ? `Completion tokens: ${usage.completion.toLocaleString()}`
-      : `${usage.completion.toLocaleString()} completion`;
-    parts.push(completionText);
+    parts.push(`${usage.completion.toLocaleString()} completion`);
   }
 
   if (usage.cached !== undefined) {
-    const cachedText = includeType
-      ? `Cached tokens: ${usage.cached.toLocaleString()}`
-      : `${usage.cached.toLocaleString()} cached`;
-    parts.push(cachedText);
+    parts.push(`${usage.cached.toLocaleString()} cached`);
   }
 
   if (usage.completionDetails?.reasoning !== undefined) {
-    const reasoningText = includeType
-      ? `Reasoning tokens: ${usage.completionDetails.reasoning.toLocaleString()}`
-      : `${usage.completionDetails.reasoning.toLocaleString()} reasoning`;
-    parts.push(reasoningText);
+    parts.push(`${usage.completionDetails.reasoning.toLocaleString()} reasoning`);
   }
 
   return parts.join(' / ');
