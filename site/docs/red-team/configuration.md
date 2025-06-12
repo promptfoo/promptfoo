@@ -735,21 +735,24 @@ Configuration values can be set in multiple ways, with the following precedence 
 1. **Command-line flags** - Override all other settings
 
    ```bash
-   promptfoo redteam run --provider openai:chat:gpt-4.1-mini --num-tests 10
+   promptfoo redteam run --force --max-concurrency 5
    ```
 
-2. **Environment variables** - Override config file settings
+2. **Configuration file** (`promptfooconfig.yaml`) - Base configuration with env overrides
 
-   ```bash
-   export PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true
-   export OPENAI_API_KEY=your-key-here
-   ```
-
-3. **Configuration file** (`promptfooconfig.yaml`) - Base configuration
    ```yaml
    redteam:
      provider: openai:gpt-4.1
      numTests: 5
+   env:
+     OPENAI_API_KEY: your-key-here
+   ```
+
+3. **Environment variables** - System-level settings
+
+   ```bash
+   export PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true
+   export OPENAI_API_KEY=your-key-here
    ```
 
 ## Best Practices
