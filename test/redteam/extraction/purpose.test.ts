@@ -96,4 +96,9 @@ describe('System Purpose Extractor', () => {
 
     expect(result).toBe('Extracted system purpose');
   });
+
+  it('should return default message for empty prompts array', async () => {
+    const result = await extractSystemPurpose(provider, []);
+    expect(result).toBe('An AI system');
+  });
 });
