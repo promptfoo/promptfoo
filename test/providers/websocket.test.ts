@@ -55,7 +55,7 @@ describe('WebSocketProvider', () => {
     expect(provider.config.messageTemplate).toBe('{{ prompt }}');
   });
 
-  it('should pass headers to WebSocket connection', () => {
+  it('should pass headers to WebSocket connection', async () => {
     const headers = {
       Authorization: 'Bearer test-token',
       'Custom-Header': 'test-value',
@@ -68,6 +68,17 @@ describe('WebSocketProvider', () => {
       },
     });
 
+    jest.mocked(WebSocket).mockImplementation(() => {
+      setTimeout(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        setTimeout(() => {
+          mockWs.onmessage?.({ data: 'test response' } as WebSocket.MessageEvent);
+        }, 10);
+      }, 10);
+      return mockWs;
+    });
+
+    await provider.callApi('test prompt');
     expect(WebSocket).toHaveBeenCalledWith('ws://test.com', { headers });
   });
 
