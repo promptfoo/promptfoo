@@ -11,7 +11,7 @@ import { PythonProvider } from '../src/providers/pythonCompletion';
 import { ScriptCompletionProvider } from '../src/providers/scriptCompletion';
 import { WebSocketProvider } from '../src/providers/websocket';
 import type { ProviderOptions } from '../src/types';
-import { getProviderFromCloud } from '../src/util/cloud';
+import { getProviderFromCloud, isCloudProvider, getCloudDatabaseId } from '../src/util/cloud';
 
 jest.mock('fs');
 jest.mock('js-yaml');
@@ -28,6 +28,14 @@ describe('loadApiProvider', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     jest.spyOn(process, 'exit').mockImplementation((() => {}) as any);
+
+    // Mock the cloud utility functions
+    jest
+      .mocked(isCloudProvider)
+      .mockImplementation((path: string) => path.startsWith('promptfoo://provider/'));
+    jest
+      .mocked(getCloudDatabaseId)
+      .mockImplementation((path: string) => path.slice('promptfoo://provider/'.length));
   });
 
   it('should load echo provider', async () => {

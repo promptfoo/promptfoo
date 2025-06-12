@@ -36,6 +36,13 @@ import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
 import { readTest, readTests } from '../testCaseReader';
 
+/**
+ * Type guard to check if a test case has vars property
+ */
+function isTestCaseWithVars(test: unknown): test is { vars: Record<string, unknown> } {
+  return typeof test === 'object' && test !== null && 'vars' in test;
+}
+
 export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
   if (getEnvBool('PROMPTFOO_DISABLE_REF_PARSER')) {
     return rawConfig;
@@ -208,7 +215,7 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
       // Check the array for `prompt` vars
       (Array.isArray(ret.tests) &&
         ret.tests.some(
-          (test) => typeof test === 'object' && Object.keys(test.vars || {}).includes('prompt'),
+          (test) => isTestCaseWithVars(test) && Object.keys(test.vars || {}).includes('prompt'),
         ));
 
     if (!hasAnyPrompt) {
@@ -273,12 +280,18 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
   });
 
   const tests: UnifiedConfig['tests'] = [];
-  for (const config of configs) {
+  for (let i = 0; i < configs.length; i++) {
+    const config = configs[i];
+    const configPath = configPaths[i];
     if (typeof config.tests === 'string') {
-      const newTests = await readTests(config.tests, path.dirname(configPaths[0]));
+      const newTests = await readTests(config.tests, path.dirname(configPath));
       tests.push(...newTests);
     } else if (Array.isArray(config.tests)) {
       tests.push(...config.tests);
+    } else if (config.tests && typeof config.tests === 'object' && 'path' in config.tests) {
+      // Handle TestGeneratorConfig object
+      const newTests = await readTests(config.tests, path.dirname(configPath));
+      tests.push(...newTests);
     }
   }
 

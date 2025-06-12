@@ -1,5 +1,14 @@
 # yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
 reviews:
+  high_level_summary: false
+  sequence_diagrams: false
+  changed_files_summary: false
+  suggested_labels: false
+  poem: false
+  auto_review:
+    enabled: true
+    auto_incremental_review: true
+    drafts: false
   path_instructions:
     - path: 'src/**'
       instructions: |

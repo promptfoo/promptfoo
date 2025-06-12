@@ -477,6 +477,46 @@ def generate_tests():
     return test_cases
 ```
 
+#### Passing configuration to test generators
+
+Both JavaScript/TypeScript and Python generators can accept a configuration
+object. Provide a `path` and optional `config` field:
+
+```yaml title="promptfooconfig.yaml"
+tests:
+  - path: file://path/to/tests.py:generate_tests
+    config:
+      dataset: truthfulqa
+      split: validation
+```
+
+The configuration object is passed as the first argument to the
+`generate_tests` function.
+
+Values in the config object can reference external files using `file://` paths.
+These files are loaded and replaced with their contents before your generator is
+called.
+
+:::note file:// Path Handling
+
+The `file://` prefix is handled differently in the `path` field versus the `config` object:
+
+- **In the `path` field**: `file://` is treated as a standard file URI to locate the test generator function. This is how promptfoo knows to load and execute your generator function from a file.
+
+- **In the `config` object**: `file://` triggers special content loading. When promptfoo encounters `file://` in any config value, it loads the file contents and substitutes them in place before passing the config to your generator.
+
+**Example:**
+
+```yaml
+tests:
+  - path: file://generators/tests.py:generate_tests # Standard file URI
+    config:
+      prompts: file://data/prompts.txt # Content will be loaded
+      schema: file://schema.json # Content will be loaded and parsed
+```
+
+:::
+
 ### Import from JSON/JSONL
 
 JSON files contain an array of test cases:

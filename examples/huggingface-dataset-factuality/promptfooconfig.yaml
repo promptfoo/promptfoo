@@ -34,4 +34,8 @@ defaultTest:
       differButFactual: 0.7 # Score for category E (differences don't affect factuality)
 
 # Grabs TruthfulQA dataset from HuggingFace and formats it for promptfoo
-tests: file://dataset_loader.ts:generate_tests
+tests:
+  path: file://dataset_loader.ts:generate_tests
+  config:
+    dataset: EleutherAI/truthful_qa_mc
+    split: validation
