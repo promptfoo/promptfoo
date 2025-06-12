@@ -45,7 +45,6 @@ hyperbolic:audio:<model_name>
 - `hyperbolic:deepseek-ai/DeepSeek-R1` - Best open-source reasoning model
 - `hyperbolic:deepseek-ai/DeepSeek-R1-Zero` - Zero-shot variant of DeepSeek-R1
 - `hyperbolic:deepseek-ai/DeepSeek-V3` - Latest DeepSeek model
-- `hyperbolic:deepseek-ai/DeepSeek-V3-0324` - Updated V3 model (03/24/2025)
 - `hyperbolic:deepseek/DeepSeek-V2.5` - Previous generation model
 
 #### Qwen Models
@@ -249,24 +248,26 @@ Example prompt template (`prompts/coding_assistant.json`):
 
 ## Cost Information
 
-Hyperbolic offers competitive pricing across all model types:
+Hyperbolic offers competitive pricing across all model types (rates as of January 2025):
 
 ### Text Models
 
-- DeepSeek-R1: $0.50/M input, $2.18/M output tokens
-- Qwen3-235B: $2.00/M input, $8.00/M output tokens
-- Llama-3.1-405B: $3.00/M input, $3.00/M output tokens
-- Smaller models have proportionally lower costs
+- **DeepSeek-R1**: $2.00/M tokens
+- **DeepSeek-V3**: $0.25/M tokens
+- **Qwen3-235B**: $0.40/M tokens
+- **Llama-3.1-405B**: $4.00/M tokens (BF16)
+- **Llama-3.1-70B**: $0.40/M tokens
+- **Llama-3.1-8B**: $0.10/M tokens
 
 ### Image Models
 
-- Flux.1-dev: $0.025 per image
-- SDXL models: $0.01-0.015 per image
-- SD1.5/SD2: $0.005-0.008 per image
+- **Flux.1-dev**: $0.01 per 1024x1024 image with 25 steps (scales with size/steps)
+- **SDXL models**: Similar pricing formula
+- **SD1.5/SD2**: Lower cost options
 
 ### Audio Models
 
-- Melo-TTS: $0.001 per 1000 characters
+- **Melo-TTS**: $5.00 per 1M characters
 
 ## Notes
 
@@ -274,3 +275,5 @@ Hyperbolic offers competitive pricing across all model types:
 - Image generation supports advanced features like ControlNet and LoRA
 - All endpoints use the OpenAI-compatible format for easy integration
 - VLM models support multimodal inputs (text + images)
+- Basic tier: 60 requests/minute (free), Pro tier: 600 requests/minute ($5+ deposit)
+- Some models may require Pro tier access

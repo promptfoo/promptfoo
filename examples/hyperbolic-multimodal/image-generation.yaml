@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Hyperbolic image generation
+description: AI image generation showcase
 
 prompts:
   - '{{prompt}}'
@@ -31,23 +31,46 @@ providers:
   #     cfg_scale: 7.5
 
 tests:
-  # Artistic styles
+  # Dreamy artistic style
   - vars:
-      prompt: 'A serene Japanese garden with cherry blossoms, koi pond, and Mount Fuji in the background, painted in traditional watercolor style'
+      prompt: 'A cat wearing sunglasses riding a unicorn through a rainbow portal, painted in Van Gogh style with swirling cosmic backgrounds'
+    assert:
+      - type: regex
+        value: '^(/9j/|iVBORw0KGgo|UklGR|data:image/)'
+      - type: cost
+        threshold: 0.05
 
+  # Futuristic scene
   - vars:
-      prompt: 'Cyberpunk street scene at night, neon lights reflecting on wet pavement, flying cars overhead, highly detailed digital art'
+      prompt: 'A pizza-powered rocket ship delivering dinner to aliens on Mars, neon cyberpunk aesthetic with glowing cheese trails'
+    assert:
+      - type: regex
+        value: '^(/9j/|iVBORw0KGgo|UklGR|data:image/)'
 
-  # Photorealistic
+  # Whimsical portrait
   - vars:
-      prompt: 'Professional portrait of a golden retriever wearing glasses and a bow tie, studio lighting, shallow depth of field'
+      prompt: 'A distinguished octopus professor wearing a monocle and bow tie, teaching quantum physics to confused fish students'
+    assert:
+      - type: regex
+        value: '^(/9j/|iVBORw0KGgo|UklGR|data:image/)'
 
+  # Nature photography style
   - vars:
-      prompt: 'Macro photography of a dewdrop on a spider web at sunrise, bokeh background, ultra sharp detail'
+      prompt: 'A tiny dragon napping in a coffee cup surrounded by miniature autumn leaves, macro photography with golden hour lighting'
+    assert:
+      - type: regex
+        value: '^(/9j/|iVBORw0KGgo|UklGR|data:image/)'
 
-  # Fantasy/Sci-fi
+  # Epic fantasy scene
   - vars:
-      prompt: 'Ancient dragon perched on a crystal mountain peak, magical aurora in the sky, fantasy art style, epic composition'
+      prompt: 'A wizard penguin casting spells to create aurora borealis over an ice castle made entirely of crystallized music notes'
+    assert:
+      - type: regex
+        value: '^(/9j/|iVBORw0KGgo|UklGR|data:image/)'
 
+  # Sci-fi adventure
   - vars:
-      prompt: 'Astronaut discovering alien ruins on Mars, dramatic lighting, photorealistic, cinematic composition'
+      prompt: 'An astronaut surfing on Saturn rings while juggling planets, photorealistic style with spectacular cosmic vista background'
+    assert:
+      - type: regex
+        value: '^(/9j/|iVBORw0KGgo|UklGR|data:image/)'

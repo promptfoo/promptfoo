@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Hyperbolic multimodal vision-language
+description: Vision-language model testing
 
 prompts:
   - file://vision_prompt.json
@@ -25,41 +25,42 @@ providers:
   #     max_tokens: 1024
 
 tests:
-  # Image analysis
+  # Animal behavior analysis
   - vars:
-      question: 'What do you see in this image? Describe the main subject and what they are doing.'
+      question: 'Describe this adorable creature and what they might be thinking about while munching. Be creative!'
       image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/0f/Grosser_Panda.JPG/1280px-Grosser_Panda.JPG'
     assert:
       - type: contains-any
         value: ['panda', 'bear', 'bamboo', 'eating']
       - type: llm-rubric
-        value: 'The response accurately describes the panda in the image'
+        value: 'The response accurately describes the panda with creative personality insights'
 
+  # Landmark detective work
   - vars:
-      question: 'What landmark is shown in this image? Describe the scene including time of day and weather.'
+      question: 'What famous landmark is this? Pretend you are a tour guide and describe the scene with enthusiasm!'
       image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a7/Eiffel_Tower_from_Seine.jpg/800px-Eiffel_Tower_from_Seine.jpg'
     assert:
       - type: contains
         value: 'Eiffel Tower'
       - type: llm-rubric
-        value: 'The response correctly identifies the Eiffel Tower and describes the scene'
+        value: 'The response correctly identifies the Eiffel Tower and provides an engaging description'
 
-  # Chart/diagram understanding
+  # Technical diagram interpretation
   - vars:
-      question: 'What programming concept is illustrated in this diagram? List the main categories shown.'
+      question: 'Analyze this diagram like a computer science professor explaining to excited students. What concept does it illustrate?'
       image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1b/Python_3._The_standard_type_hierarchy.png/800px-Python_3._The_standard_type_hierarchy.png'
     assert:
       - type: contains-any
         value: ['Python', 'type', 'hierarchy', 'class']
       - type: llm-rubric
-        value: "The response correctly identifies this as Python's type hierarchy"
+        value: "The response correctly identifies this as Python's type hierarchy with educational enthusiasm"
 
-  # Text extraction
+  # Sign reading challenge
   - vars:
-      question: 'What text is visible in this image? What does the sign mean?'
+      question: 'What does this sign say, and why might it be important for a robot learning to drive?'
       image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9d/Stop_sign_MUTCD.svg/800px-Stop_sign_MUTCD.svg.png'
     assert:
       - type: contains
         value: 'STOP'
       - type: llm-rubric
-        value: 'The response correctly reads the STOP sign text and explains its meaning'
+        value: 'The response correctly reads the STOP sign and explains its importance for autonomous vehicles'

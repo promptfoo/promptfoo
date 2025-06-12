@@ -2,16 +2,8 @@
   {
     "role": "user",
     "content": [
-      {
-        "type": "text",
-        "text": "{{question}}"
-      },
-      {
-        "type": "image_url",
-        "image_url": {
-          "url": "{{image_url}}"
-        }
-      }
+      { "type": "text", "text": "{{question}}" },
+      { "type": "image_url", "image_url": { "url": "{{image_url}}" } }
     ]
   }
 ]
