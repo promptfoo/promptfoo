@@ -906,7 +906,13 @@ export class HttpProvider implements ApiProvider {
     }
     const parsedOutput = (await this.transformResponse)(parsedData, rawText, { response });
 
-    return this.processResponseWithTokenEstimation(ret, parsedOutput, rawText, transformedPrompt, prompt);
+    return this.processResponseWithTokenEstimation(
+      ret,
+      parsedOutput,
+      rawText,
+      transformedPrompt,
+      prompt,
+    );
   }
 
   private async callApiWithRawRequest(
@@ -979,7 +985,13 @@ export class HttpProvider implements ApiProvider {
 
     const parsedOutput = (await this.transformResponse)(parsedData, rawText, { response });
 
-    return this.processResponseWithTokenEstimation(ret, parsedOutput, rawText, transformedPrompt, prompt);
+    return this.processResponseWithTokenEstimation(
+      ret,
+      parsedOutput,
+      rawText,
+      transformedPrompt,
+      prompt,
+    );
   }
 
   /**
