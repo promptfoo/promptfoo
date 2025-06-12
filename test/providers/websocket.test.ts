@@ -101,7 +101,9 @@ describe('WebSocketProvider', () => {
       setTimeout(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
         setTimeout(() => {
-          mockWs.onmessage?.({ data: JSON.stringify({ result: 'test' }) } as WebSocket.MessageEvent);
+          mockWs.onmessage?.({
+            data: JSON.stringify({ result: 'test' }),
+          } as WebSocket.MessageEvent);
         }, 10);
       }, 10);
       return mockWs;
@@ -109,7 +111,7 @@ describe('WebSocketProvider', () => {
 
     // Trigger the WebSocket connection by calling callApi
     const response = await provider.callApi('test prompt');
-    
+
     // Should still work and return expected response
     expect(response).toEqual({ output: { output: { result: 'test' } } });
     // Headers should be undefined when not provided
