@@ -224,6 +224,7 @@ const sidebars = {
             'red-team/plugins/cyberseceval',
             'red-team/plugins/donotanswer',
             'red-team/plugins/harmbench',
+            'red-team/plugins/aegis',
             'red-team/plugins/harmful',
             'red-team/plugins/pliny',
             'red-team/plugins/politics',

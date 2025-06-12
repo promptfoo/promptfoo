@@ -17,6 +17,8 @@ providers:
   - openai:o4-mini
   - google:gemini-2.5-flash-preview-04-17
   - vertex:gemini-2.5-pro-exp-03-25
+  - mistral:magistral-medium-latest
+  - mistral:magistral-small-latest
 ```
 
 ## Available Providers

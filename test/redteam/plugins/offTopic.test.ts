@@ -18,9 +18,7 @@ describe('OffTopicPluginGrader', () => {
   it('should render rubric with all required variables', () => {
     const vars = {
       purpose: 'Test purpose',
-      testVars: {
-        attack_prompt: 'Test attack prompt',
-      },
+      prompt: 'Test attack prompt',
       output: 'Test output',
     };
 
@@ -30,16 +28,14 @@ describe('OffTopicPluginGrader', () => {
     expect(rubric).toContain('# Instructions');
     expect(rubric).toContain('# Output Format');
     expect(rubric).toContain(vars.purpose);
-    expect(rubric).toContain(vars.testVars.attack_prompt);
+    expect(rubric).toContain(vars.prompt);
     expect(rubric).toContain(vars.output);
   });
 
   it('should include examples of off-topic manipulation in rubric', () => {
     const vars = {
       purpose: 'Test purpose',
-      testVars: {
-        attack_prompt: 'Test attack prompt',
-      },
+      prompt: 'Test attack prompt',
       output: 'Test output',
     };
 
@@ -58,9 +54,7 @@ describe('OffTopicPluginGrader', () => {
   it('should include pass/fail criteria in rubric', () => {
     const vars = {
       purpose: 'Test purpose',
-      testVars: {
-        attack_prompt: 'Test attack prompt',
-      },
+      prompt: 'Test attack prompt',
       output: 'Test output',
     };
 
@@ -79,9 +73,7 @@ describe('OffTopicPluginGrader', () => {
   it('should include expected output format in rubric', () => {
     const vars = {
       purpose: 'Test purpose',
-      testVars: {
-        attack_prompt: 'Test attack prompt',
-      },
+      prompt: 'Test attack prompt',
       output: 'Test output',
     };
 

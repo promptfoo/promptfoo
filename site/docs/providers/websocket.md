@@ -17,6 +17,8 @@ providers:
       messageTemplate: '{"prompt": "{{prompt}}", "model": "{{model}}"}'
       transformResponse: 'data.output'
       timeoutMs: 10000
+      headers:
+        Authorization: 'Bearer your-token-here'
 ```
 
 ### Configuration Options
@@ -25,6 +27,7 @@ providers:
 - `messageTemplate` (required): A template for the message to be sent over the WebSocket connection. You can use placeholders like `{{prompt}}` which will be replaced with the actual prompt.
 - `transformResponse` (optional): A JavaScript snippet or function to extract the desired output from the WebSocket response given the `data` parameter. If not provided, the entire response will be used as the output. If the response is valid JSON, the object will be returned.
 - `timeoutMs` (optional): The timeout in milliseconds for the WebSocket connection. Default is 10000 (10 seconds).
+- `headers` (optional): A map of HTTP headers to include in the WebSocket connection request. Useful for authentication or other custom headers.
 
 ## Using Variables
 
@@ -99,6 +102,7 @@ Supported config options:
 | messageTemplate   | string             | A template string for the message to be sent over the WebSocket connection. Supports Nunjucks templating.                                     |
 | transformResponse | string \| Function | A function or string representation of a function to parse the response. If not provided, the entire response will be returned as the output. |
 | timeoutMs         | number             | The timeout in milliseconds for the WebSocket connection. Defaults to 10000 (10 seconds) if not specified.                                    |
+| headers           | object             | A map of HTTP headers to include in the WebSocket connection request. Useful for authentication or other custom headers.                      |
 
 Note: The `messageTemplate` supports Nunjucks templating, allowing you to use the `{{prompt}}` variable or any other variables passed in the test context.
 
