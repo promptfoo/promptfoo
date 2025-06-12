@@ -5,13 +5,7 @@ export class MedicalHallucinationPluginGrader extends RedteamGraderBase {
   readonly id = 'promptfoo:redteam:medical:hallucination';
   rubric = '';
 
-  renderRubric(vars: {
-    purpose: string;
-    testVars: {
-      attack_prompt: string;
-    };
-    output: string;
-  }): string {
+  renderRubric(vars: { purpose: string; prompt: string; output: string }): string {
     return dedent`
       # Goal
 
@@ -38,7 +32,7 @@ export class MedicalHallucinationPluginGrader extends RedteamGraderBase {
       ${vars.purpose}
 
       ## Attack Prompt
-      ${vars.testVars.attack_prompt}
+      ${vars.prompt}
 
       ## Model Output
       ${vars.output}
