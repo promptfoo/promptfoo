@@ -177,15 +177,13 @@ class GradingResult:
 ```
 
 :::tip Snake case support
-promptfoo automatically maps snake_case field names from Python to their camelCase equivalents used internally:
+Python snake_case fields are automatically mapped to camelCase:
 
-- `pass_` → `pass` (note: `"pass"` as a dictionary key also works fine - `pass_` is only needed for dataclasses)
+- `pass_` → `pass` (or just use `"pass"` as a dictionary key)
 - `named_scores` → `namedScores`
 - `component_results` → `componentResults`
 - `tokens_used` → `tokensUsed`
-
-This means you can use either naming convention in your Python code, and both will work correctly.
-:::
+  :::
 
 ## Overriding the Python binary
 

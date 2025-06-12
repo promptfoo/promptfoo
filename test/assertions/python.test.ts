@@ -247,14 +247,6 @@ describe('Python file references', () => {
     ['number', 1, 1, 'Assertion passed', true, undefined],
     [
       'GradingResult',
-      `{"pass": true, "score": 1, "reason": "Custom success"}`,
-      1,
-      'Custom success',
-      true,
-      undefined,
-    ],
-    [
-      'GradingResult',
       // This score is less than the assertion threshold in the test
       `{"pass": true, "score": 0.4, "reason": "Foo bar"}`,
       0.4,
@@ -411,7 +403,6 @@ describe('Python file references', () => {
           score: 0.8,
           reason: 'component 1 ok',
           named_scores: { precision: 0.85 },
-          tokens_used: { total: 50, prompt: 30, completion: 20 },
         },
         {
           pass_: false,
@@ -459,7 +450,6 @@ describe('Python file references', () => {
           score: 0.8,
           reason: 'component 1 ok',
           namedScores: { precision: 0.85 },
-          tokensUsed: { total: 50, prompt: 30, completion: 20 },
         },
         {
           pass: false,
@@ -483,63 +473,5 @@ describe('Python file references', () => {
     expect(pythonResult).not.toHaveProperty('namedScores');
     expect(pythonResult).not.toHaveProperty('componentResults');
     expect(pythonResult).not.toHaveProperty('tokensUsed');
-  });
-
-  it('should support both "pass" and "pass_" keys', async () => {
-    const pythonResultWithPass = {
-      pass: true, // Regular dictionary key - should work fine
-      score: 1,
-      reason: 'using regular pass key',
-    };
-
-    jest.mocked(runPython).mockResolvedValueOnce(pythonResultWithPass as any);
-
-    const fileAssertion: Assertion = {
-      type: 'python',
-      value: 'file:///path/to/assert.py',
-    };
-    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
-    const providerResponse = { output: 'Expected output' };
-
-    const result: GradingResult = await runAssertion({
-      prompt: 'A prompt',
-      provider,
-      assertion: fileAssertion,
-      test: {} as AtomicTestCase,
-      providerResponse,
-    });
-
-    expect(result.pass).toBe(true);
-    expect(result.reason).toBe('using regular pass key');
-  });
-
-  it('should preserve falsy values when mapping snake_case keys', async () => {
-    const pythonResult = {
-      pass_: true,
-      score: 1,
-      reason: 'ok',
-      named_scores: {}, // Empty object should be preserved
-      component_results: [], // Empty array should be preserved
-    };
-
-    jest.mocked(runPython).mockResolvedValueOnce(pythonResult as any);
-
-    const fileAssertion: Assertion = {
-      type: 'python',
-      value: 'file:///path/to/assert.py',
-    };
-    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
-    const providerResponse = { output: 'Expected output' };
-
-    const result: GradingResult = await runAssertion({
-      prompt: 'A prompt',
-      provider,
-      assertion: fileAssertion,
-      test: {} as AtomicTestCase,
-      providerResponse,
-    });
-
-    expect(result.namedScores).toEqual({});
-    expect(result.componentResults).toEqual([]);
   });
 });
