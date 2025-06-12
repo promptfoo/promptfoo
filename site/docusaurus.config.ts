@@ -159,6 +159,10 @@ const config: Config = {
               href: '/careers/',
               label: 'Careers',
             },
+            {
+              href: '/feedback/',
+              label: 'Feedback',
+            },
           ],
         },
         {
@@ -304,6 +308,10 @@ const config: Config = {
             {
               label: 'Careers',
               to: '/careers/',
+            },
+            {
+              label: 'Feedback',
+              to: '/feedback/',
             },
             {
               label: 'Log in',
