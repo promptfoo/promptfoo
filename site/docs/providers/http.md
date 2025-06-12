@@ -527,7 +527,7 @@ providers:
 
 ## Token Estimation
 
-By default, the HTTP provider does not provide token usage statistics since it's designed for general HTTP APIs that may not return token information. However, you can enable optional token estimation to get approximate token counts for cost tracking and analysis.
+By default, the HTTP provider does not provide token usage statistics since it's designed for general HTTP APIs that may not return token information. However, you can enable optional token estimation to get approximate token counts for cost tracking and analysis. Token estimation is automatically enabled when running redteam scans so you can track approximate costs without additional configuration.
 
 Token estimation uses a simple word-based counting method with configurable multipliers. This provides a rough approximation that's useful for basic cost estimation and usage tracking.
 
@@ -673,10 +673,10 @@ module.exports = (json, text, context) => {
 
 ### Configuration Options
 
-| Option     | Type    | Default | Description                                              |
-| ---------- | ------- | ------- | -------------------------------------------------------- |
-| enabled    | boolean | false   | Enable or disable token estimation                       |
-| multiplier | number  | 1.3     | Multiplier applied to word count (adjust for complexity) |
+| Option     | Type    | Default                      | Description                                              |
+| ---------- | ------- | ---------------------------- | -------------------------------------------------------- |
+| enabled    | boolean | false (true in redteam mode) | Enable or disable token estimation                       |
+| multiplier | number  | 1.3                          | Multiplier applied to word count (adjust for complexity) |
 
 ### Example: Cost Tracking
 
