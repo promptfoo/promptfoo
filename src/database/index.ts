@@ -48,3 +48,5 @@ export function closeDb() {
     }
   }
 }
+
+export { DrizzleLogWriter, dbInstance, sqliteInstance };
