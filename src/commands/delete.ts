@@ -3,7 +3,7 @@ import type { Command } from 'commander';
 import logger from '../logger';
 import telemetry from '../telemetry';
 import { setupEnv } from '../util';
-import { deleteAllEvals, deleteEval, getEvalFromId, getLatestEval } from '../util/database';
+import { deleteAllEvals, deleteEval, getEvalFromId } from '../util/database';
 
 async function handleEvalDelete(evalId: string, envPath?: string) {
   try {
@@ -61,7 +61,7 @@ export function deleteCommand(program: Command) {
       await telemetry.send();
 
       if (evalId === 'latest') {
-        const latestResults = await getLatestEval();
+        const latestResults = await Eval.latest();
         if (latestResults) {
           await handleEvalDelete(latestResults.id, cmdObj.envPath);
         } else {

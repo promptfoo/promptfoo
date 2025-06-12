@@ -211,10 +211,6 @@ export async function updateResult(
   }
 }
 
-export async function getLatestEval(filterDescription?: string): Promise<Eval | undefined> {
-  return await Eval.latest();
-}
-
 export async function getPromptsWithPredicate(
   predicate: (result: ResultsFile) => boolean,
   limit: number,
