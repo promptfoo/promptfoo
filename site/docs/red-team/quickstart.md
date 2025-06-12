@@ -201,7 +201,7 @@ The configuration file includes a description of the target endpoint. You can ed
 ```yaml
 targets:
   - id: https
-    label: 'travel-agent-agent'
+    label: 'travel-agent'
     config:
       url: 'https://example.com/generate'
       method: 'POST'

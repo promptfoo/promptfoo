@@ -31,7 +31,7 @@ export default function HomepageFeatures() {
             millions of users.
           </p>
           <p>
-            Embraced by an open-source community of <strong>over 80,000 developers</strong>{' '}
+            Embraced by an open-source community of <strong>over 100,000 developers</strong>{' '}
             worldwide.
           </p>
         </>

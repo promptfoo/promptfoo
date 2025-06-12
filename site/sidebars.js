@@ -181,10 +181,6 @@ const sidebars = {
       id: 'red-team/owasp-llm-top-10',
     },
     {
-      type: 'doc',
-      id: 'red-team/discovery',
-    },
-    {
       type: 'category',
       label: 'Plugins',
       collapsed: true,
@@ -320,6 +316,10 @@ const sidebars = {
       label: 'Tools',
       collapsed: true,
       items: [
+        {
+          type: 'doc',
+          id: 'red-team/discovery',
+        },
         {
           type: 'doc',
           id: 'red-team/guardrails',

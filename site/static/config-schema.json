@@ -774,9 +774,55 @@
                       }
                     },
                     "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "type": "string"
+                      },
+                      "config": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": [
+                                  "string",
+                                  "number",
+                                  "boolean"
+                                ]
+                              }
+                            },
+                            {
+                              "type": "object",
+                              "additionalProperties": {}
+                            },
+                            {}
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "path"
+                    ],
+                    "additionalProperties": false
                   }
                 ]
               }
+            },
+            {
+              "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/2"
             }
           ]
         },
@@ -1521,6 +1567,9 @@
               "type": "boolean"
             },
             "timeoutMs": {
+              "type": "number"
+            },
+            "maxEvalTimeMs": {
               "type": "number"
             }
           },

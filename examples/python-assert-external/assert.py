@@ -1,43 +1,33 @@
 def get_assert(output, context):
-    print("Prompt:", context["prompt"])
-    print("Vars", context["vars"]["topic"])
+    """
+    Custom function that grades an LLM output.
+    """
 
-    # You can return a bool...
-    # return 'bananas' in output.lower()
+    # You can return a bool, number, or dict
+    if "banana" not in output.lower():
+        return False
 
-    # A score (where 0 = Fail)...
-    # return 0.5
+    if "yellow" not in output.lower():
+        return 0.5
 
-    # Or an entire grading result, which can be simple...
-    result = {
-        "pass": "bananas" in output.lower(),
-        "score": 0.5,
-        "reason": "Contains banana",
-    }
-
-    # Or include nested assertions...
-    result = {
-        "pass": True,
+    # Snake_case field names are automatically converted to camelCase
+    return {
+        "pass_": True,
         "score": 0.75,
-        "reason": "Looks good to me",
-        "componentResults": [
+        "reason": "Good banana content",
+        "named_scores": {"banana_quality": 0.8, "color_accuracy": 0.7},
+        "component_results": [
             {
-                "pass": "bananas" in output.lower(),
+                "pass_": "bananas" in output.lower(),
                 "score": 0.5,
                 "reason": "Contains banana",
-                "namedScores": {
-                    "Uses banana": 1.0,
-                },
+                "named_scores": {"banana_mentions": 1.0},
             },
             {
-                "pass": "yellow" in output.lower(),
+                "pass_": "yellow" in output.lower(),
                 "score": 0.5,
                 "reason": "Contains yellow",
-                "namedScores": {
-                    "Yellowish": 0.66,
-                },
+                "named_scores": {"color_mentions": 0.66},
             },
         ],
     }
-
-    return result

@@ -58,6 +58,7 @@ const CopyPageButton: React.FC = () => {
         aria-label={copied ? 'Copied markdown to clipboard' : 'Copy markdown to clipboard'}
         aria-live="polite"
         className={styles.copyButton}
+        title="Copy page as markdown"
       >
         <span className={`${styles.iconContainer} ${copied ? styles.copied : ''}`}>
           <ContentCopyIcon className={styles.copyIcon} />

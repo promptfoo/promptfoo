@@ -720,7 +720,8 @@ export async function synthesize({
           metadata: {
             pluginId: plugin.id,
             pluginConfig: resolvePluginConfig(plugin.config),
-            severity: getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
+            severity:
+              plugin.severity ?? getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
             ...(t?.metadata || {}),
           },
         }));
@@ -765,7 +766,8 @@ export async function synthesize({
           metadata: {
             pluginId: plugin.id,
             pluginConfig: resolvePluginConfig(plugin.config),
-            severity: getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
+            severity:
+              plugin.severity || getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
             ...(t.metadata || {}),
           },
         }));
