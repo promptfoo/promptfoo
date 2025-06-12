@@ -38,14 +38,14 @@ function safeJsonStringifyTruncated<T>(value: T, prettyPrint: boolean = false): 
   const MAX_ARRAY_LENGTH = 10; // Max elements to include from arrays
   const cache = new Set();
   const space = prettyPrint ? 2 : undefined;
-  
+
   const truncateValue = (val: any): any => {
     if (typeof val === 'string') {
-      return val.length > MAX_STRING_LENGTH 
+      return val.length > MAX_STRING_LENGTH
         ? val.substring(0, MAX_STRING_LENGTH) + '...[truncated]'
         : val;
     }
-    
+
     if (Array.isArray(val)) {
       const truncated = val.slice(0, MAX_ARRAY_LENGTH).map(truncateValue);
       if (val.length > MAX_ARRAY_LENGTH) {
@@ -53,17 +53,17 @@ function safeJsonStringifyTruncated<T>(value: T, prettyPrint: boolean = false): 
       }
       return truncated;
     }
-    
+
     if (typeof val === 'object' && val !== null) {
       if (cache.has(val)) {
         return '[Circular Reference]';
       }
       cache.add(val);
-      
+
       const truncated: any = {};
       let count = 0;
       const MAX_OBJECT_KEYS = 20;
-      
+
       for (const [k, v] of Object.entries(val)) {
         if (count >= MAX_OBJECT_KEYS) {
           truncated['...[truncated]'] = `${Object.keys(val).length - count} more keys`;
@@ -74,10 +74,10 @@ function safeJsonStringifyTruncated<T>(value: T, prettyPrint: boolean = false): 
       }
       return truncated;
     }
-    
+
     return val;
   };
-  
+
   try {
     return JSON.stringify(truncateValue(value), null, space) || '{}';
   } catch {
@@ -90,7 +90,7 @@ export function safeJsonStringify<T>(value: T, prettyPrint: boolean = false): st
   // Prevent circular references
   const cache = new Set();
   const space = prettyPrint ? 2 : undefined;
-  
+
   try {
     return (
       JSON.stringify(
@@ -312,9 +312,8 @@ export function summarizeEvaluateResultForLogging(result: any): any {
     // Truncate large output fields
     if (result.response.output) {
       const output = String(result.response.output);
-      summary.response.output = output.length > 500 
-        ? output.substring(0, 500) + '...[truncated]'
-        : output;
+      summary.response.output =
+        output.length > 500 ? output.substring(0, 500) + '...[truncated]' : output;
     }
 
     // Include metadata keys but not values (which could be large)
