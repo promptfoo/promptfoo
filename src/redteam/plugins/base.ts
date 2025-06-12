@@ -106,7 +106,9 @@ export abstract class RedteamPluginBase {
    * These instructions will be appended to the template to provide
    * domain-specific guidance for generating attacks.
    */
-  protected abstract getTestGenerationInstructions(): Promise<string>;
+  protected getTestGenerationInstructions(): string {
+    return this.config.testGenerationInstructions ?? '';
+  }
 
   /**
    * Abstract method to get assertions for a given prompt.
@@ -121,17 +123,19 @@ export abstract class RedteamPluginBase {
    */
   protected async getCombinedTemplate(): Promise<string> {
     const baseTemplate = await this.getTemplate();
-    const instructions = await this.getTestGenerationInstructions();
+    const instructions = this.getTestGenerationInstructions();
 
     if (!instructions.trim()) {
       return baseTemplate;
     }
 
     return dedent`
-      ${baseTemplate.trim()}
+    ${baseTemplate.trim()}
 
-      Additional Test Generation Instructions:
-      ${instructions.trim()}
+    Make note of these important instructions while generating test cases:
+    \`\`\`
+    ${instructions.trim()}
+    \`\`\`
     `.trim();
   }
 

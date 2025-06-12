@@ -12,6 +12,7 @@ export type PluginConfig = RedteamObjectConfig & {
     reason: string;
   }[];
   severity?: Severity;
+  testGenerationInstructions?: string;
 };
 export type StrategyConfig = RedteamObjectConfig;
 

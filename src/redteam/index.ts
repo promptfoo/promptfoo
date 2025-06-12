@@ -431,6 +431,7 @@ export async function synthesize({
   targetLabels,
   showProgressBar: showProgressBarOverride,
   excludeTargetOutputFromAgenticAttackGeneration,
+  testGenerationInstructions,
 }: SynthesizeOptions): Promise<{
   purpose: string;
   entities: string[];
@@ -706,6 +707,7 @@ export async function synthesize({
         delayMs: delay || 0,
         config: {
           language,
+          testGenerationInstructions,
           ...resolvePluginConfig(plugin.config),
         },
       });

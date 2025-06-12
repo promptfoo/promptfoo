@@ -69,7 +69,7 @@ export class CrossSessionLeakPlugin extends RedteamPluginBase {
 
   async generateTests(n: number, delayMs: number): Promise<TestCase[]> {
     const nunjucks = getNunjucksEngine();
-    const renderedTemplate = nunjucks.renderString(await this.getTemplate(), {
+    const renderedTemplate = nunjucks.renderString(await this.getCombinedTemplate(), {
       purpose: this.purpose,
       n,
     });
