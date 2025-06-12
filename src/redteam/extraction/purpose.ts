@@ -9,6 +9,10 @@ export async function extractSystemPurpose(
   provider: ApiProvider,
   prompts: string[],
 ): Promise<string> {
+  if (prompts.length === 0) {
+    return `An AI system`;
+  }
+
   if (!neverGenerateRemote()) {
     try {
       const result = await fetchRemoteGeneration('purpose' as RedTeamTask, prompts);
