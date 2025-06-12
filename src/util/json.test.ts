@@ -168,7 +168,7 @@ describe('JSON utilities for large data handling', () => {
         latencyMs: 50,
         promptId: 'minimal-prompt-id',
         provider: { id: 'minimal-provider' },
-        prompt: { 
+        prompt: {
           raw: 'test prompt',
           label: 'Test Prompt',
         },
