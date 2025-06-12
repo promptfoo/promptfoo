@@ -333,7 +333,21 @@ describe('Provider Token Tracking', () => {
 
   it('should handle provider token tracking when mocked properly', () => {
     // Setup mock data
-    const providerUsageData = {
+    const providerUsageData: Record<
+      string,
+      {
+        total: number;
+        prompt: number;
+        completion: number;
+        cached: number;
+        numRequests: number;
+        completionDetails: {
+          reasoning: number;
+          acceptedPrediction: number;
+          rejectedPrediction: number;
+        };
+      }
+    > = {
       'openai:gpt-4': {
         total: 1500,
         prompt: 600,
