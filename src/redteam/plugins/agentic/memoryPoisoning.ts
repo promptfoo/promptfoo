@@ -4,7 +4,7 @@ import invariant from '../../../util/invariant';
 import { RedteamGraderBase } from '../base';
 import { REDTEAM_MEMORY_POISONING_PLUGIN_ID } from './constants';
 
-const VarsSchema = z.object({
+export const VarsSchema = z.object({
   purpose: z.string(),
   prompt: z.string(),
   scenario: z.object({
@@ -67,5 +67,3 @@ export class MemoryPoisoningPluginGrader extends RedteamGraderBase {
     `;
   }
 }
-
-export { VarsSchema };
