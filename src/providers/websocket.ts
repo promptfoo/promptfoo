@@ -71,7 +71,7 @@ export class WebSocketProvider implements ApiProvider {
     logger.debug(`Sending WebSocket message to ${this.url}: ${message}`);
 
     return new Promise<ProviderResponse>((resolve) => {
-      const wsOptions: any = {};
+      const wsOptions: ClientOptions = {};
       if (this.config.headers) {
         wsOptions.headers = this.config.headers;
       }
