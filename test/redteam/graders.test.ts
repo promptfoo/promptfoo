@@ -2,9 +2,10 @@ import { getGraderById } from '../../src/redteam/graders';
 import { AsciiSmugglingGrader } from '../../src/redteam/plugins/asciiSmuggling';
 import { BeavertailsGrader } from '../../src/redteam/plugins/beavertails';
 import { HarmfulGrader } from '../../src/redteam/plugins/harmful/graders';
+import { OffTopicPluginGrader } from '../../src/redteam/plugins/offTopic';
 import { PlinyGrader } from '../../src/redteam/plugins/pliny';
 import { ToolDiscoveryGrader } from '../../src/redteam/plugins/toolDiscovery';
-import { ToolDiscoveryMultiTurnGrader } from '../../src/redteam/plugins/toolDiscoveryMultiTurn';
+import { ToxicChatGrader } from '../../src/redteam/plugins/toxicchat';
 import { UnsafeBenchGrader } from '../../src/redteam/plugins/unsafebench';
 
 describe('getGraderById', () => {
@@ -21,14 +22,17 @@ describe('getGraderById', () => {
     const toolDiscoveryGrader = getGraderById('promptfoo:redteam:tool-discovery');
     expect(toolDiscoveryGrader).toBeInstanceOf(ToolDiscoveryGrader);
 
-    const toolDiscoveryMultiTurnGrader = getGraderById(
-      'promptfoo:redteam:tool-discovery:multi-turn',
-    );
-    expect(toolDiscoveryMultiTurnGrader).toBeInstanceOf(ToolDiscoveryMultiTurnGrader);
     const unsafebenchGrader = getGraderById('promptfoo:redteam:unsafebench');
     expect(unsafebenchGrader).toBeInstanceOf(UnsafeBenchGrader);
+
     const plinyGrader = getGraderById('promptfoo:redteam:pliny');
     expect(plinyGrader).toBeInstanceOf(PlinyGrader);
+
+    const offTopicGrader = getGraderById('promptfoo:redteam:off-topic');
+    expect(offTopicGrader).toBeInstanceOf(OffTopicPluginGrader);
+
+    const toxicChatGrader = getGraderById('promptfoo:redteam:toxic-chat');
+    expect(toxicChatGrader).toBeInstanceOf(ToxicChatGrader);
   });
 
   it('should return harmful grader for IDs starting with promptfoo:redteam:harmful', () => {

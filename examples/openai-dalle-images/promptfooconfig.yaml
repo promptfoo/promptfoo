@@ -1,4 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Comparing DALL-E 2 and 3 image generation capabilities
+
 prompts:
   - 'In the style of {{artist}}: {{subject}}'
 

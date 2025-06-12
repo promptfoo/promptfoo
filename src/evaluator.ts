@@ -5,14 +5,14 @@ import cliProgress from 'cli-progress';
 import { randomUUID } from 'crypto';
 import { globSync } from 'glob';
 import * as path from 'path';
-import readline from 'readline';
 import type winston from 'winston';
 import { MODEL_GRADED_ASSERTION_TYPES, runAssertions, runCompareAssertion } from './assertions';
 import { fetchWithCache, getCache } from './cache';
 import cliState from './cliState';
+import { FILE_METADATA_KEY } from './constants';
 import { updateSignalFile } from './database/signal';
-import { getEnvBool, getEnvInt, isCI, getEvalTimeoutMs } from './envars';
-import { renderPrompt, runExtensionHook } from './evaluatorHelpers';
+import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
+import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger from './logger';
 import type Eval from './models/eval';
 import { generateIdFromPrompt } from './models/prompt';
@@ -38,7 +38,8 @@ import { isApiProvider } from './types/providers';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
-import { safeJsonStringify } from './util/json';
+import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
+import { promptYesNo } from './util/readline';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
 import { transform, type TransformContext, TransformInputType } from './util/transform';
@@ -161,6 +162,10 @@ export async function runEval({
 
   // Set up the special _conversation variable
   const vars = test.vars || {};
+
+  // Collect file metadata for the test case before rendering the prompt.
+  const fileMetadata = collectFileMetadata(test.vars || vars);
+
   const conversationKey = `${provider.label || provider.id()}:${prompt.id}${test.metadata?.conversationId ? `:${test.metadata.conversationId}` : ''}`;
   const usesConversation = prompt.raw.includes('_conversation');
   if (
@@ -300,6 +305,7 @@ export async function runEval({
       metadata: {
         ...test.metadata,
         ...response.metadata,
+        [FILE_METADATA_KEY]: fileMetadata,
       },
       promptIdx,
       testIdx,
@@ -458,7 +464,7 @@ export function generateVarCombinations(
     if (typeof vars[key] === 'string' && vars[key].startsWith('file://')) {
       const filePath = vars[key].slice('file://'.length);
       const resolvedPath = path.resolve(cliState.basePath || '', filePath);
-      const filePaths = globSync(resolvedPath.replace(/\\/g, '/'));
+      const filePaths = globSync(resolvedPath.replace(/\\/g, '/')) || [];
       values = filePaths.map((path: string) => `file://${path}`);
       if (values.length === 0) {
         throw new Error(`No files found for variable ${key} at path ${resolvedPath}`);
@@ -519,7 +525,24 @@ class Evaluator {
 
   async evaluate(): Promise<Eval> {
     const { testSuite, options } = this;
+    const startTime = Date.now();
+    const maxEvalTimeMs = options.maxEvalTimeMs ?? getMaxEvalTimeMs();
+    let evalTimedOut = false;
+    let globalTimeout: NodeJS.Timeout | undefined;
+    let globalAbortController: AbortController | undefined;
+    const processedIndices = new Set<number>();
 
+    if (maxEvalTimeMs > 0) {
+      globalAbortController = new AbortController();
+      options.abortSignal = options.abortSignal
+        ? AbortSignal.any([options.abortSignal, globalAbortController.signal])
+        : globalAbortController.signal;
+      globalTimeout = setTimeout(() => {
+        evalTimedOut = true;
+        globalAbortController?.abort();
+      }, maxEvalTimeMs);
+    }
+    const vars = new Set<string>();
     const checkAbort = () => {
       if (options.abortSignal?.aborted) {
         throw new Error('Operation cancelled');
@@ -551,25 +574,13 @@ class Evaluator {
         logger.info('--------------------------------------------------------');
 
         // Ask the user if they want to continue
-        await new Promise((resolve) => {
-          const rl = readline.createInterface({
-            input: process.stdin,
-            output: process.stdout,
-          });
-          rl.question(
-            `${chalk.blue('Do you want to test this prompt?')} (y/N): `,
-            async (answer) => {
-              rl.close();
-              if (answer.toLowerCase().startsWith('y')) {
-                testSuite.prompts.push({ raw: prompt, label: prompt });
-                numAdded++;
-              } else {
-                logger.info('Skipping this prompt.');
-              }
-              resolve(true);
-            },
-          );
-        });
+        const shouldTest = await promptYesNo('Do you want to test this prompt?', false);
+        if (shouldTest) {
+          testSuite.prompts.push({ raw: prompt, label: prompt });
+          numAdded++;
+        } else {
+          logger.info('Skipping this prompt.');
+        }
       }
 
       if (numAdded < 1) {
@@ -642,7 +653,7 @@ class Evaluator {
 
     // Build scenarios and add to tests
     if (testSuite.scenarios && testSuite.scenarios.length > 0) {
-      telemetry.record('feature_used', {
+      telemetry.recordAndSendOnce('feature_used', {
         feature: 'scenarios',
       });
       for (const scenario of testSuite.scenarios) {
@@ -835,7 +846,11 @@ class Evaluator {
       });
 
       const rows = await runEval(evalStep);
+
       for (const row of rows) {
+        for (const varName of Object.keys(row.vars)) {
+          vars.add(varName);
+        }
         // Print token usage for model-graded assertions and add to stats
         if (row.gradingResult?.tokensUsed && row.testCase?.assert) {
           for (const assertion of row.testCase.assert) {
@@ -901,7 +916,8 @@ class Evaluator {
         try {
           await this.evalRecord.addResult(row);
         } catch (error) {
-          logger.error(`Error saving result: ${error} ${safeJsonStringify(row)}`);
+          const resultSummary = summarizeEvaluateResultForLogging(row);
+          logger.error(`Error saving result: ${error} ${safeJsonStringify(resultSummary)}`);
         }
 
         for (const writer of this.fileWriters) {
@@ -1078,8 +1094,7 @@ class Evaluator {
         this.stats.errors++;
 
         // Update prompt metrics
-        const { promptIdx } = timeoutResult;
-        const metrics = prompts[promptIdx].metrics;
+        const { metrics } = prompts[evalStep.promptIdx];
         if (metrics) {
           metrics.testErrorCount += 1;
           metrics.totalLatencyMs += timeoutMs;
@@ -1180,6 +1195,7 @@ class Evaluator {
             ? 'Group {groupId} [{bar}] {percentage}% | {value}/{total} | {activeThreads}/{maxThreads} threads | {provider} "{prompt}" {vars}'
             : 'Group {groupId} [{bar}] {percentage}% | {value}/{total} | {provider} "{prompt}" {vars}',
           hideCursor: true,
+          gracefulExit: true,
         },
         cliProgress.Presets.shades_classic,
       );
@@ -1228,33 +1244,46 @@ class Evaluator {
       }
     }
 
-    if (serialRunEvalOptions.length > 0) {
-      // Run serial evaluations first
-      logger.info(`Running ${serialRunEvalOptions.length} serial evaluations...`);
-      for (const evalStep of serialRunEvalOptions) {
-        if (isWebUI) {
-          const provider = evalStep.provider.label || evalStep.provider.id();
-          const vars = Object.entries(evalStep.test.vars || {})
-            .map(([k, v]) => `${k}=${v}`)
-            .join(' ')
-            .slice(0, 50)
-            .replace(/\n/g, ' ');
-          logger.info(
-            `[${numComplete}/${serialRunEvalOptions.length}] Running ${provider} with vars: ${vars}`,
-          );
+    try {
+      if (serialRunEvalOptions.length > 0) {
+        // Run serial evaluations first
+        logger.info(`Running ${serialRunEvalOptions.length} serial evaluations...`);
+        for (const evalStep of serialRunEvalOptions) {
+          if (isWebUI) {
+            const provider = evalStep.provider.label || evalStep.provider.id();
+            const vars = Object.entries(evalStep.test.vars || {})
+              .map(([k, v]) => `${k}=${v}`)
+              .join(' ')
+              .slice(0, 50)
+              .replace(/\n/g, ' ');
+            logger.info(
+              `[${numComplete}/${serialRunEvalOptions.length}] Running ${provider} with vars: ${vars}`,
+            );
+          }
+          const idx = runEvalOptions.indexOf(evalStep);
+          await processEvalStepWithTimeout(evalStep, idx);
+          processedIndices.add(idx);
         }
-        await processEvalStepWithTimeout(evalStep, serialRunEvalOptions.indexOf(evalStep));
+      }
+
+      // Then run concurrent evaluations
+      logger.info(
+        `Running ${concurrentRunEvalOptions.length} concurrent evaluations with up to ${concurrency} threads...`,
+      );
+      await async.forEachOfLimit(concurrentRunEvalOptions, concurrency, async (evalStep) => {
+        checkAbort();
+        const idx = runEvalOptions.indexOf(evalStep);
+        await processEvalStepWithTimeout(evalStep, idx);
+        processedIndices.add(idx);
+      });
+    } catch (err) {
+      if (options.abortSignal?.aborted) {
+        evalTimedOut = evalTimedOut || maxEvalTimeMs > 0;
+        logger.warn(`Evaluation aborted: ${String(err)}`);
+      } else {
+        throw err;
       }
     }
-
-    // Then run concurrent evaluations
-    logger.info(
-      `Running ${concurrentRunEvalOptions.length} concurrent evaluations with up to ${concurrency} threads...`,
-    );
-    await async.forEachOfLimit(concurrentRunEvalOptions, concurrency, async (evalStep, index) => {
-      checkAbort();
-      await processEvalStepWithTimeout(evalStep, index);
-    });
 
     // Do we have to run comparisons between row outputs?
     const compareRowsCount = rowsWithSelectBestAssertion.size;
@@ -1370,6 +1399,51 @@ class Evaluator {
     if (progressBar) {
       progressBar.stop();
     }
+
+    if (globalTimeout) {
+      clearTimeout(globalTimeout);
+    }
+
+    if (evalTimedOut) {
+      for (let i = 0; i < runEvalOptions.length; i++) {
+        if (!processedIndices.has(i)) {
+          const evalStep = runEvalOptions[i];
+          const timeoutResult = {
+            provider: {
+              id: evalStep.provider.id(),
+              label: evalStep.provider.label,
+              config: evalStep.provider.config,
+            },
+            prompt: {
+              raw: evalStep.prompt.raw,
+              label: evalStep.prompt.label,
+              config: evalStep.prompt.config,
+            },
+            vars: evalStep.test.vars || {},
+            error: `Evaluation exceeded max duration of ${maxEvalTimeMs}ms`,
+            success: false,
+            failureReason: ResultFailureReason.ERROR,
+            score: 0,
+            namedScores: {},
+            latencyMs: Date.now() - startTime,
+            promptIdx: evalStep.promptIdx,
+            testIdx: evalStep.testIdx,
+            testCase: evalStep.test,
+            promptId: evalStep.prompt.id || '',
+          } as EvaluateResult;
+
+          await this.evalRecord.addResult(timeoutResult);
+          this.stats.errors++;
+          const { metrics } = prompts[evalStep.promptIdx];
+          if (metrics) {
+            metrics.testErrorCount += 1;
+            metrics.totalLatencyMs += timeoutResult.latencyMs;
+          }
+        }
+      }
+    }
+
+    this.evalRecord.setVars(Array.from(vars));
 
     await runExtensionHook(testSuite.extensions, 'afterAll', {
       prompts: this.evalRecord.prompts,

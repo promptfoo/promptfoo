@@ -1,5 +1,6 @@
 import React from 'react';
 import Link from '@docusaurus/Link';
+import clsx from 'clsx';
 import styles from './styles.module.css';
 
 export default function HomepageFeatures() {
@@ -30,7 +31,7 @@ export default function HomepageFeatures() {
             millions of users.
           </p>
           <p>
-            Embraced by an open-source community of <strong>over 80,000 developers</strong>{' '}
+            Embraced by an open-source community of <strong>over 100,000 developers</strong>{' '}
             worldwide.
           </p>
         </>
@@ -97,7 +98,7 @@ export default function HomepageFeatures() {
             >
               <div className={styles.featureContent}>
                 <h3>{feature.title}</h3>
-                <p>{feature.description}</p>
+                <div>{feature.description}</div>
                 <Link to={feature.link} className="button button--secondary">
                   {feature.cta}
                 </Link>

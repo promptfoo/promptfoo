@@ -36,7 +36,7 @@ description: 'DeepSeek Sensitive Prompts'
 providers:
   - 'openrouter:deepseek/deepseek-r1'
 
-tests: tests.csv
+tests: file://tests.csv
 ```
 
 We'll encounter refusals very quickly, as the first topic in the dataset is Taiwanese independence.
@@ -72,7 +72,7 @@ providers:
       passthrough:
         include_reasoning: true
 
-tests: tests.csv
+tests: file://tests.csv
 ```
 
 Running it via Promptfoo eval shows that **about 85% of this dataset is censored by DeepSeek**:

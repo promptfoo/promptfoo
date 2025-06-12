@@ -2,11 +2,9 @@ import {
   createColumnHelper,
   flexRender,
   getCoreRowModel,
-  getPaginationRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import * as React from 'react';
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Link } from 'react-router-dom';
 import { useToast } from '@app/hooks/useToast';
@@ -15,7 +13,6 @@ import {
   type EvaluateTableOutput,
   type FilterMode,
   type EvaluateTable,
-  ResultFailureReason,
 } from '@app/pages/eval/components/types';
 import { callApi } from '@app/utils/api';
 import CloseIcon from '@mui/icons-material/Close';
@@ -30,6 +27,7 @@ import Select from '@mui/material/Select';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import { FILE_METADATA_KEY } from '@promptfoo/constants';
 import invariant from '@promptfoo/util/invariant';
 import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
 import yaml from 'js-yaml';
@@ -41,7 +39,7 @@ import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
 import type { TruncatedTextProps } from './TruncatedText';
 import TruncatedText from './TruncatedText';
-import { useStore as useMainStore, useResultsViewSettingsStore } from './store';
+import { useTableStore, useResultsViewSettingsStore } from './store';
 import './ResultsTable.css';
 
 function formatRowOutput(output: EvaluateTableOutput | string) {
@@ -123,6 +121,8 @@ interface ResultsTableProps {
   onFailureFilterToggle: (columnId: string, checked: boolean) => void;
   onSearchTextChange: (text: string) => void;
   setFilterMode: (mode: FilterMode) => void;
+  selectedMetric?: string | null;
+  onMetricFilter?: (metric: string | null) => void;
 }
 
 interface ExtendedEvaluateTableOutput extends EvaluateTableOutput {
@@ -160,36 +160,6 @@ function useScrollHandler() {
   return { isCollapsed };
 }
 
-function stringifyMetadataValue(value: any): string {
-  try {
-    if (value === null || value === undefined) {
-      return '';
-    }
-    return typeof value === 'object' ? JSON.stringify(value) : String(value);
-  } catch (err) {
-    console.error('Error stringifying metadata value:', err);
-    return '';
-  }
-}
-
-function generateMetadataSearchString(metadata: Record<string, any> | undefined): string {
-  if (!metadata) {
-    return '';
-  }
-
-  return Object.entries(metadata)
-    .map(([key, value]) => {
-      try {
-        const valueStr = stringifyMetadataValue(value);
-        return `metadata=${key}:${valueStr}`;
-      } catch (err) {
-        console.error('Error processing metadata entry:', err);
-        return '';
-      }
-    })
-    .join(' ');
-}
-
 function ResultsTable({
   maxTextLength,
   columnVisibility,
@@ -202,16 +172,37 @@ function ResultsTable({
   onFailureFilterToggle,
   onSearchTextChange,
   setFilterMode,
+  selectedMetric,
+  onMetricFilter,
 }: ResultsTableProps) {
-  const { evalId, table, setTable, config, version } = useMainStore();
-  const { inComparisonMode } = useResultsViewSettingsStore();
+  const {
+    evalId,
+    table,
+    setTable,
+    config,
+    version,
+    filteredResultsCount,
+    fetchEvalData,
+    isFetching,
+  } = useTableStore();
+  const { inComparisonMode, comparisonEvalIds } = useResultsViewSettingsStore();
+
   const { showToast } = useToast();
 
   invariant(table, 'Table should be defined');
   const { head, body } = table;
 
+  const visiblePromptCount = React.useMemo(
+    () => head.prompts.filter((_, idx) => columnVisibility[`Prompt ${idx + 1}`] !== false).length,
+    [head.prompts, columnVisibility],
+  );
+
   const [lightboxOpen, setLightboxOpen] = React.useState(false);
   const [lightboxImage, setLightboxImage] = React.useState<string | null>(null);
+  const [pagination, setPagination] = React.useState<{ pageIndex: number; pageSize: number }>({
+    pageIndex: 0,
+    pageSize: 50,
+  });
 
   const toggleLightbox = (url?: string) => {
     setLightboxImage(url || null);
@@ -307,8 +298,6 @@ function ResultsTable({
     [body, head, setTable, evalId, inComparisonMode, showToast],
   );
 
-  const columnVisibilityIsSet = Object.keys(columnVisibility).length > 0;
-
   const [localDebouncedSearchText] = useDebounce(searchText, 200);
   const debouncedSearchText = externalDebouncedSearchText || localDebouncedSearchText;
   const [isSearching, setIsSearching] = useState(false);
@@ -317,141 +306,99 @@ function ResultsTable({
     setIsSearching(searchText !== debouncedSearchText && searchText !== '');
   }, [searchText, debouncedSearchText]);
 
-  const searchRegex = React.useMemo(() => {
-    if (!debouncedSearchText) {
-      return null;
-    }
-    try {
-      return new RegExp(debouncedSearchText, 'i');
-    } catch (err) {
-      console.error('Invalid regular expression:', (err as Error).message);
-      return null;
-    }
-  }, [debouncedSearchText]);
+  const tableBody = React.useMemo(() => {
+    return body.map((row, rowIndex) => ({
+      ...row,
+      outputs: row.outputs.map((output, promptIndex) => ({
+        ...output,
+        originalRowIndex: rowIndex,
+        originalPromptIndex: promptIndex,
+      })),
+    })) as ExtendedEvaluateTableRow[];
+  }, [body]);
 
-  const filteredBody = React.useMemo(() => {
-    try {
-      return body
-        .map((row, rowIndex) => ({
-          ...row,
-          outputs: row.outputs.map((output, promptIndex) => ({
-            ...output,
-            originalRowIndex: rowIndex,
-            originalPromptIndex: promptIndex,
-          })),
-        }))
-        .filter((row) => {
-          let outputsPassFilter = true;
-          if (filterMode === 'failures') {
-            outputsPassFilter = row.outputs.some((output, idx) => {
-              const columnId = `Prompt ${idx + 1}`;
-              return (
-                failureFilter[columnId] &&
-                !output.pass &&
-                (!columnVisibilityIsSet || columnVisibility[columnId]) &&
-                output.failureReason !== ResultFailureReason.ERROR
-              );
-            });
-          } else if (filterMode === 'errors') {
-            outputsPassFilter = row.outputs.some(
-              (output) => output.failureReason === ResultFailureReason.ERROR,
-            );
-          } else if (filterMode === 'different') {
-            outputsPassFilter = !row.outputs.every((output) => output.text === row.outputs[0].text);
-          } else if (filterMode === 'highlights') {
-            outputsPassFilter = row.outputs.some((output) =>
-              output.gradingResult?.comment?.startsWith('!highlight'),
-            );
-          }
-
-          if (!outputsPassFilter) {
-            return false;
-          }
-
-          return debouncedSearchText && searchRegex
-            ? row.outputs.some((output) => {
-                const vars = row.vars.map((v) => `var=${v}`).join(' ');
-                const stringifiedOutput = `${output.text} ${Object.keys(output.namedScores || {})
-                  .map((k) => {
-                    const namedScores = output.namedScores || {};
-                    const score = namedScores[k as keyof typeof namedScores];
-                    return `metric=${k}:${score}`;
-                  })
-                  .join(' ')} ${
-                  output.gradingResult?.reason || ''
-                } ${output.gradingResult?.comment || ''}`;
-
-                const outputMetadataString = generateMetadataSearchString(output.metadata);
-                const testCaseMetadataString = generateMetadataSearchString(
-                  output.testCase?.metadata,
-                );
-                const searchString = `${vars} ${stringifiedOutput} ${outputMetadataString} ${testCaseMetadataString}`;
-                return searchRegex.test(searchString);
-              })
-            : true;
-        }) as ExtendedEvaluateTableRow[];
-    } catch (err) {
-      console.error('Invalid regular expression:', (err as Error).message);
-      return body as ExtendedEvaluateTableRow[];
-    }
-  }, [
-    body,
-    failureFilter,
-    filterMode,
-    debouncedSearchText,
-    columnVisibility,
-    columnVisibilityIsSet,
-    searchRegex,
-  ]);
-
-  const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: 50 });
   const parseQueryParams = (queryString: string) => {
     return Object.fromEntries(new URLSearchParams(queryString));
   };
 
   React.useEffect(() => {
-    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
-  }, [failureFilter, filterMode, debouncedSearchText]);
+    setPagination({ ...pagination, pageIndex: 0 });
+  }, [failureFilter, filterMode, debouncedSearchText, selectedMetric]);
+
+  // Add a ref to track the current evalId to compare with new values
+  const previousEvalIdRef = useRef<string | null>(null);
+
+  // Reset pagination when evalId changes
+  React.useEffect(() => {
+    if (evalId !== previousEvalIdRef.current) {
+      setPagination({ pageIndex: 0, pageSize: pagination.pageSize });
+      previousEvalIdRef.current = evalId;
+
+      // Don't fetch here - the parent component (Eval.tsx) is responsible
+      // for the initial data load when changing evalId
+    }
+  }, [evalId]);
+
+  // Only fetch data when pagination or filters change, but not when evalId changes
+  React.useEffect(() => {
+    if (!evalId) {
+      return;
+    }
+
+    // Skip fetching if this is the first render for a new evalId
+    // Data should already be loaded by Eval.tsx
+    if (pagination.pageIndex === 0 && evalId !== previousEvalIdRef.current) {
+      previousEvalIdRef.current = evalId;
+      return;
+    }
+
+    console.log('Fetching data for filtering/pagination', evalId);
+
+    fetchEvalData(evalId, {
+      pageIndex: pagination.pageIndex,
+      pageSize: pagination.pageSize,
+      filterMode,
+      searchText: debouncedSearchText,
+      selectedMetric,
+      skipSettingEvalId: true, // Don't change evalId when paginating or filtering
+    });
+  }, [
+    // evalId is NOT in the dependency array
+    pagination.pageIndex,
+    pagination.pageSize,
+    filterMode,
+    comparisonEvalIds,
+    debouncedSearchText,
+    selectedMetric,
+    fetchEvalData,
+  ]);
 
   // TODO(ian): Switch this to use prompt.metrics field once most clients have updated.
   const numGoodTests = React.useMemo(
+    () => head.prompts.map((prompt) => prompt.metrics?.testPassCount || 0),
+    [head.prompts, body],
+  );
+
+  const numTests = React.useMemo(
     () =>
-      head.prompts.map((_, idx) =>
-        body.reduce((acc, row) => acc + (row.outputs[idx]?.pass ? 1 : 0), 0),
+      head.prompts.map(
+        (prompt) => (prompt.metrics?.testPassCount ?? 0) + (prompt.metrics?.testFailCount ?? 0),
       ),
     [head.prompts, body],
   );
 
   const numAsserts = React.useMemo(
     () =>
-      head.prompts.map((_, idx) =>
-        body.reduce(
-          (acc, row) => acc + (row.outputs[idx]?.gradingResult?.componentResults?.length || 0),
-          0,
-        ),
+      head.prompts.map(
+        (prompt) => (prompt.metrics?.assertFailCount ?? 0) + (prompt.metrics?.assertPassCount ?? 0),
       ),
     [head.prompts, body],
   );
 
   const numGoodAsserts = React.useMemo(
-    () =>
-      head.prompts.map((_, idx) =>
-        body.reduce((acc, row) => {
-          const componentResults = row.outputs[idx]?.gradingResult?.componentResults;
-          return acc + (componentResults ? componentResults.filter((r) => r?.pass).length : 0);
-        }, 0),
-      ),
+    () => head.prompts.map((prompt) => prompt.metrics?.assertPassCount || 0),
     [head.prompts, body],
   );
-
-  const highestPassingIndex = React.useMemo(
-    () =>
-      numGoodTests.reduce((maxIndex, currentPassCount, currentIndex, array) => {
-        return currentPassCount > array[maxIndex] ? currentIndex : maxIndex;
-      }, 0),
-    [numGoodTests],
-  );
-  const highestPassingCount = numGoodTests[highestPassingIndex];
 
   const columnHelper = React.useMemo(() => createColumnHelper<EvaluateTableRow>(), []);
 
@@ -470,6 +417,66 @@ function ResultsTable({
               ),
               cell: (info: CellContext<EvaluateTableRow, string>) => {
                 let value: string | object = info.getValue();
+
+                // Get the first output that has metadata for checking file metadata
+                const row = info.row.original;
+                const output = row.outputs && row.outputs.length > 0 ? row.outputs[0] : null;
+
+                const fileMetadata = output?.metadata?.[FILE_METADATA_KEY] as
+                  | Record<string, { path: string; type: string; format?: string }>
+                  | undefined;
+                const isMediaFile = fileMetadata && fileMetadata[varName];
+
+                if (isMediaFile) {
+                  // Handle various media types
+                  const mediaMetadata = fileMetadata[varName];
+                  const mediaType = mediaMetadata.type;
+                  const format = mediaMetadata.format || '';
+                  const mediaDataUrl = value.startsWith('data:')
+                    ? value
+                    : `data:${mediaType}/${format};base64,${value}`;
+
+                  let mediaElement = null;
+
+                  if (mediaType === 'audio') {
+                    mediaElement = (
+                      <audio controls style={{ maxWidth: '100%' }}>
+                        <source src={mediaDataUrl} type={`audio/${format}`} />
+                        Your browser does not support the audio element.
+                      </audio>
+                    );
+                  } else if (mediaType === 'video') {
+                    mediaElement = (
+                      <video controls style={{ maxWidth: '100%', maxHeight: '200px' }}>
+                        <source src={mediaDataUrl} type={`video/${format}`} />
+                        Your browser does not support the video element.
+                      </video>
+                    );
+                  } else if (mediaType === 'image') {
+                    mediaElement = (
+                      <img
+                        src={mediaDataUrl}
+                        alt="Input image"
+                        style={{ maxWidth: '100%', maxHeight: '200px' }}
+                        onClick={() => toggleLightbox?.(mediaDataUrl)}
+                      />
+                    );
+                  }
+
+                  if (mediaElement) {
+                    return (
+                      <div className="cell">
+                        <div style={{ marginBottom: '8px' }}>{mediaElement}</div>
+                        <Tooltip title="Original file path">
+                          <span style={{ fontSize: '0.8em', color: '#666' }}>
+                            {mediaMetadata.path} ({mediaType}/{format})
+                          </span>
+                        </Tooltip>
+                      </div>
+                    );
+                  }
+                }
+
                 if (typeof value === 'object') {
                   value = JSON.stringify(value, null, 2);
                   if (renderMarkdown) {
@@ -503,16 +510,16 @@ function ResultsTable({
 
   const getOutput = React.useCallback(
     (rowIndex: number, promptIndex: number) => {
-      return filteredBody[rowIndex].outputs[promptIndex];
+      return tableBody[rowIndex].outputs[promptIndex];
     },
-    [filteredBody],
+    [tableBody],
   );
 
   const getFirstOutput = React.useCallback(
     (rowIndex: number) => {
-      return filteredBody[rowIndex].outputs[0];
+      return tableBody[rowIndex].outputs[0];
     },
-    [filteredBody],
+    [tableBody],
   );
 
   const metricTotals = React.useMemo(() => {
@@ -534,6 +541,15 @@ function ResultsTable({
     return totals;
   }, [table]);
 
+  const handleMetricFilter = React.useCallback(
+    (metric: string | null) => {
+      if (onMetricFilter) {
+        onMetricFilter(metric);
+      }
+    },
+    [onMetricFilter],
+  );
+
   const promptColumns = React.useMemo(() => {
     return [
       columnHelper.group({
@@ -544,8 +560,8 @@ function ResultsTable({
             id: `Prompt ${idx + 1}`,
             header: () => {
               const pct =
-                numGoodTests[idx] && body.length
-                  ? ((numGoodTests[idx] / body.length) * 100.0).toFixed(2)
+                numGoodTests[idx] && numTests[idx]
+                  ? ((numGoodTests[idx] / numTests[idx]) * 100.0).toFixed(2)
                   : '0.00';
               const columnId = `Prompt ${idx + 1}`;
               const isChecked = failureFilter[columnId] || false;
@@ -563,8 +579,8 @@ function ResultsTable({
                       <Tooltip
                         title={`Average: $${Intl.NumberFormat(undefined, {
                           minimumFractionDigits: 1,
-                          maximumFractionDigits: prompt.metrics.cost / body.length >= 1 ? 2 : 4,
-                        }).format(prompt.metrics.cost / body.length)} per test`}
+                          maximumFractionDigits: prompt.metrics.cost / numTests[idx] >= 1 ? 2 : 4,
+                        }).format(prompt.metrics.cost / numTests[idx])} per test`}
                       >
                         <span style={{ cursor: 'help' }}>
                           $
@@ -590,7 +606,7 @@ function ResultsTable({
                       <strong>Avg Tokens:</strong>{' '}
                       {Intl.NumberFormat(undefined, {
                         maximumFractionDigits: 0,
-                      }).format(prompt.metrics.tokenUsage.total / body.length)}
+                      }).format(prompt.metrics.tokenUsage.total / numTests[idx])}
                     </div>
                   ) : null}
                   {prompt.metrics?.totalLatencyMs ? (
@@ -598,7 +614,7 @@ function ResultsTable({
                       <strong>Avg Latency:</strong>{' '}
                       {Intl.NumberFormat(undefined, {
                         maximumFractionDigits: 0,
-                      }).format(prompt.metrics.totalLatencyMs / body.length)}{' '}
+                      }).format(prompt.metrics.totalLatencyMs / numTests[idx])}{' '}
                       ms
                     </div>
                   ) : null}
@@ -656,12 +672,12 @@ function ResultsTable({
                     <div className="summary">
                       <div
                         className={`highlight ${
-                          numGoodTests[idx] && body.length
-                            ? `success-${Math.round(((numGoodTests[idx] / body.length) * 100) / 20) * 20}`
+                          numGoodTests[idx] && numTests[idx]
+                            ? `success-${Math.round(((numGoodTests[idx] / numTests[idx]) * 100) / 20) * 20}`
                             : 'success-0'
                         }`}
                       >
-                        <strong>{pct}% passing</strong> ({numGoodTests[idx]}/{body.length} cases)
+                        <strong>{pct}% passing</strong> ({numGoodTests[idx]}/{numTests[idx]} cases)
                       </div>
                     </div>
                     {prompt.metrics?.testErrorCount && prompt.metrics.testErrorCount > 0 ? (
@@ -678,6 +694,7 @@ function ResultsTable({
                         counts={prompt.metrics.namedScoresCount}
                         metricTotals={metricTotals}
                         onSearchTextChange={onSearchTextChange}
+                        onMetricFilter={handleMetricFilter}
                       />
                     ) : null}
                     {/* TODO(ian): Remove backwards compatibility for prompt.provider added 12/26/23 */}
@@ -726,7 +743,7 @@ function ResultsTable({
                     output.id,
                   )}
                   firstOutput={getFirstOutput(info.row.index)}
-                  showDiffs={filterMode === 'different'}
+                  showDiffs={filterMode === 'different' && visiblePromptCount > 1}
                   searchText={debouncedSearchText}
                   showStats={showStats}
                 />
@@ -748,16 +765,16 @@ function ResultsTable({
     getOutput,
     handleRating,
     head.prompts,
-    highestPassingCount,
     maxTextLength,
     metricTotals,
     numAsserts,
     numGoodAsserts,
     numGoodTests,
     onFailureFilterToggle,
-    onSearchTextChange,
     debouncedSearchText,
     showStats,
+    selectedMetric,
+    handleMetricFilter,
   ]);
 
   const descriptionColumn = React.useMemo(() => {
@@ -787,12 +804,14 @@ function ResultsTable({
     return cols;
   }, [descriptionColumn, variableColumns, promptColumns]);
 
+  const pageCount = Math.ceil(filteredResultsCount / pagination.pageSize);
   const reactTable = useReactTable({
-    data: filteredBody,
+    data: tableBody,
     columns,
     columnResizeMode: 'onChange',
     getCoreRowModel: getCoreRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
+    manualPagination: true,
+    pageCount,
     state: {
       columnVisibility,
       pagination,
@@ -816,17 +835,20 @@ function ResultsTable({
 
     if (rowId) {
       const parsedRowId = Number(rowId);
-      const rowIndex = Math.max(0, Math.min(parsedRowId - 1, filteredBody.length - 1));
+      const rowIndex = Math.max(0, Math.min(parsedRowId - 1, tableBody.length - 1));
 
       let hasScrolled = false;
 
       const rowPageIndex = Math.floor(rowIndex / pagination.pageSize);
 
-      const maxPageIndex = reactTable.getPageCount() - 1;
+      const maxPageIndex = pageCount - 1;
       const safeRowPageIndex = Math.min(rowPageIndex, maxPageIndex);
 
       if (pagination.pageIndex !== safeRowPageIndex) {
-        setPagination((prev) => ({ ...prev, pageIndex: safeRowPageIndex }));
+        setPagination((prev) => ({
+          ...prev,
+          pageIndex: safeRowPageIndex,
+        }));
       }
 
       const scrollToRow = () => {
@@ -883,7 +905,7 @@ function ResultsTable({
         clearTimeout(timeoutId);
       };
     }
-  }, [pagination.pageIndex, pagination.pageSize, reactTable, filteredBody.length]);
+  }, [pagination.pageIndex, pagination.pageSize, reactTable, tableBody.length]);
 
   return (
     <div>
@@ -907,6 +929,24 @@ function ResultsTable({
           </Typography>
         </Box>
       )}
+
+      {filteredResultsCount === 0 &&
+        !isFetching &&
+        (debouncedSearchText || filterMode !== 'all' || selectedMetric) && (
+          <Box
+            sx={{
+              padding: '20px',
+              textAlign: 'center',
+              backgroundColor: 'rgba(0, 0, 0, 0.03)',
+              borderRadius: '4px',
+              marginTop: '20px',
+              marginBottom: '20px',
+            }}
+          >
+            <Typography variant="body1">No results found for the current filters.</Typography>
+          </Box>
+        )}
+
       <table
         className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
         style={{
@@ -1021,11 +1061,18 @@ function ResultsTable({
           })}
         </tbody>
       </table>
-      {reactTable.getPageCount() > 1 && (
-        <Box className="pagination" mx={1} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+      {pageCount > 1 && (
+        <Box
+          className="pagination"
+          mx={1}
+          sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}
+        >
           <Button
             onClick={() => {
-              setPagination((prev) => ({ ...prev, pageIndex: Math.max(prev.pageIndex - 1, 0) }));
+              setPagination((prev) => ({
+                ...prev,
+                pageIndex: Math.max(prev.pageIndex - 1, 0),
+              }));
               clearRowIdFromUrl();
               window.scrollTo(0, 0);
             }}
@@ -1044,7 +1091,7 @@ function ResultsTable({
                 const page = e.target.value ? Number(e.target.value) - 1 : 0;
                 setPagination((prev) => ({
                   ...prev,
-                  pageIndex: Math.min(Math.max(page, 0), reactTable.getPageCount() - 1),
+                  pageIndex: Math.min(Math.max(page, 0), pageCount - 1),
                 }));
                 clearRowIdFromUrl();
               }}
@@ -1053,18 +1100,19 @@ function ResultsTable({
               }}
               variant="outlined"
             />
-            <span>of {reactTable.getPageCount()}</span>
+            <span>of {pageCount}</span>
           </Typography>
+
           <Button
             onClick={() => {
               setPagination((prev) => ({
                 ...prev,
-                pageIndex: Math.min(prev.pageIndex + 1, reactTable.getPageCount() - 1),
+                pageIndex: Math.min(prev.pageIndex + 1, pageCount - 1),
               }));
               clearRowIdFromUrl();
               window.scrollTo(0, 0);
             }}
-            disabled={reactTable.getState().pagination.pageIndex + 1 >= reactTable.getPageCount()}
+            disabled={reactTable.getState().pagination.pageIndex + 1 >= pageCount}
             variant="contained"
           >
             Next
@@ -1073,7 +1121,10 @@ function ResultsTable({
             <Select
               value={pagination.pageSize}
               onChange={(e) => {
-                setPagination({ pageIndex: 0, pageSize: Number(e.target.value) });
+                setPagination((prev) => ({
+                  ...prev,
+                  pageSize: Number(e.target.value),
+                }));
                 window.scrollTo(0, 0);
               }}
               displayEmpty

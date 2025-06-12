@@ -1,3 +1,4 @@
+import { AegisGrader } from './plugins/aegis';
 import { REDTEAM_MEMORY_POISONING_PLUGIN_ID } from './plugins/agentic/constants';
 import { MemoryPoisoningPluginGrader } from './plugins/agentic/memoryPoisoning';
 import { AsciiSmugglingGrader } from './plugins/asciiSmuggling';
@@ -42,6 +43,12 @@ import { ImitationGrader } from './plugins/imitation';
 import { IndirectPromptInjectionGrader } from './plugins/indirectPromptInjection';
 import { IntentGrader } from './plugins/intent';
 import { MCPPluginGrader } from './plugins/mcp';
+import { MedicalAnchoringBiasPluginGrader } from './plugins/medical/medicalAnchoringBias';
+import { MedicalHallucinationPluginGrader } from './plugins/medical/medicalHallucination';
+import { MedicalIncorrectKnowledgePluginGrader } from './plugins/medical/medicalIncorrectKnowledge';
+import { MedicalPrioritizationErrorPluginGrader } from './plugins/medical/medicalPrioritizationError';
+import { MedicalSycophancyPluginGrader } from './plugins/medical/medicalSycophancy';
+import { OffTopicPluginGrader } from './plugins/offTopic';
 import { OverrelianceGrader } from './plugins/overreliance';
 import { PiiGrader } from './plugins/pii';
 import { PlinyGrader } from './plugins/pliny';
@@ -56,13 +63,19 @@ import { ShellInjectionGrader } from './plugins/shellInjection';
 import { SqlInjectionGrader } from './plugins/sqlInjection';
 import { SsrfGrader } from './plugins/ssrf';
 import { ToolDiscoveryGrader } from './plugins/toolDiscovery';
-import { ToolDiscoveryMultiTurnGrader } from './plugins/toolDiscoveryMultiTurn';
+import { ToxicChatGrader } from './plugins/toxicchat';
 import { UnsafeBenchGrader } from './plugins/unsafebench';
 import type { RedteamAssertionTypes } from './types';
 
 export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   [REDTEAM_MEMORY_POISONING_PLUGIN_ID]: new MemoryPoisoningPluginGrader(),
   'promptfoo:redteam:mcp': new MCPPluginGrader(),
+  'promptfoo:redteam:medical:anchoring-bias': new MedicalAnchoringBiasPluginGrader(),
+  'promptfoo:redteam:medical:hallucination': new MedicalHallucinationPluginGrader(),
+  'promptfoo:redteam:medical:incorrect-knowledge': new MedicalIncorrectKnowledgePluginGrader(),
+  'promptfoo:redteam:medical:prioritization-error': new MedicalPrioritizationErrorPluginGrader(),
+  'promptfoo:redteam:medical:sycophancy': new MedicalSycophancyPluginGrader(),
+  'promptfoo:redteam:off-topic': new OffTopicPluginGrader(),
   'promptfoo:redteam:ascii-smuggling': new AsciiSmugglingGrader(),
   'promptfoo:redteam:beavertails': new BeavertailsGrader(),
   'promptfoo:redteam:bias:gender': new GenderBiasGrader(),
@@ -76,9 +89,9 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:divergent-repetition': new DivergentRepetitionGrader(),
   'promptfoo:redteam:excessive-agency': new ExcessiveAgencyGrader(),
   'promptfoo:redteam:tool-discovery': new ToolDiscoveryGrader(),
-  'promptfoo:redteam:tool-discovery:multi-turn': new ToolDiscoveryMultiTurnGrader(),
   'promptfoo:redteam:hallucination': new HallucinationGrader(),
   'promptfoo:redteam:harmbench': new HarmbenchGrader(),
+  'promptfoo:redteam:aegis': new AegisGrader(),
   'promptfoo:redteam:harmful': new HarmfulGrader(),
   'promptfoo:redteam:harmful:chemical-biological-weapons': new HarmfulGrader(),
   'promptfoo:redteam:harmful:child-exploitation': new ChildExploitationGrader(),
@@ -127,6 +140,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:shell-injection': new ShellInjectionGrader(),
   'promptfoo:redteam:sql-injection': new SqlInjectionGrader(),
   'promptfoo:redteam:ssrf': new SsrfGrader(),
+  'promptfoo:redteam:toxic-chat': new ToxicChatGrader(),
   'promptfoo:redteam:unsafebench': new UnsafeBenchGrader(),
 };
 

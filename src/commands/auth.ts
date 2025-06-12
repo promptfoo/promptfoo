@@ -25,7 +25,7 @@ export function authCommand(program: Command) {
       telemetry.record('command_used', {
         name: 'auth login',
       });
-
+      await telemetry.send();
       try {
         if (cmdObj.apiKey) {
           token = cmdObj.apiKey;
@@ -94,7 +94,7 @@ export function authCommand(program: Command) {
         }
 
         const apiHost = cloudConfig.getApiHost();
-        const response = await fetchWithProxy(`${apiHost}/users/me`, {
+        const response = await fetchWithProxy(`${apiHost}/api/v1/users/me`, {
           headers: {
             Authorization: `Bearer ${apiKey}`,
           },
@@ -115,6 +115,7 @@ export function authCommand(program: Command) {
         telemetry.record('command_used', {
           name: 'auth whoami',
         });
+        await telemetry.send();
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         logger.error(`Failed to get user info: ${errorMessage}`);

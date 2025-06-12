@@ -1,53 +1,37 @@
-import { PostHog } from 'posthog-node';
+import packageJson from '../package.json';
+import cliState from '../src/cliState';
 import { fetchWithTimeout } from '../src/fetch';
 import { Telemetry } from '../src/telemetry';
 
-// Mock PostHog
-jest.mock('posthog-node', () => {
-  const mockCapture = jest.fn();
-  const mockIdentify = jest.fn();
-
-  return {
-    PostHog: jest.fn().mockImplementation(() => ({
-      capture: mockCapture,
-      identify: mockIdentify,
-    })),
-  };
-});
-
-// Mock fetch
 jest.mock('../src/fetch', () => ({
   fetchWithTimeout: jest.fn(),
 }));
 
-// Mock crypto
-jest.mock('crypto', () => ({
-  randomUUID: jest.fn().mockReturnValue('test-uuid'),
+jest.mock('../package.json', () => ({
+  version: '1.0.0',
 }));
 
-// Mock globalConfig
-jest.mock('../src/globalConfig/globalConfig', () => ({
-  readGlobalConfig: jest
-    .fn()
-    .mockReturnValue({ id: 'test-user-id', account: { email: 'test@example.com' } }),
+jest.mock('../src/cliState', () => ({
+  __esModule: true,
+  default: {
+    config: undefined,
+  },
 }));
 
-// Mock constants
-jest.mock('../src/constants', () => ({
-  VERSION: '1.0.0',
-}));
-
-// Mock envars
 jest.mock('../src/envars', () => ({
+  ...jest.requireActual('../src/envars'),
   getEnvBool: jest.fn().mockImplementation((key) => {
     if (key === 'PROMPTFOO_DISABLE_TELEMETRY') {
       return process.env.PROMPTFOO_DISABLE_TELEMETRY === '1';
+    }
+    if (key === 'IS_TESTING') {
+      return false;
     }
     return false;
   }),
   getEnvString: jest.fn().mockImplementation((key) => {
     if (key === 'PROMPTFOO_POSTHOG_KEY') {
-      return process.env.PROMPTFOO_POSTHOG_KEY || undefined;
+      return process.env.PROMPTFOO_POSTHOG_KEY || 'test-key';
     }
     if (key === 'PROMPTFOO_POSTHOG_HOST') {
       return process.env.PROMPTFOO_POSTHOG_HOST || undefined;
@@ -57,84 +41,154 @@ jest.mock('../src/envars', () => ({
     }
     return undefined;
   }),
+  isCI: jest.fn().mockReturnValue(false),
 }));
 
 describe('Telemetry', () => {
   let originalEnv: NodeJS.ProcessEnv;
-  let mockPostHogInstance: any;
-  let mockFetch: jest.Mock;
 
   beforeEach(() => {
     originalEnv = process.env;
     process.env = { ...originalEnv };
-    process.env.PROMPTFOO_POSTHOG_KEY = 'test-key';
-
-    // Setup fetch mock
-    mockFetch = jest.fn().mockResolvedValue({ ok: true });
-    global.fetch = mockFetch;
-
-    // Reset PostHog mock
-    jest.mocked(PostHog).mockClear();
-    mockPostHogInstance = {
-      capture: jest.fn(),
-      identify: jest.fn(),
-    };
-    jest.mocked(PostHog).mockImplementation(() => mockPostHogInstance);
-
-    // Reset fetchWithTimeout mock
     jest.mocked(fetchWithTimeout).mockClear();
   });
 
   afterEach(() => {
     process.env = originalEnv;
-    jest.resetAllMocks();
   });
 
-  it('should not track events with PostHog when telemetry is disabled', () => {
+  it('should record only the "telemetry disabled" event when telemetry is disabled', () => {
     process.env.PROMPTFOO_DISABLE_TELEMETRY = '1';
-
-    // Create telemetry instance with telemetry disabled
-    const _telemetry = new Telemetry();
-
-    // Record an event
-    _telemetry.record('eval_ran', { foo: 'bar' });
-
-    // PostHog capture should not be called
-    expect(mockPostHogInstance.capture).not.toHaveBeenCalled();
+    const telemetry = new Telemetry();
+    telemetry.record('eval_ran', { foo: 'bar' });
+    expect(telemetry['events']).toHaveLength(1);
+    expect(telemetry['events'][0]).toEqual({
+      event: 'feature_used',
+      packageVersion: packageJson.version,
+      properties: { feature: 'telemetry disabled' },
+    });
   });
 
-  it('should save consent successfully', async () => {
-    jest.mocked(fetchWithTimeout).mockResolvedValue({ ok: true } as any);
-    const _telemetry = new Telemetry();
+  it('should record events when telemetry is enabled', () => {
+    delete process.env.PROMPTFOO_DISABLE_TELEMETRY;
+    const telemetry = new Telemetry();
+    telemetry.record('eval_ran', { foo: 'bar' });
+    expect(telemetry['events']).toHaveLength(1);
+    expect(telemetry['events'][0]).toEqual({
+      event: 'eval_ran',
+      packageVersion: packageJson.version,
+      properties: { foo: 'bar', isRunningInCi: false, isRedteam: false },
+    });
+  });
 
-    await _telemetry.saveConsent('test@example.com', { source: 'test' });
+  it('should send events and clear events array when telemetry is enabled and send is called', async () => {
+    delete process.env.PROMPTFOO_DISABLE_TELEMETRY;
+    jest.mocked(fetchWithTimeout).mockResolvedValue({ ok: true } as any);
+
+    const telemetry = new Telemetry();
+    telemetry.record('eval_ran', { foo: 'bar' });
+    await telemetry.send();
 
     expect(fetchWithTimeout).toHaveBeenCalledWith(
-      'https://api.promptfoo.dev/consent',
+      'https://api.promptfoo.dev/telemetry',
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email: 'test@example.com', metadata: { source: 'test' } }),
+        body: JSON.stringify([
+          {
+            event: 'eval_ran',
+            packageVersion: '1.0.0',
+            properties: { foo: 'bar', isRedteam: false, isRunningInCi: false },
+          },
+        ]),
       },
       1000,
     );
+    expect(telemetry['events']).toHaveLength(0);
   });
 
-  it('should handle failed consent save', async () => {
-    jest.mocked(fetchWithTimeout).mockResolvedValue({ ok: false, statusText: 'Not Found' } as any);
-    const _telemetry = new Telemetry();
+  it('should send only the "telemetry disabled" event when telemetry is disabled and send is called', async () => {
+    process.env.PROMPTFOO_DISABLE_TELEMETRY = '1';
+    jest.mocked(fetchWithTimeout).mockResolvedValue({ ok: true } as any);
 
-    await _telemetry.saveConsent('test@example.com');
+    const telemetry = new Telemetry();
+    telemetry.record('eval_ran', { foo: 'bar' });
+    await telemetry.send();
 
     expect(fetchWithTimeout).toHaveBeenCalledWith(
-      'https://api.promptfoo.dev/consent',
-      expect.objectContaining({
+      'https://api.promptfoo.dev/telemetry',
+      {
         method: 'POST',
-        body: expect.any(String),
-      }),
-      expect.any(Number),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify([
+          {
+            event: 'feature_used',
+            packageVersion: '1.0.0',
+            properties: { feature: 'telemetry disabled' },
+          },
+        ]),
+      },
+      1000,
     );
+    expect(telemetry['events']).toHaveLength(0);
+  });
+
+  it('should send telemetry disabled event only once', async () => {
+    process.env.PROMPTFOO_DISABLE_TELEMETRY = '1';
+    jest.mocked(fetchWithTimeout).mockResolvedValue({ ok: true } as any);
+
+    const telemetry = new Telemetry();
+    telemetry.record('eval_ran', { foo: 'bar' });
+    await telemetry.send();
+
+    expect(fetchWithTimeout).toHaveBeenCalledTimes(1);
+    expect(fetchWithTimeout).toHaveBeenCalledWith(
+      'https://api.promptfoo.dev/telemetry',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify([
+          {
+            event: 'feature_used',
+            packageVersion: '1.0.0',
+            properties: { feature: 'telemetry disabled' },
+          },
+        ]),
+      },
+      1000,
+    );
+
+    // Record another event and send again
+    telemetry.record('command_used', { command: 'test' });
+    await telemetry.send();
+
+    // Ensure fetchWithTimeout was not called again
+    expect(fetchWithTimeout).toHaveBeenCalledTimes(1);
+  });
+
+  it('should include isRedteam: true when redteam configuration is present', () => {
+    delete process.env.PROMPTFOO_DISABLE_TELEMETRY;
+
+    // Mock cliState with redteam configuration
+    cliState.config = { redteam: {} } as any;
+
+    const telemetry = new Telemetry();
+    telemetry.record('eval_ran', { foo: 'bar' });
+
+    expect(telemetry['events']).toHaveLength(1);
+    expect(telemetry['events'][0]).toEqual({
+      event: 'eval_ran',
+      packageVersion: packageJson.version,
+      properties: { foo: 'bar', isRunningInCi: false, isRedteam: true },
+    });
+
+    // Clean up
+    cliState.config = undefined;
   });
 });

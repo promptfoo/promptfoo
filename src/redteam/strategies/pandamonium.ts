@@ -6,6 +6,7 @@ export function addPandamonium(
   config: Record<string, any>,
 ): TestCase[] {
   const plugins = new Set(testCases.map((testCase) => testCase.metadata?.pluginId));
+  const originalText = String(testCases[0].vars![injectVar]);
 
   return [
     {
@@ -21,6 +22,7 @@ export function addPandamonium(
         ...testCases[0].metadata,
         pluginIds: Array.from(plugins),
         strategyId: 'pandamonium',
+        originalText,
       },
       assert: testCases[0].assert?.map((assertion) => ({
         ...assertion,

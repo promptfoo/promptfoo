@@ -153,6 +153,9 @@
                             "GOOGLE_API_HOST": {
                               "type": "string"
                             },
+                            "GOOGLE_API_BASE_URL": {
+                              "type": "string"
+                            },
                             "GOOGLE_API_KEY": {
                               "type": "string"
                             },
@@ -771,9 +774,55 @@
                       }
                     },
                     "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "type": "string"
+                      },
+                      "config": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": [
+                                  "string",
+                                  "number",
+                                  "boolean"
+                                ]
+                              }
+                            },
+                            {
+                              "type": "object",
+                              "additionalProperties": {}
+                            },
+                            {}
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "path"
+                    ],
+                    "additionalProperties": false
                   }
                 ]
               }
+            },
+            {
+              "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/2"
             }
           ]
         },
@@ -1022,6 +1071,7 @@
                       {
                         "type": "string",
                         "enum": [
+                          "aegis",
                           "agentic:memory-poisoning",
                           "ascii-smuggling",
                           "beavertails",
@@ -1090,6 +1140,11 @@
                           "indirect-prompt-injection",
                           "intent",
                           "mcp",
+                          "medical:anchoring-bias",
+                          "medical:hallucination",
+                          "medical:incorrect-knowledge",
+                          "medical:prioritization-error",
+                          "medical:sycophancy",
                           "misinformation",
                           "mitre:atlas",
                           "mitre:atlas:exfiltration",
@@ -1121,6 +1176,7 @@
                           "nist:ai:measure:4.1",
                           "nist:ai:measure:4.2",
                           "nist:ai:measure:4.3",
+                          "off-topic",
                           "overreliance",
                           "owasp:agentic:t01",
                           "owasp:api",
@@ -1170,6 +1226,7 @@
                           "system-prompt-override",
                           "tool-discovery",
                           "tool-discovery:multi-turn",
+                          "toxic-chat",
                           "toxicity",
                           "unsafebench",
                           "xstest"
@@ -1190,6 +1247,7 @@
                           {
                             "type": "string",
                             "enum": [
+                              "aegis",
                               "agentic:memory-poisoning",
                               "ascii-smuggling",
                               "beavertails",
@@ -1258,6 +1316,11 @@
                               "indirect-prompt-injection",
                               "intent",
                               "mcp",
+                              "medical:anchoring-bias",
+                              "medical:hallucination",
+                              "medical:incorrect-knowledge",
+                              "medical:prioritization-error",
+                              "medical:sycophancy",
                               "misinformation",
                               "mitre:atlas",
                               "mitre:atlas:exfiltration",
@@ -1289,6 +1352,7 @@
                               "nist:ai:measure:4.1",
                               "nist:ai:measure:4.2",
                               "nist:ai:measure:4.3",
+                              "off-topic",
                               "overreliance",
                               "owasp:agentic:t01",
                               "owasp:api",
@@ -1338,6 +1402,7 @@
                               "system-prompt-override",
                               "tool-discovery",
                               "tool-discovery:multi-turn",
+                              "toxic-chat",
                               "toxicity",
                               "unsafebench",
                               "xstest"
@@ -1360,6 +1425,16 @@
                         "type": "object",
                         "additionalProperties": {},
                         "description": "Plugin-specific configuration"
+                      },
+                      "severity": {
+                        "type": "string",
+                        "enum": [
+                          "critical",
+                          "high",
+                          "medium",
+                          "low"
+                        ],
+                        "description": "Severity level for this plugin"
                       }
                     },
                     "required": [
@@ -1387,9 +1462,11 @@
                           "base64",
                           "basic",
                           "best-of-n",
+                          "camelcase",
                           "citation",
                           "crescendo",
                           "default",
+                          "emoji",
                           "gcg",
                           "goat",
                           "hex",
@@ -1437,7 +1514,7 @@
                   }
                 ]
               },
-              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports audio, base64, basic, best-of-n, citation, crescendo, default, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak:composite, jailbreak:likert, jailbreak:tree, leetspeak, math-prompt, morse, multilingual, other-encodings, pandamonium, piglatin, prompt-injection, retry, rot13, video",
+              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports audio, base64, basic, best-of-n, camelcase, citation, crescendo, default, emoji, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak:composite, jailbreak:likert, jailbreak:tree, leetspeak, math-prompt, morse, multilingual, other-encodings, pandamonium, piglatin, prompt-injection, retry, rot13, video",
               "default": [
                 "default"
               ]
@@ -1490,6 +1567,9 @@
               "type": "boolean"
             },
             "timeoutMs": {
+              "type": "number"
+            },
+            "maxEvalTimeMs": {
               "type": "number"
             }
           },

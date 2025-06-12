@@ -186,6 +186,32 @@ describe('evalCommand', () => {
       expect.objectContaining({ maxConcurrency: 5 }),
     );
   });
+
+  it('should fallback to evaluateOptions.maxConcurrency when cmdObj.maxConcurrency is undefined', async () => {
+    const cmdObj = {}; // No maxConcurrency set
+    const evaluateOptions = { maxConcurrency: 3 };
+
+    await doEval(cmdObj, defaultConfig, defaultConfigPath, evaluateOptions);
+
+    expect(evaluate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ maxConcurrency: 3 }),
+    );
+  });
+
+  it('should fallback to DEFAULT_MAX_CONCURRENCY when both cmdObj and evaluateOptions maxConcurrency are undefined', async () => {
+    const cmdObj = {}; // No maxConcurrency set
+    const evaluateOptions = {}; // No maxConcurrency set
+
+    await doEval(cmdObj, defaultConfig, defaultConfigPath, evaluateOptions);
+
+    expect(evaluate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ maxConcurrency: 4 }), // DEFAULT_MAX_CONCURRENCY is 4 in the mock
+    );
+  });
 });
 
 describe('formatTokenUsage', () => {

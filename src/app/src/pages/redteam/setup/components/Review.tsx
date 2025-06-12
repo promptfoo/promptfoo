@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useState, useEffect } from 'react';
+import { useEmailVerification } from '@app/hooks/useEmailVerification';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import YamlEditor from '@app/pages/eval-creator/components/YamlEditor';
@@ -11,6 +12,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import SettingsIcon from '@mui/icons-material/Settings';
 import StopIcon from '@mui/icons-material/Stop';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
@@ -35,6 +37,7 @@ import type { RedteamPlugin } from '@promptfoo/redteam/types';
 import type { Job } from '@promptfoo/types';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { generateOrderedYaml } from '../utils/yamlHelpers';
+import { EmailVerificationDialog } from './EmailVerificationDialog';
 import { LogViewer } from './LogViewer';
 
 interface PolicyPlugin {
@@ -61,10 +64,16 @@ export default function Review() {
   const { showToast } = useToast();
   const [forceRegeneration /*, setForceRegeneration*/] = React.useState(true);
   const [debugMode, setDebugMode] = React.useState(false);
-  const [delay, setDelay] = React.useState('0');
+  const [maxConcurrency, setMaxConcurrency] = React.useState('1');
+  const [delayMs, setDelayMs] = React.useState('0');
   const [isJobStatusDialogOpen, setIsJobStatusDialogOpen] = useState(false);
   const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
   const [isRunSettingsDialogOpen, setIsRunSettingsDialogOpen] = useState(false);
+  const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
+  const [emailVerificationMessage, setEmailVerificationMessage] = useState('');
+  const [emailVerificationError, setEmailVerificationError] = useState<string | null>(null);
+  const { checkEmailStatus } = useEmailVerification();
+  const [isPurposeExpanded, setIsPurposeExpanded] = useState(false);
 
   const handleDescriptionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     updateConfig('description', event.target.value);
@@ -169,6 +178,30 @@ export default function Review() {
 
   const handleRunWithSettings = async () => {
     setIsRunSettingsDialogOpen(false);
+
+    // Check email verification first
+    const emailResult = await checkEmailStatus();
+
+    if (!emailResult.canProceed) {
+      if (emailResult.needsEmail) {
+        setEmailVerificationMessage(
+          emailResult.status?.message ||
+            'Redteam evals require email verification. Please enter your work email:',
+        );
+        setIsEmailDialogOpen(true);
+        return;
+      } else if (emailResult.error) {
+        setEmailVerificationError(emailResult.error);
+        showToast(emailResult.error, 'error');
+        return;
+      }
+    }
+
+    // Show usage warning if present
+    if (emailResult.status?.status === 'show_usage_warning' && emailResult.status.message) {
+      showToast(emailResult.status.message, 'warning');
+    }
+
     const { hasRunningJob } = await checkForRunningJob();
 
     if (hasRunningJob) {
@@ -202,7 +235,8 @@ export default function Review() {
           config: getUnifiedConfig(config),
           force: forceRegeneration,
           verbose: debugMode,
-          delay,
+          maxConcurrency,
+          delayMs,
         }),
       });
 
@@ -515,9 +549,40 @@ export default function Review() {
             <Grid container spacing={2}>
               <Grid item xs={12} sm={12}>
                 <Typography variant="subtitle2">Purpose</Typography>
-                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                <Typography
+                  variant="body2"
+                  onClick={() => setIsPurposeExpanded(!isPurposeExpanded)}
+                  sx={{
+                    whiteSpace: 'pre-wrap',
+                    padding: 1,
+                    borderRadius: 1,
+                    backgroundColor: 'background.paper',
+                    cursor: 'pointer',
+                    display: '-webkit-box',
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                    WebkitLineClamp: isPurposeExpanded ? 'none' : 6,
+                    '&:hover': {
+                      backgroundColor: 'action.hover',
+                    },
+                  }}
+                >
                   {config.purpose || 'Not specified'}
                 </Typography>
+                {config.purpose && config.purpose.split('\n').length > 6 && (
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: 'primary.main',
+                      cursor: 'pointer',
+                      mt: 0.5,
+                      display: 'block',
+                    }}
+                    onClick={() => setIsPurposeExpanded(!isPurposeExpanded)}
+                  >
+                    {isPurposeExpanded ? 'Show less' : 'Show more'}
+                  </Typography>
+                )}
               </Grid>
             </Grid>
           </Paper>
@@ -725,24 +790,72 @@ export default function Review() {
               />
             </Box>
             <Box>
-              <TextField
-                fullWidth
-                type="number"
-                label="Delay between API calls (ms)"
-                value={delay}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  // Ensure non-negative numbers only
-                  if (!Number.isNaN(Number(value)) && Number(value) >= 0) {
-                    setDelay(value);
-                  }
-                }}
-                disabled={isRunning}
-                InputProps={{
-                  endAdornment: <Typography variant="caption">ms</Typography>,
-                }}
-                helperText="Add a delay between API calls to avoid rate limits"
-              />
+              <Tooltip
+                title={
+                  Number(maxConcurrency) > 1
+                    ? 'Disabled because max concurrency is greater than 1'
+                    : ''
+                }
+                placement="top"
+              >
+                <span>
+                  <TextField
+                    fullWidth
+                    type="number"
+                    label="Delay between API calls (ms)"
+                    value={delayMs}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      // Ensure non-negative numbers only
+                      if (!Number.isNaN(Number(value)) && Number(value) >= 0) {
+                        setDelayMs(value);
+                        // If delay is set, disable concurrency by setting it to 1
+                        if (Number(value) > 0) {
+                          setMaxConcurrency('1');
+                        }
+                      }
+                    }}
+                    disabled={isRunning || Number(maxConcurrency) > 1}
+                    inputProps={{ min: 0, step: 1 }}
+                    InputProps={{
+                      endAdornment: <Typography variant="caption">ms</Typography>,
+                    }}
+                    helperText="Add a delay between API calls to avoid rate limits"
+                  />
+                </span>
+              </Tooltip>
+            </Box>
+            <Box>
+              <Tooltip
+                title={Number(delayMs) > 0 ? 'Disabled because delay is set' : ''}
+                placement="top"
+              >
+                <span>
+                  <TextField
+                    fullWidth
+                    type="number"
+                    label="Max concurrency"
+                    value={maxConcurrency}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      // Ensure non-negative numbers only
+                      if (!Number.isNaN(Number(value)) && Number(value) >= 0) {
+                        setMaxConcurrency(value);
+                        // If concurrency > 1, disable delay by setting it to 0
+                        if (Number(value) > 1) {
+                          setDelayMs('0');
+                        }
+                      }
+                    }}
+                    disabled={isRunning || Number(delayMs) > 0}
+                    inputProps={{ min: 1, step: 1 }}
+                    InputProps={{
+                      endAdornment: <Typography variant="caption">instances</Typography>,
+                    }}
+                    helperText="Maximum number of concurrent evaluations"
+                  />
+                </span>
+              </Tooltip>
             </Box>
             <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
               <Button onClick={() => setIsRunSettingsDialogOpen(false)}>Close</Button>
@@ -750,6 +863,22 @@ export default function Review() {
           </Stack>
         </DialogContent>
       </Dialog>
+
+      {emailVerificationError && (
+        <Alert severity="error" sx={{ mt: 2 }}>
+          {emailVerificationError}
+        </Alert>
+      )}
+
+      <EmailVerificationDialog
+        open={isEmailDialogOpen}
+        onClose={() => setIsEmailDialogOpen(false)}
+        onSuccess={() => {
+          setIsEmailDialogOpen(false);
+          handleRunWithSettings();
+        }}
+        message={emailVerificationMessage}
+      />
     </Box>
   );
 }

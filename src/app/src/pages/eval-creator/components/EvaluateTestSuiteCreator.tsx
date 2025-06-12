@@ -45,7 +45,19 @@ function ErrorFallback({
 const EvaluateTestSuiteCreator: React.FC = () => {
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
 
-  const { setDescription, providers, setProviders, prompts, setPrompts, setTestCases } = useStore();
+  const {
+    setDescription,
+    providers,
+    setProviders,
+    prompts,
+    setPrompts,
+    setTestCases,
+    setDefaultTest,
+    setEnv,
+    setEvaluateOptions,
+    setScenarios,
+    setExtensions,
+  } = useStore();
 
   useEffect(() => {
     useStore.persist.rehydrate();
@@ -71,6 +83,11 @@ const EvaluateTestSuiteCreator: React.FC = () => {
     setDescription('');
     setProviders([]);
     setPrompts([]);
+    setDefaultTest({});
+    setEnv({});
+    setEvaluateOptions({});
+    setScenarios([]);
+    setExtensions([]);
     setTestCases([]);
     setResetDialogOpen(false);
   };

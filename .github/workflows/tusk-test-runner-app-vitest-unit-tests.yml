@@ -1,0 +1,73 @@
+name: Tusk Test Runner - Vitest unit tests (src/app)
+
+# Required for Tusk
+permissions:
+  contents: read
+on:
+  workflow_dispatch:
+    inputs:
+      runId:
+        description: 'Tusk Run ID'
+        required: true
+      tuskUrl:
+        description: 'Tusk server URL'
+        required: true
+      commitSha:
+        description: 'Commit SHA to checkout'
+        required: true
+
+jobs:
+  test-action:
+    name: Tusk Test Runner
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.commitSha }} # Required for Tusk to access files for the commit being tested
+
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Start runner
+        id: test-action
+        uses: Use-Tusk/test-runner@v1
+        # See https://github.com/Use-Tusk/test-runner for full details and examples.
+        with:
+          # Required for the test runner, do not remove this input
+          runId: ${{ github.event.inputs.runId }}
+
+          # Required for the test runner, do not remove this input
+          tuskUrl: ${{ github.event.inputs.tuskUrl }}
+
+          # Required for the test runner, do not remove this input
+          commitSha: ${{ github.event.inputs.commitSha }}
+
+          # Your Tusk auth token. It is recommended to add it to your repo's secrets.
+          # Please adapt the secret name accordingly if you have named it differently.
+          authToken: ${{ secrets.TUSK_AUTH_TOKEN }}
+
+          # Vitest for the React app tests
+          testFramework: 'Vitest'
+
+          # Test file regex to match Vitest test files in src/app
+          testFileRegex: '^src/app/.*\.(test|spec)\.(js|jsx|ts|tsx)$'
+
+          # The script to run to lint the code for React/TypeScript files
+          lintScript: 'npx prettier --write {{file}} && npx eslint --fix {{file}} --no-warn-ignored'
+
+          # The script to run Vitest tests for individual files
+          # Use the workspace-aware test:app script and pass the relative file path within src/app
+          testScript: 'npm run test:app -- run $(echo "{{file}}" | sed "s|^src/app/||")'
+
+          # The runner may run tests in parallel.
+          # Set this value to 1 if you know that your tests should not be run concurrently.
+          # maxConcurrency: 1

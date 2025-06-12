@@ -324,6 +324,7 @@ describe('redteamConfigSchema', () => {
       strategies: strategiesExceptDefault,
     };
     const result = RedteamConfigSchema.safeParse(input);
+
     expect(result).toEqual({
       success: true,
       data: expect.objectContaining({
@@ -340,7 +341,10 @@ describe('redteamConfigSchema', () => {
     expect(result.data?.plugins).toHaveLength(
       REDTEAM_ALL_PLUGINS.filter((id) => !COLLECTIONS.includes(id as any)).length,
     );
-    expect(result.data?.strategies).toHaveLength(strategiesExceptDefault.length);
+
+    // The schema deduplicates strategies, so we should expect the unique count
+    const uniqueStrategies = [...new Set(strategiesExceptDefault)];
+    expect(result.data?.strategies).toHaveLength(uniqueStrategies.length);
   });
 
   it('should expand harmful plugin to all harm categories', () => {
@@ -881,6 +885,68 @@ describe('redteamConfigSchema', () => {
       const strategies = result.data!.strategies!;
       const strategyIds = new Set(strategies.map((s) => (typeof s === 'string' ? s : s.id)));
       expect(strategies).toHaveLength(strategyIds.size);
+    });
+  });
+
+  describe('severity handling', () => {
+    it('should preserve severity field in plugin objects', () => {
+      const config = {
+        plugins: [
+          { id: 'harmful:hate', numTests: 1, severity: 'low' },
+          { id: 'harmful:self-harm', numTests: 1, severity: 'low' },
+        ],
+      };
+
+      const result = RedteamConfigSchema.parse(config);
+
+      expect(result.plugins!).toHaveLength(2);
+      expect(result.plugins![0]).toEqual({
+        id: 'harmful:hate',
+        numTests: 1,
+        severity: 'low',
+      });
+      expect(result.plugins![1]).toEqual({
+        id: 'harmful:self-harm',
+        numTests: 1,
+        severity: 'low',
+      });
+    });
+
+    it('should handle plugins without severity field', () => {
+      const config = {
+        plugins: [
+          { id: 'harmful:hate', numTests: 1 },
+          { id: 'harmful:self-harm', numTests: 1, severity: 'high' },
+        ],
+      };
+
+      const result = RedteamConfigSchema.parse(config);
+
+      expect(result.plugins!).toHaveLength(2);
+      expect(result.plugins![0]).toEqual({
+        id: 'harmful:hate',
+        numTests: 1,
+      });
+      expect(result.plugins![1]).toEqual({
+        id: 'harmful:self-harm',
+        numTests: 1,
+        severity: 'high',
+      });
+    });
+
+    it('should preserve severity when expanding collections', () => {
+      const config = {
+        plugins: [{ id: 'harmful', numTests: 1, severity: 'medium' }],
+      };
+
+      const result = RedteamConfigSchema.parse(config);
+
+      // All expanded harmful plugins should have the severity
+      const harmfulPlugins = result.plugins!.filter((p) => p.id.startsWith('harmful:'));
+      expect(harmfulPlugins.length).toBeGreaterThan(0);
+      harmfulPlugins.forEach((plugin) => {
+        expect(plugin.severity).toBe('medium');
+      });
     });
   });
 });

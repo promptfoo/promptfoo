@@ -1,17 +1,17 @@
+import { CLOUD_PROVIDER_PREFIX } from '../constants';
 import { fetchWithProxy } from '../fetch';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
+import type { Plugin, Severity } from '../redteam/constants';
 import type { UnifiedConfig } from '../types';
 import type { ProviderOptions } from '../types/providers';
 import { ProviderOptionsSchema } from '../validators/providers';
 import invariant from './invariant';
 
-const CHUNKED_RESULTS_BUILD_DATE = new Date('2025-01-10');
-
 export function makeRequest(path: string, method: string, body?: any): Promise<Response> {
   const apiHost = cloudConfig.getApiHost();
   const apiKey = cloudConfig.getApiKey();
-  const url = `${apiHost}/${path}`;
+  const url = `${apiHost}/api/v1/${path.startsWith('/') ? path.slice(1) : path}`;
   try {
     return fetchWithProxy(url, {
       method,
@@ -27,23 +27,6 @@ export function makeRequest(path: string, method: string, body?: any): Promise<R
   }
 }
 
-export async function targetApiBuildDate(): Promise<Date | null> {
-  try {
-    const response = await makeRequest('version', 'GET');
-
-    const data = await response.json();
-
-    const { buildDate } = data;
-    logger.debug(`[targetApiBuildDate] ${buildDate}`);
-    if (buildDate) {
-      return new Date(buildDate);
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
 export async function getProviderFromCloud(id: string): Promise<ProviderOptions & { id: string }> {
   if (!cloudConfig.isEnabled()) {
     throw new Error(
@@ -51,7 +34,7 @@ export async function getProviderFromCloud(id: string): Promise<ProviderOptions 
     );
   }
   try {
-    const response = await makeRequest(`api/providers/${id}`, 'GET');
+    const response = await makeRequest(`providers/${id}`, 'GET');
 
     if (!response.ok) {
       const errorMessage = await response.text();
@@ -84,7 +67,7 @@ export async function getConfigFromCloud(id: string, providerId?: string): Promi
   }
   try {
     const response = await makeRequest(
-      `api/redteam/configs/${id}/unified${providerId ? `?providerId=${providerId}` : ''}`,
+      `redteam/configs/${id}/unified${providerId ? `?providerId=${providerId}` : ''}`,
       'GET',
     );
     if (!response.ok) {
@@ -105,7 +88,82 @@ export async function getConfigFromCloud(id: string, providerId?: string): Promi
   }
 }
 
-export async function cloudCanAcceptChunkedResults(): Promise<boolean> {
-  const buildDate = await targetApiBuildDate();
-  return buildDate != null && buildDate > CHUNKED_RESULTS_BUILD_DATE;
+export function isCloudProvider(providerPath: string): boolean {
+  return providerPath.startsWith(CLOUD_PROVIDER_PREFIX);
+}
+
+export function getCloudDatabaseId(providerPath: string): string {
+  if (!isCloudProvider(providerPath)) {
+    throw new Error(`Provider path ${providerPath} is not a cloud provider.`);
+  }
+  return providerPath.slice(CLOUD_PROVIDER_PREFIX.length);
+}
+
+/**
+ * Get the plugin severity overrides for a cloud provider.
+ * @param cloudProviderId - The cloud provider ID.
+ * @returns The plugin severity overrides.
+ */
+export async function getPluginSeverityOverridesFromCloud(cloudProviderId: string): Promise<{
+  id: string;
+  severities: Record<Plugin, Severity>;
+} | null> {
+  if (!cloudConfig.isEnabled()) {
+    throw new Error(
+      `Could not fetch plugin severity overrides from cloud. Cloud config is not enabled. Please run \`promptfoo auth login\` to login.`,
+    );
+  }
+  try {
+    const response = await makeRequest(`/providers/${cloudProviderId}`, 'GET');
+
+    if (!response.ok) {
+      const errorMessage = await response.text();
+      const formattedErrorMessage = `Failed to provider from cloud: ${errorMessage}. HTTP Status: ${response.status} -- ${response.statusText}.`;
+
+      logger.error(`[Cloud] ${formattedErrorMessage}`);
+      throw new Error(formattedErrorMessage);
+    }
+
+    const body = await response.json();
+
+    if (body.pluginSeveritySetId) {
+      // Fetch the plugin severity set from the cloud:
+      const pluginSeveritySetResponse = await makeRequest(
+        `/redteam/plugins/severity-sets/${body.pluginSeveritySetId}`,
+        'GET',
+      );
+
+      if (!pluginSeveritySetResponse.ok) {
+        const errorMessage = await pluginSeveritySetResponse.text();
+        const formattedErrorMessage = `Failed to fetch plugin severity set from cloud: ${errorMessage}. HTTP Status: ${pluginSeveritySetResponse.status} -- ${pluginSeveritySetResponse.statusText}.`;
+
+        logger.error(`[Cloud] ${formattedErrorMessage}`);
+        throw new Error(formattedErrorMessage);
+      }
+
+      const pluginSeveritySet = await pluginSeveritySetResponse.json();
+
+      logger.debug(
+        `Plugin severity overrides ${pluginSeveritySet.id} fetched from cloud: ${JSON.stringify(pluginSeveritySet.members, null, 2)}`,
+      );
+
+      return {
+        id: pluginSeveritySet.id,
+        severities: pluginSeveritySet.members.reduce(
+          (acc: Record<Plugin, Severity>, member: { pluginId: Plugin; severity: Severity }) => ({
+            ...acc,
+            [member.pluginId]: member.severity,
+          }),
+          {},
+        ),
+      };
+    } else {
+      logger.debug(`No plugin severity overrides found for cloud provider ${cloudProviderId}`);
+      return null;
+    }
+  } catch (e) {
+    logger.error(`Failed to fetch plugin severity overrides from cloud.`);
+    logger.error(String(e));
+    throw new Error(`Failed to fetch plugin severity overrides from cloud.`);
+  }
 }

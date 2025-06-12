@@ -114,6 +114,7 @@ export async function doEval(
       // Only set when redteam is enabled for sure, because we don't know if config is loaded yet
       ...(Boolean(config?.redteam) && { isRedteam: true }),
     });
+    await telemetry.send();
 
     if (cmdObj.write) {
       await runDbMigrations();
@@ -177,7 +178,8 @@ export async function doEval(
       };
     }
 
-    let maxConcurrency = cmdObj.maxConcurrency;
+    let maxConcurrency =
+      cmdObj.maxConcurrency ?? evaluateOptions.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY;
     const delay = cmdObj.delay ?? 0;
 
     if (delay > 0) {
@@ -436,11 +438,64 @@ export async function doEval(
         completion: tokenUsage.completion,
         total: combinedTotal,
       };
+
+      printBorder();
+      logger.info(chalk.bold('Token Usage Summary:'));
+
+      if (isRedteam) {
+        logger.info(
+          `  ${chalk.cyan('Probes:')} ${chalk.white.bold(tokenUsage.numRequests.toLocaleString())}`,
+        );
+      }
+
+      // Eval tokens
+      logger.info(`\n  ${chalk.yellow.bold('Evaluation:')}`);
+      logger.info(`    ${chalk.gray('Total:')} ${chalk.white(evalTokens.total.toLocaleString())}`);
       logger.info(
-        `Token usage: ${tokenUsage.prompt.toLocaleString()} prompt + ${tokenUsage.completion.toLocaleString()} completion = ${combinedTotal.toLocaleString()} total`,
+        `    ${chalk.gray('Prompt:')} ${chalk.white(evalTokens.prompt.toLocaleString())}`,
       );
       logger.info(
-        `Total tokens: ${combinedTotal.toLocaleString()} (eval: ${evalTokens.total.toLocaleString()} + Grading: ${tokenUsage.assertions.total.toLocaleString()})`,
+        `    ${chalk.gray('Completion:')} ${chalk.white(evalTokens.completion.toLocaleString())}`,
+      );
+      if (tokenUsage.cached > 0) {
+        logger.info(
+          `    ${chalk.gray('Cached:')} ${chalk.green(tokenUsage.cached.toLocaleString())}`,
+        );
+      }
+      if (tokenUsage.completionDetails.reasoning > 0) {
+        logger.info(
+          `    ${chalk.gray('Reasoning:')} ${chalk.white(tokenUsage.completionDetails.reasoning.toLocaleString())}`,
+        );
+      }
+
+      // Grading tokens
+      if (tokenUsage.assertions.total > 0) {
+        logger.info(`\n  ${chalk.magenta.bold('Grading:')}`);
+        logger.info(
+          `    ${chalk.gray('Total:')} ${chalk.white(tokenUsage.assertions.total.toLocaleString())}`,
+        );
+        logger.info(
+          `    ${chalk.gray('Prompt:')} ${chalk.white(tokenUsage.assertions.prompt.toLocaleString())}`,
+        );
+        logger.info(
+          `    ${chalk.gray('Completion:')} ${chalk.white(tokenUsage.assertions.completion.toLocaleString())}`,
+        );
+        if (tokenUsage.assertions.cached > 0) {
+          logger.info(
+            `    ${chalk.gray('Cached:')} ${chalk.green(tokenUsage.assertions.cached.toLocaleString())}`,
+          );
+        }
+        if (tokenUsage.assertions.completionDetails?.reasoning > 0) {
+          logger.info(
+            `    ${chalk.gray('Reasoning:')} ${chalk.white(tokenUsage.assertions.completionDetails.reasoning.toLocaleString())}`,
+          );
+        }
+      }
+
+      // Grand total
+      const grandTotal = evalTokens.total + tokenUsage.assertions.total;
+      logger.info(
+        `\n  ${chalk.blue.bold('Grand Total:')} ${chalk.white.bold(grandTotal.toLocaleString())} tokens`,
       );
     }
 
@@ -450,6 +505,7 @@ export async function doEval(
       duration: Math.round((Date.now() - startTime) / 1000),
       isRedteam,
     });
+    await telemetry.send();
 
     if (cmdObj.watch) {
       if (initialization) {
@@ -486,7 +542,7 @@ export async function doEval(
               .flatMap((t) => {
                 if (typeof t === 'string' && t.startsWith('file://')) {
                   return path.resolve(basePath, t.slice('file://'.length));
-                } else if (typeof t !== 'string' && t.vars) {
+                } else if (typeof t !== 'string' && 'vars' in t && t.vars) {
                   return Object.values(t.vars).flatMap((v) => {
                     if (typeof v === 'string' && v.startsWith('file://')) {
                       return path.resolve(basePath, v.slice('file://'.length));

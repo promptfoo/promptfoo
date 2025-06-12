@@ -1,4 +1,5 @@
-description: Example showing how to load test cases from JavaScript/TypeScript functions
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Example showing how to load test cases from JavaScript/TypeScript functions with configuration
 
 prompts:
   - 'Translate the following text to {{target_language}}: {{text}}'
@@ -8,9 +9,41 @@ providers:
     config:
       reasoning_effort: low
 
-# Demonstrate different ways to load test cases from JavaScript/TypeScript
+# Demonstrate different ways to load test cases from JavaScript/TypeScript with configuration
 tests:
-  # Load simple test cases
+  # Load simple test cases (no configuration)
   - file://staticTests.ts
-  # Load test cases from simulated database
+
+  # Load test cases from simulated database (backward compatibility)
   - file://dynamicTests.ts:generateFromDatabase
+
+  # Load basic translations with language filtering
+  - path: file://dynamicTests.ts:generateFromDatabase
+    config:
+      dataset: 'basic_translations'
+      difficulty: 'basic'
+      languages: ['German', 'Spanish']
+      max_results: 3
+
+  # Load intermediate difficulty travel phrases
+  - path: file://dynamicTests.ts:generateFromDatabase
+    config:
+      dataset: 'travel_phrases'
+      difficulty: 'intermediate'
+      max_results: 2
+
+  # Load intermediate translations with specific languages
+  - path: file://dynamicTests.ts:generateFromDatabase
+    config:
+      dataset: 'basic_translations'
+      difficulty: 'intermediate'
+      languages: ['French']
+      max_results: 1
+
+  # Load advanced difficulty translations to demonstrate full difficulty range
+  - path: file://dynamicTests.ts:generateFromDatabase
+    config:
+      dataset: 'basic_translations'
+      difficulty: 'advanced'
+      languages: ['Italian']
+      max_results: 1
