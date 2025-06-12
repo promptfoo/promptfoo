@@ -5,10 +5,17 @@ import { neverGenerateRemote } from '../remoteGeneration';
 import type { RedTeamTask } from './util';
 import { callExtraction, fetchRemoteGeneration, formatPrompts } from './util';
 
+export const DEFAULT_PURPOSE = 'An AI system';
+
 export async function extractSystemPurpose(
   provider: ApiProvider,
   prompts: string[],
 ): Promise<string> {
+  if (prompts.length === 0) {
+    logger.debug('[purpose] No prompts provided, returning default purpose');
+    return DEFAULT_PURPOSE;
+  }
+
   if (!neverGenerateRemote()) {
     try {
       const result = await fetchRemoteGeneration('purpose' as RedTeamTask, prompts);
