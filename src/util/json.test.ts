@@ -1,4 +1,5 @@
 import type { EvaluateResult } from '../types';
+import { ResultFailureReason } from '../types';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './json';
 
 describe('JSON utilities for large data handling', () => {
@@ -11,7 +12,7 @@ describe('JSON utilities for large data handling', () => {
       success: false,
       score: 0.5,
       error: 'Test error',
-      failureReason: 'ERROR',
+      failureReason: ResultFailureReason.ERROR,
       latencyMs: 100,
       promptId: 'test-prompt-id',
       provider: {
@@ -20,7 +21,7 @@ describe('JSON utilities for large data handling', () => {
       },
       response: {
         output: 'This is a test output that is reasonably sized for testing purposes.',
-        error: null,
+        error: undefined,
         cached: false,
         cost: 0.01,
         tokenUsage: {
@@ -44,6 +45,7 @@ describe('JSON utilities for large data handling', () => {
       prompt: {
         raw: 'Test prompt',
         display: 'Test Prompt Display',
+        label: 'Test Prompt Label',
       },
       vars: {
         userInput: 'test user input',
@@ -118,20 +120,17 @@ describe('JSON utilities for large data handling', () => {
       const testResult = createTestEvaluateResult();
       const summary = summarizeEvaluateResultForLogging(testResult);
 
-      // Essential fields
       expect(summary.id).toBe('test-eval-result');
       expect(summary.testIdx).toBe(0);
       expect(summary.promptIdx).toBe(0);
       expect(summary.success).toBe(false);
       expect(summary.score).toBe(0.5);
       expect(summary.error).toBe('Test error');
-      expect(summary.failureReason).toBe('ERROR');
+      expect(summary.failureReason).toBe(ResultFailureReason.ERROR);
 
-      // Provider info
       expect(summary.provider?.id).toBe('test-provider');
       expect(summary.provider?.label).toBe('Test Provider');
 
-      // Response info
       expect(summary.response?.output).toBeDefined();
       expect(summary.response?.cached).toBe(false);
       expect(summary.response?.cost).toBe(0.01);
@@ -141,13 +140,11 @@ describe('JSON utilities for large data handling', () => {
         completion: 500,
       });
 
-      // Metadata keys (not values)
       expect(summary.response?.metadata?.keys).toContain('model');
       expect(summary.response?.metadata?.keys).toContain('timestamp');
       expect(summary.response?.metadata?.keys).toContain('additionalData');
       expect(summary.response?.metadata?.keyCount).toBe(3);
 
-      // Test case info
       expect(summary.testCase?.description).toBe('Test case with regular data');
       expect(summary.testCase?.vars).toEqual(['input', 'context']);
     });
@@ -167,11 +164,14 @@ describe('JSON utilities for large data handling', () => {
         promptIdx: 2,
         success: true,
         score: 1.0,
-        failureReason: 'NONE',
+        failureReason: ResultFailureReason.NONE,
         latencyMs: 50,
         promptId: 'minimal-prompt-id',
         provider: { id: 'minimal-provider' },
-        prompt: { raw: 'test prompt' },
+        prompt: { 
+          raw: 'test prompt',
+          label: 'Test Prompt',
+        },
         vars: {},
         testCase: { vars: {} },
         namedScores: {},
