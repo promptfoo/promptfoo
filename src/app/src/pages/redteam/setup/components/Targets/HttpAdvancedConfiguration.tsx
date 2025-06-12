@@ -159,7 +159,6 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
           </AccordionDetails>
         </Accordion>
 
-        {/* Token Estimation Section */}
         <Accordion defaultExpanded={!!selectedTarget.config.tokenEstimation?.enabled}>
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
             <Box>
