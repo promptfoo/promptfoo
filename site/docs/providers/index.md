@@ -12,19 +12,19 @@ Here's a basic example of configuring providers in your promptfoo YAML config:
 
 ```yaml
 providers:
-  - anthropic:messages:claude-3-7-sonnet-20250219
-  - openai:gpt-4.1-mini
-  - openai:o3-mini
+  - anthropic:messages:claude-sonnet-4-20250514
+  - openai:gpt-4.1
+  - openai:o4-mini
   - google:gemini-2.5-flash-preview-04-17
-  - vertex:gemini-2.5-flash-preview-04-17
+  - vertex:gemini-2.5-pro-exp-03-25
 ```
 
 ## Available Providers
 
 | Api Providers                                       | Description                                       | Syntax & Example                                   |
 | --------------------------------------------------- | ------------------------------------------------- | -------------------------------------------------- |
-| [OpenAI](./openai.md)                               | GPT models including GPT-4.1 and reasoning models | `openai:gpt-4.1-mini` or `openai:o3-mini`          |
-| [Anthropic](./anthropic.md)                         | Claude models                                     | `anthropic:messages:claude-3-7-sonnet-latest`      |
+| [OpenAI](./openai.md)                               | GPT models including GPT-4.1 and reasoning models | `openai:gpt-4.1` or `openai:o4-mini`               |
+| [Anthropic](./anthropic.md)                         | Claude models                                     | `anthropic:messages:claude-sonnet-4-20250514`      |
 | [HTTP](./http.md)                                   | Generic HTTP-based providers                      | `https://api.example.com/v1/chat/completions`      |
 | [Javascript](./custom-api.md)                       | Custom - JavaScript file                          | `file://path/to/custom_provider.js`                |
 | [Python](./python.md)                               | Custom - Python file                              | `file://path/to/custom_provider.py`                |
@@ -41,7 +41,7 @@ providers:
 | [F5](./f5.md)                                       | OpenAI-compatible AI Gateway interface            | `f5:path-name`                                     |
 | [fal.ai](./fal.md)                                  | Image Generation Provider                         | `fal:image:fal-ai/fast-sdxl`                       |
 | [Fireworks AI](./fireworks.md)                      | Various hosted models                             | `fireworks:accounts/fireworks/models/qwen-v2p5-7b` |
-| [GitHub](./github.md)                               | GitHub AI Gateway                                 | `github:gpt-4.1-mini`                              |
+| [GitHub](./github.md)                               | GitHub AI Gateway                                 | `github:gpt-4.1`                                   |
 | [Google AI Studio](./google.md)                     | Gemini models                                     | `google:gemini-2.5-flash-preview-04-17`            |
 | [Google Vertex AI](./vertex.md)                     | Google Cloud's AI platform                        | `vertex:gemini-2.5-flash-preview-04-17`            |
 | [Groq](./groq.md)                                   | High-performance inference API                    | `groq:llama-3.3-70b-versatile`                     |
@@ -85,7 +85,7 @@ Providers are specified using various syntax options:
    provider_name:model_name
    ```
 
-   Example: `openai:gpt-4.1-mini` or `anthropic:claude-3-7-sonnet-20250219`
+   Example: `openai:gpt-4.1` or `anthropic:claude-sonnet-4-20250514`
 
 2. Object format with configuration:
 
@@ -99,7 +99,7 @@ Providers are specified using various syntax options:
    Example:
 
    ```yaml
-   - id: openai:gpt-4.1-mini
+   - id: openai:gpt-4.1
      config:
        temperature: 0.7
        max_tokens: 150
@@ -110,7 +110,7 @@ Providers are specified using various syntax options:
    Load a single provider:
 
    ```yaml title="provider.yaml"
-   id: openai:chat:gpt-4.1-mini
+   id: openai:chat:gpt-4.1
    config:
      temperature: 0.7
    ```
@@ -118,10 +118,10 @@ Providers are specified using various syntax options:
    Or multiple providers:
 
    ```yaml title="providers.yaml"
-   - id: openai:gpt-4.1-mini
+   - id: openai:gpt-4.1
      config:
        temperature: 0.7
-   - id: anthropic:messages:claude-3-7-sonnet-20250219
+   - id: anthropic:messages:claude-sonnet-4-20250514
      config:
        max_tokens: 1000
    ```
@@ -147,7 +147,7 @@ You can also specify API keys in your configuration file:
 
 ```yaml
 providers:
-  - id: openai:gpt-4.1-mini
+  - id: openai:gpt-4.1
     config:
       apiKey: your_api_key_here
 ```
@@ -218,7 +218,7 @@ Example:
 
 ```yaml
 providers:
-  - id: openai:gpt-4.1-mini
+  - id: openai:gpt-4.1
     config:
       temperature: 0.7
       max_tokens: 150
@@ -238,7 +238,7 @@ Enable MCP for a provider by adding the `mcp` block to your provider's configura
 
 ```yaml
 providers:
-  - id: openai:gpt-4.1-mini
+  - id: openai:gpt-4.1
     config:
       temperature: 0.7
       mcp:
@@ -255,7 +255,7 @@ You can connect a single provider to multiple MCP servers:
 
 ```yaml
 providers:
-  - id: openai:gpt-4.1-mini
+  - id: openai:gpt-4.1
     config:
       mcp:
         enabled: true

@@ -15,10 +15,15 @@ import { getEnvBool } from '../../envars';
 import { getAuthor, getUserEmail } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
-import { loadApiProviders } from '../../providers';
+import { getProviderIds, loadApiProviders } from '../../providers';
 import telemetry from '../../telemetry';
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types';
 import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
+import {
+  getCloudDatabaseId,
+  getPluginSeverityOverridesFromCloud,
+  isCloudProvider,
+} from '../../util/cloud';
 import { resolveConfigs } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/manage';
 import invariant from '../../util/invariant';
@@ -30,6 +35,7 @@ import {
   DEFAULT_STRATEGIES,
   REDTEAM_MODEL,
   type Severity,
+  type Plugin,
 } from '../constants';
 import { shouldGenerateRemote, neverGenerateRemote } from '../remoteGeneration';
 import type {
@@ -127,6 +133,9 @@ export async function doGenerateRedteam(
   }
 
   let targetPurposeDiscoveryResult: TargetPurposeDiscoveryResult | undefined;
+  let pluginSeverityOverrides: Map<Plugin, Severity> = new Map();
+  let pluginSeverityOverridesId: string | undefined;
+
   if (configPath) {
     const resolved = await resolveConfigs(
       {
@@ -137,17 +146,17 @@ export async function doGenerateRedteam(
     testSuite = resolved.testSuite;
     redteamConfig = resolved.config.redteam;
 
+    const providers = await loadApiProviders(resolved.config.providers ?? []);
+
+    invariant(
+      providers.length === 1,
+      'Generation can only be run with a single provider. Please specify a single provider in the config file.',
+    );
+
     if (
-      !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_TARGET_DISCOVERY_AGENT', false) &&
-      !neverGenerateRemote() &&
-      resolved.config.providers &&
-      Array.isArray(resolved.config.providers)
+      !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_TARGET_DISCOVERY_AGENT', true) &&
+      !neverGenerateRemote()
     ) {
-      invariant(
-        resolved.config.providers.length > 0,
-        'At least one provider must be provided in the config file',
-      );
-      const providers = await loadApiProviders(resolved.config.providers);
       try {
         if (testSuite.prompts.length > 1) {
           logger.warn(
@@ -164,6 +173,25 @@ export async function doGenerateRedteam(
           `Target Discovery Agent failed from error, skipping: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
+    }
+
+    try {
+      // If the provider is a cloud provider, check for plugin severity overrides:
+      const providerId = getProviderIds(resolved.config.providers!)[0];
+      if (isCloudProvider(providerId)) {
+        const cloudId = getCloudDatabaseId(providerId);
+        const overrides = await getPluginSeverityOverridesFromCloud(cloudId);
+        if (overrides) {
+          pluginSeverityOverrides = new Map(
+            Object.entries(overrides.severities) as [Plugin, Severity][],
+          );
+          pluginSeverityOverridesId = overrides.id;
+        }
+      }
+    } catch (error) {
+      logger.error(
+        `Plugin severity override check failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   } else if (options.purpose) {
     // There is a purpose, so we can just have a dummy test suite for standalone invocation
@@ -248,6 +276,23 @@ export async function doGenerateRedteam(
     }));
   }
   invariant(plugins && Array.isArray(plugins) && plugins.length > 0, 'No plugins found');
+
+  // Apply plugin severity overrides
+  if (pluginSeverityOverrides.size > 0) {
+    let intersectionCount = 0;
+    plugins = plugins.map((plugin) => {
+      if (pluginSeverityOverrides.has(plugin.id as Plugin)) {
+        intersectionCount++;
+        return {
+          ...plugin,
+          severity: pluginSeverityOverrides.get(plugin.id as Plugin),
+        };
+      }
+      return plugin;
+    });
+
+    logger.info(`Applied ${intersectionCount} custom plugin severity levels`);
+  }
 
   let strategies: (string | { id: string })[] =
     redteamConfig?.strategies ?? DEFAULT_STRATEGIES.map((s) => ({ id: s }));
@@ -363,6 +408,7 @@ export async function doGenerateRedteam(
           ? { configHash: getConfigHash(configPath) }
           : { configHash: 'force-regenerate' }),
         ...(targetPurposeDiscoveryResult ? { targetPurposeDiscoveryResult } : {}),
+        ...(pluginSeverityOverridesId ? { pluginSeverityOverridesId } : {}),
       },
     };
     const author = getAuthor();

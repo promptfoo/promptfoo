@@ -233,9 +233,29 @@ describe('calculateOpenAICost', () => {
     expect(cost).toBeCloseTo((1000 * 150 + 500 * 600) / 1e6, 6);
   });
 
+  it('should calculate cost correctly for o3-pro', () => {
+    const cost = calculateOpenAICost('o3-pro', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 20 + 500 * 80) / 1e6, 6);
+  });
+
   it('should calculate cost correctly for o1-pro-2025-03-19', () => {
     const cost = calculateOpenAICost('o1-pro-2025-03-19', {}, 1000, 500);
     expect(cost).toBeCloseTo((1000 * 150 + 500 * 600) / 1e6, 6);
+  });
+
+  it('should calculate cost correctly for o3', () => {
+    const cost = calculateOpenAICost('o3', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 2 + 500 * 8) / 1e6, 6);
+  });
+
+  it('should calculate cost correctly for o3-2025-04-16', () => {
+    const cost = calculateOpenAICost('o3-2025-04-16', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 2 + 500 * 8) / 1e6, 6);
+  });
+
+  it('should calculate cost correctly for o3-pro-2025-06-10', () => {
+    const cost = calculateOpenAICost('o3-pro-2025-06-10', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 20 + 500 * 80) / 1e6, 6);
   });
 
   it('should calculate audio token costs for gpt-4o-realtime-preview-2024-12-17', () => {
