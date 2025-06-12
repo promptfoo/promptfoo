@@ -1,6 +1,11 @@
 import { getGraderById } from '../../src/redteam/graders';
 import { AsciiSmugglingGrader } from '../../src/redteam/plugins/asciiSmuggling';
 import { BeavertailsGrader } from '../../src/redteam/plugins/beavertails';
+import { FinancialCalculationErrorPluginGrader } from '../../src/redteam/plugins/financial/financialCalculationError';
+import { FinancialComplianceViolationPluginGrader } from '../../src/redteam/plugins/financial/financialComplianceViolation';
+import { FinancialDataLeakagePluginGrader } from '../../src/redteam/plugins/financial/financialDataLeakage';
+import { FinancialHallucinationPluginGrader } from '../../src/redteam/plugins/financial/financialHallucination';
+import { FinancialSycophancyPluginGrader } from '../../src/redteam/plugins/financial/financialSycophancy';
 import { HarmfulGrader } from '../../src/redteam/plugins/harmful/graders';
 import { OffTopicPluginGrader } from '../../src/redteam/plugins/offTopic';
 import { PlinyGrader } from '../../src/redteam/plugins/pliny';
@@ -33,6 +38,25 @@ describe('getGraderById', () => {
 
     const toxicChatGrader = getGraderById('promptfoo:redteam:toxic-chat');
     expect(toxicChatGrader).toBeInstanceOf(ToxicChatGrader);
+
+    const financialCalculationGrader = getGraderById(
+      'promptfoo:redteam:financial:calculation-error',
+    );
+    expect(financialCalculationGrader).toBeInstanceOf(FinancialCalculationErrorPluginGrader);
+
+    const financialComplianceGrader = getGraderById(
+      'promptfoo:redteam:financial:compliance-violation',
+    );
+    expect(financialComplianceGrader).toBeInstanceOf(FinancialComplianceViolationPluginGrader);
+
+    const financialDataLeakageGrader = getGraderById('promptfoo:redteam:financial:data-leakage');
+    expect(financialDataLeakageGrader).toBeInstanceOf(FinancialDataLeakagePluginGrader);
+
+    const financialHallucinationGrader = getGraderById('promptfoo:redteam:financial:hallucination');
+    expect(financialHallucinationGrader).toBeInstanceOf(FinancialHallucinationPluginGrader);
+
+    const financialSycophancyGrader = getGraderById('promptfoo:redteam:financial:sycophancy');
+    expect(financialSycophancyGrader).toBeInstanceOf(FinancialSycophancyPluginGrader);
   });
 
   it('should return harmful grader for IDs starting with promptfoo:redteam:harmful', () => {
