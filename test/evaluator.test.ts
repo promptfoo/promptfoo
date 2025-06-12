@@ -2399,7 +2399,7 @@ describe('evaluator', () => {
       prompt: 10, // 5 from provider + 5 from assertion
       completion: 10, // 5 from provider + 5 from assertion
       cached: 0,
-      numRequests: 3, // Updated: 1 for provider + request increments
+      numRequests: 2, // 1 from provider + 1 from assertion
       completionDetails: {
         reasoning: 0,
         acceptedPrediction: 0,
@@ -2410,6 +2410,11 @@ describe('evaluator', () => {
         prompt: 0,
         completion: 0,
         cached: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       },
     });
   });
@@ -2728,7 +2733,12 @@ describe('runEval', () => {
       prompt: 10, // 5 from provider + 5 from assertion
       completion: 10, // 5 from provider + 5 from assertion
       cached: 0,
-      numRequests: 3, // Updated: 1 for provider + request increments
+      completionDetails: {
+        reasoning: 0,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+      },
+      numRequests: 2, // 1 from provider + 1 from assertion
       completionDetails: {
         reasoning: 0,
         acceptedPrediction: 0,
@@ -2739,6 +2749,11 @@ describe('runEval', () => {
         prompt: 0,
         completion: 0,
         cached: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       },
     });
   });

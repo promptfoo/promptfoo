@@ -166,6 +166,13 @@ export class TokenUsageTracker {
   }
 
   /**
+   * Cleanup method to prevent memory leaks
+   */
+  public cleanup(): void {
+    this.providersMap.clear();
+  }
+
+  /**
    * Merge token usage records
    * @param current The current token usage
    * @param update The new token usage to merge
@@ -212,9 +219,6 @@ export class TokenUsageTracker {
 
     if (typeof update.numRequests === 'number') {
       result.numRequests = (result.numRequests || 0) + update.numRequests;
-    } else {
-      // Default to incrementing by 1 if numRequests not provided
-      result.numRequests = (result.numRequests || 0) + 1;
     }
 
     // Handle completion details
