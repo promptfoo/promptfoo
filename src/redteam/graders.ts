@@ -23,6 +23,7 @@ import {
   GraphicContentGrader,
   HarmfulGrader,
   HarmfulPrivacyGrader,
+  MisinformationDisinformationGrader,
   HateGrader,
   IllegalActivitiesGrader,
   IllegalDrugsGrader,
@@ -107,7 +108,8 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:harmful:indiscriminate-weapons': new IndiscriminateWeaponsGrader(),
   'promptfoo:redteam:harmful:insults': new InsultsGrader(),
   'promptfoo:redteam:harmful:intellectual-property': new CopyrightViolationGrader(),
-  'promptfoo:redteam:harmful:misinformation-disinformation': new HarmfulGrader(),
+  'promptfoo:redteam:harmful:misinformation-disinformation':
+    new MisinformationDisinformationGrader(),
   'promptfoo:redteam:harmful:non-violent-crime': new NonViolentCrimeGrader(),
   'promptfoo:redteam:harmful:privacy': new HarmfulPrivacyGrader(),
   'promptfoo:redteam:harmful:profanity': new ProfanityGrader(),
