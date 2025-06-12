@@ -21,24 +21,27 @@ import { sleep } from '../src/util/time';
 jest.mock('../src/util/fileReference', () => ({
   ...jest.requireActual('../src/util/fileReference'),
   processConfigFileReferences: jest.fn().mockImplementation(async (config) => {
-    if (typeof config === 'object' && config !== null) {
-      if (config.tests && Array.isArray(config.tests)) {
-        const result = {
-          ...config,
-          tests: config.tests.map((test: any) => {
-            return {
-              ...test,
-              vars:
-                test.vars.var1 === 'file://test/fixtures/test_file.txt'
-                  ? {
-                      var1: '<h1>Sample Report</h1><p>This is a test report with some data for the year 2023.</p>',
-                    }
-                  : test.vars,
-            };
-          }),
-        };
-        return result;
-      }
+    if (
+      typeof config === 'object' &&
+      config !== null &&
+      config.tests &&
+      Array.isArray(config.tests)
+    ) {
+      const result = {
+        ...config,
+        tests: config.tests.map((test: any) => {
+          return {
+            ...test,
+            vars:
+              test.vars.var1 === 'file://test/fixtures/test_file.txt'
+                ? {
+                    var1: '<h1>Sample Report</h1><p>This is a test report with some data for the year 2023.</p>',
+                  }
+                : test.vars,
+          };
+        }),
+      };
+      return result;
     }
     return config;
   }),
@@ -296,8 +299,8 @@ describe('evaluator', () => {
 
   it('evaluate with vars from file', async () => {
     const originalReadFileSync = fs.readFileSync;
-    fs.readFileSync = jest.fn().mockImplementation((path) => {
-      if (path.includes('test_file.txt')) {
+    jest.spyOn(fs, 'readFileSync').mockImplementation((path) => {
+      if (typeof path === 'string' && path.includes('test_file.txt')) {
         return '<h1>Sample Report</h1><p>This is a test report with some data for the year 2023.</p>';
       }
       return originalReadFileSync(path);
@@ -2284,6 +2287,80 @@ describe('evaluator', () => {
       );
 
       expect(slowApiProvider.cleanup).toHaveBeenCalledWith();
+    } finally {
+      if (longTimer) {
+        clearTimeout(longTimer);
+      }
+    }
+  });
+
+  it('should abort when exceeding maxEvalTimeMs', async () => {
+    const mockAddResult = jest.fn().mockResolvedValue(undefined);
+    let longTimer: NodeJS.Timeout | null = null;
+
+    const slowApiProvider: ApiProvider = {
+      id: jest.fn().mockReturnValue('slow-provider'),
+      callApi: jest.fn().mockImplementation((_, __, opts) => {
+        return new Promise((resolve, reject) => {
+          longTimer = setTimeout(() => {
+            resolve({
+              output: 'Slow response',
+              tokenUsage: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 1 },
+            });
+          }, 1000);
+
+          opts?.abortSignal?.addEventListener('abort', () => {
+            if (longTimer) {
+              clearTimeout(longTimer);
+            }
+            reject(new Error('aborted'));
+          });
+        });
+      }),
+      cleanup: jest.fn(),
+    };
+
+    const mockEval = {
+      id: 'mock-eval-id',
+      results: [],
+      prompts: [],
+      persisted: false,
+      config: {},
+      addResult: mockAddResult,
+      addPrompts: jest.fn().mockResolvedValue(undefined),
+      fetchResultsByTestIdx: jest.fn().mockResolvedValue([]),
+      getResults: jest.fn().mockResolvedValue([]),
+      toEvaluateSummary: jest.fn().mockResolvedValue({
+        results: [],
+        prompts: [],
+        stats: {
+          successes: 0,
+          failures: 0,
+          errors: 2,
+          tokenUsage: newTokenUsage(),
+        },
+      }),
+      save: jest.fn().mockResolvedValue(undefined),
+      setVars: jest.fn().mockResolvedValue(undefined),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [slowApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}, {}],
+    };
+
+    try {
+      const evalPromise = evaluate(testSuite, mockEval as unknown as Eval, { maxEvalTimeMs: 100 });
+      await evalPromise;
+
+      expect(mockAddResult).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.stringContaining('aborted'),
+          success: false,
+          failureReason: ResultFailureReason.ERROR,
+        }),
+      );
     } finally {
       if (longTimer) {
         clearTimeout(longTimer);

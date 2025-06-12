@@ -11,7 +11,7 @@ import { fetchWithCache, getCache } from './cache';
 import cliState from './cliState';
 import { FILE_METADATA_KEY } from './constants';
 import { updateSignalFile } from './database/signal';
-import { getEnvBool, getEnvInt, getEvalTimeoutMs, isCI } from './envars';
+import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger from './logger';
 import type Eval from './models/eval';
@@ -528,6 +528,23 @@ class Evaluator {
 
   async evaluate(): Promise<Eval> {
     const { testSuite, options } = this;
+    const startTime = Date.now();
+    const maxEvalTimeMs = options.maxEvalTimeMs ?? getMaxEvalTimeMs();
+    let evalTimedOut = false;
+    let globalTimeout: NodeJS.Timeout | undefined;
+    let globalAbortController: AbortController | undefined;
+    const processedIndices = new Set<number>();
+
+    if (maxEvalTimeMs > 0) {
+      globalAbortController = new AbortController();
+      options.abortSignal = options.abortSignal
+        ? AbortSignal.any([options.abortSignal, globalAbortController.signal])
+        : globalAbortController.signal;
+      globalTimeout = setTimeout(() => {
+        evalTimedOut = true;
+        globalAbortController?.abort();
+      }, maxEvalTimeMs);
+    }
     const vars = new Set<string>();
     const checkAbort = () => {
       if (options.abortSignal?.aborted) {
@@ -1069,8 +1086,7 @@ class Evaluator {
         this.stats.errors++;
 
         // Update prompt metrics
-        const { promptIdx } = timeoutResult;
-        const metrics = prompts[promptIdx].metrics;
+        const { metrics } = prompts[evalStep.promptIdx];
         if (metrics) {
           metrics.testErrorCount += 1;
           metrics.totalLatencyMs += timeoutMs;
@@ -1220,33 +1236,46 @@ class Evaluator {
       }
     }
 
-    if (serialRunEvalOptions.length > 0) {
-      // Run serial evaluations first
-      logger.info(`Running ${serialRunEvalOptions.length} serial evaluations...`);
-      for (const evalStep of serialRunEvalOptions) {
-        if (isWebUI) {
-          const provider = evalStep.provider.label || evalStep.provider.id();
-          const vars = Object.entries(evalStep.test.vars || {})
-            .map(([k, v]) => `${k}=${v}`)
-            .join(' ')
-            .slice(0, 50)
-            .replace(/\n/g, ' ');
-          logger.info(
-            `[${numComplete}/${serialRunEvalOptions.length}] Running ${provider} with vars: ${vars}`,
-          );
+    try {
+      if (serialRunEvalOptions.length > 0) {
+        // Run serial evaluations first
+        logger.info(`Running ${serialRunEvalOptions.length} serial evaluations...`);
+        for (const evalStep of serialRunEvalOptions) {
+          if (isWebUI) {
+            const provider = evalStep.provider.label || evalStep.provider.id();
+            const vars = Object.entries(evalStep.test.vars || {})
+              .map(([k, v]) => `${k}=${v}`)
+              .join(' ')
+              .slice(0, 50)
+              .replace(/\n/g, ' ');
+            logger.info(
+              `[${numComplete}/${serialRunEvalOptions.length}] Running ${provider} with vars: ${vars}`,
+            );
+          }
+          const idx = runEvalOptions.indexOf(evalStep);
+          await processEvalStepWithTimeout(evalStep, idx);
+          processedIndices.add(idx);
         }
-        await processEvalStepWithTimeout(evalStep, serialRunEvalOptions.indexOf(evalStep));
+      }
+
+      // Then run concurrent evaluations
+      logger.info(
+        `Running ${concurrentRunEvalOptions.length} concurrent evaluations with up to ${concurrency} threads...`,
+      );
+      await async.forEachOfLimit(concurrentRunEvalOptions, concurrency, async (evalStep) => {
+        checkAbort();
+        const idx = runEvalOptions.indexOf(evalStep);
+        await processEvalStepWithTimeout(evalStep, idx);
+        processedIndices.add(idx);
+      });
+    } catch (err) {
+      if (options.abortSignal?.aborted) {
+        evalTimedOut = evalTimedOut || maxEvalTimeMs > 0;
+        logger.warn(`Evaluation aborted: ${String(err)}`);
+      } else {
+        throw err;
       }
     }
-
-    // Then run concurrent evaluations
-    logger.info(
-      `Running ${concurrentRunEvalOptions.length} concurrent evaluations with up to ${concurrency} threads...`,
-    );
-    await async.forEachOfLimit(concurrentRunEvalOptions, concurrency, async (evalStep, index) => {
-      checkAbort();
-      await processEvalStepWithTimeout(evalStep, index);
-    });
 
     // Do we have to run comparisons between row outputs?
     const compareRowsCount = rowsWithSelectBestAssertion.size;
@@ -1361,6 +1390,49 @@ class Evaluator {
     }
     if (progressBar) {
       progressBar.stop();
+    }
+
+    if (globalTimeout) {
+      clearTimeout(globalTimeout);
+    }
+
+    if (evalTimedOut) {
+      for (let i = 0; i < runEvalOptions.length; i++) {
+        if (!processedIndices.has(i)) {
+          const evalStep = runEvalOptions[i];
+          const timeoutResult = {
+            provider: {
+              id: evalStep.provider.id(),
+              label: evalStep.provider.label,
+              config: evalStep.provider.config,
+            },
+            prompt: {
+              raw: evalStep.prompt.raw,
+              label: evalStep.prompt.label,
+              config: evalStep.prompt.config,
+            },
+            vars: evalStep.test.vars || {},
+            error: `Evaluation exceeded max duration of ${maxEvalTimeMs}ms`,
+            success: false,
+            failureReason: ResultFailureReason.ERROR,
+            score: 0,
+            namedScores: {},
+            latencyMs: Date.now() - startTime,
+            promptIdx: evalStep.promptIdx,
+            testIdx: evalStep.testIdx,
+            testCase: evalStep.test,
+            promptId: evalStep.prompt.id || '',
+          } as EvaluateResult;
+
+          await this.evalRecord.addResult(timeoutResult);
+          this.stats.errors++;
+          const { metrics } = prompts[evalStep.promptIdx];
+          if (metrics) {
+            metrics.testErrorCount += 1;
+            metrics.totalLatencyMs += timeoutResult.latencyMs;
+          }
+        }
+      }
     }
 
     this.evalRecord.setVars(Array.from(vars));
