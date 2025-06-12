@@ -1071,6 +1071,7 @@
                       {
                         "type": "string",
                         "enum": [
+                          "aegis",
                           "agentic:memory-poisoning",
                           "ascii-smuggling",
                           "beavertails",
@@ -1246,6 +1247,7 @@
                           {
                             "type": "string",
                             "enum": [
+                              "aegis",
                               "agentic:memory-poisoning",
                               "ascii-smuggling",
                               "beavertails",
