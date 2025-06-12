@@ -196,7 +196,7 @@ describe('JSON utilities for large data handling', () => {
       };
 
       const summary = summarizeEvaluateResultForLogging(resultWithLongOutput, 100);
-
+      
       expect(summary.response?.output?.length).toBeLessThanOrEqual(115); // 100 + '...[truncated]'
       expect(summary.response?.output).toContain('...[truncated]');
     });
@@ -222,7 +222,7 @@ describe('JSON utilities for large data handling', () => {
       };
 
       const summary = summarizeEvaluateResultForLogging(resultWithObjectOutput);
-
+      
       expect(summary.response?.output).toBe('[object Object]');
     });
   });
@@ -246,7 +246,7 @@ describe('JSON utilities for large data handling', () => {
 
     it('should perform efficiently', () => {
       const testResult = createTestEvaluateResult();
-
+      
       const start = Date.now();
       const summary = summarizeEvaluateResultForLogging(testResult);
       const stringified = safeJsonStringify(summary);
