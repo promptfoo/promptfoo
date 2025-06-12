@@ -2,6 +2,7 @@ import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import yaml from 'js-yaml';
 import { getEnvBool, getEnvString } from '../envars';
+import type { EvaluateResult, ResultFailureReason } from '../types';
 import invariant from '../util/invariant';
 
 let ajvInstance: Ajv | null = null;
@@ -33,23 +34,27 @@ export function isValidJson(str: string): boolean {
   }
 }
 
+/**
+ * Creates a truncated version of an object for safe JSON stringification.
+ * Prevents memory issues by limiting string, array, and object sizes.
+ *
+ * @param value - The value to truncate and stringify
+ * @param prettyPrint - Whether to format the JSON with indentation
+ * @returns A JSON string representation of the truncated value
+ */
 function safeJsonStringifyTruncated<T>(value: T, prettyPrint: boolean = false): string {
-  const MAX_STRING_LENGTH = 1000; // Max length for string values
-  const MAX_ARRAY_LENGTH = 10; // Max elements to include from arrays
   const cache = new Set();
   const space = prettyPrint ? 2 : undefined;
 
   const truncateValue = (val: any): any => {
     if (typeof val === 'string') {
-      return val.length > MAX_STRING_LENGTH
-        ? val.substring(0, MAX_STRING_LENGTH) + '...[truncated]'
-        : val;
+      return val.length > 1000 ? val.substring(0, 1000) + '...[truncated]' : val;
     }
 
     if (Array.isArray(val)) {
-      const truncated = val.slice(0, MAX_ARRAY_LENGTH).map(truncateValue);
-      if (val.length > MAX_ARRAY_LENGTH) {
-        truncated.push(`...[${val.length - MAX_ARRAY_LENGTH} more items]`);
+      const truncated = val.slice(0, 10).map(truncateValue);
+      if (val.length > 10) {
+        truncated.push(`...[${val.length - 10} more items]`);
       }
       return truncated;
     }
@@ -62,10 +67,9 @@ function safeJsonStringifyTruncated<T>(value: T, prettyPrint: boolean = false): 
 
       const truncated: any = {};
       let count = 0;
-      const MAX_OBJECT_KEYS = 20;
 
       for (const [k, v] of Object.entries(val)) {
-        if (count >= MAX_OBJECT_KEYS) {
+        if (count >= 20) {
           truncated['...[truncated]'] = `${Object.keys(val).length - count} more keys`;
           break;
         }
@@ -81,13 +85,18 @@ function safeJsonStringifyTruncated<T>(value: T, prettyPrint: boolean = false): 
   try {
     return JSON.stringify(truncateValue(value), null, space) || '{}';
   } catch {
-    // Ultimate fallback
     return `{"error": "Failed to stringify even truncated data", "type": "${typeof value}", "constructor": "${value?.constructor?.name || 'unknown'}"}`;
   }
 }
 
+/**
+ * Safely stringify a value to JSON, handling circular references and large objects.
+ *
+ * @param value - The value to stringify
+ * @param prettyPrint - Whether to format the JSON with indentation
+ * @returns JSON string representation, or undefined if serialization fails
+ */
 export function safeJsonStringify<T>(value: T, prettyPrint: boolean = false): string | undefined {
-  // Prevent circular references
   const cache = new Set();
   const space = prettyPrint ? 2 : undefined;
 
@@ -108,13 +117,10 @@ export function safeJsonStringify<T>(value: T, prettyPrint: boolean = false): st
       ) || undefined
     );
   } catch (error) {
-    // If JSON.stringify fails (e.g., RangeError: Invalid string length),
-    // try to create a truncated version for debugging
     if (error instanceof RangeError && error.message.includes('Invalid string length')) {
       return safeJsonStringifyTruncated(value, prettyPrint);
     }
-    // For other errors, return a basic error representation
-    return `{"error": "Failed to stringify: ${error instanceof Error ? error.message : String(error)}"}`;
+    return undefined;
   }
 }
 
@@ -278,11 +284,60 @@ export function orderKeys<T extends object>(obj: T, order: (keyof T)[]): T {
 }
 
 /**
- * Creates a summary of an EvaluateResult for logging purposes, avoiding the RangeError
- * that can occur when trying to stringify large evaluation results.
+ * Type definition for a logging-safe summary of an EvaluateResult.
  */
-export function summarizeEvaluateResultForLogging(result: any): any {
-  const summary: any = {
+export interface LoggableEvaluateResultSummary {
+  id?: string;
+  testIdx: number;
+  promptIdx: number;
+  success: boolean;
+  score: number;
+  error?: string | null;
+  failureReason: ResultFailureReason;
+  provider?: {
+    id: string;
+    label?: string;
+  };
+  response?: {
+    output?: string;
+    error?: string | null;
+    cached?: boolean;
+    cost?: number;
+    tokenUsage?: any;
+    metadata?: {
+      keys: string[];
+      keyCount: number;
+    };
+  };
+  testCase?: {
+    description?: string;
+    vars?: string[];
+  };
+}
+
+/**
+ * Creates a summary of an EvaluateResult for logging purposes, avoiding RangeError
+ * when stringifying large evaluation results.
+ *
+ * Extracts key information while truncating potentially large fields like response
+ * outputs and metadata values.
+ *
+ * @param result - The evaluation result to summarize
+ * @param maxOutputLength - Maximum length for response output before truncation. Default: 500
+ * @param includeMetadataKeys - Whether to include metadata keys in the summary. Default: true
+ * @returns A summarized version safe for JSON stringification
+ * @throws {TypeError} If result is null or undefined
+ */
+export function summarizeEvaluateResultForLogging(
+  result: EvaluateResult,
+  maxOutputLength: number = 500,
+  includeMetadataKeys: boolean = true,
+): LoggableEvaluateResultSummary {
+  if (!result) {
+    throw new TypeError('EvaluateResult cannot be null or undefined');
+  }
+
+  const summary: LoggableEvaluateResultSummary = {
     id: result.id,
     testIdx: result.testIdx,
     promptIdx: result.promptIdx,
@@ -292,15 +347,13 @@ export function summarizeEvaluateResultForLogging(result: any): any {
     failureReason: result.failureReason,
   };
 
-  // Include basic provider info
   if (result.provider) {
     summary.provider = {
-      id: result.provider.id,
+      id: result.provider.id || '',
       label: result.provider.label,
     };
   }
 
-  // Include truncated response info
   if (result.response) {
     summary.response = {
       error: result.response.error,
@@ -309,15 +362,15 @@ export function summarizeEvaluateResultForLogging(result: any): any {
       tokenUsage: result.response.tokenUsage,
     };
 
-    // Truncate large output fields
-    if (result.response.output) {
+    if (result.response.output != null) {
       const output = String(result.response.output);
       summary.response.output =
-        output.length > 500 ? output.substring(0, 500) + '...[truncated]' : output;
+        output.length > maxOutputLength
+          ? output.substring(0, maxOutputLength) + '...[truncated]'
+          : output;
     }
 
-    // Include metadata keys but not values (which could be large)
-    if (result.response.metadata) {
+    if (result.response.metadata && includeMetadataKeys) {
       summary.response.metadata = {
         keys: Object.keys(result.response.metadata),
         keyCount: Object.keys(result.response.metadata).length,
@@ -325,7 +378,6 @@ export function summarizeEvaluateResultForLogging(result: any): any {
     }
   }
 
-  // Include basic test case info without potentially large data
   if (result.testCase) {
     summary.testCase = {
       description: result.testCase.description,
