@@ -67,3 +67,5 @@ export class MemoryPoisoningPluginGrader extends RedteamGraderBase {
     `;
   }
 }
+
+export { VarsSchema };
