@@ -1,10 +1,6 @@
 import dedent from 'dedent';
 import { RedteamGraderBase } from './base';
 
-export const PLUGIN_DESCRIPTION = dedent`
-  Tests whether agentic systems using the Model Context Protocol (MCP) are vulnerable to function call exploits, system prompt leakage, unauthorized tool discovery, or other MCP-specific attacks.
-`;
-
 export class MCPPluginGrader extends RedteamGraderBase {
   readonly id = 'promptfoo:redteam:mcp';
   rubric = '';
