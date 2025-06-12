@@ -12,6 +12,11 @@ import { CrossSessionLeakGrader } from './plugins/crossSessionLeak';
 import { DebugAccessGrader } from './plugins/debugAccess';
 import { DivergentRepetitionGrader } from './plugins/divergentRepetition';
 import { ExcessiveAgencyGrader } from './plugins/excessiveAgency';
+import { FinancialCalculationErrorPluginGrader } from './plugins/financial/financialCalculationError';
+import { FinancialComplianceViolationPluginGrader } from './plugins/financial/financialComplianceViolation';
+import { FinancialDataLeakagePluginGrader } from './plugins/financial/financialDataLeakage';
+import { FinancialHallucinationPluginGrader } from './plugins/financial/financialHallucination';
+import { FinancialSycophancyPluginGrader } from './plugins/financial/financialSycophancy';
 import { HallucinationGrader } from './plugins/hallucination';
 import { HarmbenchGrader } from './plugins/harmbench';
 import {
@@ -74,6 +79,12 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:medical:incorrect-knowledge': new MedicalIncorrectKnowledgePluginGrader(),
   'promptfoo:redteam:medical:prioritization-error': new MedicalPrioritizationErrorPluginGrader(),
   'promptfoo:redteam:medical:sycophancy': new MedicalSycophancyPluginGrader(),
+  'promptfoo:redteam:financial:calculation-error': new FinancialCalculationErrorPluginGrader(),
+  'promptfoo:redteam:financial:compliance-violation':
+    new FinancialComplianceViolationPluginGrader(),
+  'promptfoo:redteam:financial:data-leakage': new FinancialDataLeakagePluginGrader(),
+  'promptfoo:redteam:financial:hallucination': new FinancialHallucinationPluginGrader(),
+  'promptfoo:redteam:financial:sycophancy': new FinancialSycophancyPluginGrader(),
   'promptfoo:redteam:off-topic': new OffTopicPluginGrader(),
   'promptfoo:redteam:ascii-smuggling': new AsciiSmugglingGrader(),
   'promptfoo:redteam:beavertails': new BeavertailsGrader(),
