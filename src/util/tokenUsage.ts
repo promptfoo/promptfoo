@@ -31,10 +31,20 @@ export class TokenUsageTracker {
       return;
     }
 
-    const current = this.providersMap.get(providerId) || {};
+    const current =
+      this.providersMap.get(providerId) ??
+      ({
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
+        numRequests: 0,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+        assertions: { total: 0, prompt: 0, completion: 0, cached: 0 },
+      } satisfies TokenUsage);
     this.providersMap.set(providerId, this.mergeUsage(current, usage));
     logger.debug(
-      `Tracked token usage for ${providerId}: total=${usage.total || 0}, cached=${usage.cached || 0}`,
+      `Tracked token usage for ${providerId}: total=${usage.total ?? 0}, cached=${usage.cached ?? 0}`,
     );
   }
 
