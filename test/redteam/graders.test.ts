@@ -1,4 +1,5 @@
 import { getGraderById } from '../../src/redteam/graders';
+import { AegisGrader } from '../../src/redteam/plugins/aegis';
 import { AsciiSmugglingGrader } from '../../src/redteam/plugins/asciiSmuggling';
 import { BeavertailsGrader } from '../../src/redteam/plugins/beavertails';
 import { HarmfulGrader } from '../../src/redteam/plugins/harmful/graders';
@@ -33,6 +34,9 @@ describe('getGraderById', () => {
 
     const toxicChatGrader = getGraderById('promptfoo:redteam:toxic-chat');
     expect(toxicChatGrader).toBeInstanceOf(ToxicChatGrader);
+
+    const aegisGrader = getGraderById('promptfoo:redteam:aegis');
+    expect(aegisGrader).toBeInstanceOf(AegisGrader);
   });
 
   it('should return harmful grader for IDs starting with promptfoo:redteam:harmful', () => {
