@@ -404,7 +404,30 @@ describe('Python file references', () => {
       score: 1,
       reason: 'ok',
       named_scores: { accuracy: 0.9 },
-      component_results: [{ id: 1 }],
+      tokens_used: { total: 100, prompt: 60, completion: 40 },
+      component_results: [
+        {
+          pass_: true,
+          score: 0.8,
+          reason: 'component 1 ok',
+          named_scores: { precision: 0.85 },
+          tokens_used: { total: 50, prompt: 30, completion: 20 },
+        },
+        {
+          pass_: false,
+          score: 0.2,
+          reason: 'component 2 failed',
+          named_scores: { recall: 0.15 },
+          component_results: [
+            {
+              pass_: true,
+              score: 0.9,
+              reason: 'nested component ok',
+              named_scores: { f1: 0.7 },
+            },
+          ],
+        },
+      ],
     };
 
     jest.mocked(runPython).mockResolvedValueOnce(pythonResult as any);
@@ -429,7 +452,94 @@ describe('Python file references', () => {
       score: 1,
       reason: 'ok',
       namedScores: { accuracy: 0.9 },
-      componentResults: [{ id: 1 }],
+      tokensUsed: { total: 100, prompt: 60, completion: 40 },
+      componentResults: [
+        {
+          pass: true,
+          score: 0.8,
+          reason: 'component 1 ok',
+          namedScores: { precision: 0.85 },
+          tokensUsed: { total: 50, prompt: 30, completion: 20 },
+        },
+        {
+          pass: false,
+          score: 0.2,
+          reason: 'component 2 failed',
+          namedScores: { recall: 0.15 },
+          componentResults: [
+            {
+              pass: true,
+              score: 0.9,
+              reason: 'nested component ok',
+              namedScores: { f1: 0.7 },
+            },
+          ],
+        },
+      ],
     });
+
+    // Verify original object wasn't mutated
+    expect(pythonResult).not.toHaveProperty('pass');
+    expect(pythonResult).not.toHaveProperty('namedScores');
+    expect(pythonResult).not.toHaveProperty('componentResults');
+    expect(pythonResult).not.toHaveProperty('tokensUsed');
+  });
+
+  it('should support both "pass" and "pass_" keys', async () => {
+    const pythonResultWithPass = {
+      pass: true, // Regular dictionary key - should work fine
+      score: 1,
+      reason: 'using regular pass key',
+    };
+
+    jest.mocked(runPython).mockResolvedValueOnce(pythonResultWithPass as any);
+
+    const fileAssertion: Assertion = {
+      type: 'python',
+      value: 'file:///path/to/assert.py',
+    };
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+    const providerResponse = { output: 'Expected output' };
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'A prompt',
+      provider,
+      assertion: fileAssertion,
+      test: {} as AtomicTestCase,
+      providerResponse,
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.reason).toBe('using regular pass key');
+  });
+
+  it('should preserve falsy values when mapping snake_case keys', async () => {
+    const pythonResult = {
+      pass_: true,
+      score: 1,
+      reason: 'ok',
+      named_scores: {}, // Empty object should be preserved
+      component_results: [], // Empty array should be preserved
+    };
+
+    jest.mocked(runPython).mockResolvedValueOnce(pythonResult as any);
+
+    const fileAssertion: Assertion = {
+      type: 'python',
+      value: 'file:///path/to/assert.py',
+    };
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+    const providerResponse = { output: 'Expected output' };
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'A prompt',
+      provider,
+      assertion: fileAssertion,
+      test: {} as AtomicTestCase,
+      providerResponse,
+    });
+
+    expect(result.namedScores).toEqual({});
+    expect(result.componentResults).toEqual([]);
   });
 });

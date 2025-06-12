@@ -179,9 +179,10 @@ class GradingResult:
 :::tip Snake case support
 promptfoo automatically maps snake_case field names from Python to their camelCase equivalents used internally:
 
-- `pass_` → `pass`
+- `pass_` → `pass` (note: `"pass"` as a dictionary key also works fine - `pass_` is only needed for dataclasses)
 - `named_scores` → `namedScores`
 - `component_results` → `componentResults`
+- `tokens_used` → `tokensUsed`
 
 This means you can use either naming convention in your Python code, and both will work correctly.
 :::
