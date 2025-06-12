@@ -22,7 +22,7 @@ export const BaseTokenUsageSchema = z.object({
   // Request metadata
   numRequests: z.number().optional(),
 
-  // Detailed completion token breakdown (o1 models)
+  // Detailed completion information
   completionDetails: CompletionTokenDetailsSchema.optional(),
 
   // Assertion token usage (model-graded assertions)
