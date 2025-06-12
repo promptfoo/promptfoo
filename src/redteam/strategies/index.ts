@@ -272,6 +272,15 @@ export const Strategies: Strategy[] = [
       return newTestCases;
     },
   },
+  {
+    id: 'emoji',
+    action: async (testCases, injectVar) => {
+      logger.debug(`Adding emoji encoding to ${testCases.length} test cases`);
+      const newTestCases = addOtherEncodings(testCases, injectVar, EncodingType.EMOJI);
+      logger.debug(`Added ${newTestCases.length} emoji encoded test cases`);
+      return newTestCases;
+    },
+  },
 ];
 
 export async function validateStrategies(strategies: RedteamStrategyObject[]): Promise<void> {

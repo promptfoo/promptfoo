@@ -98,8 +98,8 @@ Now, let's go back to `promptfooconfig.yaml` and add our prompts. We'll name the
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
-  prompts/chat_prompt.json: chat_prompt
-  prompts/llama_prompt.txt: llama_prompt
+  file://prompts/chat_prompt.json: chat_prompt
+  file://prompts/llama_prompt.txt: llama_prompt
 
 providers:
   - id: openai:gpt-4.1

@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+reviews:
+  high_level_summary: false
+  sequence_diagrams: false
+  changed_files_summary: false
+  suggested_labels: false
+  poem: false
+  auto_review:
+    enabled: true
+    auto_incremental_review: true
+    drafts: false
+  path_instructions:
+    - path: 'src/**'
+      instructions: |
+        - This is a CLI tool so errors need to be handled gracefully and logged with lots of information so the user can give us enough data to fix the issue or pass it to the developers.

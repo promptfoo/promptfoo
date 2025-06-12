@@ -109,8 +109,8 @@ like `llm-rubric` or `similar`. To do this, override the default LLM grader by a
 
 ```yaml
 prompts:
-  - prompt1.txt
-  - prompt2.txt
+  - file://prompt1.txt
+  - file://prompt2.txt
 providers:
   - anthropic:messages:claude-3-5-sonnet-20241022
   - openai:chat:gpt-4.1-mini
