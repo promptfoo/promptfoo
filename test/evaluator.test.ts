@@ -2399,12 +2399,12 @@ describe('evaluator', () => {
       prompt: 10, // 5 from provider + 5 from assertion
       completion: 10, // 5 from provider + 5 from assertion
       cached: 0,
-      numRequests: 2, // 1 from provider + 1 from assertion
       completionDetails: {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
       },
+      numRequests: 2, // 1 from provider + 1 from assertion
       assertions: {
         total: 0,
         prompt: 0,
@@ -2739,11 +2739,6 @@ describe('runEval', () => {
         rejectedPrediction: 0,
       },
       numRequests: 2, // 1 from provider + 1 from assertion
-      completionDetails: {
-        reasoning: 0,
-        acceptedPrediction: 0,
-        rejectedPrediction: 0,
-      },
       assertions: {
         total: 0,
         prompt: 0,

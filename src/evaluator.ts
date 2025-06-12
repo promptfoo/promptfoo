@@ -122,8 +122,8 @@ export function newTokenUsage(): Required<TokenUsage> {
   return {
     prompt: 0,
     completion: 0,
-    total: 0,
     cached: 0,
+    total: 0,
     numRequests: 0,
     completionDetails: {
       reasoning: 0,

@@ -60,7 +60,6 @@ export class TokenUsageTracker {
    * @returns Aggregated token usage
    */
   public getTotalUsage(): TokenUsage {
-    // Create a new result object with all properties explicitly initialized
     const result: TokenUsage = {
       total: 0,
       prompt: 0,
@@ -80,70 +79,29 @@ export class TokenUsageTracker {
       },
     };
 
-    // Explicitly accumulate totals from all providers
+    // Accumulate totals from all providers
     for (const usage of this.providersMap.values()) {
-      // Add token counts with safe, non-mutating assignments
-      if (result.total !== undefined) {
-        result.total += typeof usage.total === 'number' ? usage.total : 0;
-      }
-      if (result.prompt !== undefined) {
-        result.prompt += typeof usage.prompt === 'number' ? usage.prompt : 0;
-      }
-      if (result.completion !== undefined) {
-        result.completion += typeof usage.completion === 'number' ? usage.completion : 0;
-      }
-      if (result.cached !== undefined) {
-        result.cached += typeof usage.cached === 'number' ? usage.cached : 0;
-      }
-      if (result.numRequests !== undefined) {
-        result.numRequests += typeof usage.numRequests === 'number' ? usage.numRequests : 0;
+      result.total! += usage.total ?? 0;
+      result.prompt! += usage.prompt ?? 0;
+      result.completion! += usage.completion ?? 0;
+      result.cached! += usage.cached ?? 0;
+      result.numRequests! += usage.numRequests ?? 0;
+
+      // Add completion details
+      if (usage.completionDetails) {
+        result.completionDetails!.reasoning! += usage.completionDetails.reasoning ?? 0;
+        result.completionDetails!.acceptedPrediction! +=
+          usage.completionDetails.acceptedPrediction ?? 0;
+        result.completionDetails!.rejectedPrediction! +=
+          usage.completionDetails.rejectedPrediction ?? 0;
       }
 
-      // Add completion details with safe assignments
-      if (usage.completionDetails && result.completionDetails) {
-        if (result.completionDetails.reasoning !== undefined) {
-          result.completionDetails.reasoning +=
-            typeof usage.completionDetails.reasoning === 'number'
-              ? usage.completionDetails.reasoning
-              : 0;
-        }
-
-        if (result.completionDetails.acceptedPrediction !== undefined) {
-          result.completionDetails.acceptedPrediction +=
-            typeof usage.completionDetails.acceptedPrediction === 'number'
-              ? usage.completionDetails.acceptedPrediction
-              : 0;
-        }
-
-        if (result.completionDetails.rejectedPrediction !== undefined) {
-          result.completionDetails.rejectedPrediction +=
-            typeof usage.completionDetails.rejectedPrediction === 'number'
-              ? usage.completionDetails.rejectedPrediction
-              : 0;
-        }
-      }
-
-      // Add assertion statistics if present
-      if (usage.assertions && result.assertions) {
-        if (result.assertions.total !== undefined) {
-          result.assertions.total +=
-            typeof usage.assertions.total === 'number' ? usage.assertions.total : 0;
-        }
-
-        if (result.assertions.prompt !== undefined) {
-          result.assertions.prompt +=
-            typeof usage.assertions.prompt === 'number' ? usage.assertions.prompt : 0;
-        }
-
-        if (result.assertions.completion !== undefined) {
-          result.assertions.completion +=
-            typeof usage.assertions.completion === 'number' ? usage.assertions.completion : 0;
-        }
-
-        if (result.assertions.cached !== undefined) {
-          result.assertions.cached +=
-            typeof usage.assertions.cached === 'number' ? usage.assertions.cached : 0;
-        }
+      // Add assertion statistics
+      if (usage.assertions) {
+        result.assertions!.total! += usage.assertions.total ?? 0;
+        result.assertions!.prompt! += usage.assertions.prompt ?? 0;
+        result.assertions!.completion! += usage.assertions.completion ?? 0;
+        result.assertions!.cached! += usage.assertions.cached ?? 0;
       }
     }
 
@@ -181,102 +139,28 @@ export class TokenUsageTracker {
   private mergeUsage(current: TokenUsage, update: TokenUsage): TokenUsage {
     // Create a result object with all properties initialized
     const result: TokenUsage = {
-      prompt: 0,
-      completion: 0,
-      cached: 0,
-      total: 0,
-      numRequests: 0,
+      prompt: (current.prompt ?? 0) + (update.prompt ?? 0),
+      completion: (current.completion ?? 0) + (update.completion ?? 0),
+      cached: (current.cached ?? 0) + (update.cached ?? 0),
+      total: (current.total ?? 0) + (update.total ?? 0),
+      numRequests: (current.numRequests ?? 0) + (update.numRequests ?? 0),
       completionDetails: {
-        reasoning: 0,
-        acceptedPrediction: 0,
-        rejectedPrediction: 0,
+        reasoning:
+          (current.completionDetails?.reasoning ?? 0) + (update.completionDetails?.reasoning ?? 0),
+        acceptedPrediction:
+          (current.completionDetails?.acceptedPrediction ?? 0) +
+          (update.completionDetails?.acceptedPrediction ?? 0),
+        rejectedPrediction:
+          (current.completionDetails?.rejectedPrediction ?? 0) +
+          (update.completionDetails?.rejectedPrediction ?? 0),
       },
       assertions: {
-        total: 0,
-        prompt: 0,
-        completion: 0,
-        cached: 0,
+        total: (current.assertions?.total ?? 0) + (update.assertions?.total ?? 0),
+        prompt: (current.assertions?.prompt ?? 0) + (update.assertions?.prompt ?? 0),
+        completion: (current.assertions?.completion ?? 0) + (update.assertions?.completion ?? 0),
+        cached: (current.assertions?.cached ?? 0) + (update.assertions?.cached ?? 0),
       },
-      ...current,
     };
-
-    // Add basic fields safely
-    if (typeof update.prompt === 'number') {
-      result.prompt = (result.prompt || 0) + update.prompt;
-    }
-
-    if (typeof update.completion === 'number') {
-      result.completion = (result.completion || 0) + update.completion;
-    }
-
-    if (typeof update.cached === 'number') {
-      result.cached = (result.cached || 0) + update.cached;
-    }
-
-    if (typeof update.total === 'number') {
-      result.total = (result.total || 0) + update.total;
-    }
-
-    if (typeof update.numRequests === 'number') {
-      result.numRequests = (result.numRequests || 0) + update.numRequests;
-    }
-
-    // Handle completion details
-    if (update.completionDetails) {
-      if (!result.completionDetails) {
-        result.completionDetails = {
-          reasoning: 0,
-          acceptedPrediction: 0,
-          rejectedPrediction: 0,
-        };
-      }
-
-      if (typeof update.completionDetails.reasoning === 'number') {
-        result.completionDetails.reasoning =
-          (result.completionDetails.reasoning || 0) + update.completionDetails.reasoning;
-      }
-
-      if (typeof update.completionDetails.acceptedPrediction === 'number') {
-        result.completionDetails.acceptedPrediction =
-          (result.completionDetails.acceptedPrediction || 0) +
-          update.completionDetails.acceptedPrediction;
-      }
-
-      if (typeof update.completionDetails.rejectedPrediction === 'number') {
-        result.completionDetails.rejectedPrediction =
-          (result.completionDetails.rejectedPrediction || 0) +
-          update.completionDetails.rejectedPrediction;
-      }
-    }
-
-    // Handle assertions
-    if (update.assertions) {
-      if (!result.assertions) {
-        result.assertions = {
-          total: 0,
-          prompt: 0,
-          completion: 0,
-          cached: 0,
-        };
-      }
-
-      if (typeof update.assertions.prompt === 'number') {
-        result.assertions.prompt = (result.assertions.prompt || 0) + update.assertions.prompt;
-      }
-
-      if (typeof update.assertions.completion === 'number') {
-        result.assertions.completion =
-          (result.assertions.completion || 0) + update.assertions.completion;
-      }
-
-      if (typeof update.assertions.cached === 'number') {
-        result.assertions.cached = (result.assertions.cached || 0) + update.assertions.cached;
-      }
-
-      if (typeof update.assertions.total === 'number') {
-        result.assertions.total = (result.assertions.total || 0) + update.assertions.total;
-      }
-    }
 
     return result;
   }

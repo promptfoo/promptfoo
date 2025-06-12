@@ -747,12 +747,6 @@ export default class Eval {
       db.delete(evalsTable).where(eq(evalsTable.id, this.id)).run();
     });
   }
-
-  static loadEval(evalConfig: Partial<UnifiedConfig>): Eval {
-    return new Eval(evalConfig, {
-      prompts: [],
-    });
-  }
 }
 
 /**

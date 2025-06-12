@@ -14,16 +14,26 @@ export type CompletionTokenDetails = z.infer<typeof CompletionTokenDetailsSchema
  */
 export const BaseTokenUsageSchema = z.object({
   // Core token counts
-  total: z.number().optional(),
   prompt: z.number().optional(),
   completion: z.number().optional(),
   cached: z.number().optional(),
+  total: z.number().optional(),
 
   // Request metadata
   numRequests: z.number().optional(),
 
-  // Detailed completion information
+  // Detailed completion token breakdown (o1 models)
   completionDetails: CompletionTokenDetailsSchema.optional(),
+
+  // Assertion token usage (model-graded assertions)
+  assertions: z
+    .object({
+      total: z.number().optional(),
+      prompt: z.number().optional(),
+      completion: z.number().optional(),
+      cached: z.number().optional(),
+    })
+    .optional(),
 });
 
 /**

@@ -68,27 +68,58 @@ export function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
 /**
  * Format token usage for display in CLI output
  */
-export function formatTokenUsage(usage: TokenUsage): string {
+export function formatTokenUsage(
+  usageOrType: TokenUsage | string,
+  legacyUsage?: Partial<TokenUsage>,
+): string {
+  // Handle backward compatibility: if first param is string, it's the old API
+  let usage: Partial<TokenUsage>;
+  let includeType = false;
+
+  if (typeof usageOrType === 'string' && legacyUsage) {
+    // Old API: formatTokenUsage(type, usage)
+    usage = legacyUsage;
+    includeType = true;
+  } else {
+    // New API: formatTokenUsage(usage)
+    usage = usageOrType as TokenUsage;
+  }
+
   const parts = [];
 
   if (usage.total !== undefined) {
-    parts.push(`${usage.total.toLocaleString()} total`);
+    const totalText = includeType
+      ? `${usageOrType as string} tokens: ${usage.total.toLocaleString()}`
+      : `${usage.total.toLocaleString()} total`;
+    parts.push(totalText);
   }
 
   if (usage.prompt !== undefined) {
-    parts.push(`${usage.prompt.toLocaleString()} prompt`);
+    const promptText = includeType
+      ? `Prompt tokens: ${usage.prompt.toLocaleString()}`
+      : `${usage.prompt.toLocaleString()} prompt`;
+    parts.push(promptText);
   }
 
   if (usage.completion !== undefined) {
-    parts.push(`${usage.completion.toLocaleString()} completion`);
+    const completionText = includeType
+      ? `Completion tokens: ${usage.completion.toLocaleString()}`
+      : `${usage.completion.toLocaleString()} completion`;
+    parts.push(completionText);
   }
 
   if (usage.cached !== undefined) {
-    parts.push(`${usage.cached.toLocaleString()} cached`);
+    const cachedText = includeType
+      ? `Cached tokens: ${usage.cached.toLocaleString()}`
+      : `${usage.cached.toLocaleString()} cached`;
+    parts.push(cachedText);
   }
 
   if (usage.completionDetails?.reasoning !== undefined) {
-    parts.push(`${usage.completionDetails.reasoning.toLocaleString()} reasoning`);
+    const reasoningText = includeType
+      ? `Reasoning tokens: ${usage.completionDetails.reasoning.toLocaleString()}`
+      : `${usage.completionDetails.reasoning.toLocaleString()} reasoning`;
+    parts.push(reasoningText);
   }
 
   return parts.join(' / ');
@@ -431,12 +462,18 @@ export async function doEval(
     logger.info(chalk.blue.bold(`Duration: ${durationDisplay} (concurrency: ${maxConcurrency})`));
 
     // Handle token usage display
-    if (tokenUsage.prompt) {
-      const combinedTotal = tokenUsage.prompt + tokenUsage.completion;
+    if (tokenUsage.total > 0 || (tokenUsage.prompt || 0) + (tokenUsage.completion || 0) > 0) {
+      const combinedTotal = (tokenUsage.prompt || 0) + (tokenUsage.completion || 0);
       const evalTokens = {
-        prompt: tokenUsage.prompt,
-        completion: tokenUsage.completion,
+        prompt: tokenUsage.prompt || 0,
+        completion: tokenUsage.completion || 0,
         total: combinedTotal,
+        cached: tokenUsage.cached || 0,
+        completionDetails: tokenUsage.completionDetails || {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       };
 
       printBorder();
@@ -457,14 +494,14 @@ export async function doEval(
       logger.info(
         `    ${chalk.gray('Completion:')} ${chalk.white(evalTokens.completion.toLocaleString())}`,
       );
-      if (tokenUsage.cached > 0) {
+      if (evalTokens.cached > 0) {
         logger.info(
-          `    ${chalk.gray('Cached:')} ${chalk.green(tokenUsage.cached.toLocaleString())}`,
+          `    ${chalk.gray('Cached:')} ${chalk.green(evalTokens.cached.toLocaleString())}`,
         );
       }
-      if (tokenUsage.completionDetails.reasoning > 0) {
+      if (evalTokens.completionDetails.reasoning > 0) {
         logger.info(
-          `    ${chalk.gray('Reasoning:')} ${chalk.white(tokenUsage.completionDetails.reasoning.toLocaleString())}`,
+          `    ${chalk.gray('Reasoning:')} ${chalk.white(evalTokens.completionDetails.reasoning.toLocaleString())}`,
         );
       }
 

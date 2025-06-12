@@ -28,7 +28,10 @@ describe('fetchDataset', () => {
     jest.mocked(fetchHuggingFaceDataset).mockResolvedValue(mockTestCases);
 
     const result = await fetchDataset(1);
-    expect(fetchHuggingFaceDataset).toHaveBeenCalled();
+    expect(fetchHuggingFaceDataset).toHaveBeenCalledWith(
+      'huggingface://datasets/nvidia/Aegis-AI-Content-Safety-Dataset-1.0?split=train',
+      5,
+    );
     expect(result).toHaveLength(1);
     expect(result[0].vars?.text).toBe('hello');
   });

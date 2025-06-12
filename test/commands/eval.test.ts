@@ -215,7 +215,7 @@ describe('evalCommand', () => {
 });
 
 describe('formatTokenUsage', () => {
-  it('should format token usage correctly', () => {
+  it('should format complete token usage data', () => {
     const usage = {
       total: 1000,
       prompt: 400,
@@ -223,11 +223,20 @@ describe('formatTokenUsage', () => {
       cached: 200,
       completionDetails: {
         reasoning: 300,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
       },
     };
 
+    // Test new API
     const result = formatTokenUsage(usage);
     expect(result).toBe('1,000 total / 400 prompt / 600 completion / 200 cached / 300 reasoning');
+
+    // Test old API for backward compatibility
+    const legacyResult = formatTokenUsage('Test', usage);
+    expect(legacyResult).toBe(
+      'Test tokens: 1,000 / Prompt tokens: 400 / Completion tokens: 600 / Cached tokens: 200 / Reasoning tokens: 300',
+    );
   });
 
   it('should handle partial token usage data', () => {
@@ -235,14 +244,25 @@ describe('formatTokenUsage', () => {
       total: 1000,
     };
 
+    // Test new API
     const result = formatTokenUsage(usage);
     expect(result).toBe('1,000 total');
+
+    // Test old API for backward compatibility
+    const legacyResult = formatTokenUsage('Test', usage);
+    expect(legacyResult).toBe('Test tokens: 1,000');
   });
 
   it('should handle empty token usage', () => {
     const usage = {};
+
+    // Test new API
     const result = formatTokenUsage(usage);
     expect(result).toBe('');
+
+    // Test old API for backward compatibility
+    const legacyResult = formatTokenUsage('Test', usage);
+    expect(legacyResult).toBe('');
   });
 });
 
