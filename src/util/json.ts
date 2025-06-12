@@ -387,3 +387,5 @@ export function summarizeEvaluateResultForLogging(
 
   return summary;
 }
+
+export { ajvInstance, safeJsonStringifyTruncated };
