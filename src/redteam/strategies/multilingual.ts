@@ -242,11 +242,6 @@ export async function translateBatch(
   }
 }
 
-export async function translate(text: string, lang: string): Promise<string | null> {
-  const translations = await translateBatch(text, [lang]);
-  return translations[lang] || null;
-}
-
 export async function addMultilingual(
   testCases: TestCase[],
   injectVar: string,
