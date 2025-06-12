@@ -528,6 +528,8 @@ class Evaluator {
 
   async evaluate(): Promise<Eval> {
     const { options } = this;
+    let { testSuite } = this;
+
     const vars = new Set<string>();
     const checkAbort = () => {
       if (options.abortSignal?.aborted) {
@@ -542,18 +544,15 @@ class Evaluator {
     const assertionTypes = new Set<string>();
     const rowsWithSelectBestAssertion = new Set<number>();
 
-    const beforeAllOut = await runExtensionHook(this.testSuite.extensions, 'beforeAll', {
-      suite: this.testSuite,
+    const beforeAllOut = await runExtensionHook(testSuite.extensions, 'beforeAll', {
+      suite: testSuite,
     });
-    this.testSuite = beforeAllOut.suite;
+    testSuite = beforeAllOut.suite;
 
     if (options.generateSuggestions) {
       // TODO(ian): Move this into its own command/file
       logger.info(`Generating prompt variations...`);
-      const { prompts: newPrompts, error } = await generatePrompts(
-        this.testSuite.prompts[0].raw,
-        1,
-      );
+      const { prompts: newPrompts, error } = await generatePrompts(testSuite.prompts[0].raw, 1);
       if (error || !newPrompts) {
         throw new Error(`Failed to generate prompts: ${error}`);
       }
@@ -568,7 +567,7 @@ class Evaluator {
         // Ask the user if they want to continue
         const shouldTest = await promptYesNo('Do you want to test this prompt?', false);
         if (shouldTest) {
-          this.testSuite.prompts.push({ raw: prompt, label: prompt });
+          testSuite.prompts.push({ raw: prompt, label: prompt });
           numAdded++;
         } else {
           logger.info('Skipping this prompt.');
@@ -584,11 +583,11 @@ class Evaluator {
 
     // Split prompts by provider
     // Order matters - keep provider in outer loop to reduce need to swap models during local inference.
-    for (const provider of this.testSuite.providers) {
-      for (const prompt of this.testSuite.prompts) {
+    for (const provider of testSuite.providers) {
+      for (const prompt of testSuite.prompts) {
         // Check if providerPromptMap exists and if it contains the current prompt's label
         const providerKey = provider.label || provider.id();
-        if (!isAllowedPrompt(prompt, this.testSuite.providerPromptMap?.[providerKey])) {
+        if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[providerKey])) {
           continue;
         }
         const completedPrompt = {
@@ -622,9 +621,9 @@ class Evaluator {
 
     // Aggregate all vars across test cases
     let tests =
-      this.testSuite.tests && this.testSuite.tests.length > 0
-        ? this.testSuite.tests
-        : this.testSuite.scenarios
+      testSuite.tests && testSuite.tests.length > 0
+        ? testSuite.tests
+        : testSuite.scenarios
           ? []
           : [
               {
@@ -633,11 +632,11 @@ class Evaluator {
             ];
 
     // Build scenarios and add to tests
-    if (this.testSuite.scenarios && this.testSuite.scenarios.length > 0) {
+    if (testSuite.scenarios && testSuite.scenarios.length > 0) {
       telemetry.recordAndSendOnce('feature_used', {
         feature: 'scenarios',
       });
-      for (const scenario of this.testSuite.scenarios) {
+      for (const scenario of testSuite.scenarios) {
         for (const data of scenario.config) {
           // Merge defaultTest with scenario config
           const scenarioTests = (
@@ -648,16 +647,16 @@ class Evaluator {
             ]
           ).map((test) => {
             return {
-              ...this.testSuite.defaultTest,
+              ...testSuite.defaultTest,
               ...data,
               ...test,
               vars: {
-                ...this.testSuite.defaultTest?.vars,
+                ...testSuite.defaultTest?.vars,
                 ...data.vars,
                 ...test.vars,
               },
               options: {
-                ...this.testSuite.defaultTest?.options,
+                ...testSuite.defaultTest?.options,
                 ...test.options,
               },
               assert: [
@@ -666,7 +665,7 @@ class Evaluator {
                 ...(test.assert || []),
               ],
               metadata: {
-                ...this.testSuite.defaultTest?.metadata,
+                ...testSuite.defaultTest?.metadata,
                 ...data.metadata,
                 ...test.metadata,
               },
@@ -678,14 +677,14 @@ class Evaluator {
       }
     }
 
-    maybeEmitAzureOpenAiWarning(this.testSuite, tests);
+    maybeEmitAzureOpenAiWarning(testSuite, tests);
 
     // Prepare vars
     const varNames: Set<string> = new Set();
     const varsWithSpecialColsRemoved: Vars[] = [];
-    const inputTransformDefault = this.testSuite?.defaultTest?.options?.transformVars;
+    const inputTransformDefault = testSuite?.defaultTest?.options?.transformVars;
     for (const testCase of tests) {
-      testCase.vars = { ...this.testSuite.defaultTest?.vars, ...testCase?.vars };
+      testCase.vars = { ...testSuite.defaultTest?.vars, ...testCase?.vars };
 
       if (testCase.vars) {
         const varWithSpecialColsRemoved: Vars = {};
@@ -724,7 +723,7 @@ class Evaluator {
     for (let index = 0; index < tests.length; index++) {
       const testCase = tests[index];
       invariant(
-        Array.isArray(this.testSuite.defaultTest?.assert || []),
+        Array.isArray(testSuite.defaultTest?.assert || []),
         `defaultTest.assert is not an array in test case #${index + 1}`,
       );
       invariant(
@@ -732,13 +731,13 @@ class Evaluator {
         `testCase.assert is not an array in test case #${index + 1}`,
       );
       // Handle default properties
-      testCase.assert = [...(this.testSuite.defaultTest?.assert || []), ...(testCase.assert || [])];
-      testCase.threshold = testCase.threshold ?? this.testSuite.defaultTest?.threshold;
-      testCase.options = { ...this.testSuite.defaultTest?.options, ...testCase.options };
-      testCase.metadata = { ...this.testSuite.defaultTest?.metadata, ...testCase.metadata };
-      testCase.provider = testCase.provider || this.testSuite.defaultTest?.provider;
+      testCase.assert = [...(testSuite.defaultTest?.assert || []), ...(testCase.assert || [])];
+      testCase.threshold = testCase.threshold ?? testSuite.defaultTest?.threshold;
+      testCase.options = { ...testSuite.defaultTest?.options, ...testCase.options };
+      testCase.metadata = { ...testSuite.defaultTest?.metadata, ...testCase.metadata };
+      testCase.provider = testCase.provider || testSuite.defaultTest?.provider;
       testCase.assertScoringFunction =
-        testCase.assertScoringFunction || this.testSuite.defaultTest?.assertScoringFunction;
+        testCase.assertScoringFunction || testSuite.defaultTest?.assertScoringFunction;
 
       if (typeof testCase.assertScoringFunction === 'string') {
         const { filePath: resolvedPath, functionName } = parseFileUrl(
@@ -750,9 +749,9 @@ class Evaluator {
         });
       }
       const prependToPrompt =
-        testCase.options?.prefix || this.testSuite.defaultTest?.options?.prefix || '';
+        testCase.options?.prefix || testSuite.defaultTest?.options?.prefix || '';
       const appendToPrompt =
-        testCase.options?.suffix || this.testSuite.defaultTest?.options?.suffix || '';
+        testCase.options?.suffix || testSuite.defaultTest?.options?.suffix || '';
 
       // Finalize test case eval
       const varCombinations =
@@ -765,10 +764,10 @@ class Evaluator {
         for (const vars of varCombinations) {
           let promptIdx = 0;
           // Order matters - keep provider in outer loop to reduce need to swap models during local inference.
-          for (const provider of this.testSuite.providers) {
-            for (const prompt of this.testSuite.prompts) {
+          for (const provider of testSuite.providers) {
+            for (const prompt of testSuite.prompts) {
               const providerKey = provider.label || provider.id();
-              if (!isAllowedPrompt(prompt, this.testSuite.providerPromptMap?.[providerKey])) {
+              if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[providerKey])) {
                 continue;
               }
               runEvalOptions.push({
@@ -779,14 +778,14 @@ class Evaluator {
                   raw: prependToPrompt + prompt.raw + appendToPrompt,
                 },
                 test: { ...testCase, vars, options: testCase.options },
-                nunjucksFilters: this.testSuite.nunjucksFilters,
+                nunjucksFilters: testSuite.nunjucksFilters,
                 testIdx,
                 promptIdx,
                 repeatIndex,
                 evaluateOptions: options,
                 conversations: this.conversations,
                 registers: this.registers,
-                isRedteam: this.testSuite.redteam != null,
+                isRedteam: testSuite.redteam != null,
                 allTests: runEvalOptions,
                 concurrency,
                 abortSignal: options.abortSignal,
@@ -822,7 +821,7 @@ class Evaluator {
         throw new Error('Expected index to be a number');
       }
 
-      const beforeEachOut = await runExtensionHook(this.testSuite.extensions, 'beforeEach', {
+      const beforeEachOut = await runExtensionHook(testSuite.extensions, 'beforeEach', {
         test: evalStep.test,
       });
       evalStep.test = beforeEachOut.test;
@@ -925,9 +924,9 @@ class Evaluator {
             (metrics.namedScoresCount[key] || 0) + (contributingAssertions || 1);
         }
 
-        if (this.testSuite.derivedMetrics) {
+        if (testSuite.derivedMetrics) {
           const math = await import('mathjs');
-          for (const metric of this.testSuite.derivedMetrics) {
+          for (const metric of testSuite.derivedMetrics) {
             if (metrics.namedScores[metric.name] === undefined) {
               metrics.namedScores[metric.name] = 0;
             }
@@ -987,7 +986,7 @@ class Evaluator {
 
         metrics.cost += row.cost || 0;
 
-        await runExtensionHook(this.testSuite.extensions, 'afterEach', {
+        await runExtensionHook(testSuite.extensions, 'afterEach', {
           test: evalStep.test,
           result: row,
         });
@@ -1371,10 +1370,10 @@ class Evaluator {
 
     this.evalRecord.setVars(Array.from(vars));
 
-    await runExtensionHook(this.testSuite.extensions, 'afterAll', {
+    await runExtensionHook(testSuite.extensions, 'afterAll', {
       prompts: this.evalRecord.prompts,
       results: this.evalRecord.results,
-      suite: this.testSuite,
+      suite: testSuite,
     });
 
     telemetry.record('eval_ran', {
@@ -1388,11 +1387,11 @@ class Evaluator {
         0,
       ),
       numVars: varNames.size,
-      numProviders: this.testSuite.providers.length,
+      numProviders: testSuite.providers.length,
       numRepeat: options.repeat || 1,
       providerPrefixes: Array.from(
         new Set(
-          this.testSuite.providers.map((p) => {
+          testSuite.providers.map((p) => {
             const idParts = p.id().split(':');
             return idParts.length > 1 ? idParts[0] : 'unknown';
           }),

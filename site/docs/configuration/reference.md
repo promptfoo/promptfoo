@@ -101,12 +101,12 @@ Promptfoo supports extension hooks that allow you to run custom code that modifi
 
 ### Available Hooks
 
-| Name       | Description                                   | Context                                           | Mutable Context |
-| ---------- | --------------------------------------------- | ------------------------------------------------- | --------------- |
-| beforeAll  | Runs before the entire test suite begins      | `{ suite: TestSuite }`                            | True            |
-| afterAll   | Runs after the entire test suite has finished | `{ results: EvaluateResult[], suite: TestSuite }` | False           |
-| beforeEach | Runs before each individual test              | `{ test: TestCase }`                              | True            |
-| afterEach  | Runs after each individual test               | `{ test: TestCase, result: EvaluateResult }`      | False           |
+| Name       | Description                                   | Context                                           |
+| ---------- | --------------------------------------------- | ------------------------------------------------- |
+| beforeAll  | Runs before the entire test suite begins      | `{ suite: TestSuite }`                            |
+| afterAll   | Runs after the entire test suite has finished | `{ results: EvaluateResult[], suite: TestSuite }` |
+| beforeEach | Runs before each individual test              | `{ test: TestCase }`                              |
+| afterEach  | Runs after each individual test               | `{ test: TestCase, result: EvaluateResult }`      |
 
 ### Implementing Hooks
 
@@ -223,8 +223,6 @@ module.exports = extensionHook;
 ```
 
 These hooks provide powerful extensibility to your promptfoo evaluations, allowing you to implement custom logic for setup, teardown, logging, or integration with other systems. The extension function receives the `hookName` and a `context` object, which contains relevant data for each hook type. You can use this information to perform actions specific to each stage of the evaluation process.
-
-### Mutable Context
 
 The beforeAll and beforeEach hooks may mutate specific properties of their respective `context` arguments in order to modify evaluation state. To persist these changes, the hook must return the modified context.
 

@@ -1,16 +1,13 @@
 import cliState from '../cliState';
 import { importModule } from '../esm';
+import type { ExtensionHookContext } from '../evaluatorHelpers';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
-import type { Prompt, Vars } from '../types';
+import type { Vars } from '../types';
 import { safeJoin } from './file.node';
 import { isJavascriptFile } from './fileExtensions';
 
-export type TransformContext = {
-  vars?: Vars;
-  prompt: Partial<Prompt>;
-  uuid?: string;
-};
+export type TransformContext = ExtensionHookContext;
 
 export enum TransformInputType {
   OUTPUT = 'output',
@@ -147,7 +144,7 @@ async function getTransformFunction(
 export async function transform(
   codeOrFilepath: string,
   transformInput: string | object | undefined,
-  context: any,
+  context: TransformContext,
   validateReturn: boolean = true,
   inputType: TransformInputType = TransformInputType.OUTPUT,
 ): Promise<any> {
