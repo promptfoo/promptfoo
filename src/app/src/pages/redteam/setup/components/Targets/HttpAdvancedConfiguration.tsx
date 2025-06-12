@@ -175,6 +175,7 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
               <a
                 href="https://www.promptfoo.dev/docs/providers/http/#token-estimation"
                 target="_blank"
+                rel="noopener noreferrer"
               >
                 docs
               </a>{' '}
@@ -189,10 +190,11 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
                     if (event.target.checked) {
                       updateCustomTarget('tokenEstimation', {
                         enabled: true,
-                        multiplier: 1.3,
+                        multiplier:
+                          selectedTarget.config.tokenEstimation?.multiplier ?? 1.3,
                       });
                     } else {
-                      updateCustomTarget('tokenEstimation', { enabled: false });
+                      updateCustomTarget('tokenEstimation', undefined);
                     }
                   }}
                 />
