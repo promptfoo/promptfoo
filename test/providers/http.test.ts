@@ -3,6 +3,7 @@ import dedent from 'dedent';
 import fs from 'fs';
 import path from 'path';
 import { fetchWithCache } from '../../src/cache';
+import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
 import {
@@ -51,6 +52,7 @@ jest.mock('../../src/esm', () => ({
 
 jest.mock('../../src/cliState', () => ({
   basePath: '/mock/base/path',
+  config: {},
 }));
 
 describe('HttpProvider', () => {
@@ -3313,6 +3315,9 @@ describe('Token Estimation', () => {
   });
 
   describe('HttpProvider with token estimation', () => {
+    afterEach(() => {
+      delete cliState.config;
+    });
     it('should not estimate tokens when disabled', async () => {
       const provider = new HttpProvider('http://test.com', {
         config: {
@@ -3333,6 +3338,34 @@ describe('Token Estimation', () => {
       const result = await provider.callApi('Test prompt');
 
       expect(result.tokenUsage).toBeUndefined();
+    });
+
+    it('should enable token estimation by default in redteam mode', async () => {
+      cliState.config = { redteam: {} } as any;
+
+      const provider = new HttpProvider('http://test.com', {
+        config: {
+          method: 'POST',
+          body: { prompt: '{{prompt}}' },
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ result: 'Hello world' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.tokenUsage).toBeDefined();
+      expect(result.tokenUsage!.prompt).toBe(Math.ceil(2 * 1.3));
+      expect(result.tokenUsage!.completion).toBe(Math.ceil(2 * 1.3));
+      expect(result.tokenUsage!.total).toBe(
+        result.tokenUsage!.prompt! + result.tokenUsage!.completion!,
+      );
     });
 
     it('should estimate tokens when enabled with default settings', async () => {
