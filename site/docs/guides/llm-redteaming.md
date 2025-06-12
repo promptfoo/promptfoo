@@ -254,7 +254,7 @@ Now that you've configured everything, the next step is to generate the red team
 npx promptfoo@latest redteam generate
 ```
 
-This command works by reading your prompts and targets, [discovering your target](/docs/red-team/discovery), and then generating a set of adversarial inputs that stress-test your prompts/models in a variety of situations. Test generation usually takes about 5 minutes.
+This command works by reading your prompts and targets and then generating a set of adversarial inputs that stress-test your prompts/models in a variety of situations. Test generation usually takes about 5 minutes.
 
 The adversarial tests include:
 

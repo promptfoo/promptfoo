@@ -57,19 +57,6 @@ export interface ImageBlockParam {
   };
 }
 
-export interface VideoBlockParam {
-  video: {
-    format: 'mkv' | 'mov' | 'mp4' | 'webm' | 'three_gp' | 'flv' | 'mpeg' | 'mpg' | 'wmv';
-    source: {
-      s3Location?: {
-        uri: string;
-        bucketOwner?: string;
-      };
-      bytes?: Uint8Array | string; // Binary array or Base64-encoded string
-    };
-  };
-}
-
 export interface ToolUseBlockParam {
   id: string;
   input: unknown;

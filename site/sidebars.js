@@ -181,10 +181,6 @@ const sidebars = {
       id: 'red-team/owasp-llm-top-10',
     },
     {
-      type: 'doc',
-      id: 'red-team/discovery',
-    },
-    {
       type: 'category',
       label: 'Plugins',
       collapsed: true,
@@ -228,6 +224,7 @@ const sidebars = {
             'red-team/plugins/cyberseceval',
             'red-team/plugins/donotanswer',
             'red-team/plugins/harmbench',
+            'red-team/plugins/aegis',
             'red-team/plugins/harmful',
             'red-team/plugins/pliny',
             'red-team/plugins/politics',
@@ -319,6 +316,10 @@ const sidebars = {
       label: 'Tools',
       collapsed: true,
       items: [
+        {
+          type: 'doc',
+          id: 'red-team/discovery',
+        },
         {
           type: 'doc',
           id: 'red-team/guardrails',
