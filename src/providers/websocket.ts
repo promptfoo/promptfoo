@@ -17,6 +17,7 @@ interface WebSocketProviderConfig {
   url?: string;
   timeoutMs?: number;
   transformResponse?: string | Function;
+  headers?: Record<string, string>;
   /**
    * @deprecated
    */
@@ -70,7 +71,9 @@ export class WebSocketProvider implements ApiProvider {
     logger.debug(`Sending WebSocket message to ${this.url}: ${message}`);
 
     return new Promise<ProviderResponse>((resolve) => {
-      const ws = new WebSocket(this.url);
+      const ws = new WebSocket(this.url, {
+        headers: this.config.headers,
+      });
       const timeout = setTimeout(() => {
         ws.close();
         resolve({ error: 'WebSocket request timed out' });

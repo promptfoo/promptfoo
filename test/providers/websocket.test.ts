@@ -55,6 +55,22 @@ describe('WebSocketProvider', () => {
     expect(provider.config.messageTemplate).toBe('{{ prompt }}');
   });
 
+  it('should pass headers to WebSocket connection', () => {
+    const headers = {
+      Authorization: 'Bearer test-token',
+      'Custom-Header': 'test-value',
+    };
+
+    provider = new WebSocketProvider('ws://test.com', {
+      config: {
+        messageTemplate: '{{ prompt }}',
+        headers,
+      },
+    });
+
+    expect(WebSocket).toHaveBeenCalledWith('ws://test.com', { headers });
+  });
+
   it('should throw if messageTemplate is missing', () => {
     expect(() => {
       new WebSocketProvider('ws://test.com', {
