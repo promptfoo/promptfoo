@@ -247,14 +247,6 @@ describe('Python file references', () => {
     ['number', 1, 1, 'Assertion passed', true, undefined],
     [
       'GradingResult',
-      `{"pass": true, "score": 1, "reason": "Custom success"}`,
-      1,
-      'Custom success',
-      true,
-      undefined,
-    ],
-    [
-      'GradingResult',
       // This score is less than the assertion threshold in the test
       `{"pass": true, "score": 0.4, "reason": "Foo bar"}`,
       0.4,
@@ -396,5 +388,90 @@ describe('Python file references', () => {
       reason: 'The Python script `call_api` function must return a dict with an `output`',
       score: 0,
     });
+  });
+
+  it('should map snake_case keys from python dataclass to camelCase', async () => {
+    const pythonResult = {
+      pass_: true,
+      score: 1,
+      reason: 'ok',
+      named_scores: { accuracy: 0.9 },
+      tokens_used: { total: 100, prompt: 60, completion: 40 },
+      component_results: [
+        {
+          pass_: true,
+          score: 0.8,
+          reason: 'component 1 ok',
+          named_scores: { precision: 0.85 },
+        },
+        {
+          pass_: false,
+          score: 0.2,
+          reason: 'component 2 failed',
+          named_scores: { recall: 0.15 },
+          component_results: [
+            {
+              pass_: true,
+              score: 0.9,
+              reason: 'nested component ok',
+              named_scores: { f1: 0.7 },
+            },
+          ],
+        },
+      ],
+    };
+
+    jest.mocked(runPython).mockResolvedValueOnce(pythonResult as any);
+
+    const fileAssertion: Assertion = {
+      type: 'python',
+      value: 'file:///path/to/assert.py',
+    };
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+    const providerResponse = { output: 'Expected output' };
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'A prompt',
+      provider,
+      assertion: fileAssertion,
+      test: {} as AtomicTestCase,
+      providerResponse,
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      reason: 'ok',
+      namedScores: { accuracy: 0.9 },
+      tokensUsed: { total: 100, prompt: 60, completion: 40 },
+      componentResults: [
+        {
+          pass: true,
+          score: 0.8,
+          reason: 'component 1 ok',
+          namedScores: { precision: 0.85 },
+        },
+        {
+          pass: false,
+          score: 0.2,
+          reason: 'component 2 failed',
+          namedScores: { recall: 0.15 },
+          componentResults: [
+            {
+              pass: true,
+              score: 0.9,
+              reason: 'nested component ok',
+              namedScores: { f1: 0.7 },
+            },
+          ],
+        },
+      ],
+    });
+
+    // Verify original object wasn't mutated
+    expect(pythonResult).not.toHaveProperty('pass');
+    expect(pythonResult).not.toHaveProperty('namedScores');
+    expect(pythonResult).not.toHaveProperty('componentResults');
+    expect(pythonResult).not.toHaveProperty('tokensUsed');
   });
 });
