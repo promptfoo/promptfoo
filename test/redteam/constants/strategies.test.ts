@@ -46,6 +46,7 @@ describe('strategies constants', () => {
       'donotanswer',
       'harmbench',
       'toxic-chat',
+      'aegis',
       'pliny',
       'unsafebench',
       'xstest',

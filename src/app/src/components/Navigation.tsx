@@ -181,6 +181,7 @@ export default function Navigation({
             <NavLink href="/prompts" label="Prompts" />
             <NavLink href="/datasets" label="Datasets" />
             <NavLink href="/history" label="History" />
+            <NavLink href="/model-audit" label="Model Audit" />
           </NavSection>
           <NavSection>
             <IconButton onClick={handleModalToggle} color="inherit">

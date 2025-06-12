@@ -1,4 +1,5 @@
 import { getGraderById } from '../../src/redteam/graders';
+import { AegisGrader } from '../../src/redteam/plugins/aegis';
 import { AsciiSmugglingGrader } from '../../src/redteam/plugins/asciiSmuggling';
 import { BeavertailsGrader } from '../../src/redteam/plugins/beavertails';
 import { FinancialCalculationErrorPluginGrader } from '../../src/redteam/plugins/financial/financialCalculationError';
@@ -57,6 +58,9 @@ describe('getGraderById', () => {
 
     const financialSycophancyGrader = getGraderById('promptfoo:redteam:financial:sycophancy');
     expect(financialSycophancyGrader).toBeInstanceOf(FinancialSycophancyPluginGrader);
+
+    const aegisGrader = getGraderById('promptfoo:redteam:aegis');
+    expect(aegisGrader).toBeInstanceOf(AegisGrader);
   });
 
   it('should return harmful grader for IDs starting with promptfoo:redteam:harmful', () => {

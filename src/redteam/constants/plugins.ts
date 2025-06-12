@@ -142,6 +142,7 @@ export const BASE_PLUGINS = [
 export type BasePlugin = (typeof BASE_PLUGINS)[number];
 
 export const ADDITIONAL_PLUGINS = [
+  'aegis',
   'ascii-smuggling',
   'beavertails',
   'bfla',

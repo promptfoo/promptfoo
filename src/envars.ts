@@ -38,6 +38,7 @@ export type EnvVars = {
   PROMPTFOO_ENABLE_DATABASE_LOGS?: boolean;
   PROMPTFOO_EVAL_TIMEOUT_MS?: number;
   PROMPTFOO_EXPERIMENTAL?: boolean;
+  PROMPTFOO_MAX_EVAL_TIME_MS?: number;
   PROMPTFOO_NO_TESTCASE_ASSERT_WARNING?: boolean;
   PROMPTFOO_RETRY_5XX?: boolean;
   PROMPTFOO_SELF_HOSTED?: boolean;
@@ -388,6 +389,15 @@ export function getEnvFloat(key: EnvVarKey, defaultValue?: number): number | und
  */
 export function getEvalTimeoutMs(defaultValue: number = 0): number {
   return getEnvInt('PROMPTFOO_EVAL_TIMEOUT_MS', defaultValue);
+}
+
+/**
+ * Get the maximum duration for an evaluation in milliseconds.
+ * @param defaultValue Optional default value if the environment variable is not set. Defaults to 0 (no limit).
+ * @returns The max duration in milliseconds, or the default value if not set.
+ */
+export function getMaxEvalTimeMs(defaultValue: number = 0): number {
+  return getEnvInt('PROMPTFOO_MAX_EVAL_TIME_MS', defaultValue);
 }
 
 /**
