@@ -41,53 +41,55 @@ import invariant from './util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
 import { promptYesNo } from './util/readline';
 import { sleep } from './util/time';
+import { TokenUsageTracker } from './util/tokenUsage';
 import { transform, type TransformContext, TransformInputType } from './util/transform';
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
 
+/**
+ * Update token usage metrics with assertion token usage
+ */
 function updateAssertionMetrics(
   metrics: { tokenUsage: Partial<TokenUsage> },
   assertionTokens: Partial<TokenUsage>,
 ): void {
-  if (!metrics.tokenUsage.assertions) {
-    metrics.tokenUsage.assertions = {
-      total: 0,
-      prompt: 0,
-      completion: 0,
-      cached: 0,
-    };
-  }
-
-  const assertions = metrics.tokenUsage.assertions;
-  assertions.total = (assertions.total ?? 0) + (assertionTokens.total ?? 0);
-  assertions.prompt = (assertions.prompt ?? 0) + (assertionTokens.prompt ?? 0);
-  assertions.completion = (assertions.completion ?? 0) + (assertionTokens.completion ?? 0);
-  assertions.cached = (assertions.cached ?? 0) + (assertionTokens.cached ?? 0);
-
-  if (assertionTokens.numRequests) {
-    assertions.numRequests = (assertions.numRequests ?? 0) + assertionTokens.numRequests;
-  }
-
-  if (assertionTokens.completionDetails) {
-    if (!assertions.completionDetails) {
-      assertions.completionDetails = {
-        reasoning: 0,
-        acceptedPrediction: 0,
-        rejectedPrediction: 0,
+  if (metrics.tokenUsage && assertionTokens) {
+    if (!metrics.tokenUsage.assertions) {
+      metrics.tokenUsage.assertions = {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       };
     }
 
-    assertions.completionDetails.reasoning =
-      (assertions.completionDetails.reasoning ?? 0) +
-      (assertionTokens.completionDetails.reasoning ?? 0);
+    const assertions = metrics.tokenUsage.assertions;
 
-    assertions.completionDetails.acceptedPrediction =
-      (assertions.completionDetails.acceptedPrediction ?? 0) +
-      (assertionTokens.completionDetails.acceptedPrediction ?? 0);
+    // Update basic token counts
+    assertions.total = (assertions.total ?? 0) + (assertionTokens.total ?? 0);
+    assertions.prompt = (assertions.prompt ?? 0) + (assertionTokens.prompt ?? 0);
+    assertions.completion = (assertions.completion ?? 0) + (assertionTokens.completion ?? 0);
+    assertions.cached = (assertions.cached ?? 0) + (assertionTokens.cached ?? 0);
 
-    assertions.completionDetails.rejectedPrediction =
-      (assertions.completionDetails.rejectedPrediction ?? 0) +
-      (assertionTokens.completionDetails.rejectedPrediction ?? 0);
+    // Update completion details if present
+    if (assertionTokens.completionDetails && assertions.completionDetails) {
+      assertions.completionDetails.reasoning =
+        (assertions.completionDetails.reasoning ?? 0) +
+        (assertionTokens.completionDetails.reasoning ?? 0);
+
+      assertions.completionDetails.acceptedPrediction =
+        (assertions.completionDetails.acceptedPrediction ?? 0) +
+        (assertionTokens.completionDetails.acceptedPrediction ?? 0);
+
+      assertions.completionDetails.rejectedPrediction =
+        (assertions.completionDetails.rejectedPrediction ?? 0) +
+        (assertionTokens.completionDetails.rejectedPrediction ?? 0);
+    }
   }
 }
 
@@ -118,10 +120,10 @@ export function isAllowedPrompt(prompt: Prompt, allowedPrompts: string[] | undef
 
 export function newTokenUsage(): Required<TokenUsage> {
   return {
-    total: 0,
     prompt: 0,
     completion: 0,
     cached: 0,
+    total: 0,
     numRequests: 0,
     completionDetails: {
       reasoning: 0,
@@ -330,6 +332,15 @@ export async function runEval({
 
     invariant(ret.tokenUsage, 'This is always defined, just doing this to shut TS up');
 
+    // Track token usage at the provider level
+    if (response.tokenUsage) {
+      const providerId = provider.id();
+      const trackingId = provider.constructor?.name
+        ? `${providerId} (${provider.constructor.name})`
+        : providerId;
+      TokenUsageTracker.getInstance().trackUsage(trackingId, response.tokenUsage);
+    }
+
     if (response.error) {
       ret.error = response.error;
       ret.failureReason = ResultFailureReason.ERROR;
@@ -403,6 +414,7 @@ export async function runEval({
       ret.tokenUsage.completion += response.tokenUsage.completion || 0;
       ret.tokenUsage.cached += response.tokenUsage.cached || 0;
       ret.tokenUsage.numRequests += response.tokenUsage.numRequests || 1;
+
       if (response.tokenUsage.completionDetails) {
         ret.tokenUsage.completionDetails.reasoning! +=
           response.tokenUsage.completionDetails.reasoning || 0;
@@ -621,6 +633,17 @@ class Evaluator {
               completion: 0,
               cached: 0,
               numRequests: 0,
+              completionDetails: {
+                reasoning: 0,
+                acceptedPrediction: 0,
+                rejectedPrediction: 0,
+              },
+              assertions: {
+                total: 0,
+                prompt: 0,
+                completion: 0,
+                cached: 0,
+              },
             },
             namedScores: {},
             namedScoresCount: {},
