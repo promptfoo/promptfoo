@@ -1071,6 +1071,7 @@
                       {
                         "type": "string",
                         "enum": [
+                          "aegis",
                           "agentic:memory-poisoning",
                           "ascii-smuggling",
                           "beavertails",
@@ -1227,7 +1228,6 @@
                           "tool-discovery:multi-turn",
                           "toxic-chat",
                           "toxicity",
-                          "aegis",
                           "unsafebench",
                           "xstest"
                         ]
@@ -1247,6 +1247,7 @@
                           {
                             "type": "string",
                             "enum": [
+                              "aegis",
                               "agentic:memory-poisoning",
                               "ascii-smuggling",
                               "beavertails",
@@ -1403,7 +1404,6 @@
                               "tool-discovery:multi-turn",
                               "toxic-chat",
                               "toxicity",
-                              "aegis",
                               "unsafebench",
                               "xstest"
                             ]
