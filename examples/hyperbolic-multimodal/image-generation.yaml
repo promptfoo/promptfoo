@@ -36,7 +36,7 @@ tests:
       prompt: 'A cat wearing sunglasses riding a unicorn through a rainbow portal, painted in Van Gogh style with swirling cosmic backgrounds'
     assert:
       - type: regex
-        value: '^(/9j/|iVBORw0KGgo|UklGR|data:image/)'
+        value: '^data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$'
       - type: cost
         threshold: 0.05
 
@@ -45,32 +45,32 @@ tests:
       prompt: 'A pizza-powered rocket ship delivering dinner to aliens on Mars, neon cyberpunk aesthetic with glowing cheese trails'
     assert:
       - type: regex
-        value: '^(/9j/|iVBORw0KGgo|UklGR|data:image/)'
+        value: '^data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$'
 
   # Whimsical portrait
   - vars:
       prompt: 'A distinguished octopus professor wearing a monocle and bow tie, teaching quantum physics to confused fish students'
     assert:
       - type: regex
-        value: '^(/9j/|iVBORw0KGgo|UklGR|data:image/)'
+        value: '^data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$'
 
   # Nature photography style
   - vars:
       prompt: 'A tiny dragon napping in a coffee cup surrounded by miniature autumn leaves, macro photography with golden hour lighting'
     assert:
       - type: regex
-        value: '^(/9j/|iVBORw0KGgo|UklGR|data:image/)'
+        value: '^data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$'
 
   # Epic fantasy scene
   - vars:
       prompt: 'A wizard penguin casting spells to create aurora borealis over an ice castle made entirely of crystallized music notes'
     assert:
       - type: regex
-        value: '^(/9j/|iVBORw0KGgo|UklGR|data:image/)'
+        value: '^data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$'
 
   # Sci-fi adventure
   - vars:
       prompt: 'An astronaut surfing on Saturn rings while juggling planets, photorealistic style with spectacular cosmic vista background'
     assert:
       - type: regex
-        value: '^(/9j/|iVBORw0KGgo|UklGR|data:image/)'
+        value: '^data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$'

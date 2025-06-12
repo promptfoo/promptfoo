@@ -4,6 +4,7 @@ import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider } from '../../types/providers';
+import { ellipsize } from '../../util/text';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 
 export type HyperbolicImageOptions = {
@@ -29,6 +30,7 @@ export type HyperbolicImageOptions = {
   controlnet_name?: string;
   controlnet_image?: string;
   loras?: Record<string, number>;
+  response_format?: 'url' | 'b64_json';
 };
 
 export const HYPERBOLIC_IMAGE_MODELS = [
@@ -73,6 +75,33 @@ export const HYPERBOLIC_IMAGE_MODELS = [
     cost: 0.008, // $0.008 per image
   },
 ];
+
+export function formatHyperbolicImageOutput(
+  imageData: string,
+  prompt: string,
+  responseFormat?: string,
+): string {
+  if (responseFormat === 'b64_json') {
+    // Return structured JSON for b64_json format
+    return JSON.stringify({
+      data: [{ b64_json: imageData }],
+    });
+  } else {
+    // For URL format or default, format as data URL for proper rendering
+    // Determine image format from base64 header
+    let mimeType = 'image/jpeg'; // Default to JPEG
+    if (imageData.startsWith('/9j/')) {
+      mimeType = 'image/jpeg';
+    } else if (imageData.startsWith('iVBORw0KGgo')) {
+      mimeType = 'image/png';
+    } else if (imageData.startsWith('UklGR')) {
+      mimeType = 'image/webp';
+    }
+
+    // Return as data URL for proper image rendering in the viewer
+    return `data:${mimeType};base64,${imageData}`;
+  }
+}
 
 export class HyperbolicImageProvider implements ApiProvider {
   modelName: string;
@@ -140,6 +169,7 @@ export class HyperbolicImageProvider implements ApiProvider {
 
     const modelName = config.model_name || this.getApiModelName();
     const endpoint = '/image/generation';
+    const responseFormat = config.response_format || 'url';
 
     const body: Record<string, any> = {
       model_name: modelName,
@@ -243,11 +273,14 @@ export class HyperbolicImageProvider implements ApiProvider {
       const imageData = data.images[0].image;
       const cost = cached ? 0 : this.calculateImageCost();
 
+      // Format the output for proper rendering
+      const formattedOutput = formatHyperbolicImageOutput(imageData, prompt, responseFormat);
+
       return {
-        output: imageData,
+        output: formattedOutput,
         cached,
         cost,
-        ...(imageData ? { isBase64: true } : {}),
+        ...(responseFormat === 'b64_json' ? { isBase64: true, format: 'json' } : {}),
       };
     } catch (err) {
       return {
