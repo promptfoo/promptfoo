@@ -9,7 +9,9 @@ import {
 import { MCPPluginGrader } from '../../src/redteam/plugins/mcp';
 import { MedicalAnchoringBiasPluginGrader } from '../../src/redteam/plugins/medical/medicalAnchoringBias';
 import { MedicalHallucinationPluginGrader } from '../../src/redteam/plugins/medical/medicalHallucination';
+import { OffTopicPluginGrader } from '../../src/redteam/plugins/offTopic';
 import { PlinyGrader } from '../../src/redteam/plugins/pliny';
+import { ToolDiscoveryGrader } from '../../src/redteam/plugins/toolDiscovery';
 import { ToxicChatGrader } from '../../src/redteam/plugins/toxicchat';
 import { UnsafeBenchGrader } from '../../src/redteam/plugins/unsafebench';
 
@@ -44,6 +46,12 @@ describe('getGraderById', () => {
 
     const medicalHallucinationGrader = getGraderById('promptfoo:redteam:medical:hallucination');
     expect(medicalHallucinationGrader).toBeInstanceOf(MedicalHallucinationPluginGrader);
+
+    const offTopicGrader = getGraderById('promptfoo:redteam:off-topic');
+    expect(offTopicGrader).toBeInstanceOf(OffTopicPluginGrader);
+
+    const toolDiscoveryGrader = getGraderById('promptfoo:redteam:tool-discovery');
+    expect(toolDiscoveryGrader).toBeInstanceOf(ToolDiscoveryGrader);
   });
 
   it('should return specific grader for misinformation-disinformation', () => {
