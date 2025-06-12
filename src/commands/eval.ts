@@ -37,6 +37,7 @@ import { resolveConfigs } from '../util/config/load';
 import { maybeLoadFromExternalFile } from '../util/file';
 import { formatDuration } from '../util/formatDuration';
 import invariant from '../util/invariant';
+import { TokenUsageTracker } from '../util/tokenUsage';
 import { filterProviders } from './eval/filterProviders';
 import type { FilterOptions } from './eval/filterTests';
 import { filterTests } from './eval/filterTests';
@@ -505,6 +506,49 @@ export async function doEval(
         );
       }
 
+      // Provider breakdown
+      const tracker = TokenUsageTracker.getInstance();
+      const providerIds = tracker.getProviderIds();
+      if (providerIds.length > 0) {
+        logger.info(`\n  ${chalk.cyan.bold('Provider Breakdown:')}`);
+
+        // Sort providers by total token usage (descending)
+        const sortedProviders = providerIds
+          .map((id) => ({ id, usage: tracker.getProviderUsage(id)! }))
+          .sort((a, b) => (b.usage.total || 0) - (a.usage.total || 0));
+
+        for (const { id, usage } of sortedProviders) {
+          if ((usage.total || 0) > 0 || (usage.prompt || 0) + (usage.completion || 0) > 0) {
+            const displayTotal = usage.total || (usage.prompt || 0) + (usage.completion || 0);
+            // Extract just the provider ID part (remove class name in parentheses)
+            const displayId = id.includes(' (') ? id.substring(0, id.indexOf(' (')) : id;
+            logger.info(
+              `    ${chalk.gray(displayId + ':')} ${chalk.white(displayTotal.toLocaleString())}`,
+            );
+
+            // Show breakdown if there are individual components
+            if (usage.prompt || usage.completion || usage.cached) {
+              const details = [];
+              if (usage.prompt) {
+                details.push(`${usage.prompt.toLocaleString()} prompt`);
+              }
+              if (usage.completion) {
+                details.push(`${usage.completion.toLocaleString()} completion`);
+              }
+              if (usage.cached) {
+                details.push(`${usage.cached.toLocaleString()} cached`);
+              }
+              if (usage.completionDetails?.reasoning) {
+                details.push(`${usage.completionDetails.reasoning.toLocaleString()} reasoning`);
+              }
+              if (details.length > 0) {
+                logger.info(`      ${chalk.dim('(' + details.join(', ') + ')')}`);
+              }
+            }
+          }
+        }
+      }
+
       // Grading tokens
       if (tokenUsage.assertions.total > 0) {
         logger.info(`\n  ${chalk.magenta.bold('Grading:')}`);
@@ -623,11 +667,11 @@ export async function doEval(
             ),
           );
         }
-        logger.info('Done.');
+        logger.info('\nDone.');
         process.exitCode = Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100;
         return ret;
       } else {
-        logger.info('Done.');
+        logger.info('\nDone.');
       }
     }
     if (testSuite.redteam) {

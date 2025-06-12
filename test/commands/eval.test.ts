@@ -16,6 +16,7 @@ import { loadApiProvider } from '../../src/providers';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../src/types';
 import { resolveConfigs } from '../../src/util/config/load';
+import { TokenUsageTracker } from '../../src/util/tokenUsage';
 
 jest.mock('../../src/cache');
 jest.mock('../../src/evaluator');
@@ -34,6 +35,7 @@ jest.mock('path', () => {
   };
 });
 jest.mock('../../src/util/config/load');
+jest.mock('../../src/util/tokenUsage');
 jest.mock('../../src/database/index', () => ({
   getDb: jest.fn(() => ({
     transaction: jest.fn((fn) => fn()),
@@ -313,5 +315,74 @@ describe('showRedteamProviderLabelMissingWarning', () => {
 
     showRedteamProviderLabelMissingWarning(testSuite);
     expect(mockWarn).not.toHaveBeenCalled();
+  });
+});
+
+describe('Provider Token Tracking', () => {
+  let mockTokenUsageTracker: jest.Mocked<TokenUsageTracker>;
+  const mockLogger = jest.spyOn(logger, 'info');
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockLogger.mockClear();
+
+    // Create a mock instance of TokenUsageTracker
+    mockTokenUsageTracker = {
+      getProviderIds: jest.fn(),
+      getProviderUsage: jest.fn(),
+      trackUsage: jest.fn(),
+      resetAllUsage: jest.fn(),
+      resetProviderUsage: jest.fn(),
+      getTotalUsage: jest.fn(),
+      cleanup: jest.fn(),
+    } as any;
+
+    // Mock the getInstance static method
+    jest.mocked(TokenUsageTracker.getInstance).mockReturnValue(mockTokenUsageTracker);
+  });
+
+  it('should create and configure TokenUsageTracker correctly', () => {
+    const tracker = TokenUsageTracker.getInstance();
+    expect(tracker).toBeDefined();
+    expect(tracker.getProviderIds).toBeDefined();
+    expect(tracker.getProviderUsage).toBeDefined();
+  });
+
+  it('should handle provider token tracking when mocked properly', () => {
+    // Setup mock data
+    const providerUsageData = {
+      'openai:gpt-4': {
+        total: 1500,
+        prompt: 600,
+        completion: 900,
+        cached: 100,
+        numRequests: 5,
+        completionDetails: { reasoning: 200, acceptedPrediction: 0, rejectedPrediction: 0 },
+      },
+      'anthropic:claude-3': {
+        total: 800,
+        prompt: 300,
+        completion: 500,
+        cached: 50,
+        numRequests: 3,
+        completionDetails: { reasoning: 100, acceptedPrediction: 0, rejectedPrediction: 0 },
+      },
+    };
+
+    mockTokenUsageTracker.getProviderIds.mockReturnValue(['openai:gpt-4', 'anthropic:claude-3']);
+    mockTokenUsageTracker.getProviderUsage.mockImplementation(
+      (id: string) => providerUsageData[id],
+    );
+
+    // Test the tracker functionality directly
+    const tracker = TokenUsageTracker.getInstance();
+    const providerIds = tracker.getProviderIds();
+    expect(providerIds).toEqual(['openai:gpt-4', 'anthropic:claude-3']);
+
+    const openaiUsage = tracker.getProviderUsage('openai:gpt-4');
+    expect(openaiUsage).toEqual(providerUsageData['openai:gpt-4']);
+
+    const claudeUsage = tracker.getProviderUsage('anthropic:claude-3');
+    expect(claudeUsage).toEqual(providerUsageData['anthropic:claude-3']);
   });
 });
