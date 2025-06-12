@@ -1,6 +1,6 @@
 import type { Command } from 'commander';
-import logger from 'src/logger';
 import { getDefaultPort } from '../constants';
+import logger from '../logger';
 import { startServer } from '../server/server';
 import telemetry from '../telemetry';
 import { setupEnv } from '../util';
