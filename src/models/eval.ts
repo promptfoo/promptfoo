@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { desc, eq, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
 import { getDb } from '../database';
+import { updateSignalFile } from '../database/signal';
 import {
   datasetsTable,
   evalsTable,
@@ -389,6 +390,10 @@ export default class Eval {
       // We're only going to keep results in memory if the eval isn't persisted in the database
       // This is to avoid memory issues when running large evaluations
       this.results.push(newResult);
+    }
+    if (this.persisted) {
+      // Notify watchers that new results are available
+      updateSignalFile();
     }
   }
 
