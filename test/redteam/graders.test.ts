@@ -2,7 +2,10 @@ import { getGraderById } from '../../src/redteam/graders';
 import { AegisGrader } from '../../src/redteam/plugins/aegis';
 import { AsciiSmugglingGrader } from '../../src/redteam/plugins/asciiSmuggling';
 import { BeavertailsGrader } from '../../src/redteam/plugins/beavertails';
-import { HarmfulGrader } from '../../src/redteam/plugins/harmful/graders';
+import {
+  HarmfulGrader,
+  MisinformationDisinformationGrader,
+} from '../../src/redteam/plugins/harmful/graders';
 import { MCPPluginGrader } from '../../src/redteam/plugins/mcp';
 import { MedicalAnchoringBiasPluginGrader } from '../../src/redteam/plugins/medical/medicalAnchoringBias';
 import { MedicalHallucinationPluginGrader } from '../../src/redteam/plugins/medical/medicalHallucination';
@@ -41,6 +44,16 @@ describe('getGraderById', () => {
 
     const medicalHallucinationGrader = getGraderById('promptfoo:redteam:medical:hallucination');
     expect(medicalHallucinationGrader).toBeInstanceOf(MedicalHallucinationPluginGrader);
+  });
+
+  it('should return specific grader for misinformation-disinformation', () => {
+    const misinformationGrader = getGraderById(
+      'promptfoo:redteam:harmful:misinformation-disinformation',
+    );
+    expect(misinformationGrader).toBeInstanceOf(MisinformationDisinformationGrader);
+    expect(misinformationGrader?.id).toBe(
+      'promptfoo:redteam:harmful:misinformation-disinformation',
+    );
   });
 
   it('should return harmful grader for IDs starting with promptfoo:redteam:harmful', () => {
