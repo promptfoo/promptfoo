@@ -190,8 +190,7 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
                     if (event.target.checked) {
                       updateCustomTarget('tokenEstimation', {
                         enabled: true,
-                        multiplier:
-                          selectedTarget.config.tokenEstimation?.multiplier ?? 1.3,
+                        multiplier: selectedTarget.config.tokenEstimation?.multiplier ?? 1.3,
                       });
                     } else {
                       updateCustomTarget('tokenEstimation', undefined);
