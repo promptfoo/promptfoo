@@ -11,8 +11,8 @@ import { fetchWithCache, getCache } from './cache';
 import cliState from './cliState';
 import { FILE_METADATA_KEY } from './constants';
 import { updateSignalFile } from './database/signal';
-import { getEnvBool, getEnvInt, isCI, getEvalTimeoutMs } from './envars';
-import { renderPrompt, runExtensionHook, collectFileMetadata } from './evaluatorHelpers';
+import { getEnvBool, getEnvInt, getEvalTimeoutMs, isCI } from './envars';
+import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger from './logger';
 import type Eval from './models/eval';
 import { generateIdFromPrompt } from './models/prompt';
@@ -38,7 +38,7 @@ import { isApiProvider } from './types/providers';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
-import { safeJsonStringify } from './util/json';
+import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
 import { promptYesNo } from './util/readline';
 import { sleep } from './util/time';
 import { transform, type TransformContext, TransformInputType } from './util/transform';
@@ -891,7 +891,8 @@ class Evaluator {
         try {
           await this.evalRecord.addResult(row);
         } catch (error) {
-          logger.error(`Error saving result: ${error} ${safeJsonStringify(row)}`);
+          const resultSummary = summarizeEvaluateResultForLogging(row);
+          logger.error(`Error saving result: ${error} ${safeJsonStringify(resultSummary)}`);
         }
 
         for (const writer of this.fileWriters) {

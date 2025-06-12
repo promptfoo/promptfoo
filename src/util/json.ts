@@ -33,25 +33,89 @@ export function isValidJson(str: string): boolean {
   }
 }
 
+function safeJsonStringifyTruncated<T>(value: T, prettyPrint: boolean = false): string {
+  const MAX_STRING_LENGTH = 1000; // Max length for string values
+  const MAX_ARRAY_LENGTH = 10; // Max elements to include from arrays
+  const cache = new Set();
+  const space = prettyPrint ? 2 : undefined;
+  
+  const truncateValue = (val: any): any => {
+    if (typeof val === 'string') {
+      return val.length > MAX_STRING_LENGTH 
+        ? val.substring(0, MAX_STRING_LENGTH) + '...[truncated]'
+        : val;
+    }
+    
+    if (Array.isArray(val)) {
+      const truncated = val.slice(0, MAX_ARRAY_LENGTH).map(truncateValue);
+      if (val.length > MAX_ARRAY_LENGTH) {
+        truncated.push(`...[${val.length - MAX_ARRAY_LENGTH} more items]`);
+      }
+      return truncated;
+    }
+    
+    if (typeof val === 'object' && val !== null) {
+      if (cache.has(val)) {
+        return '[Circular Reference]';
+      }
+      cache.add(val);
+      
+      const truncated: any = {};
+      let count = 0;
+      const MAX_OBJECT_KEYS = 20;
+      
+      for (const [k, v] of Object.entries(val)) {
+        if (count >= MAX_OBJECT_KEYS) {
+          truncated['...[truncated]'] = `${Object.keys(val).length - count} more keys`;
+          break;
+        }
+        truncated[k] = truncateValue(v);
+        count++;
+      }
+      return truncated;
+    }
+    
+    return val;
+  };
+  
+  try {
+    return JSON.stringify(truncateValue(value), null, space) || '{}';
+  } catch {
+    // Ultimate fallback
+    return `{"error": "Failed to stringify even truncated data", "type": "${typeof value}", "constructor": "${value?.constructor?.name || 'unknown'}"}`;
+  }
+}
+
 export function safeJsonStringify<T>(value: T, prettyPrint: boolean = false): string | undefined {
   // Prevent circular references
   const cache = new Set();
   const space = prettyPrint ? 2 : undefined;
-  return (
-    JSON.stringify(
-      value,
-      (key, val) => {
-        if (typeof val === 'object' && val !== null) {
-          if (cache.has(val)) {
-            return;
+  
+  try {
+    return (
+      JSON.stringify(
+        value,
+        (key, val) => {
+          if (typeof val === 'object' && val !== null) {
+            if (cache.has(val)) {
+              return;
+            }
+            cache.add(val);
           }
-          cache.add(val);
-        }
-        return val;
-      },
-      space,
-    ) || undefined
-  );
+          return val;
+        },
+        space,
+      ) || undefined
+    );
+  } catch (error) {
+    // If JSON.stringify fails (e.g., RangeError: Invalid string length),
+    // try to create a truncated version for debugging
+    if (error instanceof RangeError && error.message.includes('Invalid string length')) {
+      return safeJsonStringifyTruncated(value, prettyPrint);
+    }
+    // For other errors, return a basic error representation
+    return `{"error": "Failed to stringify: ${error instanceof Error ? error.message : String(error)}"}`;
+  }
 }
 
 export function convertSlashCommentsToHash(str: string): string {
@@ -211,4 +275,64 @@ export function orderKeys<T extends object>(obj: T, order: (keyof T)[]): T {
   }
 
   return result;
+}
+
+/**
+ * Creates a summary of an EvaluateResult for logging purposes, avoiding the RangeError
+ * that can occur when trying to stringify large evaluation results.
+ */
+export function summarizeEvaluateResultForLogging(result: any): any {
+  const summary: any = {
+    id: result.id,
+    testIdx: result.testIdx,
+    promptIdx: result.promptIdx,
+    success: result.success,
+    score: result.score,
+    error: result.error,
+    failureReason: result.failureReason,
+  };
+
+  // Include basic provider info
+  if (result.provider) {
+    summary.provider = {
+      id: result.provider.id,
+      label: result.provider.label,
+    };
+  }
+
+  // Include truncated response info
+  if (result.response) {
+    summary.response = {
+      error: result.response.error,
+      cached: result.response.cached,
+      cost: result.response.cost,
+      tokenUsage: result.response.tokenUsage,
+    };
+
+    // Truncate large output fields
+    if (result.response.output) {
+      const output = String(result.response.output);
+      summary.response.output = output.length > 500 
+        ? output.substring(0, 500) + '...[truncated]'
+        : output;
+    }
+
+    // Include metadata keys but not values (which could be large)
+    if (result.response.metadata) {
+      summary.response.metadata = {
+        keys: Object.keys(result.response.metadata),
+        keyCount: Object.keys(result.response.metadata).length,
+      };
+    }
+  }
+
+  // Include basic test case info without potentially large data
+  if (result.testCase) {
+    summary.testCase = {
+      description: result.testCase.description,
+      vars: result.testCase.vars ? Object.keys(result.testCase.vars) : undefined,
+    };
+  }
+
+  return summary;
 }
