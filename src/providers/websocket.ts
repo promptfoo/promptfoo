@@ -1,4 +1,4 @@
-import WebSocket from 'ws';
+import WebSocket, { type ClientOptions } from 'ws';
 import logger from '../logger';
 import type {
   ApiProvider,
