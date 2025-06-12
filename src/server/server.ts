@@ -267,7 +267,9 @@ export async function startServer(
 
   setupSignalWatcher(async () => {
     const latestEval = await getLatestEval(filterDescription);
-    if ((latestEval?.results.results.length || 0) > 0) {
+    const results = await latestEval?.getResultsCount();
+
+    if (results && results > 0) {
       logger.info(`Emitting update with eval ID: ${latestEval?.config?.description || 'unknown'}`);
       io.emit('update', latestEval);
       allPrompts = null;

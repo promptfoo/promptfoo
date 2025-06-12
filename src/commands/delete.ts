@@ -63,7 +63,7 @@ export function deleteCommand(program: Command) {
       if (evalId === 'latest') {
         const latestResults = await getLatestEval();
         if (latestResults) {
-          await handleEvalDelete(latestResults.createdAt, cmdObj.envPath);
+          await handleEvalDelete(latestResults.id, cmdObj.envPath);
         } else {
           logger.error('No eval found.');
           process.exitCode = 1;

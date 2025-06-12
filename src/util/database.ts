@@ -211,9 +211,8 @@ export async function updateResult(
   }
 }
 
-export async function getLatestEval(filterDescription?: string): Promise<ResultsFile | undefined> {
-  const eval_ = await Eval.latest();
-  return await eval_?.toResultsFile();
+export async function getLatestEval(filterDescription?: string): Promise<Eval | undefined> {
+  return await Eval.latest();
 }
 
 export async function getPromptsWithPredicate(

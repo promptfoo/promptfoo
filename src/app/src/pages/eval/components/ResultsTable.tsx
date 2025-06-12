@@ -7,6 +7,7 @@ import {
 import React, { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Link } from 'react-router-dom';
+import ErrorBoundary from '@app/components/ErrorBoundary';
 import { useToast } from '@app/hooks/useToast';
 import {
   type EvaluateTableRow,
@@ -731,22 +732,31 @@ function ResultsTable({
             cell: (info: CellContext<EvaluateTableRow, EvaluateTableOutput>) => {
               const output = getOutput(info.row.index, idx);
               return output ? (
-                <EvalOutputCell
-                  output={output}
-                  maxTextLength={maxTextLength}
-                  rowIndex={info.row.index}
-                  promptIndex={idx}
-                  onRating={handleRating.bind(
-                    null,
-                    output.originalRowIndex ?? info.row.index,
-                    output.originalPromptIndex ?? idx,
-                    output.id,
-                  )}
-                  firstOutput={getFirstOutput(info.row.index)}
-                  showDiffs={filterMode === 'different' && visiblePromptCount > 1}
-                  searchText={debouncedSearchText}
-                  showStats={showStats}
-                />
+                <ErrorBoundary
+                  name={`EvalOutputCell-${info.row.index}-${idx}`}
+                  fallback={
+                    <div style={{ padding: '20px', color: 'red', fontSize: '12px' }}>
+                      Error loading cell
+                    </div>
+                  }
+                >
+                  <EvalOutputCell
+                    output={output}
+                    maxTextLength={maxTextLength}
+                    rowIndex={info.row.index}
+                    promptIndex={idx}
+                    onRating={handleRating.bind(
+                      null,
+                      output.originalRowIndex ?? info.row.index,
+                      output.originalPromptIndex ?? idx,
+                      output.id,
+                    )}
+                    firstOutput={getFirstOutput(info.row.index)}
+                    showDiffs={filterMode === 'different' && visiblePromptCount > 1}
+                    searchText={debouncedSearchText}
+                    showStats={showStats}
+                  />
+                </ErrorBoundary>
               ) : (
                 <div style={{ padding: '20px' }}>'Test still in progress...'</div>
               );
