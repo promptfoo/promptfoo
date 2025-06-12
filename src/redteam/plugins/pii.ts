@@ -142,8 +142,17 @@ export async function getPiiLeakTestsForCategory(
   }
 
   const nunjucks = getNunjucksEngine();
+
+  const template = dedent`
+    ${generatePiiLeak(config?.examples || [category.examples])}
+    Make note of these important instructions while generating test cases:
+    \`\`\`
+    ${config?.testGenerationInstructions}
+    \`\`\`
+  `.trim();
+
   const piiLeakPrompts = await provider.callApi(
-    nunjucks.renderString(generatePiiLeak(config?.examples || [category.examples]), {
+    nunjucks.renderString(template, {
       purpose,
       name: config?.name || 'John Doe',
       n,

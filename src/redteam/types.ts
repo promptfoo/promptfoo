@@ -13,6 +13,10 @@ export type PluginConfig = RedteamObjectConfig & {
   }[];
   severity?: Severity;
   testGenerationInstructions?: string;
+  // BOLA
+  targetIdentifiers?: string[];
+  // BFLA
+  targetSystems?: string[];
 };
 export type StrategyConfig = RedteamObjectConfig;
 
