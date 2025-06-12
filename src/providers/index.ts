@@ -4,12 +4,11 @@ import fs from 'fs';
 import yaml from 'js-yaml';
 import path from 'path';
 import cliState from '../cliState';
-import { CLOUD_PROVIDER_PREFIX } from '../constants';
 import logger from '../logger';
 import type { LoadApiProviderContext, TestSuiteConfig } from '../types';
 import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, ProviderOptions, ProviderOptionsMap } from '../types/providers';
-import { getProviderFromCloud } from '../util/cloud';
+import { getCloudDatabaseId, getProviderFromCloud, isCloudProvider } from '../util/cloud';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { providerMap } from './registry';
@@ -31,11 +30,11 @@ export async function loadApiProvider(
 
   const renderedProviderPath = getNunjucksEngine().renderString(providerPath, {});
 
-  if (renderedProviderPath.startsWith(CLOUD_PROVIDER_PREFIX)) {
-    const cloudDatabaseId = renderedProviderPath.slice(CLOUD_PROVIDER_PREFIX.length);
+  if (isCloudProvider(renderedProviderPath)) {
+    const cloudDatabaseId = getCloudDatabaseId(renderedProviderPath);
 
     const provider = await getProviderFromCloud(cloudDatabaseId);
-    if (provider.id.startsWith(CLOUD_PROVIDER_PREFIX)) {
+    if (isCloudProvider(provider.id)) {
       throw new Error(
         `This cloud provider ${cloudDatabaseId} points to another cloud provider: ${provider.id}. This is not allowed. A cloud provider should point to a specific provider, not another cloud provider.`,
       );
@@ -239,6 +238,38 @@ export async function loadApiProviders(
       }),
     );
     return providersArrays.flat();
+  }
+  throw new Error('Invalid providers list');
+}
+
+/**
+ * Given a `providerPaths` object, resolves a list of provider IDs. Mimics the waterfall behavior
+ * of `loadApiProviders` to ensure consistent behavior given the shape of the `providerPaths`
+ * object.
+ *
+ * @param providerPaths - The list of providers to get the IDs of.
+ * @returns The IDs of the providers in the providerPaths list.
+ */
+export function getProviderIds(providerPaths: TestSuiteConfig['providers']): string[] {
+  if (typeof providerPaths === 'string') {
+    return [providerPaths];
+  } else if (typeof providerPaths === 'function') {
+    return ['custom-function'];
+  } else if (Array.isArray(providerPaths)) {
+    return providerPaths.map((provider, idx) => {
+      if (typeof provider === 'string') {
+        return provider;
+      }
+      if (typeof provider === 'function') {
+        return provider.label || `custom-function-${idx}`;
+      }
+      if ((provider as ProviderOptions).id) {
+        return (provider as ProviderOptions).id!;
+      }
+      const id = Object.keys(provider)[0];
+      const providerObject = (provider as ProviderOptionsMap)[id];
+      return providerObject.id || id;
+    });
   }
   throw new Error('Invalid providers list');
 }
