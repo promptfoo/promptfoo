@@ -318,10 +318,10 @@ export interface LoggableEvaluateResultSummary {
 /**
  * Creates a summary of an EvaluateResult for logging purposes, avoiding RangeError
  * when stringifying large evaluation results.
- * 
+ *
  * Extracts key information while truncating potentially large fields like response
  * outputs and metadata values.
- * 
+ *
  * @param result - The evaluation result to summarize
  * @param maxOutputLength - Maximum length for response output before truncation. Default: 500
  * @param includeMetadataKeys - Whether to include metadata keys in the summary. Default: true
