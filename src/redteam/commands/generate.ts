@@ -457,6 +457,13 @@ export async function doGenerateRedteam(
     printBorder();
   } else if (options.write && configPath) {
     const existingConfig = yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>;
+    const existingTests = existingConfig.tests;
+    let testsArray: any[] = [];
+    if (Array.isArray(existingTests)) {
+      testsArray = existingTests;
+    } else if (existingTests) {
+      testsArray = [existingTests];
+    }
     existingConfig.defaultTest = {
       ...(existingConfig.defaultTest || {}),
       metadata: {
@@ -465,7 +472,7 @@ export async function doGenerateRedteam(
         entities,
       },
     };
-    existingConfig.tests = [...(existingConfig.tests || []), ...redteamTests];
+    existingConfig.tests = [...testsArray, ...redteamTests];
     existingConfig.redteam = { ...(existingConfig.redteam || {}), ...updatedRedteamConfig };
     // Add the result of target purpose discovery to metadata if available
     existingConfig.metadata = {
