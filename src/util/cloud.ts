@@ -127,7 +127,7 @@ export async function getPluginSeverityOverridesFromCloud(cloudProviderId: strin
     const body = await response.json();
 
     if (body.pluginSeverityOverrideId) {
-      // Fetch the plugin severity set from the cloud:
+      // Fetch the plugin severity override from the cloud:
       const overrideRes = await makeRequest(
         `/redteam/plugins/severity-overrides/${body.pluginSeverityOverrideId}`,
         'GET',
@@ -135,7 +135,7 @@ export async function getPluginSeverityOverridesFromCloud(cloudProviderId: strin
 
       if (!overrideRes.ok) {
         const errorMessage = await overrideRes.text();
-        const formattedErrorMessage = `Failed to fetch plugin severity set from cloud: ${errorMessage}. HTTP Status: ${overrideRes.status} -- ${overrideRes.statusText}.`;
+        const formattedErrorMessage = `Failed to fetch plugin severity override from cloud: ${errorMessage}. HTTP Status: ${overrideRes.status} -- ${overrideRes.statusText}.`;
 
         logger.error(`[Cloud] ${formattedErrorMessage}`);
         throw new Error(formattedErrorMessage);
