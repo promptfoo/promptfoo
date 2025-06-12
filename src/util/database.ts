@@ -597,3 +597,5 @@ export async function getStandaloneEvals({
   standaloneEvalCache.set(cacheKey, withUUIDs);
   return withUUIDs;
 }
+
+export { DEFAULT_QUERY_LIMIT, standaloneEvalCache };
