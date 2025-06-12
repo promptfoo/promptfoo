@@ -728,6 +728,33 @@ You can set up the provider in several ways:
 
 For more detailed information on configuration options, refer to the [ProviderOptions documentation](/docs/configuration/reference/#provideroptions).
 
+### Configuration Precedence
+
+Configuration values can be set in multiple ways, with the following precedence (highest to lowest):
+
+1. **Command-line flags** - Override all other settings
+
+   ```bash
+   promptfoo redteam run --force --max-concurrency 5
+   ```
+
+2. **Configuration file** (`promptfooconfig.yaml`) - Base configuration with env overrides
+
+   ```yaml
+   redteam:
+     provider: openai:gpt-4.1
+     numTests: 5
+   env:
+     OPENAI_API_KEY: your-key-here
+   ```
+
+3. **Environment variables** - System-level settings
+
+   ```bash
+   export PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true
+   export OPENAI_API_KEY=your-key-here
+   ```
+
 ## Best Practices
 
 1. Start with a configuration created by `promptfoo redteam init`
