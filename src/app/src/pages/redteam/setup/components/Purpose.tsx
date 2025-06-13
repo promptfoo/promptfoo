@@ -343,17 +343,37 @@ export default function Purpose({ onNext }: PromptsProps) {
                     <Alert severity="error" sx={{ border: 0 }}>
                       {discoveryError}
                     </Alert>
-                    <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                      To re-attempt discovery from your terminal:
-                    </Typography>
-                    <Box>
-                      <Typography variant="body2" color="text.secondary">
-                        1. Save Config and export it as YAML
+                    <Box
+                      sx={{
+                        p: 2,
+                        borderRadius: 1.5,
+                        backgroundColor:
+                          theme.palette.mode === 'dark'
+                            ? alpha(theme.palette.grey[800], 0.5)
+                            : alpha(theme.palette.grey[100], 0.5),
+                        border: `1px solid ${
+                          theme.palette.mode === 'dark'
+                            ? alpha(theme.palette.grey[700], 0.3)
+                            : alpha(theme.palette.grey[300], 0.3)
+                        }`,
+                      }}
+                    >
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{ fontStyle: 'italic', mb: 2 }}
+                      >
+                        💡 To re-attempt discovery from your terminal:
                       </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        2. Run the command
-                      </Typography>
-                      <Code>promptfoo redteam discover -c yourconfig.yaml</Code>
+                      <Stack spacing={1}>
+                        <Typography variant="body2" color="text.secondary">
+                          <strong>1.</strong> Save Config and export it as YAML
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          <strong>2.</strong> Run the following command:
+                        </Typography>
+                        <Code>promptfoo redteam discover -c redteam-config.yaml</Code>
+                      </Stack>
                     </Box>
                   </>
                 )}
