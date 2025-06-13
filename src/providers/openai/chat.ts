@@ -2,14 +2,14 @@ import path from 'path';
 import { OpenAiGenericProvider } from '.';
 import { fetchWithCache } from '../../cache';
 import cliState from '../../cliState';
-import { importModule } from '../../esm';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
+import { importModule } from '../../esm';
 import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
 import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util';
-import { isJavascriptFile } from '../../util/fileExtensions';
 import { maybeLoadFromExternalFile } from '../../util/file';
+import { isJavascriptFile } from '../../util/fileExtensions';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from '../shared';
@@ -108,7 +108,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   /**
    * Executes a function callback with proper error handling
    */
-  private async executeFunctionCallback(functionName: string, args: string, config: OpenAiCompletionOptions): Promise<string> {
+  private async executeFunctionCallback(
+    functionName: string,
+    args: string,
+    config: OpenAiCompletionOptions,
+  ): Promise<string> {
     try {
       // Check if we've already loaded this function
       let callback = this.loadedFunctionCallbacks[functionName];

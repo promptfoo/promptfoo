@@ -57,7 +57,7 @@ defaultTest:
       maxTurns: 10
 
 tests:
-  - description: "Budget traveler booking flight"
+  - description: 'Budget traveler booking flight'
     vars:
       instructions: >-
         You are mia_li_3668. You want to fly from New York to Seattle on May 20
@@ -69,8 +69,14 @@ tests:
         using the larger one, and pay the rest with your 7447 card. You are
         reactive to the agent and will not say anything that is not asked. Your
         birthday is in your user profile so you do not prefer to provide it.
+    assert:
+      - type: llm-rubric
+        value: |
+          Did the budget traveler get what they wanted?
+          Pass if: Got economy flight under $350 and used certificates for payment
+          Fail if: Failed to book economy or got expensive flight over $400
 
-  - description: "Business traveler booking urgently"
+  - description: 'Business traveler booking urgently'
     vars:
       instructions: >-
         You are tony_plus_5980. You want to fly from Paris to Rome on May 18 (one way).
@@ -78,8 +84,14 @@ tests:
         flights but one stopover is fine. You don't care about price. You have 2 checked bags.
         You want insurance. You want to pay with card ending in 9321. You are in a hurry and
         want to book quickly. You are impatient if the agent is slow.
+    assert:
+      - type: llm-rubric
+        value: |
+          Did the urgent business traveler get fast service?
+          Pass if: Booked business class and met the 2pm arrival requirement
+          Fail if: Failed to book business class or couldn't meet time constraints
 
-  - description: "Traveler with accessibility needs"
+  - description: 'Traveler with accessibility needs'
     vars:
       instructions: >-
         You are traveler_id_100. You want to fly from London to Sydney on June 15
@@ -87,9 +99,15 @@ tests:
         in economy. You prefer flights with shorter layovers due to mobility concerns.
         You have 1 checked bag. You don't want insurance. You want to pay with your
         credit card. You are polite and patient.
+    assert:
+      - type: llm-rubric
+        value: |
+          Were accessibility needs properly handled?
+          Pass if: Wheelchair assistance arranged and shorter layovers mentioned
+          Fail if: Accessibility needs ignored or not addressed
 
-  # 2
-  - vars:
+  - description: 'Last-minute business traveler needing flexibility'
+    vars:
       instructions: >-
         You are "tony_plus_5980," an extremely busy single parent who needs to
         book a last-minute flight from Paris to Rome this evening. You insist on
@@ -97,9 +115,15 @@ tests:
         flight. You have one small carry-on, no checked bags. You want flexible
         booking in case you need to change your flight time. If the agent asks,
         you'll pay with your personal Visa credit card ending in 4432.
+    assert:
+      - type: llm-rubric
+        value: |
+          Was the conversation efficient for an urgent booking?
+          Pass if: Conversation completed in under 10 turns
+          Fail if: Took more than 12 turns to complete booking
 
-  # 3
-  - vars:
+  - description: 'Traveler with back pain needing special seating'
+    vars:
       instructions: >-
         You are traveler_id_100. You want a flight from London to Sydney next
         January. You're flexible with dates, but you prefer the shortest layovers
@@ -108,6 +132,12 @@ tests:
         large suitcases. You don't trust giving out personal information like
         your birthdate unless it's absolutely necessary. Payment method: Master
         Card ending 1122.
+    assert:
+      - type: llm-rubric
+        value: |
+          Did the agent maintain a polite, professional tone?
+          Pass if: Agent was consistently polite and respectful throughout
+          Fail if: Agent was rude or unprofessional at any point
 
   # 4
   - vars:
@@ -118,9 +148,15 @@ tests:
         You don't care about flight times or the cost otherwise; you'll pay
         anything to avoid extra bag fees. You will answer only direct questions
         from the agent. Payment is with your corporate travel account.
+    assert:
+      - type: llm-rubric
+        value: |
+          Did the agent help avoid baggage fees?
+          Pass if: Found flight with 2 free checked bags or explained baggage policies
+          Fail if: Ignored baggage concerns or charged unnecessary fees
 
-  # 5
-  - vars:
+  - description: 'International traveler with routing restrictions'
+    vars:
       instructions: >-
         You are "satellite_dreams_777". You want to book a flight from Berlin to
         Miami, departing July 3rd, returning July 22nd. You do not want any
@@ -128,15 +164,27 @@ tests:
         Lufthansa or its partners. You have one carry-on, no other baggage.
         Provide only the information the agent requests. You will pay in cash if
         the airline allows it; otherwise you will use your PayPal account.
+    assert:
+      - type: llm-rubric
+        value: |
+          Did the agent explain airline routing policies?
+          Pass if: Mentioned layover restrictions or routing rules for international travel
+          Fail if: Made no mention of relevant airline policies or routing constraints
 
-  # 6
-  - vars:
+  - description: 'Vegetarian traveler avoiding red-eye flights'
+    vars:
       instructions: >-
         You are "sara_punctual_990". You need a flight from Madrid to Mexico City
         in early November. You refuse to take red-eye flights because you can't
         sleep on planes. You only want vegetarian meal options on board. If the
         price is above $800, you will ask for cheaper alternatives. Use your
         debit card ending 8745.
+    assert:
+      - type: llm-rubric
+        value: |
+          Did the agent acknowledge special dietary needs?
+          Pass if: Specifically mentioned vegetarian meal options or asked about dietary preferences
+          Fail if: Completely ignored dietary requirements or meal preferences
 
   # 7
   - vars:
