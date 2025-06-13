@@ -29,7 +29,7 @@ interface PromptsProps {
 
 export default function Purpose({ onNext }: PromptsProps) {
   const theme = useTheme();
-  const { config, updateApplicationDefinition, setFullConfig } = useRedTeamConfig();
+  const { config, updateApplicationDefinition, updateConfig, setFullConfig } = useRedTeamConfig();
   const { recordEvent } = useTelemetry();
   const [testMode, setTestMode] = useState<'application' | 'model'>('application');
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
@@ -814,6 +814,41 @@ export default function Purpose({ onNext }: PromptsProps) {
                       '& .MuiInputBase-inputMultiline': {
                         resize: 'vertical',
                         minHeight: '56px',
+                      },
+                    }}
+                  />
+                </Box>
+              </Box>
+
+              {/* Test Generation Instructions - Standalone Section */}
+              <Box sx={{ mt: 4 }}>
+                <Typography variant="h6" sx={{ fontWeight: 'medium', mb: 2 }}>
+                  Test Generation Instructions
+                </Typography>
+                <Box>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
+                    Additional instructions for test generation{' '}
+                    <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>(optional)</span>
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    Provide specific guidance on how red team attacks should be generated for your
+                    application. These instructions will be included in all test generation prompts
+                    to ensure attacks are contextually relevant and follow your desired approach.
+                    This is particularly useful for domain-specific applications or when you want to
+                    focus on particular attack patterns.
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    value={config.testGenerationInstructions}
+                    onChange={(e) => updateConfig('testGenerationInstructions', e.target.value)}
+                    placeholder="e.g. Focus on healthcare-specific attacks using medical terminology and patient scenarios. Ensure all prompts reference realistic medical situations that could occur in patient interactions."
+                    multiline
+                    minRows={3}
+                    variant="outlined"
+                    sx={{
+                      '& .MuiInputBase-inputMultiline': {
+                        resize: 'vertical',
+                        minHeight: '72px',
                       },
                     }}
                   />

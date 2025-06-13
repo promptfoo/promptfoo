@@ -9,6 +9,7 @@ import IconButton from '@mui/material/IconButton';
 import Pagination from '@mui/material/Pagination';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import type { PluginConfig } from '@promptfoo/redteam/types';
 import { parse } from 'csv-parse/browser/esm/sync';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import type { LocalPluginConfig } from '../types';
@@ -101,7 +102,7 @@ export default function CustomIntentSection() {
 
   useEffect(() => {
     if (localConfig?.intent) {
-      debouncedUpdatePlugins(localConfig.intent);
+      debouncedUpdatePlugins(localConfig.intent as unknown as string[]);
     }
   }, [localConfig, debouncedUpdatePlugins]);
 
@@ -120,7 +121,9 @@ export default function CustomIntentSection() {
 
       const timeout = setTimeout(() => {
         setLocalConfig((prev) => {
-          const currentArray = Array.isArray(prev[key]) ? [...(prev[key] as string[])] : [''];
+          const currentArray = Array.isArray(prev[key as keyof PluginConfig])
+            ? [...(prev[key as keyof PluginConfig] as string[])]
+            : [''];
           currentArray[actualIndex] = value;
           return {
             ...prev,
@@ -137,7 +140,12 @@ export default function CustomIntentSection() {
   const addArrayItem = (key: string) => {
     setLocalConfig((prev) => ({
       ...prev,
-      [key]: [...(Array.isArray(prev[key]) ? (prev[key] as string[]) : []), ''],
+      [key]: [
+        ...(Array.isArray(prev[key as keyof PluginConfig])
+          ? (prev[key as keyof PluginConfig] as string[])
+          : []),
+        '',
+      ],
     }));
     const newTotalPages = Math.ceil(((localConfig.intent?.length || 0) + 1) / ITEMS_PER_PAGE);
     setCurrentPage(newTotalPages);
@@ -153,7 +161,9 @@ export default function CustomIntentSection() {
     });
 
     setLocalConfig((prev) => {
-      const currentArray = Array.isArray(prev[key]) ? [...(prev[key] as string[])] : [''];
+      const currentArray = Array.isArray(prev[key as keyof PluginConfig])
+        ? [...(prev[key as keyof PluginConfig] as string[])]
+        : [''];
       currentArray.splice(actualIndex, 1);
       if (currentArray.length === 0) {
         currentArray.push('');
@@ -218,30 +228,31 @@ export default function CustomIntentSection() {
         </Box>
       ) : (
         <>
-          {currentIntents.map((intent: string, index: number) => {
-            const actualIndex = startIndex + index;
-            const value = actualIndex in draftIntents ? draftIntents[actualIndex] : intent;
+          {Array.isArray(currentIntents) &&
+            currentIntents.map((intent: string | string[], index: number) => {
+              const actualIndex = startIndex + index;
+              const value = actualIndex in draftIntents ? draftIntents[actualIndex] : intent;
 
-            return (
-              <Box key={actualIndex} sx={{ display: 'flex', gap: 1 }}>
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={2}
-                  value={value}
-                  onChange={(e) => handleArrayInputChange('intent', index, e.target.value)}
-                  placeholder={EXAMPLE_INTENTS[index % EXAMPLE_INTENTS.length]}
-                />
-                <IconButton
-                  onClick={() => removeArrayItem('intent', index)}
-                  disabled={(localConfig.intent || []).length <= 1}
-                  sx={{ alignSelf: 'flex-start' }}
-                >
-                  <DeleteIcon />
-                </IconButton>
-              </Box>
-            );
-          })}
+              return (
+                <Box key={actualIndex} sx={{ display: 'flex', gap: 1 }}>
+                  <TextField
+                    fullWidth
+                    multiline
+                    rows={2}
+                    value={value}
+                    onChange={(e) => handleArrayInputChange('intent', index, e.target.value)}
+                    placeholder={EXAMPLE_INTENTS[index % EXAMPLE_INTENTS.length]}
+                  />
+                  <IconButton
+                    onClick={() => removeArrayItem('intent', index)}
+                    disabled={(localConfig.intent || []).length <= 1}
+                    sx={{ alignSelf: 'flex-start' }}
+                  >
+                    <DeleteIcon />
+                  </IconButton>
+                </Box>
+              );
+            })}
 
           {totalPages > 1 && (
             <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>

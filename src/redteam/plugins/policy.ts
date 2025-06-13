@@ -1,5 +1,12 @@
 import dedent from 'dedent';
-import type { ApiProvider, Assertion, AtomicTestCase, GradingResult, TestCase } from '../../types';
+import type {
+  ApiProvider,
+  Assertion,
+  AtomicTestCase,
+  GradingResult,
+  PluginConfig,
+  TestCase,
+} from '../../types';
 import invariant from '../../util/invariant';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
@@ -9,13 +16,8 @@ export class PolicyPlugin extends RedteamPluginBase {
   readonly id = PLUGIN_ID;
   private policy: string;
 
-  constructor(
-    provider: ApiProvider,
-    purpose: string,
-    injectVar: string,
-    config: { policy: string },
-  ) {
-    super(provider, purpose, injectVar);
+  constructor(provider: ApiProvider, purpose: string, injectVar: string, config: PluginConfig) {
+    super(provider, purpose, injectVar, config);
     invariant(config.policy, 'A "policy" property is required for the policy plugin.');
     this.policy = config.policy;
   }

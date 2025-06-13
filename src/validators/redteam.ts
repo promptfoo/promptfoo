@@ -174,6 +174,7 @@ export const RedteamConfigSchema = z
       .string()
       .optional()
       .describe('Purpose override string - describes the prompt templates'),
+    testGenerationInstructions: z.string().optional().describe('Test generation instructions'),
     provider: ProviderSchema.optional().describe('Provider used for generating adversarial inputs'),
     numTests: z.number().int().positive().optional().describe('Number of tests to generate'),
     language: z.string().optional().describe('Language of tests ot generate for this plugin'),

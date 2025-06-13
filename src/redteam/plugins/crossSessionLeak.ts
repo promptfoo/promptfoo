@@ -73,12 +73,13 @@ export class CrossSessionLeakPlugin extends RedteamPluginBase {
       purpose: this.purpose,
       n,
     });
+    const finalTemplate = RedteamPluginBase.appendModifiers(renderedTemplate, this.config);
     const provider = await redteamProviderManager.getProvider({
       provider: this.provider,
       jsonOnly: true,
     });
 
-    const { output, error } = await provider.callApi(renderedTemplate);
+    const { output, error } = await provider.callApi(finalTemplate);
     if (error) {
       logger.error(`Error generating cross-session leak prompts: ${error}`);
       return [];

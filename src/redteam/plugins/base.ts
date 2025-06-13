@@ -102,6 +102,15 @@ export abstract class RedteamPluginBase {
   protected abstract getTemplate(): Promise<string>;
 
   /**
+   * Additional instructions for test generation.
+   * These instructions will be appended to the template to provide
+   * domain-specific guidance for generating attacks.
+   */
+  protected getTestGenerationInstructions(): string {
+    return (this.config.modifiers?.testGenerationInstructions as string) ?? '';
+  }
+
+  /**
    * Abstract method to get assertions for a given prompt.
    * @param prompt - The prompt to generate assertions for.
    * @returns An array of Assertion objects.
@@ -142,7 +151,7 @@ export abstract class RedteamPluginBase {
         examples: this.config.examples,
       });
 
-      const finalTemplate = this.appendModifiers(renderedTemplate);
+      const finalTemplate = RedteamPluginBase.appendModifiers(renderedTemplate, this.config);
       const { output: generatedPrompts, error } = await this.provider.callApi(finalTemplate);
       if (delayMs > 0) {
         logger.debug(`Delaying for ${delayMs}ms`);
@@ -197,15 +206,13 @@ export abstract class RedteamPluginBase {
    * @param template - The template to append modifiers to.
    * @returns The modified template.
    */
-  private appendModifiers(template: string): string {
+  static appendModifiers(template: string, config: PluginConfig): string {
     // Take everything under "modifiers" config key
-    const modifiers: Record<string, string> =
-      (this.config.modifiers as Record<string, string>) ?? {};
+    const modifiers: Record<string, string> = (config.modifiers as Record<string, string>) ?? {};
 
-    // `language` is a special top-level config field
-    if (this.config.language) {
-      invariant(typeof this.config.language === 'string', 'language must be a string');
-      modifiers.language = this.config.language;
+    if (config.language) {
+      invariant(typeof config.language === 'string', 'language must be a string');
+      modifiers.language = config.language;
     }
 
     // No modifiers
@@ -218,7 +225,7 @@ export abstract class RedteamPluginBase {
 
     // Append all modifiers
     const modifierSection = Object.entries(modifiers)
-      .filter(([key, value]) => typeof value !== 'undefined' && value !== '')
+      .filter(([_, value]) => typeof value !== 'undefined' && value !== '')
       .map(([key, value]) => `${key}: ${value}`)
       .join('\n');
 

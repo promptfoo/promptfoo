@@ -39,6 +39,7 @@ import {
   AGENTIC_EXEMPT_PLUGINS,
   DATASET_EXEMPT_PLUGINS,
 } from '@promptfoo/redteam/constants';
+import type { PluginConfig } from '@promptfoo/redteam/types';
 import { useDebounce } from 'use-debounce';
 import { useRedTeamConfig, useRecentlyUsedPlugins } from '../hooks/useRedTeamConfig';
 import type { LocalPluginConfig } from '../types';
@@ -276,7 +277,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
           return false;
         }
         for (const key in config) {
-          const value = config[key];
+          const value = config[key as keyof PluginConfig];
           if (Array.isArray(value) && value.length === 0) {
             return false;
           }
@@ -304,7 +305,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     }
 
     for (const key in config) {
-      const value = config[key];
+      const value = config[key as keyof PluginConfig];
       if (Array.isArray(value) && value.length === 0) {
         return false;
       }
