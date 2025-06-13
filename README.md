@@ -87,3 +87,5 @@ Join our [Discord community](https://discord.gg/promptfoo) for help and discussi
 <a href="https://github.com/promptfoo/promptfoo/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=promptfoo/promptfoo" />
 </a>
+
+<!-- Test comment for workflow testing -->
