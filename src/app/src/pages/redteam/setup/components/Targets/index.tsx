@@ -21,6 +21,7 @@ import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamCon
 import type { ProviderOptions } from '../../types';
 import Prompts from '../Prompts';
 import { predefinedTargets, customTargetOption } from '../constants';
+import LoadExampleButton from './../LoadExampleButton';
 import BrowserAutomationConfiguration from './BrowserAutomationConfiguration';
 import CommonConfigurationOptions from './CommonConfigurationOptions';
 import CustomTargetConfiguration from './CustomTargetConfiguration';
@@ -331,9 +332,13 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
 
   return (
     <Stack direction="column" spacing={3}>
-      <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
-        Select Red Team Target
-      </Typography>
+      <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
+          Select Red Team Target
+        </Typography>
+
+        <LoadExampleButton />
+      </Box>
 
       <Typography variant="body1">
         A target is the specific LLM or endpoint you want to evaluate in your red teaming process.
