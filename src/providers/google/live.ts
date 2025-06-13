@@ -655,10 +655,7 @@ export class GoogleLiveProvider implements ApiProvider {
   /**
    * Executes a function callback with proper error handling
    */
-  private async executeFunctionCallback(
-    functionName: string,
-    args: string,
-  ): Promise<any> {
+  private async executeFunctionCallback(functionName: string, args: string): Promise<any> {
     try {
       // Check if we've already loaded this function
       let callback = this.loadedFunctionCallbacks[functionName];
