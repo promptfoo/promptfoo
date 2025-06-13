@@ -383,7 +383,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             } catch (error) {
               // If callback fails, fall back to original behavior (return the function call)
               logger.debug(
-                `Function callback failed for ${functionName}, falling back to original output`,
+                `Function callback failed for ${functionName} with error ${error}, falling back to original output`,
               );
               hasSuccessfulCallback = false;
               break;
