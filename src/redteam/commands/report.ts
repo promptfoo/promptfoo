@@ -1,5 +1,6 @@
 import type { Command } from 'commander';
 import { getDefaultPort } from '../../constants';
+import logger from '../../logger';
 import { startServer } from '../../server/server';
 import telemetry from '../../telemetry';
 import { setupEnv } from '../../util';
@@ -33,12 +34,17 @@ export function redteamReportCommand(program: Command) {
         if (directory) {
           setConfigDirectoryPath(directory);
         }
+        if (cmdObj.filterDescription) {
+          logger.warn(
+            'The --filter-description option is deprecated and not longer supported. The argument will be ignored.',
+          );
+        }
 
         const isRunning = await checkServerRunning();
         if (isRunning) {
           await openBrowser(BrowserBehavior.OPEN_TO_REPORT);
         } else {
-          await startServer(cmdObj.port, BrowserBehavior.OPEN_TO_REPORT, cmdObj.filterDescription);
+          await startServer(cmdObj.port, BrowserBehavior.OPEN_TO_REPORT);
         }
       },
     );

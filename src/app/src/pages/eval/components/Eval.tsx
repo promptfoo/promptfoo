@@ -132,6 +132,7 @@ export default function Eval({
             setDefaultEvalId(newRecentEvals[0]?.evalId);
             setEvalId(newRecentEvals[0]?.evalId);
             console.log('setting default eval id', newRecentEvals[0]?.evalId);
+            loadEvalById(newRecentEvals[0]?.evalId);
           }
         });
       });
@@ -147,6 +148,7 @@ export default function Eval({
             if (newId) {
               setDefaultEvalId(newId);
               setEvalId(newId);
+              loadEvalById(newId);
             }
           }
         });

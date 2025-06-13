@@ -22,7 +22,6 @@ import { synthesizeFromTestSuite } from '../testCase/synthesis';
 import type { EvalSummary } from '../types';
 import { checkRemoteHealth } from '../util/apiHealth';
 import {
-  getLatestEval,
   getPrompts,
   getPromptsForTestCasesHash,
   getStandaloneEvals,
@@ -252,7 +251,6 @@ export function createApp() {
 export async function startServer(
   port = getDefaultPort(),
   browserBehavior: BrowserBehavior = BrowserBehavior.ASK,
-  filterDescription?: string,
 ) {
   const app = createApp();
 
@@ -266,8 +264,10 @@ export async function startServer(
   await runDbMigrations();
 
   setupSignalWatcher(async () => {
-    const latestEval = await getLatestEval(filterDescription);
-    if ((latestEval?.results.results.length || 0) > 0) {
+    const latestEval = await Eval.latest();
+    const results = await latestEval?.getResultsCount();
+
+    if (results && results > 0) {
       logger.info(`Emitting update with eval ID: ${latestEval?.config?.description || 'unknown'}`);
       io.emit('update', latestEval);
       allPrompts = null;
@@ -275,7 +275,7 @@ export async function startServer(
   });
 
   io.on('connection', async (socket) => {
-    socket.emit('init', await getLatestEval(filterDescription));
+    socket.emit('init', await Eval.latest());
   });
 
   httpServer

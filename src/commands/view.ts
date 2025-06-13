@@ -1,5 +1,6 @@
 import type { Command } from 'commander';
 import { getDefaultPort } from '../constants';
+import logger from '../logger';
 import { startServer } from '../server/server';
 import telemetry from '../telemetry';
 import { setupEnv } from '../util';
@@ -33,6 +34,12 @@ export function viewCommand(program: Command) {
         });
         await telemetry.send();
 
+        if (cmdObj.filterDescription) {
+          logger.warn(
+            'The --filter-description option is deprecated and not longer supported. The argument will be ignored.',
+          );
+        }
+
         if (directory) {
           setConfigDirectoryPath(directory);
         }
@@ -42,7 +49,7 @@ export function viewCommand(program: Command) {
           : cmdObj.no
             ? BrowserBehavior.SKIP
             : BrowserBehavior.ASK;
-        await startServer(cmdObj.port, browserBehavior, cmdObj.filterDescription);
+        await startServer(cmdObj.port, browserBehavior);
       },
     );
 }

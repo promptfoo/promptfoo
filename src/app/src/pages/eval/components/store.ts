@@ -19,7 +19,7 @@ function computeHighlightCount(table: EvaluateTable | null): number {
   return table.body.reduce((count, row) => {
     return (
       count +
-      row.outputs.filter((o) => o.gradingResult?.comment?.trim().startsWith('!highlight')).length
+      row.outputs.filter((o) => o?.gradingResult?.comment?.trim().startsWith('!highlight')).length
     );
   }, 0);
 }
