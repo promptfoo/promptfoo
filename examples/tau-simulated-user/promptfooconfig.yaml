@@ -1,12 +1,219 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 
-description: 'TAU Simulated User'
+description: 'Airline Agent Testing with 31 Customer Personas'
 
 prompts:
-  - file://agent_policy.txt
+  - |
+    You are an airline booking agent. The current time is 2024-05-15 15:00:00 EST.
+
+    You can help users book, modify, or cancel flight reservations using the available functions.
+
+    **Important Rules:**
+    - Before taking any actions that update the booking database, you must list the action details and obtain explicit user confirmation (yes) to proceed
+    - Only make one function call at a time
+    - Do not provide information not available through the functions
+    - Transfer to human agent if request cannot be handled within scope of available functions
+
+    **Booking Process:**
+    1. Get user profile first using their user ID
+    2. Search for flights based on their requirements
+    3. Collect passenger details and payment preferences
+    4. Book the flight after confirming all details
+
+    **Pricing Rules:**
+    - Basic Economy: 0/1/2 free bags for regular/silver/gold members
+    - Economy: 1/2/3 free bags for regular/silver/gold members  
+    - Business: 2/3/3 free bags for regular/silver/gold members
+    - Extra bags: $50 each
+    - Travel insurance: $30 per passenger (enables full refund for health/weather cancellations)
 
 providers:
-  - 'openai:gpt-4.1-mini'
+  - id: openai:responses:gpt-4.1-mini
+    config:
+      temperature: 0.1
+      max_output_tokens: 2000
+      tool_choice: auto
+      tools:
+        - type: function
+          name: get_user_profile
+          description: 'Get user profile information including membership tier, payment methods, and personal details'
+          parameters:
+            type: object
+            properties:
+              user_id:
+                type: string
+                description: 'The user ID to look up'
+            required: ['user_id']
+
+        - type: function
+          name: search_flights
+          description: 'Search for available flights based on criteria'
+          parameters:
+            type: object
+            properties:
+              origin:
+                type: string
+                description: 'Departure city/airport code'
+              destination:
+                type: string
+                description: 'Arrival city/airport code'
+              departure_date:
+                type: string
+                description: 'Departure date in YYYY-MM-DD format'
+              return_date:
+                type: string
+                description: 'Return date in YYYY-MM-DD format (for round trip)'
+              trip_type:
+                type: string
+                enum: ['one_way', 'round_trip']
+                description: 'Type of trip'
+              cabin_class:
+                type: string
+                enum: ['basic_economy', 'economy', 'business', 'first']
+                description: 'Preferred cabin class'
+              passengers:
+                type: integer
+                description: 'Number of passengers'
+                minimum: 1
+                maximum: 5
+            required: ['origin', 'destination', 'departure_date', 'trip_type', 'passengers']
+
+        - type: function
+          name: book_flight
+          description: 'Book a flight reservation'
+          parameters:
+            type: object
+            properties:
+              user_id:
+                type: string
+                description: 'User ID making the booking'
+              flight_details:
+                type: object
+                description: 'Selected flight information'
+                properties:
+                  outbound_flight:
+                    type: string
+                    description: 'Outbound flight number'
+                  return_flight:
+                    type: string
+                    description: 'Return flight number (for round trip)'
+                  cabin_class:
+                    type: string
+                    enum: ['basic_economy', 'economy', 'business', 'first']
+              passengers:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    first_name:
+                      type: string
+                    last_name:
+                      type: string
+                    date_of_birth:
+                      type: string
+                      description: 'Date of birth in YYYY-MM-DD format'
+                  required: ['first_name', 'last_name', 'date_of_birth']
+              payment_method:
+                type: object
+                properties:
+                  certificates:
+                    type: array
+                    items:
+                      type: string
+                    description: 'Travel certificate IDs (max 1)'
+                  credit_card:
+                    type: string
+                    description: 'Credit card ID from user profile'
+                  gift_cards:
+                    type: array
+                    items:
+                      type: string
+                    description: 'Gift card IDs (max 3)'
+              checked_bags:
+                type: integer
+                description: 'Number of checked bags'
+                minimum: 0
+              travel_insurance:
+                type: boolean
+                description: 'Whether to add travel insurance'
+            required: ['user_id', 'flight_details', 'passengers', 'payment_method']
+
+        - type: function
+          name: get_reservation
+          description: 'Get details of an existing reservation'
+          parameters:
+            type: object
+            properties:
+              user_id:
+                type: string
+                description: 'User ID'
+              reservation_id:
+                type: string
+                description: 'Reservation ID to look up'
+            required: ['user_id', 'reservation_id']
+
+        - type: function
+          name: modify_reservation
+          description: 'Modify an existing reservation'
+          parameters:
+            type: object
+            properties:
+              user_id:
+                type: string
+                description: 'User ID'
+              reservation_id:
+                type: string
+                description: 'Reservation ID to modify'
+              modification_type:
+                type: string
+                enum: ['change_flights', 'change_cabin', 'add_bags', 'update_passenger']
+                description: 'Type of modification'
+              new_details:
+                type: object
+                description: 'New details for the modification'
+              payment_method:
+                type: string
+                description: 'Payment method for additional charges'
+            required: ['user_id', 'reservation_id', 'modification_type']
+
+        - type: function
+          name: cancel_reservation
+          description: 'Cancel an existing reservation'
+          parameters:
+            type: object
+            properties:
+              user_id:
+                type: string
+                description: 'User ID'
+              reservation_id:
+                type: string
+                description: 'Reservation ID to cancel'
+              reason:
+                type: string
+                enum: ['change_of_plan', 'airline_cancelled', 'other']
+                description: 'Reason for cancellation'
+            required: ['user_id', 'reservation_id', 'reason']
+
+        - type: function
+          name: offer_compensation
+          description: 'Offer compensation certificate for flight issues'
+          parameters:
+            type: object
+            properties:
+              user_id:
+                type: string
+                description: 'User ID'
+              reservation_id:
+                type: string
+                description: 'Affected reservation ID'
+              issue_type:
+                type: string
+                enum: ['cancelled_flight', 'delayed_flight']
+                description: 'Type of issue'
+              passenger_count:
+                type: integer
+                description: 'Number of passengers affected'
+            required: ['user_id', 'reservation_id', 'issue_type', 'passenger_count']
 
 defaultTest:
   provider:
@@ -19,10 +226,10 @@ tests:
   - vars:
       instructions: >-
         You are mia_li_3668. You want to fly from New York to Seattle on May 20
-        (one way). You do not want to fly before 11am est. You want to fly in
-        economy. You prefer direct flights but one stopover also fine. If there
+        (one way). You do not want to fly before 11am EST. You want to fly in
+        economy. You prefer direct flights but one stopover is also fine. If there
         are multiple options, you prefer the one with the lowest price. You have
-        3 baggages. You do not want insurance. You want to use your two
+        3 bags. You do not want insurance. You want to use your two
         certificates to pay. If only one certificate can be used, you prefer
         using the larger one, and pay the rest with your 7447 card. You are
         reactive to the agent and will not say anything that is not asked. Your
@@ -36,7 +243,7 @@ tests:
         a business class seat, no matter the cost, because you need to work in
         flight. You have one small carry-on, no checked bags. You want flexible
         booking in case you need to change your flight time. If the agent asks,
-        you’ll pay with your personal Visa credit card ending in 4432.
+        you'll pay with your personal Visa credit card ending in 4432.
 
   # 3
   - vars:
@@ -84,7 +291,7 @@ tests:
         You are "the_birthday_girl_0505." You want a flight from San Francisco to
         Chicago for your birthday trip next month. You'd like to be asked for a
         special meal (vegan) and special note on the seat. You have a dog, but
-        you’re leaving it at home—so no pet seats needed. If there's an upgrade
+        you're leaving it at home—so no pet seats needed. If there's an upgrade
         to premium economy under $100 more, you'll take it. Pay with gift
         vouchers if possible; otherwise your credit card.
 
@@ -105,7 +312,7 @@ tests:
         need extra baggage. You prefer an aisle seat to stretch your legs. You do
         not want connecting flights longer than 3 hours. If the agent forgets to
         ask about baggage needs, you will remind them politely. Payment via your
-        US bank’s travel points.
+        US bank's travel points.
 
   # 10
   - vars:
@@ -123,7 +330,7 @@ tests:
         Shanghai to Los Angeles next month. Absolutely no more than 1 layover.
         You specifically want seats near the front so you can exit the plane
         quickly. If it's not possible, you'll ask for the next best option. You
-        only have one small bag. Payment with your father’s credit card info you
+        only have one small bag. Payment with your father's credit card info you
         have on file.
 
   # 12
@@ -161,12 +368,12 @@ tests:
         in late March. You specifically request seats in the 'quiet section' if
         available. You also want an in-flight meal with no fish or eggs. You
         require wheelchair assistance but only inside the airport. Payment with
-        your mother’s loyalty points.
+        your mother's loyalty points.
 
   # 16
   - vars:
       instructions: >-
-        You are "vip_request_999". You’re booking a flight from Hong Kong to
+        You are "vip_request_999". You're booking a flight from Hong Kong to
         London. Money is no object. You want first-class with a fully reclining
         seat, premium champagne, private lounge access, and an in-flight shower
         if the airline offers it. You have 3 suitcases. You won't provide any
@@ -188,7 +395,7 @@ tests:
         You are "budget_buster_808". You want a flight from Tokyo to Seoul for a
         weekend getaway, leaving Friday after 5pm, returning Sunday evening. You
         want the absolutely cheapest option, no matter how many stops. One small
-        carry-on. If the agent tries to upsell you, you’ll refuse politely.
+        carry-on. If the agent tries to upsell you, you'll refuse politely.
         Payment: local travel pass or credit card if needed.
 
   # 19
@@ -224,7 +431,7 @@ tests:
         Johannesburg to Cairo, leaving in two months. You are extremely chatty
         and love sharing personal stories, but will only do so if asked direct
         questions. You prefer vegetarian meals but won't specify unless asked.
-        Payment method is your father’s credit card ending in 9999.
+        Payment method is your father's credit card ending in 9999.
 
   # 23
   - vars:
@@ -256,7 +463,7 @@ tests:
   # 26
   - vars:
       instructions: >-
-        You are "sudden_inspiration_241". You’re an artist who decided on a whim
+        You are "sudden_inspiration_241". You're an artist who decided on a whim
         to fly from Paris to Bangkok next Monday. You prefer a direct flight if
         possible. If not, you want no more than one short layover. You have heavy
         paint supplies. You'll only provide ID if the agent explicitly asks.
@@ -268,7 +475,7 @@ tests:
         You are "triple_stop_333". You need to book a flight from Kuala Lumpur to
         Toronto, and you don't care if it has multiple stops because you plan to
         sightsee during long layovers. No baggage. You only care that the price
-        stays under $600. Payment with traveler checks or credit card if that’s
+        stays under $600. Payment with traveler checks or credit card if that's
         not possible.
 
   # 28
@@ -276,7 +483,7 @@ tests:
       instructions: >-
         You are "impulse_queen_77". You want to fly from Sydney to Bali
         tomorrow—no preference on time or airline. You have 2 carry-on bags.
-        Money is not a problem but you don’t want to provide any address
+        Money is not a problem but you don't want to provide any address
         information. If pressed, you will say "My address is on file." Payment:
         your personal gold card.
 
@@ -301,7 +508,7 @@ tests:
   - vars:
       instructions: >-
         You are "drama_lover_614". You need to book a flight from Johannesburg to
-        Dubai tomorrow. You’re in a panic and worry about missing any connecting
+        Dubai tomorrow. You're in a panic and worry about missing any connecting
         flights, so you prefer direct flights. You have 4 big suitcases. You
         begin by complaining about airline delays, but will provide ID or
         personal details if specifically asked. Payment: whichever card is on
