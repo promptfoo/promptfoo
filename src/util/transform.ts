@@ -1,13 +1,12 @@
 import cliState from '../cliState';
 import { importModule } from '../esm';
-import type { ExtensionHookContext } from '../evaluatorHelpers';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
 import type { Vars } from '../types';
 import { safeJoin } from './file.node';
 import { isJavascriptFile } from './fileExtensions';
 
-export type TransformContext = ExtensionHookContext;
+export type TransformContext = object;
 
 export enum TransformInputType {
   OUTPUT = 'output',
@@ -135,7 +134,7 @@ async function getTransformFunction(
  * If no function name is provided for Python files, it defaults to 'get_transform'.
  * For inline code, it's treated as JavaScript.
  * @param transformInput - The output to be transformed. Can be a string or an object.
- * @param context - The context object containing variables and prompt information.
+ * @param context - A context object that will be passed to the transform function.
  * @param validateReturn - Optional. If true, throws an error if the transform function doesn't return a value.
  * @returns A promise that resolves to the transformed output.
  * @throws Error if the file format is unsupported or if the transform function
