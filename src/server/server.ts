@@ -22,7 +22,6 @@ import { synthesizeFromTestSuite } from '../testCase/synthesis';
 import type { EvalSummary } from '../types';
 import { checkRemoteHealth } from '../util/apiHealth';
 import {
-  getLatestEval,
   getPrompts,
   getPromptsForTestCasesHash,
   getStandaloneEvals,
@@ -33,6 +32,7 @@ import invariant from '../util/invariant';
 import { BrowserBehavior, openBrowser } from '../util/server';
 import { configsRouter } from './routes/configs';
 import { evalRouter } from './routes/eval';
+import { modelAuditRouter } from './routes/modelAudit';
 import { providersRouter } from './routes/providers';
 import { redteamRouter } from './routes/redteam';
 import { userRouter } from './routes/user';
@@ -212,6 +212,7 @@ export function createApp() {
   app.use('/api/redteam', redteamRouter);
   app.use('/api/user', userRouter);
   app.use('/api/configs', configsRouter);
+  app.use('/api/model-audit', modelAuditRouter);
 
   app.post('/api/telemetry', async (req: Request, res: Response): Promise<void> => {
     try {
@@ -250,7 +251,6 @@ export function createApp() {
 export async function startServer(
   port = getDefaultPort(),
   browserBehavior: BrowserBehavior = BrowserBehavior.ASK,
-  filterDescription?: string,
 ) {
   const app = createApp();
 
@@ -264,8 +264,10 @@ export async function startServer(
   await runDbMigrations();
 
   setupSignalWatcher(async () => {
-    const latestEval = await getLatestEval(filterDescription);
-    if ((latestEval?.results.results.length || 0) > 0) {
+    const latestEval = await Eval.latest();
+    const results = await latestEval?.getResultsCount();
+
+    if (results && results > 0) {
       logger.info(`Emitting update with eval ID: ${latestEval?.config?.description || 'unknown'}`);
       io.emit('update', latestEval);
       allPrompts = null;
@@ -273,7 +275,7 @@ export async function startServer(
   });
 
   io.on('connection', async (socket) => {
-    socket.emit('init', await getLatestEval(filterDescription));
+    socket.emit('init', await Eval.latest());
   });
 
   httpServer

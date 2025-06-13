@@ -29,6 +29,7 @@ export const DATASET_PLUGINS = [
   'donotanswer',
   'harmbench',
   'toxic-chat',
+  'aegis',
   'pliny',
   'unsafebench',
   'xstest',

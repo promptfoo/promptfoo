@@ -168,14 +168,35 @@ defaultTest:
           apiHost: xxx.openai.azure.com
 ```
 
-## Timeout errors
+## How to triage stuck evals
 
-When running evals, you may encounter timeout errors, especially when using local providers or when running many concurrent requests. These timeouts can manifest as generic errors or as a lack of useful error messages.
+When running evals, you may encounter timeout errors, especially when using local providers or when running many concurrent requests. Here's how to fix them:
 
-To resolve timeout issues, try limiting concurrency by using the `-j 1` flag when running `promptfoo eval`. This reduces the number of simultaneous requests:
+**Common use cases:**
+
+- Ensure evaluations complete within a time limit (useful for CI/CD)
+- Handle custom providers or providers that get stuck
+- Prevent runaway costs from long-running evaluations
+
+You can control two settings: timeout for individual test cases and timeout for the entire evaluation.
+
+### Quick fixes
+
+**Set timeouts for individual requests and total evaluation time:**
 
 ```bash
-npx promptfoo eval -j 1
+export PROMPTFOO_EVAL_TIMEOUT_MS=30000  # 30 seconds per request
+export PROMPTFOO_MAX_EVAL_TIME_MS=300000  # 5 minutes total limit
+
+npx promptfoo eval
+```
+
+You can also set these values in your `.env` file or Promptfoo config file:
+
+```yaml title="promptfooconfig.yaml"
+env:
+  PROMPTFOO_EVAL_TIMEOUT_MS: 30000
+  PROMPTFOO_MAX_EVAL_TIME_MS: 300000
 ```
 
 ## Debugging Python
@@ -243,3 +264,14 @@ Remember that promptfoo runs your Python script in a separate process, so some s
    ```bash
    unset PROMPTFOO_ENABLE_DATABASE_LOGS
    ```
+
+## Finding log files
+
+promptfoo logs errors to `${PROMPTFOO_LOG_DIR}/promptfoo-errors.log` by default.
+`PROMPTFOO_LOG_DIR` defaults to the current working directory, so the log file
+is created next to where you run your command.
+
+Set `PROMPTFOO_DISABLE_ERROR_LOG=true` to turn off file logging, or change the
+location by setting `PROMPTFOO_LOG_DIR` to a different directory.
+
+Increase verbosity by running commands with `LOG_LEVEL=debug`.

@@ -1,9 +1,10 @@
 import confirm from '@inquirer/confirm';
 import type { Command } from 'commander';
 import logger from '../logger';
+import Eval from '../models/eval';
 import telemetry from '../telemetry';
 import { setupEnv } from '../util';
-import { deleteAllEvals, deleteEval, getEvalFromId, getLatestEval } from '../util/database';
+import { deleteAllEvals, deleteEval, getEvalFromId } from '../util/database';
 
 async function handleEvalDelete(evalId: string, envPath?: string) {
   try {
@@ -61,9 +62,9 @@ export function deleteCommand(program: Command) {
       await telemetry.send();
 
       if (evalId === 'latest') {
-        const latestResults = await getLatestEval();
+        const latestResults = await Eval.latest();
         if (latestResults) {
-          await handleEvalDelete(latestResults.createdAt, cmdObj.envPath);
+          await handleEvalDelete(latestResults.id, cmdObj.envPath);
         } else {
           logger.error('No eval found.');
           process.exitCode = 1;
