@@ -216,13 +216,47 @@ The `load_context.py` script defines two functions:
 
 ### Extracting context from responses
 
-If your retrieval or LLM provider returns the context inside the response, you can use `contextTransform` to pull it out for the context-based metrics:
+Many RAG systems return the retrieved context alongside the generated response. Instead of requiring separate context variables, you can extract the context directly from the provider response using `contextTransform`.
+
+The `contextTransform` property supports JavaScript expressions and can handle various response formats:
+
+#### Simple context extraction
 
 ```yaml
 assert:
   - type: context-faithfulness
     contextTransform: 'output.context'
 ```
+
+#### Complex context extraction
+
+For responses with multiple documents or nested structures:
+
+```yaml
+assert:
+  - type: context-faithfulness
+    contextTransform: 'output.retrieved_docs.map(d => d.content).join("\n")'
+  - type: context-relevance
+    contextTransform: 'output.sources.filter(s => s.relevance > 0.7).map(s => s.text).join("\n\n")'
+```
+
+#### Using with all context assertions
+
+```yaml
+assert:
+  - type: context-faithfulness
+    contextTransform: 'output.context'
+    threshold: 0.8
+  - type: context-relevance
+    contextTransform: 'output.context'
+    threshold: 0.7
+  - type: context-recall
+    contextTransform: 'output.context'
+    value: 'Expected information to verify'
+    threshold: 0.8
+```
+
+This approach works with any RAG system that includes context in its response, making evaluation more flexible and closer to real-world usage patterns.
 
 ### Run the eval
 

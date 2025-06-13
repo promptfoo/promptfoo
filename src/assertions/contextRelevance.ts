@@ -1,41 +1,37 @@
 import { matchesContextRelevance } from '../matchers';
 import type { AssertionParams, GradingResult } from '../types';
 import invariant from '../util/invariant';
-import { transform } from '../util/transform';
+import { resolveContext } from './contextUtils';
 
+/**
+ * Handles context-relevance assertions by evaluating whether the provided context
+ * is relevant to the given query/question.
+ * 
+ * Supports extracting context from provider responses using contextTransform
+ * or from test variables.
+ * 
+ * @param params - Assertion parameters including test case, output, and configuration
+ * @returns Promise resolving to grading result with pass/fail and score
+ */
 export const handleContextRelevance = async ({
   assertion,
   test,
   output,
   prompt,
 }: AssertionParams): Promise<GradingResult> => {
-  invariant(test.vars, 'context-relevance assertion type must have a vars object');
+  invariant(test.vars, 'context-relevance assertion requires a test with variables');
   invariant(
     typeof test.vars.query === 'string',
-    'context-relevance assertion type must have a query var',
+    'context-relevance assertion requires a "query" variable with the user question',
   );
-  let contextVar: string | undefined = test.vars.context;
-  if (assertion.contextTransform) {
-    const transformed = await transform(assertion.contextTransform, output, {
-      vars: test.vars,
-      prompt: { label: prompt },
-    });
-    invariant(
-      typeof transformed === 'string',
-      'context-relevance contextTransform must return a string',
-    );
-    contextVar = transformed;
-  }
-  invariant(
-    typeof contextVar === 'string',
-    'context-relevance assertion type must have a context var',
-  );
+
+  const context = await resolveContext(assertion, test, output, prompt);
 
   return {
     assertion,
     ...(await matchesContextRelevance(
       test.vars.query,
-      contextVar,
+      context,
       assertion.threshold ?? 0,
       test.options,
     )),

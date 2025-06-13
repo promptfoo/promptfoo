@@ -2,63 +2,61 @@
 sidebar_label: Context Faithfulness
 ---
 
-# Context Faithfulness
+# Context faithfulness
 
-The `context-faithfulness` assertion evaluates whether the LLM's output is faithful to the provided context, ensuring that the response doesn't include information or claims that aren't supported by the context. This is essential for RAG (Retrieval-Augmented Generation) applications to prevent hallucination.
+The `context-faithfulness` assertion evaluates whether the AI's response is faithful to the provided context, checking for hallucinations or unsupported claims.
 
-### How to use it
-
-To use the `context-faithfulness` assertion type, add it to your test configuration like this:
+## Configuration
 
 ```yaml
 assert:
   - type: context-faithfulness
-    threshold: 0.9 # Score between 0 and 1
+    threshold: 0.8  # Score from 0 to 1
 ```
 
 Note: This assertion requires `query`, `context`, and the LLM's output to evaluate faithfulness.
 
-If the context is included in the provider output, set `contextTransform` to extract it:
+## Extracting context from responses
+
+If your provider returns the context within the response (common in RAG systems), use `contextTransform` to extract it:
 
 ```yaml
 assert:
   - type: context-faithfulness
-    contextTransform: 'output.context'
+    contextTransform: 'output.context'  # Extract from response.context
+    threshold: 0.8
+```
+
+For more complex extractions:
+
+```yaml  
+assert:
+  - type: context-faithfulness
+    contextTransform: 'output.retrieved_docs.map(d => d.content).join("\n")'
+    threshold: 0.8
 ```
 
 ### How it works
 
 The context faithfulness checker:
 
-1. Extracts claims and statements from the LLM's output
-2. Verifies each statement against the provided context
-3. Calculates a faithfulness score based on the proportion of supported statements
+1. Analyzes the relationship between the provided context and the AI's response
+2. Identifies claims in the response that are not supported by the context
+3. Returns a score from 0 to 1, where 1 means the response is completely faithful to the context
 
-A higher threshold requires the output to be more strictly supported by the context.
-
-### Example Configuration
-
-Here's a complete example showing how to use context faithfulness in a RAG system:
+### Example
 
 ```yaml
-prompts:
-  - |
-    Answer this question: {{query}}
-    Using this context: {{context}}
-    Be specific and detailed in your response.
-providers:
-  - openai:gpt-4
 tests:
   - vars:
-      query: 'What is our parental leave policy?'
-      context: file://docs/policies/parental_leave.md
+      query: "What is the capital of France?"
+      context: "France is a country in Europe. Paris is the capital and largest city of France."
     assert:
       - type: context-faithfulness
-        threshold: 0.9
-      - type: context-recall
         threshold: 0.8
-        value: 'Employees get 4 months paid leave'
 ```
+
+The assertion will pass if the AI's response about France's capital is faithful to the provided context and doesn't include unsupported information.
 
 ### Overriding the Grader
 
