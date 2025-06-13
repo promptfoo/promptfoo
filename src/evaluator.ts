@@ -462,9 +462,73 @@ export function calculateThreadsPerBar(
   numProgressBars: number,
   barIndex: number,
 ): number {
-  const minThreadsPerBar = Math.floor(concurrency / numProgressBars);
+  const threadsPerBar = Math.floor(concurrency / numProgressBars);
   const extraThreads = concurrency % numProgressBars;
-  return barIndex < extraThreads ? minThreadsPerBar + 1 : minThreadsPerBar;
+  return barIndex < extraThreads ? threadsPerBar + 1 : threadsPerBar;
+}
+
+/**
+ * Safely formats variables for display in progress bars and logs.
+ * Handles extremely large variables that could cause RangeError crashes.
+ *
+ * @param vars - Variables to format
+ * @param maxLength - Maximum length of the final formatted string
+ * @returns Formatted variables string or fallback message
+ */
+function formatVarsForDisplay(vars: Record<string, any> | undefined, maxLength: number): string {
+  if (!vars || Object.keys(vars).length === 0) {
+    return '';
+  }
+
+  try {
+    // Calculate reasonable per-value limit to avoid double truncation
+    const entries = Object.entries(vars);
+    const maxValueLength = Math.max(
+      1,
+      Math.floor((maxLength - entries.length * 3) / entries.length),
+    ); // Account for "k=v " format
+
+    const formattedPairs: string[] = [];
+    let currentLength = 0;
+
+    for (const [key, value] of entries) {
+      // Convert value to string safely and truncate early to prevent memory issues
+      let valueStr: string;
+      try {
+        // Handle different value types efficiently
+        if (typeof value === 'string') {
+          valueStr = value.length > maxValueLength ? value.slice(0, maxValueLength) : value;
+        } else if (value === null || value === undefined) {
+          valueStr = String(value);
+        } else {
+          // For objects/arrays, convert to string then truncate
+          const fullStr = String(value);
+          valueStr = fullStr.length > maxValueLength ? fullStr.slice(0, maxValueLength) : fullStr;
+        }
+             } catch {
+         // Fallback for values that can't be converted to string
+         valueStr = '[unconvertible]';
+       }
+
+      const pair = `${key}=${valueStr}`;
+
+      // Check if adding this pair would exceed the limit
+      if (currentLength + pair.length + 1 > maxLength && formattedPairs.length > 0) {
+        break;
+      }
+
+      formattedPairs.push(pair);
+      currentLength += pair.length + 1; // +1 for space separator
+    }
+
+    return formattedPairs.join(' ').replace(/\n/g, ' ');
+  } catch (err) {
+    if (err instanceof RangeError) {
+      return '[vars too long]';
+    }
+    // Re-throw unexpected errors for debugging
+    throw err;
+  }
 }
 
 export function generateVarCombinations(
@@ -1159,11 +1223,7 @@ class Evaluator {
 
       if (isWebUI) {
         const provider = evalStep.provider.label || evalStep.provider.id();
-        const vars = Object.entries(evalStep.test.vars || {})
-          .map(([k, v]) => `${k}=${v}`)
-          .join(' ')
-          .slice(0, 50)
-          .replace(/\n/g, ' ');
+        const vars = formatVarsForDisplay(evalStep.test.vars, 50);
         logger.info(`[${numComplete}/${total}] Running ${provider} with vars: ${vars}`);
       } else if (multibar && evalStep) {
         const numProgressBars = Math.min(concurrency, 20);
@@ -1179,14 +1239,11 @@ class Evaluator {
           progressBarIndex,
         );
 
+        const vars = formatVarsForDisplay(evalStep.test.vars, 10);
         progressbar.increment({
           provider: evalStep.provider.label || evalStep.provider.id(),
           prompt: evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ' '),
-          vars: Object.entries(evalStep.test.vars || {})
-            .map(([k, v]) => `${k}=${v}`)
-            .join(' ')
-            .slice(0, 10)
-            .replace(/\n/g, ' '),
+          vars,
           activeThreads: threadsForThisBar,
         });
       } else {
@@ -1266,11 +1323,7 @@ class Evaluator {
         for (const evalStep of serialRunEvalOptions) {
           if (isWebUI) {
             const provider = evalStep.provider.label || evalStep.provider.id();
-            const vars = Object.entries(evalStep.test.vars || {})
-              .map(([k, v]) => `${k}=${v}`)
-              .join(' ')
-              .slice(0, 50)
-              .replace(/\n/g, ' ');
+            const vars = formatVarsForDisplay(evalStep.test.vars || {}, 50);
             logger.info(
               `[${numComplete}/${serialRunEvalOptions.length}] Running ${provider} with vars: ${vars}`,
             );

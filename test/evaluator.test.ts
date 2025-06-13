@@ -2796,3 +2796,76 @@ describe('calculateThreadsPerBar', () => {
     expect(calculateThreadsPerBar(101, 20, 19)).toBe(5); // Last bar gets no extra
   });
 });
+
+describe('progress bar vars handling', () => {
+  it('handles extremely large vars without throwing', async () => {
+    const bigStr = 'x'.repeat(5 * 1024 * 1024);
+    const vars: Record<string, string> = {};
+    for (let i = 0; i < 20; i++) {
+      vars[`var${i}`] = bigStr;
+    }
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          vars,
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await expect(
+      evaluate(testSuite, evalRecord, { showProgressBar: true, maxConcurrency: 1 }),
+    ).resolves.not.toThrow();
+  });
+
+  it('handles various variable types efficiently', async () => {
+    const complexVars: Record<string, any> = {
+      string: 'simple string',
+      longString: 'x'.repeat(1000),
+      number: 42,
+      boolean: true,
+      nullValue: null,
+      undefinedValue: undefined,
+      object: { nested: { deep: 'value' } },
+      array: [1, 2, 3, 'long string that should be truncated'],
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          vars: complexVars,
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await expect(
+      evaluate(testSuite, evalRecord, { showProgressBar: true, maxConcurrency: 1 }),
+    ).resolves.not.toThrow();
+  });
+
+  it('formats empty and undefined vars gracefully', async () => {
+    const testCases = [{ vars: {} }, { vars: undefined }, {}];
+
+    for (const testCase of testCases) {
+      const testSuite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('Test prompt')],
+        tests: [testCase],
+      };
+
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+      await expect(
+        evaluate(testSuite, evalRecord, { showProgressBar: true, maxConcurrency: 1 }),
+      ).resolves.not.toThrow();
+    }
+  });
+});
