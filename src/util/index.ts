@@ -27,6 +27,7 @@ import {
   ResultFailureReason,
 } from '../types';
 import invariant from '../util/invariant';
+import type { StandaloneEval } from './database';
 import { convertTestResultsToTableRow } from './exportToFile';
 import { getHeaderForTable } from './exportToFile/getHeaderForTable';
 import { maybeLoadFromExternalFile } from './file';
@@ -359,3 +360,5 @@ export function maybeLoadToolsFromExternalFile(
 ): any {
   return maybeLoadFromExternalFile(renderVarsInObject(tools, vars));
 }
+
+export type { StandaloneEval };

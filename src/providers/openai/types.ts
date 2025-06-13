@@ -95,3 +95,5 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   >;
   mcp?: MCPConfig;
 };
+
+export type { OpenAiMCPTool };

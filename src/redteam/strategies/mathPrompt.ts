@@ -206,3 +206,5 @@ export async function addMathPrompt(
 
   return encodedTestCases;
 }
+
+export { generateMathPrompt, encodeMathPrompt };

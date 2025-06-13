@@ -107,3 +107,5 @@ export function maybeLoadConfigFromExternalFile(config: any): any {
   }
   return maybeLoadFromExternalFile(config);
 }
+
+export { getNunjucksEngineForFilePath };

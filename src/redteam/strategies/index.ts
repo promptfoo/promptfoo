@@ -344,3 +344,5 @@ export async function loadStrategy(strategyPath: string): Promise<Strategy> {
 
   return strategy;
 }
+
+export { Strategy };

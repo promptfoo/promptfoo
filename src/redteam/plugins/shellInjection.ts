@@ -46,6 +46,8 @@ const DEFAULT_EXAMPLES = dedent`
     </Example>
 `;
 
+export { DEFAULT_EXAMPLES };
+
 export class ShellInjectionPlugin extends RedteamPluginBase {
   readonly id = PLUGIN_ID;
 

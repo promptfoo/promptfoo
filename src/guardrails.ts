@@ -111,3 +111,5 @@ const guardrails = {
 };
 
 export default guardrails;
+
+export { GuardResult, AdaptiveResult };

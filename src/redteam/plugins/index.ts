@@ -306,3 +306,5 @@ remotePlugins.push(
 );
 
 export const Plugins: PluginFactory[] = [...pluginFactories, ...piiPlugins, ...remotePlugins];
+
+export { PluginFactory };
