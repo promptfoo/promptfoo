@@ -5,9 +5,20 @@ import {
   setDefaultCompletionProviders,
   setDefaultEmbeddingProviders,
 } from '../../src/providers/defaults';
+import {
+  DefaultEmbeddingProvider as MistralEmbeddingProvider,
+  DefaultGradingProvider as MistralGradingProvider,
+  DefaultGradingJsonProvider as MistralGradingJsonProvider,
+  DefaultSuggestionsProvider as MistralSuggestionsProvider,
+  DefaultSynthesizeProvider as MistralSynthesizeProvider,
+} from '../../src/providers/mistral/defaults';
 import { DefaultModerationProvider } from '../../src/providers/openai/defaults';
 import type { ApiProvider } from '../../src/types';
 import type { EnvOverrides } from '../../src/types/env';
+
+jest.mock('../../src/providers/google/util', () => ({
+  hasGoogleDefaultCredentials: jest.fn().mockResolvedValue(false),
+}));
 
 class MockProvider implements ApiProvider {
   private providerId: string;
@@ -19,6 +30,7 @@ class MockProvider implements ApiProvider {
   id(): string {
     return this.providerId;
   }
+
   async callApi() {
     return {};
   }
@@ -31,6 +43,9 @@ describe('Provider override tests', () => {
     process.env = { ...originalEnv };
     setDefaultCompletionProviders(undefined as any);
     setDefaultEmbeddingProviders(undefined as any);
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.MISTRAL_API_KEY;
   });
 
   afterEach(() => {
@@ -128,5 +143,57 @@ describe('Provider override tests', () => {
     expect(moderationProvider.modelName).toBe('text-content-safety');
     expect(moderationProvider.endpoint).toBe('https://test-endpoint.com');
     expect(moderationProvider.apiVersion).toBe('2024-01-01');
+  });
+
+  it('should use Mistral providers when MISTRAL_API_KEY is set', async () => {
+    process.env.MISTRAL_API_KEY = 'test-key';
+
+    const providers = await getDefaultProviders();
+
+    expect(providers.embeddingProvider).toBe(MistralEmbeddingProvider);
+    expect(providers.gradingJsonProvider).toBe(MistralGradingJsonProvider);
+    expect(providers.gradingProvider).toBe(MistralGradingProvider);
+    expect(providers.suggestionsProvider).toBe(MistralSuggestionsProvider);
+    expect(providers.synthesizeProvider).toBe(MistralSynthesizeProvider);
+  });
+
+  it('should use Mistral providers when provided via env overrides', async () => {
+    const envOverrides: EnvOverrides = {
+      MISTRAL_API_KEY: 'test-key',
+    } as EnvOverrides;
+
+    const providers = await getDefaultProviders(envOverrides);
+
+    expect(providers.embeddingProvider).toBe(MistralEmbeddingProvider);
+    expect(providers.gradingJsonProvider).toBe(MistralGradingJsonProvider);
+    expect(providers.gradingProvider).toBe(MistralGradingProvider);
+    expect(providers.suggestionsProvider).toBe(MistralSuggestionsProvider);
+    expect(providers.synthesizeProvider).toBe(MistralSynthesizeProvider);
+  });
+
+  it('should not use Mistral providers when OpenAI credentials exist', async () => {
+    process.env.MISTRAL_API_KEY = 'test-key';
+    process.env.OPENAI_API_KEY = 'test-key';
+
+    const providers = await getDefaultProviders();
+
+    expect(providers.embeddingProvider).not.toBe(MistralEmbeddingProvider);
+    expect(providers.gradingJsonProvider).not.toBe(MistralGradingJsonProvider);
+    expect(providers.gradingProvider).not.toBe(MistralGradingProvider);
+    expect(providers.suggestionsProvider).not.toBe(MistralSuggestionsProvider);
+    expect(providers.synthesizeProvider).not.toBe(MistralSynthesizeProvider);
+  });
+
+  it('should not use Mistral providers when Anthropic credentials exist', async () => {
+    process.env.MISTRAL_API_KEY = 'test-key';
+    process.env.ANTHROPIC_API_KEY = 'test-key';
+
+    const providers = await getDefaultProviders();
+
+    expect(providers.embeddingProvider).not.toBe(MistralEmbeddingProvider);
+    expect(providers.gradingJsonProvider).not.toBe(MistralGradingJsonProvider);
+    expect(providers.gradingProvider).not.toBe(MistralGradingProvider);
+    expect(providers.suggestionsProvider).not.toBe(MistralSuggestionsProvider);
+    expect(providers.synthesizeProvider).not.toBe(MistralSynthesizeProvider);
   });
 });

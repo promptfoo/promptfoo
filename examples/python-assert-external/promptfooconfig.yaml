@@ -1,8 +1,10 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: External Python assertion files for output validation
+
 prompts:
   - 'Tell me about {{topic}} in three words'
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
 
 tests:
   - vars:

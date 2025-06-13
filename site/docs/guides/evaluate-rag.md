@@ -140,7 +140,7 @@ Think carefully and respond to the user concisely and accurately.
 Now that we've constructed a prompt, let's set up some test cases. In this example, the eval will format each of these test cases using the prompt template and send it to the LLM API:
 
 ```yaml title="promptfooconfig.yaml"
-prompts: [prompt1.txt]
+prompts: [file://prompt1.txt]
 providers: [openai:gpt-4.1-mini]
 tests:
   - vars:
@@ -279,7 +279,7 @@ defaultTest:
 Here's the final config:
 
 ```yaml title="promptfooconfig.yaml"
-prompts: [prompt1.txt]
+prompts: [file://prompt1.txt]
 providers: [openai:gpt-4.1-mini, openai:gpt-4.1, ollama:llama3.1]
 defaultTest:
   assert:
@@ -322,7 +322,7 @@ The way to do this is similar to the "Evaluating document retrieval" step above.
 
 ```yaml title="promptfooconfig.yaml"
 # Test different prompts to find the best
-prompts: [prompt1.txt, prompt2.txt]
+prompts: [file://prompt1.txt, file://prompt2.txt]
 
 # Test different retrieval and generation methods to find the best
 providers:

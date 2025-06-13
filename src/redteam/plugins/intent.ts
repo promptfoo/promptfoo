@@ -53,7 +53,7 @@ export class IntentPlugin extends RedteamPluginBase {
 
     for (const intent of this.intents) {
       if (typeof intent === 'string') {
-        const extractedIntent = await extractGoalFromPrompt(intent, this.purpose);
+        const extractedIntent = await extractGoalFromPrompt(intent, this.purpose, this.id);
 
         testCases.push({
           vars: {
@@ -68,7 +68,7 @@ export class IntentPlugin extends RedteamPluginBase {
         });
       } else {
         const firstPrompt = Array.isArray(intent) ? intent[0] : intent;
-        const extractedIntent = await extractGoalFromPrompt(firstPrompt, this.purpose);
+        const extractedIntent = await extractGoalFromPrompt(firstPrompt, this.purpose, this.id);
 
         testCases.push({
           vars: {

@@ -232,6 +232,19 @@ The rubric prompt has two built-in variables that you may use:
 - `{{output}}` - The output of the LLM (you probably want to use this)
 - `{{rubric}}` - The `value` of the llm-rubric `assert` object
 
+:::tip Object handling in variables
+
+When `{{output}}` or `{{rubric}}` contain objects, they are automatically converted to JSON strings by default to prevent display issues. To access object properties directly (e.g., `{{output.text}}`), enable object property access:
+
+```bash
+export PROMPTFOO_DISABLE_OBJECT_STRINGIFY=true
+promptfoo eval
+```
+
+For details, see the [object template handling guide](/docs/usage/troubleshooting#object-template-handling).
+
+:::
+
 In this example, we set `rubricPrompt` under `defaultTest`, which applies it to every test in this test suite:
 
 ```yaml

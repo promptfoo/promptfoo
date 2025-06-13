@@ -17,5 +17,5 @@ promptfoo eval
 Full command-line equivalent:
 
 ```sh
-promptfoo eval --prompts prompts.txt --tests tests.csv --providers openai:gpt-4o-mini --output output.json
+promptfoo eval --prompts prompts.txt --tests tests.csv --providers openai:gpt-4.1-mini --output output.json
 ```

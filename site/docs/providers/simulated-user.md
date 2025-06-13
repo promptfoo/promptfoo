@@ -1,3 +1,7 @@
+---
+sidebar_label: Simulated User
+---
+
 # Simulated User
 
 The Simulated User Provider enables testing of multi-turn conversations between an AI agent and a simulated user. This is useful for testing chatbots, virtual assistants, and other conversational AI applications.

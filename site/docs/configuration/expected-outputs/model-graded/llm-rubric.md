@@ -1,3 +1,7 @@
+---
+sidebar_label: LLM Rubric
+---
+
 # LLM Rubric
 
 `llm-rubric` is promptfoo's general-purpose grader for "LLM as a judge" evaluation.
@@ -123,6 +127,29 @@ defaultTest:
         }
     ]
 ```
+
+### Object handling in rubric prompts
+
+When using `{{output}}` or `{{rubric}}` variables that contain objects, promptfoo automatically converts them to JSON strings by default to prevent display issues. If you need to access specific properties of objects in your rubric prompts, you can enable object property access:
+
+```bash
+export PROMPTFOO_DISABLE_OBJECT_STRINGIFY=true
+promptfoo eval
+```
+
+With this enabled, you can access object properties directly in your rubric prompts:
+
+```yaml
+rubricPrompt: >
+  [
+      {
+          "role": "user", 
+          "content": "Evaluate this answer: {{output.text}}\nFor the question: {{rubric.question}}\nCriteria: {{rubric.criteria}}"
+      }
+  ]
+```
+
+For more details, see the [object template handling guide](/docs/usage/troubleshooting#object-template-handling).
 
 ## Threshold Support
 

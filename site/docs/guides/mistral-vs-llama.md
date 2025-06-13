@@ -76,13 +76,13 @@ Now, let's go back to `promptfooconfig.yaml` and add our prompts. We'll name the
 
 ````yaml title="promptfooconfig.yaml"
 prompts:
-  prompts/mistral_prompt.txt: mistral_prompt
-  prompts/llama_prompt.txt: llama_prompt
+  file://prompts/mistral_prompt.txt: mistral_prompt
+  file://prompts/llama_prompt.txt: llama_prompt
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
-  prompts/mistral_prompt.txt: mistral_prompt
-  prompts/llama_prompt.txt: llama_prompt
+  file://prompts/mistral_prompt.txt: mistral_prompt
+  file://prompts/llama_prompt.txt: llama_prompt
 
 providers:
   - id: huggingface:text-generation:mistralai/Mistral-7B-Instruct-v0.1

@@ -5,7 +5,7 @@ prompts:
   - "You are an office assistant. Using this context:\n\n<context>{{context}}</context>\n\nAnswer this question:\n\n<question>{{question}}</question>"
 
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
 
 tests:
   - vars:

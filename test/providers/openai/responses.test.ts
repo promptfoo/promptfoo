@@ -24,6 +24,7 @@ describe('OpenAiResponsesProvider', () => {
 
   it('should support various model names', () => {
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o1-pro');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3-pro');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4o');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3-mini');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4.1');
@@ -1415,6 +1416,19 @@ describe('OpenAiResponsesProvider', () => {
       });
     });
 
+    it('should handle external file loading for response_format correctly', () => {
+      // Test that the provider can be configured with external file syntax
+      // This verifies the type handling for external file references
+      expect(() => {
+        new OpenAiResponsesProvider('gpt-4o', {
+          config: {
+            apiKey: 'test-key',
+            response_format: 'file://./response_format.json' as any,
+          },
+        });
+      }).not.toThrow();
+    });
+
     it('should handle explicit text format correctly', async () => {
       const mockApiResponse = {
         id: 'resp_abc123',
@@ -1462,6 +1476,37 @@ describe('OpenAiResponsesProvider', () => {
           type: 'text',
         },
       });
+    });
+
+    it('should accept external file reference syntax for response_format', () => {
+      // Test that the provider can be instantiated with external file syntax
+      // without throwing type errors (using type assertion as needed)
+      expect(() => {
+        new OpenAiResponsesProvider('gpt-4o', {
+          config: {
+            apiKey: 'test-key',
+            response_format: 'file://./schema.json' as any,
+          },
+        });
+      }).not.toThrow();
+
+      expect(() => {
+        new OpenAiResponsesProvider('gpt-4o', {
+          config: {
+            apiKey: 'test-key',
+            response_format: 'file://relative/path/schema.json' as any,
+          },
+        });
+      }).not.toThrow();
+
+      expect(() => {
+        new OpenAiResponsesProvider('gpt-4o', {
+          config: {
+            apiKey: 'test-key',
+            response_format: 'file:///absolute/path/schema.json' as any,
+          },
+        });
+      }).not.toThrow();
     });
   });
 
@@ -1585,6 +1630,53 @@ describe('OpenAiResponsesProvider', () => {
     expect(body.reasoning).toEqual({ effort: 'high' });
     expect(body.max_output_tokens).toBe(2000);
     expect(body.temperature).toBeUndefined(); // o3 model should not have temperature
+  });
+
+  it('should configure o3-pro model correctly with reasoning parameters', async () => {
+    const mockApiResponse = {
+      id: 'resp_abc123',
+      status: 'completed',
+      model: 'o3-pro',
+      output: [
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [
+            {
+              type: 'output_text',
+              text: 'Response from o3-pro model',
+            },
+          ],
+        },
+      ],
+      usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
+    };
+
+    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new OpenAiResponsesProvider('o3-pro', {
+      config: {
+        apiKey: 'test-key',
+        reasoning_effort: 'high',
+        max_output_tokens: 2000,
+      },
+    });
+
+    await provider.callApi('Test prompt');
+
+    const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+    const reqOptions = mockCall[1] as { body: string };
+    const body = JSON.parse(reqOptions.body);
+
+    expect(body.model).toBe('o3-pro');
+    expect(body.reasoning).toEqual({ effort: 'high' });
+    expect(body.max_output_tokens).toBe(2000);
+    expect(body.temperature).toBeUndefined(); // o3-pro model should not have temperature
   });
 
   it('should configure o4-mini model correctly with reasoning parameters', async () => {

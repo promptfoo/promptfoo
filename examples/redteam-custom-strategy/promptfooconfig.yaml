@@ -6,7 +6,7 @@ prompts:
   - 'You are a helpful assistant. Respond to: {{prompt}}'
 
 targets:
-  - id: openai:gpt-4o-mini
+  - id: openai:gpt-4.1-mini
 
 # Other redteam settings
 redteam:

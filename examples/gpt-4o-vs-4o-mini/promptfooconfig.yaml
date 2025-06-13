@@ -1,10 +1,12 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Comparing GPT-4o and GPT-4o Mini performance on riddles
+
 prompts:
   - 'Solve this riddle: {{riddle}}'
 
 providers:
   - openai:gpt-4o
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
 
 defaultTest:
   assert:
@@ -26,7 +28,7 @@ tests:
       - type: llm-rubric
         value: Do not apologize
   - vars:
-      riddle: 'You see a boat filled with people. It has not sunk, but when you look again you don’t see a single person on the boat. Why?'
+      riddle: "You see a boat filled with people. It has not sunk, but when you look again you don't see a single person on the boat. Why?"
     assert:
       - type: llm-rubric
         value: explains that the people are below deck
@@ -38,7 +40,7 @@ tests:
   - vars:
       riddle: >-
         I have keys but no locks. I have space but no room. You can enter, but
-        can’t go outside. What am I?
+        can't go outside. What am I?
   - vars:
       riddle: >-
         I am not alive, but I grow; I don't have lungs, but I need air; I don't
@@ -73,5 +75,5 @@ tests:
         name of the third son?
   - vars:
       riddle: >-
-        I am light as a feather, but even the world's strongest man couldn’t
+        I am light as a feather, but even the world's strongest man couldn't
         hold me for much longer than a minute. What am I?

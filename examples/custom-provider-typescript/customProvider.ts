@@ -22,7 +22,7 @@ export default class CustomApiProvider implements ApiProvider {
 
   async callApi(prompt: string): Promise<ProviderResponse> {
     const body = {
-      model: 'gpt-4o-mini',
+      model: 'gpt-4.1-mini',
       messages: [
         {
           role: 'user',
@@ -34,7 +34,7 @@ export default class CustomApiProvider implements ApiProvider {
     };
 
     // Fetch the data from the API using promptfoo's cache. You can use your own fetch implementation if preferred.
-    const { data, cached } = await promptfoo.cache.fetchWithCache(
+    const { data } = await promptfoo.cache.fetchWithCache(
       'https://api.openai.com/v1/chat/completions',
       {
         method: 'POST',

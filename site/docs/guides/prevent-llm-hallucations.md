@@ -97,7 +97,7 @@ Once you've set up a few prompts, add them to the config file:
 
 ```yaml title="promptfooconfig.yaml"
 // highlight-next-line
-prompts: [prompt1.txt, prompt2.txt]
+prompts: [file://prompt1.txt, file://prompt2.txt]
 tests:
   - vars:
       question: What's the weather in New York?

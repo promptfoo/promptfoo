@@ -17,6 +17,45 @@ const defaultProviders: ProviderOptions[] = (
 )
   .concat([
     {
+      id: 'openai:gpt-4.1',
+      label: 'OpenAI: GPT-4.1',
+      config: {
+        organization: '',
+        temperature: 0.5,
+        max_tokens: 1024,
+        top_p: 1.0,
+        frequency_penalty: 0.0,
+        presence_penalty: 0.0,
+        function_call: undefined,
+        functions: undefined,
+        stop: undefined,
+      },
+    },
+    {
+      id: 'openai:gpt-4.1-mini',
+      label: 'OpenAI: GPT-4.1 Mini',
+      config: {
+        organization: '',
+        temperature: 0.5,
+        max_tokens: 1024,
+        top_p: 1.0,
+        frequency_penalty: 0.0,
+        presence_penalty: 0.0,
+      },
+    },
+    {
+      id: 'openai:gpt-4.1-nano',
+      label: 'OpenAI: GPT-4.1 Nano',
+      config: {
+        organization: '',
+        temperature: 0.5,
+        max_tokens: 1024,
+        top_p: 1.0,
+        frequency_penalty: 0.0,
+        presence_penalty: 0.0,
+      },
+    },
+    {
       id: 'openai:gpt-4o',
       label: 'OpenAI: GPT-4o',
       config: {
@@ -44,12 +83,22 @@ const defaultProviders: ProviderOptions[] = (
       },
     },
     {
-      id: 'openai:o1',
-      label: 'OpenAI: GPT-o1 (with thinking)',
+      id: 'openai:o3',
+      label: 'OpenAI: GPT-o3 (with thinking)',
       config: {
         organization: '',
         isReasoningModel: true,
         max_completion_tokens: 1024,
+        reasoning_effort: 'medium', // Options: 'low', 'medium', 'high'
+      },
+    },
+    {
+      id: 'openai:o4-mini',
+      label: 'OpenAI: GPT-o4 Mini (with thinking)',
+      config: {
+        organization: '',
+        isReasoningModel: true,
+        max_completion_tokens: 2048,
         reasoning_effort: 'medium', // Options: 'low', 'medium', 'high'
       },
     },
@@ -293,6 +342,26 @@ const defaultProviders: ProviderOptions[] = (
   ])
   .concat([
     {
+      id: 'azure:chat:gpt-4.1',
+      label: 'Azure: GPT-4.1',
+      config: {
+        api_host: 'your-resource-name.openai.azure.com',
+        api_version: '2024-02-15-preview',
+        temperature: 0.5,
+        max_tokens: 1024,
+      },
+    },
+    {
+      id: 'azure:chat:gpt-4.1-mini',
+      label: 'Azure: GPT-4.1 Mini',
+      config: {
+        api_host: 'your-resource-name.openai.azure.com',
+        api_version: '2024-02-15-preview',
+        temperature: 0.5,
+        max_tokens: 1024,
+      },
+    },
+    {
       id: 'azure:chat:gpt-4o',
       label: 'Azure: GPT-4o',
       config: {
@@ -310,6 +379,16 @@ const defaultProviders: ProviderOptions[] = (
         api_version: '2024-02-15-preview',
         temperature: 0.5,
         max_tokens: 2048,
+      },
+    },
+    {
+      id: 'azure:chat:o4-mini',
+      label: 'Azure: O4 Mini',
+      config: {
+        api_host: 'your-resource-name.openai.azure.com',
+        api_version: '2024-05-15-preview',
+        temperature: 0.5,
+        max_tokens: 4096,
       },
     },
     {

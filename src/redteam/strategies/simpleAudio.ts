@@ -73,6 +73,7 @@ export async function addAudioToBase64(
       {
         format: 'Converting to Audio {bar} {percentage}% | ETA: {eta}s | {value}/{total}',
         hideCursor: true,
+        gracefulExit: true,
       },
       Presets.shades_classic,
     );
@@ -105,6 +106,7 @@ export async function addAudioToBase64(
       metadata: {
         ...testCase.metadata,
         strategyId: 'audio',
+        originalText,
       },
     });
 

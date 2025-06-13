@@ -35,6 +35,8 @@
   --textarea-color: #404040;
   --search-highlight-color: #ffff00;
   --search-text-color: inherit;
+  --cell-highlight-color: #ffffeb;
+  --cell-highlight-text-color: inherit;
 }
 
 /* Dark mode colors */
@@ -59,6 +61,8 @@
   --textarea-color: #fff;
   --search-highlight-color: #ffff00;
   --search-text-color: #404040;
+  --cell-highlight-color: #2c4a6b;
+  --cell-highlight-text-color: #e8f4fd;
 }
 
 html {

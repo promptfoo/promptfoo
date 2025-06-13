@@ -1,3 +1,7 @@
+---
+sidebar_label: Together AI
+---
+
 # Together AI
 
 [Together AI](https://www.together.ai/) provides access to open-source models through an API compatible with OpenAI's interface.

@@ -22,7 +22,7 @@ function HomepageHeader({ getStartedUrl }: { getStartedUrl: string }) {
           from <span className={styles.heroHighlight}>prompt</span> to{' '}
           <span className={styles.heroHighlight}>production</span>
         </h1>
-        <p>Open-source LLM security trusted by 80,000+ users</p>
+        <p>Open-source LLM security trusted by 100,000+ users</p>
         <div className={styles.buttons}>
           <Link className="button button--primary button--lg" to={getStartedUrl}>
             Get Started
@@ -312,7 +312,7 @@ export default function Home(): JSX.Element {
   return (
     <Layout
       title="Secure & reliable LLMs"
-      description="Eliminate risk with AI red-teaming and evals used by 80,000+ developers. Find and fix vulnerabilities, maximize output quality, catch regressions."
+      description="Eliminate risk with AI red-teaming and evals used by 100,000+ developers. Find and fix vulnerabilities, maximize output quality, catch regressions."
       wrapperClassName="homepage-wrapper"
     >
       <Head>

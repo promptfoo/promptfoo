@@ -1,10 +1,11 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: 'Portkey.ai prompt integration'
 
 prompts:
   - 'portkey://pp-test-promp-669f48'
 
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
 
 tests:
   - vars:

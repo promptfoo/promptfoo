@@ -1,4 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Implementing custom LLM provider in JavaScript
+
 prompts:
   - file://prompts.txt
 

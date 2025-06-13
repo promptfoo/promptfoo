@@ -1,4 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Using prompt labels for organized testing and comparison
+
 prompts:
   - id: file://prompts1.txt
     label: content_generation
@@ -10,7 +12,7 @@ providers:
     label: 4o
     prompts:
       - content_generation
-  - id: openai:gpt-4o-mini
+  - id: openai:gpt-4.1-mini
     label: '3.5'
     prompts:
       - knowledge_base_query

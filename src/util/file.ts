@@ -93,3 +93,17 @@ export function getResolvedRelativePath(filePath: string, isCloudConfig?: boolea
   // Join the basePath and filePath to get the resolved path
   return path.join(process.cwd(), filePath);
 }
+
+export function maybeLoadConfigFromExternalFile(config: any): any {
+  if (Array.isArray(config)) {
+    return config.map((item) => maybeLoadConfigFromExternalFile(item));
+  }
+  if (config && typeof config === 'object' && config !== null) {
+    const result: Record<string, any> = {};
+    for (const key of Object.keys(config)) {
+      result[key] = maybeLoadConfigFromExternalFile(config[key]);
+    }
+    return result;
+  }
+  return maybeLoadFromExternalFile(config);
+}

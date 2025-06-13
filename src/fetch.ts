@@ -7,6 +7,7 @@ import cliState from './cliState';
 import { VERSION } from './constants';
 import { getEnvBool, getEnvInt, getEnvString } from './envars';
 import logger from './logger';
+import { REQUEST_TIMEOUT_MS } from './providers/shared';
 import invariant from './util/invariant';
 import { sleep } from './util/time';
 
@@ -17,6 +18,7 @@ interface ProxyTlsOptions {
   uri: string;
   proxyTls: ConnectionOptions;
   requestTls: ConnectionOptions;
+  headersTimeout?: number;
 }
 
 /**
@@ -126,10 +128,13 @@ export async function fetchWithProxy(
       uri: proxyUrl,
       proxyTls: tlsOptions,
       requestTls: tlsOptions,
+      headersTimeout: REQUEST_TIMEOUT_MS,
     } as ProxyTlsOptions);
     setGlobalDispatcher(agent);
   } else {
-    const agent = new Agent();
+    const agent = new Agent({
+      headersTimeout: REQUEST_TIMEOUT_MS,
+    });
     setGlobalDispatcher(agent);
   }
 

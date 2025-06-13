@@ -1,4 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Automatic response evaluation using LLM rubric scoring
+
 prompts:
   - file://prompts.txt
 providers:

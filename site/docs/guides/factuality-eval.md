@@ -297,7 +297,7 @@ You must implement the following template variables:
 
 - `{{input}}`: The original prompt/question
 - `{{ideal}}`: The reference answer (from the `value` field)
-- `{{completion}}`: The LLM's actual response
+- `{{completion}}`: The LLM's actual response (provided automatically by promptfoo)
 
 ## Response Formats
 

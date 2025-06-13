@@ -13,6 +13,14 @@ By invoking `promptfoo scan-model`, you can use ModelAudit's static security sca
 
 ![example model scan results](/img/docs/modelaudit/modelaudit-result.png)
 
+Promptfoo also includes a UI that allows you to set up a scan:
+
+![model scan](/img/docs/modelaudit/model-audit-setup.png)
+
+And displays the results:
+
+![model scan results](/img/docs/modelaudit/model-audit-results.png)
+
 ## Purpose
 
 AI/ML models can introduce security risks through:

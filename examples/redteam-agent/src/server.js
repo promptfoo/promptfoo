@@ -33,7 +33,12 @@ app.use('/api', router);
 
 const port = process.env.PORT || 3090;
 
-app.listen(port, () => {
+app.listen(port, (error) => {
+  if (error) {
+    console.error(`Failed to start server: ${error.message}`);
+    process.exit(1);
+    return;
+  }
   console.log(`Travel agent API is running on port ${port}`);
 });
 

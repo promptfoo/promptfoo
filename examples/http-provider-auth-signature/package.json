@@ -1,16 +1,16 @@
 {
   "name": "http-provider-auth-signature",
-  "version": "0.0.0",
-  "description": "A simple chatbot for testing http signatures in promptfoo",
+  "version": "1.0.0",
+  "description": "Example HTTP provider with signature authentication",
   "main": "app.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node app.js"
+    "start": "node app.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "Promptfoo",
   "license": "MIT",
   "dependencies": {
-    "express": "^4.21.2",
-    "promptfoo": "^0.100.5"
+    "express": "^5.1.0",
+    "promptfoo": "^0.114.7"
   }
 }

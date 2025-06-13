@@ -8,7 +8,7 @@ providers:
     config:
       tools: file://tools.json
       functionToolStatefulApi:
-        file: examples/google-live/counter_api.py
+        file: file://examples/google-live/counter_api.py
         url: http://127.0.0.1:8765
         # Optionally specify a custom Python executable path
         # pythonExecutable: '/usr/local/bin/python3'

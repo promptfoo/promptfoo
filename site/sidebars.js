@@ -9,8 +9,6 @@
  Create as many sidebars as you want.
  */
 
-const { amber } = require('@mui/material/colors');
-
 // @ts-check
 
 /** @type {import('@docusaurus/plugin-content-docs').SidebarsConfig} */
@@ -181,10 +179,6 @@ const sidebars = {
       id: 'red-team/owasp-llm-top-10',
     },
     {
-      type: 'doc',
-      id: 'red-team/discovery',
-    },
-    {
       type: 'category',
       label: 'Plugins',
       collapsed: true,
@@ -228,6 +222,7 @@ const sidebars = {
             'red-team/plugins/cyberseceval',
             'red-team/plugins/donotanswer',
             'red-team/plugins/harmbench',
+            'red-team/plugins/aegis',
             'red-team/plugins/harmful',
             'red-team/plugins/pliny',
             'red-team/plugins/politics',
@@ -251,7 +246,7 @@ const sidebars = {
           type: 'category',
           label: 'Custom',
           collapsed: true,
-          items: ['red-team/plugins/custom', 'red-team/plugins/intent'],
+          items: ['red-team/plugins/policy', 'red-team/plugins/intent', 'red-team/plugins/custom'],
         },
       ],
     },
@@ -319,6 +314,10 @@ const sidebars = {
       label: 'Tools',
       collapsed: true,
       items: [
+        {
+          type: 'doc',
+          id: 'red-team/discovery',
+        },
         {
           type: 'doc',
           id: 'red-team/guardrails',

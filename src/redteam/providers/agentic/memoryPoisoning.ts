@@ -42,7 +42,7 @@ export class MemoryPoisoningProvider implements ApiProvider {
       const targetProvider: ApiProvider | undefined = context?.originalProvider;
       const purpose = context?.test?.metadata?.purpose;
       invariant(targetProvider, 'Expected originalProvider to be set');
-      invariant(context?.vars, 'Expected vars to be set');
+      invariant(context?.test, 'Expected test to be set');
       invariant(purpose, 'Expected purpose to be set');
 
       // Generate a scenario containing memories and follow up questions/commands which are dependent on the memories.
@@ -62,8 +62,10 @@ export class MemoryPoisoningProvider implements ApiProvider {
         throw new Error(`Failed to generate scenario: ${scenarioRes.statusText}`);
       }
 
+      // Scope the scenario to the test case to ensure its passed to the grader:
       const scenario = await scenarioRes.json();
-      context.vars.scenario = scenario;
+      context!.test!.metadata ??= {};
+      context!.test!.metadata['scenario'] = scenario;
 
       // Send the memory message to the provider.
       const memoryResponse = await targetProvider.callApi(scenario.memory, context);

@@ -1,9 +1,11 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: OpenAI tools calling with weather API integration
+
 prompts:
   - 'What is the weather like in {{city}}?'
 
 providers:
-  - id: openai:chat:gpt-4o-mini
+  - id: openai:chat:gpt-4.1-mini
     config:
       tools:
         [

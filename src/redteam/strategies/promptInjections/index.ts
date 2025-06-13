@@ -23,20 +23,24 @@ export async function addInjections(
     : testCases;
 
   return filteredTests.flatMap((testCase) =>
-    injections.map((fn) => ({
-      ...testCase,
-      assert: testCase.assert?.map((assert) => ({
-        ...assert,
-        metric: 'Harmful/Injection',
-      })),
-      vars: {
-        ...testCase.vars,
-        [injectVar]: `${fn(String(testCase.vars![injectVar]))}`,
-      },
-      metadata: {
-        ...testCase.metadata,
-        strategyId: 'prompt-injection',
-      },
-    })),
+    injections.map((fn) => {
+      const originalText = String(testCase.vars![injectVar]);
+      return {
+        ...testCase,
+        assert: testCase.assert?.map((assert) => ({
+          ...assert,
+          metric: 'Harmful/Injection',
+        })),
+        vars: {
+          ...testCase.vars,
+          [injectVar]: `${fn(originalText)}`,
+        },
+        metadata: {
+          ...testCase.metadata,
+          strategyId: 'prompt-injection',
+          originalText,
+        },
+      };
+    }),
   );
 }

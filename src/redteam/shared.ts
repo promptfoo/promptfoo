@@ -55,7 +55,7 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
 
   if (options.liveRedteamConfig) {
     // Write liveRedteamConfig to a temporary file
-    const filename = options.loadedFromCloud ? `redteam-${Date.now()}.yaml` : 'redteam.yaml';
+    const filename = `redteam-${Date.now()}.yaml`;
     const tmpDir = options.loadedFromCloud ? '' : os.tmpdir();
     const tmpFile = path.join(tmpDir, filename);
     fs.mkdirSync(path.dirname(tmpFile), { recursive: true });

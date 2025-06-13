@@ -11,12 +11,12 @@ import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
 import { PromptfooSimulatedUserProvider } from './promptfoo';
 
-type Message = {
+export type Message = {
   role: 'user' | 'assistant' | 'system';
   content: string;
 };
 
-type AgentProviderOptions = ProviderOptions & {
+export type AgentProviderOptions = ProviderOptions & {
   config?: {
     userProvider?: ProviderOptions;
     instructions?: string;

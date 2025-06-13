@@ -1,18 +1,23 @@
-description: Example showing how to load test cases from Python functions
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Python test generators with configuration
 
 prompts:
   - 'Translate the following text to {{target_language}}: {{text}}'
 
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
 
-# Demonstrate different ways to load test cases from Python
+# Demonstrate test generators with and without configuration
 tests:
-  # Load simple test cases
+  # 1. Basic generator with default languages (Spanish, French)
   - file://test_cases.py:generate_simple_tests
 
-  # Load test cases from simulated CSV data
-  - file://test_cases.py:generate_from_csv
+  # 2. Same generator with different languages (German, Italian)
+  - path: file://test_cases.py:generate_simple_tests
+    config:
+      languages: [German, Italian]
 
-  # Load systematically generated test cases from a class method
-  - file://test_cases.py:TestGenerator.generate_systematic_tests
+  # 3. CSV generator with row limit
+  - path: file://test_cases.py:generate_from_csv
+    config:
+      max_rows: 2

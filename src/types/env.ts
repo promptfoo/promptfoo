@@ -32,6 +32,7 @@ export const ProviderEnvOverridesSchema = z.object({
   DATABRICKS_WORKSPACE_URL: z.string().optional(),
   FAL_KEY: z.string().optional(),
   GOOGLE_API_HOST: z.string().optional(),
+  GOOGLE_API_BASE_URL: z.string().optional(),
   GOOGLE_API_KEY: z.string().optional(),
   GROQ_API_KEY: z.string().optional(),
   HELICONE_API_KEY: z.string().optional(),

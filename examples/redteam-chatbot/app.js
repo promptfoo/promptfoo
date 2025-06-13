@@ -171,7 +171,7 @@ app.post('/chat', async (req, res) => {
     );
     const messages = [{ role: 'system', content: SYSTEM_PROMPT }, ...chat_history];
 
-    const client = await providers.loadApiProvider('openai:chat:gpt-4o-mini');
+    const client = await providers.loadApiProvider(api_provider);
     const result = await client.callApi(JSON.stringify(messages));
 
     const { output: response } = result;
@@ -191,6 +191,11 @@ app.post('/chat', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 2345;
-app.listen(PORT, () => {
+app.listen(PORT, (error) => {
+  if (error) {
+    console.error(`Failed to start server: ${error.message}`);
+    process.exit(1);
+    return;
+  }
   console.info(`Server is running on port ${PORT}`);
 });

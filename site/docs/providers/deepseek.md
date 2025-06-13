@@ -1,3 +1,7 @@
+---
+sidebar_label: DeepSeek
+---
+
 # DeepSeek
 
 [DeepSeek](https://platform.deepseek.com/) provides an OpenAI-compatible API for their language models, with specialized models for both general chat and advanced reasoning tasks. The DeepSeek provider is compatible with all the options provided by the [OpenAI provider](/docs/providers/openai/).

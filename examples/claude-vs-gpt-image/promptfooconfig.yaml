@@ -2,8 +2,8 @@
 description: 'Claude vs GPT Image Analysis'
 
 prompts:
-  - ./prompt.py:format_image_prompt
-  - ./prompt.js:formatImagePrompt
+  - file://prompt.py:format_image_prompt
+  - file://prompt.js:formatImagePrompt
 
 providers:
   - id: bedrock:anthropic.claude-3-sonnet-20240229-v1:0

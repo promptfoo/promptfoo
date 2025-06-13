@@ -1,3 +1,7 @@
+---
+sidebar_label: Lambda Labs
+---
+
 # Lambda Labs
 
 This provider enables you to use Lambda Labs models through their [Inference API](https://docs.lambda.ai/public-cloud/lambda-inference-api/).

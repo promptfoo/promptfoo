@@ -187,7 +187,7 @@ describe('OpenAI Provider', () => {
     });
 
     it('should handle API errors', async () => {
-      const error = new OpenAI.APIError(500, {}, 'API Error', {});
+      const error = new OpenAI.APIError(500, {}, 'API Error', new Headers());
       Object.defineProperty(error, 'type', {
         value: 'API Error',
         writable: true,

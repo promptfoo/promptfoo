@@ -1,8 +1,10 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Loading test cases from separate YAML configuration files
+
 prompts:
   - file://prompt*.txt
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
 
 # The defaultTest configuration is applied to every test case in this config.
 defaultTest:

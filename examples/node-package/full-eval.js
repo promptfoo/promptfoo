@@ -55,7 +55,7 @@ customFunction.label = 'My custom function';
 
 const providers = [
   // Call the OpenAI API GPT 4o Mini
-  'openai:gpt-4o-mini',
+  'openai:gpt-4.1-mini',
 
   // Or use a custom function.
   customFunction,

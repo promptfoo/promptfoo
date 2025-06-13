@@ -107,7 +107,10 @@ export async function synthesize({
   let progressBar: SingleBar | undefined;
   if (logger.level !== 'debug') {
     const cliProgress = await import('cli-progress');
-    progressBar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
+    progressBar = new cliProgress.SingleBar(
+      { gracefulExit: true },
+      cliProgress.Presets.shades_classic,
+    );
     const totalProgressSteps = 1 + numPersonas * numTestCasesPerPersona;
     progressBar.start(totalProgressSteps, 0);
   }

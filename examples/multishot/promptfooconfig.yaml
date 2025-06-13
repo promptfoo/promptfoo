@@ -1,9 +1,11 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Testing multiple prompt variations with different context
+
 prompts:
   - file://prompt1.json
   - file://prompt2.json
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
 tests:
   - vars:
       year: 1950

@@ -128,6 +128,7 @@ export function createProgressBar(total: number): {
         {
           format: 'Converting to Videos {bar} {percentage}% | ETA: {eta}s | {value}/{total}',
           hideCursor: true,
+          gracefulExit: true,
         },
         Presets.shades_classic,
       );
@@ -201,6 +202,7 @@ export async function addVideoToBase64(
           metadata: {
             ...testCase.metadata,
             strategyId: 'video',
+            originalText,
           },
         });
       } catch (error) {

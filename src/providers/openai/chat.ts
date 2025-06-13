@@ -27,7 +27,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     options: { config?: OpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     if (!OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelName)) {
-      logger.debug(`Using unknown OpenAI chat model: ${modelName}`);
+      logger.debug(`Using unknown chat model: ${modelName}`);
     }
     super(modelName, options);
     this.config = options.config || {};
@@ -164,12 +164,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
     if (this.requiresApiKey() && !this.getApiKey()) {
       throw new Error(
-        'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
+        `API key is not set. Set the ${this.config.apiKeyEnvar || 'OPENAI_API_KEY'} environment variable or add \`apiKey\` to the provider config.`,
       );
     }
 
     const { body, config } = this.getOpenAiBody(prompt, context, callApiOptions);
-    logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
+    logger.debug(`Calling ${this.getApiUrl()} API: ${JSON.stringify(body)}`);
 
     let data, status, statusText;
     let cached = false;
@@ -202,7 +202,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       };
     }
 
-    logger.debug(`\tOpenAI chat completions API response: ${JSON.stringify(data)}`);
+    logger.debug(`\tcompletions API response: ${JSON.stringify(data)}`);
     if (data.error) {
       await data.deleteFromCache?.();
       return {

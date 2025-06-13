@@ -1,5 +1,4 @@
 const express = require('express');
-const { providers } = require('promptfoo');
 const crypto = require('crypto');
 const fs = require('fs');
 
@@ -74,6 +73,11 @@ app.post('/chat', validateSignature, async (req, res) => {
 });
 
 const PORT = process.env.PORT || 2345;
-app.listen(PORT, () => {
+app.listen(PORT, (error) => {
+  if (error) {
+    console.error(`Failed to start server: ${error.message}`);
+    process.exit(1);
+    return;
+  }
   console.info(`Server is running on port ${PORT}`);
 });

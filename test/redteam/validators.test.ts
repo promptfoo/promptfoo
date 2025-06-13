@@ -887,6 +887,68 @@ describe('redteamConfigSchema', () => {
       expect(strategies).toHaveLength(strategyIds.size);
     });
   });
+
+  describe('severity handling', () => {
+    it('should preserve severity field in plugin objects', () => {
+      const config = {
+        plugins: [
+          { id: 'harmful:hate', numTests: 1, severity: 'low' },
+          { id: 'harmful:self-harm', numTests: 1, severity: 'low' },
+        ],
+      };
+
+      const result = RedteamConfigSchema.parse(config);
+
+      expect(result.plugins!).toHaveLength(2);
+      expect(result.plugins![0]).toEqual({
+        id: 'harmful:hate',
+        numTests: 1,
+        severity: 'low',
+      });
+      expect(result.plugins![1]).toEqual({
+        id: 'harmful:self-harm',
+        numTests: 1,
+        severity: 'low',
+      });
+    });
+
+    it('should handle plugins without severity field', () => {
+      const config = {
+        plugins: [
+          { id: 'harmful:hate', numTests: 1 },
+          { id: 'harmful:self-harm', numTests: 1, severity: 'high' },
+        ],
+      };
+
+      const result = RedteamConfigSchema.parse(config);
+
+      expect(result.plugins!).toHaveLength(2);
+      expect(result.plugins![0]).toEqual({
+        id: 'harmful:hate',
+        numTests: 1,
+      });
+      expect(result.plugins![1]).toEqual({
+        id: 'harmful:self-harm',
+        numTests: 1,
+        severity: 'high',
+      });
+    });
+
+    it('should preserve severity when expanding collections', () => {
+      const config = {
+        plugins: [{ id: 'harmful', numTests: 1, severity: 'medium' }],
+      };
+
+      const result = RedteamConfigSchema.parse(config);
+
+      // All expanded harmful plugins should have the severity
+      const harmfulPlugins = result.plugins!.filter((p) => p.id.startsWith('harmful:'));
+      expect(harmfulPlugins.length).toBeGreaterThan(0);
+      harmfulPlugins.forEach((plugin) => {
+        expect(plugin.severity).toBe('medium');
+      });
+    });
+  });
 });
 
 describe('RedteamConfigSchema transform', () => {

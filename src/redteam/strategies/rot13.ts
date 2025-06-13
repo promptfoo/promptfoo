@@ -9,19 +9,23 @@ export function addRot13(testCases: TestCase[], injectVar: string): TestCase[] {
     });
   };
 
-  return testCases.map((testCase) => ({
-    ...testCase,
-    assert: testCase.assert?.map((assertion) => ({
-      ...assertion,
-      metric: `${assertion.metric}/Rot13`,
-    })),
-    vars: {
-      ...testCase.vars,
-      [injectVar]: rot13(String(testCase.vars![injectVar])),
-    },
-    metadata: {
-      ...testCase.metadata,
-      strategyId: 'rot13',
-    },
-  }));
+  return testCases.map((testCase) => {
+    const originalText = String(testCase.vars![injectVar]);
+    return {
+      ...testCase,
+      assert: testCase.assert?.map((assertion) => ({
+        ...assertion,
+        metric: `${assertion.metric}/Rot13`,
+      })),
+      vars: {
+        ...testCase.vars,
+        [injectVar]: rot13(originalText),
+      },
+      metadata: {
+        ...testCase.metadata,
+        strategyId: 'rot13',
+        originalText,
+      },
+    };
+  });
 }

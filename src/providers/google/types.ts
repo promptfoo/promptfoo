@@ -89,10 +89,12 @@ export interface Tool {
 export interface CompletionOptions {
   apiKey?: string;
   apiHost?: string;
+  apiBaseUrl?: string;
+  headers?: { [key: string]: string }; // Custom headers for the request
   projectId?: string;
   region?: string;
   publisher?: string;
-  apiVersion?: string;
+  apiVersion?: string; // For Live API: 'v1alpha' or 'v1' (default: v1alpha)
   anthropicVersion?: string;
   anthropic_version?: string; // Alternative format
 
@@ -127,6 +129,28 @@ export interface CompletionOptions {
 
     // Live API
     response_modalities?: string[];
+
+    // Speech configuration
+    speechConfig?: {
+      voiceConfig?: {
+        prebuiltVoiceConfig?: {
+          voiceName?: string;
+        };
+      };
+      languageCode?: string;
+    };
+
+    // Transcription configuration
+    outputAudioTranscription?: Record<string, any>;
+    inputAudioTranscription?: Record<string, any>;
+
+    // Affective dialog (v1alpha only)
+    enableAffectiveDialog?: boolean;
+
+    // Proactive audio (v1alpha only)
+    proactivity?: {
+      proactiveAudio?: boolean;
+    };
 
     // Thinking configuration
     thinkingConfig?: {

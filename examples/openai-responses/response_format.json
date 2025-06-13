@@ -1,0 +1,34 @@
+{
+  "type": "json_schema",
+  "name": "event_extraction",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "event_name": {
+        "type": "string",
+        "description": "The name of the event"
+      },
+      "date": {
+        "type": "string",
+        "description": "When the event takes place"
+      },
+      "location": {
+        "type": "string",
+        "description": "Where the event takes place"
+      },
+      "participants": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "People attending the event"
+      },
+      "description": {
+        "type": "string",
+        "description": "Brief description of the event"
+      }
+    },
+    "required": ["event_name", "date", "location", "participants", "description"],
+    "additionalProperties": false
+  }
+}

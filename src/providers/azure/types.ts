@@ -40,6 +40,7 @@ export interface AzureCompletionOptions {
   apiKey?: string;
   apiKeyEnvar?: string;
   apiVersion?: string;
+  headers?: { [key: string]: string };
 
   // OpenAI params
   max_tokens?: number;

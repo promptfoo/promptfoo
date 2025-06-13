@@ -1,8 +1,11 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: G-Eval criteria-based evaluation of LLM responses
+
 prompts:
   - 'Hello! How are you?'
 
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
 
 tests:
   - assert: # Calculate score for one criteria only

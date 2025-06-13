@@ -48,6 +48,64 @@ If you're still encountering memory issues after trying the above options, you c
 NODE_OPTIONS="--max-old-space-size=8192" npx promptfoo eval
 ```
 
+## Object template handling
+
+When working with complex data structures in templates, you might encounter issues with how objects are displayed or accessed in your prompts and grading rubrics.
+
+### `[object Object]` appears in outputs
+
+If you see `[object Object]` in your LLM outputs or grading results, this means JavaScript objects are being converted to their string representation without proper serialization. By default, promptfoo automatically stringifies objects to prevent this issue.
+
+**Example problem:**
+
+```yaml
+prompts:
+  - 'Product: {{product}}'
+tests:
+  - vars:
+      product:
+        name: 'Headphones'
+        price: 99.99
+# Results in: "Product: [object Object]" in outputs
+```
+
+**Default solution:** Objects are automatically converted to JSON strings:
+
+```
+Product: {"name":"Headphones","price":99.99}
+```
+
+### Accessing object properties in templates
+
+If you need to access specific properties of objects in your templates (like `{{ product.name }}`), you can enable direct object access:
+
+```bash
+export PROMPTFOO_DISABLE_OBJECT_STRINGIFY=true
+promptfoo eval
+```
+
+With this setting enabled, you can use object property access in templates:
+
+```yaml
+prompts:
+  - 'Product: {{ product.name }} costs ${{ product.price }}'
+# Results in: "Product: Headphones costs $99.99"
+```
+
+### When to use each approach
+
+**Use default behavior (stringified objects) when:**
+
+- You want objects as JSON strings in your prompts
+- Working with existing templates that expect JSON strings
+- You need maximum compatibility and don't want to see `[object Object]`
+
+**Use object property access (`PROMPTFOO_DISABLE_OBJECT_STRINGIFY=true`) when:**
+
+- You need to access specific properties like `{{ product.name }}`
+- Building new templates designed for object navigation
+- Working with complex nested data structures
+
 ## Node.js version mismatch error
 
 When running `npx promptfoo@latest`, you might encounter this error:
@@ -72,6 +130,22 @@ rm -rf ~/.npm/_npx && npx -y promptfoo@latest
 
 This removes any cached npm packages in the npx cache directory and forces a fresh download and installation of promptfoo, ensuring the native modules are compiled correctly for your current Node.js version.
 
+## Native build failures
+
+Some dependencies like [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) include native code that must compile locally. Ensure your machine has a C/C++ build toolchain:
+
+- **Ubuntu/Debian**: `sudo apt-get install build-essential`
+- **macOS**: `xcode-select --install`
+- **Windows**: [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+
+If the prebuilt binaries fail, force a local build:
+
+```bash
+npm install --build-from-source
+# or
+npm rebuild
+```
+
 ## OpenAI API key is not set
 
 If you're using OpenAI, set the `OPENAI_API_KEY` environment variable or add `apiKey` to the provider config.
@@ -94,14 +168,35 @@ defaultTest:
           apiHost: xxx.openai.azure.com
 ```
 
-## Timeout errors
+## How to triage stuck evals
 
-When running evals, you may encounter timeout errors, especially when using local providers or when running many concurrent requests. These timeouts can manifest as generic errors or as a lack of useful error messages.
+When running evals, you may encounter timeout errors, especially when using local providers or when running many concurrent requests. Here's how to fix them:
 
-To resolve timeout issues, try limiting concurrency by using the `-j 1` flag when running `promptfoo eval`. This reduces the number of simultaneous requests:
+**Common use cases:**
+
+- Ensure evaluations complete within a time limit (useful for CI/CD)
+- Handle custom providers or providers that get stuck
+- Prevent runaway costs from long-running evaluations
+
+You can control two settings: timeout for individual test cases and timeout for the entire evaluation.
+
+### Quick fixes
+
+**Set timeouts for individual requests and total evaluation time:**
 
 ```bash
-npx promptfoo eval -j 1
+export PROMPTFOO_EVAL_TIMEOUT_MS=30000  # 30 seconds per request
+export PROMPTFOO_MAX_EVAL_TIME_MS=300000  # 5 minutes total limit
+
+npx promptfoo eval
+```
+
+You can also set these values in your `.env` file or Promptfoo config file:
+
+```yaml title="promptfooconfig.yaml"
+env:
+  PROMPTFOO_EVAL_TIMEOUT_MS: 30000
+  PROMPTFOO_MAX_EVAL_TIME_MS: 300000
 ```
 
 ## Debugging Python

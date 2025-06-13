@@ -12,6 +12,13 @@ import {
   DefaultGradingProvider as GeminiGradingProvider,
 } from './google/vertex';
 import {
+  DefaultEmbeddingProvider as MistralEmbeddingProvider,
+  DefaultGradingProvider as MistralGradingProvider,
+  DefaultGradingJsonProvider as MistralGradingJsonProvider,
+  DefaultSuggestionsProvider as MistralSuggestionsProvider,
+  DefaultSynthesizeProvider as MistralSynthesizeProvider,
+} from './mistral/defaults';
+import {
   DefaultEmbeddingProvider as OpenAiEmbeddingProvider,
   DefaultGradingJsonProvider as OpenAiGradingJsonProvider,
   DefaultGradingProvider as OpenAiGradingProvider,
@@ -122,6 +129,22 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: GeminiGradingProvider,
       synthesizeProvider: GeminiGradingProvider,
+    };
+  } else if (
+    !getEnvString('OPENAI_API_KEY') &&
+    !env?.OPENAI_API_KEY &&
+    !hasAnthropicCredentials &&
+    !(await hasGoogleDefaultCredentials()) &&
+    (getEnvString('MISTRAL_API_KEY') || env?.MISTRAL_API_KEY)
+  ) {
+    logger.debug('Using Mistral default providers');
+    providers = {
+      embeddingProvider: MistralEmbeddingProvider,
+      gradingJsonProvider: MistralGradingJsonProvider,
+      gradingProvider: MistralGradingProvider,
+      moderationProvider: OpenAiModerationProvider,
+      suggestionsProvider: MistralSuggestionsProvider,
+      synthesizeProvider: MistralSynthesizeProvider,
     };
   } else {
     logger.debug('Using OpenAI default providers');

@@ -1,4 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Comparing Llama and GPT model performance
+
 prompts:
   - file://prompts/chat_prompt.json
 
@@ -8,8 +10,8 @@ providers:
     config:
       temperature: 0
       max_tokens: 128
-  - id: openai:gpt-4o-mini
-    label: GPT 4o-mini
+  - id: openai:gpt-4.1-mini
+    label: GPT 4.1-mini
     config:
       temperature: 1
       max_tokens: 128

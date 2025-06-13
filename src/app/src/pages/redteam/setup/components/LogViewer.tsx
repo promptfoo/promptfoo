@@ -78,7 +78,7 @@ export function LogViewer({ logs }: LogViewerProps) {
     }
   }, [logs, shouldAutoScroll]);
 
-  const scrollToBottom = useCallback((containerRef: React.RefObject<HTMLDivElement>) => {
+  const scrollToBottom = useCallback((containerRef: React.RefObject<HTMLDivElement | null>) => {
     if (containerRef.current) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight;
       setShouldAutoScroll(true);

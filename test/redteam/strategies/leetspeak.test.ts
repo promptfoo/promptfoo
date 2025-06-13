@@ -18,6 +18,7 @@ describe('addLeetspeak', () => {
     expect(result[0].vars?.query).toBe('H3110, w0r1d!');
     expect(result[0].metadata).toEqual({
       strategyId: 'leetspeak',
+      originalText: 'Hello, world!',
     });
   });
 

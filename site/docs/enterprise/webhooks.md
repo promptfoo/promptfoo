@@ -1,3 +1,7 @@
+---
+sidebar_label: Webhook Integration
+---
+
 # Webhook Integration
 
 Promptfoo Enterprise provides webhooks to notify external systems when issues are created or updated.

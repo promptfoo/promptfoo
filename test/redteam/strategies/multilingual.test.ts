@@ -261,6 +261,7 @@ describe('Multilingual Strategy', () => {
         harmCategory: 'Test',
         strategyId: 'multilingual',
         language: 'de',
+        originalText: 'Hello world',
       });
       expect(result[0].vars?.text).toBe('Hallo Welt');
     });

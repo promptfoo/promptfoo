@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: 'CyberSecEval Prompt Injections'
 prompts:
   - id: file://prompt.json
@@ -6,7 +7,7 @@ prompts:
 providers:
   - id: openai:chat:gpt-4o
     label: GPT 4o
-  - id: openai:chat:gpt-4o-mini
+  - id: openai:chat:gpt-4.1-mini
     label: GPT 4o mini
 
 defaultTest:

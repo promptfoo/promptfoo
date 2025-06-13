@@ -1,3 +1,7 @@
+---
+sidebar_label: HuggingFace
+---
+
 # HuggingFace
 
 promptfoo includes support for the [HuggingFace Inference API](https://huggingface.co/inference-api), for text generation, classification, and embeddings related tasks, as well as [HuggingFace Datasets](https://huggingface.co/docs/datasets).

@@ -52,7 +52,10 @@
   padding: 1.5rem;
   cursor: pointer;
   transition: all 0.3s ease;
-  height: 250px;
+  min-height: 250px;
+  height: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .card:hover {
@@ -62,7 +65,8 @@
 }
 
 .expanded {
-  grid-row: span 2;
+  height: auto;
+  min-height: 400px;
 }
 
 .cardHeader {
@@ -136,7 +140,8 @@
 }
 
 .cardFooter {
-  margin-top: 1rem;
+  margin-top: auto;
+  padding-top: 1rem;
   display: flex;
   justify-content: flex-end;
 }
@@ -182,8 +187,8 @@
   position: absolute;
   width: calc(100% + 2rem);
   left: calc(100% - 1rem);
-  top: 0;
-  bottom: 0;
+  top: 125px;
+  height: 2px;
   pointer-events: none;
   display: flex;
   align-items: center;
@@ -193,7 +198,7 @@
 .flowConnector::before {
   content: '';
   position: absolute;
-  top: 50%;
+  top: 0;
   left: 0;
   width: 100%;
   height: 2px;

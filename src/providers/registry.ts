@@ -11,7 +11,6 @@ import RedteamIterativeProvider from '../redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from '../redteam/providers/iterativeTree';
 import RedteamPandamoniumProvider from '../redteam/providers/pandamonium';
-import { ServerToolDiscoveryMultiProvider } from '../redteam/providers/toolDiscoveryMulti';
 import type { LoadApiProviderContext } from '../types';
 import type { ApiProvider, ProviderOptions } from '../types/providers';
 import { isJavascriptFile } from '../util/fileExtensions';
@@ -1151,16 +1150,6 @@ export const providerMap: ProviderFactory[] = [
       throw new Error(
         `Invalid Huggingface provider path: ${providerPath}. Use one of the following providers: huggingface:feature-extraction:<model name>, huggingface:text-generation:<model name>, huggingface:text-classification:<model name>, huggingface:token-classification:<model name>`,
       );
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath === 'promptfoo:redteam:tool-discovery:multi-turn',
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return new ServerToolDiscoveryMultiProvider(providerOptions.config);
     },
   },
   {

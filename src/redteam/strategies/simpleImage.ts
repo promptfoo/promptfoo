@@ -91,6 +91,7 @@ export async function addImageToBase64(
       {
         format: 'Converting to Images {bar} {percentage}% | ETA: {eta}s | {value}/{total}',
         hideCursor: true,
+        gracefulExit: true,
       },
       Presets.shades_classic,
     );
@@ -124,6 +125,7 @@ export async function addImageToBase64(
       metadata: {
         ...testCase.metadata,
         strategyId: 'image',
+        originalText,
       },
     });
 

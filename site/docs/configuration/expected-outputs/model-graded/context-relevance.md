@@ -1,3 +1,7 @@
+---
+sidebar_label: Context Relevance
+---
+
 # Context Relevance
 
 The `context-relevance` assertion evaluates whether the retrieved context is relevant to the original query. This is crucial for RAG (Retrieval-Augmented Generation) applications to ensure that the retrieved information is actually useful for answering the question.

@@ -1,0 +1,66 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+
+# Git Workflow Using `gh`
+
+This rule describes how to create branches, make commits, and open pull requests when working on the promptfoo repository.
+
+## Pre-Work Setup
+
+- Ensure you're in the repository root directory before starting any work.
+- Run `git pull origin main` to get the latest changes.
+- Run `npm install` to ensure dependencies are up to date.
+- Verify your working directory is clean with `git status`.
+
+## Branches
+
+- Use descriptive topic branches based on the change type: `feat/`, `fix/`, `docs/`, or `chore/`.
+- Branch names should be kebab-case and descriptive, e.g., `feat/add-anthropic-provider` or `fix/eval-timeout-issue`.
+- Create a branch from `main` using `git checkout -b <branch-name>`.
+- Pull the latest `main` before creating your branch to avoid conflicts.
+- Keep your branch focused on a single change or feature.
+- Before opening a PR, ensure your branch has the latest `main` merged: `git merge main` or `git rebase main`.
+
+## Commits
+
+- Use the [Conventional Commits](mdc:https:/www.conventionalcommits.org) format in your commit messages, e.g., `feat: add new provider`. Commit messages should concisely describe _only_ the files you changed.
+- **Always run tests from the repository root**: `cd` to the root directory and run `npm test` before each commit to ensure tests pass.
+- **Ensure TypeScript compilation passes**: run `npm run build` or `npx tsc` from the root to verify TypeScript is valid.
+- Format and lint the code prior to committing: `npm run f && npm run l` (run from root).
+- Avoid disabling or skipping tests unless absolutely necessary and documented.
+- Prefer not to introduce new TypeScript types; use existing interfaces whenever possible.
+- Make atomic commits that represent single logical changes.
+- Verify all intended changes are staged before committing with `git diff --cached`.
+
+## Pull Requests
+
+- Use `gh pr create --fill` to open a pull request against `main`.
+- PR titles must follow Conventional Commits syntax (`feat:`, `fix:`, `docs:`, etc.).
+- **Documentation PRs**: Any changes that only touch `site/` or `examples/` directories must use the `docs:` prefix, not `feat:` or `fix:`.
+- Use draft PRs (`gh pr create --draft`) for work-in-progress that needs early feedback.
+- Test your changes locally with `npm run local -- <subcommand>` rather than `npx promptfoo@latest`.
+- If the change is a feature, update the relevant documentation under `site/`.
+- When modifying examples, update existing files instead of adding new ones. For instance, replace outdated model IDs rather than introducing brand new example files.
+- Do not run `npm run dev`; assume the view server is already running or instruct the user to start it separately.
+- For breaking changes, clearly document the impact and migration steps in the PR description.
+
+## Conflict Resolution
+
+- When conflicts arise, pull the latest `main`: `git pull origin main`.
+- Resolve conflicts carefully, testing after resolution.
+- Run the full test suite from root after resolving conflicts: `npm test`.
+- Verify TypeScript still compiles after conflict resolution: `npm run build`.
+
+## Additional Guidance
+
+- Keep commits atomic and easy to review.
+- Avoid large, unrelated changes in a single PR.
+- Ensure CI tests pass before merging.
+- Confirm all changed files are included in your commit before creating the PR.
+- If your branch becomes stale, rebase against `main` rather than merging main into your branch.
+- Delete your local branch after successful merge: `git branch -d <branch-name>`.
+- Regularly clean up remote tracking branches: `git remote prune origin`.
+- Consider whether or not documentation should be updated.

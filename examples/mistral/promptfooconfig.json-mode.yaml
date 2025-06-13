@@ -1,0 +1,46 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'JSON mode and structured output with Mistral models'
+
+providers:
+  - id: mistral:mistral-large-latest
+    config:
+      response_format:
+        type: 'json_object'
+      temperature: 0.3
+
+prompts:
+  - "Extract the following information from the text and return as JSON with keys 'name', 'age', 'occupation', and 'location': {{text}}"
+
+tests:
+  - vars:
+      text: 'John Smith is a 35-year-old software engineer living in San Francisco.'
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const parsed = JSON.parse(output);
+          return parsed.name === "John Smith" && 
+                 parsed.age === 35 && 
+                 parsed.occupation === "software engineer" &&
+                 parsed.location === "San Francisco";
+
+  - vars:
+      text: 'Maria Garcia, age 28, works as a data scientist in New York City.'
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const parsed = JSON.parse(output);
+          return parsed.name === "Maria Garcia" && 
+                 parsed.age === 28 && 
+                 parsed.occupation === "data scientist" &&
+                 parsed.location === "New York City";
+
+  - vars:
+      text: 'Dr. Ahmed Hassan is a 42-year-old cardiologist practicing in London.'
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const parsed = JSON.parse(output);
+          return parsed.name && parsed.age && parsed.occupation && parsed.location;

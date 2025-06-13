@@ -10,7 +10,7 @@ Promptfoo's **Target Discovery Agent** automatically extracts useful information
 
 ## Usage
 
-Target discovery runs automatically during [red team scans](/docs/red-team/quickstart#run-the-scan) and [adversarial test case generation](/docs/guides/llm-redteaming/#step-3-generate-adversarial-test-cases). The discovered information is written to the [`redteam.purpose`](/docs/red-team/configuration/#purpose) field of the outputted `redteam.yaml`.
+Use the command `promptfoo redteam discover` with either a configuration file or a cloud target. [More info](/docs/usage/command-line#promptfoo-redteam-discover)
 
 ### Preview
 

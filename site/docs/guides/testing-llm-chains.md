@@ -59,7 +59,7 @@ python langchain_example.py "What is 2+2?"
 Now, let's configure promptfoo to run this LangChain script with a bunch of test cases:
 
 ```yaml
-prompts: prompt.txt
+prompts: file://prompt.txt
 providers:
   - openai:chat:gpt-4.1
   - exec:python langchain_example.py

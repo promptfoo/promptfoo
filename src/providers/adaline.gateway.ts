@@ -709,4 +709,4 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
   }
 }
 
-export { AdalineGatewayCachePlugin,  };
+export { AdalineGatewayCachePlugin };

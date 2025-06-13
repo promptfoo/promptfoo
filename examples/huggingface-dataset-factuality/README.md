@@ -31,6 +31,7 @@ After initialization, you can customize the `promptfooconfig.yaml` file to adjus
 - The models/providers you want to evaluate (uncomment additional providers)
 - The grading model for factuality eval
 - The factuality scoring weights for different categories
+- Dataset parameters passed to `dataset_loader.ts` via the `config` field
 
 Then run:
 
@@ -55,6 +56,18 @@ This example uses:
 5. Multiple LLM providers can be enabled for comparison (Claude is enabled by default)
 
 The TypeScript dataset approach gives you more flexibility to preprocess, filter, or transform the data before eval, plus it avoids the need for additional Python dependencies.
+
+### Customizing the Dataset
+
+You can pass options to `dataset_loader.ts` using the `config` field in `promptfooconfig.yaml`:
+
+```yaml
+tests:
+  path: file://dataset_loader.ts:generate_tests
+  config:
+    dataset: EleutherAI/truthful_qa_mc
+    split: validation
+```
 
 ### Dataset Structure
 

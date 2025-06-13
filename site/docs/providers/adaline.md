@@ -1,3 +1,7 @@
+---
+sidebar_label: Adaline Gateway
+---
+
 # Adaline Gateway
 
 Adaline Gateway is a fully local production-grade Super SDK that provides a simple, unified, and powerful interface for calling more than 200+ LLMs.

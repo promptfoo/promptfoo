@@ -5,7 +5,7 @@ prompts:
   - 'What are the latest scientific discoveries about {{topic}}? Please include citations.'
 
 providers:
-  - id: openai:chat:gpt-4o-mini
+  - id: openai:chat:gpt-4.1-mini
 
   - id: perplexity:sonar
     config:

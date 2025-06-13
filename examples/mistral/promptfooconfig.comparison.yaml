@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Compare reasoning capabilities across Mistral models'
+
+providers:
+  - mistral:magistral-medium-latest
+  - mistral:magistral-small-latest
+  - mistral:mistral-large-latest
+  - mistral:mistral-small-latest
+
+prompts:
+  - 'Solve this step by step: {{problem}}'
+
+tests:
+  - vars:
+      problem: "A company has 100 employees. 60% work remotely, 25% work hybrid, and the rest work in office. If remote workers get a $200 stipend and hybrid workers get $100, what's the total monthly stipend cost?"
+    assert:
+      - type: llm-rubric
+        value: 'Shows clear mathematical reasoning and arrives at correct answer ($13,500)'
+      - type: cost
+        threshold: 0.10
+
+  - vars:
+      problem: 'If I have 3 boxes with 4 apples each, and I eat 2 apples from the first box and 1 apple from the second box, how many apples do I have left in total?'
+    assert:
+      - type: llm-rubric
+        value: 'Correctly calculates the remaining apples (9 apples total)'
+      - type: contains
+        value: '9'

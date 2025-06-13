@@ -799,17 +799,6 @@ module.exports = { validateUser, validatePasswordStrength };`;
     setSelectedFile(file);
   };
 
-  // Handle selecting a predefined prompt
-  const handlePromptSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const selectedValue = e.target.value;
-    const selectedPromptObj = prompts.find((p) => p.id === selectedValue);
-    if (selectedPromptObj) {
-      setSelectedPrompt(selectedValue);
-    } else {
-      setSelectedPrompt('');
-    }
-  };
-
   return (
     <div className={styles.container}>
       {/* Mobile banner */}

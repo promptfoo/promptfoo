@@ -1,6 +1,7 @@
 import { fetchWithCache } from '../cache';
 import logger from '../logger';
 import { REQUEST_TIMEOUT_MS } from '../providers/shared';
+import { pluginDescriptions } from './constants';
 import { getRemoteGenerationUrl } from './remoteGeneration';
 
 /**
@@ -207,16 +208,25 @@ export function getShortPluginId(pluginId: string): string {
  * Extracts goal from a prompt using remote generation API.
  * @param prompt - The prompt to extract goal from.
  * @param purpose - The purpose of the system.
+ * @param pluginId - Optional plugin ID to provide context about the attack type.
  * @returns The extracted goal, or null if extraction fails.
  */
 export async function extractGoalFromPrompt(
   prompt: string,
   purpose: string,
+  pluginId?: string,
 ): Promise<string | null> {
+  // If we have a plugin ID, use the plugin description to generate a better goal
+  // This helps with multi-variable attacks where the main prompt might be innocent
+  const pluginDescription = pluginId
+    ? pluginDescriptions[pluginId as keyof typeof pluginDescriptions]
+    : null;
+
   const requestBody = {
     task: 'extract-intent',
     prompt,
     purpose,
+    ...(pluginDescription && { pluginContext: pluginDescription }),
   };
 
   logger.debug(`Extracting goal from prompt. Request URL: ${getRemoteGenerationUrl()}`);

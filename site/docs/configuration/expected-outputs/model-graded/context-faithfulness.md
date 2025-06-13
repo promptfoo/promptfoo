@@ -1,3 +1,7 @@
+---
+sidebar_label: Context Faithfulness
+---
+
 # Context Faithfulness
 
 The `context-faithfulness` assertion evaluates whether the LLM's output is faithful to the provided context, ensuring that the response doesn't include information or claims that aren't supported by the context. This is essential for RAG (Retrieval-Augmented Generation) applications to prevent hallucination.
