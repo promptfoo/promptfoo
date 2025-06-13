@@ -505,10 +505,10 @@ function formatVarsForDisplay(vars: Record<string, any> | undefined, maxLength: 
           const fullStr = String(value);
           valueStr = fullStr.length > maxValueLength ? fullStr.slice(0, maxValueLength) : fullStr;
         }
-             } catch {
-         // Fallback for values that can't be converted to string
-         valueStr = '[unconvertible]';
-       }
+      } catch {
+        // Fallback for values that can't be converted to string
+        valueStr = '[unconvertible]';
+      }
 
       const pair = `${key}=${valueStr}`;
 
