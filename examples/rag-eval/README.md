@@ -65,9 +65,11 @@ tests:
   - vars:
       query: What is the max purchase that doesn't require approval?
     assert:
+      - type: contains
+        value: '$500'
       - type: context-faithfulness
         contextTransform: 'output.split("CONTEXT:")[1]?.split("ANSWER:")[0]?.trim() || ""'
-        threshold: 0.9
+        threshold: 0.3
 ```
 
 **When to use:**
@@ -92,14 +94,14 @@ The `contextTransform` expression extracts everything between "CONTEXT:" and "AN
 ```yaml
 - type: context-faithfulness
   contextTransform: 'output.context'
-  threshold: 0.9
+  threshold: 0.5
 ```
 
 ### Complex JavaScript expressions
 ```yaml
 - type: context-relevance
   contextTransform: 'output.split("CONTEXT:")[1]?.split("ANSWER:")[0]?.trim() || ""'
-  threshold: 0.8
+  threshold: 0.3
 ```
 
 ### Multiple context assertions
@@ -107,6 +109,8 @@ All three context assertions work with both approaches:
 - `context-faithfulness` - Prevents hallucinations
 - `context-relevance` - Ensures relevant retrieval
 - `context-recall` - Verifies information completeness
+
+**Note:** Context-based assertions use AI grading and can be sensitive to threshold settings. Start with lower thresholds (0.3-0.5) and adjust based on your specific use case and quality requirements.
 
 ## Viewing Results
 
