@@ -18,6 +18,8 @@ export type PluginConfig = {
   }[];
   severity?: Severity;
   language?: string;
+  prompt?: string;
+  purpose?: string;
   modifiers?: Partial<Record<Modifier, unknown>>;
   // BOLA
   targetIdentifiers?: string[];
@@ -29,6 +31,11 @@ export type PluginConfig = {
   targetUrls?: string[];
   // PII
   name?: string;
+
+  indirectInjectionVar?: string;
+  intent?: string;
+  policy?: string;
+  systemPrompt?: string;
 };
 export type StrategyConfig = RedteamObjectConfig;
 
