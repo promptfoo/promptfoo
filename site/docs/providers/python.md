@@ -604,5 +604,5 @@ def call_api(prompt, options, context):
 
 ## Next Steps
 
-- Learn about [custom assertions](/docs/configuration/expected-outputs.md)
+- Learn about [custom assertions](/docs/configuration/expected-outputs/)
 - Set up [CI/CD integration](/docs/integrations/github-action.md)
