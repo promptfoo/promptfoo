@@ -41,7 +41,11 @@ const SettingsPanel: React.FC = () => {
 
   // Local state for slider
   const sanitizedMaxTextLength =
-    Number.isFinite(maxTextLength) && maxTextLength >= 25 ? maxTextLength : 500;
+    maxTextLength === Number.POSITIVE_INFINITY
+      ? Number.POSITIVE_INFINITY
+      : Number.isFinite(maxTextLength) && maxTextLength >= 25
+        ? maxTextLength
+        : 500;
   const [localMaxTextLength, setLocalMaxTextLength] = useState(
     sanitizedMaxTextLength === Number.POSITIVE_INFINITY ? 1001 : sanitizedMaxTextLength,
   );
