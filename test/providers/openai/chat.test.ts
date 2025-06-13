@@ -1,8 +1,8 @@
 import { disableCache, enableCache, fetchWithCache } from '../../../src/cache';
+import cliState from '../../../src/cliState';
+import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
-import { importModule } from '../../../src/esm';
-import cliState from '../../../src/cliState';
 
 jest.mock('../../../src/cache');
 jest.mock('../../../src/logger');
@@ -699,7 +699,10 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
         const result = await provider.callApi('Call external function');
 
-        expect(mockImportModule).toHaveBeenCalledWith('/test/base/path/test/callbacks.js', 'testFunction');
+        expect(mockImportModule).toHaveBeenCalledWith(
+          '/test/base/path/test/callbacks.js',
+          'testFunction',
+        );
         expect(mockExternalFunction).toHaveBeenCalledWith('{"param": "test_value"}');
         expect(result.output).toBe('External function result');
         expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5 });
@@ -830,7 +833,10 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
         const result = await provider.callApi('Call error function');
 
-        expect(mockImportModule).toHaveBeenCalledWith('/test/base/path/nonexistent/module.js', 'errorFunction');
+        expect(mockImportModule).toHaveBeenCalledWith(
+          '/test/base/path/nonexistent/module.js',
+          'errorFunction',
+        );
         // Should fall back to original function call object when loading fails
         expect(result.output).toEqual([
           {
@@ -869,7 +875,9 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         mockFetchWithCache.mockResolvedValue(mockResponse);
 
         // Mock a function that throws during execution
-        const mockFailingFunction = jest.fn().mockRejectedValue(new Error('Function execution failed'));
+        const mockFailingFunction = jest
+          .fn()
+          .mockRejectedValue(new Error('Function execution failed'));
         mockImportModule.mockResolvedValue({
           failingFunction: mockFailingFunction,
         });
@@ -910,7 +918,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
           },
         ]);
         expect(mockLogger.debug).toHaveBeenCalledWith(
-          expect.stringContaining('Function callback failed for failing_function')
+          expect.stringContaining('Function callback failed for failing_function'),
         );
       });
 
@@ -968,7 +976,10 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
         const result = await provider.callApi('Test parsing');
 
-        expect(mockImportModule).toHaveBeenCalledWith('/test/base/path/deep/path/module.js', 'deepExport.nestedFunction');
+        expect(mockImportModule).toHaveBeenCalledWith(
+          '/test/base/path/deep/path/module.js',
+          'deepExport.nestedFunction',
+        );
         expect(mockParsedFunction).toHaveBeenCalledWith('{"data": "parsing_test"}');
         expect(result.output).toBe('Parsed successfully');
       });
@@ -1051,7 +1062,10 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         const result = await provider.callApi('Test mixed callbacks');
 
         expect(mockInlineFunction).toHaveBeenCalledWith('{"inline": "test"}');
-        expect(mockImportModule).toHaveBeenCalledWith('/test/base/path/mixed/callbacks.js', 'externalFunc');
+        expect(mockImportModule).toHaveBeenCalledWith(
+          '/test/base/path/mixed/callbacks.js',
+          'externalFunc',
+        );
         expect(mockExternalFunction).toHaveBeenCalledWith('{"external": "test"}');
         expect(result.output).toBe('Inline result\nExternal result');
       });

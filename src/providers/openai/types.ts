@@ -91,7 +91,7 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
    */
   functionToolCallbacks?: Record<
     OpenAI.FunctionDefinition['name'],
-    (arg: string) => Promise<string>
+    ((arg: string) => Promise<string>) | string
   >;
   mcp?: MCPConfig;
 };
