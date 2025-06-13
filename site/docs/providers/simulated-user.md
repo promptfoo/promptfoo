@@ -84,24 +84,19 @@ tests:
 
 ### Advanced Function Calling
 
-For complex scenarios with function calling, you can define structured APIs:
+For complex scenarios with function calling, you can define structured APIs with mock implementations:
 
 ```yaml
 providers:
-  - id: openai:responses:gpt-4.1-mini
+  - id: openai:gpt-4.1-mini
     config:
       tools:
-        - type: function
-          name: search_flights
-          description: 'Search for available flights'
-          parameters:
-            type: object
-            properties:
-              origin:
-                type: string
-              destination:
-                type: string
+        - file://functions/search_flights.json
+      functionToolCallbacks:
+        search_flights: file://callbacks/airline-functions.js:searchFlights
 ```
+
+Where `functions/search_flights.json` defines the function schema and `callbacks/airline-functions.js` contains the mock implementation that returns realistic data.
 
 The output will show the full conversation history with each turn separated by "---":
 
@@ -120,7 +115,25 @@ Let me search for flights from New York to Seattle on May 20th...
 User: I prefer direct flights but one stop is okay if it's cheaper ###STOP###
 ```
 
-For a complete working example with 31 customer personas, see the [Simulated User example](https://github.com/promptfoo/promptfoo/tree/main/examples/tau-simulated-user).
+### Evaluation and Assertions
+
+You can add assertions to automatically evaluate conversation quality:
+
+```yaml
+tests:
+  - vars:
+      instructions: You are a budget-conscious traveler wanting economy flights under $350
+    assert:
+      - type: llm-rubric
+        value: |
+          Did the budget traveler get what they wanted?
+          Pass if: Got economy flight under $350 and used certificates for payment
+          Fail if: Failed to book economy or got expensive flight over $400
+```
+
+This enables automatic evaluation of whether your agent successfully handles different customer types and scenarios.
+
+For a complete working example with 31 customer personas and comprehensive assertions, see the [Simulated User example](https://github.com/promptfoo/promptfoo/tree/main/examples/tau-simulated-user).
 
 ## Using as a Library
 

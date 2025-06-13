@@ -119,6 +119,6 @@ export class SimulatedUser implements ApiProvider {
   }
 
   toString() {
-    return 'SimulatedUser';
+    return 'AgentProvider';
   }
 }

@@ -160,9 +160,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       }
     } catch (error: any) {
       logger.error(`Error executing function '${functionName}': ${error.message || String(error)}`);
-      return JSON.stringify({
-        error: `Error in ${functionName}: ${error.message || String(error)}`,
-      });
+      throw error; // Re-throw so caller can handle fallback behavior
     }
   }
 
@@ -370,18 +368,27 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       const functionCalls = message.function_call ? [message.function_call] : message.tool_calls;
       if (functionCalls && config.functionToolCallbacks) {
         const results = [];
+        let hasSuccessfulCallback = false;
         for (const functionCall of functionCalls) {
           const functionName = functionCall.name || functionCall.function?.name;
           if (config.functionToolCallbacks[functionName]) {
-            const functionResult = await this.executeFunctionCallback(
-              functionName,
-              functionCall.arguments || functionCall.function?.arguments,
-              config,
-            );
-            results.push(functionResult);
+            try {
+              const functionResult = await this.executeFunctionCallback(
+                functionName,
+                functionCall.arguments || functionCall.function?.arguments,
+                config,
+              );
+              results.push(functionResult);
+              hasSuccessfulCallback = true;
+            } catch (error) {
+              // If callback fails, fall back to original behavior (return the function call)
+              logger.debug(`Function callback failed for ${functionName}, falling back to original output`);
+              hasSuccessfulCallback = false;
+              break;
+            }
           }
         }
-        if (results.length > 0) {
+        if (hasSuccessfulCallback && results.length > 0) {
           return {
             output: results.join('\n'),
             tokenUsage: getTokenUsage(data, cached),
