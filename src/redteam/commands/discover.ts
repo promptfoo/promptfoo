@@ -410,3 +410,5 @@ export function discoverCommand(
       process.exit();
     });
 }
+
+export { LOG_PREFIX, COMMAND, isNullLike, cleanTools };
