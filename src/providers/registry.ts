@@ -572,15 +572,29 @@ export const providerMap: ProviderFactory[] = [
       context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
-      const modelName = splits.slice(1).join(':');
-      return new OpenAiChatCompletionProvider(modelName, {
-        ...providerOptions,
-        config: {
-          ...providerOptions.config,
-          apiBaseUrl: 'https://api.hyperbolic.xyz/v1',
-          apiKeyEnvar: 'HYPERBOLIC_API_KEY',
-        },
-      });
+      const modelType = splits[1];
+
+      // Handle hyperbolic:image:<model> format
+      if (modelType === 'image') {
+        const { createHyperbolicImageProvider } = await import('./hyperbolic/image');
+        return createHyperbolicImageProvider(providerPath, {
+          ...providerOptions,
+          env: context.env,
+        });
+      }
+
+      // Handle hyperbolic:audio:<model> format
+      if (modelType === 'audio') {
+        const { createHyperbolicAudioProvider } = await import('./hyperbolic/audio');
+        return createHyperbolicAudioProvider(providerPath, {
+          ...providerOptions,
+          env: context.env,
+        });
+      }
+
+      // Handle regular hyperbolic:<model> format for chat
+      const { createHyperbolicProvider } = await import('./hyperbolic/chat');
+      return createHyperbolicProvider(providerPath, providerOptions);
     },
   },
   {
