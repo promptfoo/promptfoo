@@ -1,6 +1,6 @@
 import { handleContextRelevance } from '../../src/assertions/contextRelevance';
-import { matchesContextRelevance } from '../../src/matchers';
 import * as contextUtils from '../../src/assertions/contextUtils';
+import { matchesContextRelevance } from '../../src/matchers';
 
 jest.mock('../../src/matchers');
 jest.mock('../../src/assertions/contextUtils');
@@ -55,7 +55,12 @@ describe('handleContextRelevance', () => {
     expect(result.pass).toBe(true);
     expect(result.score).toBe(0.9);
     expect(result.reason).toBe('Context is highly relevant');
-    expect(matchesContextRelevance).toHaveBeenCalledWith('What is the capital of France?', 'test context', 0.8, {});
+    expect(matchesContextRelevance).toHaveBeenCalledWith(
+      'What is the capital of France?',
+      'test context',
+      0.8,
+      {},
+    );
   });
 
   it('should fail when context relevance is below threshold', async () => {
@@ -103,7 +108,12 @@ describe('handleContextRelevance', () => {
     expect(result.pass).toBe(false);
     expect(result.score).toBe(0.3);
     expect(result.reason).toBe('Context not relevant to query');
-    expect(matchesContextRelevance).toHaveBeenCalledWith('What is the capital of France?', 'irrelevant context', 0.7, {});
+    expect(matchesContextRelevance).toHaveBeenCalledWith(
+      'What is the capital of France?',
+      'irrelevant context',
+      0.7,
+      {},
+    );
   });
 
   it('should use default threshold of 0 when not provided', async () => {
@@ -192,7 +202,9 @@ describe('handleContextRelevance', () => {
         outputString: 'test output',
         providerResponse: { output: 'out', tokenUsage: {} },
       } as any),
-    ).rejects.toThrow('context-relevance assertion requires a "query" variable with the user question');
+    ).rejects.toThrow(
+      'context-relevance assertion requires a "query" variable with the user question',
+    );
   });
 
   it('should use contextTransform when provided', async () => {

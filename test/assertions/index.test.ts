@@ -3042,7 +3042,9 @@ describe('runAssertion', () => {
           test,
           providerResponse: { output: 'Some output' },
         }),
-      ).rejects.toThrow('context-relevance assertion requires a "query" variable with the user question');
+      ).rejects.toThrow(
+        'context-relevance assertion requires a "query" variable with the user question',
+      );
     });
 
     it('should throw an error when context var is missing', async () => {
@@ -3062,7 +3064,9 @@ describe('runAssertion', () => {
           test,
           providerResponse: { output: 'Some output' },
         }),
-      ).rejects.toThrow('Context is required for context-based assertions. Provide either a "context" variable in your test case or use "contextTransform" to extract context from the provider response.');
+      ).rejects.toThrow(
+        'Context is required for context-based assertions. Provide either a "context" variable in your test case or use "contextTransform" to extract context from the provider response.',
+      );
     });
   });
 
@@ -3126,7 +3130,9 @@ describe('runAssertion', () => {
           test,
           providerResponse: { output: 'Some output' },
         }),
-      ).rejects.toThrow('context-faithfulness assertion requires a "query" variable with the user question');
+      ).rejects.toThrow(
+        'context-faithfulness assertion requires a "query" variable with the user question',
+      );
     });
 
     it('should throw an error when context var is missing', async () => {
@@ -3146,7 +3152,9 @@ describe('runAssertion', () => {
           test,
           providerResponse: { output: 'Some output' },
         }),
-      ).rejects.toThrow('Context is required for context-based assertions. Provide either a "context" variable in your test case or use "contextTransform" to extract context from the provider response.');
+      ).rejects.toThrow(
+        'Context is required for context-based assertions. Provide either a "context" variable in your test case or use "contextTransform" to extract context from the provider response.',
+      );
     });
 
     it('should throw an error when output is not a string', async () => {

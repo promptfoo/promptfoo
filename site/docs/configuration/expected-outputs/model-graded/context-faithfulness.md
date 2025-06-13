@@ -11,7 +11,7 @@ The `context-faithfulness` assertion evaluates whether the AI's response is fait
 ```yaml
 assert:
   - type: context-faithfulness
-    threshold: 0.8  # Score from 0 to 1
+    threshold: 0.8 # Score from 0 to 1
 ```
 
 Note: This assertion requires `query`, `context`, and the LLM's output to evaluate faithfulness.
@@ -23,13 +23,13 @@ If your provider returns the context within the response (common in RAG systems)
 ```yaml
 assert:
   - type: context-faithfulness
-    contextTransform: 'output.context'  # Extract from response.context
+    contextTransform: 'output.context' # Extract from response.context
     threshold: 0.8
 ```
 
 For more complex extractions:
 
-```yaml  
+```yaml
 assert:
   - type: context-faithfulness
     contextTransform: 'output.retrieved_docs.map(d => d.content).join("\n")'
@@ -49,8 +49,8 @@ The context faithfulness checker:
 ```yaml
 tests:
   - vars:
-      query: "What is the capital of France?"
-      context: "France is a country in Europe. Paris is the capital and largest city of France."
+      query: 'What is the capital of France?'
+      context: 'France is a country in Europe. Paris is the capital and largest city of France.'
     assert:
       - type: context-faithfulness
         threshold: 0.8

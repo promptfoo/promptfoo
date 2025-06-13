@@ -1,6 +1,6 @@
 import { handleContextFaithfulness } from '../../src/assertions/contextFaithfulness';
-import * as matchers from '../../src/matchers';
 import * as contextUtils from '../../src/assertions/contextUtils';
+import * as matchers from '../../src/matchers';
 
 jest.mock('../../src/matchers');
 jest.mock('../../src/assertions/contextUtils');
@@ -147,9 +147,7 @@ describe('handleContextFaithfulness', () => {
         outputString: 'test output',
         providerResponse: null,
       } as any),
-    ).rejects.toThrow(
-      'context-faithfulness assertion requires a test with variables',
-    );
+    ).rejects.toThrow('context-faithfulness assertion requires a test with variables');
   });
 
   it('should throw error when query is not a string', async () => {
@@ -211,9 +209,7 @@ describe('handleContextFaithfulness', () => {
         outputString: '123',
         providerResponse: null,
       } as any),
-    ).rejects.toThrow(
-      'context-faithfulness assertion requires string output from the provider',
-    );
+    ).rejects.toThrow('context-faithfulness assertion requires string output from the provider');
   });
 
   it('should use contextTransform to extract context', async () => {

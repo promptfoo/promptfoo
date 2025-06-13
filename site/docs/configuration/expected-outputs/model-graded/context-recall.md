@@ -12,7 +12,7 @@ The `context-recall` assertion evaluates whether the provided context contains t
 assert:
   - type: context-recall
     value: 'Expected fact to find in context'
-    threshold: 0.8  # Score from 0 to 1
+    threshold: 0.8 # Score from 0 to 1
 ```
 
 Note: This assertion requires the `context` variable to be set in your test.
@@ -24,7 +24,7 @@ If your provider returns the context within the response (common in RAG systems)
 ```yaml
 assert:
   - type: context-recall
-    contextTransform: 'output.context'  # Extract from response.context
+    contextTransform: 'output.context' # Extract from response.context
     value: 'Expected fact'
     threshold: 0.8
 ```
@@ -52,7 +52,7 @@ The context recall checker:
 ```yaml
 tests:
   - vars:
-      context: "Paris is the capital of France. It has a population of over 2 million people."
+      context: 'Paris is the capital of France. It has a population of over 2 million people.'
     assert:
       - type: context-recall
         value: 'Paris is the capital of France'

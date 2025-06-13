@@ -11,7 +11,7 @@ The `context-relevance` assertion evaluates whether the provided context is rele
 ```yaml
 assert:
   - type: context-relevance
-    threshold: 0.8  # Score from 0 to 1
+    threshold: 0.8 # Score from 0 to 1
 ```
 
 Note: This assertion requires both `query` and `context` variables to be set in your test.
@@ -23,7 +23,7 @@ If your provider returns the context within the response (common in RAG systems)
 ```yaml
 assert:
   - type: context-relevance
-    contextTransform: 'output.context'  # Extract from response.context
+    contextTransform: 'output.context' # Extract from response.context
     threshold: 0.8
 ```
 
@@ -49,8 +49,8 @@ The context relevance checker:
 ```yaml
 tests:
   - vars:
-      query: "What is the capital of France?"
-      context: "France is a country in Europe. Paris is the capital and largest city of France."
+      query: 'What is the capital of France?'
+      context: 'France is a country in Europe. Paris is the capital and largest city of France.'
     assert:
       - type: context-relevance
         threshold: 0.8

@@ -1,7 +1,7 @@
 import { handleContextRecall } from '../../src/assertions/contextRecall';
+import * as contextUtils from '../../src/assertions/contextUtils';
 import * as matchers from '../../src/matchers';
 import type { AssertionParams, ApiProvider, ProviderResponse } from '../../src/types';
-import * as contextUtils from '../../src/assertions/contextUtils';
 
 jest.mock('../../src/matchers');
 jest.mock('../../src/assertions/contextUtils');
@@ -49,7 +49,13 @@ describe('handleContextRecall', () => {
     expect(result.pass).toBe(true);
     expect(result.score).toBe(0.9);
     expect(result.reason).toBe('Context contains expected information');
-    expect(mockMatchesContextRecall).toHaveBeenCalledWith('test context', 'Expected fact', 0.8, {}, { context: 'test context' });
+    expect(mockMatchesContextRecall).toHaveBeenCalledWith(
+      'test context',
+      'Expected fact',
+      0.8,
+      {},
+      { context: 'test context' },
+    );
   });
 
   it('should fail when context recall is below threshold', async () => {
@@ -88,7 +94,13 @@ describe('handleContextRecall', () => {
     expect(result.pass).toBe(false);
     expect(result.score).toBe(0.3);
     expect(result.reason).toBe('Context missing expected information');
-    expect(mockMatchesContextRecall).toHaveBeenCalledWith('test context', 'Missing fact', 0.7, {}, { context: 'incomplete context' });
+    expect(mockMatchesContextRecall).toHaveBeenCalledWith(
+      'test context',
+      'Missing fact',
+      0.7,
+      {},
+      { context: 'incomplete context' },
+    );
   });
 
   it('should use default threshold of 0 when not provided', async () => {
@@ -124,7 +136,13 @@ describe('handleContextRecall', () => {
 
     await handleContextRecall(params);
 
-    expect(mockMatchesContextRecall).toHaveBeenCalledWith('test context', 'test value', 0, {}, { context: 'test context' });
+    expect(mockMatchesContextRecall).toHaveBeenCalledWith(
+      'test context',
+      'test value',
+      0,
+      {},
+      { context: 'test context' },
+    );
   });
 
   it('should fall back to prompt when no context variable', async () => {

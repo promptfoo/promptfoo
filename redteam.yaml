@@ -8,7 +8,7 @@
 # Test Configuration:
 #   Total cases: 3
 #   Plugins:     aegis
-#   Strategies:  
+#   Strategies:
 # ===================================================================
 targets:
   - openai:gpt-4.1-nano
