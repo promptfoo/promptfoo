@@ -130,24 +130,29 @@ export function normalizeTargetPurposeDiscoveryResult(
  *
  * @param target - The target API provider.
  * @param prompt - The prompt to use for the discovery.
+ * @param showProgress - Whether to show the progress bar.
  * @returns The discovery result.
  */
 export async function doTargetPurposeDiscovery(
   target: ApiProvider,
   prompt?: Prompt,
+  showProgress: boolean = true,
 ): Promise<TargetPurposeDiscoveryResult | undefined> {
   // Generate a unique session id to pass to the target across all turns.
   const sessionId = randomUUID();
 
-  const pbar = new cliProgress.SingleBar({
-    format: `Mapping the target {bar} {percentage}% | {value}${DEFAULT_TURN_COUNT ? '/{total}' : ''} turns`,
-    barCompleteChar: '\u2588',
-    barIncompleteChar: '\u2591',
-    hideCursor: true,
-    gracefulExit: true,
-  });
+  let pbar: cliProgress.SingleBar | undefined;
+  if (showProgress) {
+    pbar = new cliProgress.SingleBar({
+      format: `Mapping the target {bar} {percentage}% | {value}${DEFAULT_TURN_COUNT ? '/{total}' : ''} turns`,
+      barCompleteChar: '\u2588',
+      barIncompleteChar: '\u2591',
+      hideCursor: true,
+      gracefulExit: true,
+    });
 
-  pbar.start(DEFAULT_TURN_COUNT, 0);
+    pbar.start(DEFAULT_TURN_COUNT, 0);
+  }
 
   let done = false;
   let question: string | undefined;
@@ -202,7 +207,9 @@ export async function doTargetPurposeDiscovery(
       state = data.state;
 
       if (data.error) {
-        logger.error(`${LOG_PREFIX} Error from remote server: ${data.error}`);
+        const errorMessage = `Error from remote server: ${data.error}`;
+        logger.error(`${LOG_PREFIX} ${errorMessage}`);
+        throw new Error(errorMessage);
       }
       // Should another question be asked?
       else if (!done) {
@@ -218,12 +225,15 @@ export async function doTargetPurposeDiscovery(
         });
 
         if (targetResponse.error) {
-          logger.error(`${LOG_PREFIX} Error from target: ${targetResponse.error}`);
-          if (turn > MAX_TURN_COUNT) {
-            logger.error(`${LOG_PREFIX} Too many retries, giving up.`);
-            return undefined;
-          }
-          continue;
+          const errorMessage = `Error from target: ${targetResponse.error}`;
+          logger.error(`${LOG_PREFIX} ${errorMessage}`);
+          throw new Error(errorMessage);
+        }
+
+        if (turn > MAX_TURN_COUNT) {
+          const errorMessage = `Too many retries, giving up.`;
+          logger.error(`${LOG_PREFIX} ${errorMessage}`);
+          throw new Error(errorMessage);
         }
 
         logger.debug(
@@ -232,17 +242,15 @@ export async function doTargetPurposeDiscovery(
 
         state.answers.push(targetResponse.output);
       }
-    } catch (error) {
-      logger.error(
-        `An unexpected error occurred during target discovery: ${error instanceof Error ? error.message : String(error)}\n${
-          error instanceof Error ? error.stack : ''
-        }`,
-      );
     } finally {
-      pbar.increment(1);
+      if (showProgress) {
+        pbar?.increment(1);
+      }
     }
   }
-  pbar.stop();
+  if (showProgress) {
+    pbar?.stop();
+  }
 
   return discoveryResult ? normalizeTargetPurposeDiscoveryResult(discoveryResult) : undefined;
 }

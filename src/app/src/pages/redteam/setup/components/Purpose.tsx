@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import Code from '@app/components/Code';
 import { useTelemetry } from '@app/hooks/useTelemetry';
+import { callApi } from '@app/utils/api';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
-import { Alert, Tooltip } from '@mui/material';
+import { Alert } from '@mui/material';
 import Accordion from '@mui/material/Accordion';
 import AccordionDetails from '@mui/material/AccordionDetails';
 import AccordionSummary from '@mui/material/AccordionSummary';
@@ -17,11 +18,8 @@ import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Typography from '@mui/material/Typography';
 import { alpha, useTheme } from '@mui/material/styles';
-import {
-  DEFAULT_HTTP_TARGET,
-  EXAMPLE_APPLICATION_DEFINITION,
-  useRedTeamConfig,
-} from '../hooks/useRedTeamConfig';
+import { type TargetPurposeDiscoveryResult } from '@promptfoo/redteam/commands/discover';
+import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import type { ApplicationDefinition } from '../types';
 
 interface PromptsProps {
@@ -50,14 +48,6 @@ export default function Purpose({ onNext }: PromptsProps) {
   ) => {
     if (newMode !== null) {
       setTestMode(newMode);
-      // Clear application definition fields when switching to model testing
-      // TODO: Move this out of this step; if the user switches out of curiosity, their values are cleared, which is a bad UX.
-      // This check should occur during the final review when the user saves the config.
-      if (newMode === 'model') {
-        Object.keys(EXAMPLE_APPLICATION_DEFINITION).forEach((key) => {
-          updateApplicationDefinition(key as keyof ApplicationDefinition, '');
-        });
-      }
       recordEvent('feature_used', { feature: 'redteam_test_mode_change', mode: newMode });
     }
   };
@@ -108,11 +98,49 @@ export default function Purpose({ onNext }: PromptsProps) {
     return `${percentage}%`;
   };
 
+  // =============================================================================
+  // TARGET PURPOSE DISCOVERY ====================================================
+  // =============================================================================
+
+  const [isDiscovering, setIsDiscovering] = useState(false);
+  const [discoveryError, setDiscoveryError] = useState<string | null>(null);
+  const [discoveryResult, setDiscoveryResult] = useState<TargetPurposeDiscoveryResult | null>(null);
+
+  const handleTargetPurposeDiscovery = React.useCallback(async () => {
+    recordEvent('feature_used', { feature: 'redteam_config_target_test' });
+    try {
+      setIsDiscovering(true);
+      const response = await callApi('/providers/discover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config.target),
+      });
+
+      if (!response.ok) {
+        const { error } = (await response.json()) as { error: string };
+        setDiscoveryError(error);
+        return;
+      }
+
+      const data = (await response.json()) as TargetPurposeDiscoveryResult;
+      setDiscoveryResult(data);
+    } catch (error) {
+      console.error('Error during target purpose discovery:', error);
+      setDiscoveryError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsDiscovering(false);
+    }
+  }, [config.target]);
+
   const hasTargetConfigured = JSON.stringify(config.target) !== JSON.stringify(DEFAULT_HTTP_TARGET);
   const mustDiscoverTargetFromCLI = config.target?.id !== 'http';
   const targetCloudId = 'ebe51faa-d54e-46f3-a451-a93649419af7';
 
   const cliCommandCode = <Code>promptfoo redteam discover -t {targetCloudId}</Code>;
+
+  // =============================================================================
+  // RENDERING ===================================================================
+  // =============================================================================
 
   return (
     <Box sx={{ maxWidth: '1200px', width: '100%', px: 3 }}>
@@ -197,13 +225,33 @@ export default function Purpose({ onNext }: PromptsProps) {
                 cliCommandCode
               ) : (
                 <Stack direction="column" spacing={2}>
-                  <Button variant="contained" disabled={!hasTargetConfigured}>
-                    Discover
+                  <Button
+                    variant="contained"
+                    disabled={!hasTargetConfigured || !!discoveryError || !!discoveryResult}
+                    onClick={handleTargetPurposeDiscovery}
+                    loading={isDiscovering}
+                  >
+                    {isDiscovering ? 'Discovering...' : 'Discover'}
                   </Button>
                   {!hasTargetConfigured && (
                     <Alert severity="error" sx={{ border: 0 }}>
                       You must configure a target to run auto-discovery.
                     </Alert>
+                  )}
+                  {discoveryError && (
+                    <>
+                      <Alert severity="error" sx={{ border: 0 }}>
+                        {discoveryError}
+                      </Alert>
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{ fontStyle: 'italic' }}
+                      >
+                        To re-attempt discovery from your terminal, run:
+                      </Typography>
+                      {cliCommandCode}
+                    </>
                   )}
                 </Stack>
               )}
