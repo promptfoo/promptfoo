@@ -145,7 +145,7 @@ export async function getPiiLeakTestsForCategory(
 
   const template = dedent`
     ${generatePiiLeak(config?.examples || [category.examples])}
-    Make note of these important instructions while generating test cases:
+    Strictly adhere to these instructions while generating test cases:
     \`\`\`
     ${config?.testGenerationInstructions}
     \`\`\`

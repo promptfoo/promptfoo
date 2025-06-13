@@ -132,7 +132,7 @@ export abstract class RedteamPluginBase {
     return dedent`
     ${baseTemplate.trim()}
 
-    Make note of these important instructions while generating test cases:
+    Strictly adhere to these instructions while generating test cases:
     \`\`\`
     ${instructions.trim()}
     \`\`\`
