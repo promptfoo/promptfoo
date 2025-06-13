@@ -1,3 +1,4 @@
+import path from 'path';
 import { disableCache, enableCache, fetchWithCache } from '../../../src/cache';
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
@@ -700,7 +701,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         const result = await provider.callApi('Call external function');
 
         expect(mockImportModule).toHaveBeenCalledWith(
-          '/test/base/path/test/callbacks.js',
+          path.resolve('/test/base/path', 'test/callbacks.js'),
           'testFunction',
         );
         expect(mockExternalFunction).toHaveBeenCalledWith('{"param": "test_value"}');
@@ -834,7 +835,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         const result = await provider.callApi('Call error function');
 
         expect(mockImportModule).toHaveBeenCalledWith(
-          '/test/base/path/nonexistent/module.js',
+          path.resolve('/test/base/path', 'nonexistent/module.js'),
           'errorFunction',
         );
         // Should fall back to original function call object when loading fails
@@ -977,7 +978,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         const result = await provider.callApi('Test parsing');
 
         expect(mockImportModule).toHaveBeenCalledWith(
-          '/test/base/path/deep/path/module.js',
+          path.resolve('/test/base/path', 'deep/path/module.js'),
           'deepExport.nestedFunction',
         );
         expect(mockParsedFunction).toHaveBeenCalledWith('{"data": "parsing_test"}');
@@ -1063,7 +1064,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
         expect(mockInlineFunction).toHaveBeenCalledWith('{"inline": "test"}');
         expect(mockImportModule).toHaveBeenCalledWith(
-          '/test/base/path/mixed/callbacks.js',
+          path.resolve('/test/base/path', 'mixed/callbacks.js'),
           'externalFunc',
         );
         expect(mockExternalFunction).toHaveBeenCalledWith('{"external": "test"}');
