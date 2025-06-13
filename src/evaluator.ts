@@ -1182,11 +1182,41 @@ class Evaluator {
         progressbar.increment({
           provider: evalStep.provider.label || evalStep.provider.id(),
           prompt: evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ' '),
-          vars: Object.entries(evalStep.test.vars || {})
-            .map(([k, v]) => `${k}=${v}`)
-            .join(' ')
-            .slice(0, 10)
-            .replace(/\n/g, ' '),
+          vars: (() => {
+            try {
+              // Constants for progress bar display
+              // Limit individual var values
+              const MAX_VAR_VALUE_LENGTH = 50; 
+              // Limit total vars string length 
+              // Maybe this should vary based on terminal size??
+              const MAX_TOTAL_LENGTH = 200; 
+              
+              const entries = Object.entries(evalStep.test.vars || {});
+              
+              const truncatedEntries = entries.map(([k, v]) => {
+                const valueStr = String(v);
+                const truncatedValue = valueStr.length > MAX_VAR_VALUE_LENGTH
+                  ? valueStr.substring(0, MAX_VAR_VALUE_LENGTH) + '...'
+                  : valueStr;
+                return `${k}=${truncatedValue}`;
+              });
+              
+              const joined = truncatedEntries.join(' ');
+              const result = joined.length > MAX_TOTAL_LENGTH
+                ? joined.substring(0, MAX_TOTAL_LENGTH) + '...'
+                : joined;
+              
+              // Remove newlines from the final result so we don't break the progress bar
+              return result.replace(/\n/g, ' ');
+            } catch (error) {
+              if (error instanceof RangeError) {
+                logger.warn(`RangeError in progress bar vars display: ${error.message}`);
+                return `[${Object.keys(evalStep.test.vars || {}).length} vars - too large to display]`;
+              }
+              logger.error(`Error formatting progress bar vars: ${error}`);
+              return '[vars error]';
+            }
+          })(),
           activeThreads: threadsForThisBar,
         });
       } else {

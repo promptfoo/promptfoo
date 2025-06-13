@@ -13,10 +13,11 @@ import { runPython } from './python/pythonUtils';
 import telemetry from './telemetry';
 import type { ApiProvider, NunjucksFilterMap, Prompt } from './types';
 import { renderVarsInObject } from './util';
-import { isJavascriptFile, isImageFile, isVideoFile, isAudioFile } from './util/fileExtensions';
+import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions';
 import invariant from './util/invariant';
 import { getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
+
 
 export type FileMetadata = Record<string, { path: string; type: string; format?: string }>;
 
@@ -37,6 +38,58 @@ export async function extractTextFromPDF(pdfPath: string): Promise<string> {
   }
 }
 
+// Constants for variable resolution size limits
+const VARIABLE_LIMITS = {
+  MAX_VARIABLE_SIZE: 50 * 1024 * 1024, // 50MB practical limit
+  MAX_RESULT_SIZE: 100 * 1024 * 1024,  // 100MB total result limit
+  SUMMARY_LENGTH: 1000,
+  SMALL_VARIABLE_THRESHOLD: 1000, // For performance optimization
+} as const;
+
+/**
+ * Creates a useful summary of a large variable instead of truncating arbitrarily
+ */
+function createVariableSummary(content: string, varName: string): string {
+  const { SUMMARY_LENGTH } = VARIABLE_LIMITS;
+  
+  // Handle edge case where content is shorter than 2 * SUMMARY_LENGTH
+  if (content.length <= SUMMARY_LENGTH * 2) {
+    return `[${varName}: ${content.length} chars]\n${content}`;
+  }
+  
+  const start = content.substring(0, SUMMARY_LENGTH);
+  const end = content.substring(content.length - SUMMARY_LENGTH);
+  const omittedChars = content.length - (SUMMARY_LENGTH * 2);
+  
+  return `[${varName}: ${content.length} chars - showing first/last ${SUMMARY_LENGTH} chars]\n\nSTART:\n${start}\n\n...[${omittedChars} chars omitted]...\n\nEND:\n${end}`;
+}
+
+/**
+ * Performs replacement in chunks to avoid creating strings that are too large
+ */
+function performChunkedReplacement(template: string, placeholder: string, replacement: string, maxSize: number): string {
+  // Calculate how much of the replacement we can actually include
+  const templateWithoutPlaceholder = template.replace(placeholder, '');
+  const availableSpace = maxSize - templateWithoutPlaceholder.length;
+  
+  if (availableSpace <= 0) {
+    return `[Template too large after variable replacement - ${template.length} chars]`;
+  }
+  
+  if (replacement.length <= availableSpace) {
+    // Replacement fits, do normal replacement
+    return template.replace(placeholder, replacement);
+  } else {
+    // Truncate replacement to fit
+    const truncatedReplacement = replacement.substring(0, availableSpace - 50) + '...[truncated to fit size limits]';
+    return template.replace(placeholder, truncatedReplacement);
+  }
+}
+
+/**
+ * Safely resolves variable substitutions with size limits to prevent RangeError.
+ * Uses a chunked approach for large variables to avoid JavaScript string length limits.
+ */
 export function resolveVariables(
   variables: Record<string, string | object>,
 ): Record<string, string | object> {
@@ -46,25 +99,66 @@ export function resolveVariables(
   let iterations = 0;
   do {
     resolved = true;
-    for (const key of Object.keys(variables)) {
-      if (typeof variables[key] !== 'string') {
-        continue;
-      }
-      const value = variables[key] as string;
-      const match = regex.exec(value);
-      if (match) {
-        const [placeholder, varName] = match;
-        if (variables[varName] === undefined) {
-          // Do nothing - final nunjucks render will fail if necessary.
-          // logger.warn(`Variable "${varName}" not found for substitution.`);
-        } else {
-          variables[key] = value.replace(placeholder, variables[varName] as string);
-          resolved = false; // Indicate that we've made a replacement and should check again
+    iterations++;
+    // Prevent infinite loops
+    if (iterations > 100) {
+      break;
+    }
+    for (const [key, value] of Object.entries(variables)) {
+      if (typeof value === 'string') {
+        const match = regex.exec(value);
+        if (match) {
+          const placeholder = match[0];
+          const varName = match[1];
+          if (variables[varName] === undefined) {
+            // Do nothing - final nunjucks render will fail if necessary.
+            // logger.warn(`Variable "${varName}" not found for substitution.`);
+          } else {
+            try {
+              const replacementValue = String(variables[varName]);
+              
+              // Performance optimization: Quick path for normal-sized variables
+              if (replacementValue.length < VARIABLE_LIMITS.SMALL_VARIABLE_THRESHOLD) {
+                variables[key] = value.replace(placeholder, replacementValue);
+                resolved = false;
+                continue;
+              }
+              
+              // Pre-check sizes to avoid creating strings that are too large
+              if (replacementValue.length > VARIABLE_LIMITS.MAX_VARIABLE_SIZE) {
+                // For extremely large variables, create a summary instead
+                logger.warn(`Large variable detected: ${varName} (${replacementValue.length} chars) - using summary`);
+                const summary = createVariableSummary(replacementValue, varName);
+                variables[key] = value.replace(placeholder, summary);
+              } else {
+                // Estimate final size before replacement
+                const estimatedSize = value.length + replacementValue.length - placeholder.length;
+                
+                if (estimatedSize > VARIABLE_LIMITS.MAX_RESULT_SIZE) {
+                  // Use chunked replacement for large results
+                  logger.warn(`Large result detected for variable ${varName} (estimated ${estimatedSize} chars) - using chunked replacement`);
+                  variables[key] = performChunkedReplacement(value, placeholder, replacementValue, VARIABLE_LIMITS.MAX_RESULT_SIZE);
+                } else {
+                  // Normal replacement for reasonable sizes
+                  variables[key] = value.replace(placeholder, replacementValue);
+                }
+              }
+              resolved = false; // Indicate that we've made a replacement and should check again
+            } catch (error) {
+              if (error instanceof RangeError && error.message.includes('Invalid string length')) {
+                // Ultimate fallback for any remaining RangeErrors
+                logger.error(`RangeError encountered for variable ${key}, using fallback`);
+                variables[key] = `[${key}: content too large for processing]`;
+                resolved = false;
+              } else {
+                throw error;
+              }
+            }
+          }
         }
       }
     }
-    iterations++;
-  } while (!resolved && iterations < 5);
+  } while (!resolved);
 
   return variables;
 }
@@ -258,8 +352,10 @@ export async function renderPrompt(
       vars[key] = (vars[key] as string).replace(/\n$/, '');
     }
   }
+
   // Resolve variable mappings
   resolveVariables(vars);
+
   // Third party integrations
   if (prompt.raw.startsWith('portkey://')) {
     const portKeyResult = await getPortkeyPrompt(prompt.raw.slice('portkey://'.length), vars);
@@ -292,6 +388,7 @@ export async function renderPrompt(
     );
     return heliconeResult;
   }
+
   // Render prompt
   try {
     if (getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE')) {
