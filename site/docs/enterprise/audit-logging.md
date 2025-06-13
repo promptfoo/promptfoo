@@ -22,18 +22,22 @@ Please note that Audit Logging captures operations in the promptfoo control plan
 The following list specifies the supported events and their corresponding actions:
 
 ### Authentication
+
 - **User Login**: `login` - Tracks when users successfully authenticate to the platform
 
 ### User Management
+
 - **User Added**: `user_added` - Records when new users are invited or added to the organization
 - **User Removed**: `user_removed` - Logs when users are removed from the organization
 
 ### Role Management
+
 - **Role Created**: `role_created` - Captures creation of new custom roles
 - **Role Updated**: `role_updated` - Records changes to existing role permissions
 - **Role Deleted**: `role_deleted` - Logs deletion of custom roles
 
 ### Team Management
+
 - **Team Created**: `team_created` - Records creation of new teams
 - **Team Deleted**: `team_deleted` - Logs team deletion
 - **User Added to Team**: `user_added_to_team` - Tracks when users join teams
@@ -41,10 +45,12 @@ The following list specifies the supported events and their corresponding action
 - **User Role Changed in Team**: `user_role_changed_in_team` - Logs role changes within teams
 
 ### Permission Management
+
 - **System Admin Added**: `org_admin_added` - Records when system admin permissions are granted
 - **System Admin Removed**: `org_admin_removed` - Logs when system admin permissions are revoked
 
 ### Service Account Management
+
 - **Service Account Created**: `service_account_created` - Tracks creation of API service accounts
 - **Service Account Deleted**: `service_account_deleted` - Records deletion of service accounts
 
@@ -57,7 +63,7 @@ The audit log entries are stored in JSON format with the following structure:
   "id": "unique-log-entry-id",
   "description": "Human-readable description of the action",
   "actorId": "ID of the user who performed the action",
-  "actorName": "Name of the user who performed the action", 
+  "actorName": "Name of the user who performed the action",
   "actorEmail": "Email of the user who performed the action",
   "action": "Machine-readable action identifier",
   "actionDisplayName": "Human-readable action name",
@@ -75,6 +81,7 @@ The audit log entries are stored in JSON format with the following structure:
 ### Audit Log Targets
 
 The system tracks changes to the following resource types:
+
 - `USER` - User accounts and profiles
 - `ROLE` - Custom roles and permissions
 - `TEAM` - Team structures and memberships
@@ -86,6 +93,7 @@ The system tracks changes to the following resource types:
 The following examples show the contents of various audit log entries:
 
 ### User Login
+
 ```json
 {
   "id": "550e8400-e29b-41d4-a716-446655440000",
@@ -105,9 +113,10 @@ The following examples show the contents of various audit log entries:
 ```
 
 ### Team Creation
+
 ```json
 {
-  "id": "550e8400-e29b-41d4-a716-446655440001", 
+  "id": "550e8400-e29b-41d4-a716-446655440001",
   "description": "jane.smith@example.com created team Engineering",
   "actorId": "user-789",
   "actorName": "Jane Smith",
@@ -124,12 +133,13 @@ The following examples show the contents of various audit log entries:
 ```
 
 ### Role Update
+
 ```json
 {
   "id": "550e8400-e29b-41d4-a716-446655440002",
   "description": "admin@example.com updated role Developer",
   "actorId": "user-456",
-  "actorName": "Admin User", 
+  "actorName": "Admin User",
   "actorEmail": "admin@example.com",
   "action": "role_updated",
   "actionDisplayName": "Role Updated",
@@ -162,7 +172,7 @@ GET /api/v1/audit-logs
 - `limit` (optional): Number of logs to return (1-100, default: 20)
 - `offset` (optional): Number of logs to skip for pagination (default: 0)
 - `createdAtGte` (optional): Filter logs created after this ISO timestamp
-- `createdAtLte` (optional): Filter logs created before this ISO timestamp  
+- `createdAtLte` (optional): Filter logs created before this ISO timestamp
 - `action` (optional): Filter by specific action type
 - `target` (optional): Filter by specific target type
 - `actorId` (optional): Filter by specific user who performed the action
@@ -170,6 +180,7 @@ GET /api/v1/audit-logs
 ### Authentication
 
 Audit log access requires:
+
 - Valid authentication token
 - Organization administrator privileges
 
@@ -186,7 +197,7 @@ curl -X GET \
 ```json
 {
   "total": 150,
-  "limit": 50, 
+  "limit": 50,
   "offset": 0,
   "logs": [
     {
@@ -194,7 +205,7 @@ curl -X GET \
       "description": "john.doe@example.com logged in",
       "actorId": "user-123",
       "actorName": "John Doe",
-      "actorEmail": "john.doe@example.com", 
+      "actorEmail": "john.doe@example.com",
       "action": "login",
       "actionDisplayName": "User Login",
       "target": "USER",
@@ -233,4 +244,4 @@ For additional support, contact the promptfoo support team with details about yo
 - [Service Accounts](service-accounts.md) - Create API tokens for accessing audit logs
 - [Teams](teams.md) - Learn about team management and permissions
 - [Authentication](authentication.md) - Enterprise authentication and security features
-- [API Reference](https://www.promptfoo.dev/docs/api-reference/#tag/audit-logs) - Complete audit logs API documentation 
+- [API Reference](https://www.promptfoo.dev/docs/api-reference/#tag/audit-logs) - Complete audit logs API documentation
