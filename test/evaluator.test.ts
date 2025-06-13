@@ -63,7 +63,7 @@ jest.mock('../src/esm');
 
 jest.mock('../src/evaluatorHelpers', () => ({
   ...jest.requireActual('../src/evaluatorHelpers'),
-  runExtensionHook: jest.fn(),
+  runExtensionHook: jest.fn().mockImplementation((extensions, hookName, context) => context),
 }));
 
 jest.mock('../src/util/time', () => ({

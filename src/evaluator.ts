@@ -539,7 +539,9 @@ class Evaluator {
   }
 
   async evaluate(): Promise<Eval> {
-    const { testSuite, options } = this;
+    const { options } = this;
+    let { testSuite } = this;
+
     const startTime = Date.now();
     const maxEvalTimeMs = options.maxEvalTimeMs ?? getMaxEvalTimeMs();
     let evalTimedOut = false;
@@ -557,6 +559,7 @@ class Evaluator {
         globalAbortController?.abort();
       }, maxEvalTimeMs);
     }
+
     const vars = new Set<string>();
     const checkAbort = () => {
       if (options.abortSignal?.aborted) {
@@ -573,7 +576,10 @@ class Evaluator {
     const assertionTypes = new Set<string>();
     const rowsWithSelectBestAssertion = new Set<number>();
 
-    await runExtensionHook(testSuite.extensions, 'beforeAll', { suite: testSuite });
+    const beforeAllOut = await runExtensionHook(testSuite.extensions, 'beforeAll', {
+      suite: testSuite,
+    });
+    testSuite = beforeAllOut.suite;
 
     if (options.generateSuggestions) {
       // TODO(ian): Move this into its own command/file
@@ -824,7 +830,7 @@ class Evaluator {
                 evaluateOptions: options,
                 conversations: this.conversations,
                 registers: this.registers,
-                isRedteam: this.testSuite.redteam != null,
+                isRedteam: testSuite.redteam != null,
                 allTests: runEvalOptions,
                 concurrency,
                 abortSignal: options.abortSignal,
@@ -860,9 +866,10 @@ class Evaluator {
         throw new Error('Expected index to be a number');
       }
 
-      await runExtensionHook(testSuite.extensions, 'beforeEach', {
+      const beforeEachOut = await runExtensionHook(testSuite.extensions, 'beforeEach', {
         test: evalStep.test,
       });
+      evalStep.test = beforeEachOut.test;
 
       const rows = await runEval(evalStep);
 

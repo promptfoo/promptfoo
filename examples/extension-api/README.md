@@ -19,6 +19,8 @@ promptfoo supports four types of extension hooks, each triggered at a specific p
 
 Each hook receives a `hookName` parameter and a `context` object containing relevant data for that specific hook type.
 
+The `beforeAll` and `beforeEach` hooks should return the `context` object, while the `afterAll` and `afterEach` hooks should not return anything.
+
 For comprehensive information on implementing and using these hooks, refer to the [Extension Hooks](https://www.promptfoo.dev/docs/configuration/reference/#extension-hooks) section in the official documentation.
 
 ## Configuring Extensions
