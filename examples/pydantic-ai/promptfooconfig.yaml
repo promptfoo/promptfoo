@@ -1,0 +1,60 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: PydanticAI weather agent evaluation
+
+prompts:
+  - "{{query}}"
+
+providers:
+  - id: file://provider.py
+    label: PydanticAI GPT-4o-mini
+    config:
+      model: openai:gpt-4o-mini
+
+  - id: file://provider.py:call_api_with_gpt4 
+    label: PydanticAI GPT-4o
+
+tests:
+  - description: "Basic weather query for major city"
+    vars:
+      query: "What's the weather like in London?"
+    assert:
+      - type: javascript
+        value: "typeof output === 'object' && output.location && output.location.toLowerCase().includes('london')"
+      - type: javascript
+        value: "output.temperature && output.temperature !== 'N/A'"
+
+  - description: "Weather query with specific format request"
+    vars:
+      query: "Can you tell me the current weather conditions in New York including humidity?"
+    assert:
+      - type: javascript
+        value: "output.location && output.location.toLowerCase().includes('new york')"
+      - type: javascript
+        value: "output.humidity && output.humidity !== null"
+
+  - description: "International city weather query"
+    vars:
+      query: "How's the weather in Tokyo today?"
+    assert:
+      - type: javascript
+        value: "output.location && output.location.toLowerCase().includes('tokyo')"
+      - type: javascript
+        value: "!output.error"
+
+  - description: "Weather query with multiple details requested"
+    vars:
+      query: "Tell me about the weather in Sydney - temperature, conditions, and wind speed please"
+    assert:
+      - type: javascript
+        value: "output.location && output.location.toLowerCase().includes('sydney')"
+      - type: javascript
+        value: "output.wind_speed && output.wind_speed !== null"
+
+  - description: "Error handling test"
+    vars:
+      query: "What's the weather like in Atlantis?"  
+    assert:
+      - type: javascript
+        value: "Boolean(output.location || output.error)"
+
+outputPath: ./promptfoo_results.json 
