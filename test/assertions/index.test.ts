@@ -3022,7 +3022,7 @@ describe('runAssertion', () => {
           test,
           providerResponse: { output: 'Some output' },
         }),
-      ).rejects.toThrow('context-relevance assertion type must have a vars object');
+      ).rejects.toThrow('context-relevance assertion requires a test with variables');
     });
 
     it('should throw an error when query var is missing', async () => {
@@ -3042,7 +3042,7 @@ describe('runAssertion', () => {
           test,
           providerResponse: { output: 'Some output' },
         }),
-      ).rejects.toThrow('context-relevance assertion type must have a query var');
+      ).rejects.toThrow('context-relevance assertion requires a "query" variable with the user question');
     });
 
     it('should throw an error when context var is missing', async () => {
@@ -3062,7 +3062,7 @@ describe('runAssertion', () => {
           test,
           providerResponse: { output: 'Some output' },
         }),
-      ).rejects.toThrow('context-relevance assertion type must have a context var');
+      ).rejects.toThrow('Context is required for context-based assertions. Provide either a "context" variable in your test case or use "contextTransform" to extract context from the provider response.');
     });
   });
 
@@ -3106,7 +3106,7 @@ describe('runAssertion', () => {
           test,
           providerResponse: { output: 'Some output' },
         }),
-      ).rejects.toThrow('context-faithfulness assertion type must have a vars object');
+      ).rejects.toThrow('context-faithfulness assertion requires a test with variables');
     });
 
     it('should throw an error when query var is missing', async () => {
@@ -3126,7 +3126,7 @@ describe('runAssertion', () => {
           test,
           providerResponse: { output: 'Some output' },
         }),
-      ).rejects.toThrow('context-faithfulness assertion type must have a query var');
+      ).rejects.toThrow('context-faithfulness assertion requires a "query" variable with the user question');
     });
 
     it('should throw an error when context var is missing', async () => {
@@ -3146,7 +3146,7 @@ describe('runAssertion', () => {
           test,
           providerResponse: { output: 'Some output' },
         }),
-      ).rejects.toThrow('context-faithfulness assertion type must have a context var');
+      ).rejects.toThrow('Context is required for context-based assertions. Provide either a "context" variable in your test case or use "contextTransform" to extract context from the provider response.');
     });
 
     it('should throw an error when output is not a string', async () => {
@@ -3167,7 +3167,7 @@ describe('runAssertion', () => {
           test,
           providerResponse: { output: { some: 'object' } },
         }),
-      ).rejects.toThrow('context-faithfulness assertion type must have a string output');
+      ).rejects.toThrow('context-faithfulness assertion requires string output from the provider');
     });
   });
 
