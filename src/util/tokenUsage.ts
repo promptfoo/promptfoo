@@ -1,5 +1,4 @@
 import logger from '../logger';
-import type { ApiProvider } from '../types/providers';
 import type { TokenUsage } from '../types/shared';
 
 /**
@@ -174,61 +173,4 @@ export class TokenUsageTracker {
 
     return result;
   }
-}
-
-/**
- * Decorator function to wrap a provider's callApi method to track token usage
- * @param provider The provider to instrument
- * @returns The instrumented provider
- */
-export function withTokenTracking<T extends ApiProvider>(provider: T): T {
-  const originalCallApi = provider.callApi;
-
-  provider.callApi = async (...args) => {
-    const response = await originalCallApi.apply(provider, args);
-    if (response.tokenUsage) {
-      const providerId = provider.id();
-      // Include the provider's class in the tracking ID
-      const trackingId = provider.constructor?.name
-        ? `${providerId} (${provider.constructor.name})`
-        : providerId;
-
-      TokenUsageTracker.getInstance().trackUsage(trackingId, response.tokenUsage);
-    }
-    return response;
-  };
-
-  return provider;
-}
-
-/**
- * Get the cumulative token usage from a provider
- * @param provider The provider to get token usage from
- * @returns The cumulative token usage
- */
-export function getCumulativeTokenUsage(provider: ApiProvider): TokenUsage | undefined {
-  return TokenUsageTracker.getInstance().getProviderUsage(provider.id());
-}
-
-/**
- * Reset the cumulative token usage for a provider
- * @param provider The provider to reset token usage for
- */
-export function resetCumulativeTokenUsage(provider: ApiProvider): void {
-  TokenUsageTracker.getInstance().resetProviderUsage(provider.id());
-}
-
-/**
- * Get the total token usage across all providers
- * @returns The total token usage
- */
-export function getTotalTokenUsage(): TokenUsage {
-  return TokenUsageTracker.getInstance().getTotalUsage();
-}
-
-/**
- * Reset token usage for all providers
- */
-export function resetAllProviderTokenUsage(): void {
-  TokenUsageTracker.getInstance().resetAllUsage();
 }
