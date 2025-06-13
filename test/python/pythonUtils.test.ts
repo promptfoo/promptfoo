@@ -33,16 +33,14 @@ const mockPythonShellInstance = {
   stderr: { on: jest.fn() },
   end: jest.fn(),
 };
+
 jest.mock('python-shell', () => ({
   PythonShell: jest.fn(() => mockPythonShellInstance),
 }));
 
-// Helper to create a minimal ChildProcess-like object for mocks
-function createMockChildProcess(): ChildProcess {
-  // Create dummy streams to satisfy type requirements
-  const dummyWritable = Object.assign(new Writable(), {});
-  const dummyReadable = Object.assign(new Readable({ read() {} }), {});
-  // @ts-expect-error: Only minimal fields for testing
+function createMockChildProcess(): Partial<ChildProcess> {
+  const dummyWritable = new Writable();
+  const dummyReadable = new Readable({ read() {} });
   return {
     stdin: dummyWritable,
     stdout: dummyReadable,
@@ -84,7 +82,7 @@ describe('pythonUtils', () => {
       jest.mocked(execAsync).mockResolvedValue({
         stdout: 'Python 3.8.10\n',
         stderr: '',
-        child: createMockChildProcess(),
+        child: createMockChildProcess() as ChildProcess,
       });
 
       const result = await pythonUtils.tryPath('/usr/bin/python3');
@@ -102,30 +100,29 @@ describe('pythonUtils', () => {
 
     it('should return null if the command times out', async () => {
       jest.useFakeTimers();
-      jest.mocked(execAsync).mockImplementation(() => {
-        return Object.assign(
-          new Promise<{ stdout: string; stderr: string }>((resolve) => {
-            setTimeout(
-              () =>
-                resolve({
-                  stdout: 'Python 3.8.10\n',
-                  stderr: '',
-                }),
-              3000,
-            );
-          }),
-          { child: createMockChildProcess() },
-        );
-      });
+      const mockChildProcess = createMockChildProcess() as ChildProcess;
+      const execPromise = new Promise<{ stdout: string; stderr: string; child: ChildProcess }>(
+        (resolve) => {
+          setTimeout(() => {
+            resolve({
+              stdout: 'Python 3.8.10\n',
+              stderr: '',
+              child: mockChildProcess,
+            });
+          }, 3000);
+        },
+      );
+
+      jest.mocked(execAsync).mockReturnValue(execPromise as any);
 
       const resultPromise = pythonUtils.tryPath('/usr/bin/python3');
       jest.advanceTimersByTime(2501);
-      const result = await resultPromise;
 
+      const result = await resultPromise;
       expect(result).toBeNull();
       expect(execAsync).toHaveBeenCalledWith('/usr/bin/python3 --version');
       jest.useRealTimers();
-    }, 10000);
+    });
   });
 
   describe('validatePythonPath', () => {
@@ -133,7 +130,7 @@ describe('pythonUtils', () => {
       jest.mocked(execAsync).mockResolvedValue({
         stdout: 'Python 3.8.10\n',
         stderr: '',
-        child: createMockChildProcess(),
+        child: createMockChildProcess() as ChildProcess,
       });
 
       const result = await pythonUtils.validatePythonPath('python', false);
@@ -155,7 +152,7 @@ describe('pythonUtils', () => {
         .mockResolvedValueOnce({
           stdout: 'Python 3.9.5\n',
           stderr: '',
-          child: createMockChildProcess(),
+          child: createMockChildProcess() as ChildProcess,
         });
 
       const result = await pythonUtils.validatePythonPath('non_existent_program', false);
@@ -167,7 +164,7 @@ describe('pythonUtils', () => {
       jest.mocked(execAsync).mockRejectedValue(new Error('Command failed'));
 
       await expect(pythonUtils.validatePythonPath('non_existent_program', true)).rejects.toThrow(
-        /Python 3 not found\. Tried "non_existent_program"/,
+        'Python 3 not found. Tried "non_existent_program"',
       );
       expect(execAsync).toHaveBeenCalledWith('non_existent_program --version');
     });
@@ -176,7 +173,7 @@ describe('pythonUtils', () => {
       jest.mocked(execAsync).mockRejectedValue(new Error('Command failed'));
 
       await expect(pythonUtils.validatePythonPath('python', false)).rejects.toThrow(
-        /Python 3 not found\. Tried "python" and ".+"/,
+        'Python 3 not found. Tried "python" and',
       );
       expect(execAsync).toHaveBeenCalledTimes(2);
     });
@@ -186,12 +183,94 @@ describe('pythonUtils', () => {
       jest.mocked(execAsync).mockResolvedValue({
         stdout: 'Python 3.8.10\n',
         stderr: '',
-        child: createMockChildProcess(),
+        child: createMockChildProcess() as ChildProcess,
       });
 
       const result = await pythonUtils.validatePythonPath('/custom/python/path', true);
       expect(result).toBe('/custom/python/path');
       expect(execAsync).toHaveBeenCalledWith('/custom/python/path --version');
+    });
+
+    it('should share validation promise between concurrent calls', async () => {
+      jest.mocked(execAsync).mockResolvedValue({
+        stdout: 'Python 3.8.10\n',
+        stderr: '',
+        child: createMockChildProcess() as ChildProcess,
+      });
+
+      const promise1 = pythonUtils.validatePythonPath('python', false);
+      const promise2 = pythonUtils.validatePythonPath('python', false);
+
+      expect(pythonUtils.validationPromise).toBeTruthy();
+      expect(promise1).toEqual(promise2);
+
+      const [result1, result2] = await Promise.all([promise1, promise2]);
+      expect(result1).toBe('python');
+      expect(result2).toBe('python');
+      expect(execAsync).toHaveBeenCalledTimes(1);
+      expect(pythonUtils.validationPromise).toBeNull();
+    });
+
+    it('should clear validation promise after successful validation', async () => {
+      jest.mocked(execAsync).mockResolvedValue({
+        stdout: 'Python 3.8.10\n',
+        stderr: '',
+        child: createMockChildProcess() as ChildProcess,
+      });
+
+      await pythonUtils.validatePythonPath('python', false);
+      expect(pythonUtils.validationPromise).toBeNull();
+    });
+
+    it('should clear validation promise after failed validation', async () => {
+      jest.mocked(execAsync).mockRejectedValue(new Error('Command failed'));
+
+      await expect(pythonUtils.validatePythonPath('python', true)).rejects.toThrow(
+        'Python 3 not found. Tried "python"',
+      );
+      expect(pythonUtils.validationPromise).toBeNull();
+    });
+
+    it('should handle race conditions between concurrent validation attempts', async () => {
+      const mockChildProcess = createMockChildProcess() as ChildProcess;
+      let firstResolve:
+        | ((value: { stdout: string; stderr: string; child: ChildProcess }) => void)
+        | undefined;
+
+      const firstPromise = new Promise<{ stdout: string; stderr: string; child: ChildProcess }>(
+        (resolve) => {
+          firstResolve = resolve;
+        },
+      );
+
+      jest
+        .mocked(execAsync)
+        .mockReturnValueOnce(firstPromise as any)
+        .mockResolvedValueOnce({
+          stdout: 'Python 3.9.0\n',
+          stderr: '',
+          child: mockChildProcess,
+        } as any);
+
+      const promise1 = pythonUtils.validatePythonPath('python3.8', false);
+      const promise2 = pythonUtils.validatePythonPath('python3.9', false);
+
+      expect(pythonUtils.validationPromise).toBeTruthy();
+      expect(promise1).toEqual(promise2);
+
+      if (firstResolve) {
+        firstResolve({
+          stdout: 'Python 3.8.0\n',
+          stderr: '',
+          child: mockChildProcess,
+        });
+      }
+
+      const [result1, result2] = await Promise.all([promise1, promise2]);
+      expect(result1).toBe('python3.8');
+      expect(result2).toBe('python3.8');
+      expect(execAsync).toHaveBeenCalledTimes(1);
+      expect(pythonUtils.validationPromise).toBeNull();
     });
   });
 
