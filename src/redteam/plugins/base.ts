@@ -121,8 +121,8 @@ export abstract class RedteamPluginBase {
    * Combines the base template with test generation instructions.
    * @returns A promise that resolves to the combined template string.
    */
-  protected async getCombinedTemplate(): Promise<string> {
-    const baseTemplate = await this.getTemplate();
+  protected async getCombinedTemplate(templateOverride?: string): Promise<string> {
+    const baseTemplate = templateOverride ?? (await this.getTemplate());
     const instructions = this.getTestGenerationInstructions();
 
     if (!instructions.trim()) {

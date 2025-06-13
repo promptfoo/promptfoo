@@ -17,6 +17,10 @@ export type PluginConfig = RedteamObjectConfig & {
   targetIdentifiers?: string[];
   // BFLA
   targetSystems?: string[];
+  // Competitor
+  mentions?: boolean;
+  // SSRF
+  targetUrls?: string[];
 };
 export type StrategyConfig = RedteamObjectConfig;
 
