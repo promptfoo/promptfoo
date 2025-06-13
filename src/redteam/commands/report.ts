@@ -34,10 +34,11 @@ export function redteamReportCommand(program: Command) {
         if (directory) {
           setConfigDirectoryPath(directory);
         }
-
-        logger.warn(
-          'The --filter-description option is deprecated and not longer supported. The argument will be ignored.',
-        );
+        if (cmdObj.filterDescription) {
+          logger.warn(
+            'The --filter-description option is deprecated and not longer supported. The argument will be ignored.',
+          );
+        }
 
         const isRunning = await checkServerRunning();
         if (isRunning) {

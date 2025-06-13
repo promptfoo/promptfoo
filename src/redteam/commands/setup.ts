@@ -33,10 +33,11 @@ export function redteamSetupCommand(program: Command) {
         if (directory) {
           setConfigDirectoryPath(directory);
         }
-
-        logger.warn(
-          'The --filter-description option is deprecated and not longer supported. The argument will be ignored.',
-        );
+        if (cmdObj.filterDescription) {
+          logger.warn(
+            'The --filter-description option is deprecated and not longer supported. The argument will be ignored.',
+          );
+        }
 
         const isRunning = await checkServerRunning();
         const browserBehavior = BrowserBehavior.OPEN_TO_REDTEAM_CREATE;
