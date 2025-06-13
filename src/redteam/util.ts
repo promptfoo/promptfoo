@@ -1,8 +1,10 @@
+import dedent from 'dedent';
 import { fetchWithCache } from '../cache';
 import logger from '../logger';
 import { REQUEST_TIMEOUT_MS } from '../providers/shared';
 import { pluginDescriptions } from './constants';
 import { getRemoteGenerationUrl } from './remoteGeneration';
+import type { PluginConfig } from './types';
 
 /**
  * Normalizes different types of apostrophes to a standard single quote
@@ -265,4 +267,25 @@ export async function extractGoalFromPrompt(
     logger.warn(`Error extracting goal: ${error}`);
     return null;
   }
+}
+
+export function applyTestGenerationInstructions({
+  config,
+  template,
+}: {
+  config?: PluginConfig;
+  template: string;
+}): string {
+  if (!config?.testGenerationInstructions) {
+    return '';
+  }
+
+  return dedent`
+    ${template.trim()}
+
+    Strictly adhere to these instructions while generating test cases:
+    \`\`\`
+    ${config?.testGenerationInstructions}
+    \`\`\`
+  `.trim();
 }

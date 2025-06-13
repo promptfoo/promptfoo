@@ -18,7 +18,13 @@ import invariant from '../../util/invariant';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { redteamProviderManager } from '../providers/shared';
-import { getShortPluginId, isBasicRefusal, isEmptyResponse, removePrefix } from '../util';
+import {
+  applyTestGenerationInstructions,
+  getShortPluginId,
+  isBasicRefusal,
+  isEmptyResponse,
+  removePrefix,
+} from '../util';
 
 /**
  * Parses the LLM response of generated prompts into an array of objects.
@@ -123,20 +129,7 @@ export abstract class RedteamPluginBase {
    */
   protected async getCombinedTemplate(templateOverride?: string): Promise<string> {
     const baseTemplate = templateOverride ?? (await this.getTemplate());
-    const instructions = this.getTestGenerationInstructions();
-
-    if (!instructions.trim()) {
-      return baseTemplate;
-    }
-
-    return dedent`
-    ${baseTemplate.trim()}
-
-    Strictly adhere to these instructions while generating test cases:
-    \`\`\`
-    ${instructions.trim()}
-    \`\`\`
-    `.trim();
+    return applyTestGenerationInstructions({ config: this.config, template: baseTemplate });
   }
 
   /**
