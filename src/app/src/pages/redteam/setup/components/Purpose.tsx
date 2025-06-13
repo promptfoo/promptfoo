@@ -1,8 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import Code from '@app/components/Code';
 import { useTelemetry } from '@app/hooks/useTelemetry';
+import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
+import { formatToolsAsJSDocs } from '@app/utils/discovery';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import { Alert } from '@mui/material';
@@ -11,11 +14,12 @@ import AccordionDetails from '@mui/material/AccordionDetails';
 import AccordionSummary from '@mui/material/AccordionSummary';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import Grid from '@mui/material/Grid';
+import IconButton from '@mui/material/IconButton';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { alpha, useTheme } from '@mui/material/styles';
 import { type TargetPurposeDiscoveryResult } from '@promptfoo/redteam/commands/discover';
@@ -24,6 +28,106 @@ import type { ApplicationDefinition } from '../types';
 
 interface PromptsProps {
   onNext: () => void;
+}
+
+/**
+ * Component to display auto-discovery results with copy functionality
+ */
+function DiscoveryResult({ text }: { text: string }) {
+  const { showToast } = useToast();
+  const { recordEvent } = useTelemetry();
+  const theme = useTheme();
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast('Copied to clipboard!', 'success');
+      recordEvent('feature_used', { feature: 'redteam_discovery_copy_discovery_result' });
+    } catch (error) {
+      console.error('Failed to copy to clipboard:', error);
+      showToast('Failed to copy to clipboard', 'error');
+    }
+  };
+
+  return (
+    <Box
+      sx={{
+        mb: 2,
+        p: 2,
+        borderRadius: 1,
+        backgroundColor:
+          theme.palette.mode === 'dark'
+            ? alpha(theme.palette.primary.main, 0.1)
+            : alpha(theme.palette.primary.main, 0.05),
+        border: `1px solid ${
+          theme.palette.mode === 'dark'
+            ? alpha(theme.palette.primary.main, 0.3)
+            : alpha(theme.palette.primary.main, 0.2)
+        }`,
+        position: 'relative',
+      }}
+    >
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+        <Box sx={{ flex: 1 }}>
+          <Typography
+            variant="subtitle2"
+            sx={{
+              fontWeight: 'medium',
+              mb: 1,
+              color: theme.palette.primary.main,
+            }}
+          >
+            🔍 Auto-Discovery Result
+          </Typography>
+          <Typography
+            variant="body2"
+            sx={{
+              color:
+                theme.palette.mode === 'dark'
+                  ? theme.palette.text.primary
+                  : theme.palette.text.secondary,
+              lineHeight: 1.5,
+
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              fontSize: '12px',
+              fontFamily: 'monospace',
+            }}
+          >
+            {text}
+          </Typography>
+        </Box>
+        <Tooltip title="Copy to clipboard">
+          <IconButton
+            size="small"
+            onClick={handleCopy}
+            sx={{
+              color: theme.palette.primary.main,
+              '&:hover': {
+                backgroundColor:
+                  theme.palette.mode === 'dark'
+                    ? alpha(theme.palette.primary.main, 0.2)
+                    : alpha(theme.palette.primary.main, 0.1),
+              },
+            }}
+          >
+            <ContentCopyIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      </Box>
+      <Typography
+        variant="caption"
+        sx={{
+          color: theme.palette.text.secondary,
+          fontStyle: 'italic',
+          mt: 1,
+          display: 'block',
+        }}
+      >
+        To use this as a starting point, copy the text and modify it as needed.
+      </Typography>
+    </Box>
+  );
 }
 
 /**
@@ -134,6 +238,11 @@ export default function Purpose({ onNext }: PromptsProps) {
 
   const hasTargetConfigured = JSON.stringify(config.target) !== JSON.stringify(DEFAULT_HTTP_TARGET);
 
+  const toolsAsJSDocs = React.useMemo(
+    () => formatToolsAsJSDocs(discoveryResult?.tools),
+    [discoveryResult],
+  );
+
   // =============================================================================
   // RENDERING ===================================================================
   // =============================================================================
@@ -208,54 +317,48 @@ export default function Purpose({ onNext }: PromptsProps) {
         {testMode === 'application' ? (
           <Stack direction="column" spacing={4}>
             {/* Auto-Discover Target Details */}
-
-            <Stack direction="column" spacing={2}>
-              <Typography variant="h5" gutterBottom sx={{ fontWeight: 'medium' }}>
-                Auto-Discovery
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Get started using 1-click discovery of your target's usage details.
-              </Typography>
-              <Button
-                variant="contained"
-                disabled={!hasTargetConfigured || !!discoveryError || !!discoveryResult}
-                onClick={handleTargetPurposeDiscovery}
-                loading={isDiscovering}
-              >
-                {isDiscovering ? 'Discovering...' : 'Discover'}
-              </Button>
-              {!hasTargetConfigured && (
-                <Alert severity="warning" sx={{ border: 0 }}>
-                  You must configure a target to run auto-discovery.
-                </Alert>
-              )}
-              {discoveryError && (
-                <>
-                  <Alert severity="error" sx={{ border: 0 }}>
-                    {discoveryError}
+            {!discoveryResult && (
+              <Stack direction="column" spacing={2}>
+                <Typography variant="h5" gutterBottom sx={{ fontWeight: 'medium' }}>
+                  Auto-Discovery
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Get started using 1-click discovery of your target's usage details.
+                </Typography>
+                <Button
+                  variant="contained"
+                  disabled={!hasTargetConfigured || !!discoveryError || !!discoveryResult}
+                  onClick={handleTargetPurposeDiscovery}
+                  loading={isDiscovering}
+                >
+                  {isDiscovering ? 'Discovering...' : 'Discover'}
+                </Button>
+                {!hasTargetConfigured && (
+                  <Alert severity="warning" sx={{ border: 0 }}>
+                    You must configure a target to run auto-discovery.
                   </Alert>
-                  <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                    To re-attempt discovery from your terminal:
-                  </Typography>
-                  <Box>
-                    <Typography variant="body2" color="text.secondary">
-                      1. Save Config and export it as YAML
+                )}
+                {discoveryError && (
+                  <>
+                    <Alert severity="error" sx={{ border: 0 }}>
+                      {discoveryError}
+                    </Alert>
+                    <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                      To re-attempt discovery from your terminal:
                     </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      2. Run the command
-                    </Typography>
-                    <Code>promptfoo redteam discover -c yourconfig.yaml</Code>
-                  </Box>
-                </>
-              )}
-              {discoveryResult && (
-                <Stack direction="column" spacing={2}>
-                  <Typography variant="h5" gutterBottom sx={{ fontWeight: 'medium' }}>
-                    Discovery Result
-                  </Typography>
-                </Stack>
-              )}
-            </Stack>
+                    <Box>
+                      <Typography variant="body2" color="text.secondary">
+                        1. Save Config and export it as YAML
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        2. Run the command
+                      </Typography>
+                      <Code>promptfoo redteam discover -c yourconfig.yaml</Code>
+                    </Box>
+                  </>
+                )}
+              </Stack>
+            )}
 
             {/* Main Purpose - Standalone Section */}
             <Stack direction="column" spacing={3}>
@@ -283,6 +386,11 @@ export default function Purpose({ onNext }: PromptsProps) {
                     information provides essential context for generating all types of targeted
                     security attacks and red team tests.
                   </Typography>
+
+                  {discoveryResult && discoveryResult.purpose && (
+                    <DiscoveryResult text={discoveryResult.purpose} />
+                  )}
+
                   <TextField
                     fullWidth
                     value={config.applicationDefinition?.purpose}
@@ -350,6 +458,7 @@ export default function Purpose({ onNext }: PromptsProps) {
                       generate feature-specific attacks including tool discovery, debug access,
                       hijacking attempts, and tests for excessive agency vulnerabilities.
                     </Typography>
+
                     <TextField
                       fullWidth
                       value={config.applicationDefinition?.features}
@@ -406,6 +515,11 @@ export default function Purpose({ onNext }: PromptsProps) {
                       information about what the system will or won't respond to, topics it
                       restricts, input formats, or any other domain-specific rules.
                     </Typography>
+
+                    {discoveryResult && discoveryResult.limitations && (
+                      <DiscoveryResult text={discoveryResult.limitations} />
+                    )}
+
                     <TextField
                       fullWidth
                       value={config.applicationDefinition?.attackConstraints || ''}
@@ -468,6 +582,9 @@ export default function Purpose({ onNext }: PromptsProps) {
                       privilege escalation, malicious resource fetching, and RAG poisoning
                       vulnerabilities.
                     </Typography>
+
+                    {discoveryResult && toolsAsJSDocs && <DiscoveryResult text={toolsAsJSDocs} />}
+
                     <TextField
                       fullWidth
                       value={config.applicationDefinition?.hasAccessTo}
@@ -813,6 +930,11 @@ export default function Purpose({ onNext }: PromptsProps) {
                   prompt extraction, system prompt override, and role-based security
                   vulnerabilities.
                 </Typography>
+
+                {discoveryResult && discoveryResult.user && (
+                  <DiscoveryResult text={discoveryResult.user} />
+                )}
+
                 <TextField
                   fullWidth
                   value={config.applicationDefinition?.redteamUser}
