@@ -63,8 +63,6 @@ The context recall checker:
 2. Evaluates the completeness and accuracy of information retrieval
 3. Returns a score from 0 to 1, where 1 means the context fully contains the expected information
 
-
-
 # Further reading
 
 See [model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more options.

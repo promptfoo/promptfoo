@@ -214,8 +214,6 @@ The `load_context.py` script defines two functions:
 - `get_var(var_name, prompt, other_vars)`: This is a special function that promptfoo looks for when loading dynamic variables.
   - `retrieve_documents(question: str) -> str`: This function takes the `question` as input and retrieves relevant documents based on the question. You can implement your own logic here to search a vector database or do anything else to fetch context.
 
-
-
 ### Run the eval
 
 The `promptfoo eval` command will run the evaluation and check if your tests are passed. Use the web viewer to view the test output. You can click into a test case to see the full prompt, as well as the test outcomes.
@@ -355,7 +353,7 @@ tests:
     assert:
       - type: context-faithfulness
         threshold: 0.8
-      - type: context-relevance  
+      - type: context-relevance
         threshold: 0.7
       - type: context-recall
         value: 'Expected information to verify'

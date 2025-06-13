@@ -13,12 +13,13 @@ npx promptfoo@latest init --example rag-eval
 RAG systems combine retrieval of relevant information with language model generation. This example shows how to evaluate RAG systems using promptfoo's context-based assertions:
 
 - `context-faithfulness` - Checks if the answer is faithful to the context without hallucinations
-- `context-relevance` - Checks if the context is relevant to the query  
+- `context-relevance` - Checks if the context is relevant to the query
 - `context-recall` - Checks if the context contains expected information
 
 ## Prerequisites
 
 Set your OpenAI API key:
+
 ```bash
 export OPENAI_API_KEY=your_api_key_here
 ```
@@ -34,6 +35,7 @@ promptfoo eval -c promptfooconfig.yaml
 ```
 
 **Configuration example:**
+
 ```yaml
 tests:
   - vars:
@@ -47,6 +49,7 @@ tests:
 ```
 
 **When to use:**
+
 - You have explicit control over the context
 - Testing specific context scenarios
 - Your provider only returns the generated answer
@@ -60,6 +63,7 @@ promptfoo eval -c promptfooconfig.contextTransform.yaml
 ```
 
 **Configuration example:**
+
 ```yaml
 tests:
   - vars:
@@ -73,6 +77,7 @@ tests:
 ```
 
 **When to use:**
+
 - Your RAG system returns context alongside the generated response
 - You want to evaluate the actual context used by the model
 - You need to extract context from structured or formatted responses
@@ -80,6 +85,7 @@ tests:
 ## Provider Response Format
 
 The contextTransform example uses a provider that returns responses like:
+
 ```
 CONTEXT: Company Policy: Maximum purchase without approval is $500...
 
@@ -91,6 +97,7 @@ The `contextTransform` expression extracts everything between "CONTEXT:" and "AN
 ## Key Features Demonstrated
 
 ### Simple context extraction
+
 ```yaml
 - type: context-faithfulness
   contextTransform: 'output.context'
@@ -98,6 +105,7 @@ The `contextTransform` expression extracts everything between "CONTEXT:" and "AN
 ```
 
 ### Complex JavaScript expressions
+
 ```yaml
 - type: context-relevance
   contextTransform: 'output.split("CONTEXT:")[1]?.split("ANSWER:")[0]?.trim() || ""'
@@ -105,12 +113,19 @@ The `contextTransform` expression extracts everything between "CONTEXT:" and "AN
 ```
 
 ### Multiple context assertions
+
 All three context assertions work with both approaches:
+
 - `context-faithfulness` - Prevents hallucinations
 - `context-relevance` - Ensures relevant retrieval
 - `context-recall` - Verifies information completeness
 
-**Note:** Context-based assertions use AI grading and can be sensitive to threshold settings. Start with lower thresholds (0.3-0.5) and adjust based on your specific use case and quality requirements.
+**Note:** Context-based assertions use AI grading and can be sensitive to threshold settings. This example includes both passing and failing test cases to demonstrate:
+
+- **Passing cases**: Relevant context with reasonable thresholds (0.3)
+- **Failing cases**: Missing/irrelevant context with high thresholds (0.7+)
+
+Start with lower thresholds (0.3-0.5) and adjust based on your specific use case and quality requirements.
 
 ## Viewing Results
 

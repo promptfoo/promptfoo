@@ -26,7 +26,7 @@ tests:
       - type: context-faithfulness
         contextTransform: 'output.split("CONTEXT:")[1]?.split("ANSWER:")[0]?.trim() || ""'
         threshold: 0.3
-        
+
   - vars:
       query: How many weeks is maternity leave?
     assert:
@@ -35,10 +35,26 @@ tests:
         value: '4 months'
       - type: contains
         value: 'maternity'
-      # Demonstrate contextTransform functionality  
+      # Demonstrate contextTransform functionality
       - type: context-relevance
         contextTransform: 'output.split("CONTEXT:")[1]?.split("ANSWER:")[0]?.trim() || ""'
         threshold: 0.3
       - type: context-faithfulness
         contextTransform: 'output.split("CONTEXT:")[1]?.split("ANSWER:")[0]?.trim() || ""'
-        threshold: 0.3 
+        threshold: 0.3
+
+  # Example that demonstrates failure scenarios
+  - vars:
+      query: What is our remote work policy?
+    assert:
+      # This will likely pass as it's basic content checking
+      - type: contains
+        value: 'work'
+      # These are likely to fail due to irrelevant context and high thresholds
+      - type: context-relevance
+        contextTransform: 'output.split("CONTEXT:")[1]?.split("ANSWER:")[0]?.trim() || ""'
+        threshold: 0.8
+      - type: context-recall
+        contextTransform: 'output.split("CONTEXT:")[1]?.split("ANSWER:")[0]?.trim() || ""'
+        threshold: 0.7
+        value: remote work policy allows working from home 3 days per week
