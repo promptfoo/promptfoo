@@ -1,10 +1,14 @@
+import path from 'path';
 import { OpenAiGenericProvider } from '.';
 import { fetchWithCache } from '../../cache';
+import cliState from '../../cliState';
+import { importModule } from '../../esm';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
 import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util';
+import { isJavascriptFile } from '../../util/fileExtensions';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
@@ -21,6 +25,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   config: OpenAiCompletionOptions;
   private mcpClient: MCPClient | null = null;
   private initializationPromise: Promise<void> | null = null;
+  private loadedFunctionCallbacks: Record<string, Function> = {};
 
   constructor(
     modelName: string,
@@ -47,6 +52,113 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       await this.initializationPromise;
       await this.mcpClient.cleanup();
       this.mcpClient = null;
+    }
+  }
+
+  /**
+   * Loads a function from an external file
+   * @param fileRef The file reference in the format 'file://path/to/file:functionName'
+   * @returns The loaded function
+   */
+  private async loadExternalFunction(fileRef: string): Promise<Function> {
+    let filePath = fileRef.slice('file://'.length);
+    let functionName: string | undefined;
+
+    if (filePath.includes(':')) {
+      const splits = filePath.split(':');
+      if (splits[0] && isJavascriptFile(splits[0])) {
+        [filePath, functionName] = splits;
+      }
+    }
+
+    try {
+      const resolvedPath = path.resolve(cliState.basePath || '', filePath);
+      logger.debug(
+        `Loading function from ${resolvedPath}${functionName ? `:${functionName}` : ''}`,
+      );
+
+      const requiredModule = await importModule(resolvedPath, functionName);
+
+      if (typeof requiredModule === 'function') {
+        return requiredModule;
+      } else if (
+        requiredModule &&
+        typeof requiredModule === 'object' &&
+        functionName &&
+        functionName in requiredModule
+      ) {
+        const fn = requiredModule[functionName];
+        if (typeof fn === 'function') {
+          return fn;
+        }
+      }
+
+      throw new Error(
+        `Function callback malformed: ${filePath} must export ${
+          functionName
+            ? `a named function '${functionName}'`
+            : 'a function or have a default export as a function'
+        }`,
+      );
+    } catch (error: any) {
+      throw new Error(`Error loading function from ${filePath}: ${error.message || String(error)}`);
+    }
+  }
+
+  /**
+   * Executes a function callback with proper error handling
+   */
+  private async executeFunctionCallback(functionName: string, args: string, config: OpenAiCompletionOptions): Promise<string> {
+    try {
+      // Check if we've already loaded this function
+      let callback = this.loadedFunctionCallbacks[functionName];
+
+      // If not loaded yet, try to load it now
+      if (!callback) {
+        const callbackRef = config.functionToolCallbacks?.[functionName];
+
+        if (callbackRef && typeof callbackRef === 'string') {
+          const callbackStr: string = callbackRef;
+          if (callbackStr.startsWith('file://')) {
+            callback = await this.loadExternalFunction(callbackStr);
+          } else {
+            callback = new Function('return ' + callbackStr)();
+          }
+
+          // Cache for future use
+          this.loadedFunctionCallbacks[functionName] = callback;
+        } else if (typeof callbackRef === 'function') {
+          callback = callbackRef;
+          this.loadedFunctionCallbacks[functionName] = callback;
+        }
+      }
+
+      if (!callback) {
+        throw new Error(`No callback found for function '${functionName}'`);
+      }
+
+      // Execute the callback
+      logger.debug(`Executing function '${functionName}' with args: ${args}`);
+      const result = await callback(args);
+
+      // Format the result
+      if (result === undefined || result === null) {
+        return '';
+      } else if (typeof result === 'object') {
+        try {
+          return JSON.stringify(result);
+        } catch (error) {
+          logger.warn(`Error stringifying result from function '${functionName}': ${error}`);
+          return String(result);
+        }
+      } else {
+        return String(result);
+      }
+    } catch (error: any) {
+      logger.error(`Error executing function '${functionName}': ${error.message || String(error)}`);
+      return JSON.stringify({
+        error: `Error in ${functionName}: ${error.message || String(error)}`,
+      });
     }
   }
 
@@ -257,14 +369,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         for (const functionCall of functionCalls) {
           const functionName = functionCall.name || functionCall.function?.name;
           if (config.functionToolCallbacks[functionName]) {
-            try {
-              const functionResult = await config.functionToolCallbacks[functionName](
-                functionCall.arguments || functionCall.function?.arguments,
-              );
-              results.push(functionResult);
-            } catch (error) {
-              logger.error(`Error executing function ${functionName}: ${error}`);
-            }
+            const functionResult = await this.executeFunctionCallback(
+              functionName,
+              functionCall.arguments || functionCall.function?.arguments,
+              config,
+            );
+            results.push(functionResult);
           }
         }
         if (results.length > 0) {

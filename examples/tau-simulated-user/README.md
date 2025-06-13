@@ -41,12 +41,14 @@ Agent: [searches flights and presents options]
 ...
 ```
 
-The agent uses structured function calls to:
+The agent makes structured function calls to:
 
 - Look up customer profiles and preferences
-- Search for available flights
+- Search for available flights  
 - Process bookings and payments
 - Handle modifications and cancellations
+
+**Note**: This example tests the conversation flow and function calling interface, but doesn't execute real airline functions. The AI simulates realistic responses based on the function schemas, making it perfect for testing conversational logic without requiring a full airline booking backend.
 
 ## Sample Customer Personas
 
@@ -85,4 +87,15 @@ The agent can call these booking functions:
 
 ---
 
-**Technical Details**: This example uses `openai:responses:gpt-4.1-mini` with actual function definitions instead of text-based policies, enabling more structured and reliable testing of conversational AI agents.
+## Mock vs Real Function Calling
+
+This example demonstrates **function calling interface testing** rather than real function execution:
+
+- **Function Schemas**: Defined in `functions/*.json` files - these specify the interface
+- **No Backend**: No actual airline booking system is connected
+- **AI Simulation**: The AI continues conversations as if functions returned realistic data
+- **Testing Focus**: Validates conversation flow, function selection, and parameter passing
+
+To connect real functions, you'd need to implement a function execution backend that processes the structured calls and returns actual data.
+
+**Technical Details**: This example uses `openai:responses:gpt-4.1-mini` with function definitions instead of text-based policies, enabling more structured and reliable testing of conversational AI agents. All function schemas are externalized into separate JSON files in the `functions/` directory for better maintainability.

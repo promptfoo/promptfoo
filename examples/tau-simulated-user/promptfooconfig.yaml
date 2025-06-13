@@ -28,192 +28,27 @@ prompts:
     - Travel insurance: $30 per passenger (enables full refund for health/weather cancellations)
 
 providers:
-  - id: openai:responses:gpt-4.1-mini
+  - id: openai:gpt-4.1-mini
     config:
+      max_tokens: 2000
       temperature: 0.1
-      max_output_tokens: 2000
-      tool_choice: auto
       tools:
-        - type: function
-          name: get_user_profile
-          description: 'Get user profile information including membership tier, payment methods, and personal details'
-          parameters:
-            type: object
-            properties:
-              user_id:
-                type: string
-                description: 'The user ID to look up'
-            required: ['user_id']
-
-        - type: function
-          name: search_flights
-          description: 'Search for available flights based on criteria'
-          parameters:
-            type: object
-            properties:
-              origin:
-                type: string
-                description: 'Departure city/airport code'
-              destination:
-                type: string
-                description: 'Arrival city/airport code'
-              departure_date:
-                type: string
-                description: 'Departure date in YYYY-MM-DD format'
-              return_date:
-                type: string
-                description: 'Return date in YYYY-MM-DD format (for round trip)'
-              trip_type:
-                type: string
-                enum: ['one_way', 'round_trip']
-                description: 'Type of trip'
-              cabin_class:
-                type: string
-                enum: ['basic_economy', 'economy', 'business', 'first']
-                description: 'Preferred cabin class'
-              passengers:
-                type: integer
-                description: 'Number of passengers'
-                minimum: 1
-                maximum: 5
-            required: ['origin', 'destination', 'departure_date', 'trip_type', 'passengers']
-
-        - type: function
-          name: book_flight
-          description: 'Book a flight reservation'
-          parameters:
-            type: object
-            properties:
-              user_id:
-                type: string
-                description: 'User ID making the booking'
-              flight_details:
-                type: object
-                description: 'Selected flight information'
-                properties:
-                  outbound_flight:
-                    type: string
-                    description: 'Outbound flight number'
-                  return_flight:
-                    type: string
-                    description: 'Return flight number (for round trip)'
-                  cabin_class:
-                    type: string
-                    enum: ['basic_economy', 'economy', 'business', 'first']
-              passengers:
-                type: array
-                items:
-                  type: object
-                  properties:
-                    first_name:
-                      type: string
-                    last_name:
-                      type: string
-                    date_of_birth:
-                      type: string
-                      description: 'Date of birth in YYYY-MM-DD format'
-                  required: ['first_name', 'last_name', 'date_of_birth']
-              payment_method:
-                type: object
-                properties:
-                  certificates:
-                    type: array
-                    items:
-                      type: string
-                    description: 'Travel certificate IDs (max 1)'
-                  credit_card:
-                    type: string
-                    description: 'Credit card ID from user profile'
-                  gift_cards:
-                    type: array
-                    items:
-                      type: string
-                    description: 'Gift card IDs (max 3)'
-              checked_bags:
-                type: integer
-                description: 'Number of checked bags'
-                minimum: 0
-              travel_insurance:
-                type: boolean
-                description: 'Whether to add travel insurance'
-            required: ['user_id', 'flight_details', 'passengers', 'payment_method']
-
-        - type: function
-          name: get_reservation
-          description: 'Get details of an existing reservation'
-          parameters:
-            type: object
-            properties:
-              user_id:
-                type: string
-                description: 'User ID'
-              reservation_id:
-                type: string
-                description: 'Reservation ID to look up'
-            required: ['user_id', 'reservation_id']
-
-        - type: function
-          name: modify_reservation
-          description: 'Modify an existing reservation'
-          parameters:
-            type: object
-            properties:
-              user_id:
-                type: string
-                description: 'User ID'
-              reservation_id:
-                type: string
-                description: 'Reservation ID to modify'
-              modification_type:
-                type: string
-                enum: ['change_flights', 'change_cabin', 'add_bags', 'update_passenger']
-                description: 'Type of modification'
-              new_details:
-                type: object
-                description: 'New details for the modification'
-              payment_method:
-                type: string
-                description: 'Payment method for additional charges'
-            required: ['user_id', 'reservation_id', 'modification_type']
-
-        - type: function
-          name: cancel_reservation
-          description: 'Cancel an existing reservation'
-          parameters:
-            type: object
-            properties:
-              user_id:
-                type: string
-                description: 'User ID'
-              reservation_id:
-                type: string
-                description: 'Reservation ID to cancel'
-              reason:
-                type: string
-                enum: ['change_of_plan', 'airline_cancelled', 'other']
-                description: 'Reason for cancellation'
-            required: ['user_id', 'reservation_id', 'reason']
-
-        - type: function
-          name: offer_compensation
-          description: 'Offer compensation certificate for flight issues'
-          parameters:
-            type: object
-            properties:
-              user_id:
-                type: string
-                description: 'User ID'
-              reservation_id:
-                type: string
-                description: 'Affected reservation ID'
-              issue_type:
-                type: string
-                enum: ['cancelled_flight', 'delayed_flight']
-                description: 'Type of issue'
-              passenger_count:
-                type: integer
-                description: 'Number of passengers affected'
-            required: ['user_id', 'reservation_id', 'issue_type', 'passenger_count']
+        - file://functions/get_user_profile.json
+        - file://functions/search_flights.json
+        - file://functions/book_flight.json
+        - file://functions/get_reservation.json
+        - file://functions/modify_reservation.json
+        - file://functions/cancel_reservation.json
+        - file://functions/offer_compensation.json
+      tool_choice: 'auto'
+      functionToolCallbacks:
+        get_user_profile: file://callbacks/airline-functions.js:getUserProfile
+        search_flights: file://callbacks/airline-functions.js:searchFlights
+        book_flight: file://callbacks/airline-functions.js:bookFlight
+        get_reservation: file://callbacks/airline-functions.js:getReservation
+        modify_reservation: file://callbacks/airline-functions.js:modifyReservation
+        cancel_reservation: file://callbacks/airline-functions.js:cancelReservation
+        offer_compensation: file://callbacks/airline-functions.js:offerCompensation
 
 defaultTest:
   provider:
@@ -222,8 +57,8 @@ defaultTest:
       maxTurns: 10
 
 tests:
-  # 1
-  - vars:
+  - description: "Budget traveler booking flight"
+    vars:
       instructions: >-
         You are mia_li_3668. You want to fly from New York to Seattle on May 20
         (one way). You do not want to fly before 11am EST. You want to fly in
@@ -234,6 +69,24 @@ tests:
         using the larger one, and pay the rest with your 7447 card. You are
         reactive to the agent and will not say anything that is not asked. Your
         birthday is in your user profile so you do not prefer to provide it.
+
+  - description: "Business traveler booking urgently"
+    vars:
+      instructions: >-
+        You are tony_plus_5980. You want to fly from Paris to Rome on May 18 (one way).
+        You need to arrive by 2pm local time. You want to fly in business. You prefer direct
+        flights but one stopover is fine. You don't care about price. You have 2 checked bags.
+        You want insurance. You want to pay with card ending in 9321. You are in a hurry and
+        want to book quickly. You are impatient if the agent is slow.
+
+  - description: "Traveler with accessibility needs"
+    vars:
+      instructions: >-
+        You are traveler_id_100. You want to fly from London to Sydney on June 15
+        (round trip returning June 25). You need wheelchair assistance. You want to fly
+        in economy. You prefer flights with shorter layovers due to mobility concerns.
+        You have 1 checked bag. You don't want insurance. You want to pay with your
+        credit card. You are polite and patient.
 
   # 2
   - vars:
