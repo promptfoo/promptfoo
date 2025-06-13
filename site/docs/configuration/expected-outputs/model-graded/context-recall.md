@@ -15,21 +15,37 @@ assert:
     threshold: 0.8 # Score from 0 to 1
 ```
 
-Note: This assertion requires the `context` variable to be set in your test.
+## Providing context
 
-## Extracting context from responses
+You can provide context in two ways:
 
-If your provider returns the context within the response (common in RAG systems), use `contextTransform` to extract it:
+### Using context variables
+
+Include the context as a variable in your test case:
+
+```yaml
+tests:
+  - vars:
+      context: 'Paris is the capital of France. It has a population of over 2 million people.'
+    assert:
+      - type: context-recall
+        value: 'Paris is the capital of France'
+        threshold: 0.8
+```
+
+### Extracting from provider responses
+
+If your provider returns context within the response, use `contextTransform`:
 
 ```yaml
 assert:
   - type: context-recall
-    contextTransform: 'output.context' # Extract from response.context
+    contextTransform: 'output.context'
     value: 'Expected fact'
     threshold: 0.8
 ```
 
-For more complex extractions (e.g., combining multiple documents):
+For complex response structures:
 
 ```yaml
 assert:
@@ -47,19 +63,7 @@ The context recall checker:
 2. Evaluates the completeness and accuracy of information retrieval
 3. Returns a score from 0 to 1, where 1 means the context fully contains the expected information
 
-### Example
 
-```yaml
-tests:
-  - vars:
-      context: 'Paris is the capital of France. It has a population of over 2 million people.'
-    assert:
-      - type: context-recall
-        value: 'Paris is the capital of France'
-        threshold: 0.8
-```
-
-The assertion will pass if the provided context contains the expected fact about Paris being France's capital.
 
 # Further reading
 

@@ -214,49 +214,7 @@ The `load_context.py` script defines two functions:
 - `get_var(var_name, prompt, other_vars)`: This is a special function that promptfoo looks for when loading dynamic variables.
   - `retrieve_documents(question: str) -> str`: This function takes the `question` as input and retrieves relevant documents based on the question. You can implement your own logic here to search a vector database or do anything else to fetch context.
 
-### Extracting context from responses
 
-Many RAG systems return the retrieved context alongside the generated response. Instead of requiring separate context variables, you can extract the context directly from the provider response using `contextTransform`.
-
-The `contextTransform` property supports JavaScript expressions and can handle various response formats:
-
-#### Simple context extraction
-
-```yaml
-assert:
-  - type: context-faithfulness
-    contextTransform: 'output.context'
-```
-
-#### Complex context extraction
-
-For responses with multiple documents or nested structures:
-
-```yaml
-assert:
-  - type: context-faithfulness
-    contextTransform: 'output.retrieved_docs.map(d => d.content).join("\n")'
-  - type: context-relevance
-    contextTransform: 'output.sources.filter(s => s.relevance > 0.7).map(s => s.text).join("\n\n")'
-```
-
-#### Using with all context assertions
-
-```yaml
-assert:
-  - type: context-faithfulness
-    contextTransform: 'output.context'
-    threshold: 0.8
-  - type: context-relevance
-    contextTransform: 'output.context'
-    threshold: 0.7
-  - type: context-recall
-    contextTransform: 'output.context'
-    value: 'Expected information to verify'
-    threshold: 0.8
-```
-
-This approach works with any RAG system that includes context in its response, making evaluation more flexible and closer to real-world usage patterns.
 
 ### Run the eval
 
@@ -380,3 +338,54 @@ tests:
 By following this approach and setting up tests on [assertions & metrics](/docs/configuration/expected-outputs), you can ensure that the quality of your RAG pipeline is improving, and prevent regressions.
 
 See the [RAG example](https://github.com/promptfoo/promptfoo/tree/main/examples/rag-full) on GitHub for a fully functioning end-to-end example.
+
+### Context evaluation approaches
+
+There are two ways to provide context for RAG evaluation:
+
+#### Context variables approach
+
+Use this when you have separate context data or want explicit control over what context is used:
+
+```yaml
+tests:
+  - vars:
+      query: 'What is the capital of France?'
+      context: 'France is a country in Europe. Paris is the capital and largest city of France.'
+    assert:
+      - type: context-faithfulness
+        threshold: 0.8
+      - type: context-relevance  
+        threshold: 0.7
+      - type: context-recall
+        value: 'Expected information to verify'
+        threshold: 0.8
+```
+
+#### Response extraction approach
+
+Use this when your RAG system returns context alongside the generated response:
+
+```yaml
+assert:
+  - type: context-faithfulness
+    contextTransform: 'output.context'
+    threshold: 0.8
+  - type: context-relevance
+    contextTransform: 'output.context'
+    threshold: 0.7
+  - type: context-recall
+    contextTransform: 'output.context'
+    value: 'Expected information to verify'
+    threshold: 0.8
+```
+
+For complex response structures, you can use JavaScript expressions:
+
+```yaml
+assert:
+  - type: context-faithfulness
+    contextTransform: 'output.retrieved_docs.map(d => d.content).join("\n")'
+  - type: context-relevance
+    contextTransform: 'output.sources.filter(s => s.relevance > 0.7).map(s => s.text).join("\n\n")'
+```

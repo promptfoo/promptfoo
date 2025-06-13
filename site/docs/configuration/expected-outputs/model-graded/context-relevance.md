@@ -14,20 +14,36 @@ assert:
     threshold: 0.8 # Score from 0 to 1
 ```
 
-Note: This assertion requires both `query` and `context` variables to be set in your test.
+## Providing context
 
-## Extracting context from responses
+You can provide context in two ways:
 
-If your provider returns the context within the response (common in RAG systems), use `contextTransform` to extract it:
+### Using context variables
+
+Include both query and context as variables in your test case:
+
+```yaml
+tests:
+  - vars:
+      query: 'What is the capital of France?'
+      context: 'France is a country in Europe. Paris is the capital and largest city of France.'
+    assert:
+      - type: context-relevance
+        threshold: 0.8
+```
+
+### Extracting from provider responses
+
+If your provider returns context within the response, use `contextTransform`:
 
 ```yaml
 assert:
   - type: context-relevance
-    contextTransform: 'output.context' # Extract from response.context
+    contextTransform: 'output.context'
     threshold: 0.8
 ```
 
-For more complex extractions (e.g., combining multiple documents):
+For complex response structures:
 
 ```yaml
 assert:
@@ -43,20 +59,6 @@ The context relevance checker:
 1. Analyzes the relationship between the user's query and the provided context
 2. Evaluates whether the context contains information that helps answer the query
 3. Returns a score from 0 to 1, where 1 means the context is highly relevant to the query
-
-### Example
-
-```yaml
-tests:
-  - vars:
-      query: 'What is the capital of France?'
-      context: 'France is a country in Europe. Paris is the capital and largest city of France.'
-    assert:
-      - type: context-relevance
-        threshold: 0.8
-```
-
-The assertion will pass if the provided context is relevant to answering the question about France's capital.
 
 # Further reading
 
