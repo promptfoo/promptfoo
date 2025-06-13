@@ -77,21 +77,25 @@ The example evaluates a weather assistant agent that:
 This example demonstrates multiple evaluation patterns:
 
 ### Structured Output Validation
+
 - **Type checking** - Ensures responses match expected schema
 - **Field presence** - Verifies all required fields are populated
 - **JSON structure** - Validates proper data structure
 
 ### Functional Testing
+
 - **Location detection** - Verifies the agent correctly identifies cities
 - **Tool usage** - Confirms proper use of geocoding and weather tools
 - **Cross-model consistency** - Compares behavior across different LLMs
 
 ### Quality Assessment
+
 - **LLM-based rubrics** - Uses AI to evaluate response quality
 - **Decision support** - Tests actionable advice provision
 - **Error handling** - Validates graceful handling of edge cases
 
 ### Performance Testing
+
 - **Latency thresholds** - Ensures responses within acceptable time limits
 - **Complex queries** - Tests performance with multi-part requests
 
@@ -116,10 +120,10 @@ Edit `promptfooconfig.yaml` to add more test scenarios:
 tests:
   - description: 'Your custom test'
     vars:
-      query: "Your weather question"
+      query: 'Your weather question'
     assert:
       - type: javascript
-        value: "your_validation_logic"
+        value: 'your_validation_logic'
 ```
 
 ### Testing Different Models

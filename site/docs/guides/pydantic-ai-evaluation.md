@@ -74,7 +74,7 @@ class WeatherResponse(BaseModel):
 # Agent with dependencies
 class WeatherDeps(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
-    
+
     http_client: httpx.AsyncClient
 
 # Create the agent
@@ -82,7 +82,7 @@ weather_agent = Agent(
     'openai:gpt-4o-mini',
     deps_type=WeatherDeps,
     result_type=WeatherResponse,
-    system_prompt="""You are a helpful weather assistant. Use the available tools to get weather information 
+    system_prompt="""You are a helpful weather assistant. Use the available tools to get weather information
     and provide structured responses. Always be conversational and helpful."""
 )
 
@@ -101,12 +101,12 @@ async def get_coordinates(ctx: RunContext[WeatherDeps], location: str) -> dict:
         'miami': (25.7617, -80.1918),
         'central park': (40.7829, -73.9654),
     }
-    
+
     location_lower = location.lower()
     for key, coords in locations.items():
         if key in location_lower:
             return {'lat': coords[0], 'lon': coords[1], 'name': key.title()}
-    
+
     return {'error': f'Location {location} not found'}
 
 @weather_agent.tool
@@ -114,12 +114,12 @@ async def get_weather(ctx: RunContext[WeatherDeps], lat: float, lon: float) -> d
     """Get weather data for coordinates."""
     # Mock weather data - in production, use real weather API
     import random
-    
+
     conditions = ['sunny', 'cloudy', 'rainy', 'partly cloudy', 'clear']
     temp = random.randint(10, 30)
     humidity = random.randint(30, 90)
     wind = random.randint(5, 25)
-    
+
     return {
         'temperature': f'{temp}°C',
         'description': random.choice(conditions),
@@ -132,7 +132,7 @@ async def run_weather_agent(query: str, model: KnownModelName = 'openai:gpt-4o-m
     """Run the weather agent with a given query."""
     async with httpx.AsyncClient() as client:
         deps = WeatherDeps(http_client=client)
-        
+
         # Update agent model if different
         agent = Agent(
             model,
@@ -140,11 +140,11 @@ async def run_weather_agent(query: str, model: KnownModelName = 'openai:gpt-4o-m
             result_type=WeatherResponse,
             system_prompt=weather_agent.system_prompt
         )
-        
+
         # Register tools
         for tool in weather_agent._function_tools.values():
             agent.tool(tool.function)
-        
+
         result = await agent.run(query, deps=deps)
         return result.data
 ```
@@ -219,10 +219,10 @@ tests:
 
   - description: 'LLM-based quality assessment'
     vars:
-      query: "Is it a good day for a picnic in Central Park?"
+      query: 'Is it a good day for a picnic in Central Park?'
     assert:
       - type: llm-rubric
-        value: "Response provides weather-based recommendation for outdoor activities"
+        value: 'Response provides weather-based recommendation for outdoor activities'
 
   - description: 'Performance benchmark'
     vars:
@@ -263,7 +263,7 @@ assert:
   - type: javascript
     value: 'typeof output.temperature === "string" && output.temperature.length > 0'
   - type: contains-json
-    value: { "location": "Expected City" }
+    value: { 'location': 'Expected City' }
   - type: javascript
     value: 'output.error === null || output.error === undefined'
 ```
@@ -276,10 +276,10 @@ Verify that your agent uses tools correctly:
 tests:
   - description: 'Tool usage verification'
     vars:
-      query: "Weather in an obscure location"
+      query: 'Weather in an obscure location'
     assert:
       - type: javascript
-        value: 'output.location || output.error'  # Should handle unknown locations
+        value: 'output.location || output.error' # Should handle unknown locations
 ```
 
 ### 3. Cross-Model Consistency
@@ -306,9 +306,9 @@ Monitor response times and resource usage:
 ```yaml
 assert:
   - type: latency
-    threshold: 3000  # 3 seconds max
+    threshold: 3000 # 3 seconds max
   - type: cost
-    threshold: 0.01  # Cost per request
+    threshold: 0.01 # Cost per request
 ```
 
 ### 5. LLM-Based Quality Assessment
@@ -318,9 +318,9 @@ Use AI to evaluate subjective qualities:
 ```yaml
 assert:
   - type: llm-rubric
-    value: "Response is conversational, helpful, and provides actionable weather advice"
+    value: 'Response is conversational, helpful, and provides actionable weather advice'
   - type: llm-rubric
-    value: "Information is accurate and properly formatted"
+    value: 'Information is accurate and properly formatted'
 ```
 
 ## Advanced Evaluation Techniques
@@ -379,19 +379,19 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
-      
+
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
           npm install -g promptfoo
-      
+
       - name: Run evaluation
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           cd examples/pydantic-ai
           promptfoo eval --no-interactive
-          
+
       - name: Upload results
         uses: actions/upload-artifact@v3
         with:
@@ -424,11 +424,10 @@ Create domain-specific evaluation criteria:
 function validateWeatherData(output) {
   const tempPattern = /\d+°[CF]/;
   const hasValidTemp = tempPattern.test(output.temperature);
-  
-  const locationValid = output.location && 
-                       output.location.length > 2 && 
-                       !output.location.includes('unknown');
-  
+
+  const locationValid =
+    output.location && output.location.length > 2 && !output.location.includes('unknown');
+
   return hasValidTemp && locationValid;
 }
 ```
@@ -450,7 +449,7 @@ crontab -e
 Monitor and optimize based on evaluation results:
 
 - **Token usage**: Track costs across different models
-- **Latency**: Identify slow tool calls or model responses  
+- **Latency**: Identify slow tool calls or model responses
 - **Success rates**: Monitor error rates and failure patterns
 - **Quality scores**: Track LLM-based quality metrics over time
 
@@ -462,11 +461,11 @@ Use evaluation to discover and handle edge cases:
 tests:
   - description: 'Ambiguous location query'
     vars:
-      query: "Weather in Springfield"  # Multiple Springfields exist
+      query: 'Weather in Springfield' # Multiple Springfields exist
     assert:
       - type: javascript
         value: 'output.location || output.error'
-        
+
   - description: 'Non-weather query'
     vars:
       query: "What's the capital of France?"
