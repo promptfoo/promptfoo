@@ -175,7 +175,7 @@ export interface CompletionOptions {
    * If set, automatically call these functions when the assistant activates
    * these function tools.
    */
-  functionToolCallbacks?: Record<string, (arg: string) => Promise<any>>;
+  functionToolCallbacks?: Record<string, ((arg: string) => Promise<any>) | string>;
 
   /**
    * If set, spawn a python process with the file and connect to its API

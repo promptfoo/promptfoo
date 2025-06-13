@@ -1,0 +1,21 @@
+{
+  "type": "function",
+  "function": {
+    "name": "get_reservation",
+    "description": "Get details of an existing reservation",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "User ID"
+        },
+        "reservation_id": {
+          "type": "string",
+          "description": "Reservation ID to look up"
+        }
+      },
+      "required": ["user_id", "reservation_id"]
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "type": "function",
+  "function": {
+    "name": "offer_compensation",
+    "description": "Offer compensation certificate for flight issues",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "User ID"
+        },
+        "reservation_id": {
+          "type": "string",
+          "description": "Affected reservation ID"
+        },
+        "issue_type": {
+          "type": "string",
+          "enum": ["cancelled_flight", "delayed_flight"],
+          "description": "Type of issue"
+        },
+        "passenger_count": {
+          "type": "integer",
+          "description": "Number of passengers affected"
+        }
+      },
+      "required": ["user_id", "reservation_id", "issue_type", "passenger_count"]
+    }
+  }
+}
