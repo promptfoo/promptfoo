@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle } from '@mui/material';
 import { EXAMPLE_CONFIG, useRedTeamConfig } from '../hooks/useRedTeamConfig';
@@ -6,6 +7,7 @@ import { EXAMPLE_CONFIG, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 export default function LoadExampleButton() {
   const { setFullConfig } = useRedTeamConfig();
   const { recordEvent } = useTelemetry();
+  const navigate = useNavigate();
 
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
 
@@ -15,9 +17,10 @@ export default function LoadExampleButton() {
 
   const handleConfirmation = () => {
     recordEvent('feature_used', { feature: 'redteam_config_example' });
-    //setTestMode('application');
     setFullConfig(EXAMPLE_CONFIG);
     setConfirmDialogOpen(false);
+    // Reload the page to persist the new config into the form fields:
+    navigate(0);
   };
 
   return (

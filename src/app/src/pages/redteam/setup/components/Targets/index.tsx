@@ -91,16 +91,6 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
     recordEvent('webui_page_view', { page: 'redteam_config_targets' });
   }, []);
 
-  /**
-   * If the target is changed in the example config, update the selected target
-   */
-  useEffect(() => {
-    if (config.target && JSON.stringify(config.target) !== JSON.stringify(selectedTarget)) {
-      setSelectedTarget(config.target);
-      setRawConfigJson(JSON.stringify(config.target.config, null, 2));
-    }
-  }, [config.target, selectedTarget]);
-
   useEffect(() => {
     const updatedTarget = { ...selectedTarget };
 
