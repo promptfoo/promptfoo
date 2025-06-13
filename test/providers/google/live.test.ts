@@ -1,12 +1,16 @@
 import axios from 'axios';
 import dedent from 'dedent';
+import path from 'path';
 import WebSocket from 'ws';
+import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
 import { GoogleLiveProvider } from '../../../src/providers/google/live';
 
 jest.mock('ws');
 jest.mock('axios');
-jest.mock('../../../src/esm');
+jest.mock('../../../src/esm', () => ({
+  importModule: jest.fn(),
+}));
 jest.mock('../../../src/python/pythonUtils', () => ({
   validatePythonPath: jest.fn().mockImplementation(async (path) => path),
 }));
@@ -1052,14 +1056,13 @@ describe('GoogleLiveProvider', () => {
 
   describe('External Function Callbacks', () => {
     beforeEach(() => {
-      // Mock cliState for external function loading
-      jest.doMock('../../../src/cliState', () => ({
-        basePath: '/test/base/path',
-      }));
+      // Set cliState basePath for external function loading
+      cliState.basePath = '/test/base/path';
     });
 
     afterEach(() => {
       jest.clearAllMocks();
+      cliState.basePath = undefined;
     });
 
     it('should load and execute external function callbacks from file', async () => {
@@ -1109,7 +1112,7 @@ describe('GoogleLiveProvider', () => {
       const response = await provider.callApi('Call external function');
 
       expect(mockImportModule).toHaveBeenCalledWith(
-        '/test/base/path/test/callbacks.js',
+        path.resolve('/test/base/path', 'test/callbacks.js'),
         'testFunction',
       );
       expect(mockExternalFunction).toHaveBeenCalledWith('{"param":"test_value"}');
@@ -1231,7 +1234,7 @@ describe('GoogleLiveProvider', () => {
       const response = await provider.callApi('Call error function');
 
       expect(mockImportModule).toHaveBeenCalledWith(
-        '/test/base/path/nonexistent/module.js',
+        path.resolve('/test/base/path', 'nonexistent/module.js'),
         'errorFunction',
       );
       // Should continue with normal flow despite error
@@ -1299,7 +1302,7 @@ describe('GoogleLiveProvider', () => {
 
       expect(mockInlineFunction).toHaveBeenCalledWith('{"inline":"test"}');
       expect(mockImportModule).toHaveBeenCalledWith(
-        '/test/base/path/mixed/callbacks.js',
+        path.resolve('/test/base/path', 'mixed/callbacks.js'),
         'externalFunc',
       );
       expect(mockExternalFunction).toHaveBeenCalledWith('{"external":"test"}');

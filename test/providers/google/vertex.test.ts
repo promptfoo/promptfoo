@@ -1,6 +1,8 @@
 import * as fs from 'fs';
 import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
+import path from 'path';
 import { getCache, isCacheEnabled } from '../../../src/cache';
+import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
 import * as vertexUtil from '../../../src/providers/google/util';
 import { VertexChatProvider } from '../../../src/providers/google/vertex';
@@ -57,7 +59,9 @@ jest.mock('../../../src/providers/google/util', () => ({
 }));
 
 jest.mock('../../../src/providers/google/util');
-jest.mock('../../../src/esm');
+jest.mock('../../../src/esm', () => ({
+  importModule: jest.fn(),
+}));
 
 const mockImportModule = jest.mocked(importModule);
 
@@ -549,14 +553,13 @@ describe('VertexChatProvider.callGeminiApi', () => {
 
   describe('External Function Callbacks', () => {
     beforeEach(() => {
-      // Mock cliState for external function loading
-      jest.doMock('../../../src/cliState', () => ({
-        basePath: '/test/base/path',
-      }));
+      // Set cliState basePath for external function loading
+      cliState.basePath = '/test/base/path';
     });
 
     afterEach(() => {
       jest.clearAllMocks();
+      cliState.basePath = undefined;
     });
 
     it('should load and execute external function callbacks from file', async () => {
@@ -607,7 +610,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
       const result = await provider.callApi('Call external function');
 
       expect(mockImportModule).toHaveBeenCalledWith(
-        '/test/base/path/test/callbacks.js',
+        path.resolve('/test/base/path', 'test/callbacks.js'),
         'testFunction',
       );
       expect(mockExternalFunction).toHaveBeenCalledWith('{"param":"test_value"}');
@@ -718,7 +721,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
       const result = await provider.callApi('Call error function');
 
       expect(mockImportModule).toHaveBeenCalledWith(
-        '/test/base/path/nonexistent/module.js',
+        path.resolve('/test/base/path', 'nonexistent/module.js'),
         'errorFunction',
       );
       // Should fall back to original function call object when loading fails
@@ -783,7 +786,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
       const result = await provider.callApi('Test mixed callbacks');
 
       expect(mockImportModule).toHaveBeenCalledWith(
-        '/test/base/path/mixed/callbacks.js',
+        path.resolve('/test/base/path', 'mixed/callbacks.js'),
         'externalFunc',
       );
       expect(mockExternalFunction).toHaveBeenCalledWith('{"external":"test"}');
