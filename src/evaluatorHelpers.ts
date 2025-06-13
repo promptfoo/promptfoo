@@ -18,7 +18,6 @@ import invariant from './util/invariant';
 import { getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
 
-
 export type FileMetadata = Record<string, { path: string; type: string; format?: string }>;
 
 export async function extractTextFromPDF(pdfPath: string): Promise<string> {
@@ -41,7 +40,7 @@ export async function extractTextFromPDF(pdfPath: string): Promise<string> {
 // Constants for variable resolution size limits
 const VARIABLE_LIMITS = {
   MAX_VARIABLE_SIZE: 50 * 1024 * 1024, // 50MB practical limit
-  MAX_RESULT_SIZE: 100 * 1024 * 1024,  // 100MB total result limit
+  MAX_RESULT_SIZE: 100 * 1024 * 1024, // 100MB total result limit
   SUMMARY_LENGTH: 1000,
   SMALL_VARIABLE_THRESHOLD: 1000, // For performance optimization
 } as const;
@@ -51,37 +50,43 @@ const VARIABLE_LIMITS = {
  */
 function createVariableSummary(content: string, varName: string): string {
   const { SUMMARY_LENGTH } = VARIABLE_LIMITS;
-  
+
   // Handle edge case where content is shorter than 2 * SUMMARY_LENGTH
   if (content.length <= SUMMARY_LENGTH * 2) {
     return `[${varName}: ${content.length} chars]\n${content}`;
   }
-  
+
   const start = content.substring(0, SUMMARY_LENGTH);
   const end = content.substring(content.length - SUMMARY_LENGTH);
-  const omittedChars = content.length - (SUMMARY_LENGTH * 2);
-  
+  const omittedChars = content.length - SUMMARY_LENGTH * 2;
+
   return `[${varName}: ${content.length} chars - showing first/last ${SUMMARY_LENGTH} chars]\n\nSTART:\n${start}\n\n...[${omittedChars} chars omitted]...\n\nEND:\n${end}`;
 }
 
 /**
  * Performs replacement in chunks to avoid creating strings that are too large
  */
-function performChunkedReplacement(template: string, placeholder: string, replacement: string, maxSize: number): string {
+function performChunkedReplacement(
+  template: string,
+  placeholder: string,
+  replacement: string,
+  maxSize: number,
+): string {
   // Calculate how much of the replacement we can actually include
   const templateWithoutPlaceholder = template.replace(placeholder, '');
   const availableSpace = maxSize - templateWithoutPlaceholder.length;
-  
+
   if (availableSpace <= 0) {
     return `[Template too large after variable replacement - ${template.length} chars]`;
   }
-  
+
   if (replacement.length <= availableSpace) {
     // Replacement fits, do normal replacement
     return template.replace(placeholder, replacement);
   } else {
     // Truncate replacement to fit
-    const truncatedReplacement = replacement.substring(0, availableSpace - 50) + '...[truncated to fit size limits]';
+    const truncatedReplacement =
+      replacement.substring(0, availableSpace - 50) + '...[truncated to fit size limits]';
     return template.replace(placeholder, truncatedReplacement);
   }
 }
@@ -116,28 +121,37 @@ export function resolveVariables(
           } else {
             try {
               const replacementValue = String(variables[varName]);
-              
+
               // Performance optimization: Quick path for normal-sized variables
               if (replacementValue.length < VARIABLE_LIMITS.SMALL_VARIABLE_THRESHOLD) {
                 variables[key] = value.replace(placeholder, replacementValue);
                 resolved = false;
                 continue;
               }
-              
+
               // Pre-check sizes to avoid creating strings that are too large
               if (replacementValue.length > VARIABLE_LIMITS.MAX_VARIABLE_SIZE) {
                 // For extremely large variables, create a summary instead
-                logger.warn(`Large variable detected: ${varName} (${replacementValue.length} chars) - using summary`);
+                logger.warn(
+                  `Large variable detected: ${varName} (${replacementValue.length} chars) - using summary`,
+                );
                 const summary = createVariableSummary(replacementValue, varName);
                 variables[key] = value.replace(placeholder, summary);
               } else {
                 // Estimate final size before replacement
                 const estimatedSize = value.length + replacementValue.length - placeholder.length;
-                
+
                 if (estimatedSize > VARIABLE_LIMITS.MAX_RESULT_SIZE) {
                   // Use chunked replacement for large results
-                  logger.warn(`Large result detected for variable ${varName} (estimated ${estimatedSize} chars) - using chunked replacement`);
-                  variables[key] = performChunkedReplacement(value, placeholder, replacementValue, VARIABLE_LIMITS.MAX_RESULT_SIZE);
+                  logger.warn(
+                    `Large result detected for variable ${varName} (estimated ${estimatedSize} chars) - using chunked replacement`,
+                  );
+                  variables[key] = performChunkedReplacement(
+                    value,
+                    placeholder,
+                    replacementValue,
+                    VARIABLE_LIMITS.MAX_RESULT_SIZE,
+                  );
                 } else {
                   // Normal replacement for reasonable sizes
                   variables[key] = value.replace(placeholder, replacementValue);

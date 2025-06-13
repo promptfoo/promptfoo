@@ -1186,26 +1186,28 @@ class Evaluator {
             try {
               // Constants for progress bar display
               // Limit individual var values
-              const MAX_VAR_VALUE_LENGTH = 50; 
-              // Limit total vars string length 
+              const MAX_VAR_VALUE_LENGTH = 50;
+              // Limit total vars string length
               // Maybe this should vary based on terminal size??
-              const MAX_TOTAL_LENGTH = 200; 
-              
+              const MAX_TOTAL_LENGTH = 200;
+
               const entries = Object.entries(evalStep.test.vars || {});
-              
+
               const truncatedEntries = entries.map(([k, v]) => {
                 const valueStr = String(v);
-                const truncatedValue = valueStr.length > MAX_VAR_VALUE_LENGTH
-                  ? valueStr.substring(0, MAX_VAR_VALUE_LENGTH) + '...'
-                  : valueStr;
+                const truncatedValue =
+                  valueStr.length > MAX_VAR_VALUE_LENGTH
+                    ? valueStr.substring(0, MAX_VAR_VALUE_LENGTH) + '...'
+                    : valueStr;
                 return `${k}=${truncatedValue}`;
               });
-              
+
               const joined = truncatedEntries.join(' ');
-              const result = joined.length > MAX_TOTAL_LENGTH
-                ? joined.substring(0, MAX_TOTAL_LENGTH) + '...'
-                : joined;
-              
+              const result =
+                joined.length > MAX_TOTAL_LENGTH
+                  ? joined.substring(0, MAX_TOTAL_LENGTH) + '...'
+                  : joined;
+
               // Remove newlines from the final result so we don't break the progress bar
               return result.replace(/\n/g, ' ');
             } catch (error) {
