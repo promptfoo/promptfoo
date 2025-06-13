@@ -72,7 +72,14 @@ describe('resolveContext', () => {
       const result = await resolveContext(assertion, test, { context: 'data' }, 'prompt');
 
       expect(result).toBe('transformed context');
-      expect(mockTransform).toHaveBeenCalled();
+      expect(mockTransform).toHaveBeenCalledWith(
+        'output.context',
+        { context: 'data' },
+        {
+          vars: { context: 'original context' },
+          prompt: { label: 'prompt' },
+        },
+      );
     });
 
     it('should throw error if transform returns non-string', async () => {
