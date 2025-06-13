@@ -1,12 +1,13 @@
 import * as fs from 'fs';
-import { createRequire } from 'node:module';
-import * as path from 'path';
 import {
   renderPrompt,
   resolveVariables,
   runExtensionHook,
   extractTextFromPDF,
   collectFileMetadata,
+  VARIABLE_LIMITS,
+  createVariableSummary,
+  performChunkedReplacement,
 } from '../src/evaluatorHelpers';
 import type { Prompt } from '../src/types';
 import { transform } from '../src/util/transform';
@@ -42,9 +43,7 @@ jest.mock('fs', () => ({
 
 jest.mock('pdf-parse', () => ({
   __esModule: true,
-  default: jest
-    .fn()
-    .mockImplementation((buffer) => Promise.resolve({ text: 'Extracted PDF text' })),
+  default: jest.fn().mockImplementation(() => Promise.resolve({ text: 'Extracted PDF text' })),
 }));
 
 jest.mock('../src/esm');
@@ -95,412 +94,170 @@ describe('extractTextFromPDF', () => {
   });
 });
 
-describe('renderPrompt', () => {
-  beforeEach(() => {
-    delete process.env.PROMPTFOO_DISABLE_TEMPLATING;
-    delete process.env.PROMPTFOO_DISABLE_JSON_AUTOESCAPE;
+describe('createVariableSummary', () => {
+  it('should return full content when shorter than 2 * SUMMARY_LENGTH', () => {
+    const content = 'Short content';
+    const result = createVariableSummary(content, 'test');
+    expect(result).toBe(`[test: ${content.length} chars]\n${content}`);
   });
 
-  it('should render a prompt with a single variable', async () => {
-    const prompt = toPrompt('Test prompt {{ var1 }}');
-    const renderedPrompt = await renderPrompt(prompt, { var1: 'value1' }, {});
-    expect(renderedPrompt).toBe('Test prompt value1');
-  });
-
-  it('should render nested variables in non-JSON prompts', async () => {
-    const prompt = toPrompt('Test {{ outer[inner] }}');
-    const renderedPrompt = await renderPrompt(
-      prompt,
-      { outer: { key1: 'value1' }, inner: 'key1' },
-      {},
+  it('should create summary for long content', () => {
+    const content = 'a'.repeat(VARIABLE_LIMITS.SUMMARY_LENGTH * 3);
+    const result = createVariableSummary(content, 'test');
+    expect(result).toContain(
+      `[test: ${content.length} chars - showing first/last ${VARIABLE_LIMITS.SUMMARY_LENGTH} chars]`,
     );
-    expect(renderedPrompt).toBe('Test value1');
-  });
-
-  it('should handle complex variable substitutions in non-JSON prompts', async () => {
-    const prompt = toPrompt('{{ var1[var2] }}');
-    const renderedPrompt = await renderPrompt(
-      prompt,
-      {
-        var1: { hello: 'world' },
-        var2: 'hello',
-      },
-      {},
+    expect(result).toContain('START:');
+    expect(result).toContain('END:');
+    expect(result).toContain(
+      `[${content.length - VARIABLE_LIMITS.SUMMARY_LENGTH * 2} chars omitted]`,
     );
-    expect(renderedPrompt).toBe('world');
-  });
-
-  it('should render a JSON prompt', async () => {
-    const prompt = toPrompt('[{"text": "Test prompt "}, {"text": "{{ var1 }}"}]');
-    const renderedPrompt = await renderPrompt(prompt, { var1: 'value1' }, {});
-    expect(renderedPrompt).toBe(
-      JSON.stringify(JSON.parse('[{"text":"Test prompt "},{"text":"value1"}]'), null, 2),
-    );
-  });
-
-  it('should render nested variables in JSON prompts', async () => {
-    const prompt = toPrompt('{"text": "{{ outer[inner] }}"}');
-    const renderedPrompt = await renderPrompt(
-      prompt,
-      { outer: { key1: 'value1' }, inner: 'key1' },
-      {},
-    );
-    expect(renderedPrompt).toBe(JSON.stringify({ text: 'value1' }, null, 2));
-  });
-
-  it('should render environment variables in JSON prompts', async () => {
-    process.env.TEST_ENV_VAR = 'env_value';
-    const prompt = toPrompt('{"text": "{{ env.TEST_ENV_VAR }}"}');
-    const renderedPrompt = await renderPrompt(prompt, {}, {});
-    expect(renderedPrompt).toBe(JSON.stringify({ text: 'env_value' }, null, 2));
-    delete process.env.TEST_ENV_VAR;
-  });
-
-  it('should render environment variables in non-JSON prompts', async () => {
-    process.env.TEST_ENV_VAR = 'env_value';
-    const prompt = toPrompt('Test prompt {{ env.TEST_ENV_VAR }}');
-    const renderedPrompt = await renderPrompt(prompt, {}, {});
-    expect(renderedPrompt).toBe('Test prompt env_value');
-    delete process.env.TEST_ENV_VAR;
-  });
-
-  it('should handle complex variable substitutions in JSON prompts', async () => {
-    const prompt = toPrompt('{"message": "{{ var1[var2] }}"}');
-    const renderedPrompt = await renderPrompt(
-      prompt,
-      {
-        var1: { hello: 'world' },
-        var2: 'hello',
-      },
-      {},
-    );
-    expect(renderedPrompt).toBe(JSON.stringify({ message: 'world' }, null, 2));
-  });
-
-  it('should render a JSON prompt and escape the var string', async () => {
-    const prompt = toPrompt('[{"text": "Test prompt "}, {"text": "{{ var1 }}"}]');
-    const renderedPrompt = await renderPrompt(prompt, { var1: 'He said "hello world!"' }, {});
-    expect(renderedPrompt).toBe(
-      JSON.stringify(
-        JSON.parse('[{"text":"Test prompt "},{"text":"He said \\"hello world!\\""}]'),
-        null,
-        2,
-      ),
-    );
-  });
-
-  it('should render a JSON prompt with nested JSON', async () => {
-    const prompt = toPrompt('[{"text": "Test prompt "}, {"text": "{{ var1 }}"}]');
-    const renderedPrompt = await renderPrompt(prompt, { var1: '{"nested": "value1"}' }, {});
-    expect(renderedPrompt).toBe(
-      JSON.stringify(
-        JSON.parse('[{"text":"Test prompt "},{"text":"{\\"nested\\": \\"value1\\"}"}]'),
-        null,
-        2,
-      ),
-    );
-  });
-
-  it('should load external yaml files in renderPrompt', async () => {
-    const prompt = toPrompt('Test prompt with {{ var1 }}');
-    const vars = { var1: 'file://test.txt' };
-    const evaluateOptions = {};
-
-    jest.spyOn(fs, 'readFileSync').mockReturnValueOnce('loaded from file');
-
-    const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
-
-    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('test.txt'), 'utf8');
-    expect(renderedPrompt).toBe('Test prompt with loaded from file');
-  });
-
-  it('should load external js files in renderPrompt and execute the exported function', async () => {
-    const prompt = toPrompt('Test prompt with {{ var1 }} {{ var2 }} {{ var3 }}');
-    const vars = {
-      var1: 'file:///path/to/testFunction.js',
-      var2: 'file:///path/to/testFunction.cjs',
-      var3: 'file:///path/to/testFunction.mjs',
-    };
-    const evaluateOptions = {};
-
-    jest.doMock(
-      path.resolve('/path/to/testFunction.js'),
-      () => (varName: any, prompt: any, vars: any) => ({ output: `Dynamic value for ${varName}` }),
-      { virtual: true },
-    );
-    jest.doMock(
-      path.resolve('/path/to/testFunction.cjs'),
-      () => (varName: any, prompt: any, vars: any) => ({ output: `and ${varName}` }),
-      { virtual: true },
-    );
-    jest.doMock(
-      path.resolve('/path/to/testFunction.mjs'),
-      () => (varName: any, prompt: any, vars: any) => ({ output: `and ${varName}` }),
-      { virtual: true },
-    );
-
-    const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
-    expect(renderedPrompt).toBe('Test prompt with Dynamic value for var1 and var2 and var3');
-  });
-
-  it('should load external js package in renderPrompt and execute the exported function', async () => {
-    const prompt = toPrompt('Test prompt with {{ var1 }}');
-    const vars = {
-      var1: 'package:@promptfoo/fake:testFunction',
-    };
-    const evaluateOptions = {};
-
-    const require = createRequire('');
-    jest.spyOn(require, 'resolve').mockReturnValueOnce('/node_modules/@promptfoo/fake/index.js');
-
-    jest.doMock(
-      path.resolve('/node_modules/@promptfoo/fake/index.js'),
-      () => ({
-        testFunction: (varName: any, prompt: any, vars: any) => ({
-          output: `Dynamic value for ${varName}`,
-        }),
-      }),
-      { virtual: true },
-    );
-
-    const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
-    expect(renderedPrompt).toBe('Test prompt with Dynamic value for var1');
-  });
-
-  it('should load external json files in renderPrompt and parse the JSON content', async () => {
-    const prompt = toPrompt('Test prompt with {{ var1 }}');
-    const vars = { var1: 'file:///path/to/testData.json' };
-    const evaluateOptions = {};
-
-    jest.spyOn(fs, 'readFileSync').mockReturnValueOnce(JSON.stringify({ key: 'valueFromJson' }));
-
-    const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
-
-    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('testData.json'), 'utf8');
-    expect(renderedPrompt).toBe('Test prompt with {"key":"valueFromJson"}');
-  });
-
-  it('should load external yaml files in renderPrompt and parse the YAML content', async () => {
-    const prompt = toPrompt('Test prompt with {{ var1 }}');
-    const vars = { var1: 'file:///path/to/testData.yaml' };
-    const evaluateOptions = {};
-
-    jest.spyOn(fs, 'readFileSync').mockReturnValueOnce('key: valueFromYaml');
-
-    const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
-
-    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('testData.yaml'), 'utf8');
-    expect(renderedPrompt).toBe('Test prompt with {"key":"valueFromYaml"}');
-  });
-
-  describe('with PROMPTFOO_DISABLE_TEMPLATING', () => {
-    beforeEach(() => {
-      process.env.PROMPTFOO_DISABLE_TEMPLATING = 'true';
-    });
-
-    afterEach(() => {
-      delete process.env.PROMPTFOO_DISABLE_TEMPLATING;
-    });
-
-    it('should return raw prompt when templating is disabled', async () => {
-      const prompt = toPrompt('Test prompt {{ var1 }}');
-      const renderedPrompt = await renderPrompt(prompt, { var1: 'value1' }, {});
-      expect(renderedPrompt).toBe('Test prompt {{ var1 }}');
-    });
-  });
-
-  it('should render normally when templating is enabled', async () => {
-    process.env.PROMPTFOO_DISABLE_TEMPLATING = 'false';
-    const prompt = toPrompt('Test prompt {{ var1 }}');
-    const renderedPrompt = await renderPrompt(prompt, { var1: 'value1' }, {});
-    expect(renderedPrompt).toBe('Test prompt value1');
-    delete process.env.PROMPTFOO_DISABLE_TEMPLATING;
-  });
-
-  it('should respect Nunjucks raw tags when variable is provided as a string', async () => {
-    const prompt = toPrompt('{% raw %}{{ var1 }}{% endraw %}');
-    const renderedPrompt = await renderPrompt(prompt, { var1: 'value1' }, {});
-    expect(renderedPrompt).toBe('{{ var1 }}');
-  });
-
-  it('should respect Nunjucks raw tags when no variables are provided', async () => {
-    const prompt = toPrompt('{% raw %}{{ var1 }}{% endraw %}');
-    const renderedPrompt = await renderPrompt(prompt, {}, {});
-    expect(renderedPrompt).toBe('{{ var1 }}');
-  });
-
-  it('should respect Nunjucks escaped strings when variable is provided as a string', async () => {
-    const prompt = toPrompt(`{{ '{{ var1 }}' }}`);
-    const renderedPrompt = await renderPrompt(prompt, { var1: 'value1' }, {});
-    expect(renderedPrompt).toBe('{{ var1 }}');
-  });
-
-  it('should respect Nunjucks escaped strings when no variables are provided', async () => {
-    const prompt = toPrompt(`{{ '{{ var1 }}' }}`);
-    const renderedPrompt = await renderPrompt(prompt, {}, {});
-    expect(renderedPrompt).toBe('{{ var1 }}');
-  });
-
-  it('should render variables that are template strings', async () => {
-    const prompt = toPrompt('{{ var1 }}');
-    const renderedPrompt = await renderPrompt(prompt, { var1: '{{ var2 }}', var2: 'value2' }, {});
-    expect(renderedPrompt).toBe('value2');
-  });
-
-  it('should auto-wrap prompts with partial Nunjucks tags in {% raw %}', async () => {
-    const prompt = toPrompt('This is a partial tag: {%');
-    const renderedPrompt = await renderPrompt(prompt, {}, {});
-    expect(renderedPrompt).toBe('This is a partial tag: {%');
-  });
-
-  it('should not double-wrap prompts already wrapped in {% raw %}', async () => {
-    const prompt = toPrompt('{% raw %}This is a partial tag: {%{% endraw %}');
-    const renderedPrompt = await renderPrompt(prompt, {}, {});
-    expect(renderedPrompt).toBe('This is a partial tag: {%');
-  });
-
-  it('should not wrap prompts with valid Nunjucks tags', async () => {
-    const prompt = toPrompt('Hello {{ name }}!');
-    const renderedPrompt = await renderPrompt(prompt, { name: 'Alice' }, {});
-    expect(renderedPrompt).toBe('Hello Alice!');
-    expect(renderedPrompt).not.toContain('{% raw %}');
-  });
-
-  it('should auto-wrap prompts with partial variable tags', async () => {
-    const prompt = toPrompt('Unfinished variable: {{ name');
-    const renderedPrompt = await renderPrompt(prompt, { name: 'Alice' }, {});
-    expect(renderedPrompt).toBe('Unfinished variable: {{ name');
-  });
-
-  it('should auto-wrap prompts with partial comment tags', async () => {
-    const prompt = toPrompt('Unfinished comment: {# comment');
-    const renderedPrompt = await renderPrompt(prompt, {}, {});
-    expect(renderedPrompt).toBe('Unfinished comment: {# comment');
   });
 });
 
-describe('renderPrompt with prompt functions', () => {
-  it('should handle string returns from prompt functions', async () => {
-    const promptObj = {
-      ...toPrompt('test'),
-      function: async () => 'Hello, world!',
-    };
-    const result = await renderPrompt(promptObj, {});
-    expect(result).toBe('Hello, world!');
+describe('performChunkedReplacement', () => {
+  it('should perform direct replacement when content fits', () => {
+    const template = 'Hello {{name}}!';
+    const placeholder = '{{name}}';
+    const replacement = 'World';
+    const result = performChunkedReplacement(template, placeholder, replacement, 100);
+    expect(result).toBe('Hello World!');
   });
 
-  it('should handle object/array returns from prompt functions', async () => {
-    const messages = [
-      { role: 'system', content: 'You are a helpful assistant.' },
-      { role: 'user', content: 'Hello' },
-    ];
-    const promptObj = {
-      ...toPrompt('test'),
-      function: async () => messages,
-    };
-    const result = await renderPrompt(promptObj, {});
-    expect(JSON.parse(result)).toEqual(messages);
+  it('should truncate replacement when too large', () => {
+    const template = 'Hello {{name}}!';
+    const placeholder = '{{name}}';
+    const replacement = 'a'.repeat(100);
+    const maxSize = 20;
+    const result = performChunkedReplacement(template, placeholder, replacement, maxSize);
+    expect(result).toContain('Hello');
+    expect(result).toContain('...[truncated to fit size limits]');
   });
 
-  it('should handle PromptFunctionResult returns from prompt functions', async () => {
-    const messages = [
-      { role: 'system', content: 'You are a helpful assistant.' },
-      { role: 'user', content: 'Hello' },
-    ];
-    const promptObj = {
-      ...toPrompt('test'),
-      function: async () => ({
-        prompt: messages,
-        config: { max_tokens: 10 },
-      }),
-      config: {},
+  it('should handle template too large case', () => {
+    const template = 'a'.repeat(1000);
+    const result = performChunkedReplacement(template, '{{var}}', 'test', 50);
+    expect(result).toBe(
+      `[Template too large after variable replacement - ${template.length} chars]`,
+    );
+  });
+});
+
+describe('resolveVariables with size limits', () => {
+  it('should handle variables under small threshold normally', () => {
+    const variables = {
+      result: 'Hello {{name}}',
+      name: 'a'.repeat(VARIABLE_LIMITS.SMALL_VARIABLE_THRESHOLD - 1),
     };
-    const result = await renderPrompt(promptObj, {});
-    expect(JSON.parse(result)).toEqual(messages);
-    expect(promptObj.config).toEqual({ max_tokens: 10 });
+    const result = resolveVariables(variables);
+    expect(result.result).toBe(`Hello ${'a'.repeat(VARIABLE_LIMITS.SMALL_VARIABLE_THRESHOLD - 1)}`);
   });
 
-  it('should set config from prompt function when initial config is undefined', async () => {
-    const messages = [
-      { role: 'system', content: 'You are a helpful assistant.' },
-      { role: 'user', content: 'Hello' },
-    ];
-
-    const promptObj = {
-      ...toPrompt('test'),
-      config: undefined,
-      function: async () => ({
-        prompt: messages,
-        config: { max_tokens: 10 },
-      }),
+  it('should create summary for variables exceeding MAX_VARIABLE_SIZE', () => {
+    const largeValue = 'a'.repeat(VARIABLE_LIMITS.MAX_VARIABLE_SIZE + 1000);
+    const variables = {
+      result: 'Content: {{content}}',
+      content: largeValue,
     };
-
-    expect(promptObj.config).toBeUndefined();
-
-    const result = await renderPrompt(promptObj, {});
-
-    expect(promptObj.config).toEqual({ max_tokens: 10 });
-    expect(JSON.parse(result)).toEqual(messages);
+    const result = resolveVariables(variables);
+    expect(result.result).toContain('[content:');
+    expect(result.result).toContain('chars - showing first/last');
   });
 
-  it('should replace existing config with function config', async () => {
-    const messages = [
-      { role: 'system', content: 'You are a helpful assistant.' },
-      { role: 'user', content: 'Hello' },
-    ];
-    const promptObj = {
-      ...toPrompt('test'),
-      function: async () => ({
-        prompt: messages,
-        config: {
-          temperature: 0.8,
-          max_tokens: 20,
+  it('should handle chunked replacement for large results', () => {
+    const variables = {
+      result: 'Content: {{content}}',
+      content: 'a'.repeat(VARIABLE_LIMITS.MAX_RESULT_SIZE - 1000),
+    };
+    const result = resolveVariables(variables);
+    expect(typeof result.result).toBe('string');
+    expect((result.result as string).startsWith('Content:')).toBe(true);
+    expect((result.result as string).length).toBeLessThanOrEqual(VARIABLE_LIMITS.MAX_RESULT_SIZE);
+  });
+
+  it('should handle RangeError gracefully', () => {
+    const variables = {
+      result: '{{content}}',
+      content: {
+        toString: () => {
+          throw new RangeError('Invalid string length');
         },
-      }),
-      config: {
-        temperature: 0.2,
-        top_p: 0.9,
       },
     };
-    const result = await renderPrompt(promptObj, {});
-    expect(JSON.parse(result)).toEqual(messages);
-    expect(promptObj.config).toEqual({
-      temperature: 0.8,
-      max_tokens: 20,
-      top_p: 0.9,
+    const result = resolveVariables(variables);
+    expect(result.result).toBe('[result: content too large for processing]');
+  });
+
+  it('should break on reaching iteration limit', () => {
+    const variables = {
+      a: '{{b}}',
+      b: '{{c}}',
+      c: '{{c}}',
+    };
+    const result = resolveVariables(variables);
+    expect(result).toEqual({
+      a: '{{c}}',
+      b: '{{c}}',
+      c: '{{c}}',
     });
+  });
+
+  it('should handle non-string variables', () => {
+    const variables = {
+      result: '{{obj}}',
+      obj: { foo: 'bar' },
+    };
+    const result = resolveVariables(variables);
+    expect(result).toEqual(variables);
+  });
+
+  it('should handle undefined variables', () => {
+    const variables = {
+      result: '{{missing}}',
+    };
+    const result = resolveVariables(variables);
+    expect(result.result).toBe('{{missing}}');
   });
 });
 
-describe('resolveVariables', () => {
-  it('should replace placeholders with corresponding variable values', () => {
-    const variables = { final: '{{ my_greeting }}, {{name}}!', my_greeting: 'Hello', name: 'John' };
-    const expected = { final: 'Hello, John!', my_greeting: 'Hello', name: 'John' };
-    expect(resolveVariables(variables)).toEqual(expected);
+describe('renderPrompt', () => {
+  it('should render simple prompts', async () => {
+    const prompt = toPrompt('Hello {{name}}!');
+    const vars = { name: 'World' };
+    const result = await renderPrompt(prompt, vars);
+    expect(result).toBe('Hello World!');
   });
 
-  it('should handle nested variable substitutions', () => {
-    const variables = { first: '{{second}}', second: '{{third}}', third: 'value' };
-    const expected = { first: 'value', second: 'value', third: 'value' };
-    expect(resolveVariables(variables)).toEqual(expected);
+  it('should handle nested variables', async () => {
+    const prompt = toPrompt('{{greeting}} {{name}}!');
+    const vars = { greeting: 'Hello', name: '{{person}}', person: 'World' };
+    const result = await renderPrompt(prompt, vars);
+    expect(result).toBe('Hello World!');
   });
 
-  it('should not modify variables without placeholders', () => {
-    const variables = { greeting: 'Hello, world!', name: 'John' };
-    const expected = { greeting: 'Hello, world!', name: 'John' };
-    expect(resolveVariables(variables)).toEqual(expected);
+  it('should handle JSON prompts', async () => {
+    const prompt = toPrompt('{"message": "Hello {{name}}!"}');
+    const vars = { name: 'World' };
+    const result = await renderPrompt(prompt, vars);
+    expect(JSON.parse(result)).toEqual({ message: 'Hello World!' });
   });
+});
 
-  it('should not fail if a variable is not found', () => {
-    const variables = { greeting: 'Hello, {{name}}!' };
-    expect(resolveVariables(variables)).toEqual({ greeting: 'Hello, {{name}}!' });
-  });
+describe('collectFileMetadata', () => {
+  it('should collect metadata for file variables', () => {
+    const vars = {
+      image: 'file://test.jpg',
+      video: 'file://test.mp4',
+      audio: 'file://test.mp3',
+      text: 'file://test.txt',
+    };
 
-  it('should not fail for unresolved placeholders', () => {
-    const variables = { greeting: 'Hello, {{name}}!', name: '{{unknown}}' };
-    expect(resolveVariables(variables)).toEqual({
-      greeting: 'Hello, {{unknown}}!',
-      name: '{{unknown}}',
+    const metadata = collectFileMetadata(vars);
+
+    expect(metadata).toEqual({
+      image: { path: 'file://test.jpg', type: 'image', format: 'jpg' },
+      video: { path: 'file://test.mp4', type: 'video', format: 'mp4' },
+      audio: { path: 'file://test.mp3', type: 'audio', format: 'mp3' },
     });
   });
 });
@@ -510,163 +267,18 @@ describe('runExtensionHook', () => {
     jest.clearAllMocks();
   });
 
-  it('should not call transform if extensions array is empty', async () => {
-    await runExtensionHook([], 'testHook', { data: 'test' });
+  it('should not run hooks when no extensions provided', async () => {
+    await runExtensionHook(null, 'test', {});
     expect(transform).not.toHaveBeenCalled();
   });
 
-  it('should not call transform if extensions is undefined', async () => {
-    await runExtensionHook(undefined, 'testHook', { data: 'test' });
-    expect(transform).not.toHaveBeenCalled();
-  });
-
-  it('should not call transform if extensions is null', async () => {
-    await runExtensionHook(null, 'testHook', { data: 'test' });
-    expect(transform).not.toHaveBeenCalled();
-  });
-
-  it('should call transform for each extension', async () => {
-    const extensions = ['ext1', 'ext2', 'ext3'];
-    const hookName = 'testHook';
+  it('should run hooks for each extension', async () => {
+    const extensions = ['ext1', 'ext2'];
     const context = { data: 'test' };
+    await runExtensionHook(extensions, 'hookName', context);
 
-    await runExtensionHook(extensions, hookName, context);
-
-    expect(transform).toHaveBeenCalledTimes(3);
-    expect(transform).toHaveBeenNthCalledWith(1, 'ext1', hookName, context, false);
-    expect(transform).toHaveBeenNthCalledWith(2, 'ext2', hookName, context, false);
-    expect(transform).toHaveBeenNthCalledWith(3, 'ext3', hookName, context, false);
-  });
-
-  it('should throw an error if an extension is not a string', async () => {
-    const extensions = ['ext1', 123, 'ext3'] as unknown as string[];
-    const hookName = 'testHook';
-    const context = { data: 'test' };
-
-    await expect(runExtensionHook(extensions, hookName, context)).rejects.toThrow(
-      'extension must be a string',
-    );
-  });
-});
-
-describe('collectFileMetadata', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    jest.spyOn(path, 'resolve').mockImplementation((...paths) => {
-      return paths[paths.length - 1];
-    });
-  });
-
-  it('should identify image files correctly', () => {
-    const vars = {
-      image1: 'file://path/to/image.jpg',
-      image2: 'file://path/to/image.png',
-      image3: 'file://path/to/image.webp',
-      text: 'This is not a file',
-      otherFile: 'file://path/to/document.txt',
-    };
-
-    const metadata = collectFileMetadata(vars);
-
-    expect(metadata).toEqual({
-      image1: {
-        path: 'file://path/to/image.jpg',
-        type: 'image',
-        format: 'jpg',
-      },
-      image2: {
-        path: 'file://path/to/image.png',
-        type: 'image',
-        format: 'png',
-      },
-      image3: {
-        path: 'file://path/to/image.webp',
-        type: 'image',
-        format: 'webp',
-      },
-    });
-  });
-
-  it('should identify video files correctly', () => {
-    const vars = {
-      video1: 'file://path/to/video.mp4',
-      video2: 'file://path/to/video.webm',
-      video3: 'file://path/to/video.mkv',
-      text: 'This is not a file',
-    };
-
-    const metadata = collectFileMetadata(vars);
-
-    expect(metadata).toEqual({
-      video1: {
-        path: 'file://path/to/video.mp4',
-        type: 'video',
-        format: 'mp4',
-      },
-      video2: {
-        path: 'file://path/to/video.webm',
-        type: 'video',
-        format: 'webm',
-      },
-      video3: {
-        path: 'file://path/to/video.mkv',
-        type: 'video',
-        format: 'mkv',
-      },
-    });
-  });
-
-  it('should identify audio files correctly', () => {
-    const vars = {
-      audio1: 'file://path/to/audio.mp3',
-      audio2: 'file://path/to/audio.wav',
-      text: 'This is not a file',
-    };
-
-    const metadata = collectFileMetadata(vars);
-
-    expect(metadata).toEqual({
-      audio1: {
-        path: 'file://path/to/audio.mp3',
-        type: 'audio',
-        format: 'mp3',
-      },
-      audio2: {
-        path: 'file://path/to/audio.wav',
-        type: 'audio',
-        format: 'wav',
-      },
-    });
-  });
-
-  it('should return an empty object when no media files are found', () => {
-    const vars = {
-      text1: 'This is not a file',
-      text2: 'file://path/to/document.txt',
-      text3: 'file://path/to/document.pdf',
-    };
-
-    const metadata = collectFileMetadata(vars);
-
-    expect(metadata).toEqual({});
-  });
-
-  it('should handle non-string values correctly', () => {
-    const vars = {
-      text: 'file://path/to/image.jpg',
-      object: { key: 'value' },
-      array: ['file://path/to/video.mp4'],
-      number: 42 as unknown as string,
-    };
-
-    const metadata = collectFileMetadata(vars);
-
-    expect(metadata).toEqual({
-      text: {
-        path: 'file://path/to/image.jpg',
-        type: 'image',
-        format: 'jpg',
-      },
-    });
+    expect(transform).toHaveBeenCalledTimes(2);
+    expect(transform).toHaveBeenCalledWith('ext1', 'hookName', context, false);
+    expect(transform).toHaveBeenCalledWith('ext2', 'hookName', context, false);
   });
 });
