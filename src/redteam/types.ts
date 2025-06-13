@@ -5,7 +5,7 @@ import type { Plugin, Severity } from './constants';
 // They let the user specify additional instructions for the plugin,
 // and can be anything the user wants.
 export type Modifier = string | 'tone' | 'style' | 'context' | 'testGenerationInstructions';
-
+export type Intent = string | string[];
 // Base types
 export type RedteamObjectConfig = Record<string, unknown>;
 export type PluginConfig = {
@@ -31,9 +31,11 @@ export type PluginConfig = {
   targetUrls?: string[];
   // PII
   name?: string;
+  // CyberSecEval
+  multilingual?: boolean;
 
   indirectInjectionVar?: string;
-  intent?: string;
+  intent?: Intent | Intent[];
   policy?: string;
   systemPrompt?: string;
 };
