@@ -18,13 +18,7 @@ import invariant from '../../util/invariant';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { redteamProviderManager } from '../providers/shared';
-import {
-  applyTestGenerationInstructions,
-  getShortPluginId,
-  isBasicRefusal,
-  isEmptyResponse,
-  removePrefix,
-} from '../util';
+import { getShortPluginId, isBasicRefusal, isEmptyResponse, removePrefix } from '../util';
 
 /**
  * Parses the LLM response of generated prompts into an array of objects.
@@ -113,7 +107,7 @@ export abstract class RedteamPluginBase {
    * domain-specific guidance for generating attacks.
    */
   protected getTestGenerationInstructions(): string {
-    return this.config.testGenerationInstructions ?? '';
+    return (this.config.modifiers?.testGenerationInstructions as string) ?? '';
   }
 
   /**
@@ -122,15 +116,6 @@ export abstract class RedteamPluginBase {
    * @returns An array of Assertion objects.
    */
   protected abstract getAssertions(prompt: string): Assertion[];
-
-  /**
-   * Combines the base template with test generation instructions.
-   * @returns A promise that resolves to the combined template string.
-   */
-  protected async getCombinedTemplate(templateOverride?: string): Promise<string> {
-    const baseTemplate = templateOverride ?? (await this.getTemplate());
-    return applyTestGenerationInstructions({ config: this.config, template: baseTemplate });
-  }
 
   /**
    * Generates test cases based on the plugin's configuration.
@@ -142,7 +127,7 @@ export abstract class RedteamPluginBase {
   async generateTests(
     n: number,
     delayMs: number = 0,
-    templateGetter: () => Promise<string> = this.getCombinedTemplate.bind(this),
+    templateGetter: () => Promise<string> = this.getTemplate.bind(this),
   ): Promise<TestCase[]> {
     logger.debug(`Generating ${n} test cases`);
     const batchSize = 20;
@@ -166,7 +151,7 @@ export abstract class RedteamPluginBase {
         examples: this.config.examples,
       });
 
-      const finalTemplate = this.appendModifiers(renderedTemplate);
+      const finalTemplate = RedteamPluginBase.appendModifiers(renderedTemplate, this.config);
       const { output: generatedPrompts, error } = await this.provider.callApi(finalTemplate);
       if (delayMs > 0) {
         logger.debug(`Delaying for ${delayMs}ms`);
@@ -221,15 +206,13 @@ export abstract class RedteamPluginBase {
    * @param template - The template to append modifiers to.
    * @returns The modified template.
    */
-  private appendModifiers(template: string): string {
+  static appendModifiers(template: string, config: PluginConfig): string {
     // Take everything under "modifiers" config key
-    const modifiers: Record<string, string> =
-      (this.config.modifiers as Record<string, string>) ?? {};
+    const modifiers: Record<string, string> = (config.modifiers as Record<string, string>) ?? {};
 
-    // `language` is a special top-level config field
-    if (this.config.language) {
-      invariant(typeof this.config.language === 'string', 'language must be a string');
-      modifiers.language = this.config.language;
+    if (config.language) {
+      invariant(typeof config.language === 'string', 'language must be a string');
+      modifiers.language = config.language;
     }
 
     // No modifiers
@@ -242,7 +225,7 @@ export abstract class RedteamPluginBase {
 
     // Append all modifiers
     const modifierSection = Object.entries(modifiers)
-      .filter(([key, value]) => typeof value !== 'undefined' && value !== '')
+      .filter(([_, value]) => typeof value !== 'undefined' && value !== '')
       .map(([key, value]) => `${key}: ${value}`)
       .join('\n');
 

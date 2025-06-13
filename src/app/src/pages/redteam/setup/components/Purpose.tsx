@@ -29,7 +29,7 @@ interface PromptsProps {
 
 export default function Purpose({ onNext }: PromptsProps) {
   const theme = useTheme();
-  const { config, updateApplicationDefinition, setFullConfig } = useRedTeamConfig();
+  const { config, updateApplicationDefinition, updateConfig, setFullConfig } = useRedTeamConfig();
   const { recordEvent } = useTelemetry();
   const [testMode, setTestMode] = useState<'application' | 'model'>('application');
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
@@ -839,10 +839,8 @@ export default function Purpose({ onNext }: PromptsProps) {
                   </Typography>
                   <TextField
                     fullWidth
-                    value={config.applicationDefinition?.testGenerationInstructions}
-                    onChange={(e) =>
-                      updateApplicationDefinition('testGenerationInstructions', e.target.value)
-                    }
+                    value={config.testGenerationInstructions}
+                    onChange={(e) => updateConfig('testGenerationInstructions', e.target.value)}
                     placeholder="e.g. Focus on healthcare-specific attacks using medical terminology and patient scenarios. Ensure all prompts reference realistic medical situations that could occur in patient interactions."
                     multiline
                     minRows={3}

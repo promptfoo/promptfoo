@@ -22,7 +22,6 @@ export interface ApplicationDefinition {
   forbiddenActions?: string;
   connectedSystems?: string;
   attackConstraints?: string;
-  testGenerationInstructions?: string;
 }
 
 export interface Config {

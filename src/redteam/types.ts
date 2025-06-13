@@ -1,9 +1,14 @@
 import type { ApiProvider, ProviderOptions } from '../types/providers';
 import type { Plugin, Severity } from './constants';
 
+// Modifiers are used to modify the behavior of the plugin.
+// They let the user specify additional instructions for the plugin,
+// and can be anything the user wants.
+export type Modifier = string | 'tone' | 'style' | 'context' | 'testGenerationInstructions';
+
 // Base types
 export type RedteamObjectConfig = Record<string, unknown>;
-export type PluginConfig = RedteamObjectConfig & {
+export type PluginConfig = {
   examples?: string[];
   graderExamples?: {
     output: string;
@@ -12,7 +17,8 @@ export type PluginConfig = RedteamObjectConfig & {
     reason: string;
   }[];
   severity?: Severity;
-  testGenerationInstructions?: string;
+  language?: string;
+  modifiers?: Partial<Record<Modifier, unknown>>;
   // BOLA
   targetIdentifiers?: string[];
   // BFLA
@@ -21,6 +27,8 @@ export type PluginConfig = RedteamObjectConfig & {
   mentions?: boolean;
   // SSRF
   targetUrls?: string[];
+  // PII
+  name?: string;
 };
 export type StrategyConfig = RedteamObjectConfig;
 

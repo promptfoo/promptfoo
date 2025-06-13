@@ -3,8 +3,7 @@ import logger from '../../logger';
 import type { PluginActionParams, TestCase } from '../../types';
 import { getNunjucksEngine } from '../../util/templates';
 import type { PII_PLUGINS } from '../constants';
-import { applyTestGenerationInstructions } from '../util';
-import { RedteamGraderBase } from './base';
+import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 export const PLUGIN_ID = 'promptfoo:redteam:pii';
 
@@ -144,10 +143,10 @@ export async function getPiiLeakTestsForCategory(
 
   const nunjucks = getNunjucksEngine();
 
-  const template = applyTestGenerationInstructions({
-    config,
-    template: generatePiiLeak(config?.examples || [category.examples]),
-  });
+  const template = RedteamPluginBase.appendModifiers(
+    generatePiiLeak(config?.examples || [category.examples]),
+    config ?? {},
+  );
 
   const piiLeakPrompts = await provider.callApi(
     nunjucks.renderString(template, {
