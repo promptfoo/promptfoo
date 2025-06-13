@@ -20,6 +20,7 @@ describe('cloud utils', () => {
 
   beforeEach(() => {
     jest.resetAllMocks();
+
     mockCloudConfig.getApiHost.mockReturnValue('https://api.example.com');
     mockCloudConfig.getApiKey.mockReturnValue('test-api-key');
   });
@@ -81,6 +82,22 @@ describe('cloud utils', () => {
     });
 
     it('should handle API host without trailing slash', async () => {
+      mockCloudConfig.getApiHost.mockReturnValue('https://api.example.com');
+
+      const path = 'test/path';
+      const method = 'GET';
+
+      await makeRequest(path, method);
+
+      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/test/path',
+        expect.any(Object),
+      );
+    });
+
+    it('should handle API host with trailing slash', async () => {
+      mockCloudConfig.getApiHost.mockReturnValue('https://api.example.com');
+
       const path = 'test/path';
       const method = 'GET';
 
@@ -177,11 +194,18 @@ describe('cloud utils', () => {
       mockFetchWithProxy.mockResolvedValueOnce({
         json: () => Promise.resolve(mockProvider),
         ok: true,
-      } as any);
+      } as Response);
 
       const result = await getProviderFromCloud('test-provider');
 
       expect(result).toEqual({ ...mockProvider.config });
+      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/providers/test-provider',
+        {
+          method: 'GET',
+          headers: { Authorization: 'Bearer test-api-key' },
+        },
+      );
     });
 
     it('should throw error when cloud config is not enabled', async () => {
@@ -204,13 +228,17 @@ describe('cloud utils', () => {
       const mockProvider = {
         config: {
           label: 'Test Provider',
+          // Missing id field
         },
       };
 
       mockFetchWithProxy.mockResolvedValueOnce({
+        json: () => Promise.resolve({ buildDate: '2025-03-011' }),
+      } as Response);
+
+      mockFetchWithProxy.mockResolvedValueOnce({
         json: () => Promise.resolve(mockProvider),
-        ok: true,
-      } as any);
+      } as Response);
 
       await expect(getProviderFromCloud('test-provider')).rejects.toThrow(
         'Failed to fetch provider from cloud: test-provider.',
@@ -234,11 +262,18 @@ describe('cloud utils', () => {
       mockFetchWithProxy.mockResolvedValueOnce({
         json: () => Promise.resolve(mockUnifiedConfig),
         ok: true,
-      } as any);
+      } as Response);
 
       const result = await getConfigFromCloud('test-config');
 
       expect(result).toEqual(mockUnifiedConfig);
+      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/redteam/configs/test-config/unified',
+        {
+          method: 'GET',
+          headers: { Authorization: 'Bearer test-api-key' },
+        },
+      );
     });
 
     it('should fetch unified config with target', async () => {
@@ -252,11 +287,18 @@ describe('cloud utils', () => {
       mockFetchWithProxy.mockResolvedValueOnce({
         json: () => Promise.resolve(mockUnifiedConfig),
         ok: true,
-      } as any);
+      } as Response);
 
       const result = await getConfigFromCloud('test-config', 'test-provider');
 
       expect(result).toEqual(mockUnifiedConfig);
+      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/redteam/configs/test-config/unified?providerId=test-provider',
+        {
+          method: 'GET',
+          headers: { Authorization: 'Bearer test-api-key' },
+        },
+      );
     });
 
     it('should throw error when cloud config is not enabled', async () => {
@@ -268,12 +310,19 @@ describe('cloud utils', () => {
     });
 
     it('should throw error when config fetch fails', async () => {
+      mockFetchWithProxy.mockRejectedValueOnce(new Error('Network error'));
+
+      await expect(getConfigFromCloud('test-config')).rejects.toThrow(
+        'Failed to fetch config from cloud: test-config.',
+      );
+    });
+
+    it('should throw error when response is not ok', async () => {
       mockFetchWithProxy.mockResolvedValueOnce({
         ok: false,
-        status: 404,
         statusText: 'Not Found',
-        text: () => Promise.resolve('Not Found'),
-      } as any);
+        json: () => Promise.resolve({}),
+      } as Response);
 
       await expect(getConfigFromCloud('test-config')).rejects.toThrow(
         'Failed to fetch config from cloud: test-config.',
