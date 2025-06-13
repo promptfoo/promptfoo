@@ -1,7 +1,9 @@
 import { handleContextFaithfulness } from '../../src/assertions/contextFaithfulness';
 import * as matchers from '../../src/matchers';
+import * as transformUtil from '../../src/util/transform';
 
 jest.mock('../../src/matchers');
+jest.mock('../../src/util/transform');
 
 describe('handleContextFaithfulness', () => {
   beforeEach(() => {
@@ -224,6 +226,55 @@ describe('handleContextFaithfulness', () => {
       'test query',
       'test output',
       'test context',
+      0,
+      {},
+    );
+  });
+
+  it('should use contextTransform to extract context', async () => {
+    const mockResult = { pass: true, score: 1, reason: 'ok' };
+    jest.mocked(matchers.matchesContextFaithfulness).mockResolvedValue(mockResult);
+    jest.mocked(transformUtil.transform).mockResolvedValue('from-transform');
+
+    const params = {
+      assertion: {
+        type: 'context-faithfulness' as const,
+        contextTransform: 'output.context',
+      },
+      test: {
+        vars: {
+          query: 'test query',
+        },
+        options: {},
+      },
+      output: 'raw',
+      prompt: 'prompt text',
+      baseType: 'context-faithfulness' as const,
+      context: {
+        prompt: 'prompt text',
+        vars: {},
+        test: {},
+        logProbs: null,
+        tokenUsage: null,
+        cached: false,
+        provider: null,
+        providerResponse: null,
+      },
+      inverse: false,
+      outputString: 'raw',
+      providerResponse: null,
+    } as any;
+
+    await handleContextFaithfulness(params);
+
+    expect(transformUtil.transform).toHaveBeenCalledWith('output.context', 'raw', {
+      vars: params.test.vars,
+      prompt: { label: 'prompt text' },
+    });
+    expect(matchers.matchesContextFaithfulness).toHaveBeenCalledWith(
+      'test query',
+      'raw',
+      'from-transform',
       0,
       {},
     );

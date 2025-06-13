@@ -212,7 +212,17 @@ def get_var(var_name, prompt, other_vars):
 The `load_context.py` script defines two functions:
 
 - `get_var(var_name, prompt, other_vars)`: This is a special function that promptfoo looks for when loading dynamic variables.
-- `retrieve_documents(question: str) -> str`: This function takes the `question` as input and retrieves relevant documents based on the question. You can implement your own logic here to search a vector database or do anything else to fetch context.
+  - `retrieve_documents(question: str) -> str`: This function takes the `question` as input and retrieves relevant documents based on the question. You can implement your own logic here to search a vector database or do anything else to fetch context.
+
+### Extracting context from responses
+
+If your retrieval or LLM provider returns the context inside the response, you can use `contextTransform` to pull it out for the context-based metrics:
+
+```yaml
+assert:
+  - type: context-faithfulness
+    contextTransform: 'output.context'
+```
 
 ### Run the eval
 

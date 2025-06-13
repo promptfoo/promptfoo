@@ -1,8 +1,10 @@
 import { handleContextRecall } from '../../src/assertions/contextRecall';
 import * as matchers from '../../src/matchers';
 import type { AssertionParams, ApiProvider, ProviderResponse } from '../../src/types';
+import * as transformUtil from '../../src/util/transform';
 
 jest.mock('../../src/matchers');
+jest.mock('../../src/util/transform');
 
 describe('handleContextRecall', () => {
   const mockMatchesContextRecall = jest.spyOn(matchers, 'matchesContextRecall');
@@ -168,6 +170,43 @@ describe('handleContextRecall', () => {
       ...mockResult,
     });
     expect(mockMatchesContextRecall).toHaveBeenCalledWith('test context', 'test output', 0, {}, {});
+  });
+
+  it('should use contextTransform when provided', async () => {
+    const mockResult = { pass: true, score: 1, reason: 'ok' };
+    mockMatchesContextRecall.mockResolvedValue(mockResult);
+    jest.mocked(transformUtil.transform).mockResolvedValue('ctx');
+
+    const mockProvider: ApiProvider = { id: () => 'p', callApi: jest.fn() };
+
+    const params: AssertionParams = {
+      assertion: { type: 'context-recall', contextTransform: 'expr' },
+      renderedValue: 'val',
+      prompt: 'prompt',
+      test: { vars: {}, options: {} },
+      baseType: 'context-recall',
+      context: {
+        prompt: 'prompt',
+        vars: {},
+        test: { vars: {}, options: {} },
+        logProbs: undefined,
+        provider: mockProvider,
+        providerResponse: undefined,
+      },
+      inverse: false,
+      output: { context: 'hello' } as any,
+      outputString: 'str',
+      provider: mockProvider,
+      providerResponse: {} as ProviderResponse,
+    };
+
+    await handleContextRecall(params);
+
+    expect(transformUtil.transform).toHaveBeenCalledWith('expr', params.output, {
+      vars: params.test.vars,
+      prompt: { label: 'prompt' },
+    });
+    expect(mockMatchesContextRecall).toHaveBeenCalledWith('ctx', 'val', 0, {}, {});
   });
 
   it('should throw error when renderedValue is not a string', async () => {

@@ -19,6 +19,15 @@ assert:
 
 Note: This assertion requires the `context` variable to be set in your test.
 
+If the context appears in the provider response, you can extract it with `contextTransform`:
+
+```yaml
+assert:
+  - type: context-recall
+    contextTransform: 'output.docs.join("\n")'
+    value: 'Expected fact'
+```
+
 ### How it works
 
 The context recall checker:

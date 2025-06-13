@@ -18,6 +18,14 @@ assert:
 
 Note: This assertion requires `query`, `context`, and the LLM's output to evaluate faithfulness.
 
+If the context is included in the provider output, set `contextTransform` to extract it:
+
+```yaml
+assert:
+  - type: context-faithfulness
+    contextTransform: 'output.context'
+```
+
 ### How it works
 
 The context faithfulness checker:

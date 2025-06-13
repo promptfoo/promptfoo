@@ -1,7 +1,9 @@
 import { handleContextRelevance } from '../../src/assertions/contextRelevance';
 import { matchesContextRelevance } from '../../src/matchers';
+import * as transformUtil from '../../src/util/transform';
 
 jest.mock('../../src/matchers');
+jest.mock('../../src/util/transform');
 
 describe('handleContextRelevance', () => {
   beforeEach(() => {
@@ -251,5 +253,42 @@ describe('handleContextRelevance', () => {
     } as any);
 
     expect(matchesContextRelevance).toHaveBeenCalledWith('test query', 'test context', 0, {});
+  });
+
+  it('should use contextTransform when provided', async () => {
+    const mockResult = { pass: true, score: 1, reason: 'ok' };
+    jest.mocked(matchesContextRelevance).mockResolvedValue(mockResult);
+    jest.mocked(transformUtil.transform).mockResolvedValue('cx');
+
+    await handleContextRelevance({
+      assertion: {
+        type: 'context-relevance',
+        contextTransform: 'expr',
+      },
+      test: {
+        vars: { query: 'q' },
+        options: {},
+      },
+      baseType: 'context-relevance',
+      context: {
+        prompt: 'p',
+        vars: {},
+        test: { vars: { query: 'q' }, options: {} },
+        logProbs: undefined,
+        provider: { id: () => 'id', config: {}, callApi: jest.fn() },
+        providerResponse: { output: 'out', tokenUsage: {} },
+      },
+      inverse: false,
+      prompt: 'p',
+      output: 'out',
+      outputString: 'out',
+      providerResponse: { output: 'out', tokenUsage: {} },
+    } as any);
+
+    expect(transformUtil.transform).toHaveBeenCalledWith('expr', 'out', {
+      vars: { query: 'q' },
+      prompt: { label: 'p' },
+    });
+    expect(matchesContextRelevance).toHaveBeenCalledWith('q', 'cx', 0, {});
   });
 });

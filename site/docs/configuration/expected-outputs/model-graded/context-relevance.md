@@ -18,6 +18,14 @@ assert:
 
 Note: This assertion requires both `query` and `context` variables to be set in your test.
 
+When the response contains the context, use `contextTransform` to pull it out:
+
+```yaml
+assert:
+  - type: context-relevance
+    contextTransform: 'output.context'
+```
+
 ### How it works
 
 The context relevance checker:
