@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
+import Code from '@app/components/Code';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
-import { Alert } from '@mui/material';
+import { Alert, Tooltip } from '@mui/material';
 import Accordion from '@mui/material/Accordion';
 import AccordionDetails from '@mui/material/AccordionDetails';
 import AccordionSummary from '@mui/material/AccordionSummary';
@@ -16,13 +17,20 @@ import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Typography from '@mui/material/Typography';
 import { alpha, useTheme } from '@mui/material/styles';
-import { EXAMPLE_APPLICATION_DEFINITION, useRedTeamConfig } from '../hooks/useRedTeamConfig';
+import {
+  DEFAULT_HTTP_TARGET,
+  EXAMPLE_APPLICATION_DEFINITION,
+  useRedTeamConfig,
+} from '../hooks/useRedTeamConfig';
 import type { ApplicationDefinition } from '../types';
 
 interface PromptsProps {
   onNext: () => void;
 }
 
+/**
+ * "Usage Details" step of the red teaming config setup wizard.
+ */
 export default function Purpose({ onNext }: PromptsProps) {
   const theme = useTheme();
   const { config, updateApplicationDefinition } = useRedTeamConfig();
@@ -43,6 +51,8 @@ export default function Purpose({ onNext }: PromptsProps) {
     if (newMode !== null) {
       setTestMode(newMode);
       // Clear application definition fields when switching to model testing
+      // TODO: Move this out of this step; if the user switches out of curiosity, their values are cleared, which is a bad UX.
+      // This check should occur during the final review when the user saves the config.
       if (newMode === 'model') {
         Object.keys(EXAMPLE_APPLICATION_DEFINITION).forEach((key) => {
           updateApplicationDefinition(key as keyof ApplicationDefinition, '');
@@ -97,6 +107,12 @@ export default function Purpose({ onNext }: PromptsProps) {
     const percentage = Math.round((filledFields.length / sectionFields.length) * 100);
     return `${percentage}%`;
   };
+
+  const hasTargetConfigured = JSON.stringify(config.target) !== JSON.stringify(DEFAULT_HTTP_TARGET);
+  const mustDiscoverTargetFromCLI = config.target?.id !== 'http';
+  const targetCloudId = 'ebe51faa-d54e-46f3-a451-a93649419af7';
+
+  const cliCommandCode = <Code>promptfoo redteam discover -t {targetCloudId}</Code>;
 
   return (
     <Box sx={{ maxWidth: '1200px', width: '100%', px: 3 }}>
@@ -167,59 +183,81 @@ export default function Purpose({ onNext }: PromptsProps) {
 
         {testMode === 'application' ? (
           <>
-            <Box>
+            <Stack direction="column" spacing={3}>
               <Typography variant="h5" gutterBottom sx={{ fontWeight: 'medium' }}>
-                Application Details
+                Auto-Discover Target Details
               </Typography>
               <Typography variant="body1" sx={{ mb: 3 }}>
-                <strong>
-                  This is the most critical step for generating effective red team attacks.
-                </strong>{' '}
-                The quality and specificity of your responses directly determines how targeted and
-                realistic the generated attacks will be. Detailed information leads to{' '}
-                <strong>significantly</strong> better security testing and{' '}
-                <strong>more accurate</strong> grading of attack effectiveness.
+                {mustDiscoverTargetFromCLI
+                  ? "Run the following command in your terminal to auto-discover your target's usage details:"
+                  : "Get started by auto-discovering your target's usage details:"}
               </Typography>
+
+              {mustDiscoverTargetFromCLI ? (
+                cliCommandCode
+              ) : (
+                <Stack direction="column" spacing={2}>
+                  <Button variant="contained" disabled={!hasTargetConfigured}>
+                    Discover
+                  </Button>
+                  {!hasTargetConfigured && (
+                    <Alert severity="error" sx={{ border: 0 }}>
+                      You must configure a target to run auto-discovery.
+                    </Alert>
+                  )}
+                </Stack>
+              )}
 
               {/* Main Purpose - Standalone Section */}
-              <Box sx={{}}>
-                <Typography variant="h6" sx={{ fontWeight: 'medium', mb: 2 }}>
-                  What is the main purpose of your application?{' '}
-                  <span style={{ color: 'red' }}>*</span>
+              <Stack direction="column" spacing={3}>
+                <Typography variant="h5" gutterBottom sx={{ fontWeight: 'medium' }}>
+                  Application Details
                 </Typography>
-                <Box>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    Describe the primary objective and goals of your application. This foundational
-                    information provides essential context for generating all types of targeted
-                    security attacks and red team tests.
-                  </Typography>
-                  <TextField
-                    fullWidth
-                    value={config.applicationDefinition?.purpose}
-                    onChange={(e) => updateApplicationDefinition('purpose', e.target.value)}
-                    placeholder="e.g. Assist healthcare professionals and patients with medical-related tasks, access medical information, schedule appointments..."
-                    multiline
-                    minRows={3}
-                    variant="outlined"
-                    required
-                    sx={{
-                      '& .MuiInputBase-inputMultiline': {
-                        resize: 'vertical',
-                        minHeight: '72px',
-                      },
-                    }}
-                  />
-                </Box>
-              </Box>
+                <Typography variant="body1" sx={{ mb: 3 }}>
+                  <strong>
+                    This is the most critical step for generating effective red team attacks.
+                  </strong>{' '}
+                  The quality and specificity of your responses directly determines how targeted and
+                  realistic the generated attacks will be. Detailed information leads to{' '}
+                  <strong>significantly</strong> better security testing and{' '}
+                  <strong>more accurate</strong> grading of attack effectiveness.
+                </Typography>
 
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                sx={{ mb: 4, mt: 2, fontStyle: 'italic' }}
-              >
-                Only the main purpose is required. All other fields are optional, but providing more
-                details will result in significantly more targeted and effective security tests.
-              </Typography>
+                <Box sx={{}}>
+                  <Typography variant="h6" sx={{ fontWeight: 'medium', mb: 2 }}>
+                    What is the main purpose of your application?{' '}
+                    <span style={{ color: 'red' }}>*</span>
+                  </Typography>
+                  <Box>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                      Describe the primary objective and goals of your application. This
+                      foundational information provides essential context for generating all types
+                      of targeted security attacks and red team tests.
+                    </Typography>
+                    <TextField
+                      fullWidth
+                      value={config.applicationDefinition?.purpose}
+                      onChange={(e) => updateApplicationDefinition('purpose', e.target.value)}
+                      placeholder="e.g. Assist healthcare professionals and patients with medical-related tasks, access medical information, schedule appointments..."
+                      multiline
+                      minRows={3}
+                      variant="outlined"
+                      required
+                      sx={{
+                        '& .MuiInputBase-inputMultiline': {
+                          resize: 'vertical',
+                          minHeight: '72px',
+                        },
+                      }}
+                    />
+                  </Box>
+                </Box>
+                <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                  Only the main purpose is required. All other fields are optional, but providing
+                  more details will result in significantly more targeted and effective security
+                  tests.
+                </Typography>
+              </Stack>
 
               {/* Core Application Details */}
               <Accordion
@@ -736,7 +774,7 @@ export default function Purpose({ onNext }: PromptsProps) {
                   </Stack>
                 </AccordionDetails>
               </Accordion>
-            </Box>
+            </Stack>
 
             {/* Red Team User - Standalone Section */}
             <Box sx={{ mt: 4 }}>
