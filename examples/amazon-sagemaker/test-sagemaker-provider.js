@@ -11,18 +11,6 @@ const {
   SageMakerEmbeddingProvider,
 } = require('../../dist/providers/sagemaker');
 
-// Define usage information
-function printUsage() {
-  console.log('Usage: node test-sagemaker-provider.js [options]');
-  console.log('');
-  console.log('Options:');
-  console.log('  --model=<name>        Specify the model (llama or mistral, default: llama)');
-  console.log('  --prompt=<text>       Specify the prompt text');
-  console.log('  --max-tokens=<num>    Maximum tokens to generate (default: 256)');
-  console.log('  --temperature=<num>   Temperature setting (default: 0.7)');
-  console.log('');
-}
-
 // Process command line arguments
 function parseArgs() {
   const parser = new ArgumentParser({

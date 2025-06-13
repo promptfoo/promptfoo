@@ -9,8 +9,6 @@
  Create as many sidebars as you want.
  */
 
-const { amber } = require('@mui/material/colors');
-
 // @ts-check
 
 /** @type {import('@docusaurus/plugin-content-docs').SidebarsConfig} */

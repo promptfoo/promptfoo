@@ -1,5 +1,4 @@
 const express = require('express');
-const { providers } = require('promptfoo');
 const crypto = require('crypto');
 const fs = require('fs');
 

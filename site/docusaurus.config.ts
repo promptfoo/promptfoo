@@ -446,7 +446,7 @@ const config: Config = {
           }
 
           // This is our fallback approach in case extendDevServer doesn't work
-          const { siteDir } = context;
+          const { siteDir = '' } = context || {};
           const docsDir = path.join(siteDir, 'docs');
 
           return {
@@ -469,7 +469,7 @@ const config: Config = {
                     if (stat.isFile()) {
                       foundFile = true;
                     }
-                  } catch (err) {
+                  } catch {
                     // File doesn't exist, try with extensions
                     const extensions = ['.md', '.mdx'];
                     for (const ext of extensions) {
@@ -481,7 +481,7 @@ const config: Config = {
                           foundFile = true;
                           break;
                         }
-                      } catch (err) {
+                      } catch {
                         // Try index.md in the directory
                         try {
                           const indexPath = path.join(filePath.split('.')[0], `index${ext}`);
@@ -491,9 +491,7 @@ const config: Config = {
                             foundFile = true;
                             break;
                           }
-                        } catch (indexErr) {
-                          // Ignore errors for index files
-                        }
+                        } catch {}
                       }
                     }
                   }
@@ -510,7 +508,7 @@ const config: Config = {
                       res.setHeader('Cache-Control', 'no-cache');
                       res.setHeader('X-Content-Type-Options', 'nosniff');
                       res.send(content);
-                    } catch (error) {
+                    } catch {
                       res.status(500).send('Error reading markdown file');
                     }
                   } else {

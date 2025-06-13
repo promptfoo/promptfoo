@@ -202,23 +202,6 @@ const MCPConnectionSimulator: React.FC = () => {
     });
   };
 
-  const getStatusIcon = (status: ComponentStatus['status']) => {
-    switch (status) {
-      case 'idle':
-        return '○';
-      case 'connecting':
-        return '◌';
-      case 'connected':
-        return '●';
-      case 'disconnecting':
-        return '◌';
-      case 'error':
-        return '⊗';
-      default:
-        return '○';
-    }
-  };
-
   return (
     <div className={styles.container}>
       <div className={styles.header}>

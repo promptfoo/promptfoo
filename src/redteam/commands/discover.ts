@@ -23,19 +23,19 @@ import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration
 // Schemas
 // ========================================================
 
-export const TargetPurposeDiscoveryStateSchema = z.object({
+const TargetPurposeDiscoveryStateSchema = z.object({
   currentQuestionIndex: z.number(),
   answers: z.array(z.string()),
 });
 
-export const TargetPurposeDiscoveryRequestSchema = z.object({
+const TargetPurposeDiscoveryRequestSchema = z.object({
   state: TargetPurposeDiscoveryStateSchema,
   task: z.literal('target-purpose-discovery'),
   version: z.string(),
   email: z.string().optional().nullable(),
 });
 
-export const TargetPurposeDiscoveryResultSchema = z.object({
+const TargetPurposeDiscoveryResultSchema = z.object({
   purpose: z.string().nullable(),
   limitations: z.string().nullable(),
   user: z.string().nullable(),
@@ -56,7 +56,7 @@ export const TargetPurposeDiscoveryResultSchema = z.object({
   ),
 });
 
-export const TargetPurposeDiscoveryTaskResponseSchema = z.object({
+const TargetPurposeDiscoveryTaskResponseSchema = z.object({
   done: z.boolean(),
   question: z.string().optional(),
   purpose: TargetPurposeDiscoveryResultSchema.optional(),
@@ -87,8 +87,8 @@ type Args = z.infer<typeof ArgsSchema>;
 // Constants
 // ========================================================
 
-export const DEFAULT_TURN_COUNT = 5;
-export const MAX_TURN_COUNT = 10;
+const DEFAULT_TURN_COUNT = 5;
+const MAX_TURN_COUNT = 10;
 const LOG_PREFIX = '[Target Discovery Agent]';
 const COMMAND = 'discover';
 

@@ -124,7 +124,7 @@ export function calculateXAICost(
   return inputCostTotal + outputCostTotal;
 }
 
-export class XAIProvider extends OpenAiChatCompletionProvider {
+class XAIProvider extends OpenAiChatCompletionProvider {
   private originalConfig?: XAIConfig;
 
   protected get apiKey(): string | undefined {

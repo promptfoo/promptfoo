@@ -27,7 +27,7 @@ export const ProviderOptionsSchema = z
   })
   .strict();
 
-export const CallApiContextParamsSchema = z.object({
+const CallApiContextParamsSchema = z.object({
   fetchWithCache: z.optional(z.any()),
   filters: NunjucksFilterMapSchema.optional(),
   getCache: z.optional(z.any()),
@@ -37,7 +37,7 @@ export const CallApiContextParamsSchema = z.object({
   vars: z.record(z.union([z.string(), z.object({})])),
 });
 
-export const CallApiOptionsParamsSchema = z.object({
+const CallApiOptionsParamsSchema = z.object({
   includeLogProbs: z.optional(z.boolean()),
 });
 
@@ -69,8 +69,8 @@ export const ApiProviderSchema = z.object({
   delay: z.number().optional(),
   config: z.any().optional(),
 });
-
-export const ProviderResponseSchema = z.object({
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const ProviderResponseSchema = z.object({
   cached: z.boolean().optional(),
   cost: z.number().optional(),
   error: z.string().optional(),
@@ -84,20 +84,22 @@ export const ProviderResponseSchema = z.object({
   output: z.union([z.string(), z.any()]).optional(),
   tokenUsage: TokenUsageSchema.optional(),
 });
-
-export const ProviderEmbeddingResponseSchema = z.object({
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const ProviderEmbeddingResponseSchema = z.object({
   error: z.string().optional(),
   embedding: z.array(z.number()).optional(),
   tokenUsage: TokenUsageSchema.partial().optional(),
 });
 
-export const ProviderSimilarityResponseSchema = z.object({
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const ProviderSimilarityResponseSchema = z.object({
   error: z.string().optional(),
   similarity: z.number().optional(),
   tokenUsage: TokenUsageSchema.partial().optional(),
 });
 
-export const ProviderClassificationResponseSchema = z.object({
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const ProviderClassificationResponseSchema = z.object({
   error: z.string().optional(),
   classification: z.record(z.number()).optional(),
 });

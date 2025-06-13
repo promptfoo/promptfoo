@@ -30,7 +30,7 @@ class CustomApiProvider {
     };
 
     // Fetch the data from the API using promptfoo's cache. You can use your own fetch implementation if preferred.
-    const { data, cached } = await promptfoo.cache.fetchWithCache(
+    const { data } = await promptfoo.cache.fetchWithCache(
       'https://api.openai.com/v1/chat/completions',
       {
         method: 'POST',

@@ -29,7 +29,7 @@ import { addImageToBase64 } from './simpleImage';
 import { addVideoToBase64 } from './simpleVideo';
 import { addCompositeTestCases } from './singleTurnComposite';
 
-export interface Strategy {
+interface Strategy {
   id: string;
   action: (
     testCases: TestCaseWithPlugin[],
@@ -344,3 +344,5 @@ export async function loadStrategy(strategyPath: string): Promise<Strategy> {
 
   return strategy;
 }
+
+export { Strategy };
