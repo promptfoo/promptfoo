@@ -2,7 +2,7 @@
 description: PydanticAI weather agent evaluation
 
 prompts:
-  - "{{query}}"
+  - '{{query}}'
 
 providers:
   - id: file://provider.py
@@ -10,11 +10,11 @@ providers:
     config:
       model: openai:gpt-4o-mini
 
-  - id: file://provider.py:call_api_with_gpt4 
+  - id: file://provider.py:call_api_with_gpt4
     label: PydanticAI GPT-4o
 
 tests:
-  - description: "Basic weather query for major city"
+  - description: 'Basic weather query for major city'
     vars:
       query: "What's the weather like in London?"
     assert:
@@ -22,39 +22,81 @@ tests:
         value: "typeof output === 'object' && output.location && output.location.toLowerCase().includes('london')"
       - type: javascript
         value: "output.temperature && output.temperature !== 'N/A'"
+      - type: latency
+        threshold: 5000  # Max 5 seconds
 
-  - description: "Weather query with specific format request"
+  - description: 'Weather query with specific format request'
     vars:
-      query: "Can you tell me the current weather conditions in New York including humidity?"
+      query: 'Can you tell me the current weather conditions in New York including humidity?'
     assert:
       - type: javascript
         value: "output.location && output.location.toLowerCase().includes('new york')"
       - type: javascript
-        value: "output.humidity && output.humidity !== null"
+        value: 'output.humidity && output.humidity !== null'
+      - type: contains-json
+        value: { "location": "New York" }
 
-  - description: "International city weather query"
+  - description: 'International city weather query'
     vars:
       query: "How's the weather in Tokyo today?"
     assert:
       - type: javascript
         value: "output.location && output.location.toLowerCase().includes('tokyo')"
       - type: javascript
-        value: "!output.error"
+        value: '!output.error'
 
-  - description: "Weather query with multiple details requested"
+  - description: 'Weather query with multiple details requested'
     vars:
-      query: "Tell me about the weather in Sydney - temperature, conditions, and wind speed please"
+      query: 'Tell me about the weather in Sydney - temperature, conditions, and wind speed please'
     assert:
       - type: javascript
         value: "output.location && output.location.toLowerCase().includes('sydney')"
       - type: javascript
-        value: "output.wind_speed && output.wind_speed !== null"
+        value: 'output.wind_speed && output.wind_speed !== null'
 
-  - description: "Error handling test"
+  - description: 'Conversational weather query with decision support'
     vars:
-      query: "What's the weather like in Atlantis?"  
+      query: "I'm planning to go out in London later. Should I bring an umbrella?"
     assert:
       - type: javascript
-        value: "Boolean(output.location || output.error)"
+        value: "output.location && output.location.toLowerCase().includes('london')"
+      - type: llm-rubric
+        value: "Response provides actionable weather advice that would help someone decide whether to bring an umbrella"
 
-outputPath: ./promptfoo_results.json 
+  - description: 'JSON structure validation'
+    vars:
+      query: 'Weather in Boston'
+    assert:
+      - type: javascript
+        value: 'output.location && output.temperature && output.description'
+      - type: javascript
+        value: "typeof output.location === 'string' && typeof output.temperature === 'string'"
+      - type: contains-json
+        value: { "location": "Boston" }
+
+  - description: 'LLM-based quality assessment'
+    vars:
+      query: "Is it a good day for a picnic in Central Park?"
+    assert:
+      - type: javascript
+        value: "output.location && (output.location.toLowerCase().includes('new york') || output.location.toLowerCase().includes('central park'))"
+      - type: llm-rubric
+        value: "Response provides weather-based recommendation for outdoor activities like picnicking"
+
+  - description: 'Error handling test'
+    vars:
+      query: "What's the weather like in Atlantis?"
+    assert:
+      - type: javascript
+        value: 'Boolean(output.location || output.error)'
+
+  - description: 'Performance benchmark - multiple requests'
+    vars:
+      query: 'Weather in San Francisco, New York, and Miami'
+    assert:
+      - type: latency
+        threshold: 8000  # Allow more time for complex query
+      - type: javascript
+        value: 'output.location && output.temperature'
+
+outputPath: ./promptfoo_results.json

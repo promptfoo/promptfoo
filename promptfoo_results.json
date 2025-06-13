@@ -1,0 +1,1243 @@
+{
+  "evalId": "eval-yEU-2025-06-13T19:10:53",
+  "results": {
+    "version": 3,
+    "timestamp": "2025-06-13T19:10:53.338Z",
+    "prompts": [
+      {
+        "raw": "{{query}}",
+        "label": "{{query}}",
+        "id": "8868fc514e5f7bd1a350480c5a825cd0f5b47b6c0c8da0ca62be71158f638c23",
+        "provider": "PydanticAI GPT-4o-mini",
+        "metrics": {
+          "score": 5,
+          "testPassCount": 5,
+          "testFailCount": 0,
+          "testErrorCount": 0,
+          "assertPassCount": 9,
+          "assertFailCount": 0,
+          "totalLatencyMs": 19521,
+          "tokenUsage": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 5,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0
+            }
+          },
+          "namedScores": {},
+          "namedScoresCount": {},
+          "cost": 0
+        }
+      },
+      {
+        "raw": "{{query}}",
+        "label": "{{query}}",
+        "id": "8868fc514e5f7bd1a350480c5a825cd0f5b47b6c0c8da0ca62be71158f638c23",
+        "provider": "PydanticAI GPT-4o",
+        "metrics": {
+          "score": 5,
+          "testPassCount": 5,
+          "testFailCount": 0,
+          "testErrorCount": 0,
+          "assertPassCount": 9,
+          "assertFailCount": 0,
+          "totalLatencyMs": 18047,
+          "tokenUsage": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 5,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0
+            }
+          },
+          "namedScores": {},
+          "namedScoresCount": {},
+          "cost": 0
+        }
+      }
+    ],
+    "results": [
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "javascript",
+                "value": "output.location && output.location.toLowerCase().includes('new york')"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "javascript",
+                "value": "output.humidity && output.humidity !== null"
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "33bc8d93-4ce9-421d-bb96-2764e017566a",
+        "latencyMs": 3684,
+        "namedScores": {},
+        "prompt": {
+          "raw": "Can you tell me the current weather conditions in New York including humidity?",
+          "label": "{{query}}"
+        },
+        "promptId": "8868fc514e5f7bd1a350480c5a825cd0f5b47b6c0c8da0ca62be71158f638c23",
+        "promptIdx": 1,
+        "provider": {
+          "id": "file://provider.py:call_api_with_gpt4",
+          "label": "PydanticAI GPT-4o"
+        },
+        "response": {
+          "output": {
+            "location": "New York",
+            "temperature": "22°C",
+            "description": "Sunny",
+            "humidity": "45%",
+            "wind_speed": null,
+            "error": null
+          },
+          "metadata": {
+            "model": "openai:gpt-4o",
+            "agent_type": "pydantic_ai_weather",
+            "has_error": false,
+            "location_detected": true,
+            "temperature_provided": true
+          },
+          "tokenUsage": {
+            "total": null,
+            "prompt": null,
+            "completion": null
+          },
+          "cached": false
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Weather query with specific format request",
+          "vars": {
+            "query": "Can you tell me the current weather conditions in New York including humidity?"
+          },
+          "assert": [
+            {
+              "type": "javascript",
+              "value": "output.location && output.location.toLowerCase().includes('new york')"
+            },
+            {
+              "type": "javascript",
+              "value": "output.humidity && output.humidity !== null"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 1,
+        "vars": {
+          "query": "Can you tell me the current weather conditions in New York including humidity?"
+        },
+        "metadata": {
+          "model": "openai:gpt-4o",
+          "agent_type": "pydantic_ai_weather",
+          "has_error": false,
+          "location_detected": true,
+          "temperature_provided": true,
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "javascript",
+                "value": "typeof output === 'object' && output.location && output.location.toLowerCase().includes('london')"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "javascript",
+                "value": "output.temperature && output.temperature !== 'N/A'"
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "4c89a914-1e5d-47c5-93fe-8c893ba2d871",
+        "latencyMs": 3705,
+        "namedScores": {},
+        "prompt": {
+          "raw": "What's the weather like in London?",
+          "label": "{{query}}"
+        },
+        "promptId": "8868fc514e5f7bd1a350480c5a825cd0f5b47b6c0c8da0ca62be71158f638c23",
+        "promptIdx": 0,
+        "provider": {
+          "id": "file://provider.py",
+          "label": "PydanticAI GPT-4o-mini"
+        },
+        "response": {
+          "output": {
+            "location": "London, UK",
+            "temperature": "22°C",
+            "description": "Sunny",
+            "humidity": "45%",
+            "wind_speed": "10 km/h",
+            "error": null
+          },
+          "metadata": {
+            "model": "openai:gpt-4o-mini",
+            "agent_type": "pydantic_ai_weather",
+            "has_error": false,
+            "location_detected": true,
+            "temperature_provided": true
+          },
+          "tokenUsage": {
+            "total": null,
+            "prompt": null,
+            "completion": null
+          },
+          "cached": false
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Basic weather query for major city",
+          "vars": {
+            "query": "What's the weather like in London?"
+          },
+          "assert": [
+            {
+              "type": "javascript",
+              "value": "typeof output === 'object' && output.location && output.location.toLowerCase().includes('london')"
+            },
+            {
+              "type": "javascript",
+              "value": "output.temperature && output.temperature !== 'N/A'"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 0,
+        "vars": {
+          "query": "What's the weather like in London?"
+        },
+        "metadata": {
+          "model": "openai:gpt-4o-mini",
+          "agent_type": "pydantic_ai_weather",
+          "has_error": false,
+          "location_detected": true,
+          "temperature_provided": true,
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "javascript",
+                "value": "typeof output === 'object' && output.location && output.location.toLowerCase().includes('london')"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "javascript",
+                "value": "output.temperature && output.temperature !== 'N/A'"
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "a1a9c8ae-8238-4272-b10f-313024956f08",
+        "latencyMs": 4278,
+        "namedScores": {},
+        "prompt": {
+          "raw": "What's the weather like in London?",
+          "label": "{{query}}"
+        },
+        "promptId": "8868fc514e5f7bd1a350480c5a825cd0f5b47b6c0c8da0ca62be71158f638c23",
+        "promptIdx": 1,
+        "provider": {
+          "id": "file://provider.py:call_api_with_gpt4",
+          "label": "PydanticAI GPT-4o"
+        },
+        "response": {
+          "output": {
+            "location": "London",
+            "temperature": "22°C",
+            "description": "Sunny",
+            "humidity": "45%",
+            "wind_speed": "10 km/h",
+            "error": null
+          },
+          "metadata": {
+            "model": "openai:gpt-4o",
+            "agent_type": "pydantic_ai_weather",
+            "has_error": false,
+            "location_detected": true,
+            "temperature_provided": true
+          },
+          "tokenUsage": {
+            "total": null,
+            "prompt": null,
+            "completion": null
+          },
+          "cached": false
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Basic weather query for major city",
+          "vars": {
+            "query": "What's the weather like in London?"
+          },
+          "assert": [
+            {
+              "type": "javascript",
+              "value": "typeof output === 'object' && output.location && output.location.toLowerCase().includes('london')"
+            },
+            {
+              "type": "javascript",
+              "value": "output.temperature && output.temperature !== 'N/A'"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 0,
+        "vars": {
+          "query": "What's the weather like in London?"
+        },
+        "metadata": {
+          "model": "openai:gpt-4o",
+          "agent_type": "pydantic_ai_weather",
+          "has_error": false,
+          "location_detected": true,
+          "temperature_provided": true,
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "javascript",
+                "value": "output.location && output.location.toLowerCase().includes('new york')"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "javascript",
+                "value": "output.humidity && output.humidity !== null"
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "e6b95b06-5bf3-48b4-a7fe-03c241721402",
+        "latencyMs": 4311,
+        "namedScores": {},
+        "prompt": {
+          "raw": "Can you tell me the current weather conditions in New York including humidity?",
+          "label": "{{query}}"
+        },
+        "promptId": "8868fc514e5f7bd1a350480c5a825cd0f5b47b6c0c8da0ca62be71158f638c23",
+        "promptIdx": 0,
+        "provider": {
+          "id": "file://provider.py",
+          "label": "PydanticAI GPT-4o-mini"
+        },
+        "response": {
+          "output": {
+            "location": "New York",
+            "temperature": "12°C",
+            "description": "Rainy",
+            "humidity": "85%",
+            "wind_speed": "20 km/h",
+            "error": null
+          },
+          "metadata": {
+            "model": "openai:gpt-4o-mini",
+            "agent_type": "pydantic_ai_weather",
+            "has_error": false,
+            "location_detected": true,
+            "temperature_provided": true
+          },
+          "tokenUsage": {
+            "total": null,
+            "prompt": null,
+            "completion": null
+          },
+          "cached": false
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Weather query with specific format request",
+          "vars": {
+            "query": "Can you tell me the current weather conditions in New York including humidity?"
+          },
+          "assert": [
+            {
+              "type": "javascript",
+              "value": "output.location && output.location.toLowerCase().includes('new york')"
+            },
+            {
+              "type": "javascript",
+              "value": "output.humidity && output.humidity !== null"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 1,
+        "vars": {
+          "query": "Can you tell me the current weather conditions in New York including humidity?"
+        },
+        "metadata": {
+          "model": "openai:gpt-4o-mini",
+          "agent_type": "pydantic_ai_weather",
+          "has_error": false,
+          "location_detected": true,
+          "temperature_provided": true,
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "javascript",
+                "value": "output.location && output.location.toLowerCase().includes('tokyo')"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "javascript",
+                "value": "!output.error"
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "637a349e-7679-4fe4-96aa-96bbf3940eac",
+        "latencyMs": 3754,
+        "namedScores": {},
+        "prompt": {
+          "raw": "How's the weather in Tokyo today?",
+          "label": "{{query}}"
+        },
+        "promptId": "8868fc514e5f7bd1a350480c5a825cd0f5b47b6c0c8da0ca62be71158f638c23",
+        "promptIdx": 0,
+        "provider": {
+          "id": "file://provider.py",
+          "label": "PydanticAI GPT-4o-mini"
+        },
+        "response": {
+          "output": {
+            "location": "Tokyo",
+            "temperature": "22°C",
+            "description": "Sunny",
+            "humidity": "45%",
+            "wind_speed": "10 km/h",
+            "error": null
+          },
+          "metadata": {
+            "model": "openai:gpt-4o-mini",
+            "agent_type": "pydantic_ai_weather",
+            "has_error": false,
+            "location_detected": true,
+            "temperature_provided": true
+          },
+          "tokenUsage": {
+            "total": null,
+            "prompt": null,
+            "completion": null
+          },
+          "cached": false
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "International city weather query",
+          "vars": {
+            "query": "How's the weather in Tokyo today?"
+          },
+          "assert": [
+            {
+              "type": "javascript",
+              "value": "output.location && output.location.toLowerCase().includes('tokyo')"
+            },
+            {
+              "type": "javascript",
+              "value": "!output.error"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 2,
+        "vars": {
+          "query": "How's the weather in Tokyo today?"
+        },
+        "metadata": {
+          "model": "openai:gpt-4o-mini",
+          "agent_type": "pydantic_ai_weather",
+          "has_error": false,
+          "location_detected": true,
+          "temperature_provided": true,
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "javascript",
+                "value": "output.location && output.location.toLowerCase().includes('tokyo')"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "javascript",
+                "value": "!output.error"
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "25eb18f9-d4c7-4f5e-88d2-1600cba37304",
+        "latencyMs": 3852,
+        "namedScores": {},
+        "prompt": {
+          "raw": "How's the weather in Tokyo today?",
+          "label": "{{query}}"
+        },
+        "promptId": "8868fc514e5f7bd1a350480c5a825cd0f5b47b6c0c8da0ca62be71158f638c23",
+        "promptIdx": 1,
+        "provider": {
+          "id": "file://provider.py:call_api_with_gpt4",
+          "label": "PydanticAI GPT-4o"
+        },
+        "response": {
+          "output": {
+            "location": "Tokyo, Japan",
+            "temperature": "18°C",
+            "description": "Partly Cloudy",
+            "humidity": "60%",
+            "wind_speed": "15 km/h",
+            "error": null
+          },
+          "metadata": {
+            "model": "openai:gpt-4o",
+            "agent_type": "pydantic_ai_weather",
+            "has_error": false,
+            "location_detected": true,
+            "temperature_provided": true
+          },
+          "tokenUsage": {
+            "total": null,
+            "prompt": null,
+            "completion": null
+          },
+          "cached": false
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "International city weather query",
+          "vars": {
+            "query": "How's the weather in Tokyo today?"
+          },
+          "assert": [
+            {
+              "type": "javascript",
+              "value": "output.location && output.location.toLowerCase().includes('tokyo')"
+            },
+            {
+              "type": "javascript",
+              "value": "!output.error"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 2,
+        "vars": {
+          "query": "How's the weather in Tokyo today?"
+        },
+        "metadata": {
+          "model": "openai:gpt-4o",
+          "agent_type": "pydantic_ai_weather",
+          "has_error": false,
+          "location_detected": true,
+          "temperature_provided": true,
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "javascript",
+                "value": "output.location && output.location.toLowerCase().includes('sydney')"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "javascript",
+                "value": "output.wind_speed && output.wind_speed !== null"
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "64a8d633-4a10-4c2a-bdd7-aa2cefc9e02b",
+        "latencyMs": 4180,
+        "namedScores": {},
+        "prompt": {
+          "raw": "Tell me about the weather in Sydney - temperature, conditions, and wind speed please",
+          "label": "{{query}}"
+        },
+        "promptId": "8868fc514e5f7bd1a350480c5a825cd0f5b47b6c0c8da0ca62be71158f638c23",
+        "promptIdx": 1,
+        "provider": {
+          "id": "file://provider.py:call_api_with_gpt4",
+          "label": "PydanticAI GPT-4o"
+        },
+        "response": {
+          "output": {
+            "location": "Sydney",
+            "temperature": "22°C",
+            "description": "Sunny",
+            "humidity": "45%",
+            "wind_speed": "10 km/h",
+            "error": null
+          },
+          "metadata": {
+            "model": "openai:gpt-4o",
+            "agent_type": "pydantic_ai_weather",
+            "has_error": false,
+            "location_detected": true,
+            "temperature_provided": true
+          },
+          "tokenUsage": {
+            "total": null,
+            "prompt": null,
+            "completion": null
+          },
+          "cached": false
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Weather query with multiple details requested",
+          "vars": {
+            "query": "Tell me about the weather in Sydney - temperature, conditions, and wind speed please"
+          },
+          "assert": [
+            {
+              "type": "javascript",
+              "value": "output.location && output.location.toLowerCase().includes('sydney')"
+            },
+            {
+              "type": "javascript",
+              "value": "output.wind_speed && output.wind_speed !== null"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 3,
+        "vars": {
+          "query": "Tell me about the weather in Sydney - temperature, conditions, and wind speed please"
+        },
+        "metadata": {
+          "model": "openai:gpt-4o",
+          "agent_type": "pydantic_ai_weather",
+          "has_error": false,
+          "location_detected": true,
+          "temperature_provided": true,
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "javascript",
+                "value": "output.location && output.location.toLowerCase().includes('sydney')"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "javascript",
+                "value": "output.wind_speed && output.wind_speed !== null"
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "d622a65e-afa7-4dc1-8e49-c94fab21c91c",
+        "latencyMs": 4345,
+        "namedScores": {},
+        "prompt": {
+          "raw": "Tell me about the weather in Sydney - temperature, conditions, and wind speed please",
+          "label": "{{query}}"
+        },
+        "promptId": "8868fc514e5f7bd1a350480c5a825cd0f5b47b6c0c8da0ca62be71158f638c23",
+        "promptIdx": 0,
+        "provider": {
+          "id": "file://provider.py",
+          "label": "PydanticAI GPT-4o-mini"
+        },
+        "response": {
+          "output": {
+            "location": "Sydney",
+            "temperature": "18°C",
+            "description": "Partly Cloudy",
+            "humidity": "60%",
+            "wind_speed": "15 km/h",
+            "error": null
+          },
+          "metadata": {
+            "model": "openai:gpt-4o-mini",
+            "agent_type": "pydantic_ai_weather",
+            "has_error": false,
+            "location_detected": true,
+            "temperature_provided": true
+          },
+          "tokenUsage": {
+            "total": null,
+            "prompt": null,
+            "completion": null
+          },
+          "cached": false
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Weather query with multiple details requested",
+          "vars": {
+            "query": "Tell me about the weather in Sydney - temperature, conditions, and wind speed please"
+          },
+          "assert": [
+            {
+              "type": "javascript",
+              "value": "output.location && output.location.toLowerCase().includes('sydney')"
+            },
+            {
+              "type": "javascript",
+              "value": "output.wind_speed && output.wind_speed !== null"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 3,
+        "vars": {
+          "query": "Tell me about the weather in Sydney - temperature, conditions, and wind speed please"
+        },
+        "metadata": {
+          "model": "openai:gpt-4o-mini",
+          "agent_type": "pydantic_ai_weather",
+          "has_error": false,
+          "location_detected": true,
+          "temperature_provided": true,
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "javascript",
+                "value": "Boolean(output.location || output.error)"
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "1a0fd8dd-eda0-4ab1-bd0c-43140d758212",
+        "latencyMs": 2053,
+        "namedScores": {},
+        "prompt": {
+          "raw": "What's the weather like in Atlantis?",
+          "label": "{{query}}"
+        },
+        "promptId": "8868fc514e5f7bd1a350480c5a825cd0f5b47b6c0c8da0ca62be71158f638c23",
+        "promptIdx": 1,
+        "provider": {
+          "id": "file://provider.py:call_api_with_gpt4",
+          "label": "PydanticAI GPT-4o"
+        },
+        "response": {
+          "output": {
+            "location": "Atlantis",
+            "temperature": "",
+            "description": "",
+            "humidity": null,
+            "wind_speed": null,
+            "error": "Atlantis is a mythical location that does not have real-world coordinates for weather data. Please provide a valid location."
+          },
+          "metadata": {
+            "model": "openai:gpt-4o",
+            "agent_type": "pydantic_ai_weather",
+            "has_error": true,
+            "location_detected": true,
+            "temperature_provided": true
+          },
+          "tokenUsage": {
+            "total": null,
+            "prompt": null,
+            "completion": null
+          },
+          "cached": false
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Error handling test",
+          "vars": {
+            "query": "What's the weather like in Atlantis?"
+          },
+          "assert": [
+            {
+              "type": "javascript",
+              "value": "Boolean(output.location || output.error)"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 4,
+        "vars": {
+          "query": "What's the weather like in Atlantis?"
+        },
+        "metadata": {
+          "model": "openai:gpt-4o",
+          "agent_type": "pydantic_ai_weather",
+          "has_error": true,
+          "location_detected": true,
+          "temperature_provided": true,
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "javascript",
+                "value": "Boolean(output.location || output.error)"
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "4c3823df-eb59-4182-bdd8-70fcdb322134",
+        "latencyMs": 3406,
+        "namedScores": {},
+        "prompt": {
+          "raw": "What's the weather like in Atlantis?",
+          "label": "{{query}}"
+        },
+        "promptId": "8868fc514e5f7bd1a350480c5a825cd0f5b47b6c0c8da0ca62be71158f638c23",
+        "promptIdx": 0,
+        "provider": {
+          "id": "file://provider.py",
+          "label": "PydanticAI GPT-4o-mini"
+        },
+        "response": {
+          "output": {
+            "location": "Atlantis",
+            "temperature": "25°C",
+            "description": "Clear",
+            "humidity": "40%",
+            "wind_speed": "8 km/h",
+            "error": null
+          },
+          "metadata": {
+            "model": "openai:gpt-4o-mini",
+            "agent_type": "pydantic_ai_weather",
+            "has_error": false,
+            "location_detected": true,
+            "temperature_provided": true
+          },
+          "tokenUsage": {
+            "total": null,
+            "prompt": null,
+            "completion": null
+          },
+          "cached": false
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Error handling test",
+          "vars": {
+            "query": "What's the weather like in Atlantis?"
+          },
+          "assert": [
+            {
+              "type": "javascript",
+              "value": "Boolean(output.location || output.error)"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 4,
+        "vars": {
+          "query": "What's the weather like in Atlantis?"
+        },
+        "metadata": {
+          "model": "openai:gpt-4o-mini",
+          "agent_type": "pydantic_ai_weather",
+          "has_error": false,
+          "location_detected": true,
+          "temperature_provided": true,
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      }
+    ],
+    "stats": {
+      "successes": 10,
+      "failures": 0,
+      "errors": 0,
+      "tokenUsage": {
+        "cached": 0,
+        "completion": 0,
+        "prompt": 0,
+        "total": 0,
+        "numRequests": 10,
+        "completionDetails": {
+          "reasoning": 0,
+          "acceptedPrediction": 0,
+          "rejectedPrediction": 0
+        },
+        "assertions": {
+          "total": 0,
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0
+        }
+      }
+    }
+  },
+  "config": {
+    "tags": {},
+    "description": "PydanticAI weather agent evaluation",
+    "prompts": [
+      "{{query}}"
+    ],
+    "providers": [
+      {
+        "id": "file://provider.py",
+        "label": "PydanticAI GPT-4o-mini",
+        "config": {
+          "model": "openai:gpt-4o-mini"
+        }
+      },
+      {
+        "id": "file://provider.py:call_api_with_gpt4",
+        "label": "PydanticAI GPT-4o"
+      }
+    ],
+    "tests": [
+      {
+        "description": "Basic weather query for major city",
+        "vars": {
+          "query": "What's the weather like in London?"
+        },
+        "assert": [
+          {
+            "type": "javascript",
+            "value": "typeof output === 'object' && output.location && output.location.toLowerCase().includes('london')"
+          },
+          {
+            "type": "javascript",
+            "value": "output.temperature && output.temperature !== 'N/A'"
+          }
+        ]
+      },
+      {
+        "description": "Weather query with specific format request",
+        "vars": {
+          "query": "Can you tell me the current weather conditions in New York including humidity?"
+        },
+        "assert": [
+          {
+            "type": "javascript",
+            "value": "output.location && output.location.toLowerCase().includes('new york')"
+          },
+          {
+            "type": "javascript",
+            "value": "output.humidity && output.humidity !== null"
+          }
+        ]
+      },
+      {
+        "description": "International city weather query",
+        "vars": {
+          "query": "How's the weather in Tokyo today?"
+        },
+        "assert": [
+          {
+            "type": "javascript",
+            "value": "output.location && output.location.toLowerCase().includes('tokyo')"
+          },
+          {
+            "type": "javascript",
+            "value": "!output.error"
+          }
+        ]
+      },
+      {
+        "description": "Weather query with multiple details requested",
+        "vars": {
+          "query": "Tell me about the weather in Sydney - temperature, conditions, and wind speed please"
+        },
+        "assert": [
+          {
+            "type": "javascript",
+            "value": "output.location && output.location.toLowerCase().includes('sydney')"
+          },
+          {
+            "type": "javascript",
+            "value": "output.wind_speed && output.wind_speed !== null"
+          }
+        ]
+      },
+      {
+        "description": "Error handling test",
+        "vars": {
+          "query": "What's the weather like in Atlantis?"
+        },
+        "assert": [
+          {
+            "type": "javascript",
+            "value": "Boolean(output.location || output.error)"
+          }
+        ]
+      }
+    ],
+    "scenarios": [],
+    "env": {},
+    "sharing": true,
+    "defaultTest": {
+      "vars": {},
+      "assert": [],
+      "options": {},
+      "metadata": {}
+    },
+    "outputPath": [
+      "./promptfoo_results.json"
+    ],
+    "extensions": [],
+    "metadata": {}
+  },
+  "shareableUrl": null
+}

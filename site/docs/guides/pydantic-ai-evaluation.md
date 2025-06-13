@@ -4,7 +4,7 @@ sidebar_label: PydanticAI Agent Evaluation
 
 # Evaluating PydanticAI Agents with Promptfoo
 
-[PydanticAI](https://ai.pydantic.dev/) is a Python agent framework that makes it easier to build production-grade applications with Generative AI using structured outputs and type safety. This guide shows you how to systematically evaluate your PydanticAI agents using promptfoo.
+PydanticAI is a Python agent framework built on Pydantic that provides structured outputs and type safety for AI applications. This guide shows you how to effectively evaluate PydanticAI agents using promptfoo to ensure reliable, production-ready AI systems.
 
 ## What You'll Learn
 
@@ -15,19 +15,14 @@ sidebar_label: PydanticAI Agent Evaluation
 
 ## Why Evaluate PydanticAI Agents?
 
-PydanticAI agents are powerful because they provide:
+PydanticAI's strengths make it particularly well-suited for systematic evaluation:
 
-- **Structured outputs** - Type-safe responses using Pydantic models
-- **Tool integration** - Function calling capabilities for external data
-- **Model flexibility** - Easy switching between different LLMs
-- **Type safety** - Full TypeScript-like type checking in Python
+- **Structured outputs**: Predictable, typed responses that can be validated programmatically
+- **Tool integration**: Built-in support for function calling that can be tested end-to-end
+- **Model flexibility**: Easy switching between different LLM providers for comparison
+- **Type safety**: Pydantic models ensure data consistency and validation
 
-However, with this power comes complexity. Evaluating these agents helps ensure:
-
-- Consistent structured output format
-- Reliable tool usage across different scenarios
-- Stable performance when switching models
-- Proper error handling
+However, even with these safeguards, thorough evaluation is essential to catch edge cases, validate tool usage, and ensure consistent behavior across different scenarios.
 
 ## Getting Started
 
@@ -47,24 +42,28 @@ npm install -g promptfoo
 pip install pydantic-ai httpx
 ```
 
-## Example: Weather Agent Evaluation
+## Complete Tutorial: Building a Weather Agent
 
-Let's build a weather assistant agent and evaluate it across different scenarios.
+Let's walk through creating and evaluating a PydanticAI weather agent that demonstrates key evaluation patterns.
 
 ### Step 1: Create the PydanticAI Agent
 
-First, create your agent with structured outputs and tools:
+First, create an agent with structured outputs and tools:
 
 ```python
 # agent.py
-from typing import Optional
-from pydantic import BaseModel
-from pydantic_ai import Agent, RunContext
-import httpx
+import asyncio
+import json
 import os
+from typing import Optional
 
+import httpx
+from pydantic import BaseModel, ConfigDict
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.models import KnownModelName
+
+# Structured output model
 class WeatherResponse(BaseModel):
-    """Structured weather response"""
     location: str
     temperature: str
     description: str
@@ -72,220 +71,167 @@ class WeatherResponse(BaseModel):
     wind_speed: Optional[str] = None
     error: Optional[str] = None
 
-class Deps(BaseModel):
-    """Dependencies for the weather agent"""
-    model_config = {'arbitrary_types_allowed': True}
+# Agent with dependencies
+class WeatherDeps(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     
-    client: httpx.AsyncClient
-    weather_api_key: Optional[str] = None
+    http_client: httpx.AsyncClient
 
-def get_weather_agent(model: str = 'openai:gpt-4o-mini') -> Agent:
-    """Get or create the weather agent with the specified model"""
-    agent = Agent(
-        model,
-        deps_type=Deps,
-        output_type=WeatherResponse,
-        system_prompt=(
-            'You are a helpful weather assistant. '
-            'Use the geocoding tool to get coordinates for locations, '
-            'then use the weather tool to get current conditions. '
-            'Always provide clear, accurate weather information.'
-        ),
-    )
-    
-    # Add tools to the agent
-    agent.tool(get_coordinates)
-    agent.tool(get_weather)
-    
-    return agent
+# Create the agent
+weather_agent = Agent(
+    'openai:gpt-4o-mini',
+    deps_type=WeatherDeps,
+    result_type=WeatherResponse,
+    system_prompt="""You are a helpful weather assistant. Use the available tools to get weather information 
+    and provide structured responses. Always be conversational and helpful."""
+)
 
-async def get_coordinates(ctx: RunContext[Deps], location: str) -> dict[str, float]:
-    """Get latitude and longitude for a location."""
-    # Mock implementation for demo
-    mock_coords = {
-        "london": {"lat": 51.5074, "lng": -0.1278},
-        "new york": {"lat": 40.7128, "lng": -74.0060},
-        "tokyo": {"lat": 35.6762, "lng": 139.6503},
+# Tools for the agent
+@weather_agent.tool
+async def get_coordinates(ctx: RunContext[WeatherDeps], location: str) -> dict:
+    """Get coordinates for a location."""
+    # Simplified geocoding - in production, use real API
+    locations = {
+        'london': (51.5074, -0.1278),
+        'new york': (40.7128, -74.0060),
+        'tokyo': (35.6762, 139.6503),
+        'sydney': (-33.8688, 151.2093),
+        'boston': (42.3601, -71.0589),
+        'san francisco': (37.7749, -122.4194),
+        'miami': (25.7617, -80.1918),
+        'central park': (40.7829, -73.9654),
     }
     
     location_lower = location.lower()
-    for city, coords in mock_coords.items():
-        if city in location_lower:
-            return coords
+    for key, coords in locations.items():
+        if key in location_lower:
+            return {'lat': coords[0], 'lon': coords[1], 'name': key.title()}
     
-    return {"lat": 51.5074, "lng": -0.1278}  # Default to London
+    return {'error': f'Location {location} not found'}
 
-async def get_weather(ctx: RunContext[Deps], lat: float, lng: float, location_name: str) -> dict:
-    """Get current weather for coordinates."""
-    # Mock weather data for demo
+@weather_agent.tool
+async def get_weather(ctx: RunContext[WeatherDeps], lat: float, lon: float) -> dict:
+    """Get weather data for coordinates."""
+    # Mock weather data - in production, use real weather API
     import random
     
-    conditions = [
-        {"temp": "22°C", "desc": "Sunny", "humidity": "45%", "wind": "10 km/h"},
-        {"temp": "18°C", "desc": "Partly Cloudy", "humidity": "60%", "wind": "15 km/h"},
-        {"temp": "12°C", "desc": "Rainy", "humidity": "85%", "wind": "20 km/h"},
-    ]
+    conditions = ['sunny', 'cloudy', 'rainy', 'partly cloudy', 'clear']
+    temp = random.randint(10, 30)
+    humidity = random.randint(30, 90)
+    wind = random.randint(5, 25)
     
-    weather = random.choice(conditions)
     return {
-        'location': location_name,
-        'temperature': weather['temp'],
-        'description': weather['desc'],
-        'humidity': weather['humidity'],
-        'wind_speed': weather['wind']
+        'temperature': f'{temp}°C',
+        'description': random.choice(conditions),
+        'humidity': f'{humidity}%',
+        'wind_speed': f'{wind} km/h'
     }
 
-async def run_weather_agent(query: str, model: str = 'openai:gpt-4o-mini') -> WeatherResponse:
-    """Run the weather agent with a query."""
+# Main function to run the agent
+async def run_weather_agent(query: str, model: KnownModelName = 'openai:gpt-4o-mini') -> WeatherResponse:
+    """Run the weather agent with a given query."""
     async with httpx.AsyncClient() as client:
-        deps = Deps(client=client)
+        deps = WeatherDeps(http_client=client)
         
-        try:
-            agent = get_weather_agent(model)
-            result = await agent.run(query, deps=deps)
-            return result.output
-        except Exception as e:
-            return WeatherResponse(
-                location="Unknown",
-                temperature="N/A",
-                description="Error occurred",
-                error=str(e)
-            )
+        # Update agent model if different
+        agent = Agent(
+            model,
+            deps_type=WeatherDeps,
+            result_type=WeatherResponse,
+            system_prompt=weather_agent.system_prompt
+        )
+        
+        # Register tools
+        for tool in weather_agent._function_tools.values():
+            agent.tool(tool.function)
+        
+        result = await agent.run(query, deps=deps)
+        return result.data
 ```
 
 ### Step 2: Create the Promptfoo Provider
 
-Create a Python provider that interfaces between promptfoo and your PydanticAI agent:
+Create a provider that bridges PydanticAI with promptfoo:
 
 ```python
 # provider.py
 import asyncio
 import os
 from typing import Dict, Any
+
+# Set up environment variables
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from agent import run_weather_agent
 
 def call_api(prompt: str, options: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
-    """Promptfoo provider for the PydanticAI weather agent"""
-    
-    # Get model from config
-    config = options.get('config', {})
-    model = config.get('model', 'openai:gpt-4o-mini')
-    
-    # Ensure API keys are available
-    if not os.getenv('OPENAI_API_KEY'):
-        # Try to load from .env file
-        env_file = '../../.env'
-        if os.path.exists(env_file):
-            with open(env_file, 'r') as f:
-                for line in f:
-                    if line.startswith('OPENAI_API_KEY='):
-                        key = line.split('=', 1)[1].strip().strip('"\'')
-                        os.environ['OPENAI_API_KEY'] = key
-                        break
-    
-    try:
-        result = asyncio.run(run_weather_agent(prompt, model))
-        output_dict = result.model_dump()
-        
-        return {
-            "output": output_dict,
-            "metadata": {
-                "model": model,
-                "agent_type": "pydantic_ai_weather",
-                "has_error": output_dict.get("error") is not None,
-            }
-        }
-        
-    except Exception as e:
-        error_output = {
-            "location": "Unknown",
-            "temperature": "N/A", 
-            "description": "Error occurred",
-            "error": str(e)
-        }
-        return {
-            "output": error_output,
-            "metadata": {
-                "model": model,
-                "agent_type": "pydantic_ai_weather",
-                "has_error": True,
-            }
-        }
+    """Main provider function for GPT-4o-mini."""
+    model = options.get('config', {}).get('model', 'openai:gpt-4o-mini')
+    result = asyncio.run(run_weather_agent(prompt, model))
+    return {
+        'output': result.model_dump(),
+        'tokenUsage': {'total': 100, 'prompt': 50, 'completion': 50}
+    }
 
 def call_api_with_gpt4(prompt: str, options: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
-    """Provider variant using GPT-4"""
-    options_copy = options.copy()
-    if 'config' not in options_copy:
-        options_copy['config'] = {}
-    options_copy['config']['model'] = 'openai:gpt-4o'
-    
-    return call_api(prompt, options_copy, context)
+    """Provider function for GPT-4o."""
+    result = asyncio.run(run_weather_agent(prompt, 'openai:gpt-4o'))
+    return {
+        'output': result.model_dump(),
+        'tokenUsage': {'total': 150, 'prompt': 75, 'completion': 75}
+    }
 ```
 
-### Step 3: Configure the Evaluation
+### Step 3: Configure Comprehensive Evaluation
 
-Create your promptfoo configuration:
+Create a promptfoo configuration with multiple evaluation patterns:
 
 ```yaml
 # promptfooconfig.yaml
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: PydanticAI weather agent evaluation
 
 prompts:
-  - "{{query}}"
+  - '{{query}}'
 
 providers:
   - id: file://provider.py
     label: PydanticAI GPT-4o-mini
     config:
       model: openai:gpt-4o-mini
-
-  - id: file://provider.py:call_api_with_gpt4 
+  - id: file://provider.py:call_api_with_gpt4
     label: PydanticAI GPT-4o
 
 tests:
-  - description: "Basic weather query for major city"
+  - description: 'Basic weather query'
     vars:
       query: "What's the weather like in London?"
     assert:
       - type: javascript
-        value: "typeof output === 'object' && output.location && output.location.toLowerCase().includes('london')"
+        value: "output.location && output.location.toLowerCase().includes('london')"
       - type: javascript
         value: "output.temperature && output.temperature !== 'N/A'"
+      - type: latency
+        threshold: 5000
 
-  - description: "Weather query with specific format request"
+  - description: 'LLM-based quality assessment'
     vars:
-      query: "Can you tell me the current weather conditions in New York including humidity?"
+      query: "Is it a good day for a picnic in Central Park?"
     assert:
-      - type: javascript
-        value: "output.location && output.location.toLowerCase().includes('new york')"
-      - type: javascript
-        value: "output.humidity && output.humidity !== null"
+      - type: llm-rubric
+        value: "Response provides weather-based recommendation for outdoor activities"
 
-  - description: "International city weather query"
+  - description: 'Performance benchmark'
     vars:
-      query: "How's the weather in Tokyo today?"
+      query: 'Weather in San Francisco, New York, and Miami'
     assert:
+      - type: latency
+        threshold: 8000
       - type: javascript
-        value: "output.location && output.location.toLowerCase().includes('tokyo')"
-      - type: javascript
-        value: "!output.error"
-
-  - description: "Weather query with multiple details requested"
-    vars:
-      query: "Tell me about the weather in Sydney - temperature, conditions, and wind speed please"
-    assert:
-      - type: javascript
-        value: "output.location && output.location.toLowerCase().includes('sydney')"
-      - type: javascript
-        value: "output.wind_speed && output.wind_speed !== null"
-
-  - description: "Error handling test"
-    vars:
-      query: "What's the weather like in Atlantis?"  
-    assert:
-      - type: javascript
-        value: "Boolean(output.location || output.error)"
+        value: 'output.location && output.temperature'
 
 outputPath: ./promptfoo_results.json
 ```
@@ -296,60 +242,49 @@ outputPath: ./promptfoo_results.json
 # Install dependencies
 pip install -r requirements.txt
 
-# Set your API key
-export OPENAI_API_KEY=your_openai_api_key_here
+# Set API keys
+export OPENAI_API_KEY=your_key_here
 
-# Run the evaluation
-promptfoo eval
+# Run evaluation
+npx promptfoo eval
+
+# View results
+npx promptfoo view
 ```
 
-## Key Evaluation Patterns
+## Key Evaluation Patterns for PydanticAI
 
-### Testing Structured Outputs
+### 1. Structured Output Validation
 
-When evaluating PydanticAI agents, focus on validating the structured nature of responses:
+PydanticAI's structured outputs make validation straightforward:
+
+```yaml
+assert:
+  - type: javascript
+    value: 'typeof output.temperature === "string" && output.temperature.length > 0'
+  - type: contains-json
+    value: { "location": "Expected City" }
+  - type: javascript
+    value: 'output.error === null || output.error === undefined'
+```
+
+### 2. Tool Usage Testing
+
+Verify that your agent uses tools correctly:
 
 ```yaml
 tests:
-  - description: "Structured output validation"
+  - description: 'Tool usage verification'
     vars:
-      query: "Weather in Boston"
+      query: "Weather in an obscure location"
     assert:
-      # Validate required fields are present
       - type: javascript
-        value: "output.location && output.temperature && output.description"
-      
-      # Validate field types
-      - type: javascript
-        value: "typeof output.location === 'string'"
-      
-      # Validate no required fields are null
-      - type: javascript
-        value: "output.location !== null && output.temperature !== null"
+        value: 'output.location || output.error'  # Should handle unknown locations
 ```
 
-### Testing Tool Usage
+### 3. Cross-Model Consistency
 
-Verify that your agent correctly uses tools:
-
-```yaml
-tests:
-  - description: "Tool usage verification"
-    vars:
-      query: "Get weather for coordinates 40.7128, -74.0060"
-    assert:
-      # Should use geocoding tool
-      - type: contains-json
-        value: { "location": "New York" }
-      
-      # Should provide complete weather data
-      - type: javascript
-        value: "output.temperature && output.description && output.humidity"
-```
-
-### Cross-Model Consistency
-
-Test your agent across different models to ensure consistent behavior:
+Compare behavior across different models:
 
 ```yaml
 providers:
@@ -362,222 +297,221 @@ providers:
   - id: file://provider.py
     config:
       model: anthropic:claude-3-5-sonnet-latest
-
-tests:
-  - description: "Cross-model consistency test"
-    vars:
-      query: "Weather in San Francisco"
-    assert:
-      # All models should detect the location
-      - type: javascript
-        value: "output.location.toLowerCase().includes('san francisco')"
-      
-      # All models should provide temperature
-      - type: javascript
-        value: "output.temperature && output.temperature !== 'N/A'"
 ```
 
-### Error Handling
+### 4. Performance Testing
 
-Test how your agent handles edge cases:
+Monitor response times and resource usage:
 
 ```yaml
-tests:
-  - description: "Invalid location handling"
-    vars:
-      query: "Weather in Narnia"
-    assert:
-      # Should either provide a location or an error
-      - type: javascript
-        value: "output.location || output.error"
-      
-      # Should not crash
-      - type: javascript
-        value: "typeof output === 'object'"
+assert:
+  - type: latency
+    threshold: 3000  # 3 seconds max
+  - type: cost
+    threshold: 0.01  # Cost per request
+```
 
-  - description: "Ambiguous query handling"
-    vars:
-      query: "It's cold"
-    assert:
-      # Should ask for clarification or provide default
-      - type: javascript
-        value: "output.error || output.location"
+### 5. LLM-Based Quality Assessment
+
+Use AI to evaluate subjective qualities:
+
+```yaml
+assert:
+  - type: llm-rubric
+    value: "Response is conversational, helpful, and provides actionable weather advice"
+  - type: llm-rubric
+    value: "Information is accurate and properly formatted"
 ```
 
 ## Advanced Evaluation Techniques
 
-### Performance Metrics
-
-Track performance across evaluations:
-
-```yaml
-tests:
-  - description: "Performance benchmark"
-    vars:
-      query: "Current weather in major cities worldwide"
-    assert:
-      - type: latency
-        threshold: 5000  # 5 seconds max
-      
-      - type: javascript
-        value: "output.location && output.temperature"
-```
-
 ### Regression Testing
 
-Ensure changes don't break existing functionality:
+Set up baseline comparisons to catch regressions:
 
-```yaml
-# Store baseline results
-outputPath: ./baseline_results.json
+```bash
+# Create baseline
+npx promptfoo eval --write-baseline
 
 # Compare against baseline
-tests:
-  - description: "Regression test"
-    vars:
-      query: "Weather in London"
-    assert:
-      - type: similar
-        value: "file://baseline_london_response.json"
-        threshold: 0.8
+npx promptfoo eval --compare-baseline
 ```
 
-### A/B Testing
+### A/B Testing Different Configurations
 
-Compare different agent configurations:
+Test different system prompts or agent configurations:
 
-```yaml
+```python
+# Create multiple agent configurations
+def create_agent_variant(system_prompt: str, model: str):
+    return Agent(
+        model,
+        deps_type=WeatherDeps,
+        result_type=WeatherResponse,
+        system_prompt=system_prompt
+    )
+
+# Test in promptfoo config
 providers:
   - id: file://provider.py
-    label: "Agent v1"
     config:
-      model: openai:gpt-4o-mini
-      system_prompt: "You are a weather assistant."
+      variant: "helpful"
+  - id: file://provider.py
+    config:
+      variant: "concise"
+```
+
+### Continuous Integration Integration
+
+Add evaluation to your CI/CD pipeline:
+
+```yaml
+# .github/workflows/eval.yml
+name: AI Agent Evaluation
+on: [push, pull_request]
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          npm install -g promptfoo
+      
+      - name: Run evaluation
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          cd examples/pydantic-ai
+          promptfoo eval --no-interactive
+          
+      - name: Upload results
+        uses: actions/upload-artifact@v3
+        with:
+          name: evaluation-results
+          path: examples/pydantic-ai/promptfoo_results.json
+```
+
+### Dataset-Based Evaluation
+
+Use external datasets for comprehensive testing:
+
+```yaml
+# Use CSV datasets
+tests: file://weather_queries.csv
+
+# Or JSON datasets
+tests:
+  - vars:
+      query: "{{scenario.query}}"
+      expected_location: "{{scenario.location}}"
+    dataset: file://test_scenarios.json
+```
+
+### Custom Metrics and Assertions
+
+Create domain-specific evaluation criteria:
+
+```javascript
+// Custom assertion for weather data quality
+function validateWeatherData(output) {
+  const tempPattern = /\d+°[CF]/;
+  const hasValidTemp = tempPattern.test(output.temperature);
   
-  - id: file://provider_v2.py
-    label: "Agent v2"
-    config:
-      model: openai:gpt-4o-mini
-      system_prompt: "You are a helpful weather assistant with local knowledge."
+  const locationValid = output.location && 
+                       output.location.length > 2 && 
+                       !output.location.includes('unknown');
+  
+  return hasValidTemp && locationValid;
+}
+```
+
+## Production Considerations
+
+### Monitoring and Alerting
+
+Set up monitoring for production agents:
+
+```bash
+# Regular evaluation runs
+crontab -e
+0 */6 * * * cd /path/to/project && promptfoo eval --no-interactive
+```
+
+### Performance Optimization
+
+Monitor and optimize based on evaluation results:
+
+- **Token usage**: Track costs across different models
+- **Latency**: Identify slow tool calls or model responses  
+- **Success rates**: Monitor error rates and failure patterns
+- **Quality scores**: Track LLM-based quality metrics over time
+
+### Handling Edge Cases
+
+Use evaluation to discover and handle edge cases:
+
+```yaml
+tests:
+  - description: 'Ambiguous location query'
+    vars:
+      query: "Weather in Springfield"  # Multiple Springfields exist
+    assert:
+      - type: javascript
+        value: 'output.location || output.error'
+        
+  - description: 'Non-weather query'
+    vars:
+      query: "What's the capital of France?"
+    assert:
+      - type: javascript
+        value: 'output.error || output.location === null'
 ```
 
 ## Best Practices
 
-### 1. Start Simple
-
-Begin with basic functionality tests before adding complex scenarios:
-
-```yaml
-# Start with this
-tests:
-  - vars: { query: "Weather in London" }
-    assert:
-      - type: javascript
-        value: "output.location"
-
-# Then add complexity
-tests:
-  - vars: { query: "Detailed forecast for London including UV index and air quality" }
-    assert:
-      - type: javascript
-        value: "output.location && output.uv_index && output.air_quality"
-```
-
-### 2. Test Edge Cases
-
-Don't just test the happy path:
-
-```yaml
-tests:
-  # Happy path
-  - vars: { query: "Weather in New York" }
-    
-  # Edge cases
-  - vars: { query: "Weather in NYC" }  # Abbreviation
-  - vars: { query: "What's it like outside?" }  # No location
-  - vars: { query: "Temperature in 123" }  # Invalid location
-  - vars: { query: "" }  # Empty query
-```
-
-### 3. Use Meaningful Assertions
-
-Write assertions that test business logic, not just technical functionality:
-
-```yaml
-# Good - tests business logic
-assert:
-  - type: javascript
-    value: "output.temperature.includes('°')"  # Temperature has units
-  - type: javascript
-    value: "output.description.length > 0"     # Has description
-
-# Better - tests user value
-assert:
-  - type: llm-rubric
-    value: "Response provides actionable weather information for planning outdoor activities"
-```
-
-### 4. Version Your Evaluations
-
-Keep evaluation configs in version control alongside your agent code:
-
-```
-project/
-├── agent.py
-├── provider.py
-├── promptfooconfig.yaml
-├── requirements.txt
-└── tests/
-    ├── basic_functionality.yaml
-    ├── error_handling.yaml
-    └── performance.yaml
-```
+1. **Start Simple**: Begin with basic functionality tests before adding complex scenarios
+2. **Test Incrementally**: Add new test cases as you discover edge cases
+3. **Use Real Data**: Gradually replace mock data with real API calls for production testing
+4. **Monitor Costs**: Track token usage and API costs during evaluation
+5. **Version Control**: Keep evaluation configs in version control alongside your code
+6. **Regular Updates**: Update test cases as your agent's capabilities evolve
 
 ## Troubleshooting
 
 ### Common Issues
 
-**"API key not found" errors**
+**Issue**: "Module not found" errors
+**Solution**: Ensure all dependencies are installed and Python path is correct
 
-```python
-# In your provider, ensure environment variables are loaded
-import os
+**Issue**: API key errors
+**Solution**: Verify environment variables are set correctly
 
-if not os.getenv('OPENAI_API_KEY'):
-    # Load from .env file or other source
-    pass
-```
+**Issue**: Timeout errors
+**Solution**: Increase latency thresholds or optimize agent performance
 
-**"Unexpected token 'return'" in JavaScript assertions**
+**Issue**: Inconsistent results
+**Solution**: Add more deterministic test cases and check for model randomness
 
-```yaml
-# Wrong
-assert:
-  - type: javascript
-    value: |
-      return output.location.includes('london');
+### Debugging Tips
 
-# Right
-assert:
-  - type: javascript
-    value: "output.location.includes('london')"
-```
-
-**Structured output not being validated correctly**
-
-```python
-# Ensure your provider returns the structured data
-return {
-    "output": result.model_dump(),  # Convert Pydantic model to dict
-    "metadata": {...}
-}
-```
+1. **Use verbose mode**: `promptfoo eval --verbose` for detailed output
+2. **Check individual tests**: `promptfoo eval --filter "test description"`
+3. **Examine raw outputs**: Review the `promptfoo_results.json` file
+4. **Test providers directly**: Run your provider function independently
 
 ## Next Steps
 
-- Explore more complex agent architectures with multiple tools
-- Set up continuous evaluation in your CI/CD pipeline
-- Compare your PydanticAI agents with other frameworks
-- Build custom evaluation metrics for your specific use case
+- Explore [promptfoo's assertion types](../configuration/expected-outputs) for comprehensive testing
+- Set up [continuous evaluation](../integrations/github-action) in your CI/CD pipeline
+- Learn about [dataset management](../configuration/datasets) for large-scale testing
+- Check out other [Python integration examples](../../examples/) for inspiration
 
-For more examples and advanced patterns, check out the [promptfoo examples repository](https://github.com/promptfoo/promptfoo/tree/main/examples). 
+By following this guide, you'll have a robust evaluation system that ensures your PydanticAI agents perform reliably in production. The combination of structured outputs, comprehensive testing, and continuous monitoring will help you build trustworthy AI applications.
