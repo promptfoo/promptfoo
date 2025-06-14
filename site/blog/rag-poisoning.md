@@ -3,6 +3,7 @@ title: 'RAG Data Poisoning: Key Concepts Explained'
 description: How attackers can manipulate AI responses by corrupting the knowledge base.
 image: /img/docs/rag-poisoning.svg
 date: 2024-11-04
+authors: [ian]
 ---
 
 AI systems are under attack - and this time, it's their knowledge base that's being targeted. A new security threat called data poisoning lets attackers manipulate AI responses by corrupting the very documents these systems rely on for accurate information.

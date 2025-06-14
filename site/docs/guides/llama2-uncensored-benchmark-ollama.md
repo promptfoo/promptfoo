@@ -1,5 +1,6 @@
 ---
 sidebar_label: Uncensored Llama2 benchmark
+authors: [ian]
 ---
 
 # How to benchmark Llama2 Uncensored vs. GPT-3.5 on your own inputs

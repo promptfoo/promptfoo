@@ -11,6 +11,7 @@ keywords:
     promptfoo evaluation,
   ]
 sidebar_label: Magistral AIME2024 Benchmark
+authors: [michael]
 ---
 
 # Recreating Mistral Magistral AIME2024 Benchmarks

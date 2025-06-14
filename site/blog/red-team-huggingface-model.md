@@ -1,6 +1,7 @@
 ---
 date: 2024-11-20
 image: /img/blog/huggingface-red-team.png
+authors: [ian]
 ---
 
 # How to Red Team a HuggingFace Model

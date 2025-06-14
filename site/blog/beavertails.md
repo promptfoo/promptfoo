@@ -1,6 +1,7 @@
 ---
 date: 2024-12-22
 image: /img/blog/beavertails/beaver-coding.jpg
+authors: [ian]
 ---
 
 # Red Team Your LLM with BeaverTails

@@ -14,6 +14,7 @@ keywords:
     AI safety,
   ]
 sidebar_label: Testing Guardrails
+authors: [ian]
 ---
 
 Guardrails are security filters that help protect your AI applications from misuse. This guide explains how to test and validate guardrails with Promptfoo to ensure they're working effectively.

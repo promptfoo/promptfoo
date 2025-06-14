@@ -1,6 +1,7 @@
 ---
 date: 2025-06-07
 image: /img/blog/gpt-red-team.png
+authors: [ian]
 ---
 
 # How to Red Team GPT

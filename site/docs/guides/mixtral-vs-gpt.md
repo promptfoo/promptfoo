@@ -1,5 +1,6 @@
 ---
 sidebar_label: Mixtral vs GPT
+authors: [ian]
 ---
 
 # Mixtral vs GPT: Run a benchmark with your own data

@@ -1,6 +1,7 @@
 ---
 date: 2025-01-18
 image: /img/blog/langchain/red-team-langchain-banner.jpg
+authors: [ian]
 ---
 
 # How to Red Team a LangChain Application

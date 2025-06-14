@@ -2,6 +2,7 @@
 sidebar_label: Leveraging Promptfoo for EU AI Act Compliance
 image: /img/blog/eu-ai-act/panda-in-eu.jpeg
 date: 2024-12-10
+authors: [vanessa]
 ---
 
 # Leveraging Promptfoo for EU AI Act Compliance

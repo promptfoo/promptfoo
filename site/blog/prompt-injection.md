@@ -3,6 +3,7 @@ sidebar_label: Prompt injection
 image: /img/blog/prompt-injection/direct-vs-indirect.svg
 date: 2024-10-09
 # https://www.tldraw.com/r/f_RRQMHxGe4erRNUVAfZA?d=v-171.-485.3560.2381.page
+authors: [ian]
 ---
 
 # Prompt Injection: A Comprehensive Guide

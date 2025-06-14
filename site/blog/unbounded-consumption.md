@@ -2,6 +2,7 @@
 sidebar_label: 'Beyond DoS: How Unbounded Consumption is Reshaping LLM Security'
 image: /img/blog/unbounded-consumption/panda-eating-tokens.png
 date: 2024-12-31
+authors: [vanessa]
 ---
 
 # Beyond DoS: How Unbounded Consumption is Reshaping LLM Security

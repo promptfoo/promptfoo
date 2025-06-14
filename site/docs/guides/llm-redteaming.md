@@ -1,5 +1,6 @@
 ---
 sidebar_label: How to red team LLM applications
+authors: [ian]
 ---
 
 # How to red team LLM applications

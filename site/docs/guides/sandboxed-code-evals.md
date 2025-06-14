@@ -1,5 +1,6 @@
 ---
 sidebar_label: Sandboxed Evaluations of LLM-Generated Code
+authors: [ian]
 ---
 
 # Sandboxed Evaluations of LLM-Generated Code

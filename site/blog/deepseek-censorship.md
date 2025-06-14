@@ -1,6 +1,7 @@
 ---
 date: 2025-01-28
 image: /img/blog/deepseek/deepseek_panda.png
+authors: [vanessa]
 ---
 
 # 1,156 Questions Censored by DeepSeek

@@ -4,6 +4,7 @@ title: 'A2A Protocol: The Universal Language for AI Agents'
 description: 'Dive into the A2A protocol - the standardized communication layer that enables AI agents to discover, connect, and collaborate securely.'
 image: /img/blog/a2a/a2a.png
 date: 2025-05-12
+authors: [asmi]
 ---
 
 import A2AArchitectureVisualizer from './a2a/components/A2AArchitectureVisualizer';

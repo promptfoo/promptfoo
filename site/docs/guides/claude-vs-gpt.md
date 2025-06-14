@@ -1,6 +1,7 @@
 ---
 sidebar_label: 'Claude 3.7 vs GPT-4.1'
 description: 'Learn how to benchmark Claude 3.7 against GPT-4.1 using your own data with promptfoo. Discover which model performs best for your specific use case.'
+authors: [ian]
 ---
 
 # Claude 3.7 vs GPT-4.1: Benchmark on Your Own Data

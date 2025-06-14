@@ -1,5 +1,6 @@
 ---
 sidebar_label: DBRX benchmarks
+authors: [ian]
 ---
 
 # DBRX vs Mixtral vs GPT: create your own benchmark

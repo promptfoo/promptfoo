@@ -1,6 +1,7 @@
 ---
 date: 2024-11-23
 image: /img/blog/llama-red-team/llama-hacker.webp
+authors: [ian]
 ---
 
 # How to Red Team an Ollama Model

@@ -1,5 +1,6 @@
 ---
 sidebar_label: Evaluating JSON outputs
+authors: [ian]
 ---
 
 # LLM evaluation techniques for JSON outputs

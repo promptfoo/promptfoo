@@ -1,6 +1,7 @@
 ---
 date: 2025-05-22
 image: /img/blog/red-team-claude.png
+authors: [ian]
 ---
 
 # How to Red Team Claude

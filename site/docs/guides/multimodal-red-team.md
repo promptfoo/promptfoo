@@ -17,6 +17,7 @@ keywords:
     UnsafeBench,
     audio strategy,
   ]
+authors: [ian]
 ---
 
 # Multi-Modal Red Teaming
