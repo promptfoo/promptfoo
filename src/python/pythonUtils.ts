@@ -1,4 +1,4 @@
-import fs from 'fs';
+﻿import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import type { Options as PythonShellOptions } from 'python-shell';
@@ -10,6 +10,8 @@ import { execAsync } from './execAsync';
 
 export const state: { cachedPythonPath: string | null } = { cachedPythonPath: null };
 
+let validationPromise: Promise<string> | null = null;
+
 /**
  * Attempts to validate a Python executable path.
  * @param path - The path to the Python executable to test.
@@ -18,7 +20,7 @@ export const state: { cachedPythonPath: string | null } = { cachedPythonPath: nu
 export async function tryPath(path: string): Promise<string | null> {
   try {
     const result = await Promise.race([
-      execAsync(`${path} --version`),
+      execAsync(path + " --version"),
       new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('Command timed out')), 2500),
       ),
@@ -42,35 +44,52 @@ export async function tryPath(path: string): Promise<string | null> {
  * @throws {Error} If no valid Python executable is found.
  */
 export async function validatePythonPath(pythonPath: string, isExplicit: boolean): Promise<string> {
+  // Return cached result if available
   if (state.cachedPythonPath) {
     return state.cachedPythonPath;
   }
 
-  const primaryPath = await tryPath(pythonPath);
-  if (primaryPath) {
-    state.cachedPythonPath = primaryPath;
-    return primaryPath;
+  // If validation is already in progress, wait for it to complete
+  if (validationPromise) {
+    return validationPromise;
   }
 
-  if (isExplicit) {
-    throw new Error(
-      `Python 3 not found. Tried "${pythonPath}" ` +
-        `Please ensure Python 3 is installed and set the PROMPTFOO_PYTHON environment variable ` +
-        `to your Python 3 executable path (e.g., '${process.platform === 'win32' ? 'C:\\Python39\\python.exe' : '/usr/bin/python3'}').`,
-    );
-  }
-  const alternativePath = process.platform === 'win32' ? 'py -3' : 'python3';
-  const secondaryPath = await tryPath(alternativePath);
-  if (secondaryPath) {
-    state.cachedPythonPath = secondaryPath;
-    return secondaryPath;
-  }
+  // Start new validation and store the promise to prevent concurrent validations
+  validationPromise = (async () => {
+    try {
+      const primaryPath = await tryPath(pythonPath);
+      if (primaryPath) {
+        state.cachedPythonPath = primaryPath;
+        return primaryPath;
+      }
 
-  throw new Error(
-    `Python 3 not found. Tried "${pythonPath}" and "${alternativePath}". ` +
-      `Please ensure Python 3 is installed and set the PROMPTFOO_PYTHON environment variable ` +
-      `to your Python 3 executable path (e.g., '${process.platform === 'win32' ? 'C:\\Python39\\python.exe' : '/usr/bin/python3'}').`,
-  );
+      if (isExplicit) {
+        throw new Error(
+          `Python 3 not found. Tried "${pythonPath}" ` +
+            `Please ensure Python 3 is installed and set the PROMPTFOO_PYTHON environment variable ` +
+            `to your Python 3 executable path (e.g., '${process.platform === 'win32' ? 'C:\\Python39\\python.exe' : '/usr/bin/python3'}').`,
+        );
+      }
+
+      const alternativePath = process.platform === 'win32' ? 'py -3' : 'python3';
+      const secondaryPath = await tryPath(alternativePath);
+      if (secondaryPath) {
+        state.cachedPythonPath = secondaryPath;
+        return secondaryPath;
+      }
+
+      throw new Error(
+        `Python 3 not found. Tried "${pythonPath}" and "${alternativePath}". ` +
+          `Please ensure Python 3 is installed and set the PROMPTFOO_PYTHON environment variable ` +
+          `to your Python 3 executable path (e.g., '${process.platform === 'win32' ? 'C:\\Python39\\python.exe' : '/usr/bin/python3'}').`,
+      );
+    } finally {
+      // Clear the promise when validation completes (success or failure)
+      validationPromise = null;
+    }
+  })();
+
+  return validationPromise;
 }
 
 /**
