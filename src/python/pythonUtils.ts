@@ -20,7 +20,7 @@ let validationPromise: Promise<string> | null = null;
 export async function tryPath(path: string): Promise<string | null> {
   try {
     const result = await Promise.race([
-      execAsync(path + " --version"),
+      execAsync(path + ' --version'),
       new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('Command timed out')), 2500),
       ),
