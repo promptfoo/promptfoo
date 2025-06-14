@@ -1,5 +1,4 @@
-﻿import path from 'path';
-import * as pythonUtils from '../../src/python/pythonUtils';
+﻿import * as pythonUtils from '../../src/python/pythonUtils';
 
 async function aggressiveRaceConditionTest() {
   const { state } = pythonUtils;
