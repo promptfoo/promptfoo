@@ -28,8 +28,8 @@ async function aggressiveRaceConditionTest() {
             return { testId, success: true, result, duration };
           } catch (error) {
             const duration = Date.now() - startTime;
-            console.log(`[Test ${testId}] FAILED: ${error.message} (${duration}ms)`);
-            return { testId, success: false, error: error.message, duration };
+            console.log(`[Test ${testId}] FAILED: ${(error as Error).message} (${duration}ms)`);
+            return { testId, success: false, error: (error as Error).message, duration };
           }
         })(i)
       );
@@ -72,8 +72,8 @@ async function aggressiveRaceConditionTest() {
             console.log(`[Mixed ${testId}] SUCCESS: ${result} (${isExplicit ? 'explicit' : 'implicit'})`);
             return { testId, success: true, result, isExplicit };
           } catch (error) {
-            console.log(`[Mixed ${testId}] FAILED: ${error.message} (${isExplicit ? 'explicit' : 'implicit'})`);
-            return { testId, success: false, error: error.message, isExplicit };
+            console.log(`[Mixed ${testId}] FAILED: ${(error as Error).message} (${isExplicit ? 'explicit' : 'implicit'})`);
+            return { testId, success: false, error: (error as Error).message, isExplicit };
           }
         })(i)
       );
@@ -115,8 +115,8 @@ async function aggressiveRaceConditionTest() {
           console.log(`[Rapid ${testId}] SUCCESS: ${result}`);
           return { testId, success: true, result };
         } catch (error) {
-          console.log(`[Rapid ${testId}] FAILED: ${error.message}`);
-          return { testId, success: false, error: error.message };
+          console.log(`[Rapid ${testId}] FAILED: ${(error as Error).message}`);
+          return { testId, success: false, error: (error as Error).message };
         }
       })(i)
     );
