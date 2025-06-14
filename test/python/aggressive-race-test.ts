@@ -112,6 +112,7 @@ async function aggressiveRaceConditionTest() {
         console.log(`Explicit results: ${Array.from(uniqueExplicit).join(', ')}`);
         console.log(`Implicit results: ${Array.from(uniqueImplicit).join(', ')}`);
         inconsistentResults++;
+        raceConditionsDetected++;
       } else {
         console.log(`✅ CONSISTENT RESULTS:`);
         console.log(`Explicit results: ${Array.from(uniqueExplicit).join(', ')}`);
