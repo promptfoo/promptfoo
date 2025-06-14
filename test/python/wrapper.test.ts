@@ -19,6 +19,15 @@ jest.mock('../../src/python/pythonUtils', () => {
     },
   };
 });
+interface TestResult {
+  testId: number;
+  result: string;
+}
+interface MixedTestResult {
+  testId: number;
+  result: string;
+  isExplicit: boolean;
+}
 describe('wrapper', () => {
   beforeAll(() => {
     delete process.env.PROMPTFOO_PYTHON;
@@ -72,9 +81,10 @@ describe('wrapper', () => {
     // Unmock validatePythonPath for this test suite to test the real implementation
     beforeEach(() => {
       jest.restoreAllMocks();
-      // Reset the cached path before each test
+      // Reset the cached path and validation promise before each test
       const actualPythonUtils = jest.requireActual('../../src/python/pythonUtils');
       actualPythonUtils.state.cachedPythonPath = null;
+      actualPythonUtils.state.validationPromise = null;
     });
     it('should handle concurrent validatePythonPath calls without race conditions', async () => {
       const actualPythonUtils = jest.requireActual('../../src/python/pythonUtils');
@@ -84,17 +94,17 @@ describe('wrapper', () => {
       // Launch multiple concurrent validations
       const concurrentCalls = 10;
       const promises = Array.from({ length: concurrentCalls }, (_, i) =>
-        realValidatePythonPath('python', false).then(result => ({ testId: i, result }))
+        realValidatePythonPath('python', false).then((result: string): TestResult => ({ testId: i, result }))
       );
       const results = await Promise.all(promises);
       // All calls should succeed
       expect(results).toHaveLength(concurrentCalls);
-      results.forEach(result => {
+      results.forEach((result: TestResult) => {
         expect(result.result).toBeTruthy();
         expect(typeof result.result).toBe('string');
       });
       // All results should be consistent (no race condition)
-      const uniqueResults = new Set(results.map(r => r.result));
+      const uniqueResults = new Set(results.map((r: TestResult) => r.result));
       expect(uniqueResults.size).toBe(1);
       // Cache should be populated
       expect(realState.cachedPythonPath).toBeTruthy();
@@ -107,7 +117,7 @@ describe('wrapper', () => {
       // Create mixed explicit/implicit calls
       const mixedPromises = Array.from({ length: 8 }, (_, i) => {
         const isExplicit = i % 2 === 0;
-        return realValidatePythonPath('python', isExplicit).then(result => ({
+        return realValidatePythonPath('python', isExplicit).then((result: string): MixedTestResult => ({
           testId: i,
           result,
           isExplicit,
@@ -116,13 +126,13 @@ describe('wrapper', () => {
       const results = await Promise.all(mixedPromises);
       // All calls should succeed
       expect(results).toHaveLength(8);
-      results.forEach(result => {
+      results.forEach((result: MixedTestResult) => {
         expect(result.result).toBeTruthy();
         expect(typeof result.result).toBe('string');
       });
       // Check consistency between explicit and implicit results
-      const explicitResults = results.filter(r => r.isExplicit).map(r => r.result);
-      const implicitResults = results.filter(r => !r.isExplicit).map(r => r.result);
+      const explicitResults = results.filter((r: MixedTestResult) => r.isExplicit).map((r: MixedTestResult) => r.result);
+      const implicitResults = results.filter((r: MixedTestResult) => !r.isExplicit).map((r: MixedTestResult) => r.result);
       const uniqueExplicitResults = new Set(explicitResults);
       const uniqueImplicitResults = new Set(implicitResults);
       // Both explicit and implicit calls should return consistent results
@@ -139,17 +149,17 @@ describe('wrapper', () => {
       // Launch rapid successive calls
       const rapidCalls = 20;
       const promises = Array.from({ length: rapidCalls }, (_, i) =>
-        realValidatePythonPath('python', false).then(result => ({ testId: i, result }))
+        realValidatePythonPath('python', false).then((result: string): TestResult => ({ testId: i, result }))
       );
       const results = await Promise.all(promises);
       // All calls should succeed
       expect(results).toHaveLength(rapidCalls);
-      results.forEach(result => {
+      results.forEach((result: TestResult) => {
         expect(result.result).toBeTruthy();
         expect(typeof result.result).toBe('string');
       });
       // All results should be consistent
-      const uniqueResults = new Set(results.map(r => r.result));
+      const uniqueResults = new Set(results.map((r: TestResult) => r.result));
       expect(uniqueResults.size).toBe(1);
       // Cache should be populated with the consistent result
       expect(realState.cachedPythonPath).toBe(results[0].result);
