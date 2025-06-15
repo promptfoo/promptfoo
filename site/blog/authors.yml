@@ -8,3 +8,9 @@ vanessa:
   name: Vanessa Sauter
   title: solutions architect @ promptfoo
   url: https://github.com/vsauter
+
+steven:
+  name: Steven Klein
+  title: principal architect @ promptfoo
+  url: https://github.com/sklein12
+  image_url: https://github.com/sklein12.png
