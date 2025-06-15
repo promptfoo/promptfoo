@@ -90,3 +90,20 @@ This scanner analyzes model configuration files and manifests.
 
 **Why it matters:**
 Model configuration files can contain settings that lead to insecure behavior, such as downloading content from untrusted sources, accessing sensitive files, or executing commands.
+
+## ZIP Archive Scanner
+
+**File types:** `.zip`
+
+This scanner examines ZIP archives and their contents recursively.
+
+**What it checks for:**
+
+- **Directory traversal attacks:** Detects entries with paths containing ".." or absolute paths that could overwrite system files
+- **Zip bombs:** Identifies files with suspicious compression ratios (>100x) that could cause resource exhaustion
+- **Nested archives:** Scans ZIP files within ZIP files up to a configurable depth to prevent infinite recursion attacks
+- **Malicious content:** Each file within the archive is scanned with its appropriate scanner (e.g., pickle files with PickleScanner)
+- **Resource limits:** Enforces maximum number of entries and file sizes to prevent denial of service
+
+**Why it matters:**
+ZIP archives are commonly used to distribute models and datasets. Malicious actors can craft ZIP files that exploit extraction vulnerabilities, contain malware, or cause resource exhaustion. This scanner ensures that archives are safe to extract and that their contents don't pose security risks.

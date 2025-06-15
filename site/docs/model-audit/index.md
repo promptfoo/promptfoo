@@ -30,6 +30,7 @@ AI/ML models can introduce security risks through:
 - Potentially unsafe Keras Lambda layers
 - Encoded payloads hidden in model structures
 - Risky configurations in model architectures
+- Malicious content in ZIP archives and compressed model files
 
 ModelAudit helps identify these risks before models are deployed to production environments, ensuring a more secure AI pipeline.
 
