@@ -1,5 +1,5 @@
 ---
-title: "Announcing Promptfoo's latest Red team Agent"
+title: 'Next Generation of Red Teaming for LLM Agents'
 description: Promptfoo is launching a revolutionary next-generation red teaming platform specifically designed to protect advanced enterprise-grade LLM systems.
 image: /img/blog/summer-2025-new-redteam-agent/title.jpg
 keywords: [promptfoo, AI security, red teaming, LLM evaluation, prompt engineering, AI agents]
@@ -7,7 +7,7 @@ date: 2025-06-15
 author: 'Steven Klein, Principal Architect at Promptfoo'
 ---
 
-# Introducing the Next Generation of LLM Red Teaming for the Enterprise
+# The Next Generation of Red Teaming for LLM Agents
 
 ## The Evolution of Red Teaming
 
@@ -207,7 +207,7 @@ During execution, we have multiple agents that attack, judge and replan during e
 
 I feel like a YouTuber - "If you made it this far into the video"
 
-The biggest leap we made was when we added persistent memory throughout testing phases. Our system systematically records knowledge about the target environment as it explores and attacks. We can reuse information gleaned from one phase, whether it be tactics or information like user ids, for future attacks.
+The biggest leap we made was when we added persistent memory throughout testing phases. Our system records knowledge about the target environment as it explores and attacks. We can reuse information gleaned from one phase, whether it be tactics or information like user ids, for future attacks.
 
 **Examples of strategies dynamically developed by the system:**
 
@@ -234,6 +234,8 @@ At Promptfoo, we've raised the bar for what enterprise-grade LLM security looks 
 - **Adaptive Attack Execution**: Real-time monitoring and adaptive replanning, enabling precise, iterative exploitation and rapid pivoting.
 
 - **Persistent Memory**: Information retention across testing phases, empowering sophisticated multi-step exploitation strategies and enabling deep, cumulative learning about target systems.
+
+We
 
 If you're interested in helping us build cool stuff like this, check out our [careers page](https://www.promptfoo.dev/careers).
 
