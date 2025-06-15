@@ -1,10 +1,10 @@
 ---
 title: 'Next Generation of Red Teaming for LLM Agents'
-description: Promptfoo is launching a revolutionary next-generation red teaming platform specifically designed to protect advanced enterprise-grade LLM systems.
+description: Promptfoo is introducing our revolutionary, next-generation red teaming agent designed for enterprise-grade LLM agents.
 image: /img/blog/summer-2025-new-redteam-agent/title.jpg
 keywords: [promptfoo, AI security, red teaming, LLM evaluation, prompt engineering, AI agents]
 date: 2025-06-15
-author: 'Steven Klein, Principal Architect at Promptfoo'
+author: 'Steven Klein, Principal Engineer at Promptfoo'
 ---
 
 # The Next Generation of Red Teaming for LLM Agents
