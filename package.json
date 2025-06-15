@@ -222,8 +222,8 @@
     "uuid": "^11.1.0",
     "winston": "^3.17.0",
     "ws": "^8.18.2",
-    "zod": "^3.25.57",
-    "zod-validation-error": "^3.4.1"
+    "zod": "^3.25.63",
+    "zod-validation-error": "^3.5.0"
   },
   "madge": {
     "detectiveOptions": {

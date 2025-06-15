@@ -564,6 +564,8 @@ class Evaluator {
       }
     };
 
+    logger.info(`Starting evaluation ${this.evalRecord.id}`);
+
     // Add abort checks at key points
     checkAbort();
 
@@ -653,6 +655,8 @@ class Evaluator {
         prompts.push(completedPrompt);
       }
     }
+
+    this.evalRecord.addPrompts(prompts);
 
     // Aggregate all vars across test cases
     let tests =
@@ -1290,6 +1294,7 @@ class Evaluator {
         const idx = runEvalOptions.indexOf(evalStep);
         await processEvalStepWithTimeout(evalStep, idx);
         processedIndices.add(idx);
+        await this.evalRecord.addPrompts(prompts);
       });
     } catch (err) {
       if (options.abortSignal?.aborted) {
