@@ -59,6 +59,7 @@ ModelAudit has different dependencies depending on which model formats you want 
 | Keras H5              | `h5py`, `tensorflow`                  |
 | PyTorch               | `zipfile` (built-in)                  |
 | YAML manifests        | `pyyaml`                              |
+| ZIP archives          | Built-in (no additional dependencies) |
 
 ## Advanced Usage
 
@@ -122,6 +123,11 @@ scanners:
     blacklist_patterns:
       - 'unsafe_model'
 
+  zip:
+    max_zip_depth: 5 # Maximum nesting depth for zip files
+    max_zip_entries: 10000 # Maximum number of entries per zip
+    max_entry_size: 10485760 # 10MB max size per extracted file
+
 # Global settings
 max_file_size: 1073741824 # 1GB
 timeout: 600 # 10 minutes
@@ -148,7 +154,7 @@ repos:
         name: ModelAudit
         entry: promptfoo scan-model
         language: system
-        files: '\.(pkl|h5|pb|pt|pth|keras|hdf5|json|yaml|yml)$'
+        files: '\.(pkl|h5|pb|pt|pth|keras|hdf5|json|yaml|yml|zip)$'
         pass_filenames: true
 ```
 
@@ -169,6 +175,7 @@ on:
       - '**.pb'
       - '**.pt'
       - '**.pth'
+      - '**.zip'
 
 jobs:
   scan:
@@ -226,6 +233,7 @@ model_security_scan:
       - '**/*.pb'
       - '**/*.pt'
       - '**/*.pth'
+      - '**/*.zip'
 ```
 
 ## Programmatic Usage
@@ -254,6 +262,15 @@ config = {
 }
 
 results = scan_model_directory_or_file("path/to/models/", **config)
+
+# Scan a ZIP archive with custom settings
+zip_config = {
+    "max_zip_depth": 3,  # Limit nesting depth
+    "max_zip_entries": 1000,  # Limit number of files
+    "max_entry_size": 5242880  # 5MB per file
+}
+
+results = scan_model_directory_or_file("dataset.zip", **zip_config)
 ```
 
 ## Extending ModelAudit
