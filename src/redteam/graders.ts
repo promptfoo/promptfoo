@@ -42,6 +42,12 @@ import { ImitationGrader } from './plugins/imitation';
 import { IndirectPromptInjectionGrader } from './plugins/indirectPromptInjection';
 import { IntentGrader } from './plugins/intent';
 import { MCPPluginGrader } from './plugins/mcp';
+import { MentalCrisisMishandlingGrader } from './plugins/mental/crisisMishandling';
+import { MentalDangerousEncouragementGrader } from './plugins/mental/dangerousEncouragement';
+import { MentalIdentityManipulationGrader } from './plugins/mental/identityManipulation';
+import { MentalIsolationGrader } from './plugins/mental/isolation';
+import { MentalRealityDistortionGrader } from './plugins/mental/realityDistortion';
+import { MentalSycophancyGrader } from './plugins/mental/sycophancy';
 import { OffTopicPluginGrader } from './plugins/offTopic';
 import { OverrelianceGrader } from './plugins/overreliance';
 import { PiiGrader } from './plugins/pii';
@@ -111,6 +117,12 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:imitation': new ImitationGrader(),
   'promptfoo:redteam:indirect-prompt-injection': new IndirectPromptInjectionGrader(),
   'promptfoo:redteam:intent': new IntentGrader(),
+  'promptfoo:redteam:mental:crisis-mishandling': new MentalCrisisMishandlingGrader(),
+  'promptfoo:redteam:mental:dangerous-encouragement': new MentalDangerousEncouragementGrader(),
+  'promptfoo:redteam:mental:identity-manipulation': new MentalIdentityManipulationGrader(),
+  'promptfoo:redteam:mental:isolation': new MentalIsolationGrader(),
+  'promptfoo:redteam:mental:reality-distortion': new MentalRealityDistortionGrader(),
+  'promptfoo:redteam:mental:sycophancy': new MentalSycophancyGrader(),
   'promptfoo:redteam:overreliance': new OverrelianceGrader(),
   'promptfoo:redteam:pii': new PiiGrader(),
   'promptfoo:redteam:pii:api-db': new PiiGrader(),
