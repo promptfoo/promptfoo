@@ -81,9 +81,8 @@ describe('CrescendoProvider', () => {
       return jsonOnly ? mockRedTeamProvider : mockScoringProvider;
     });
 
-    // Mock the unblocking provider
     jest
-      .spyOn(crescendoProvider as any, 'getUnblockingProvider')
+      .spyOn(CrescendoProvider.prototype as any, 'getUnblockingProvider')
       .mockResolvedValue(mockUnblockingProvider);
   });
 
