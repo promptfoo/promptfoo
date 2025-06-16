@@ -7,7 +7,7 @@ import { globSync } from 'glob';
 import * as path from 'path';
 import type winston from 'winston';
 import { MODEL_GRADED_ASSERTION_TYPES, runAssertions, runCompareAssertion } from './assertions';
-import { fetchWithCache, getCache } from './cache';
+import { getCache } from './cache';
 import cliState from './cliState';
 import { FILE_METADATA_KEY } from './constants';
 import { updateSignalFile } from './database/signal';
@@ -269,7 +269,6 @@ export async function runEval({
 
           // All of these are removed in python and script providers, but every Javascript provider gets them
           logger: logger as unknown as winston.Logger,
-          fetchWithCache,
           getCache,
         },
         abortSignal ? { abortSignal } : undefined,
