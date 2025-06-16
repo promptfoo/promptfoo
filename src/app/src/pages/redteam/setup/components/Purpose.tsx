@@ -243,6 +243,27 @@ export default function Purpose({ onNext }: PromptsProps) {
     [discoveryResult],
   );
 
+  // Auto-expand accordions when discovery results are available
+  useEffect(() => {
+    if (discoveryResult) {
+      setExpandedSections((prev) => {
+        const newSet = new Set(prev);
+
+        // Expand "Core Application Details" if limitations are discovered
+        if (discoveryResult.limitations) {
+          newSet.add('Core Application Details');
+        }
+
+        // Expand "Access & Permissions" if tools are discovered
+        if (discoveryResult.tools && discoveryResult.tools.length > 0) {
+          newSet.add('Access & Permissions');
+        }
+
+        return newSet;
+      });
+    }
+  }, [discoveryResult]);
+
   // =============================================================================
   // RENDERING ===================================================================
   // =============================================================================
