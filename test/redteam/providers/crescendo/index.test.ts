@@ -81,9 +81,15 @@ describe('CrescendoProvider', () => {
       return jsonOnly ? mockRedTeamProvider : mockScoringProvider;
     });
 
-    jest
-      .spyOn(CrescendoProvider.prototype as any, 'getUnblockingProvider')
-      .mockResolvedValue(mockUnblockingProvider);
+    // Mock the unblockingProvider property directly since it's now a readonly property
+    Object.defineProperty(crescendoProvider, 'unblockingProvider', {
+      value: mockUnblockingProvider,
+      writable: false,
+      configurable: true,
+    });
+
+    // Mock checkServerSupportsUnblocking to return true so unblocking logic runs
+    jest.spyOn(crescendoProvider as any, 'checkServerSupportsUnblocking').mockResolvedValue(true);
   });
 
   it('should initialize with default config values', () => {
