@@ -1,6 +1,19 @@
 import { CrescendoProvider, MemorySystem } from '../../../../src/redteam/providers/crescendo';
 import type { Message } from '../../../../src/redteam/providers/shared';
 import { redteamProviderManager } from '../../../../src/redteam/providers/shared';
+import { checkServerFeatureSupport } from '../../../../src/util/server';
+
+jest.mock('../../../../src/providers/promptfoo', () => ({
+  PromptfooChatCompletionProvider: jest.fn().mockImplementation(() => ({
+    id: () => 'mock-unblocking',
+    callApi: jest.fn(),
+    delay: 0,
+  })),
+}));
+
+jest.mock('../../../../src/util/server', () => ({
+  checkServerFeatureSupport: jest.fn(),
+}));
 
 describe('MemorySystem', () => {
   let memorySystem: MemorySystem;
@@ -57,18 +70,16 @@ describe('CrescendoProvider', () => {
     callApi: jest.fn(),
     delay: 0,
   };
-  const mockUnblockingProvider = {
-    id: () => 'mock-unblocking',
-    callApi: jest.fn(),
-    delay: 0,
-  };
   const mockTargetProvider = {
     id: () => 'mock-target',
     callApi: jest.fn(),
   };
 
+  let mockUnblockingProvider: any;
+
   beforeEach(() => {
     jest.clearAllMocks();
+
     crescendoProvider = new CrescendoProvider({
       injectVar: 'objective',
       maxRounds: 10,
@@ -77,19 +88,15 @@ describe('CrescendoProvider', () => {
       stateful: true,
     });
 
+    // Get the mocked unblocking provider instance
+    mockUnblockingProvider = (crescendoProvider as any).unblockingProvider;
+
     jest.spyOn(redteamProviderManager, 'getProvider').mockImplementation(async ({ jsonOnly }) => {
       return jsonOnly ? mockRedTeamProvider : mockScoringProvider;
     });
 
-    // Mock the unblockingProvider property directly since it's now a readonly property
-    Object.defineProperty(crescendoProvider, 'unblockingProvider', {
-      value: mockUnblockingProvider,
-      writable: false,
-      configurable: true,
-    });
-
-    // Mock checkServerSupportsUnblocking to return true so unblocking logic runs
-    jest.spyOn(crescendoProvider as any, 'checkServerSupportsUnblocking').mockResolvedValue(true);
+    // Mock server feature support to return true so unblocking logic runs
+    (checkServerFeatureSupport as jest.Mock).mockResolvedValue(true);
   });
 
   it('should initialize with default config values', () => {
