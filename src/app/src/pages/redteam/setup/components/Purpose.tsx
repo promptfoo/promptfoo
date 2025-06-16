@@ -214,11 +214,19 @@ export default function Purpose({ onNext }: PromptsProps) {
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [discoveryError, setDiscoveryError] = useState<string | null>(null);
   const [discoveryResult, setDiscoveryResult] = useState<TargetPurposeDiscoveryResult | null>(null);
+  const [showSlowDiscoveryMessage, setShowSlowDiscoveryMessage] = useState(false);
 
   const handleTargetPurposeDiscovery = React.useCallback(async () => {
     recordEvent('feature_used', { feature: 'redteam_config_target_test' });
     try {
       setIsDiscovering(true);
+      setShowSlowDiscoveryMessage(false);
+
+      // Show slow discovery message after a few seconds
+      const slowDiscoveryTimeout = setTimeout(() => {
+        setShowSlowDiscoveryMessage(true);
+      }, 5000);
+
       const response = await callApi('/providers/discover', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -233,11 +241,15 @@ export default function Purpose({ onNext }: PromptsProps) {
 
       const data = (await response.json()) as TargetPurposeDiscoveryResult;
       setDiscoveryResult(data);
+
+      // Clear the timeout since discovery completed
+      clearTimeout(slowDiscoveryTimeout);
     } catch (error) {
       console.error('Error during target purpose discovery:', error);
       setDiscoveryError(error instanceof Error ? error.message : String(error));
     } finally {
       setIsDiscovering(false);
+      setShowSlowDiscoveryMessage(false);
     }
   }, [config.target]);
 
@@ -372,6 +384,11 @@ export default function Purpose({ onNext }: PromptsProps) {
                 >
                   {isDiscovering ? 'Discovering...' : 'Discover'}
                 </Button>
+                {isDiscovering && showSlowDiscoveryMessage && (
+                  <Alert severity="info" sx={{ border: 0 }}>
+                    Discovery is taking a little while. This is normal for complex applications.
+                  </Alert>
+                )}
                 {!hasTargetConfigured && (
                   <Alert severity="warning" sx={{ border: 0 }}>
                     You must configure a target to run auto-discovery.
