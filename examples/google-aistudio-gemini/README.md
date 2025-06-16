@@ -17,7 +17,8 @@ This example demonstrates using Google's Gemini models with promptfoo to evaluat
 
 The example tests across multiple Gemini models:
 
-- Gemini 2.5 Pro Experimental
+- **Gemini 2.5 Pro Preview 06-05** - Latest and most advanced model with enhanced reasoning, coding, and multimodal understanding
+- Gemini 2.5 Flash Preview 05-20 - Latest Flash model with enhanced reasoning and thinking capabilities
 - Gemini 2.0 Flash
 - Gemini 2.0 Flash Thinking
 - Gemini 1.5 Flash

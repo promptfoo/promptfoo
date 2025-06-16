@@ -7,22 +7,25 @@ prompts:
     Please solve this step by step, showing your reasoning process.
 
 providers:
-  - id: google:gemini-2.5-flash-preview-04-17
+  - id: google:gemini-2.5-pro-preview-06-05
     config:
+      temperature: 0.7
+      maxOutputTokens: 4096
       generationConfig:
-        temperature: 0.7
-        maxOutputTokens: 2048
         thinkingConfig:
-          thinkingBudget: 1024
+          thinkingBudget: 2048 # Enhanced thinking for complex reasoning
+
+  - id: google:gemini-2.5-flash-preview-05-20
+    config:
+      temperature: 0.7
+      maxOutputTokens: 2048
+      generationConfig:
+        thinkingConfig:
+          thinkingBudget: 1024 # Latest Flash model with thinking capabilities
 
   - google:gemini-2.0-flash-exp
 
   - google:gemini-2.0-flash-thinking-exp
-
-  - id: google:gemini-2.5-pro-exp-03-25
-    config:
-      temperature: 0.7
-      maxOutputTokens: 2048
 
   - id: google:gemini-1.5-pro
     config:

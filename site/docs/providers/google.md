@@ -12,10 +12,10 @@ You can use it by specifying one of the [available models](https://ai.google.dev
 
 ### Chat and Multimodal Models
 
-- `google:gemini-2.5-flash-preview-04-17` - Latest Flash model with thinking capabilities for enhanced reasoning
-- `google:gemini-2.5-pro-exp-03-25` - Latest thinking model, designed to tackle increasingly complex problems with enhanced reasoning capabilities
+- `google:gemini-2.5-pro-preview-06-05` - Latest and most advanced Gemini 2.5 Pro model with improved reasoning, coding, and multimodal understanding
+- `google:gemini-2.5-pro-preview-05-06` - Previous Gemini 2.5 Pro preview with enhanced thinking capabilities
+- `google:gemini-2.5-flash-preview-05-20` - Latest Flash model with enhanced reasoning and thinking capabilities
 - `google:gemini-2.0-pro-exp-02-05` - Multimodal model with next-gen features, 1M token context window
-- `google:gemini-2.0-flash-exp` - Multimodal model with next generation features
 - `google:gemini-2.0-flash` - Multimodal model with next-gen features, 1M token context window
 - `google:gemini-2.0-flash-lite` - Cost-efficient version of 2.0 Flash with 1M token context
 - `google:gemini-2.0-flash-thinking-exp` - Optimized for complex reasoning and problem-solving
@@ -61,7 +61,7 @@ For models that support thinking capabilities (like Gemini 2.5 Flash), you can c
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-flash-preview-04-17
+  - id: google:gemini-2.5-flash-preview-05-20
     config:
       generationConfig:
         temperature: 0.7
@@ -108,6 +108,40 @@ providers:
 For more details on capabilities and configuration options, see the [Gemini API documentation](https://ai.google.dev/docs).
 
 ## Model Examples
+
+### Gemini 2.5 Pro Preview
+
+Latest and most advanced model for complex reasoning, coding, and multimodal understanding:
+
+```yaml
+providers:
+  - id: google:gemini-2.5-pro-preview-06-05
+    config:
+      temperature: 0.7
+      maxOutputTokens: 4096
+      topP: 0.9
+      topK: 40
+      generationConfig:
+        thinkingConfig:
+          thinkingBudget: 2048 # Enhanced thinking for complex tasks
+```
+
+### Gemini 2.5 Flash Preview
+
+Latest Flash model with enhanced reasoning and thinking capabilities:
+
+```yaml
+providers:
+  - id: google:gemini-2.5-flash-preview-05-20
+    config:
+      temperature: 0.7
+      maxOutputTokens: 2048
+      topP: 0.9
+      topK: 40
+      generationConfig:
+        thinkingConfig:
+          thinkingBudget: 1024 # Fast model with thinking capabilities
+```
 
 ### Gemini 2.0 Flash
 
@@ -250,7 +284,7 @@ To enable Search grounding:
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-flash-preview-04-17
+  - id: google:gemini-2.5-flash-preview-05-20
     config:
       tools:
         - googleSearch: {} # or google_search: {}
@@ -262,7 +296,7 @@ You can combine Search grounding with thinking capabilities for better reasoning
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-pro-exp-03-25
+  - id: google:gemini-2.5-pro-preview-06-05
     config:
       generationConfig:
         thinkingConfig:
