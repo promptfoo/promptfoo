@@ -4,15 +4,15 @@ import type { Request, Response } from 'express';
 import type { ZodError } from 'zod-validation-error';
 import { fromZodError } from 'zod-validation-error';
 import { getEnvString } from '../../envars';
-import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import { loadApiProvider } from '../../providers';
 import {
   doTargetPurposeDiscovery,
   type TargetPurposeDiscoveryResult,
 } from '../../redteam/commands/discover';
-import { neverGenerateRemote } from '../../redteam/remoteGeneration';
+import { getRemoteHealthUrl, neverGenerateRemote } from '../../redteam/remoteGeneration';
 import type { ProviderOptions, ProviderTestResponse } from '../../types/providers';
+import { checkRemoteHealth } from '../../util/apiHealth';
 import invariant from '../../util/invariant';
 import { ProviderOptionsSchema } from '../../validators/providers';
 
@@ -129,7 +129,9 @@ providersRouter.post(
     }
 
     // Check that Promptfoo Cloud is accessible:
-    if (!cloudConfig.isEnabled()) {
+    const healthUrl = getRemoteHealthUrl() as string;
+    const healthResult = await checkRemoteHealth(healthUrl);
+    if (healthResult.status !== 'OK') {
       res.status(400).json({
         error: 'Promptfoo Cloud is not enabled. Please run `promptfoo auth login` to login.',
       });
