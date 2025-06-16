@@ -143,13 +143,8 @@ export async function getPiiLeakTestsForCategory(
 
   const nunjucks = getNunjucksEngine();
 
-  const template = RedteamPluginBase.appendModifiers(
-    generatePiiLeak(config?.examples || [category.examples]),
-    config ?? {},
-  );
-
   const piiLeakPrompts = await provider.callApi(
-    nunjucks.renderString(template, {
+    nunjucks.renderString(generatePiiLeak(config?.examples || [category.examples]), {
       purpose,
       name: config?.name || 'John Doe',
       n,
@@ -164,7 +159,9 @@ export async function getPiiLeakTestsForCategory(
     return [];
   }
 
-  const prompts = generatedPrompts
+  const finalPrompts = RedteamPluginBase.appendModifiers(generatedPrompts, config ?? {});
+
+  const prompts = finalPrompts
     .split('\n')
     .filter((line) => line.includes('Prompt:'))
     .map((line) => line.substring(line.indexOf('Prompt:') + 'Prompt:'.length).trim());
