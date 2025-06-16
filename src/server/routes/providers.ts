@@ -124,13 +124,13 @@ providersRouter.post(
 
     // Check that remote generation is enabled:
     if (neverGenerateRemote()) {
-      res.status(502).json({ error: 'Requires remote generation be enabled.' });
+      res.status(400).json({ error: 'Requires remote generation be enabled.' });
       return;
     }
 
     // Check that Promptfoo Cloud is accessible:
     if (!cloudConfig.isEnabled()) {
-      res.status(502).json({
+      res.status(400).json({
         error: 'Promptfoo Cloud is not enabled. Please run `promptfoo auth login` to login.',
       });
       return;
