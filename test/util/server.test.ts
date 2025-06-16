@@ -230,24 +230,6 @@ describe('Server Utilities', () => {
       );
     });
 
-    it('should return true when no buildDate but version exists (fallback)', async () => {
-      jest.mocked(cache.fetchWithCache).mockResolvedValueOnce({
-        data: { version: '1.0.0' },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
-
-      const result = await checkServerFeatureSupport(baseUrl, featureName, '2024-01-01T00:00:00Z');
-
-      expect(result).toBe(true);
-      expect(logger.debug).toHaveBeenCalledWith(
-        expect.stringContaining(
-          `${featureName}: no buildDate, but version exists, assuming supported`,
-        ),
-      );
-    });
-
     it('should return false when no version info available', async () => {
       jest.mocked(cache.fetchWithCache).mockResolvedValueOnce({
         data: {},

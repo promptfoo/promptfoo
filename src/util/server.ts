@@ -68,13 +68,6 @@ export async function checkServerFeatureSupport(
         logger.debug(
           `[Feature Detection] ${featureName}: buildDate=${data.buildDate}, required=${requiredBuildDate}, supported=${supported}`,
         );
-      } else if (data.version) {
-        // Fallback: if buildDate not available but version exists, assume supported
-        // This is less precise but better than always failing
-        logger.debug(
-          `[Feature Detection] ${featureName}: no buildDate, but version exists, assuming supported`,
-        );
-        supported = true;
       } else {
         // If no version info, assume old server
         logger.debug(`[Feature Detection] ${featureName}: no version info, assuming not supported`);
