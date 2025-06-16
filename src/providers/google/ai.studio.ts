@@ -164,7 +164,7 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
     let data,
       cached = false;
     try {
-      ({ data, cached } = (await fetchWithCache(
+      ({ data, cached } = (await (context?.fetchWithCache ?? fetchWithCache)(
         `${this.getApiUrl()}/v1beta3/models/${
           this.modelName
         }:generateMessage?key=${this.getApiKey()}`,
@@ -281,7 +281,7 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
     let data;
     let cached = false;
     try {
-      ({ data, cached } = (await fetchWithCache(
+      ({ data, cached } = (await (context?.fetchWithCache ?? fetchWithCache)(
         `${this.getApiUrl()}/${apiVersion}/models/${
           this.modelName
         }:generateContent?key=${this.getApiKey()}`,
