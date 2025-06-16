@@ -412,11 +412,3 @@ results = scan_model_directory_or_file("path/to/custom_model.mymodel")
    ```
 
    Note: ModelAudit automatically detects the actual format of `.bin` files and applies the appropriate scanner. Supported formats include pickle, SafeTensors, ONNX, and raw PyTorch tensors. The enhanced binary scanner also detects embedded executables with improved PE file detection.
-
-6. **Fast Scan Completion**
-
-   ```
-   Scan completed in 120ms
-   ```
-
-   Note: For very fast scans (under 1 second), ModelAudit now displays the duration in milliseconds for better precision.
