@@ -60,6 +60,8 @@ export class AzureCompletionProvider extends AzureGenericProvider {
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
+        'json',
+        context?.ignoreCache ?? context?.debug,
       )) as any);
     } catch (err) {
       return {
