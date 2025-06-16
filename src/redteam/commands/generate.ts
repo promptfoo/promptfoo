@@ -182,8 +182,6 @@ export async function doGenerateRedteam(
     return null;
   }
 
-  const purpose = redteamConfig?.purpose ?? options.purpose;
-
   const startTime = Date.now();
   telemetry.record('command_used', {
     name: 'generate redteam - started',
@@ -287,7 +285,7 @@ export async function doGenerateRedteam(
     entities: redteamConfig?.entities,
     plugins,
     provider: redteamConfig?.provider || options.provider,
-    purpose,
+    purpose: redteamConfig?.purpose ?? options.purpose,
     strategies: strategyObjs,
     delay: redteamConfig?.delay || options.delay,
     sharing: redteamConfig?.sharing || options.sharing,
