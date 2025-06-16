@@ -102,15 +102,6 @@ export abstract class RedteamPluginBase {
   protected abstract getTemplate(): Promise<string>;
 
   /**
-   * Additional instructions for test generation.
-   * These instructions will be appended to the template to provide
-   * domain-specific guidance for generating attacks.
-   */
-  protected getTestGenerationInstructions(): string {
-    return (this.config.modifiers?.testGenerationInstructions as string) ?? '';
-  }
-
-  /**
    * Abstract method to get assertions for a given prompt.
    * @param prompt - The prompt to generate assertions for.
    * @returns An array of Assertion objects.

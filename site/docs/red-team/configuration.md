@@ -152,7 +152,7 @@ plugins:
 
 ### Test Generation Instructions
 
-The `testGenerationInstructions` field allows you to provide additional guidance on how red team attacks should be generated for your application. These instructions are automatically appended to all plugin templates during test generation, ensuring that attacks are contextually relevant and follow your desired approach.
+The `testGenerationInstructions` field allows you to provide additional guidance on how red team attacks should be generated for your application. These instructions are automatically applied to all plugins during test generation, ensuring that attacks are contextually relevant and follow your desired approach.
 
 This feature is particularly useful for:
 
@@ -160,6 +160,7 @@ This feature is particularly useful for:
 - Applications with unique constraints or behaviors
 - Focusing on particular types of vulnerabilities
 - Ensuring attacks use appropriate terminology and scenarios
+- Avoiding irrelevant test scenarios
 
 Example usage:
 
