@@ -308,5 +308,5 @@ LANG=en_US.UTF-8 promptfoo eval --output results.csv
 ## Related Documentation
 
 - [Configuration Reference](/docs/configuration/reference) - All output options
-- [Integrations](/docs/integrations) - Using outputs with other tools
+- [Integrations](/docs/category/integrations/) - Using outputs with other tools
 - [Command Line Guide](/docs/usage/command-line) - CLI options
