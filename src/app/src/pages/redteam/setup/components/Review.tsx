@@ -58,6 +58,7 @@ export default function Review() {
   const { recordEvent } = useTelemetry();
   const [isYamlDialogOpen, setIsYamlDialogOpen] = React.useState(false);
   const yamlContent = useMemo(() => generateOrderedYaml(config), [config]);
+
   const [isRunning, setIsRunning] = React.useState(false);
   const [logs, setLogs] = React.useState<string[]>([]);
   const [evalId, setEvalId] = React.useState<string | null>(null);
@@ -74,6 +75,7 @@ export default function Review() {
   const [emailVerificationError, setEmailVerificationError] = useState<string | null>(null);
   const { checkEmailStatus } = useEmailVerification();
   const [isPurposeExpanded, setIsPurposeExpanded] = useState(false);
+  const [isTestInstructionsExpanded, setIsTestInstructionsExpanded] = useState(false);
 
   const handleDescriptionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     updateConfig('description', event.target.value);
@@ -584,6 +586,46 @@ export default function Review() {
                   </Typography>
                 )}
               </Grid>
+              {config.testGenerationInstructions && (
+                <Grid item xs={12} sm={12}>
+                  <Typography variant="subtitle2">Test Generation Instructions</Typography>
+                  <Typography
+                    variant="body2"
+                    onClick={() => setIsTestInstructionsExpanded(!isTestInstructionsExpanded)}
+                    sx={{
+                      whiteSpace: 'pre-wrap',
+                      padding: 1,
+                      borderRadius: 1,
+                      backgroundColor: 'background.paper',
+                      cursor: 'pointer',
+                      display: '-webkit-box',
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                      WebkitLineClamp: isTestInstructionsExpanded ? 'none' : 6,
+                      '&:hover': {
+                        backgroundColor: 'action.hover',
+                      },
+                    }}
+                  >
+                    {config.testGenerationInstructions}
+                  </Typography>
+                  {config.testGenerationInstructions &&
+                    config.testGenerationInstructions.split('\n').length > 6 && (
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          color: 'primary.main',
+                          cursor: 'pointer',
+                          mt: 0.5,
+                          display: 'block',
+                        }}
+                        onClick={() => setIsTestInstructionsExpanded(!isTestInstructionsExpanded)}
+                      >
+                        {isTestInstructionsExpanded ? 'Show less' : 'Show more'}
+                      </Typography>
+                    )}
+                </Grid>
+              )}
             </Grid>
           </Paper>
         </Grid>

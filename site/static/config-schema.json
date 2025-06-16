@@ -1032,6 +1032,10 @@
               "type": "string",
               "description": "Purpose override string - describes the prompt templates"
             },
+            "testGenerationInstructions": {
+              "type": "string",
+              "description": "Additional instructions for test generation applied to each plugin"
+            },
             "provider": {
               "anyOf": [
                 {
