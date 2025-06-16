@@ -172,7 +172,6 @@ export const OPENAI_CHAT_MODELS = [
       output: 0.6 / 1e6,
     },
   })),
-  // Legacy GPT-4 models (CRITICAL for backwards compatibility)
   ...['gpt-4', 'gpt-4-0613', 'gpt-4-0314'].map((model) => ({
     id: model,
     cost: {
@@ -223,7 +222,6 @@ export const OPENAI_CHAT_MODELS = [
       output: 2 / 1e6,
     },
   },
-  // Legacy GPT-3.5 models (CRITICAL for backwards compatibility)
   ...['gpt-3.5-turbo-0301', 'gpt-3.5-turbo-0613'].map((model) => ({
     id: model,
     cost: {
