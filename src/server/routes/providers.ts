@@ -1,17 +1,17 @@
 import dedent from 'dedent';
 import { Router } from 'express';
 import type { Request, Response } from 'express';
-import { cloudConfig } from 'src/globalConfig/cloud';
-import { neverGenerateRemote } from 'src/redteam/remoteGeneration';
 import type { ZodError } from 'zod-validation-error';
 import { fromZodError } from 'zod-validation-error';
 import { getEnvString } from '../../envars';
+import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import { loadApiProvider } from '../../providers';
 import {
   doTargetPurposeDiscovery,
   type TargetPurposeDiscoveryResult,
 } from '../../redteam/commands/discover';
+import { neverGenerateRemote } from '../../redteam/remoteGeneration';
 import type { ProviderOptions, ProviderTestResponse } from '../../types/providers';
 import invariant from '../../util/invariant';
 import { ProviderOptionsSchema } from '../../validators/providers';
