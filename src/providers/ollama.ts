@@ -362,3 +362,5 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
     }
   }
 }
+
+export { OllamaCompletionOptionKeys };
