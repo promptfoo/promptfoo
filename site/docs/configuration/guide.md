@@ -154,7 +154,7 @@ tests:
 ```
 
 :::tip
-Test files can be defined in YAML/JSON, JSONL, [CSV](/docs/configuration/parameters/#import-from-csv), and TypeScript/JavaScript. We also support [Google Sheets](/docs/integrations/google-sheets) CSV datasets.
+Test files can be defined in YAML/JSON, JSONL, [CSV](/docs/configuration/test-cases#csv-format), and TypeScript/JavaScript. We also support [Google Sheets](/docs/integrations/google-sheets) CSV datasets.
 :::
 
 ## Import vars from separate files
