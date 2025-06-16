@@ -34,6 +34,7 @@ promptfoo eval --output report.html
 ```
 
 **Features:**
+
 - Interactive table with sorting and filtering
 - Side-by-side output comparison
 - Pass/fail statistics
@@ -50,6 +51,7 @@ promptfoo eval --output results.json
 ```
 
 **Structure:**
+
 ```json
 {
   "version": 3,
@@ -74,6 +76,7 @@ promptfoo eval --output results.csv
 ```
 
 **Columns include:**
+
 - Test variables
 - Prompt used
 - Model outputs
@@ -102,9 +105,9 @@ promptfoo eval --output results.yaml
 outputPath: evaluations/latest_results.html
 
 prompts:
-  - "..."
+  - '...'
 tests:
-  - "..."
+  - '...'
 ```
 
 ### Multiple Output Formats
@@ -126,15 +129,15 @@ promptfoo eval --output results.csv
 
 All formats include:
 
-| Field | Description |
-|-------|-------------|
-| `timestamp` | When the evaluation ran |
-| `prompts` | Prompts used in evaluation |
-| `providers` | LLM providers tested |
-| `tests` | Test cases with variables |
-| `outputs` | Raw LLM responses |
-| `results` | Pass/fail for each assertion |
-| `stats` | Summary statistics |
+| Field       | Description                  |
+| ----------- | ---------------------------- |
+| `timestamp` | When the evaluation ran      |
+| `prompts`   | Prompts used in evaluation   |
+| `providers` | LLM providers tested         |
+| `tests`     | Test cases with variables    |
+| `outputs`   | Raw LLM responses            |
+| `results`   | Pass/fail for each assertion |
+| `stats`     | Summary statistics           |
 
 ### Detailed Metrics
 
@@ -157,12 +160,12 @@ const results = JSON.parse(fs.readFileSync('results.json', 'utf8'));
 
 // Analyze pass rates by provider
 const providerStats = {};
-results.results.outputs.forEach(output => {
+results.results.outputs.forEach((output) => {
   const provider = output.provider;
   if (!providerStats[provider]) {
     providerStats[provider] = { pass: 0, fail: 0 };
   }
-  
+
   if (output.pass) {
     providerStats[provider].pass++;
   } else {
@@ -240,6 +243,7 @@ promptfoo eval \
 ### Web Viewer
 
 The default web viewer (`promptfoo view`) provides:
+
 - Real-time updates during evaluation
 - Interactive exploration
 - Local-only (no data sent externally)
@@ -266,6 +270,7 @@ promptfoo share
 ```
 
 Creates a shareable link with:
+
 - Read-only access
 - Commenting capabilities
 - No setup required for viewers

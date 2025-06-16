@@ -25,10 +25,10 @@ Use YAML's multiline syntax for longer prompts:
 prompts:
   - |-
     You are a helpful assistant.
-    
+
     Please answer the following question:
     {{question}}
-    
+
     Provide a detailed explanation.
 ```
 
@@ -38,9 +38,9 @@ Prompts use [Nunjucks](https://mozilla.github.io/nunjucks/) templating:
 
 ```yaml
 prompts:
-  - "Hello {{name}}, welcome to {{company}}!"
-  - "Product: {{product | upper}}"  # Using filters
-  - "{% if premium %}Priority support: {% endif %}{{issue}}"  # Conditionals
+  - 'Hello {{name}}, welcome to {{company}}!'
+  - 'Product: {{product | upper}}' # Using filters
+  - '{% if premium %}Priority support: {% endif %}{{issue}}' # Conditionals
 ```
 
 ## File-Based Prompts
@@ -64,19 +64,23 @@ Please provide a helpful and professional response.
 ### Supported File Formats
 
 #### Text Files (.txt)
+
 Simple text prompts with variable substitution.
 
 #### Markdown Files (.md)
+
 ```markdown title="prompt.md"
 # System Instructions
 
 You are an AI assistant for {{company}}.
 
 ## Your Task
+
 {{task}}
 ```
 
 #### Jinja2 Templates (.j2)
+
 ```jinja title="prompt.j2"
 You are assisting with {{ topic }}.
 {% if advanced_mode %}
@@ -169,7 +173,7 @@ module.exports = async function ({ vars, provider }) {
   // Access variables and provider info
   const topic = vars.topic;
   const complexity = vars.complexity || 'medium';
-  
+
   // Build prompt based on logic
   if (complexity === 'simple') {
     return `Explain ${topic} in simple terms.`;
@@ -190,7 +194,7 @@ prompts:
 def create_prompt(context):
     vars = context['vars']
     provider = context['provider']
-    
+
     # Dynamic prompt generation
     if vars.get('technical_audience'):
         return f"Provide a technical analysis of {vars['topic']}"
@@ -205,13 +209,13 @@ Return both prompt and provider configuration:
 ```javascript title="prompt_with_config.js"
 module.exports = async function ({ vars }) {
   const complexity = vars.complexity || 'medium';
-  
+
   return {
     prompt: `Analyze ${vars.topic}`,
     config: {
       temperature: complexity === 'creative' ? 0.9 : 0.3,
-      max_tokens: complexity === 'detailed' ? 1000 : 200
-    }
+      max_tokens: complexity === 'detailed' ? 1000 : 200,
+    },
   };
 };
 ```
@@ -267,7 +271,7 @@ nunjucksFilters:
   uppercaseFirst: ./uppercase_first.js
 
 prompts:
-  - "Dear {{ name | uppercaseFirst }}, {{ message }}"
+  - 'Dear {{ name | uppercaseFirst }}, {{ message }}'
 ```
 
 ### Prompt Labels and IDs
@@ -277,9 +281,9 @@ Organize prompts with labels:
 ```yaml
 prompts:
   - id: file://customer_prompt.txt
-    label: "Customer Service"
+    label: 'Customer Service'
   - id: file://technical_prompt.txt
-    label: "Technical Support"
+    label: 'Technical Support'
 ```
 
 ### Default Prompt
@@ -297,35 +301,38 @@ If no prompts are specified, promptfoo uses `{{prompt}}` as a passthrough.
 ## Common Patterns
 
 ### System + User Message
+
 ```json
 [
-  {"role": "system", "content": "You are {{role}}"},
-  {"role": "user", "content": "{{query}}"}
+  { "role": "system", "content": "You are {{role}}" },
+  { "role": "user", "content": "{{query}}" }
 ]
 ```
 
 ### Few-Shot Examples
+
 ```yaml
 prompts:
   - |-
     Classify the sentiment:
-    
+
     Text: "I love this!" → Positive
     Text: "This is terrible" → Negative
     Text: "{{text}}" →
 ```
 
 ### Chain of Thought
+
 ```yaml
 prompts:
   - |-
     Question: {{question}}
-    
+
     Let's think step by step:
     1. First, identify what we know
     2. Then, determine what we need to find
     3. Finally, solve the problem
-    
+
     Answer:
 ```
 

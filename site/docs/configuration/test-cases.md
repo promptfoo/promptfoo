@@ -14,16 +14,16 @@ The simplest way to define tests is directly in your config:
 ```yaml title="promptfooconfig.yaml"
 tests:
   - vars:
-      question: "What is the capital of France?"
+      question: 'What is the capital of France?'
     assert:
       - type: contains
-        value: "Paris"
-  
+        value: 'Paris'
+
   - vars:
-      question: "What is 2 + 2?"
+      question: 'What is 2 + 2?'
     assert:
       - type: equals
-        value: "4"
+        value: '4'
 ```
 
 ### Test Structure
@@ -32,7 +32,7 @@ Each test case can include:
 
 ```yaml
 tests:
-  - description: "Optional test description"
+  - description: 'Optional test description'
     vars:
       # Variables to substitute in prompts
       var1: value1
@@ -40,7 +40,7 @@ tests:
     assert:
       # Expected outputs and validations
       - type: contains
-        value: "expected text"
+        value: 'expected text'
     metadata:
       # Filterable metadata
       category: math
@@ -103,16 +103,16 @@ question,__expected1,__expected2,__expected3
 
 ### Special CSV Columns
 
-| Column | Purpose | Example |
-|--------|---------|---------|
-| `__expected` | Single assertion | `contains: Paris` |
-| `__expected1`, `__expected2`, ... | Multiple assertions | `equals: 42` |
-| `__description` | Test description | `Basic math test` |
-| `__prefix` | Prepend to prompt | `You must answer: ` |
-| `__suffix` | Append to prompt | ` (be concise)` |
-| `__metric` | Metric name for assertions | `accuracy` |
-| `__threshold` | Pass threshold | `0.8` |
-| `__metadata:*` | Filterable metadata | See below |
+| Column                            | Purpose                    | Example             |
+| --------------------------------- | -------------------------- | ------------------- |
+| `__expected`                      | Single assertion           | `contains: Paris`   |
+| `__expected1`, `__expected2`, ... | Multiple assertions        | `equals: 42`        |
+| `__description`                   | Test description           | `Basic math test`   |
+| `__prefix`                        | Prepend to prompt          | `You must answer: ` |
+| `__suffix`                        | Append to prompt           | ` (be concise)`     |
+| `__metric`                        | Metric name for assertions | `accuracy`          |
+| `__threshold`                     | Pass threshold             | `0.8`               |
+| `__metadata:*`                    | Filterable metadata        | See below           |
 
 ### Metadata in CSV
 
@@ -133,6 +133,7 @@ topic,__metadata:tags[]
 ```
 
 Filter tests:
+
 ```bash
 promptfoo eval --filter-metadata category=math
 promptfoo eval --filter-metadata difficulty=easy
@@ -149,9 +150,10 @@ query,context,__expected
 ```
 
 Access in prompts:
+
 ```yaml
 prompts:
-  - "Query: {{query}}, Location: {{(context | load).location}}"
+  - 'Query: {{query}}, Location: {{(context | load).location}}'
 ```
 
 ## Dynamic Test Generation
@@ -165,26 +167,26 @@ tests: file://generate_tests.js
 ```
 
 ```javascript title="generate_tests.js"
-module.exports = async function() {
+module.exports = async function () {
   // Fetch data, compute test cases, etc.
   const testCases = [];
-  
+
   for (let i = 1; i <= 10; i++) {
     testCases.push({
       description: `Test case ${i}`,
       vars: {
         number: i,
-        squared: i * i
+        squared: i * i,
       },
       assert: [
         {
           type: 'contains',
-          value: String(i * i)
-        }
-      ]
+          value: String(i * i),
+        },
+      ],
     });
   }
-  
+
   return testCases;
 };
 ```
@@ -200,10 +202,10 @@ import json
 
 def create_tests():
     test_cases = []
-    
+
     # Load test data from database, API, etc.
     test_data = load_test_data()
-    
+
     for item in test_data:
         test_cases.append({
             "vars": {
@@ -215,7 +217,7 @@ def create_tests():
                 "value": item["expected"]
             }]
         })
-    
+
     return test_cases
 ```
 
@@ -227,8 +229,8 @@ Pass configuration to generators:
 tests:
   - path: file://generate_tests.py:create_tests
     config:
-      dataset: "validation"
-      category: "math"
+      dataset: 'validation'
+      category: 'math'
       sample_size: 100
 ```
 
@@ -237,7 +239,7 @@ def create_tests(config):
     dataset = config.get('dataset', 'train')
     category = config.get('category', 'all')
     size = config.get('sample_size', 50)
-    
+
     # Use configuration to generate tests
     return generate_test_cases(dataset, category, size)
 ```
@@ -294,13 +296,13 @@ tests:
 
 ### Supported File Types
 
-| Type | Handling | Usage |
-|------|----------|-------|
-| Images (png, jpg, etc.) | Converted to base64 | Vision models |
-| Videos (mp4, etc.) | Converted to base64 | Multimodal models |
-| PDFs | Text extraction | Document analysis |
-| Text files | Loaded as string | Any use case |
-| YAML/JSON | Parsed to object | Structured data |
+| Type                    | Handling            | Usage             |
+| ----------------------- | ------------------- | ----------------- |
+| Images (png, jpg, etc.) | Converted to base64 | Vision models     |
+| Videos (mp4, etc.)      | Converted to base64 | Multimodal models |
+| PDFs                    | Text extraction     | Document analysis |
+| Text files              | Loaded as string    | Any use case      |
+| YAML/JSON               | Parsed to object    | Structured data   |
 
 ### Example: Vision Model Test
 
@@ -308,19 +310,20 @@ tests:
 tests:
   - vars:
       image: file://test_image.jpg
-      question: "What objects are in this image?"
+      question: 'What objects are in this image?'
     assert:
       - type: contains
-        value: "dog"
+        value: 'dog'
 ```
 
 In your prompt:
+
 ```json
 [
   {
     "role": "user",
     "content": [
-      {"type": "text", "text": "{{question}}"},
+      { "type": "text", "text": "{{question}}" },
       {
         "type": "image_url",
         "image_url": {
@@ -351,11 +354,11 @@ project/
 
 ```yaml
 tests:
-  - description: "Test French translation with formal tone"
+  - description: 'Test French translation with formal tone'
     vars:
-      text: "Hello"
-      language: "French"
-      tone: "formal"
+      text: 'Hello'
+      language: 'French'
+      tone: 'formal'
 ```
 
 ### 3. Group Related Tests
@@ -364,7 +367,7 @@ tests:
 # Use metadata for organization
 tests:
   - vars:
-      query: "Reset password"
+      query: 'Reset password'
     metadata:
       feature: authentication
       priority: high
@@ -376,11 +379,11 @@ tests:
 tests:
   # Quick smoke tests inline
   - vars:
-      test: "quick check"
-  
+      test: 'quick check'
+
   # Comprehensive test suite from file
   - file://tests/full_suite.csv
-  
+
   # Dynamic edge case generation
   - file://tests/generate_edge_cases.js
 ```
@@ -400,12 +403,12 @@ message_style,greeting,__expected
 
 ```yaml
 tests:
-  - description: "Handle empty input"
+  - description: 'Handle empty input'
     vars:
-      input: ""
+      input: ''
     assert:
       - type: contains
-        value: "provide more information"
+        value: 'provide more information'
 ```
 
 ### Performance Tests
@@ -413,10 +416,10 @@ tests:
 ```yaml
 tests:
   - vars:
-      prompt: "Simple question"
+      prompt: 'Simple question'
     assert:
       - type: latency
-        threshold: 1000  # milliseconds
+        threshold: 1000 # milliseconds
 ```
 
 ## Loading from Google Sheets
