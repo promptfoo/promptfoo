@@ -109,12 +109,10 @@ function needsSignatureRefresh(timestamp: number, validityMs: number, bufferMs?:
   return timeElapsed + effectiveBufferMs >= validityMs;
 }
 
-export const TokenEstimationConfigSchema = z.object({
+const TokenEstimationConfigSchema = z.object({
   enabled: z.boolean().default(false),
   multiplier: z.number().min(0.01).default(1.3),
 });
-
-export type TokenEstimationConfig = z.infer<typeof TokenEstimationConfigSchema>;
 
 const HttpProviderConfigSchema = z.object({
   body: z.union([z.record(z.any()), z.string(), z.array(z.any())]).optional(),

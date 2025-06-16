@@ -54,31 +54,6 @@ function GuardrailsHeader() {
   );
 }
 
-function FeaturesSection() {
-  return (
-    <section className={styles.featuresSection}>
-      <div className="container">
-        <div className={styles.features}>
-          <div className={styles.featureItem}>
-            <h3>Self-Improving Security</h3>
-            <p>Guardrails that continuously learn from red team findings.</p>
-          </div>
-          <div className={styles.featureItem}>
-            <h3>Third-Party Validation</h3>
-            <p>Test and verify any guardrail system, including existing third-party solutions.</p>
-          </div>
-          <div className={styles.featureItem}>
-            <h3>Comprehensive Content Protection</h3>
-            <p>
-              Advanced filtering against harmful content, PII exposure, and inappropriate outputs.
-            </p>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 function BenefitsSection() {
   return (
     <section className={styles.benefitsSection}>
@@ -205,7 +180,6 @@ export default function Guardrails(): JSX.Element {
       <div className={styles.pageContainer}>
         <GuardrailsHeader />
         <main className={styles.mainContent}>
-          {/*<FeaturesSection />*/}
           <ActionOrientedSection />
           <ContinuousMonitoringSection />
           <BenefitsSection />

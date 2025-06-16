@@ -469,7 +469,7 @@ const config: Config = {
                     if (stat.isFile()) {
                       foundFile = true;
                     }
-                  } catch (err) {
+                  } catch (_) {
                     // File doesn't exist, try with extensions
                     const extensions = ['.md', '.mdx'];
                     for (const ext of extensions) {
@@ -481,7 +481,7 @@ const config: Config = {
                           foundFile = true;
                           break;
                         }
-                      } catch (err) {
+                      } catch (_) {
                         // Try index.md in the directory
                         try {
                           const indexPath = path.join(filePath.split('.')[0], `index${ext}`);
@@ -491,7 +491,7 @@ const config: Config = {
                             foundFile = true;
                             break;
                           }
-                        } catch (indexErr) {
+                        } catch (_) {
                           // Ignore errors for index files
                         }
                       }
@@ -510,7 +510,7 @@ const config: Config = {
                       res.setHeader('Cache-Control', 'no-cache');
                       res.setHeader('X-Content-Type-Options', 'nosniff');
                       res.send(content);
-                    } catch (error) {
+                    } catch (_) {
                       res.status(500).send('Error reading markdown file');
                     }
                   } else {

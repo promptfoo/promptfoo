@@ -206,14 +206,3 @@ if (getEnvString('LOG_LEVEL', 'info') === 'debug') {
 }
 
 export default logger;
-
-// Re-export functions and variables needed for testing
-export {
-  consoleFormatter,
-  fileFormatter,
-  getCallerLocation,
-  initializeSourceMapSupport,
-  isDebugEnabled,
-  logger,
-  sourceMapSupportInitialized,
-};

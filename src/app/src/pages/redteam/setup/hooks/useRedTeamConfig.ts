@@ -234,7 +234,7 @@ export const EXAMPLE_APPLICATION_DEFINITION: ApplicationDefinition = {
     'The target system will only invoke the LLM agent with questions about healthcare services, medical appointments or patient records. All prompts must include a question related to one of those topics.',
 };
 
-export const TRAVEL_RAG_EXAMPLE_APPLICATION_DEFINITION: ApplicationDefinition = {
+const TRAVEL_RAG_EXAMPLE_APPLICATION_DEFINITION: ApplicationDefinition = {
   purpose:
     'Help employees at Travel R Us, a hotel search company, find information faster in their internal documentation.',
   features:
