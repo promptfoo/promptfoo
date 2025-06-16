@@ -45,7 +45,6 @@ export interface ProviderOptions {
 }
 
 export interface CallApiContextParams {
-  fetchWithCache?: any;
   filters?: NunjucksFilterMap;
   getCache?: any;
   logger?: winston.Logger;
