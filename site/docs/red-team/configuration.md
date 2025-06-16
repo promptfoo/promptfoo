@@ -172,19 +172,6 @@ redteam:
     Consider HIPAA compliance requirements when generating privacy-related attacks.
 ```
 
-#### How Test Generation Instructions Work
-
-When specified, these instructions are automatically combined with each plugin's modifiers and applied to the test generation template in the following format:
-
-```
-[Plugin's Base Template]
-
-Additional Test Generation Instructions:
-[Your custom instructions]
-```
-
-This ensures that all plugins receive your domain-specific guidance while maintaining their core attack patterns.
-
 #### Examples by Domain
 
 **Healthcare Application:**
