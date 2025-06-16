@@ -55,6 +55,7 @@ export interface CallApiContextParams {
   // This was added so we have access to the grader inside the provider.
   // Vars and prompts should be access using the arguments above.
   test?: AtomicTestCase;
+  ignoreCache?: boolean;
 }
 
 export interface CallApiOptionsParams {
