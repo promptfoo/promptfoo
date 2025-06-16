@@ -174,7 +174,7 @@ redteam:
 
 #### How Test Generation Instructions Work
 
-When specified, these instructions are automatically combined with each plugin's base template using the following format:
+When specified, these instructions are automatically combined with each plugin's modifiers and applied to the test generation template in the following format:
 
 ```
 [Plugin's Base Template]

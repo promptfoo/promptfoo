@@ -95,7 +95,9 @@ export function getUnifiedConfig(
           config: configObject,
         };
       }),
-      testGenerationInstructions: config.testGenerationInstructions,
+      ...(config.testGenerationInstructions && {
+        testGenerationInstructions: config.testGenerationInstructions,
+      }),
     },
   };
 }
