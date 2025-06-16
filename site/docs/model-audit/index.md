@@ -31,6 +31,7 @@ AI/ML models can introduce security risks through:
 - Encoded payloads hidden in model structures
 - Risky configurations in model architectures
 - Malicious content in ZIP archives and compressed model files
+- Embedded executables in binary model files
 
 ModelAudit helps identify these risks before models are deployed to production environments, ensuring a more secure AI pipeline.
 
@@ -77,10 +78,12 @@ ModelAudit can scan:
 - **TensorFlow SavedModel** format
 - **Keras models** (`.h5`, `.keras`, `.hdf5`)
 - **Pickle files** (`.pkl`, `.pickle`, `.bin`)
+- **SafeTensors models** (`.safetensors`, `.bin` with SafeTensors format)
 - **Binary model files** (`.bin`) including:
-  - Safetensors format
+  - SafeTensors format (auto-detected)
   - ONNX models
   - Raw PyTorch tensor files
+  - Embedded executables (PE, ELF, Mach-O)
 - **Model configuration files** (`.json`, `.yaml`, etc.)
 
 ## Security Checks Performed
@@ -94,12 +97,13 @@ The scanner looks for various security issues, including:
 - **Dangerous Serialization**: Detecting unsafe pickle opcodes and patterns
 - **Encoded Payloads**: Looking for suspicious strings that might indicate hidden code
 - **Risky Configurations**: Identifying dangerous settings in model architectures
+- **Embedded Executables**: Detecting Windows PE, Linux ELF, and macOS Mach-O files
 
 ## Interpreting Results
 
 The scan results are classified by severity:
 
-- **ERROR**: Definite security concerns that should be addressed immediately
+- **CRITICAL**: Definite security concerns that should be addressed immediately
 - **WARNING**: Potential issues that require review
 - **INFO**: Informational findings, not necessarily security concerns
 - **DEBUG**: Additional details (only shown with `--verbose`)
@@ -134,4 +138,7 @@ pip install h5py
 
 # For YAML configuration scanning
 pip install pyyaml
+
+# For SafeTensors support
+pip install safetensors
 ```
