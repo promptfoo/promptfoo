@@ -30,6 +30,7 @@ AI/ML models can introduce security risks through:
 - Potentially unsafe Keras Lambda layers
 - Encoded payloads hidden in model structures
 - Risky configurations in model architectures
+- Malicious content in ZIP archives and compressed model files
 
 ModelAudit helps identify these risks before models are deployed to production environments, ensuring a more secure AI pipeline.
 
@@ -72,10 +73,14 @@ promptfoo scan-model model.pkl --blacklist "unsafe_model" --blacklist "malicious
 
 ModelAudit can scan:
 
-- **PyTorch models** (`.pt`, `.pth`)
+- **PyTorch models** (`.pt`, `.pth`, `.bin`)
 - **TensorFlow SavedModel** format
 - **Keras models** (`.h5`, `.keras`, `.hdf5`)
-- **Pickle files** (`.pkl`, `.pickle`)
+- **Pickle files** (`.pkl`, `.pickle`, `.bin`)
+- **Binary model files** (`.bin`) including:
+  - Safetensors format
+  - ONNX models
+  - Raw PyTorch tensor files
 - **Model configuration files** (`.json`, `.yaml`, etc.)
 
 ## Security Checks Performed

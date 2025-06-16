@@ -52,13 +52,17 @@ pip install modelaudit[all]
 
 ModelAudit has different dependencies depending on which model formats you want to scan:
 
-| Model Format          | Required Packages                     |
-| --------------------- | ------------------------------------- |
-| Pickle files          | Built-in (no additional dependencies) |
-| TensorFlow SavedModel | `tensorflow`                          |
-| Keras H5              | `h5py`, `tensorflow`                  |
-| PyTorch               | `zipfile` (built-in)                  |
-| YAML manifests        | `pyyaml`                              |
+| Model Format          | Required Packages                                          |
+| --------------------- | ---------------------------------------------------------- |
+| Pickle files          | Built-in (no additional dependencies)                      |
+| TensorFlow SavedModel | `tensorflow`                                               |
+| Keras H5              | `h5py`, `tensorflow`                                       |
+| PyTorch               | `zipfile` (built-in), `torch` for weight analysis          |
+| YAML manifests        | `pyyaml`                                                   |
+| ZIP archives          | Built-in (no additional dependencies)                      |
+| Weight Distribution   | `numpy`, `scipy`, format-specific libs (torch, h5py, etc.) |
+| ONNX                  | `onnx` (optional)                                          |
+| SafeTensors           | `safetensors` (optional)                                   |
 
 ## Advanced Usage
 
@@ -122,6 +126,18 @@ scanners:
     blacklist_patterns:
       - 'unsafe_model'
 
+  zip:
+    max_zip_depth: 5 # Maximum nesting depth for zip files
+    max_zip_entries: 10000 # Maximum number of entries per zip
+    max_entry_size: 10485760 # 10MB max size per extracted file
+
+  weight_distribution:
+    z_score_threshold: 3.0 # Threshold for outlier detection (higher = less sensitive)
+    cosine_similarity_threshold: 0.7 # Minimum similarity between neuron weight vectors
+    weight_magnitude_threshold: 3.0 # Standard deviations for extreme weight detection
+    llm_vocab_threshold: 10000 # Vocabulary size to identify LLM models
+    enable_llm_checks: false # Whether to scan large language models
+
 # Global settings
 max_file_size: 1073741824 # 1GB
 timeout: 600 # 10 minutes
@@ -148,7 +164,7 @@ repos:
         name: ModelAudit
         entry: promptfoo scan-model
         language: system
-        files: '\.(pkl|h5|pb|pt|pth|keras|hdf5|json|yaml|yml)$'
+        files: '\.(pkl|h5|pb|pt|pth|keras|hdf5|json|yaml|yml|zip|onnx|safetensors)$'
         pass_filenames: true
 ```
 
@@ -169,6 +185,9 @@ on:
       - '**.pb'
       - '**.pt'
       - '**.pth'
+      - '**.zip'
+      - '**.onnx'
+      - '**.safetensors'
 
 jobs:
   scan:
@@ -226,6 +245,9 @@ model_security_scan:
       - '**/*.pb'
       - '**/*.pt'
       - '**/*.pth'
+      - '**/*.zip'
+      - '**/*.onnx'
+      - '**/*.safetensors'
 ```
 
 ## Programmatic Usage
@@ -254,6 +276,15 @@ config = {
 }
 
 results = scan_model_directory_or_file("path/to/models/", **config)
+
+# Scan a ZIP archive with custom settings
+zip_config = {
+    "max_zip_depth": 3,  # Limit nesting depth
+    "max_zip_entries": 1000,  # Limit number of files
+    "max_entry_size": 5242880  # 5MB per file
+}
+
+results = scan_model_directory_or_file("dataset.zip", **zip_config)
 ```
 
 ## Extending ModelAudit
@@ -371,3 +402,11 @@ results = scan_model_directory_or_file("path/to/custom_model.mymodel")
    ```
 
    Solution: Ensure the file is in a supported format or create a custom scanner for the format.
+
+5. **Binary File Format Detection**
+
+   ```
+   Info: Detected safetensors format in .bin file
+   ```
+
+   Note: ModelAudit automatically detects the actual format of `.bin` files and applies the appropriate scanner. Supported formats include pickle, safetensors, ONNX, and raw PyTorch tensors.
