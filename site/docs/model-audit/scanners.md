@@ -126,6 +126,33 @@ This scanner examines ZIP archives and their contents recursively.
 **Why it matters:**
 ZIP archives are commonly used to distribute models and datasets. Malicious actors can craft ZIP files that exploit extraction vulnerabilities, contain malware, or cause resource exhaustion. This scanner ensures that archives are safe to extract and that their contents don't pose security risks.
 
+## Weight Distribution Scanner
+
+**File types:** `.pt`, `.pth`, `.h5`, `.keras`, `.hdf5`, `.pb`, `.onnx`, `.safetensors`
+
+This scanner analyzes neural network weight distributions to detect potential backdoors or trojaned models by identifying statistical anomalies.
+
+**What it checks for:**
+
+- **Outlier neurons:** Detects output neurons with abnormally high weight magnitudes using Z-score analysis
+- **Dissimilar weight vectors:** Identifies neurons whose weight patterns are significantly different from others in the same layer (using cosine similarity)
+- **Extreme weight values:** Flags neurons containing unusually large individual weight values that deviate from the layer's distribution
+- **Final layer focus:** Prioritizes analysis of classification heads and output layers where backdoors are typically implemented
+
+**Configuration options:**
+
+- `z_score_threshold`: Controls sensitivity for outlier detection (default: 3.0, higher for LLMs)
+- `cosine_similarity_threshold`: Minimum similarity required between neurons (default: 0.7)
+- `weight_magnitude_threshold`: Threshold for extreme weight detection (default: 3.0 standard deviations)
+- `llm_vocab_threshold`: Vocabulary size threshold to identify LLM models (default: 10,000)
+- `enable_llm_checks`: Whether to perform checks on large language models (default: false)
+
+**Why it matters:**
+Backdoored or trojaned models often contain specific neurons that activate on trigger inputs. These malicious neurons typically have weight patterns that are statistically anomalous compared to benign neurons. By analyzing weight distributions, this scanner can detect models that have been tampered with to include hidden behaviors.
+
+**Special handling for LLMs:**
+Large language models with vocabulary layers (>10,000 outputs) use more conservative thresholds to reduce false positives, as their weight distributions naturally have more variation. LLM checking is disabled by default but can be enabled via configuration.
+
 ## Auto Format Detection
 
 ModelAudit includes file format detection for `.bin` files, which can contain different types of model data:
