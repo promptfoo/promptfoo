@@ -1,12 +1,17 @@
 import dedent from 'dedent';
 import { Router } from 'express';
 import type { Request, Response } from 'express';
+import { cloudConfig } from 'src/globalConfig/cloud';
+import { neverGenerateRemote } from 'src/redteam/remoteGeneration';
 import type { ZodError } from 'zod-validation-error';
 import { fromZodError } from 'zod-validation-error';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { loadApiProvider } from '../../providers';
-import { doTargetPurposeDiscovery } from '../../redteam/commands/discover';
+import {
+  doTargetPurposeDiscovery,
+  type TargetPurposeDiscoveryResult,
+} from '../../redteam/commands/discover';
 import type { ProviderOptions, ProviderTestResponse } from '../../types/providers';
 import invariant from '../../util/invariant';
 import { ProviderOptionsSchema } from '../../validators/providers';
@@ -101,29 +106,56 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
   }
 });
 
-providersRouter.post('/discover', async (req: Request, res: Response): Promise<void> => {
-  const body = req.body;
-  let providerOptions: ProviderOptions;
-  try {
-    providerOptions = ProviderOptionsSchema.parse(body);
-  } catch (e) {
-    res.status(400).json({ error: fromZodError(e as ZodError).toString() });
-    return;
-  }
-  invariant(providerOptions.id, 'id is required');
+providersRouter.post(
+  '/discover',
+  async (
+    req: Request,
+    res: Response<TargetPurposeDiscoveryResult | { error: string }>,
+  ): Promise<void> => {
+    const body = req.body;
+    let providerOptions: ProviderOptions;
+    try {
+      providerOptions = ProviderOptionsSchema.parse(body);
+    } catch (e) {
+      res.status(400).json({ error: fromZodError(e as ZodError).toString() });
+      return;
+    }
+    invariant(providerOptions.id, 'Provider ID (`id`) is required');
 
-  try {
-    const loadedProvider = await loadApiProvider(providerOptions.id, { options: providerOptions });
-    const result = await doTargetPurposeDiscovery(loadedProvider, undefined, false);
-    res.json(result);
-  } catch (e) {
-    const errorMessage = e instanceof Error ? e.message : String(e);
-    logger.error(
-      dedent`[POST /providers/discover] Error calling target purpose discovery
+    // Check that remote generation is enabled:
+    if (neverGenerateRemote()) {
+      res.status(502).json({ error: 'Requires remote generation be enabled.' });
+      return;
+    }
+
+    // Check that Promptfoo Cloud is accessible:
+    if (!cloudConfig.isEnabled()) {
+      res.status(502).json({
+        error: 'Promptfoo Cloud is not enabled. Please run `promptfoo auth login` to login.',
+      });
+      return;
+    }
+
+    try {
+      const loadedProvider = await loadApiProvider(providerOptions.id, {
+        options: providerOptions,
+      });
+      const result = await doTargetPurposeDiscovery(loadedProvider, undefined, false);
+
+      if (result) {
+        res.json(result);
+      } else {
+        res.status(500).json({ error: "Discovery failed to discover the target's purpose." });
+      }
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : String(e);
+      logger.error(
+        dedent`[POST /providers/discover] Error calling target purpose discovery
         error: ${errorMessage}
         providerOptions: ${JSON.stringify(providerOptions)}`,
-    );
-    res.status(500).json({ error: errorMessage });
-    return;
-  }
-});
+      );
+      res.status(500).json({ error: errorMessage });
+      return;
+    }
+  },
+);
