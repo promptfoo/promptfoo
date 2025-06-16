@@ -257,6 +257,13 @@ export async function doGenerateRedteam(
         }
       }
 
+      if (pluginConfig.id === 'cross-session-leak') {
+        pluginConfig.config = {
+          excludeStrategies: ['crescendo', 'goat'],
+          ...(pluginConfig.config || {}),
+        };
+      }
+
       return pluginConfig;
     });
   } else {
@@ -269,11 +276,20 @@ export async function doGenerateRedteam(
 
   // override plugins with command line options
   if (Array.isArray(options.plugins) && options.plugins.length > 0) {
-    plugins = options.plugins.map((plugin) => ({
-      id: plugin.id,
-      numTests: plugin.numTests || options.numTests || redteamConfig?.numTests,
-      ...(plugin.config && { config: plugin.config }),
-    }));
+    plugins = options.plugins.map((plugin) => {
+      const pluginConfig = {
+        id: plugin.id,
+        numTests: plugin.numTests || options.numTests || redteamConfig?.numTests,
+        ...(plugin.config && { config: plugin.config }),
+      };
+      if (plugin.id === 'cross-session-leak') {
+        pluginConfig.config = {
+          excludeStrategies: ['crescendo', 'goat'],
+          ...(pluginConfig as any).config,
+        };
+      }
+      return pluginConfig;
+    });
   }
   invariant(plugins && Array.isArray(plugins) && plugins.length > 0, 'No plugins found');
 

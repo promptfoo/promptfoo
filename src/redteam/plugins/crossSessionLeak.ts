@@ -1,10 +1,21 @@
 import dedent from 'dedent';
 import logger from '../../logger';
-import type { Assertion, AtomicTestCase, GradingResult, TestCase } from '../../types';
+import type {
+  Assertion,
+  AtomicTestCase,
+  GradingResult,
+  TestCase,
+  PluginConfig,
+  ApiProvider,
+} from '../../types';
 import { extractJsonObjects } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { redteamProviderManager } from '../providers/shared';
 import { RedteamPluginBase, RedteamGraderBase } from './base';
+
+interface CrossSessionLeakPluginConfig extends PluginConfig {
+  excludeStrategies?: string[];
+}
 
 export const PLUGIN_ID = 'promptfoo:redteam:cross-session-leak';
 
@@ -30,6 +41,19 @@ const DEFAULT_EXAMPLES = dedent`
 
 export class CrossSessionLeakPlugin extends RedteamPluginBase {
   readonly id = PLUGIN_ID;
+
+  constructor(
+    provider: ApiProvider,
+    purpose: string,
+    injectVar: string,
+    config: CrossSessionLeakPluginConfig = {},
+  ) {
+    const finalConfig = {
+      excludeStrategies: ['crescendo', 'goat'],
+      ...config,
+    };
+    super(provider, purpose, injectVar, finalConfig);
+  }
 
   protected async getTemplate(): Promise<string> {
     return dedent`

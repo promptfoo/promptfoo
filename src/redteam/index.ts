@@ -159,11 +159,12 @@ const formatTestCount = (numTests: number, strategy: boolean): string =>
 
 /**
  * Checks if a plugin matches any of the strategy's target plugins
- * @param pluginId - The ID of the plugin to check
+ * @param strategyId - The ID of the strategy being applied
  * @param targetPlugins - Optional array of plugin IDs to match against
  */
 function pluginMatchesStrategyTargets(
   testCase: TestCaseWithPlugin,
+  strategyId: string,
   targetPlugins?: NonNullable<RedteamStrategyObject['config']>['plugins'],
 ): boolean {
   const pluginId = testCase.metadata?.pluginId;
@@ -172,6 +173,13 @@ function pluginMatchesStrategyTargets(
   }
   if (isProviderOptions(testCase.provider) && testCase.provider?.id === 'sequence') {
     // Sequence providers are verbatim and strategies don't apply
+    return false;
+  }
+
+  const excludedStrategies = testCase.metadata?.pluginConfig?.excludeStrategies as
+    | string[]
+    | undefined;
+  if (Array.isArray(excludedStrategies) && excludedStrategies.includes(strategyId)) {
     return false;
   }
 
@@ -249,7 +257,7 @@ async function applyStrategies(
 
     const targetPlugins = strategy.config?.plugins;
     const applicableTestCases = testCases.filter((t) =>
-      pluginMatchesStrategyTargets(t, targetPlugins),
+      pluginMatchesStrategyTargets(t, strategy.id, targetPlugins),
     );
 
     const strategyTestCases: TestCase[] = await strategyAction(applicableTestCases, injectVar, {
