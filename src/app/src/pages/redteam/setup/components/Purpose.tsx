@@ -377,7 +377,7 @@ export default function Purpose({ onNext }: PromptsProps) {
                 {hasTargetConfigured && !isApiHealthy && (
                   <Alert severity="error" sx={{ border: 0 }}>
                     Cannot connect to Promptfoo API. Auto-discovery requires a healthy API
-                    connection.
+                    connection. This check can take a few seconds to complete.
                   </Alert>
                 )}
                 {discoveryError && (
