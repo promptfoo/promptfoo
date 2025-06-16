@@ -1,6 +1,7 @@
 import fs from 'fs';
 import { runPython, state, validatePythonPath } from '../../src/python/pythonUtils';
 import { runPythonCode } from '../../src/python/wrapper';
+
 jest.mock('../../src/esm');
 jest.mock('python-shell');
 jest.mock('fs', () => ({
@@ -94,7 +95,9 @@ describe('wrapper', () => {
       // Launch multiple concurrent validations
       const concurrentCalls = 10;
       const promises = Array.from({ length: concurrentCalls }, (_, i) =>
-        realValidatePythonPath('python', false).then((result: string): TestResult => ({ testId: i, result }))
+        realValidatePythonPath('python', false).then(
+          (result: string): TestResult => ({ testId: i, result }),
+        ),
       );
       const results = await Promise.all(promises);
       // All calls should succeed
@@ -117,11 +120,13 @@ describe('wrapper', () => {
       // Create mixed explicit/implicit calls
       const mixedPromises = Array.from({ length: 8 }, (_, i) => {
         const isExplicit = i % 2 === 0;
-        return realValidatePythonPath('python', isExplicit).then((result: string): MixedTestResult => ({
-          testId: i,
-          result,
-          isExplicit,
-        }));
+        return realValidatePythonPath('python', isExplicit).then(
+          (result: string): MixedTestResult => ({
+            testId: i,
+            result,
+            isExplicit,
+          }),
+        );
       });
       const results = await Promise.all(mixedPromises);
       // All calls should succeed
@@ -131,8 +136,12 @@ describe('wrapper', () => {
         expect(typeof result.result).toBe('string');
       });
       // Check consistency between explicit and implicit results
-      const explicitResults = results.filter((r: MixedTestResult) => r.isExplicit).map((r: MixedTestResult) => r.result);
-      const implicitResults = results.filter((r: MixedTestResult) => !r.isExplicit).map((r: MixedTestResult) => r.result);
+      const explicitResults = results
+        .filter((r: MixedTestResult) => r.isExplicit)
+        .map((r: MixedTestResult) => r.result);
+      const implicitResults = results
+        .filter((r: MixedTestResult) => !r.isExplicit)
+        .map((r: MixedTestResult) => r.result);
       const uniqueExplicitResults = new Set(explicitResults);
       const uniqueImplicitResults = new Set(implicitResults);
       // Both explicit and implicit calls should return consistent results
@@ -149,7 +158,9 @@ describe('wrapper', () => {
       // Launch rapid successive calls
       const rapidCalls = 20;
       const promises = Array.from({ length: rapidCalls }, (_, i) =>
-        realValidatePythonPath('python', false).then((result: string): TestResult => ({ testId: i, result }))
+        realValidatePythonPath('python', false).then(
+          (result: string): TestResult => ({ testId: i, result }),
+        ),
       );
       const results = await Promise.all(promises);
       // All calls should succeed
