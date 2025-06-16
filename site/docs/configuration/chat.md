@@ -8,7 +8,7 @@ keywords: [chat, conversations, threads, multi-turn, history, messages, _convers
 
 # Chat conversations / threads
 
-The [prompt file](/docs/configuration/parameters#prompts-from-file) supports a message in OpenAI's JSON prompt format. This allows you to set multiple messages including the system prompt. For example:
+The [prompt file](/docs/configuration/prompts#file-based-prompts) supports a message in OpenAI's JSON prompt format. This allows you to set multiple messages including the system prompt. For example:
 
 ```json
 [
