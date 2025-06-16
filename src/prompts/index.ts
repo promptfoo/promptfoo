@@ -89,7 +89,7 @@ export function readProviderPromptMap(
  * @param maxRecursionDepth - Maximum recursion depth for globbing.
  * @returns Promise resolving to an array of processed prompts.
  */
-export async function processPrompt(
+async function processPrompt(
   prompt: Partial<Prompt>,
   basePath: string = '',
   maxRecursionDepth: number = 1,

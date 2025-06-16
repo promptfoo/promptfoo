@@ -12,17 +12,17 @@ interface PromptVersionCompiled {
   prompt_compiled: any;
 }
 
-export interface ResultError<K> {
+interface ResultError<K> {
   data: null;
   error: K;
 }
 
-export interface ResultSuccess<T> {
+interface ResultSuccess<T> {
   data: T;
   error: null;
 }
 
-export type Result<T, K> = ResultSuccess<T> | ResultError<K>;
+type Result<T, K> = ResultSuccess<T> | ResultError<K>;
 
 const buildFilter = (majorVersion?: number, minorVersion?: number): any => {
   const filter: any = {};

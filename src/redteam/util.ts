@@ -11,7 +11,7 @@ export function normalizeApostrophes(str: string): string {
   return str.replace(/['′’']/g, "'");
 }
 
-export const REFUSAL_PREFIXES = [
+const REFUSAL_PREFIXES = [
   'I am not able to',
   'I am really sorry',
   'I am sorry',
@@ -28,7 +28,7 @@ export const REFUSAL_PREFIXES = [
   'Sorry',
 ].map((s) => normalizeApostrophes(s.toLowerCase()));
 
-export const REFUSAL_SUBSTRINGS = [
+const REFUSAL_SUBSTRINGS = [
   'As a language model',
   'As an AI',
   'As an Assistant',

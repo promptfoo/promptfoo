@@ -4,13 +4,13 @@ import winston from 'winston';
 import { getEnvString } from './envars';
 
 type LogCallback = (message: string) => void;
-export let globalLogCallback: LogCallback | null = null;
+let globalLogCallback: LogCallback | null = null;
 
 export function setLogCallback(callback: LogCallback | null) {
   globalLogCallback = callback;
 }
 
-export const LOG_LEVELS = {
+const LOG_LEVELS = {
   error: 0,
   warn: 1,
   info: 2,
@@ -87,7 +87,7 @@ function extractMessage(info: any): string {
   return typeof info.message === 'string' ? info.message : JSON.stringify(info.message);
 }
 
-export const consoleFormatter = winston.format.printf(
+const consoleFormatter = winston.format.printf(
   (info: winston.Logform.TransformableInfo): string => {
     const message = extractMessage(info);
 
@@ -111,17 +111,15 @@ export const consoleFormatter = winston.format.printf(
   },
 );
 
-export const fileFormatter = winston.format.printf(
-  (info: winston.Logform.TransformableInfo): string => {
-    const timestamp = new Date().toISOString();
-    const location = info.location ? ` ${info.location}` : '';
-    const message = extractMessage(info);
+const fileFormatter = winston.format.printf((info: winston.Logform.TransformableInfo): string => {
+  const timestamp = new Date().toISOString();
+  const location = info.location ? ` ${info.location}` : '';
+  const message = extractMessage(info);
 
-    return `${timestamp} [${info.level.toUpperCase()}]${location}: ${message}`;
-  },
-);
+  return `${timestamp} [${info.level.toUpperCase()}]${location}: ${message}`;
+});
 
-export const winstonLogger = winston.createLogger({
+const winstonLogger = winston.createLogger({
   levels: LOG_LEVELS,
   transports: [
     new winston.transports.Console({
@@ -167,7 +165,7 @@ export function setLogLevel(level: LogLevel) {
   }
 }
 
-export function isDebugEnabled(): boolean {
+function isDebugEnabled(): boolean {
   return getLogLevel() === 'debug';
 }
 
@@ -188,7 +186,7 @@ function createLogMethod(level: keyof typeof LOG_LEVELS): StrictLogMethod {
 }
 
 // Wrapper enforces strict single-string argument logging
-export const logger: StrictLogger = Object.assign({}, winstonLogger, {
+const logger: StrictLogger = Object.assign({}, winstonLogger, {
   error: createLogMethod('error'),
   warn: createLogMethod('warn'),
   info: createLogMethod('info'),
@@ -209,4 +207,13 @@ if (getEnvString('LOG_LEVEL', 'info') === 'debug') {
 
 export default logger;
 
-export { sourceMapSupportInitialized, initializeSourceMapSupport, getCallerLocation };
+// Re-export functions and variables needed for testing
+export {
+  consoleFormatter,
+  fileFormatter,
+  getCallerLocation,
+  initializeSourceMapSupport,
+  isDebugEnabled,
+  logger,
+  sourceMapSupportInitialized,
+};

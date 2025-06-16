@@ -6,7 +6,7 @@ import { getNunjucksEngine } from '../../util/templates';
 import { redteamProviderManager } from '../providers/shared';
 import { RedteamPluginBase, RedteamGraderBase } from './base';
 
-export const PLUGIN_ID = 'promptfoo:redteam:cross-session-leak';
+const PLUGIN_ID = 'promptfoo:redteam:cross-session-leak';
 
 const DEFAULT_EXAMPLES = dedent`
     <Example>

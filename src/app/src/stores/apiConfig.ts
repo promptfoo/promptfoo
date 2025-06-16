@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-export interface ApiConfig {
+interface ApiConfig {
   apiBaseUrl: string | undefined;
   setApiBaseUrl: (apiBaseUrl: string) => void;
   fetchingPromise: Promise<Response> | null;

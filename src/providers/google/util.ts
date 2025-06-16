@@ -126,7 +126,6 @@ const ContentSchema = z.object({
 const GeminiFormatSchema = z.array(ContentSchema);
 
 export type GeminiFormat = z.infer<typeof GeminiFormatSchema>;
-export type GeminiPart = z.infer<typeof PartSchema>;
 
 export function maybeCoerceToGeminiFormat(contents: any): {
   contents: GeminiFormat;

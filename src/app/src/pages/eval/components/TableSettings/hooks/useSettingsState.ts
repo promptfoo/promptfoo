@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo, useCallback, useEffect } from 'react';
 import { useResultsViewSettingsStore } from '../../store';
 
-export interface SettingsState {
+interface SettingsState {
   maxTextLength: number;
   wordBreak: string;
   showInferenceDetails: boolean;

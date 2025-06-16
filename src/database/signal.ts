@@ -22,7 +22,7 @@ export function updateSignalFile(): void {
 /**
  * Ensures the signal file exists, creating it if necessary.
  */
-export function ensureSignalFile(): void {
+function ensureSignalFile(): void {
   const filePath = getDbSignalPath();
   if (!fs.existsSync(filePath)) {
     logger.debug(`Creating signal file at ${filePath}`);

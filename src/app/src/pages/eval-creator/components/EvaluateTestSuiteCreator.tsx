@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
-import type { ProviderOptions, TestCase, TestSuiteConfig } from '@app/pages/eval/components/types';
 import { useStore } from '@app/stores/evalConfig';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -19,12 +18,6 @@ import RunTestSuiteButton from './RunTestSuiteButton';
 import TestCasesSection from './TestCasesSection';
 import YamlEditor from './YamlEditor';
 import './EvaluateTestSuiteCreator.css';
-
-export type WebTestSuiteConfig = TestSuiteConfig & {
-  providers: ProviderOptions[];
-  prompts: string[];
-  tests: TestCase[];
-};
 
 function ErrorFallback({
   error,

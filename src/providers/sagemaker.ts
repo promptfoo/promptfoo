@@ -61,7 +61,7 @@ interface SageMakerOptions {
 /**
  * Base class for SageMaker providers with common functionality
  */
-export abstract class SageMakerGenericProvider {
+abstract class SageMakerGenericProvider {
   env?: EnvOverrides;
   sagemakerRuntime?: any; // SageMaker runtime client
   config: SageMakerOptions;

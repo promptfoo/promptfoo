@@ -446,7 +446,7 @@ const config: Config = {
           }
 
           // This is our fallback approach in case extendDevServer doesn't work
-          const { siteDir } = context;
+          const { siteDir = '' } = context || {};
           const docsDir = path.join(siteDir, 'docs');
 
           return {

@@ -211,7 +211,12 @@ export async function updateResult(
   }
 }
 
-export async function getPromptsWithPredicate(
+export async function getLatestEval(filterDescription?: string): Promise<ResultsFile | undefined> {
+  const eval_ = await Eval.latest();
+  return await eval_?.toResultsFile();
+}
+
+async function getPromptsWithPredicate(
   predicate: (result: ResultsFile) => boolean,
   limit: number,
 ): Promise<PromptWithMetadata[]> {
@@ -276,7 +281,7 @@ export function getPromptsForTestCasesHash(
   }, limit);
 }
 
-export async function getTestCasesWithPredicate(
+async function getTestCasesWithPredicate(
   predicate: (result: ResultsFile) => boolean,
   limit: number,
 ): Promise<TestCasesWithMetadata[]> {
@@ -377,7 +382,7 @@ export async function getDatasetFromHash(hash: string) {
   return undefined;
 }
 
-export async function getEvalsWithPredicate(
+async function getEvalsWithPredicate(
   predicate: (result: ResultsFile) => boolean,
   limit: number,
 ): Promise<EvalWithMetadata[]> {
@@ -424,7 +429,7 @@ export async function getEvalsWithPredicate(
   return ret;
 }
 
-export async function getEvals(limit: number = DEFAULT_QUERY_LIMIT) {
+async function getEvals(limit: number = DEFAULT_QUERY_LIMIT) {
   return getEvalsWithPredicate(() => true, limit);
 }
 
