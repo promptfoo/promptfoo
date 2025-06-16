@@ -149,12 +149,12 @@ providersRouter.post(
       }
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : String(e);
-      logger.error(
-        dedent`[POST /providers/discover] Error calling target purpose discovery
+      const serializedError = dedent`
+        [POST /providers/discover] Error calling target purpose discovery
         error: ${errorMessage}
-        providerOptions: ${JSON.stringify(providerOptions)}`,
-      );
-      res.status(500).json({ error: errorMessage });
+        providerOptions: ${JSON.stringify(providerOptions)}`;
+      logger.error(serializedError);
+      res.status(500).json({ error: serializedError });
       return;
     }
   },
