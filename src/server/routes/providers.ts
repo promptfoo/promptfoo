@@ -10,9 +10,8 @@ import {
   doTargetPurposeDiscovery,
   type TargetPurposeDiscoveryResult,
 } from '../../redteam/commands/discover';
-import { getRemoteHealthUrl, neverGenerateRemote } from '../../redteam/remoteGeneration';
+import { neverGenerateRemote } from '../../redteam/remoteGeneration';
 import type { ProviderOptions, ProviderTestResponse } from '../../types/providers';
-import { checkRemoteHealth } from '../../util/apiHealth';
 import invariant from '../../util/invariant';
 import { ProviderOptionsSchema } from '../../validators/providers';
 
@@ -125,16 +124,6 @@ providersRouter.post(
     // Check that remote generation is enabled:
     if (neverGenerateRemote()) {
       res.status(400).json({ error: 'Requires remote generation be enabled.' });
-      return;
-    }
-
-    // Check that Promptfoo Cloud is accessible:
-    const healthUrl = getRemoteHealthUrl() as string;
-    const healthResult = await checkRemoteHealth(healthUrl);
-    if (healthResult.status !== 'OK') {
-      res.status(400).json({
-        error: 'Promptfoo Cloud is not enabled. Please run `promptfoo auth login` to login.',
-      });
       return;
     }
 

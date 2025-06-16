@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import Code from '@app/components/Code';
+import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
@@ -137,6 +138,7 @@ export default function Purpose({ onNext }: PromptsProps) {
   const theme = useTheme();
   const { config, updateApplicationDefinition } = useRedTeamConfig();
   const { recordEvent } = useTelemetry();
+  const { status: apiHealthStatus, checkHealth } = useApiHealth();
   const [testMode, setTestMode] = useState<'application' | 'model'>('application');
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
     new Set(['Core Application Details']), // Expand the first section by default since it has required fields
@@ -238,6 +240,8 @@ export default function Purpose({ onNext }: PromptsProps) {
 
   const hasTargetConfigured = JSON.stringify(config.target) !== JSON.stringify(DEFAULT_HTTP_TARGET);
 
+  const isApiHealthy = apiHealthStatus === 'connected';
+
   const toolsAsJSDocs = React.useMemo(
     () => formatToolsAsJSDocs(discoveryResult?.tools),
     [discoveryResult],
@@ -263,6 +267,15 @@ export default function Purpose({ onNext }: PromptsProps) {
       });
     }
   }, [discoveryResult]);
+
+  /**
+   * Validate that the API is healthy when the target is configured.
+   */
+  useEffect(() => {
+    if (hasTargetConfigured) {
+      checkHealth();
+    }
+  }, [hasTargetConfigured, checkHealth]);
 
   // =============================================================================
   // RENDERING ===================================================================
@@ -348,7 +361,9 @@ export default function Purpose({ onNext }: PromptsProps) {
                 </Typography>
                 <Button
                   variant="contained"
-                  disabled={!hasTargetConfigured || !!discoveryError || !!discoveryResult}
+                  disabled={
+                    !hasTargetConfigured || !isApiHealthy || !!discoveryError || !!discoveryResult
+                  }
                   onClick={handleTargetPurposeDiscovery}
                   loading={isDiscovering}
                 >
@@ -357,6 +372,12 @@ export default function Purpose({ onNext }: PromptsProps) {
                 {!hasTargetConfigured && (
                   <Alert severity="warning" sx={{ border: 0 }}>
                     You must configure a target to run auto-discovery.
+                  </Alert>
+                )}
+                {hasTargetConfigured && !isApiHealthy && (
+                  <Alert severity="error" sx={{ border: 0 }}>
+                    Cannot connect to Promptfoo API. Auto-discovery requires a healthy API
+                    connection.
                   </Alert>
                 )}
                 {discoveryError && (
