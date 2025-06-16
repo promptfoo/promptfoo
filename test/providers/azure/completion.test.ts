@@ -32,13 +32,92 @@ describe('AzureCompletionProvider', () => {
     });
     (provider as any).authHeaders = { 'api-key': 'test-key' };
 
-    const result1 = await provider.callApi('test prompt');
-    const result2 = await provider.callApi('test prompt');
+    const testPrompt = { raw: 'test prompt', display: 'test', label: 'test' };
+    const result1 = await provider.callApi('test prompt', { prompt: testPrompt, vars: {} });
+    const result2 = await provider.callApi('test prompt', { prompt: testPrompt, vars: {} });
 
     expect(result1.output).toBe('hello');
     expect(result2.output).toBe('hello');
     expect(result1.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
     expect(result2.tokenUsage).toEqual({ cached: 10, total: 10 });
+  });
+
+  it('should use custom fetchWithCache from context when provided', async () => {
+    const customFetchWithCache = jest.fn().mockResolvedValueOnce({
+      data: {
+        choices: [{ text: 'custom fetch' }],
+        usage: { total_tokens: 5, prompt_tokens: 2, completion_tokens: 3 },
+      },
+      cached: false,
+    });
+
+    const provider = new AzureCompletionProvider('test', {
+      config: { apiHost: 'test.azure.com' },
+    });
+    (provider as any).authHeaders = { 'api-key': 'test-key' };
+
+    const testPrompt = { raw: 'test prompt', display: 'test', label: 'test' };
+    const result = await provider.callApi('test prompt', {
+      prompt: testPrompt,
+      fetchWithCache: customFetchWithCache,
+      vars: {},
+    });
+
+    expect(customFetchWithCache).toHaveBeenCalledWith(
+      expect.stringContaining('/openai/deployments/test/completions'),
+      expect.any(Object),
+      expect.any(Number),
+    );
+    expect(jest.mocked(fetchWithCache)).not.toHaveBeenCalled();
+    expect(result.output).toBe('custom fetch');
+  });
+
+  it('should fallback to default fetchWithCache when context.fetchWithCache is not provided', async () => {
+    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
+        choices: [{ text: 'default fetch' }],
+        usage: { total_tokens: 5, prompt_tokens: 2, completion_tokens: 3 },
+      },
+      cached: false,
+    } as any);
+
+    const provider = new AzureCompletionProvider('test', {
+      config: { apiHost: 'test.azure.com' },
+    });
+    (provider as any).authHeaders = { 'api-key': 'test-key' };
+
+    const testPrompt = { raw: 'test prompt', display: 'test', label: 'test' };
+    const result = await provider.callApi('test prompt', { prompt: testPrompt, vars: {} });
+
+    expect(jest.mocked(fetchWithCache)).toHaveBeenCalledWith(
+      expect.stringContaining('/openai/deployments/test/completions'),
+      expect.any(Object),
+      expect.any(Number),
+    );
+    expect(result.output).toBe('default fetch');
+  });
+
+  it('should handle errors from custom fetchWithCache', async () => {
+    const customFetchWithCache = jest.fn().mockRejectedValueOnce(new Error('Custom fetch error'));
+
+    const provider = new AzureCompletionProvider('test', {
+      config: { apiHost: 'test.azure.com' },
+    });
+    (provider as any).authHeaders = { 'api-key': 'test-key' };
+
+    const testPrompt = { raw: 'test prompt', display: 'test', label: 'test' };
+    const result = await provider.callApi('test prompt', {
+      prompt: testPrompt,
+      fetchWithCache: customFetchWithCache,
+      vars: {},
+    });
+
+    expect(customFetchWithCache).toHaveBeenCalledWith(
+      expect.stringContaining('/openai/deployments/test/completions'),
+      expect.any(Object),
+      expect.any(Number),
+    );
+    expect(result.error).toBe('API call error: Error: Custom fetch error');
   });
 
   it('should pass custom headers from config to fetchWithCache', async () => {
@@ -63,7 +142,8 @@ describe('AzureCompletionProvider', () => {
       },
     });
 
-    await provider.callApi('test prompt');
+    const testPrompt = { raw: 'test prompt', display: 'test', label: 'test' };
+    await provider.callApi('test prompt', { prompt: testPrompt, vars: {} });
 
     expect(fetchWithCache).toHaveBeenCalledWith(
       expect.any(String),
@@ -93,7 +173,8 @@ describe('AzureCompletionProvider', () => {
     });
     (provider as any).authHeaders = { 'api-key': 'test-key' };
 
-    const result = await provider.callApi('test prompt');
+    const testPrompt = { raw: 'test prompt', display: 'test', label: 'test' };
+    const result = await provider.callApi('test prompt', { prompt: testPrompt, vars: {} });
     expect(result.output).toBe(
       "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.",
     );
@@ -107,12 +188,12 @@ describe('AzureCompletionProvider', () => {
     });
     (provider as any).authHeaders = { 'api-key': 'test-key' };
 
-    const result = await provider.callApi('test prompt');
+    const testPrompt = { raw: 'test prompt', display: 'test', label: 'test' };
+    const result = await provider.callApi('test prompt', { prompt: testPrompt, vars: {} });
     expect(result.error).toBe('API call error: Error: API Error');
   });
 
   it('should handle missing API host', async () => {
-    // Simulate fetchWithCache throwing due to missing API host
     jest.mocked(fetchWithCache).mockImplementationOnce(() => {
       throw new Error('Azure API host must be set.');
     });
@@ -121,8 +202,8 @@ describe('AzureCompletionProvider', () => {
     (provider as any).initialized = true;
     (provider as any).authHeaders = { 'api-key': 'test-key' };
 
-    // The code now returns {error: ...}, not throws, so check for error property
-    const result = await provider.callApi('test prompt');
+    const testPrompt = { raw: 'test prompt', display: 'test', label: 'test' };
+    const result = await provider.callApi('test prompt', { prompt: testPrompt, vars: {} });
     expect(result.error).toBe('API call error: Error: Azure API host must be set.');
   });
 
@@ -140,7 +221,8 @@ describe('AzureCompletionProvider', () => {
     });
     (provider as any).authHeaders = { 'api-key': 'test-key' };
 
-    const result = await provider.callApi('test prompt');
+    const testPrompt = { raw: 'test prompt', display: 'test', label: 'test' };
+    const result = await provider.callApi('test prompt', { prompt: testPrompt, vars: {} });
     expect(result.output).toBe('');
   });
 
@@ -152,7 +234,8 @@ describe('AzureCompletionProvider', () => {
     });
     (provider as any).authHeaders = { 'api-key': 'test-key' };
 
-    await expect(provider.callApi('test')).rejects.toThrow(
+    const testPrompt = { raw: 'test', display: 'test', label: 'test' };
+    await expect(provider.callApi('test', { prompt: testPrompt, vars: {} })).rejects.toThrow(
       /OPENAI_STOP is not a valid JSON string/,
     );
 
@@ -173,13 +256,13 @@ describe('AzureCompletionProvider', () => {
     });
     (provider as any).authHeaders = { 'api-key': 'test-key' };
 
-    const result = await provider.callApi('test prompt');
+    const testPrompt = { raw: 'test prompt', display: 'test', label: 'test' };
+    const result = await provider.callApi('test prompt', { prompt: testPrompt, vars: {} });
     expect(result.output).toBe('');
     expect(result.tokenUsage).toEqual({ total: 7, prompt: 3, completion: 4 });
   });
 
   it('should handle exception in response parsing gracefully', async () => {
-    // Simulate a malformed data object that will throw in try/catch block
     jest.mocked(fetchWithCache).mockResolvedValueOnce({
       data: {},
       cached: false,
@@ -190,7 +273,8 @@ describe('AzureCompletionProvider', () => {
     });
     (provider as any).authHeaders = { 'api-key': 'test-key' };
 
-    const result = await provider.callApi('test prompt');
+    const testPrompt = { raw: 'test prompt', display: 'test', label: 'test' };
+    const result = await provider.callApi('test prompt', { prompt: testPrompt, vars: {} });
     expect(result.error).toMatch(/API response error:/);
     expect(result.tokenUsage).toEqual({
       total: undefined,
@@ -216,7 +300,8 @@ describe('AzureCompletionProvider', () => {
     });
     (provider as any).authHeaders = { 'api-key': 'test-key' };
 
-    await provider.callApi('test prompt');
+    const testPrompt = { raw: 'test prompt', display: 'test', label: 'test' };
+    await provider.callApi('test prompt', { prompt: testPrompt, vars: {} });
 
     const actualCall = jest.mocked(fetchWithCache).mock.calls[0];
     const body = JSON.parse(actualCall[1]?.body as string);
@@ -240,7 +325,8 @@ describe('AzureCompletionProvider', () => {
       },
     });
 
-    await provider.callApi('test prompt');
+    const testPrompt = { raw: 'test prompt', display: 'test', label: 'test' };
+    await provider.callApi('test prompt', { prompt: testPrompt, vars: {} });
 
     expect(fetchWithCache).toHaveBeenCalledWith(
       expect.any(String),
