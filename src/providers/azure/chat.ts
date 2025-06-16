@@ -153,7 +153,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         data: responseData,
         cached: isCached,
         status,
-      } = await fetchWithCache(
+      } = await (context?.fetchWithCache ?? fetchWithCache)(
         url,
         {
           method: 'POST',

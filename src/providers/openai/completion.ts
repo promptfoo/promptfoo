@@ -69,7 +69,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     let data,
       cached = false;
     try {
-      ({ data, cached } = (await fetchWithCache(
+      ({ data, cached } = (await (context?.fetchWithCache ?? fetchWithCache)(
         `${this.getApiUrl()}/completions`,
         {
           method: 'POST',
