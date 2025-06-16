@@ -38,6 +38,7 @@ function DiscoveryResult({ text }: { text: string }) {
   const { showToast } = useToast();
   const { recordEvent } = useTelemetry();
   const theme = useTheme();
+  const isClipboardAvailable = typeof navigator !== 'undefined' && navigator.clipboard;
 
   const handleCopy = async () => {
     try {
@@ -98,23 +99,25 @@ function DiscoveryResult({ text }: { text: string }) {
             {text}
           </Typography>
         </Box>
-        <Tooltip title="Copy to clipboard">
-          <IconButton
-            size="small"
-            onClick={handleCopy}
-            sx={{
-              color: theme.palette.primary.main,
-              '&:hover': {
-                backgroundColor:
-                  theme.palette.mode === 'dark'
-                    ? alpha(theme.palette.primary.main, 0.2)
-                    : alpha(theme.palette.primary.main, 0.1),
-              },
-            }}
-          >
-            <ContentCopyIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
+        {isClipboardAvailable && (
+          <Tooltip title="Copy to clipboard">
+            <IconButton
+              size="small"
+              onClick={handleCopy}
+              sx={{
+                color: theme.palette.primary.main,
+                '&:hover': {
+                  backgroundColor:
+                    theme.palette.mode === 'dark'
+                      ? alpha(theme.palette.primary.main, 0.2)
+                      : alpha(theme.palette.primary.main, 0.1),
+                },
+              }}
+            >
+              <ContentCopyIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        )}
       </Box>
       <Typography
         variant="caption"
@@ -377,7 +380,7 @@ export default function Purpose({ onNext }: PromptsProps) {
                 {hasTargetConfigured && !isApiHealthy && (
                   <Alert severity="error" sx={{ border: 0 }}>
                     Cannot connect to Promptfoo API. Auto-discovery requires a healthy API
-                    connection. This check can take a few seconds to complete.
+                    connection.
                   </Alert>
                 )}
                 {discoveryError && (
