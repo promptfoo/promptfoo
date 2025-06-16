@@ -94,7 +94,11 @@ export class CrescendoProvider implements ApiProvider {
   private userGoal: string | undefined;
   private redTeamProvider: ApiProvider | undefined;
   private scoringProvider: ApiProvider | undefined;
-  private unblockingProvider: ApiProvider | undefined;
+  private readonly unblockingProvider = new PromptfooChatCompletionProvider({
+    task: 'blocking-question-analysis',
+    jsonOnly: true,
+    preferSmallModel: false,
+  });
   private memory: MemorySystem;
   private targetConversationId: string;
   private redTeamingChatConversationId: string;
@@ -159,18 +163,6 @@ export class CrescendoProvider implements ApiProvider {
       }
     }
     return this.scoringProvider;
-  }
-
-  private async getUnblockingProvider(): Promise<ApiProvider> {
-    if (!this.unblockingProvider) {
-      // blocking-question-analysis is a server-side analysis task only, like extract-intent, citation, etc.
-      this.unblockingProvider = new PromptfooChatCompletionProvider({
-        task: 'blocking-question-analysis',
-        jsonOnly: true,
-        preferSmallModel: false,
-      });
-    }
-    return this.unblockingProvider;
   }
 
   id() {
@@ -832,6 +824,14 @@ export class CrescendoProvider implements ApiProvider {
     tokenUsage?: TokenUsage;
   }> {
     try {
+      // Check if the server supports unblocking feature
+      const supportsUnblocking = await this.checkServerSupportsUnblocking();
+
+      if (!supportsUnblocking) {
+        logger.debug('[Crescendo] Server does not support unblocking, skipping gracefully');
+        return { success: false };
+      }
+
       logger.debug('[Crescendo] Attempting to unblock with blocking-question-analysis task');
 
       const conversationHistory = this.memory.getConversation(this.targetConversationId);
@@ -847,7 +847,7 @@ export class CrescendoProvider implements ApiProvider {
         purpose: purpose || '',
       };
 
-      const unblockingProvider = await this.getUnblockingProvider();
+      const unblockingProvider = this.unblockingProvider;
       const response = await unblockingProvider.callApi(JSON.stringify(unblockingRequest), {
         prompt: {
           raw: JSON.stringify(unblockingRequest),
@@ -855,14 +855,6 @@ export class CrescendoProvider implements ApiProvider {
         },
         vars: {},
       });
-
-      console.log('[CRESCENDO DEBUG] Unblocking provider response:');
-      console.log('  response:', response);
-
-      if (unblockingProvider.delay) {
-        logger.debug(`[Crescendo] Sleeping for ${unblockingProvider.delay}ms`);
-        await sleep(unblockingProvider.delay);
-      }
 
       if (response.error) {
         logger.debug(`[Crescendo] Unblocking provider error: ${response.error}`);
@@ -891,6 +883,23 @@ export class CrescendoProvider implements ApiProvider {
     } catch (error) {
       logger.debug(`[Crescendo] Error in unblocking: ${error}`);
       return { success: false };
+    }
+  }
+
+  private async checkServerSupportsUnblocking(): Promise<boolean> {
+    try {
+      const { getRemoteGenerationUrl } = await import('../../remoteGeneration');
+      const baseUrl = getRemoteGenerationUrl();
+
+      const { checkServerFeatureSupport } = await import('../../../util/server');
+      return await checkServerFeatureSupport(
+        baseUrl,
+        'blocking-question-analysis',
+        '2025-06-16T14:49:11-07:00',
+      );
+    } catch (error) {
+      logger.debug(`[Crescendo] Feature check failed: ${error}`);
+      return false;
     }
   }
 }
