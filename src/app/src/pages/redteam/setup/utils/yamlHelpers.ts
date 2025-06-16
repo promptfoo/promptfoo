@@ -12,6 +12,7 @@ const orderRedTeam = (redteam: any): any => {
     'plugins',
     'strategies',
     'numTests',
+    'testGenerationInstructions',
   ] as const;
 
   redTeamOrder.forEach((key) => {
@@ -48,7 +49,7 @@ const orderKeys = (obj: any): any => {
 
 export function generateOrderedYaml(config: Config): string {
   const yamlConfig = getUnifiedConfig(config);
-  console.log('yamlConfig', yamlConfig);
+
   if (config.purpose) {
     yamlConfig.redteam.purpose = config.purpose;
   }
@@ -58,7 +59,7 @@ export function generateOrderedYaml(config: Config): string {
   const orderedConfig = orderKeys(yamlConfig);
 
   const yamlString = yaml.dump(orderedConfig, { noRefs: true, lineWidth: -1 });
-  console.log('yamlString', yamlString);
+
   // Add comments for plugins and strategies
   const lines = yamlString.split('\n');
   const updatedLines = lines.map((line) => {
