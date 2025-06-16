@@ -38,7 +38,11 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'configuration/guide' },
         { type: 'doc', id: 'configuration/reference' },
-        { type: 'doc', id: 'configuration/parameters' },
+        // Page still exists for backwards compatibility, but we don't put it in the sidebar
+        // { type: 'doc', id: 'configuration/parameters' },
+        { type: 'doc', id: 'configuration/prompts' },
+        { type: 'doc', id: 'configuration/test-cases' },
+        { type: 'doc', id: 'configuration/outputs' },
         { type: 'doc', id: 'configuration/chat' },
         { type: 'doc', id: 'configuration/datasets' },
         { type: 'doc', id: 'configuration/scenarios' },
