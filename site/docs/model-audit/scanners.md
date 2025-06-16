@@ -109,7 +109,24 @@ This scanner examines raw PyTorch binary tensor files that contain serialized we
 **Why it matters:**
 While `.bin` files typically contain raw tensor data, attackers could embed malicious code or executables within these files. The scanner performs deep content analysis to detect such threats.
 
-## Smart Format Detection
+## ZIP Archive Scanner
+
+**File types:** `.zip`
+
+This scanner examines ZIP archives and their contents recursively.
+
+**What it checks for:**
+
+- **Directory traversal attacks:** Detects entries with paths containing ".." or absolute paths that could overwrite system files
+- **Zip bombs:** Identifies files with suspicious compression ratios (>100x) that could cause resource exhaustion
+- **Nested archives:** Scans ZIP files within ZIP files up to a configurable depth to prevent infinite recursion attacks
+- **Malicious content:** Each file within the archive is scanned with its appropriate scanner (e.g., pickle files with PickleScanner)
+- **Resource limits:** Enforces maximum number of entries and file sizes to prevent denial of service
+
+**Why it matters:**
+ZIP archives are commonly used to distribute models and datasets. Malicious actors can craft ZIP files that exploit extraction vulnerabilities, contain malware, or cause resource exhaustion. This scanner ensures that archives are safe to extract and that their contents don't pose security risks.
+
+## Auto Format Detection
 
 ModelAudit includes file format detection for `.bin` files, which can contain different types of model data:
 
