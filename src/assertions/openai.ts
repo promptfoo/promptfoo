@@ -79,8 +79,8 @@ export const handleIsValidOpenAiToolsCall = ({
       validateFunctionCall(
         toolOutput.function,
         tools
-          .filter((tool) => tool.type === 'function' && tool.function)
-          .map((tool) => tool.function!),
+          .filter((tool) => tool.type === 'function' && 'function' in tool)
+          .map((tool) => tool.function),
         test.vars,
       );
     });
