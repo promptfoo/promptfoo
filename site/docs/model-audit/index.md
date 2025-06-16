@@ -73,10 +73,14 @@ promptfoo scan-model model.pkl --blacklist "unsafe_model" --blacklist "malicious
 
 ModelAudit can scan:
 
-- **PyTorch models** (`.pt`, `.pth`)
+- **PyTorch models** (`.pt`, `.pth`, `.bin`)
 - **TensorFlow SavedModel** format
 - **Keras models** (`.h5`, `.keras`, `.hdf5`)
-- **Pickle files** (`.pkl`, `.pickle`)
+- **Pickle files** (`.pkl`, `.pickle`, `.bin`)
+- **Binary model files** (`.bin`) including:
+  - Safetensors format
+  - ONNX models
+  - Raw PyTorch tensor files
 - **Model configuration files** (`.json`, `.yaml`, etc.)
 
 ## Security Checks Performed

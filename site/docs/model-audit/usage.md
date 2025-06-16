@@ -388,3 +388,11 @@ results = scan_model_directory_or_file("path/to/custom_model.mymodel")
    ```
 
    Solution: Ensure the file is in a supported format or create a custom scanner for the format.
+
+5. **Binary File Format Detection**
+
+   ```
+   Info: Detected safetensors format in .bin file
+   ```
+
+   Note: ModelAudit automatically detects the actual format of `.bin` files and applies the appropriate scanner. Supported formats include pickle, safetensors, ONNX, and raw PyTorch tensors.

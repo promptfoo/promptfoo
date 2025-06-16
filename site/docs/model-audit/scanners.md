@@ -9,9 +9,9 @@ ModelAudit includes specialized scanners for different model formats and file ty
 
 ## Pickle Scanner
 
-**File types:** `.pkl`, `.pickle`
+**File types:** `.pkl`, `.pickle`, `.bin` (when containing pickle data)
 
-The Pickle Scanner analyzes Python pickle files for security risks, which are common in many ML frameworks.
+The Pickle Scanner analyzes Python pickle files for security risks, which are common in many ML frameworks. It also detects pickle-formatted `.bin` files.
 
 **What it checks for:**
 
@@ -91,6 +91,24 @@ This scanner analyzes model configuration files and manifests.
 **Why it matters:**
 Model configuration files can contain settings that lead to insecure behavior, such as downloading content from untrusted sources, accessing sensitive files, or executing commands.
 
+## PyTorch Binary Scanner
+
+**File types:** `.bin` (raw PyTorch tensor files)
+
+This scanner examines raw PyTorch binary tensor files that contain serialized weight data.
+
+**What it checks for:**
+
+- Embedded code patterns (imports, function calls, eval/exec)
+- Executable file signatures (Windows PE, Linux ELF, macOS Mach-O)
+- Shell script shebangs that might indicate embedded scripts
+- Blacklisted patterns specified in configuration
+- Suspiciously small files that might not be valid tensor data
+- Validation of tensor structure
+
+**Why it matters:**
+While `.bin` files typically contain raw tensor data, attackers could embed malicious code or executables within these files. The scanner performs deep content analysis to detect such threats.
+
 ## ZIP Archive Scanner
 
 **File types:** `.zip`
@@ -107,3 +125,14 @@ This scanner examines ZIP archives and their contents recursively.
 
 **Why it matters:**
 ZIP archives are commonly used to distribute models and datasets. Malicious actors can craft ZIP files that exploit extraction vulnerabilities, contain malware, or cause resource exhaustion. This scanner ensures that archives are safe to extract and that their contents don't pose security risks.
+
+## Auto Format Detection
+
+ModelAudit includes file format detection for `.bin` files, which can contain different types of model data:
+
+- **Pickle format**: Detected by pickle protocol magic bytes
+- **Safetensors format**: Detected by JSON header structure
+- **ONNX format**: Detected by ONNX protobuf signatures
+- **Raw PyTorch tensors**: Default for `.bin` files without other signatures
+
+This allows ModelAudit to automatically apply the correct scanner based on the actual file content, not just the extension.
