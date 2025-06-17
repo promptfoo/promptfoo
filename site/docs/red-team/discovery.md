@@ -10,12 +10,8 @@ Promptfoo's **Target Discovery Agent** automatically extracts useful information
 
 ## Usage
 
-Use the command `promptfoo redteam discover` with either a configuration file or a cloud target. [More info](/docs/usage/command-line#promptfoo-redteam-discover)
-
-### Preview
-
-Alternatively, you can preview the scan report of a [previously configured target](/docs/red-team/configuration); run:
+<!-- TODO: Add full usage instructions. -->
 
 ```sh
-npx promptfoo@latest redteam discover
+promptfoo redteam discover
 ```
