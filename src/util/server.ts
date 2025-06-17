@@ -2,6 +2,7 @@ import opener from 'opener';
 import { fetchWithCache } from '../cache';
 import { getDefaultPort, VERSION } from '../constants';
 import logger from '../logger';
+import { getRemoteVersionUrl } from '../redteam/remoteGeneration';
 import { promptYesNo } from './readline';
 
 export enum BrowserBehavior {
@@ -48,29 +49,36 @@ export async function checkServerFeatureSupport(
     if (baseUrl) {
       logger.debug(`[Feature Detection] Checking server support for feature: ${featureName}`);
 
-      // Build version endpoint URL
-      const versionUrl = baseUrl.replace('/api/v1/task', '/version');
+      const versionUrl = getRemoteVersionUrl();
 
-      const { data } = await fetchWithCache(
-        versionUrl,
-        {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
-        },
-        5000,
-      );
-
-      if (data.buildDate) {
-        // Parse build date and check if it's after the required date
-        const buildDate = new Date(data.buildDate);
-        const featureDate = new Date(requiredBuildDate);
-        supported = buildDate >= featureDate;
-        logger.debug(
-          `[Feature Detection] ${featureName}: buildDate=${data.buildDate}, required=${requiredBuildDate}, supported=${supported}`,
+      if (versionUrl) {
+        const { data } = await fetchWithCache(
+          versionUrl,
+          {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' },
+          },
+          5000,
         );
+
+        if (data.buildDate) {
+          // Parse build date and check if it's after the required date
+          const buildDate = new Date(data.buildDate);
+          const featureDate = new Date(requiredBuildDate);
+          supported = buildDate >= featureDate;
+          logger.debug(
+            `[Feature Detection] ${featureName}: buildDate=${data.buildDate}, required=${requiredBuildDate}, supported=${supported}`,
+          );
+        } else {
+          logger.debug(
+            `[Feature Detection] ${featureName}: no version info, assuming not supported`,
+          );
+          supported = false;
+        }
       } else {
-        // If no version info, assume old server
-        logger.debug(`[Feature Detection] ${featureName}: no version info, assuming not supported`);
+        logger.debug(
+          `[Feature Detection] ${featureName}: no version URL available, assuming not supported`,
+        );
         supported = false;
       }
     } else {

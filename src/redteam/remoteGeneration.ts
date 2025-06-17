@@ -49,6 +49,34 @@ export function getRemoteHealthUrl(): string | null {
   return 'https://api.promptfoo.app/health';
 }
 
+/**
+ * Gets the URL for checking remote API version based on configuration.
+ * @returns The version check URL, or null if remote generation is disabled.
+ */
+export function getRemoteVersionUrl(): string | null {
+  if (neverGenerateRemote()) {
+    return null;
+  }
+
+  const envUrl = getEnvString('PROMPTFOO_REMOTE_GENERATION_URL');
+  if (envUrl) {
+    try {
+      const url = new URL(envUrl);
+      url.pathname = '/version';
+      return url.toString();
+    } catch {
+      return 'https://api.promptfoo.app/version';
+    }
+  }
+
+  const cloudConfig = new CloudConfig();
+  if (cloudConfig.isEnabled()) {
+    return `${cloudConfig.getApiHost()}/version`;
+  }
+
+  return 'https://api.promptfoo.app/version';
+}
+
 export function shouldGenerateRemote(): boolean {
   // Generate remotely when the user has not disabled it and does not have an OpenAI key.
   return (!neverGenerateRemote() && !getEnvString('OPENAI_API_KEY')) || (cliState.remote ?? false);
