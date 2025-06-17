@@ -9,17 +9,17 @@ prompts:
 providers:
   - id: google:gemini-2.5-pro-preview-06-05
     config:
-      temperature: 0.7
-      maxOutputTokens: 4096
       generationConfig:
+        temperature: 0.7
+        maxOutputTokens: 4096
         thinkingConfig:
           thinkingBudget: 2048 # Enhanced thinking for complex reasoning
 
   - id: google:gemini-2.5-flash-preview-05-20
     config:
-      temperature: 0.7
-      maxOutputTokens: 2048
       generationConfig:
+        temperature: 0.7
+        maxOutputTokens: 2048
         thinkingConfig:
           thinkingBudget: 1024 # Latest Flash model with thinking capabilities
 
@@ -79,7 +79,7 @@ defaultTest:
   options:
     provider:
       text:
-        id: google:gemini-2.0-flash-exp
+        id: google:gemini-2.5-flash-preview-05-20
       embedding:
         id: google:embedding:text-embedding-004
 tests:

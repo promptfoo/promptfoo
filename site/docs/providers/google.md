@@ -12,10 +12,11 @@ You can use it by specifying one of the [available models](https://ai.google.dev
 
 ### Chat and Multimodal Models
 
-- `google:gemini-2.5-pro-preview-06-05` - Latest and most advanced Gemini 2.5 Pro model with improved reasoning, coding, and multimodal understanding
-- `google:gemini-2.5-pro-preview-05-06` - Previous Gemini 2.5 Pro preview with enhanced thinking capabilities
+- `google:gemini-2.5-pro-preview-06-05` - Latest and most advanced Gemini 2.5 Pro model with enhanced reasoning, coding, and multimodal understanding
+- `google:gemini-2.5-pro-preview-05-06` - Previous Gemini 2.5 Pro preview with advanced thinking capabilities
 - `google:gemini-2.5-flash-preview-05-20` - Latest Flash model with enhanced reasoning and thinking capabilities
 - `google:gemini-2.0-pro-exp-02-05` - Multimodal model with next-gen features, 1M token context window
+- `google:gemini-2.0-flash-exp` - Experimental multimodal model with next generation features
 - `google:gemini-2.0-flash` - Multimodal model with next-gen features, 1M token context window
 - `google:gemini-2.0-flash-lite` - Cost-efficient version of 2.0 Flash with 1M token context
 - `google:gemini-2.0-flash-thinking-exp` - Optimized for complex reasoning and problem-solving
