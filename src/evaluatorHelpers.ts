@@ -350,9 +350,6 @@ const BeforeEachExtensionHookContextSchema = z.object({
   test: TestCaseSchema,
 });
 
-type BeforeAllExtensionHookContext = z.infer<typeof BeforeAllExtensionHookContextSchema>;
-type BeforeEachExtensionHookContext = z.infer<typeof BeforeEachExtensionHookContextSchema>;
-
 /**
  * Defines the set of fields on BeforeAllExtensionHookContextSchema that may be mutated by the extension hook.
  */
@@ -374,6 +371,9 @@ const MutableBeforeEachExtensionHookContextSchema = z
     test: TestCaseSchema,
   })
   .strict();
+
+type BeforeAllExtensionHookContext = z.infer<typeof BeforeAllExtensionHookContextSchema>;
+type BeforeEachExtensionHookContext = z.infer<typeof BeforeEachExtensionHookContextSchema>;
 
 type AfterEachExtensionHookContext = {
   test: TestCase;
@@ -420,8 +420,9 @@ export async function runExtensionHook<HookName extends keyof HookContextMap>(
     return context;
   }
 
-  // Guard against type drift by validating the passed context object. This should be caught upstream
-  // so these errors are considered invariants.
+  // Guard against runtime type drift by validating the context object matches the expected schema.
+  // This ensures that the context object is valid prior to passing it to the extension hook, upstreaming
+  // type errors.
   switch (hookName) {
     case 'beforeAll': {
       const parsed = BeforeAllExtensionHookContextSchema.safeParse(context);
@@ -454,8 +455,9 @@ export async function runExtensionHook<HookName extends keyof HookContextMap>(
 
     const extensionReturnValue = await transform(extension, hookName, context, false);
 
+    // If the extension hook returns a value, update the context with the value's mutable fields.
+    // This also provides backwards compatibility for extension hooks that do not return a value.
     if (extensionReturnValue) {
-      // Update the context with the mutable values returned by the extension hook.
       switch (hookName) {
         case 'beforeAll': {
           const parsed = MutableBeforeAllExtensionHookContextSchema.safeParse(extensionReturnValue);
@@ -488,10 +490,6 @@ export async function runExtensionHook<HookName extends keyof HookContextMap>(
           break;
         }
       }
-    } else {
-      // Backwards compatibility: no-op if the extension does not return a value.
-      // [This block is included to explicitly state this is a backwards compatibility feature.]
-      continue;
     }
   }
 
