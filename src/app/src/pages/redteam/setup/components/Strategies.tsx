@@ -314,10 +314,6 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     [config.strategies],
   );
 
-  const showSystemConfig = config.strategies.some((s) =>
-    ['goat', 'crescendo'].includes(getStrategyId(s)),
-  );
-
   const hasSessionParser = Boolean(
     config.target.config?.sessionParser || config.target.config?.sessionSource === 'client',
   );
