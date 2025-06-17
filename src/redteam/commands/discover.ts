@@ -222,6 +222,7 @@ export async function doTargetPurposeDiscovery(
         const targetResponse = await target.callApi(renderedPrompt, {
           prompt: { raw: question, label: 'Target Discovery Question' },
           vars: { sessionId },
+          bustCache: true,
         });
 
         if (targetResponse.error) {
