@@ -310,7 +310,7 @@ function Contact(): JSX.Element {
                   <img
                     src="/img/brands/anthropic-logo.svg"
                     alt="Anthropic"
-                    className={styles.testimonialLogo}
+                    className={styles.anthropicTestimonialLogo}
                   />
                   <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.875rem' }}>
                     Courses
@@ -326,6 +326,30 @@ function Contact(): JSX.Element {
                   sx={{ fontSize: '0.75rem', fontWeight: 500, textDecoration: 'none' }}
                 >
                   See course →
+                </Link>
+              </Box>
+
+              <Box className={styles.testimonialItem}>
+                <Box className={styles.testimonialHeader}>
+                  <img
+                    src="/img/brands/aws-logo.svg"
+                    alt="AWS"
+                    className={styles.awsTestimonialLogo}
+                  />
+                  <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.875rem' }}>
+                    Workshops
+                  </Typography>
+                </Box>
+                <Typography variant="body2" className={styles.testimonialQuote}>
+                  "Promptfoo works particularly well with Amazon Bedrock"
+                </Typography>
+                <Link
+                  href="https://catalog.workshops.aws/promptfoo/"
+                  target="_blank"
+                  className={styles.testimonialLink}
+                  sx={{ fontSize: '0.75rem', fontWeight: 500, textDecoration: 'none' }}
+                >
+                  View workshop →
                 </Link>
               </Box>
             </Box>
