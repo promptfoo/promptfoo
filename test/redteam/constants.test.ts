@@ -128,13 +128,14 @@ describe('constants', () => {
       'donotanswer',
       'harmbench',
       'toxic-chat',
+      'aegis',
       'pliny',
       'unsafebench',
       'xstest',
     ];
 
     expect(DATASET_PLUGINS).toEqual(expectedPlugins);
-    expect(DATASET_PLUGINS).toHaveLength(8);
+    expect(DATASET_PLUGINS).toHaveLength(9);
 
     expectedPlugins.forEach((plugin) => {
       expect(DATASET_PLUGINS).toContain(plugin);

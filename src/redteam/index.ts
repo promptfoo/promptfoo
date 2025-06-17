@@ -432,6 +432,7 @@ export async function synthesize({
   targetLabels,
   showProgressBar: showProgressBarOverride,
   excludeTargetOutputFromAgenticAttackGeneration,
+  testGenerationInstructions,
 }: SynthesizeOptions): Promise<{
   purpose: string;
   entities: string[];
@@ -614,6 +615,10 @@ export async function synthesize({
       try {
         registeredPlugin.validate({
           language,
+          modifiers: {
+            testGenerationInstructions,
+            ...(plugin.config?.modifiers || {}),
+          },
           ...resolvePluginConfig(plugin.config),
         });
       } catch (error) {
@@ -707,6 +712,10 @@ export async function synthesize({
         delayMs: delay || 0,
         config: {
           language,
+          modifiers: {
+            testGenerationInstructions,
+            ...(plugin.config?.modifiers || {}),
+          },
           ...resolvePluginConfig(plugin.config),
         },
       });
@@ -721,7 +730,8 @@ export async function synthesize({
           metadata: {
             pluginId: plugin.id,
             pluginConfig: resolvePluginConfig(plugin.config),
-            severity: getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
+            severity:
+              plugin.severity ?? getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
             ...(t?.metadata || {}),
           },
         }));
@@ -766,7 +776,8 @@ export async function synthesize({
           metadata: {
             pluginId: plugin.id,
             pluginConfig: resolvePluginConfig(plugin.config),
-            severity: getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
+            severity:
+              plugin.severity || getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
             ...(t.metadata || {}),
           },
         }));

@@ -61,12 +61,42 @@ jobs:
           # Test file regex to match Vitest test files in src/app
           testFileRegex: '^src/app/.*\.(test|spec)\.(js|jsx|ts|tsx)$'
 
+          # This will be the working directory for all commands
+          appDir: 'src/app'
+
           # The script to run to lint the code for React/TypeScript files
-          lintScript: 'npx prettier --write {{file}} && npx eslint --fix {{file}} --no-warn-ignored'
+          # Create a unique tsconfig file so we can check tsc just for the file
+          lintScript: |
+            set -e
+
+            # Create a tsconfig file just for the input file
+            # https://stackoverflow.com/questions/44676944/how-to-compile-a-specific-file-with-tsc-using-the-paths-compiler-option/60950355#60950355
+
+            FILENAME=$(echo "{{file}}" | tr -cd '[:alnum:]' | tr '[:upper:]' '[:lower:]')
+            TIMESTAMP=$(date +%s)
+            TMP_TSCONFIG=".tsconfig-lint-${FILENAME}-${TIMESTAMP}.json"
+
+            # Set up trap to remove temp file on exit, even if there's an error
+            trap "rm -f $TMP_TSCONFIG" EXIT
+
+            npx prettier --write {{file}}
+            npx eslint --fix {{file}} --no-warn-ignored
+
+            cat >$TMP_TSCONFIG <<EOF
+            {
+              "extends": "./tsconfig.json",
+              "include": [
+                "{{file}}",
+                "**/*.d.ts"
+              ]
+            }
+            EOF
+
+            # Run tsc with the temp tsconfig file
+            npx tsc --project $TMP_TSCONFIG --skipLibCheck --noEmit
 
           # The script to run Vitest tests for individual files
-          # Use the workspace-aware test:app script and pass the relative file path within src/app
-          testScript: 'npm run test:app -- run $(echo "{{file}}" | sed "s|^src/app/||")'
+          testScript: 'npx vitest run {{file}}'
 
           # The runner may run tests in parallel.
           # Set this value to 1 if you know that your tests should not be run concurrently.

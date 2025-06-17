@@ -110,11 +110,10 @@ Initialize a new project with dummy files.
 
 Start a browser UI for visualization of results.
 
-| Option                           | Description                             |
-| -------------------------------- | --------------------------------------- |
-| `-p, --port <number>`            | Port number for the local server        |
-| `-y, --yes`                      | Skip confirmation and auto-open the URL |
-| `--filter-description <pattern>` | Filter evals by description using regex |
+| Option                | Description                             |
+| --------------------- | --------------------------------------- |
+| `-p, --port <number>` | Port number for the local server        |
+| `-y, --yes`           | Skip confirmation and auto-open the URL |
 
 If you've used `PROMPTFOO_CONFIG_DIR` to override the promptfoo output directory, run `promptfoo view [directory]`.
 
@@ -331,11 +330,10 @@ For more detail, see [red team configuration](/docs/red-team/configuration/).
 
 Start browser UI and open to red team setup.
 
-| Option                           | Description                                     | Default |
-| -------------------------------- | ----------------------------------------------- | ------- |
-| `[configDirectory]`              | Directory containing configuration files        |         |
-| `-p, --port <number>`            | Port number for the local server                | 15500   |
-| `--filter-description <pattern>` | Filter evals by description using regex pattern |         |
+| Option                | Description                              | Default |
+| --------------------- | ---------------------------------------- | ------- |
+| `[configDirectory]`   | Directory containing configuration files |         |
+| `-p, --port <number>` | Port number for the local server         | 15500   |
 
 ## `promptfoo redteam run`
 
@@ -434,11 +432,10 @@ Works the same as [`promptfoo eval`](#promptfoo-eval), but defaults to loading `
 
 Start a browser UI and open the red teaming report.
 
-| Option                           | Description                                        | Default |
-| -------------------------------- | -------------------------------------------------- | ------- |
-| `[directory]`                    | Directory containing the red teaming configuration | .       |
-| `-p, --port <number>`            | Port number for the server                         | 15500   |
-| `--filter-description <pattern>` | Filter evals by description using a regex pattern  |         |
+| Option                | Description                                        | Default |
+| --------------------- | -------------------------------------------------- | ------- |
+| `[directory]`         | Directory containing the red teaming configuration | .       |
+| `-p, --port <number>` | Port number for the server                         | 15500   |
 
 Example:
 
@@ -514,6 +511,8 @@ These general-purpose environment variables are supported:
 | `PROMPTFOO_PASS_RATE_THRESHOLD`        | Set a minimum pass rate threshold (as a percentage). If not set, defaults to 100% (no failures allowed)                                                                                                 | 100            |
 | `PROMPTFOO_REQUIRE_JSON_PROMPTS`       | By default the chat completion provider will wrap non-JSON messages in a single user message. Setting this envar to true disables that behavior.                                                        |                |
 | `PROMPTFOO_SHARE_CHUNK_SIZE`           | Number of results to send in each chunk. This is used to estimate the size of the results and to determine the number of chunks to send.                                                                |                |
+| `PROMPTFOO_EVAL_TIMEOUT_MS`            | Timeout in milliseconds for each evaluation step.                                                                                                                                                       |                |
+| `PROMPTFOO_MAX_EVAL_TIME_MS`           | Maximum runtime in milliseconds for the entire evaluation.                                                                                                                                              |                |
 | `PROMPTFOO_STRIP_GRADING_RESULT`       | Strip grading results from results to reduce memory usage                                                                                                                                               | false          |
 | `PROMPTFOO_STRIP_METADATA`             | Strip metadata from results to reduce memory usage                                                                                                                                                      | false          |
 | `PROMPTFOO_STRIP_PROMPT_TEXT`          | Strip prompt text from results to reduce memory usage                                                                                                                                                   | false          |
@@ -522,4 +521,8 @@ These general-purpose environment variables are supported:
 
 :::tip
 promptfoo will load environment variables from the `.env` in your current working directory.
+:::
+
+:::tip
+For detailed information on using timeout features, including configuration examples and troubleshooting tips, see [Timeout errors in the troubleshooting guide](/docs/usage/troubleshooting#how-to-triage-stuck-evals).
 :::

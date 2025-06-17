@@ -22,6 +22,7 @@ import type {
   TestCaseWithVarsFile,
   TestSuiteConfig,
 } from '../types';
+import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
 
 export async function readTestFiles(
@@ -70,7 +71,9 @@ export async function readTestFiles(
 export async function readStandaloneTestsFile(
   varsPath: string,
   basePath: string = '',
+  config?: Record<string, any>,
 ): Promise<TestCase[]> {
+  const finalConfig = config ? maybeLoadConfigFromExternalFile(config) : config;
   const resolvedVarsPath = path.resolve(basePath, varsPath.replace(/^file:\/\//, ''));
   // Split on the last colon to handle Windows drive letters correctly
   const colonCount = resolvedVarsPath.split(':').length - 1;
@@ -101,13 +104,18 @@ export async function readStandaloneTestsFile(
       feature: 'js tests file',
     });
     const mod = await importModule(pathWithoutFunction, maybeFunctionName);
-    return typeof mod === 'function' ? await mod() : mod;
+    return typeof mod === 'function' ? await mod(finalConfig) : mod;
   }
   if (fileExtension === 'py') {
     telemetry.recordAndSendOnce('feature_used', {
       feature: 'python tests file',
     });
-    const result = await runPython(pathWithoutFunction, maybeFunctionName ?? 'generate_tests', []);
+    const args = finalConfig === undefined ? [] : [finalConfig];
+    const result = await runPython(
+      pathWithoutFunction,
+      maybeFunctionName ?? 'generate_tests',
+      args,
+    );
     if (!Array.isArray(result)) {
       throw new Error(
         `Python test function must return a list of test cases, got ${typeof result}`,
@@ -376,6 +384,13 @@ export async function readTests(
     }
     // Points to a tests.{csv,json,yaml,yml,py,js,ts,mjs} or Google Sheet
     return readStandaloneTestsFile(tests, basePath);
+  } else if (
+    typeof tests === 'object' &&
+    !Array.isArray(tests) &&
+    'path' in tests &&
+    typeof tests.path === 'string'
+  ) {
+    return readStandaloneTestsFile(tests.path, basePath, tests.config);
   }
   if (Array.isArray(tests)) {
     for (const globOrTest of tests) {
@@ -392,9 +407,11 @@ export async function readTests(
           // Resolve globs for other file types
           ret.push(...(await loadTestsFromGlob(globOrTest, basePath)));
         }
+      } else if ('path' in globOrTest) {
+        ret.push(...(await readStandaloneTestsFile(globOrTest.path, basePath, globOrTest.config)));
       } else {
         // Load individual TestCase
-        ret.push(await readTest(globOrTest, basePath));
+        ret.push(await readTest(globOrTest as TestCaseWithVarsFile, basePath));
       }
     }
   } else if (tests !== undefined && tests !== null) {

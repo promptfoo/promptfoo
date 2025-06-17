@@ -1,4 +1,6 @@
-# mistral (Mistral AI Model Comparison Example)
+# mistral (Mistral AI Chat Models)
+
+This example demonstrates Mistral AI's chat models, including their new Magistral reasoning models, traditional chat models, and shows how to use Mistral models for evaluation grading and embeddings.
 
 You can run this example with:
 
@@ -6,38 +8,101 @@ You can run this example with:
 npx promptfoo@latest init --example mistral
 ```
 
-This example demonstrates how to use promptfoo to compare different Mistral AI models on their ability to explain complex scientific concepts in simple terms. It compares several chat models and uses the embedding model to compare the semantic similarity of the explanations.
+## Environment Variables
 
-## Prerequisites
+This example requires:
 
-You'll need an API key from Mistral AI. If you don't have one, sign up at [mistral.ai](https://mistral.ai/).
+- `MISTRAL_API_KEY` - Your Mistral API key (get it from [console.mistral.ai](https://console.mistral.ai))
 
-## Setup
+## What This Example Shows
 
-1. Set your Mistral AI API key as an environment variable:
+- **Mathematical Reasoning**: AIME2024 competition problems with Magistral models
+- **Model Comparison**: Compare Mistral's different model capabilities
+- **Reasoning Models**: Showcase Magistral Small and Medium for complex problems
+- **Chat Capabilities**: General conversation and task completion
+- **Mistral-powered Evaluation**: Use Mistral models for grading instead of OpenAI
+- **Mistral Embeddings**: Use Mistral's embedding model for similarity checks
 
-   ```sh
-   export MISTRAL_API_KEY=your_api_key_here
-   ```
+## Models Demonstrated
 
-2. Review the configuration files in this directory:
-   - `promptfooconfig.yaml`: Defines the Mistral models to compare, test cases, and evaluation criteria.
-   - `prompt.yaml`: Contains the prompt template for the scientific explanations.
+### Reasoning Models (Magistral)
 
-## Usage
+- **Magistral Medium** (`magistral-medium-latest`): Enterprise reasoning model ($2/$5 per M tokens)
+- **Magistral Small** (`magistral-small-latest`): Open-source reasoning model ($0.5/$1.5 per M tokens)
 
-1. Run the evaluation:
+### Traditional Chat Models
 
-   ```
-   npx promptfoo eval
-   ```
+- **Mistral Large** (`mistral-large-latest`): Top-tier model for complex tasks
+- **Mistral Medium** (`mistral-medium-latest`): Balanced performance and cost
+- **Mistral Small** (`mistral-small-latest`): Efficient for simple tasks
 
-2. View the results:
+### Evaluation Models
 
-   ```sh
-   npx promptfoo view
-   ```
+- **Grading**: Uses `mistral-large-latest` for LLM-as-a-judge evaluation
+- **Embeddings**: Uses `mistral-embed` for semantic similarity checks
 
-This will compare the performance of different Mistral models on explaining various scientific concepts.
+## Key Features Demonstrated
 
-For more information on configuring promptfoo with Mistral AI, see the [Mistral provider documentation](https://www.promptfoo.dev/docs/providers/mistral).
+- **Multi-model comparison**: Compare performance across different Mistral models
+- **Reasoning capabilities**: Step-by-step problem solving with Magistral models
+- **Cost optimization**: Balance performance vs. cost across model tiers
+- **Self-evaluation**: Use Mistral models to grade their own outputs
+- **Semantic similarity**: Mistral embeddings for content comparison
+
+## Running the Example
+
+```bash
+# Set your API key
+export MISTRAL_API_KEY=your_api_key_here
+
+# Run the evaluation
+promptfoo eval
+
+# View results in the web UI
+promptfoo view
+```
+
+## Configuration Highlights
+
+This example showcases several advanced promptfoo features:
+
+- **Provider overrides** for grading and embeddings
+- **Multiple assertion types** including llm-rubric and similarity
+- **Cost tracking** across different model tiers
+- **Mixed scenarios** from simple chat to complex reasoning
+
+The evaluation uses Mistral models end-to-end, providing a comprehensive view of their ecosystem capabilities.
+
+## Available Configurations
+
+This example includes multiple configuration files for different use cases:
+
+### Mathematical Reasoning
+
+- **`promptfooconfig.aime2024.yaml`** - Advanced mathematical competition problems (AIME2024 dataset)
+- **`promptfooconfig.reasoning.yaml`** - Step-by-step logical problem solving
+
+### Model Capabilities
+
+- **`promptfooconfig.comparison.yaml`** - Compare reasoning across all Mistral models
+- **`promptfooconfig.code-generation.yaml`** - Multi-language programming with Codestral
+- **`promptfooconfig.multimodal.yaml`** - Vision and text processing with Pixtral
+
+### Advanced Features
+
+- **`promptfooconfig.tool-use.yaml`** - Function calling and tool integration
+- **`promptfooconfig.json-mode.yaml`** - Structured JSON output generation
+- **`promptfooconfig.yaml`** - Main example with evaluation using Mistral models
+
+Run any specific configuration:
+
+```bash
+npx promptfoo@latest eval -c promptfooconfig.aime2024.yaml  # Mathematical reasoning
+npx promptfoo@latest eval -c promptfooconfig.comparison.yaml  # Model comparison
+```
+
+## Additional Resources
+
+- **[Magistral AIME2024 Reasoning Guide](/docs/guides/mistral-magistral-aime2024)** - Comprehensive guide to mathematical reasoning evaluation
+- **[Mistral Provider Documentation](/docs/providers/mistral)** - Complete API reference and configuration options
+- **[Mistral Magistral Announcement](https://mistral.ai/news/magistral/)** - Official announcement and technical details

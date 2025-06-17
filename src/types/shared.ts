@@ -24,6 +24,16 @@ export const BaseTokenUsageSchema = z.object({
 
   // Detailed completion information
   completionDetails: CompletionTokenDetailsSchema.optional(),
+
+  // Assertion token usage (model-graded assertions)
+  assertions: z
+    .object({
+      total: z.number().optional(),
+      prompt: z.number().optional(),
+      completion: z.number().optional(),
+      cached: z.number().optional(),
+    })
+    .optional(),
 });
 
 /**

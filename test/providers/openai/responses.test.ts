@@ -108,6 +108,8 @@ describe('OpenAiResponsesProvider', () => {
         }),
       }),
       expect.any(Number),
+      'json',
+      undefined,
     );
 
     expect(result.error).toBeUndefined();
@@ -157,6 +159,8 @@ describe('OpenAiResponsesProvider', () => {
         body: expect.stringContaining('"instructions":"You are a helpful assistant"'),
       }),
       expect.any(Number),
+      'json',
+      undefined,
     );
   });
 
@@ -221,6 +225,8 @@ describe('OpenAiResponsesProvider', () => {
         body: expect.stringContaining('"tools":[{'),
       }),
       expect.any(Number),
+      'json',
+      undefined,
     );
 
     expect(result.raw).toHaveProperty('output');
@@ -288,6 +294,8 @@ describe('OpenAiResponsesProvider', () => {
         body: expect.stringContaining('"parallel_tool_calls":true'),
       }),
       expect.any(Number),
+      'json',
+      undefined,
     );
   });
 
@@ -380,6 +388,8 @@ describe('OpenAiResponsesProvider', () => {
         body: expect.stringContaining('"store":true'),
       }),
       expect.any(Number),
+      'json',
+      undefined,
     );
   });
 
@@ -520,6 +530,8 @@ describe('OpenAiResponsesProvider', () => {
         body: expect.stringContaining('"stream":true'),
       }),
       expect.any(Number),
+      'json',
+      undefined,
     );
   });
 
@@ -630,6 +642,8 @@ describe('OpenAiResponsesProvider', () => {
         body: expect.stringContaining('"reasoning":{"effort":"medium"}'),
       }),
       expect.any(Number),
+      'json',
+      undefined,
     );
 
     // Assertions
@@ -894,6 +908,8 @@ describe('OpenAiResponsesProvider', () => {
       expect.stringContaining('/responses'),
       expect.anything(),
       expect.anything(),
+      'json',
+      undefined,
     );
     expect(result.output).toBe('Test response');
     expect(result.error).toBeUndefined();
