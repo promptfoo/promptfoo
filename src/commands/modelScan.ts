@@ -9,7 +9,7 @@ const execAsync = promisify(exec);
 
 async function checkModelAuditInstalled(): Promise<boolean> {
   try {
-    await execAsync('python -c "import modelaudit"');
+    await execAsync('which modelaudit');
     return true;
   } catch {
     return false;
@@ -53,10 +53,7 @@ export function modelScanCommand(program: Command): void {
         process.exit(1);
       }
 
-      const args = ['-m', 'modelaudit'];
-
-      // Add all paths
-      args.push(...paths);
+      const args = ['scan', ...paths];
 
       // Add options
       if (options.blacklist && options.blacklist.length > 0) {
@@ -83,7 +80,7 @@ export function modelScanCommand(program: Command): void {
 
       logger.info(`Running model scan on: ${paths.join(', ')}`);
 
-      const modelAudit = spawn('python', args, { stdio: 'inherit' });
+      const modelAudit = spawn('modelaudit', args, { stdio: 'inherit' });
 
       modelAudit.on('error', (error) => {
         logger.error(`Failed to start modelaudit: ${error.message}`);

@@ -22,10 +22,7 @@ Let's start with a simple setup to test Claude 4 Sonnet, then explore more advan
 
 ```bash
 export ANTHROPIC_API_KEY=your_anthropic_api_key
-export OPENAI_API_KEY=your_openai_api_key  # For generating test cases
 ```
-
-> **Note**: We use OpenAI to generate adversarial test cases to avoid account issues with Anthropic.
 
 ### Step 1: Initialize Your Project
 

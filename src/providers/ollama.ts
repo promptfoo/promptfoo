@@ -276,6 +276,7 @@ export class OllamaChatProvider implements ApiProvider {
         },
         REQUEST_TIMEOUT_MS,
         'text',
+        context?.bustCache ?? context?.debug,
       );
     } catch (err) {
       return {
