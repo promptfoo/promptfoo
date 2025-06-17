@@ -94,6 +94,11 @@ export class CrescendoProvider implements ApiProvider {
   private userGoal: string | undefined;
   private redTeamProvider: ApiProvider | undefined;
   private scoringProvider: ApiProvider | undefined;
+  private readonly unblockingProvider = new PromptfooChatCompletionProvider({
+    task: 'blocking-question-analysis',
+    jsonOnly: true,
+    preferSmallModel: false,
+  });
   private memory: MemorySystem;
   private targetConversationId: string;
   private redTeamingChatConversationId: string;
@@ -309,6 +314,55 @@ export class CrescendoProvider implements ApiProvider {
           }
           context.vars['sessionId'] = lastResponse.sessionId;
         }
+
+        // Check if the target is asking a blocking question that needs an answer to proceed
+        const unblockingResult = await this.tryUnblocking(
+          lastResponse,
+          context?.test?.metadata?.purpose,
+        );
+        if (unblockingResult.tokenUsage) {
+          totalTokenUsage.total += unblockingResult.tokenUsage.total || 0;
+          totalTokenUsage.prompt += unblockingResult.tokenUsage.prompt || 0;
+          totalTokenUsage.completion += unblockingResult.tokenUsage.completion || 0;
+          totalTokenUsage.numRequests += unblockingResult.tokenUsage.numRequests ?? 1;
+          totalTokenUsage.cached += unblockingResult.tokenUsage.cached || 0;
+        }
+
+        if (unblockingResult.success && unblockingResult.unblockingPrompt) {
+          // Target is asking a blocking question, send the unblocking answer
+          logger.debug(
+            `[Crescendo] Sending unblocking response: ${unblockingResult.unblockingPrompt}`,
+          );
+
+          const unblockingResponse = await this.sendPrompt(
+            unblockingResult.unblockingPrompt,
+            prompt,
+            vars,
+            filters,
+            provider,
+            roundNum,
+            context,
+            options,
+          );
+
+          if (unblockingResponse.tokenUsage) {
+            totalTokenUsage.total += unblockingResponse.tokenUsage.total || 0;
+            totalTokenUsage.prompt += unblockingResponse.tokenUsage.prompt || 0;
+            totalTokenUsage.completion += unblockingResponse.tokenUsage.completion || 0;
+            totalTokenUsage.numRequests += unblockingResponse.tokenUsage.numRequests ?? 1;
+            totalTokenUsage.cached += unblockingResponse.tokenUsage.cached || 0;
+          }
+
+          // Update lastResponse to the unblocking response and continue
+          lastResponse = unblockingResponse;
+          if (lastResponse.sessionId && this.stateful) {
+            vars['sessionId'] = lastResponse.sessionId;
+            if (context) {
+              context.vars['sessionId'] = lastResponse.sessionId;
+            }
+          }
+        }
+
         const [isRefusal, refusalRationale] = await this.getRefusalScore(
           attackPrompt,
           lastResponse.output,
@@ -758,6 +812,90 @@ export class CrescendoProvider implements ApiProvider {
       } catch (error) {
         logger.warn(`Error logging message in conversation: ${error}`);
       }
+    }
+  }
+
+  private async tryUnblocking(
+    lastResponse: TargetResponse,
+    purpose?: string,
+  ): Promise<{
+    success: boolean;
+    unblockingPrompt?: string;
+    tokenUsage?: TokenUsage;
+  }> {
+    try {
+      // Check if the server supports unblocking feature
+      const supportsUnblocking = await this.checkServerSupportsUnblocking();
+
+      if (!supportsUnblocking) {
+        logger.debug('[Crescendo] Server does not support unblocking, skipping gracefully');
+        return { success: false };
+      }
+
+      logger.debug('[Crescendo] Attempting to unblock with blocking-question-analysis task');
+
+      const conversationHistory = this.memory.getConversation(this.targetConversationId);
+
+      // Prepare the unblocking request for server-side analysis
+      const unblockingRequest = {
+        conversationObjective: this.userGoal || '',
+        recentHistory: conversationHistory.map((msg) => ({
+          role: msg.role,
+          content: msg.content,
+        })),
+        targetResponse: lastResponse.output,
+        purpose: purpose || '',
+      };
+
+      const unblockingProvider = this.unblockingProvider;
+      const response = await unblockingProvider.callApi(JSON.stringify(unblockingRequest), {
+        prompt: {
+          raw: JSON.stringify(unblockingRequest),
+          label: 'unblocking',
+        },
+        vars: {},
+      });
+
+      if (response.error) {
+        logger.debug(`[Crescendo] Unblocking provider error: ${response.error}`);
+        return { success: false, tokenUsage: response.tokenUsage };
+      }
+
+      const parsed = response.output;
+      logger.debug(`[Crescendo] Unblocking analysis: ${JSON.stringify(parsed)}`);
+
+      if (parsed.isBlocking && parsed.unblockingAnswer) {
+        logger.debug(
+          `[Crescendo] Blocking question detected, unblocking answer: ${parsed.unblockingAnswer}`,
+        );
+        return {
+          success: true,
+          unblockingPrompt: parsed.unblockingAnswer,
+          tokenUsage: response.tokenUsage,
+        };
+      } else {
+        logger.debug('[Crescendo] No blocking question detected');
+        return {
+          success: false,
+          tokenUsage: response.tokenUsage,
+        };
+      }
+    } catch (error) {
+      logger.debug(`[Crescendo] Error in unblocking: ${error}`);
+      return { success: false };
+    }
+  }
+
+  private async checkServerSupportsUnblocking(): Promise<boolean> {
+    try {
+      const { checkServerFeatureSupport } = await import('../../../util/server');
+      return await checkServerFeatureSupport(
+        'blocking-question-analysis',
+        '2025-06-16T14:49:11-07:00',
+      );
+    } catch (error) {
+      logger.debug(`[Crescendo] Feature check failed: ${error}`);
+      return false;
     }
   }
 }
