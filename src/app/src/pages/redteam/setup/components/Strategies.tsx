@@ -17,7 +17,6 @@ import StrategyConfigDialog from './StrategyConfigDialog';
 import { PresetSelector } from './strategies/PresetSelector';
 import { RecommendedOptions } from './strategies/RecommendedOptions';
 import { StrategySection } from './strategies/StrategySection';
-import { SystemConfiguration } from './strategies/SystemConfiguration';
 import {
   STRATEGY_PRESETS,
   PRESET_IDS,
