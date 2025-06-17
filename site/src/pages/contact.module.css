@@ -46,7 +46,7 @@
 .trustedBySection {
   background: var(--ifm-background-surface-color);
   border-radius: 8px;
-  padding: 1.5rem;
+  padding: 0.5rem 1.5rem;
   margin-bottom: 0;
 }
 
@@ -76,7 +76,7 @@
 .testimonialsSection {
   background: var(--ifm-background-surface-color);
   border-radius: 8px;
-  padding: 1.5rem;
+  padding: 0.5rem 1.5rem;
   margin-bottom: 0;
 }
 
@@ -113,11 +113,19 @@
   opacity: 0.7;
 }
 
-[data-theme='dark'] .testimonialLogo {
-  filter: invert(100%) grayscale(100%);
+.anthropicTestimonialLogo {
+  height: 10px;
+  filter: grayscale(100%);
+  opacity: 0.7;
 }
 
-[data-theme='dark'] .openaiTestimonialLogo {
+.awsTestimonialLogo {
+  height: 22px;
+  filter: grayscale(100%);
+  opacity: 0.7;
+}
+
+[data-theme='dark'] .testimonialLogo {
   filter: invert(100%) grayscale(100%);
 }
 
@@ -147,7 +155,7 @@
 .quickLinks {
   background: var(--ifm-background-surface-color);
   border-radius: 8px;
-  padding: 1.5rem;
+  padding: 0.5rem 1.5rem;
 }
 
 .quickLink {
