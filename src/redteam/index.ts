@@ -58,6 +58,9 @@ function getPluginSeverity(pluginId: string, pluginConfig?: Record<string, any>)
  * @returns A colored string indicating the status.
  */
 function getStatus(requested: number, generated: number): string {
+  if (requested === 0 && generated === 0) {
+    return chalk.gray('Skipped');
+  }
   if (generated === 0) {
     return chalk.red('Failed');
   }
