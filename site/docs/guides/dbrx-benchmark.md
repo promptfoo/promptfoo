@@ -100,7 +100,7 @@ prompts:
   - 'Think deeply and answer concisely: {{query}}'
 ```
 
-If desired, you can test multiple prompts (just add more to the list), test [different prompts for each model](/docs/configuration/parameters#different-prompts-per-model), send [custom JSON](/docs/providers/openai/#formatting-chat-messages), or [call your own application logic](/docs/configuration/parameters#prompt-functions).
+If desired, you can test multiple prompts (just add more to the list), test [different prompts for each model](/docs/configuration/prompts#model-specific-prompts), send [custom JSON](/docs/providers/openai/#formatting-chat-messages), or [call your own application logic](/docs/configuration/prompts#dynamic-prompts-functions).
 
 ## Step 4: Add test cases
 
