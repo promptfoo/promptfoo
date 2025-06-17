@@ -9,9 +9,9 @@ ModelAudit includes specialized scanners for different model formats and file ty
 
 ## Pickle Scanner
 
-**File types:** `.pkl`, `.pickle`
+**File types:** `.pkl`, `.pickle`, `.bin` (when containing pickle data)
 
-The Pickle Scanner analyzes Python pickle files for security risks, which are common in many ML frameworks.
+The Pickle Scanner analyzes Python pickle files for security risks, which are common in many ML frameworks. It automatically detects pickle-formatted `.bin` files and also performs deep content analysis to detect embedded executables.
 
 **What it checks for:**
 
@@ -91,6 +91,25 @@ This scanner analyzes model configuration files and manifests.
 **Why it matters:**
 Model configuration files can contain settings that lead to insecure behavior, such as downloading content from untrusted sources, accessing sensitive files, or executing commands.
 
+## PyTorch Binary Scanner
+
+**File types:** `.bin` (raw PyTorch tensor files)
+
+This scanner examines raw PyTorch binary tensor files that contain serialized weight data. It performs enhanced binary content scanning to detect various threats.
+
+**What it checks for:**
+
+- Embedded code patterns (imports, function calls, eval/exec)
+- Executable file signatures (Windows PE with DOS stub validation, Linux ELF, macOS Mach-O)
+- Shell script shebangs that might indicate embedded scripts
+- Blacklisted patterns specified in configuration
+- Suspiciously small files that might not be valid tensor data
+- Validation of tensor structure
+- Enhanced PE file detection with MS-DOS stub signature validation
+
+**Why it matters:**
+While `.bin` files typically contain raw tensor data, attackers could embed malicious code or executables within these files. The scanner performs deep content analysis with enhanced PE file detection (including DOS stub validation) to detect such threats.
+
 ## ZIP Archive Scanner
 
 **File types:** `.zip`
@@ -107,3 +126,57 @@ This scanner examines ZIP archives and their contents recursively.
 
 **Why it matters:**
 ZIP archives are commonly used to distribute models and datasets. Malicious actors can craft ZIP files that exploit extraction vulnerabilities, contain malware, or cause resource exhaustion. This scanner ensures that archives are safe to extract and that their contents don't pose security risks.
+
+## Weight Distribution Scanner
+
+**File types:** `.pt`, `.pth`, `.h5`, `.keras`, `.hdf5`, `.pb`, `.onnx`, `.safetensors`
+
+This scanner analyzes neural network weight distributions to detect potential backdoors or trojaned models by identifying statistical anomalies.
+
+**What it checks for:**
+
+- **Outlier neurons:** Detects output neurons with abnormally high weight magnitudes using Z-score analysis
+- **Dissimilar weight vectors:** Identifies neurons whose weight patterns are significantly different from others in the same layer (using cosine similarity)
+- **Extreme weight values:** Flags neurons containing unusually large individual weight values that deviate from the layer's distribution
+- **Final layer focus:** Prioritizes analysis of classification heads and output layers where backdoors are typically implemented
+
+**Configuration options:**
+
+- `z_score_threshold`: Controls sensitivity for outlier detection (default: 3.0, higher for LLMs)
+- `cosine_similarity_threshold`: Minimum similarity required between neurons (default: 0.7)
+- `weight_magnitude_threshold`: Threshold for extreme weight detection (default: 3.0 standard deviations)
+- `llm_vocab_threshold`: Vocabulary size threshold to identify LLM models (default: 10,000)
+- `enable_llm_checks`: Whether to perform checks on large language models (default: false)
+
+**Why it matters:**
+Backdoored or trojaned models often contain specific neurons that activate on trigger inputs. These malicious neurons typically have weight patterns that are statistically anomalous compared to benign neurons. By analyzing weight distributions, this scanner can detect models that have been tampered with to include hidden behaviors.
+
+**Special handling for LLMs:**
+Large language models with vocabulary layers (>10,000 outputs) use more conservative thresholds to reduce false positives, as their weight distributions naturally have more variation. LLM checking is disabled by default but can be enabled via configuration.
+
+## SafeTensors Scanner
+
+**File types:** `.safetensors`, `.bin` (when containing SafeTensors data)
+
+This scanner examines SafeTensors format files, which are designed to be a safer alternative to pickle files.
+
+**What it checks for:**
+
+- Malicious metadata in the JSON header
+- Encoded payloads in metadata values
+- Unusually large metadata sections
+- Invalid SafeTensors format structure
+
+**Why it matters:**
+While SafeTensors is designed to be safer than pickle files, the metadata section can still contain malicious content. Attackers might try to exploit parsers or include encoded payloads in the metadata.
+
+## Auto Format Detection
+
+ModelAudit includes file format detection for `.bin` files, which can contain different types of model data:
+
+- **Pickle format**: Detected by pickle protocol magic bytes
+- **SafeTensors format**: Detected by JSON header structure
+- **ONNX format**: Detected by ONNX protobuf signatures
+- **Raw PyTorch tensors**: Default for `.bin` files without other signatures
+
+This allows ModelAudit to automatically apply the correct scanner based on the actual file content, not just the extension. When a `.bin` file contains SafeTensors data, the SafeTensors scanner is automatically applied.

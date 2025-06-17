@@ -352,7 +352,7 @@ print(json.dumps({
 
 ## Load assertions from CSV
 
-The [Tests file](/docs/configuration/parameters#tests-and-vars) is an optional format that lets you specify test cases outside of the main config file.
+The [Tests file](/docs/configuration/test-cases) is an optional format that lets you specify test cases outside of the main config file.
 
 To add an assertion to a test case in a vars file, use the special `__expected` column.
 
