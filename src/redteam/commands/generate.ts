@@ -291,6 +291,7 @@ export async function doGenerateRedteam(
     sharing: redteamConfig?.sharing || options.sharing,
     excludeTargetOutputFromAgenticAttackGeneration:
       redteamConfig?.excludeTargetOutputFromAgenticAttackGeneration,
+    testGenerationInstructions: redteamConfig?.testGenerationInstructions,
   };
   const parsedConfig = RedteamConfigSchema.safeParse(config);
   if (!parsedConfig.success) {
@@ -318,6 +319,7 @@ export async function doGenerateRedteam(
     abortSignal: options.abortSignal,
     targetLabels,
     showProgressBar: options.progressBar !== false,
+    testGenerationInstructions: config.testGenerationInstructions,
   } as SynthesizeOptions);
 
   if (redteamTests.length === 0) {

@@ -201,6 +201,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
+        'json',
+        context?.bustCache ?? context?.debug,
       ));
 
       if (status < 200 || status >= 300) {

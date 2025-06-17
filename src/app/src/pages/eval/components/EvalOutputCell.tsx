@@ -112,7 +112,7 @@ function EvalOutputCell({
   let failReasons: string[] = [];
 
   // Handle failure messages by splitting the text at '---'
-  if (!output.pass && text.includes('---')) {
+  if (!output.pass && text && text.includes('---')) {
     failReasons = (output.gradingResult?.componentResults || [])
       .filter((result) => (result ? !result.pass : false))
       .map((result) => result.reason);
@@ -176,16 +176,16 @@ function EvalOutputCell({
         <>
           {matches.length > 0 ? (
             <>
-              <span key="text-before">{text.substring(0, matches[0].start)}</span>
+              <span key="text-before">{text?.substring(0, matches[0].start)}</span>
               {matches.map((range, index) => (
                 <>
                   <span className="search-highlight" key={'match-' + index}>
-                    {text.substring(range.start, range.end)}
+                    {text?.substring(range.start, range.end)}
                   </span>
                   <span key={'text-after-' + index}>
-                    {text.substring(
+                    {text?.substring(
                       range.end,
-                      matches[index + 1] ? matches[index + 1].start : text.length,
+                      matches[index + 1] ? matches[index + 1].start : text?.length,
                     )}
                   </span>
                 </>
@@ -200,7 +200,7 @@ function EvalOutputCell({
       console.error('Invalid regular expression:', (error as Error).message);
     }
   } else if (
-    text.match(/^data:(image\/[a-z]+|application\/octet-stream|image\/svg\+xml);(base64,)?/)
+    text?.match(/^data:(image\/[a-z]+|application\/octet-stream|image\/svg\+xml);(base64,)?/)
   ) {
     node = (
       <img

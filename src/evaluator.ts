@@ -7,7 +7,7 @@ import { globSync } from 'glob';
 import * as path from 'path';
 import type winston from 'winston';
 import { MODEL_GRADED_ASSERTION_TYPES, runAssertions, runCompareAssertion } from './assertions';
-import { fetchWithCache, getCache } from './cache';
+import { getCache } from './cache';
 import cliState from './cliState';
 import { FILE_METADATA_KEY } from './constants';
 import { updateSignalFile } from './database/signal';
@@ -269,7 +269,6 @@ export async function runEval({
 
           // All of these are removed in python and script providers, but every Javascript provider gets them
           logger: logger as unknown as winston.Logger,
-          fetchWithCache,
           getCache,
         },
         abortSignal ? { abortSignal } : undefined,
@@ -564,6 +563,8 @@ class Evaluator {
       }
     };
 
+    logger.info(`Starting evaluation ${this.evalRecord.id}`);
+
     // Add abort checks at key points
     checkAbort();
 
@@ -653,6 +654,8 @@ class Evaluator {
         prompts.push(completedPrompt);
       }
     }
+
+    this.evalRecord.addPrompts(prompts);
 
     // Aggregate all vars across test cases
     let tests =
@@ -1290,6 +1293,7 @@ class Evaluator {
         const idx = runEvalOptions.indexOf(evalStep);
         await processEvalStepWithTimeout(evalStep, idx);
         processedIndices.add(idx);
+        await this.evalRecord.addPrompts(prompts);
       });
     } catch (err) {
       if (options.abortSignal?.aborted) {

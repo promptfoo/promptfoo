@@ -50,8 +50,8 @@ export async function gatherFeedback(message?: string) {
     // Get user email if logged in
     const userEmail = getUserEmail();
 
-    console.log(chalk.blue.bold('\n📝 promptfoo Feedback'));
-    console.log(chalk.dim('─'.repeat(40)));
+    logger.info(chalk.blue.bold('\n📝 promptfoo Feedback'));
+    logger.info(chalk.dim('─'.repeat(40)));
 
     // Get feedback message
     const feedbackText = await promptUser(
@@ -62,7 +62,7 @@ export async function gatherFeedback(message?: string) {
     );
 
     if (!feedbackText.trim()) {
-      console.log(chalk.yellow('No feedback provided.'));
+      logger.info(chalk.yellow('No feedback provided.'));
       return;
     }
 
