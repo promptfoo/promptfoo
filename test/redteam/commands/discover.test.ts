@@ -153,6 +153,7 @@ describe('doTargetPurposeDiscovery', () => {
     expect(target.callApi).toHaveBeenCalledWith('What is your purpose?', {
       prompt: { raw: 'What is your purpose?', label: 'Target Discovery Question' },
       vars: { sessionId: expect.any(String) },
+      bustCache: true,
     });
 
     expect(mockedFetchWithProxy).toHaveBeenCalledTimes(2);
@@ -224,6 +225,7 @@ describe('doTargetPurposeDiscovery', () => {
     expect(target.callApi).toHaveBeenCalledWith('This is a test prompt What is your purpose?', {
       prompt: { raw: 'What is your purpose?', label: 'Target Discovery Question' },
       vars: { sessionId: expect.any(String) },
+      bustCache: true,
     });
 
     expect(mockedFetchWithProxy).toHaveBeenCalledTimes(2);
