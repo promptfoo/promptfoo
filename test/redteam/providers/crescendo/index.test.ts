@@ -66,7 +66,7 @@ describe('CrescendoProvider', () => {
     jest.clearAllMocks();
     crescendoProvider = new CrescendoProvider({
       injectVar: 'objective',
-      maxRounds: 10,
+      maxTurns: 10,
       maxBacktracks: 10,
       redteamProvider: mockRedTeamProvider,
       stateful: true,
@@ -80,7 +80,7 @@ describe('CrescendoProvider', () => {
   it('should initialize with default config values', () => {
     const provider = new CrescendoProvider({
       injectVar: 'objective',
-      maxRounds: 10,
+      maxTurns: 10,
       maxBacktracks: 10,
       redteamProvider: mockRedTeamProvider,
       stateful: true,
@@ -88,7 +88,7 @@ describe('CrescendoProvider', () => {
 
     expect(provider.config.injectVar).toBe('objective');
     expect(provider.config.redteamProvider).toBe(mockRedTeamProvider);
-    expect(provider.config.maxRounds).toBe(10);
+    expect(provider.config.maxTurns).toBe(10);
     expect(provider.config.maxBacktracks).toBe(10);
     expect(provider.config.stateful).toBe(true);
   });
@@ -177,7 +177,7 @@ describe('CrescendoProvider', () => {
   it('should stop when max backtracks reached', async () => {
     crescendoProvider = new CrescendoProvider({
       injectVar: 'objective',
-      maxRounds: 10,
+      maxTurns: 10,
       maxBacktracks: 2,
       redteamProvider: mockRedTeamProvider,
       stateful: false,
@@ -218,7 +218,7 @@ describe('CrescendoProvider', () => {
   it('should stop when max rounds reached', async () => {
     crescendoProvider = new CrescendoProvider({
       injectVar: 'objective',
-      maxRounds: 2,
+      maxTurns: 2,
       maxBacktracks: 10,
       redteamProvider: mockRedTeamProvider,
       stateful: true,
