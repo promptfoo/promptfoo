@@ -311,7 +311,7 @@ describe('AIStudioChatProvider', () => {
         }),
         expect.any(Number),
         'json',
-        false,
+        undefined,
       );
     });
   });
