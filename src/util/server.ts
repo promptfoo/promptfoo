@@ -26,17 +26,15 @@ export function __clearFeatureCache(): void {
 
 /**
  * Checks if a server supports a specific feature based on build date
- * @param baseUrl - Base URL of the server (e.g., from getRemoteGenerationUrl())
  * @param featureName - Name of the feature (for caching and logging)
  * @param requiredBuildDate - Minimum build date when feature was added (ISO string)
  * @returns Promise<boolean> - true if server supports the feature
  */
 export async function checkServerFeatureSupport(
-  baseUrl: string | null,
   featureName: string,
   requiredBuildDate: string,
 ): Promise<boolean> {
-  const cacheKey = `${baseUrl}-${featureName}`;
+  const cacheKey = `${featureName}`;
 
   // Return cached result if available
   if (featureCache.has(cacheKey)) {
@@ -46,39 +44,30 @@ export async function checkServerFeatureSupport(
   let supported = false;
 
   try {
-    if (baseUrl) {
-      logger.debug(`[Feature Detection] Checking server support for feature: ${featureName}`);
+    logger.debug(`[Feature Detection] Checking server support for feature: ${featureName}`);
 
-      const versionUrl = getRemoteVersionUrl();
+    const versionUrl = getRemoteVersionUrl();
 
-      if (versionUrl) {
-        const { data } = await fetchWithCache(
-          versionUrl,
-          {
-            method: 'GET',
-            headers: { 'Content-Type': 'application/json' },
-          },
-          5000,
-        );
+    if (versionUrl) {
+      const { data } = await fetchWithCache(
+        versionUrl,
+        {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+        },
+        5000,
+      );
 
-        if (data.buildDate) {
-          // Parse build date and check if it's after the required date
-          const buildDate = new Date(data.buildDate);
-          const featureDate = new Date(requiredBuildDate);
-          supported = buildDate >= featureDate;
-          logger.debug(
-            `[Feature Detection] ${featureName}: buildDate=${data.buildDate}, required=${requiredBuildDate}, supported=${supported}`,
-          );
-        } else {
-          logger.debug(
-            `[Feature Detection] ${featureName}: no version info, assuming not supported`,
-          );
-          supported = false;
-        }
-      } else {
+      if (data.buildDate) {
+        // Parse build date and check if it's after the required date
+        const buildDate = new Date(data.buildDate);
+        const featureDate = new Date(requiredBuildDate);
+        supported = buildDate >= featureDate;
         logger.debug(
-          `[Feature Detection] ${featureName}: no version URL available, assuming not supported`,
+          `[Feature Detection] ${featureName}: buildDate=${data.buildDate}, required=${requiredBuildDate}, supported=${supported}`,
         );
+      } else {
+        logger.debug(`[Feature Detection] ${featureName}: no version info, assuming not supported`);
         supported = false;
       }
     } else {

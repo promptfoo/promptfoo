@@ -2,6 +2,7 @@ import opener from 'opener';
 import * as cache from '../../src/cache';
 import { getDefaultPort, VERSION } from '../../src/constants';
 import logger from '../../src/logger';
+import * as remoteGeneration from '../../src/redteam/remoteGeneration';
 import * as readlineUtils from '../../src/util/readline';
 // Import the module under test after mocks are set up
 import {
@@ -32,6 +33,11 @@ jest.mock('../../src/util/readline', () => ({
 // Mock fetchWithCache
 jest.mock('../../src/cache', () => ({
   fetchWithCache: jest.fn(),
+}));
+
+// Mock remoteGeneration
+jest.mock('../../src/redteam/remoteGeneration', () => ({
+  getRemoteVersionUrl: jest.fn(),
 }));
 
 // Properly mock fetch
@@ -171,13 +177,16 @@ describe('Server Utilities', () => {
   });
 
   describe('checkServerFeatureSupport', () => {
-    const baseUrl = 'https://api.example.com/api/v1/task';
     const featureName = 'test-feature';
 
     beforeEach(() => {
       // Clear the feature cache before each test to ensure isolation
       __clearFeatureCache();
       jest.clearAllMocks();
+      // Setup default mock for getRemoteVersionUrl to return a valid URL
+      jest
+        .mocked(remoteGeneration.getRemoteVersionUrl)
+        .mockReturnValue('https://api.promptfoo.app/version');
     });
 
     it('should return true when server buildDate is after required date', async () => {
@@ -191,10 +200,10 @@ describe('Server Utilities', () => {
         statusText: 'OK',
       });
 
-      const result = await checkServerFeatureSupport(baseUrl, featureName, requiredDate);
+      const result = await checkServerFeatureSupport(featureName, requiredDate);
 
       expect(cache.fetchWithCache).toHaveBeenCalledWith(
-        'https://api.example.com/version',
+        'https://api.promptfoo.app/version',
         {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' },
@@ -220,7 +229,7 @@ describe('Server Utilities', () => {
         statusText: 'OK',
       });
 
-      const result = await checkServerFeatureSupport(baseUrl, featureName, requiredDate);
+      const result = await checkServerFeatureSupport(featureName, requiredDate);
 
       expect(result).toBe(false);
       expect(logger.debug).toHaveBeenCalledWith(
@@ -238,7 +247,7 @@ describe('Server Utilities', () => {
         statusText: 'OK',
       });
 
-      const result = await checkServerFeatureSupport(baseUrl, featureName, '2024-01-01T00:00:00Z');
+      const result = await checkServerFeatureSupport(featureName, '2024-01-01T00:00:00Z');
 
       expect(result).toBe(false);
       expect(logger.debug).toHaveBeenCalledWith(
@@ -246,8 +255,11 @@ describe('Server Utilities', () => {
       );
     });
 
-    it('should return true when baseUrl is null (local server assumption)', async () => {
-      const result = await checkServerFeatureSupport(null, featureName, '2024-01-01T00:00:00Z');
+    it('should return true when no remote URL is available (local server assumption)', async () => {
+      // Mock getRemoteVersionUrl to return null for this specific test
+      jest.mocked(remoteGeneration.getRemoteVersionUrl).mockReturnValueOnce(null);
+
+      const result = await checkServerFeatureSupport(featureName, '2024-01-01T00:00:00Z');
 
       expect(result).toBe(true);
       expect(cache.fetchWithCache).not.toHaveBeenCalled();
@@ -261,7 +273,7 @@ describe('Server Utilities', () => {
     it('should return false when fetchWithCache throws an error', async () => {
       jest.mocked(cache.fetchWithCache).mockRejectedValueOnce(new Error('Network error'));
 
-      const result = await checkServerFeatureSupport(baseUrl, featureName, '2024-01-01T00:00:00Z');
+      const result = await checkServerFeatureSupport(featureName, '2024-01-01T00:00:00Z');
 
       expect(result).toBe(false);
       expect(logger.debug).toHaveBeenCalledWith(
@@ -283,9 +295,9 @@ describe('Server Utilities', () => {
       });
 
       // First call
-      const result1 = await checkServerFeatureSupport(baseUrl, featureName, requiredDate);
+      const result1 = await checkServerFeatureSupport(featureName, requiredDate);
       // Second call with same parameters
-      const result2 = await checkServerFeatureSupport(baseUrl, featureName, requiredDate);
+      const result2 = await checkServerFeatureSupport(featureName, requiredDate);
 
       expect(result1).toBe(true);
       expect(result2).toBe(true);
@@ -313,8 +325,8 @@ describe('Server Utilities', () => {
           statusText: 'OK',
         });
 
-      const result1 = await checkServerFeatureSupport(baseUrl, feature1, requiredDate);
-      const result2 = await checkServerFeatureSupport(baseUrl, feature2, requiredDate);
+      const result1 = await checkServerFeatureSupport(feature1, requiredDate);
+      const result2 = await checkServerFeatureSupport(feature2, requiredDate);
 
       expect(result1).toBe(true);
       expect(result2).toBe(false);
@@ -332,7 +344,7 @@ describe('Server Utilities', () => {
         statusText: 'OK',
       });
 
-      const result = await checkServerFeatureSupport(baseUrl, featureName, requiredDate);
+      const result = await checkServerFeatureSupport(featureName, requiredDate);
 
       expect(result).toBe(true);
     });
