@@ -166,7 +166,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         },
         REQUEST_TIMEOUT_MS,
         'json',
-        context?.ignoreCache ?? context?.debug,
+        context?.bustCache ?? context?.debug,
       );
 
       cached = isCached;
