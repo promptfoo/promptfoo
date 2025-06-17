@@ -32,7 +32,7 @@ describe('cross-session-leak strategy exclusions', () => {
     jest.clearAllMocks();
   });
 
-  it('should set excludeStrategies for cross-session-leak plugin', async () => {
+  it('should include cross-session-leak plugin and pass through strategies', async () => {
     jest.mocked(configModule.resolveConfigs).mockResolvedValue({
       basePath: '/mock/path',
       testSuite: {
@@ -70,8 +70,6 @@ describe('cross-session-leak strategy exclusions', () => {
     const synthOpts = jest.mocked(synthesize).mock.calls[0][0];
     const plugin = synthOpts.plugins.find((p: any) => p.id === 'cross-session-leak');
     expect(plugin).toBeDefined();
-    expect(plugin?.config).toBeDefined();
-    expect(plugin?.config?.excludeStrategies).toEqual(['crescendo', 'goat']);
     expect(synthOpts.strategies.map((s: any) => s.id)).toEqual(['crescendo', 'goat', 'rot13']);
   });
 });

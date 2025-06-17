@@ -205,7 +205,9 @@ export abstract class RedteamPluginBase {
       assert: this.getAssertions(prompt.prompt),
       metadata: {
         pluginId: getShortPluginId(this.id),
-        pluginConfig: this.config,
+        pluginConfig: {
+          excludeStrategies: this.config.excludeStrategies,
+        },
       },
     }));
   }
