@@ -18,7 +18,7 @@ import invariant from '../../../util/invariant';
 import { extractFirstJsonObject, safeJsonStringify } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { sleep } from '../../../util/time';
-import { shouldGenerateRemote } from '../../remoteGeneration';
+import { getRemoteGenerationUrl, shouldGenerateRemote } from '../../remoteGeneration';
 import type { BaseRedteamMetadata } from '../../types';
 import { isBasicRefusal } from '../../util';
 import type { Message } from '../shared';
@@ -888,12 +888,9 @@ export class CrescendoProvider implements ApiProvider {
 
   private async checkServerSupportsUnblocking(): Promise<boolean> {
     try {
-      const { getRemoteGenerationUrl } = await import('../../remoteGeneration');
-      const baseUrl = getRemoteGenerationUrl();
-
       const { checkServerFeatureSupport } = await import('../../../util/server');
       return await checkServerFeatureSupport(
-        baseUrl,
+        getRemoteGenerationUrl(),
         'blocking-question-analysis',
         '2025-06-16T14:49:11-07:00',
       );

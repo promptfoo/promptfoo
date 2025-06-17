@@ -171,7 +171,7 @@ describe('Server Utilities', () => {
   });
 
   describe('checkServerFeatureSupport', () => {
-    const baseUrl = 'https://api.example.com/task';
+    const baseUrl = 'https://api.example.com/api/v1/task';
     const featureName = 'test-feature';
 
     beforeEach(() => {

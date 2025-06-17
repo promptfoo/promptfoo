@@ -49,7 +49,7 @@ export async function checkServerFeatureSupport(
       logger.debug(`[Feature Detection] Checking server support for feature: ${featureName}`);
 
       // Build version endpoint URL
-      const versionUrl = baseUrl.replace('/task', '/version');
+      const versionUrl = baseUrl.replace('/api/v1/task', '/version');
 
       const { data } = await fetchWithCache(
         versionUrl,
