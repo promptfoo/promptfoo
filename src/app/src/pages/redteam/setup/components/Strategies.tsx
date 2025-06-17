@@ -372,6 +372,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
           isStatefulValue={isStatefulValue}
           onMultiTurnChange={handleMultiTurnChange}
           onStatefulChange={handleStatefulChange}
+          hasSessionParser={hasSessionParser}
         />
       )}
 
@@ -394,15 +395,6 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         onConfigClick={handleConfigClick}
         onSelectNone={handleSelectNoneInSection}
       />
-
-      {/* Additional system config section, if needed */}
-      {showSystemConfig && (
-        <SystemConfiguration
-          isStatefulValue={isStatefulValue}
-          onStatefulChange={handleStatefulChange}
-          hasSessionParser={hasSessionParser}
-        />
-      )}
 
       {/* Footer Buttons */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
