@@ -179,6 +179,7 @@ function pluginMatchesStrategyTargets(
     return false;
   }
 
+  // Check if this strategy is excluded for this plugin
   const excludedStrategies = testCase.metadata?.pluginConfig?.excludeStrategies as
     | string[]
     | undefined;

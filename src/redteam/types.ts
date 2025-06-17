@@ -38,7 +38,7 @@ export type PluginConfig = {
   intent?: Intent | Intent[];
   policy?: string;
   systemPrompt?: string;
-  // Strategy exclusions
+  // Strategy exclusions - allows plugins to exclude incompatible strategies
   excludeStrategies?: string[];
 };
 export type StrategyConfig = RedteamObjectConfig;

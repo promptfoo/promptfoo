@@ -1,21 +1,11 @@
 import dedent from 'dedent';
 import logger from '../../logger';
-import type {
-  ApiProvider,
-  Assertion,
-  AtomicTestCase,
-  GradingResult,
-  PluginConfig,
-  TestCase,
-} from '../../types';
+import type { Assertion, AtomicTestCase, GradingResult, TestCase } from '../../types';
 import { extractJsonObjects } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { redteamProviderManager } from '../providers/shared';
+import { getShortPluginId } from '../util';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
-
-interface CrossSessionLeakPluginConfig extends PluginConfig {
-  excludeStrategies?: string[];
-}
 
 export const PLUGIN_ID = 'promptfoo:redteam:cross-session-leak';
 
@@ -42,19 +32,8 @@ const DEFAULT_EXAMPLES = dedent`
 export class CrossSessionLeakPlugin extends RedteamPluginBase {
   readonly id = PLUGIN_ID;
 
-  constructor(
-    provider: ApiProvider,
-    purpose: string,
-    injectVar: string,
-    config: CrossSessionLeakPluginConfig = {},
-  ) {
-    const finalConfig = {
-      ...config,
-      excludeStrategies: Array.from(
-        new Set(['crescendo', 'goat', ...(config.excludeStrategies || [])]),
-      ),
-    };
-    super(provider, purpose, injectVar, finalConfig);
+  protected getDefaultExcludedStrategies(): string[] {
+    return ['crescendo', 'goat'];
   }
 
   protected async getTemplate(): Promise<string> {
@@ -130,6 +109,10 @@ export class CrossSessionLeakPlugin extends RedteamPluginBase {
       tests.push({
         options: { runSerially: true },
         vars: { [this.injectVar]: userA },
+        metadata: {
+          pluginId: getShortPluginId(this.id),
+          pluginConfig: this.config,
+        },
       });
       tests.push({
         options: { runSerially: true },
@@ -137,6 +120,8 @@ export class CrossSessionLeakPlugin extends RedteamPluginBase {
         assert: this.getAssertions(userB),
         metadata: {
           crossSessionLeakMatch: match,
+          pluginId: getShortPluginId(this.id),
+          pluginConfig: this.config,
         },
       });
     }
