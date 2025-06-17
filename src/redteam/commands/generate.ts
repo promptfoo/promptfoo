@@ -33,11 +33,11 @@ import {
   ADDITIONAL_STRATEGIES,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   DEFAULT_STRATEGIES,
+  type Plugin,
   REDTEAM_MODEL,
   type Severity,
-  type Plugin,
 } from '../constants';
-import { shouldGenerateRemote, neverGenerateRemote } from '../remoteGeneration';
+import { neverGenerateRemote, shouldGenerateRemote } from '../remoteGeneration';
 import type {
   RedteamCliGenerateOptions,
   RedteamFileConfig,
@@ -45,9 +45,9 @@ import type {
   SynthesizeOptions,
 } from '../types';
 import {
-  type TargetPurposeDiscoveryResult,
   doTargetPurposeDiscovery,
   mergeTargetPurposeDiscoveryResults,
+  type TargetPurposeDiscoveryResult,
 } from './discover';
 
 function getConfigHash(configPath: string): string {
@@ -259,8 +259,14 @@ export async function doGenerateRedteam(
 
       if (pluginConfig.id === 'cross-session-leak') {
         pluginConfig.config = {
-          excludeStrategies: ['crescendo', 'goat'],
           ...(pluginConfig.config || {}),
+          excludeStrategies: Array.from(
+            new Set([
+              'crescendo',
+              'goat',
+              ...((pluginConfig.config as any)?.excludeStrategies || []),
+            ]),
+          ),
         };
       }
 
@@ -284,8 +290,14 @@ export async function doGenerateRedteam(
       };
       if (plugin.id === 'cross-session-leak') {
         pluginConfig.config = {
-          excludeStrategies: ['crescendo', 'goat'],
           ...(pluginConfig as any).config,
+          excludeStrategies: Array.from(
+            new Set([
+              'crescendo',
+              'goat',
+              ...((pluginConfig as any).config?.excludeStrategies || []),
+            ]),
+          ),
         };
       }
       return pluginConfig;

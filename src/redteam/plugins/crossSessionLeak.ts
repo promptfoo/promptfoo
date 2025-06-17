@@ -1,17 +1,17 @@
 import dedent from 'dedent';
 import logger from '../../logger';
 import type {
+  ApiProvider,
   Assertion,
   AtomicTestCase,
   GradingResult,
-  TestCase,
   PluginConfig,
-  ApiProvider,
+  TestCase,
 } from '../../types';
 import { extractJsonObjects } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { redteamProviderManager } from '../providers/shared';
-import { RedteamPluginBase, RedteamGraderBase } from './base';
+import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 interface CrossSessionLeakPluginConfig extends PluginConfig {
   excludeStrategies?: string[];
@@ -49,8 +49,10 @@ export class CrossSessionLeakPlugin extends RedteamPluginBase {
     config: CrossSessionLeakPluginConfig = {},
   ) {
     const finalConfig = {
-      excludeStrategies: ['crescendo', 'goat'],
       ...config,
+      excludeStrategies: Array.from(
+        new Set(['crescendo', 'goat', ...(config.excludeStrategies || [])]),
+      ),
     };
     super(provider, purpose, injectVar, finalConfig);
   }
