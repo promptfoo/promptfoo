@@ -241,8 +241,16 @@ export function createApp() {
 
   app.use(express.static(staticDir));
 
+  // Ignore NotFoundError from static middleware so client routing can handle it
+  app.use((err: unknown, _req: Request, _res: Response, next: express.NextFunction) => {
+    if ((err as { status?: number }).status === 404) {
+      return next();
+    }
+    return next(err);
+  });
+
   // Handle client routing, return all requests to the app
-  app.get('/*splat', (req: Request, res: Response): void => {
+  app.use((req: Request, res: Response): void => {
     res.sendFile(path.join(staticDir, 'index.html'));
   });
   return app;
