@@ -1079,6 +1079,17 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath === 'promptfoo:prompt-optimizer',
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { PromptOptimizerProvider } = await import('./prompt-optimizer');
+      return new PromptOptimizerProvider(providerOptions);
+    },
+  },
+  {
     test: (providerPath: string) => providerPath.startsWith('promptfoo:model:'),
     create: async (
       providerPath: string,

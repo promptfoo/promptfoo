@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Variable optimization with prompt optimizer
+
+prompts:
+  - 'Translate the following to French: {{text}}'
+
+providers:
+  - openai:gpt-4o
+
+tests:
+  - provider:
+      id: promptfoo:prompt-optimizer
+      config:
+        maxTurns: 3
+        targetVariable: text
+        improverModel: openai:gpt-4o
+    vars:
+      text: Hello world
+    assert:
+      - type: contains
+        value: Bonjour
+  - provider:
+      id: promptfoo:prompt-optimizer
+      config:
+        maxTurns: 3
+        targetVariable: text
+        improverModel: openai:gpt-4o
+    vars:
+      text: Good morning
+    assert:
+      - type: contains
+        value: matin
+  - provider:
+      id: promptfoo:prompt-optimizer
+      config:
+        maxTurns: 3
+        targetVariable: text
+        improverModel: openai:gpt-4o
+    vars:
+      text: Thank you very much
+    assert:
+      - type: contains
+        value: merci

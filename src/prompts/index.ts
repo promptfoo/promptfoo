@@ -271,3 +271,52 @@ Example JSON:
 
 JSON:
 `;
+
+export const OPTIMIZER_PROMPT_V1 = `You are a variable optimization assistant. Given a prompt template and a variable value that caused test failures, suggest an improved variable value.
+
+Prompt template:
+{{promptTemplate}}
+
+Current value for "{{targetVariable}}":
+{{currentValue}}
+
+When we used this value, the model output was:
+{{previousOutput}}
+
+The test failed because:
+{% for f in failures %}
+- {{f.assertName}}: {{f.reason}}
+{% endfor %}
+
+Please suggest a better value for "{{targetVariable}}" that would help the test pass. Only provide the new value, nothing else:`;
+
+export const OPTIMIZER_PROMPT_V2 = `You are a variable optimizer. Generate an improved variable value and explain your reasoning.
+
+Prompt template:
+{{promptTemplate}}
+
+Current "{{targetVariable}}" value:
+{{currentValue}}
+
+Model response:
+{{previousOutput}}
+
+Failures:
+{% for f in failures %}
+- {{f.assertName}}: {{f.reason}}
+{% endfor %}
+
+Return YAML with fields \`value\` (the new variable value) and \`reasoning\` (why this value should work better).`;
+
+export const OPTIMIZER_PROMPT_V3 = `Generate three alternative values for "{{targetVariable}}" that may satisfy the failed assertions. Separate each value with ---
+
+Prompt template:
+{{promptTemplate}}
+
+Current "{{targetVariable}}" value:
+{{currentValue}}
+
+Previous output:
+{{previousOutput}}
+
+The test failed. Provide 3 alternative values that might work better:`;
