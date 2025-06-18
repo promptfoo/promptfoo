@@ -46,7 +46,7 @@ export class AzureCompletionProvider extends AzureGenericProvider {
     let data;
     let cached = false;
     try {
-      ({ data, cached } = (await (context?.fetchWithCache ?? fetchWithCache)(
+      ({ data, cached } = (await fetchWithCache(
         `${this.getApiBaseUrl()}/openai/deployments/${
           this.deploymentName
         }/completions?api-version=${this.config.apiVersion || DEFAULT_AZURE_API_VERSION}`,
@@ -60,6 +60,8 @@ export class AzureCompletionProvider extends AzureGenericProvider {
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
+        'json',
+        context?.bustCache ?? context?.debug,
       )) as any);
     } catch (err) {
       return {

@@ -188,7 +188,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     let data, status, statusText;
     let cached = false;
     try {
-      ({ data, cached, status, statusText } = await (context?.fetchWithCache ?? fetchWithCache)(
+      ({ data, cached, status, statusText } = await fetchWithCache(
         `${this.getApiUrl()}/responses`,
         {
           method: 'POST',
@@ -201,6 +201,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
+        'json',
+        context?.bustCache ?? context?.debug,
       ));
 
       if (status < 200 || status >= 300) {
