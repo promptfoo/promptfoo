@@ -272,58 +272,54 @@ Example JSON:
 JSON:
 `;
 
-export const OPTIMIZER_PROMPT_V1 = `You are a variable rewriter. Your job is to completely rewrite the variable value to make tests pass.
+export const OPTIMIZER_PROMPT_V1 = `You are an intelligent variable optimizer. Your job is to analyze the optimization history and strategically rewrite the variable value to make tests pass.
 
-You can COMPLETELY CHANGE the variable value - don't just make small modifications. Think of entirely different content that would achieve the goal.
-
-Prompt template:
-{{promptTemplate}}
-
-Current value for "{{targetVariable}}":
-{{currentValue}}
-
-Model output with current value:
-{{previousOutput}}
-
-Test failure:
+## Context
+Prompt template: {{promptTemplate}}
+Target variable: "{{targetVariable}}"
+Current test requirements:
 {% for f in failures %}
 - {{f.assertName}}: {{f.reason}}
 {% endfor %}
 
-COMPLETELY REWRITE the "{{targetVariable}}" value to make the test pass. Don't just modify it - think of entirely different content that would work better:`;
+## Optimization History
+{% if optimizationHistory.length > 0 %}
+Previous attempts:
+{% for attempt in optimizationHistory %}
+**Attempt {{attempt.iteration}}:**
+- Variable value: {{attempt.vars[targetVariable]}}
+- Model output: {{attempt.output}}
+- Score: {{attempt.score}} | Success: {{attempt.success}}
+- Issue: {{attempt.reason}}
 
-export const OPTIMIZER_PROMPT_V2 = `You are a variable rewriter. Completely rewrite the variable value to achieve the test goals.
-
-Prompt template:
-{{promptTemplate}}
-
-Current "{{targetVariable}}" value:
-{{currentValue}}
-
-Model response:
-{{previousOutput}}
-
-Test failures:
-{% for f in failures %}
-- {{f.assertName}}: {{f.reason}}
 {% endfor %}
+{% else %}
+This is the first attempt.
+{% endif %}
 
-COMPLETELY REWRITE the variable value. Don't just tweak it - think of entirely different content that would make the test pass. Return YAML with fields \`value\` (the completely new variable value) and \`reasoning\` (why this completely different approach should work):`;
+## Strategic Analysis & Next Steps
 
-export const OPTIMIZER_PROMPT_V3 = `You are a variable rewriter. Generate completely different variable values that would make the test pass.
+Based on the history above, analyze what has been tried and what strategies might work better:
 
-Prompt template:
-{{promptTemplate}}
+1. **Pattern Analysis**: What patterns do you see in the failed attempts?
+2. **Strategy Selection**: Choose your approach based on attempt number and what's failed:
+   - Attempts 1-2: Try direct, obvious solutions
+   - Attempts 3-4: Try creative but related approaches  
+   - Attempts 5+: Try completely different angles, indirect methods, or creative interpretations
 
-Current "{{targetVariable}}" value:
-{{currentValue}}
+3. **Failure-Specific Strategies**:
+   - If looking for specific words (like "chat", "matin"): Try phrases that would naturally include those words
+   - If semantic similarity fails: Try different domains or contexts
+   - If direct translation fails: Try phrases that would force specific translations
+   - If all logical attempts fail: Try creative/unexpected approaches
 
-Previous output:
-{{previousOutput}}
+## Your Task
 
-Test failure - needs to satisfy these requirements:
-{% for f in failures %}
-- {{f.assertName}}: {{f.reason}}
-{% endfor %}
+Generate a completely new value for "{{targetVariable}}" that learns from previous failures. 
 
-Generate 3 COMPLETELY DIFFERENT values for "{{targetVariable}}" that would make the test pass. Don't just modify the original - think of entirely different content. Separate each value with ---:`;
+Think step by step:
+1. What has been tried and why did it fail?
+2. What strategy should you use for this attempt?
+3. What specific value would likely succeed?
+
+Only provide the new variable value, nothing else:`;

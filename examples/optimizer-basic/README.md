@@ -1,27 +1,52 @@
 # optimizer-basic
 
-This example demonstrates how to use the Prompt Optimizer provider to automatically **rewrite variable values** within your prompts until test assertions pass.
+This example demonstrates how to use the **Strategic Prompt Optimizer** provider to automatically **intelligently rewrite variable values** within your prompts until test assertions pass.
 
-The optimizer can **completely rewrite** variable values - it's not limited to small modifications. It will try entirely different content to achieve the test goals.
+The optimizer uses **strategic intelligence** and **learns from optimization history** to make increasingly better variable suggestions.
 
 ## How it works
 
-The optimizer:
+The strategic optimizer:
 
 1. Takes a fixed prompt template (e.g., `'Translate the following to French: {{text}}'`)
 2. Identifies a target variable to optimize (e.g., `text`)
 3. Tests the current variable value against your assertions
-4. If tests fail, uses an LLM to **completely rewrite** the variable value
-5. Repeats until assertions pass or max turns reached
-6. Returns the best result with the rewritten variables
+4. **Analyzes the full optimization history** to understand what has failed and why
+5. **Uses strategic thinking** to choose different approaches based on failure patterns
+6. **Escalates creativity** - starts with obvious solutions, then gets more creative if needed
+7. Repeats until assertions pass or max turns reached
+8. Returns the best result with the strategically optimized variables
+
+## Strategic Intelligence Features
+
+### 🧠 **History Analysis**
+
+- Sees all previous attempts, their outputs, scores, and failure reasons
+- Understands patterns in what doesn't work
+- Avoids repeating similar failed approaches
+
+### 🎯 **Strategic Escalation**
+
+- **Attempts 1-2**: Direct, obvious solutions
+- **Attempts 3-4**: Creative but related approaches
+- **Attempts 5+**: Completely different angles, indirect methods
+
+### 🔍 **Failure-Specific Strategies**
+
+- **Word-specific tests**: Tries phrases that naturally include target words
+- **Semantic failures**: Switches domains or contexts
+- **Translation challenges**: Uses phrases that force specific translations
+- **All logic fails**: Tries creative/unexpected approaches
 
 ## Key concept
 
-The optimizer can **completely change** the variable content. For example:
-- Original: `"Good morning"` 
-- Rewritten: `"It's a beautiful morning"` (to ensure French translation contains "matin")
+The optimizer **learns from failure patterns** and **strategically adapts**. For example:
 
-It's not limited to small tweaks - it will try entirely different approaches.
+- Original: `"The weather is nice today"`
+- Strategic Analysis: "Need 'nuit' (night) but trying day-related phrases"
+- Intelligent Rewrite: `"The night is beautiful"` → "La nuit est belle." ✅
+
+It's not just rewriting - it's **strategic problem solving**.
 
 ## Prerequisites
 
@@ -43,37 +68,37 @@ npm run local -- eval -c examples/optimizer-basic/promptfooconfig.yaml
 
 ## Configuration
 
-The example rewrites the `text` variable in a French translation prompt:
+The example demonstrates strategic optimization across varying difficulty levels:
 
 - **Target Variable**: `text` - The English phrase to be translated
-- **Assertions**: Each test checks if the French translation contains specific words
-- **Max Turns**: Limited to 3 rewrite attempts per test
-- **Improver Model**: Uses `openai:gpt-4o` to suggest completely new variable values
+- **Strategic Analysis**: Each failure provides learning for the next attempt
+- **Max Turns**: 3-4 optimization attempts per test with intelligent escalation
+- **Strategic Model**: Uses `openai:gpt-4o` for sophisticated strategic analysis
 
 ## Expected Output
 
-For each test case, if the initial variable value doesn't pass the assertions, the optimizer will:
+For each test case, the strategic optimizer will:
 
-1. Try the original value (e.g., "Good morning")
-2. If it fails to contain "matin", ask GPT-4o to **completely rewrite** the English phrase
-3. Test the rewritten value (e.g., "It's a beautiful morning")
-4. Repeat until the French translation contains the required words
+1. **Analyze History**: "What approaches have failed and why?"
+2. **Choose Strategy**: "Based on attempt number and failure patterns, what approach should I try?"
+3. **Execute Intelligently**: Generate contextually aware variable values
+4. **Learn & Adapt**: Use each result to inform the next strategic decision
 
-The results will show the optimization history and final rewritten variables.
+## Test Cases & Strategic Thinking
 
-## Test Cases
-
-1. **"Hello world"** → should contain "bonjour" (might pass immediately)
-2. **"Good morning"** → should contain "matin" (will likely need rewriting)
-3. **"Thank you very much"** → should contain "merci" (might pass immediately)
-4. **"I like animals"** → should contain "chat" (challenging - needs rewrite to mention cats)
+1. **"Hello world"** → should contain "bonjour" (direct success)
+2. **"Good morning"** → should contain "matin" (strategic: "Early morning" to emphasize morning)
+3. **"Thank you very much"** → should contain "merci" (direct success)
+4. **"I like animals"** → should contain "chat" (strategic: "I like cats" to get specific animal)
+5. **"The weather is nice today"** → should contain "nuit" (strategic: complete context switch to night)
 
 ## Customization
 
 You can customize this example by:
 
 - Changing the `targetVariable` to optimize different variables
-- Adding more complex assertions
+- Adding more complex assertions to challenge the strategic thinking
 - Using different models for the `improverModel`
-- Providing custom rewriting templates
-- Adjusting `maxTurns` and `stallIterations` for different optimization strategies
+- Providing custom strategic templates
+- Adjusting `maxTurns` for different optimization complexity
+- Testing with multiple sequential requirements to see advanced strategy

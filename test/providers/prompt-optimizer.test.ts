@@ -56,10 +56,10 @@ describe('PromptOptimizerProvider', () => {
     const result = await provider.callApi('Translate {{text}} to French', context);
 
     expect(mockedRun).toHaveBeenCalledTimes(2);
-    
+
     // Check that original vars were updated
     expect(context.vars.text).toBe('Bonjour le monde');
-    
+
     // Check new structured metadata
     expect(result.metadata?.promptOptimizer).toEqual({
       originalValue: 'Hello world',
@@ -89,12 +89,12 @@ describe('PromptOptimizerProvider', () => {
         },
       ],
     });
-    
+
     // Check legacy metadata still exists
     expect(result.metadata?.optimizationHistory).toHaveLength(2);
     expect(result.metadata?.finalVars).toEqual({ text: 'Bonjour le monde' });
     expect(result.metadata?.optimizedVariable).toBe('text');
-    
+
     expect(mockImprover.callApi).toHaveBeenCalledTimes(1);
   });
 
@@ -167,7 +167,7 @@ describe('PromptOptimizerProvider', () => {
     expect(result.metadata?.promptOptimizer.succeeded).toBe(false);
     expect(result.metadata?.promptOptimizer.finalScore).toBe(0.5);
     expect(result.metadata?.promptOptimizer.history).toHaveLength(3);
-    
+
     // Original vars should be updated to best attempt
     expect(context.vars.text).toBe('original'); // First iteration had best score
   });

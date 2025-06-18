@@ -64,10 +64,10 @@ export class PromptOptimizerProvider implements ApiProvider {
   ): Promise<ProviderResponse> {
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
-    
+
     // Get the original prompt template from context
     const promptTemplate = context?.prompt?.raw || prompt;
-    
+
     const targetProvider = context.originalProvider;
     const improver = await this.getImprover(context);
     const nunjucks = getNunjucksEngine();
@@ -85,10 +85,10 @@ export class PromptOptimizerProvider implements ApiProvider {
     let bestScore = -Infinity;
     let bestOutput = '';
     let stall = 0;
-    const history: { 
+    const history: {
       iteration: number;
-      vars: any; 
-      output: string; 
+      vars: any;
+      output: string;
       score: number;
       reason?: string;
       success: boolean;
@@ -97,14 +97,14 @@ export class PromptOptimizerProvider implements ApiProvider {
     for (let i = 0; i < this.options.maxTurns; i++) {
       // Render prompt with current variables
       const rendered = nunjucks.renderString(promptTemplate, currentVars);
-      
+
       // Test with current variables
       const resp = await targetProvider.callApi(
         rendered,
         { ...context, vars: currentVars },
         options,
       );
-      
+
       // Run assertions - convert the context.test to the expected format
       const testCase = context.test as TestCase;
       const grading = await runAssertions({
@@ -113,19 +113,19 @@ export class PromptOptimizerProvider implements ApiProvider {
         providerResponse: resp,
         test: testCase,
       });
-      
+
       const score = grading.score;
       const output = String(resp.output || '');
-      
-      history.push({ 
+
+      history.push({
         iteration: i + 1,
-        vars: { ...currentVars }, 
-        output, 
+        vars: { ...currentVars },
+        output,
         score,
         reason: grading.reason,
         success: grading.pass,
       });
-      
+
       // Check if we've succeeded
       if (grading.pass) {
         bestVars = { ...currentVars };
@@ -179,6 +179,7 @@ export class PromptOptimizerProvider implements ApiProvider {
         reason: grading.reason,
         failures,
         currentPrompt: rendered,
+        optimizationHistory: history,
       });
 
       // Get suggestion from improver
@@ -203,7 +204,7 @@ export class PromptOptimizerProvider implements ApiProvider {
 
     // Return the final result with the best variables
     const finalRendered = nunjucks.renderString(promptTemplate, bestVars);
-    
+
     const optimizationMetadata = {
       promptOptimizer: {
         originalValue,
@@ -211,10 +212,10 @@ export class PromptOptimizerProvider implements ApiProvider {
         targetVariable: targetVar,
         iterations: history.length,
         finalScore: bestScore,
-        succeeded: history.some(h => h.success),
+        succeeded: history.some((h) => h.success),
         stallIterations: this.options.stallIterations,
         maxTurns: this.options.maxTurns,
-        history: history.map(h => ({
+        history: history.map((h) => ({
           iteration: h.iteration,
           [targetVar]: h.vars[targetVar],
           output: h.output,

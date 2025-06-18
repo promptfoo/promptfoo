@@ -20,7 +20,7 @@ tests:
     assert:
       - type: icontains
         value: bonjour
-  
+
   # Test 2: Need to find English text that translates to something containing "matin" (morning)
   - provider:
       id: promptfoo:prompt-optimizer
@@ -33,7 +33,7 @@ tests:
     assert:
       - type: icontains
         value: matin
-  
+
   # Test 3: Need to find English text that translates to something containing "merci" (thank you)
   - provider:
       id: promptfoo:prompt-optimizer
@@ -46,7 +46,7 @@ tests:
     assert:
       - type: icontains
         value: merci
-  
+
   # Test 4: Challenge case - need text that translates to something containing "chat" (cat)
   - provider:
       id: promptfoo:prompt-optimizer
@@ -59,3 +59,16 @@ tests:
     assert:
       - type: icontains
         value: chat
+
+  # Test 5: VERY challenging - need "nuit" (night) from a completely unrelated starting point
+  - provider:
+      id: promptfoo:prompt-optimizer
+      config:
+        maxTurns: 4
+        targetVariable: text
+        improverModel: openai:gpt-4o
+    vars:
+      text: The weather is nice today
+    assert:
+      - type: icontains
+        value: nuit
