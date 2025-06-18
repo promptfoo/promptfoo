@@ -32,17 +32,14 @@ describe('AzureCompletionProvider', () => {
     });
     (provider as any).authHeaders = { 'api-key': 'test-key' };
 
-    const testPrompt = { raw: 'test prompt', display: 'test', label: 'test' };
-    const result1 = await provider.callApi('test prompt', { prompt: testPrompt, vars: {} });
-    const result2 = await provider.callApi('test prompt', { prompt: testPrompt, vars: {} });
+    const result1 = await provider.callApi('test prompt');
+    const result2 = await provider.callApi('test prompt');
 
     expect(result1.output).toBe('hello');
     expect(result2.output).toBe('hello');
     expect(result1.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
     expect(result2.tokenUsage).toEqual({ cached: 10, total: 10 });
   });
-
-
 
   it('should pass custom headers from config to fetchWithCache', async () => {
     jest.mocked(fetchWithCache).mockResolvedValueOnce({
@@ -66,8 +63,7 @@ describe('AzureCompletionProvider', () => {
       },
     });
 
-    const testPrompt = { raw: 'test prompt', display: 'test', label: 'test' };
-    await provider.callApi('test prompt', { prompt: testPrompt, vars: {} });
+    await provider.callApi('test prompt');
 
     expect(fetchWithCache).toHaveBeenCalledWith(
       expect.any(String),
@@ -99,8 +95,7 @@ describe('AzureCompletionProvider', () => {
     });
     (provider as any).authHeaders = { 'api-key': 'test-key' };
 
-    const testPrompt = { raw: 'test prompt', display: 'test', label: 'test' };
-    const result = await provider.callApi('test prompt', { prompt: testPrompt, vars: {} });
+    const result = await provider.callApi('test prompt');
     expect(result.output).toBe(
       "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.",
     );
@@ -114,8 +109,7 @@ describe('AzureCompletionProvider', () => {
     });
     (provider as any).authHeaders = { 'api-key': 'test-key' };
 
-    const testPrompt = { raw: 'test prompt', display: 'test', label: 'test' };
-    const result = await provider.callApi('test prompt', { prompt: testPrompt, vars: {} });
+    const result = await provider.callApi('test prompt');
     expect(result.error).toBe('API call error: Error: API Error');
   });
 
@@ -128,8 +122,7 @@ describe('AzureCompletionProvider', () => {
     (provider as any).initialized = true;
     (provider as any).authHeaders = { 'api-key': 'test-key' };
 
-    const testPrompt = { raw: 'test prompt', display: 'test', label: 'test' };
-    const result = await provider.callApi('test prompt', { prompt: testPrompt, vars: {} });
+    const result = await provider.callApi('test prompt');
     expect(result.error).toBe('API call error: Error: Azure API host must be set.');
   });
 
@@ -147,8 +140,7 @@ describe('AzureCompletionProvider', () => {
     });
     (provider as any).authHeaders = { 'api-key': 'test-key' };
 
-    const testPrompt = { raw: 'test prompt', display: 'test', label: 'test' };
-    const result = await provider.callApi('test prompt', { prompt: testPrompt, vars: {} });
+    const result = await provider.callApi('test prompt');
     expect(result.output).toBe('');
   });
 
@@ -160,8 +152,7 @@ describe('AzureCompletionProvider', () => {
     });
     (provider as any).authHeaders = { 'api-key': 'test-key' };
 
-    const testPrompt = { raw: 'test', display: 'test', label: 'test' };
-    await expect(provider.callApi('test', { prompt: testPrompt, vars: {} })).rejects.toThrow(
+    await expect(provider.callApi('test')).rejects.toThrow(
       /OPENAI_STOP is not a valid JSON string/,
     );
 
@@ -182,8 +173,7 @@ describe('AzureCompletionProvider', () => {
     });
     (provider as any).authHeaders = { 'api-key': 'test-key' };
 
-    const testPrompt = { raw: 'test prompt', display: 'test', label: 'test' };
-    const result = await provider.callApi('test prompt', { prompt: testPrompt, vars: {} });
+    const result = await provider.callApi('test prompt');
     expect(result.output).toBe('');
     expect(result.tokenUsage).toEqual({ total: 7, prompt: 3, completion: 4 });
   });
@@ -199,8 +189,7 @@ describe('AzureCompletionProvider', () => {
     });
     (provider as any).authHeaders = { 'api-key': 'test-key' };
 
-    const testPrompt = { raw: 'test prompt', display: 'test', label: 'test' };
-    const result = await provider.callApi('test prompt', { prompt: testPrompt, vars: {} });
+    const result = await provider.callApi('test prompt');
     expect(result.error).toMatch(/API response error:/);
     expect(result.tokenUsage).toEqual({
       total: undefined,
@@ -226,8 +215,7 @@ describe('AzureCompletionProvider', () => {
     });
     (provider as any).authHeaders = { 'api-key': 'test-key' };
 
-    const testPrompt = { raw: 'test prompt', display: 'test', label: 'test' };
-    await provider.callApi('test prompt', { prompt: testPrompt, vars: {} });
+    await provider.callApi('test prompt');
 
     const actualCall = jest.mocked(fetchWithCache).mock.calls[0];
     const body = JSON.parse(actualCall[1]?.body as string);
@@ -251,8 +239,7 @@ describe('AzureCompletionProvider', () => {
       },
     });
 
-    const testPrompt = { raw: 'test prompt', display: 'test', label: 'test' };
-    await provider.callApi('test prompt', { prompt: testPrompt, vars: {} });
+    await provider.callApi('test prompt');
 
     expect(fetchWithCache).toHaveBeenCalledWith(
       expect.any(String),
