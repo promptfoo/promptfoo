@@ -116,6 +116,17 @@
     padding: 0.25rem !important;
   }
 
+  /* Force side-by-side layout for risk cards */
+  .risk-card-container .MuiGrid-item:first-of-type {
+    flex: 0 0 50% !important;
+    max-width: 50% !important;
+  }
+
+  .risk-card-container .MuiGrid-item:last-of-type {
+    flex: 0 0 33.333% !important;
+    max-width: 33.333% !important;
+  }
+
   /* Compact the title and subtitle */
   .risk-card-title {
     margin-bottom: 0.25rem !important;

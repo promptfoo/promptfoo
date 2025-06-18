@@ -125,7 +125,7 @@ const RiskCard: React.FC<{
               {numTestsPassed}/{numTestsPassed + numTestsFailed} passed
             </Typography>
           </Grid>
-          <Grid item xs={6} md={4}>
+          <Grid item xs={6} md={4} mt={8}>
             <List dense>
               {filteredTestTypes.map((test, index) => {
                 const percentage = test.numPassed / (test.numPassed + test.numFailed);
