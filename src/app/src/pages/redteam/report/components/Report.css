@@ -21,64 +21,18 @@
 
 /* Print CSS for PDF generation */
 @media print {
-  /* Page setup */
-  @page {
-    size: A4;
-    margin: 0.25in;
-  }
-
-  /* Body and container styles */
-  body {
-    -webkit-print-color-adjust: exact;
-    color-adjust: exact;
-    background-color: white !important;
-  }
-
-  /* Target main container backgrounds */
-  .MuiContainer-root,
-  .MuiBox-root,
-  .MuiPaper-root {
-    background-color: white !important;
-  }
-
-  /* Make main containers use more width but preserve internal spacing */
-  .MuiContainer-root {
-    max-width: 100% !important;
-  }
-
-  /* Hide navigation and interactive elements */
-  .MuiAppBar-root,
-  .report-header .MuiIconButton-root,
-  .MuiTooltip-root,
-  .MuiModal-root,
-  nav,
-  header,
-  footer,
-  /* Hide main navigation header */
-  .MuiToolbar-root,
-  .MuiContainer-root nav,
-  [role="navigation"],
-  .MuiAppBar-positionStatic {
-    display: none !important;
-  }
-
-  .print-hide {
-    display: none !important;
-    visibility: hidden !important;
+  .report-header {
+    padding-right: 8px !important;
   }
 
   /* Framework compliance layout fixes */
   /* Make framework sections stack vertically instead of side-by-side */
-  [class*='FrameworkCompliance'] .MuiGrid-container,
-  [class*='Framework'] .MuiGrid-container,
-  .MuiGrid-container {
+  .framework-grid {
     flex-direction: column !important;
     display: flex !important;
   }
 
-  [class*='FrameworkCompliance'] .MuiGrid-item,
-  [class*='Framework'] .MuiGrid-item,
-  .MuiGrid-item {
+  .framework-grid .MuiGrid-item {
     width: 100% !important;
     max-width: 100% !important;
     margin-bottom: 1.5rem !important;

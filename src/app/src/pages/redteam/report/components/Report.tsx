@@ -296,7 +296,10 @@ const App: React.FC = () => {
       <Stack spacing={4} pb={8} pt={2}>
         {evalData.config.redteam && <EnterpriseBanner evalId={evalId || ''} />}
         <Card className="report-header" sx={{ position: 'relative' }}>
-          <Box sx={{ position: 'absolute', top: 8, right: 8, display: 'flex' }}>
+          <Box
+            sx={{ position: 'absolute', top: 8, right: 8, display: 'flex' }}
+            className="print-hide"
+          >
             <Tooltip title="View all logs" placement="top">
               <IconButton
                 sx={{ position: 'relative' }}
