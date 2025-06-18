@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import Code from '@app/components/Code';
+import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
@@ -37,6 +38,7 @@ function DiscoveryResult({ text }: { text: string }) {
   const { showToast } = useToast();
   const { recordEvent } = useTelemetry();
   const theme = useTheme();
+  const isClipboardAvailable = typeof navigator !== 'undefined' && navigator.clipboard;
 
   const handleCopy = async () => {
     try {
@@ -97,23 +99,25 @@ function DiscoveryResult({ text }: { text: string }) {
             {text}
           </Typography>
         </Box>
-        <Tooltip title="Copy to clipboard">
-          <IconButton
-            size="small"
-            onClick={handleCopy}
-            sx={{
-              color: theme.palette.primary.main,
-              '&:hover': {
-                backgroundColor:
-                  theme.palette.mode === 'dark'
-                    ? alpha(theme.palette.primary.main, 0.2)
-                    : alpha(theme.palette.primary.main, 0.1),
-              },
-            }}
-          >
-            <ContentCopyIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
+        {isClipboardAvailable && (
+          <Tooltip title="Copy to clipboard">
+            <IconButton
+              size="small"
+              onClick={handleCopy}
+              sx={{
+                color: theme.palette.primary.main,
+                '&:hover': {
+                  backgroundColor:
+                    theme.palette.mode === 'dark'
+                      ? alpha(theme.palette.primary.main, 0.2)
+                      : alpha(theme.palette.primary.main, 0.1),
+                },
+              }}
+            >
+              <ContentCopyIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        )}
       </Box>
       <Typography
         variant="caption"
@@ -135,8 +139,9 @@ function DiscoveryResult({ text }: { text: string }) {
  */
 export default function Purpose({ onNext }: PromptsProps) {
   const theme = useTheme();
-  const { config, updateApplicationDefinition } = useRedTeamConfig();
+  const { config, updateApplicationDefinition, updateConfig } = useRedTeamConfig();
   const { recordEvent } = useTelemetry();
+  const { status: apiHealthStatus, checkHealth } = useApiHealth();
   const [testMode, setTestMode] = useState<'application' | 'model'>('application');
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
     new Set(['Core Application Details']), // Expand the first section by default since it has required fields
@@ -209,11 +214,19 @@ export default function Purpose({ onNext }: PromptsProps) {
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [discoveryError, setDiscoveryError] = useState<string | null>(null);
   const [discoveryResult, setDiscoveryResult] = useState<TargetPurposeDiscoveryResult | null>(null);
+  const [showSlowDiscoveryMessage, setShowSlowDiscoveryMessage] = useState(false);
 
   const handleTargetPurposeDiscovery = React.useCallback(async () => {
     recordEvent('feature_used', { feature: 'redteam_config_target_test' });
     try {
       setIsDiscovering(true);
+      setShowSlowDiscoveryMessage(false);
+
+      // Show slow discovery message after a few seconds
+      const slowDiscoveryTimeout = setTimeout(() => {
+        setShowSlowDiscoveryMessage(true);
+      }, 5000);
+
       const response = await callApi('/providers/discover', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -228,20 +241,56 @@ export default function Purpose({ onNext }: PromptsProps) {
 
       const data = (await response.json()) as TargetPurposeDiscoveryResult;
       setDiscoveryResult(data);
+
+      // Clear the timeout since discovery completed
+      clearTimeout(slowDiscoveryTimeout);
     } catch (error) {
       console.error('Error during target purpose discovery:', error);
       setDiscoveryError(error instanceof Error ? error.message : String(error));
     } finally {
       setIsDiscovering(false);
+      setShowSlowDiscoveryMessage(false);
     }
   }, [config.target]);
 
   const hasTargetConfigured = JSON.stringify(config.target) !== JSON.stringify(DEFAULT_HTTP_TARGET);
 
+  const isApiHealthy = apiHealthStatus === 'connected';
+
   const toolsAsJSDocs = React.useMemo(
     () => formatToolsAsJSDocs(discoveryResult?.tools),
     [discoveryResult],
   );
+
+  // Auto-expand accordions when discovery results are available
+  useEffect(() => {
+    if (discoveryResult) {
+      setExpandedSections((prev) => {
+        const newSet = new Set(prev);
+
+        // Expand "Core Application Details" if limitations are discovered
+        if (discoveryResult.limitations) {
+          newSet.add('Core Application Details');
+        }
+
+        // Expand "Access & Permissions" if tools are discovered
+        if (discoveryResult.tools && discoveryResult.tools.length > 0) {
+          newSet.add('Access & Permissions');
+        }
+
+        return newSet;
+      });
+    }
+  }, [discoveryResult]);
+
+  /**
+   * Validate that the API is healthy when the target is configured.
+   */
+  useEffect(() => {
+    if (hasTargetConfigured) {
+      checkHealth();
+    }
+  }, [hasTargetConfigured, checkHealth]);
 
   // =============================================================================
   // RENDERING ===================================================================
@@ -327,15 +376,28 @@ export default function Purpose({ onNext }: PromptsProps) {
                 </Typography>
                 <Button
                   variant="contained"
-                  disabled={!hasTargetConfigured || !!discoveryError || !!discoveryResult}
+                  disabled={
+                    !hasTargetConfigured || !isApiHealthy || !!discoveryError || !!discoveryResult
+                  }
                   onClick={handleTargetPurposeDiscovery}
                   loading={isDiscovering}
                 >
                   {isDiscovering ? 'Discovering...' : 'Discover'}
                 </Button>
+                {isDiscovering && showSlowDiscoveryMessage && (
+                  <Alert severity="info" sx={{ border: 0 }}>
+                    Discovery is taking a little while. This is normal for complex applications.
+                  </Alert>
+                )}
                 {!hasTargetConfigured && (
                   <Alert severity="warning" sx={{ border: 0 }}>
                     You must configure a target to run auto-discovery.
+                  </Alert>
+                )}
+                {hasTargetConfigured && !isApiHealthy && (
+                  <Alert severity="error" sx={{ border: 0 }}>
+                    Cannot connect to Promptfoo API. Auto-discovery requires a healthy API
+                    connection.
                   </Alert>
                 )}
                 {discoveryError && (
@@ -967,6 +1029,41 @@ export default function Purpose({ onNext }: PromptsProps) {
                     '& .MuiInputBase-inputMultiline': {
                       resize: 'vertical',
                       minHeight: '56px',
+                    },
+                  }}
+                />
+              </Box>
+            </Box>
+
+            {/* Test Generation Instructions - Standalone Section */}
+            <Box sx={{ mt: 4 }}>
+              <Typography variant="h6" sx={{ fontWeight: 'medium', mb: 2 }}>
+                Add commentMore actions Test Generation Instructions
+              </Typography>
+              <Box>
+                <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
+                  Additional instructions for test generation{' '}
+                  <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>(optional)</span>
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  Provide specific guidance on how red team attacks should be generated for your
+                  application. These instructions will be included in all test generation prompts to
+                  ensure attacks are contextually relevant and follow your desired approach. This is
+                  particularly useful for domain-specific applications or when you want to focus on
+                  particular attack patterns.
+                </Typography>
+                <TextField
+                  fullWidth
+                  value={config.testGenerationInstructions}
+                  onChange={(e) => updateConfig('testGenerationInstructions', e.target.value)}
+                  placeholder="e.g. Focus on healthcare-specific attacks using medical terminology and patient scenarios. Ensure all prompts reference realistic medical situations that could occur in patient interactions."
+                  multiline
+                  minRows={3}
+                  variant="outlined"
+                  sx={{
+                    '& .MuiInputBase-inputMultiline': {
+                      resize: 'vertical',
+                      minHeight: '72px',
                     },
                   }}
                 />

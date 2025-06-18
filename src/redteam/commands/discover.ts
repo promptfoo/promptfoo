@@ -222,6 +222,7 @@ export async function doTargetPurposeDiscovery(
         const targetResponse = await target.callApi(renderedPrompt, {
           prompt: { raw: question, label: 'Target Discovery Question' },
           vars: { sessionId },
+          bustCache: true,
         });
 
         if (targetResponse.error) {
@@ -410,5 +411,3 @@ export function discoverCommand(
       process.exit();
     });
 }
-
-export { LOG_PREFIX, COMMAND, isNullLike, cleanTools };

@@ -772,7 +772,7 @@ providers:
 Accessing the headers or body:
 
 ```yaml
-sessionParser: data.body.sessionId'
+sessionParser: 'data.body.sessionId'
 ```
 
 ```yaml

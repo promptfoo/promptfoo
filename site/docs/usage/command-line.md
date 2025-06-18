@@ -110,11 +110,10 @@ Initialize a new project with dummy files.
 
 Start a browser UI for visualization of results.
 
-| Option                           | Description                             |
-| -------------------------------- | --------------------------------------- |
-| `-p, --port <number>`            | Port number for the local server        |
-| `-y, --yes`                      | Skip confirmation and auto-open the URL |
-| `--filter-description <pattern>` | Filter evals by description using regex |
+| Option                | Description                             |
+| --------------------- | --------------------------------------- |
+| `-p, --port <number>` | Port number for the local server        |
+| `-y, --yes`           | Skip confirmation and auto-open the URL |
 
 If you've used `PROMPTFOO_CONFIG_DIR` to override the promptfoo output directory, run `promptfoo view [directory]`.
 
@@ -331,11 +330,10 @@ For more detail, see [red team configuration](/docs/red-team/configuration/).
 
 Start browser UI and open to red team setup.
 
-| Option                           | Description                                     | Default |
-| -------------------------------- | ----------------------------------------------- | ------- |
-| `[configDirectory]`              | Directory containing configuration files        |         |
-| `-p, --port <number>`            | Port number for the local server                | 15500   |
-| `--filter-description <pattern>` | Filter evals by description using regex pattern |         |
+| Option                | Description                              | Default |
+| --------------------- | ---------------------------------------- | ------- |
+| `[configDirectory]`   | Directory containing configuration files |         |
+| `-p, --port <number>` | Port number for the local server         | 15500   |
 
 ## `promptfoo redteam run`
 
@@ -434,11 +432,10 @@ Works the same as [`promptfoo eval`](#promptfoo-eval), but defaults to loading `
 
 Start a browser UI and open the red teaming report.
 
-| Option                           | Description                                        | Default |
-| -------------------------------- | -------------------------------------------------- | ------- |
-| `[directory]`                    | Directory containing the red teaming configuration | .       |
-| `-p, --port <number>`            | Port number for the server                         | 15500   |
-| `--filter-description <pattern>` | Filter evals by description using a regex pattern  |         |
+| Option                | Description                                        | Default |
+| --------------------- | -------------------------------------------------- | ------- |
+| `[directory]`         | Directory containing the red teaming configuration | .       |
+| `-p, --port <number>` | Port number for the server                         | 15500   |
 
 Example:
 

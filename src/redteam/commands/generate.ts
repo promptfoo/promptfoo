@@ -182,8 +182,6 @@ export async function doGenerateRedteam(
     return null;
   }
 
-  const mergedPurpose = redteamConfig?.purpose ?? options.purpose;
-
   const startTime = Date.now();
   telemetry.record('command_used', {
     name: 'generate redteam - started',
@@ -287,12 +285,13 @@ export async function doGenerateRedteam(
     entities: redteamConfig?.entities,
     plugins,
     provider: redteamConfig?.provider || options.provider,
-    purpose: mergedPurpose,
+    purpose: redteamConfig?.purpose ?? options.purpose,
     strategies: strategyObjs,
     delay: redteamConfig?.delay || options.delay,
     sharing: redteamConfig?.sharing || options.sharing,
     excludeTargetOutputFromAgenticAttackGeneration:
       redteamConfig?.excludeTargetOutputFromAgenticAttackGeneration,
+    testGenerationInstructions: redteamConfig?.testGenerationInstructions,
   };
   const parsedConfig = RedteamConfigSchema.safeParse(config);
   if (!parsedConfig.success) {
@@ -320,6 +319,7 @@ export async function doGenerateRedteam(
     abortSignal: options.abortSignal,
     targetLabels,
     showProgressBar: options.progressBar !== false,
+    testGenerationInstructions: config.testGenerationInstructions,
   } as SynthesizeOptions);
 
   if (redteamTests.length === 0) {
