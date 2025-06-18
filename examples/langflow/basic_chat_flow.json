@@ -1,409 +1,385 @@
 {
-    "data": {
-        "nodes": [
-            {
-                "id": "ChatInput-1",
-                "type": "ChatInput",
-                "position": {
-                    "x": 100,
-                    "y": 200
-                },
-                "data": {
-                    "type": "ChatInput",
-                    "node": {
-                        "template": {
-                            "files": {
-                                "required": false,
-                                "placeholder": "",
-                                "show": true,
-                                "multiline": false,
-                                "value": "",
-                                "password": false,
-                                "name": "files",
-                                "type": "file",
-                                "list": true,
-                                "display_name": "Files",
-                                "advanced": false,
-                                "dynamic": false,
-                                "info": "",
-                                "title_case": false
-                            },
-                            "input_value": {
-                                "required": true,
-                                "placeholder": "Type your message here...",
-                                "show": true,
-                                "multiline": true,
-                                "value": "",
-                                "password": false,
-                                "name": "input_value",
-                                "type": "str",
-                                "list": false,
-                                "display_name": "Text",
-                                "advanced": false,
-                                "dynamic": false,
-                                "info": "",
-                                "title_case": false
-                            },
-                            "sender": {
-                                "required": false,
-                                "placeholder": "",
-                                "show": true,
-                                "multiline": false,
-                                "value": "User",
-                                "password": false,
-                                "name": "sender",
-                                "type": "str",
-                                "list": false,
-                                "display_name": "Sender Type",
-                                "advanced": false,
-                                "dynamic": false,
-                                "info": "",
-                                "title_case": false
-                            },
-                            "sender_name": {
-                                "required": false,
-                                "placeholder": "",
-                                "show": true,
-                                "multiline": false,
-                                "value": "User",
-                                "password": false,
-                                "name": "sender_name",
-                                "type": "str",
-                                "list": false,
-                                "display_name": "Sender Name",
-                                "advanced": false,
-                                "dynamic": false,
-                                "info": "",
-                                "title_case": false
-                            },
-                            "session_id": {
-                                "required": false,
-                                "placeholder": "",
-                                "show": true,
-                                "multiline": false,
-                                "value": "",
-                                "password": false,
-                                "name": "session_id",
-                                "type": "str",
-                                "list": false,
-                                "display_name": "Session ID",
-                                "advanced": true,
-                                "dynamic": false,
-                                "info": "",
-                                "title_case": false
-                            }
-                        },
-                        "description": "A chat input component.",
-                        "base_classes": [
-                            "Message"
-                        ],
-                        "display_name": "Chat Input",
-                        "custom_fields": {},
-                        "output_types": [
-                            "Message"
-                        ],
-                        "documentation": "",
-                        "beta": false,
-                        "error": null,
-                        "official": false
-                    }
-                }
+  "data": {
+    "nodes": [
+      {
+        "id": "ChatInput-1",
+        "type": "ChatInput",
+        "position": {
+          "x": 100,
+          "y": 200
+        },
+        "data": {
+          "type": "ChatInput",
+          "node": {
+            "template": {
+              "files": {
+                "required": false,
+                "placeholder": "",
+                "show": true,
+                "multiline": false,
+                "value": "",
+                "password": false,
+                "name": "files",
+                "type": "file",
+                "list": true,
+                "display_name": "Files",
+                "advanced": false,
+                "dynamic": false,
+                "info": "",
+                "title_case": false
+              },
+              "input_value": {
+                "required": true,
+                "placeholder": "Type your message here...",
+                "show": true,
+                "multiline": true,
+                "value": "",
+                "password": false,
+                "name": "input_value",
+                "type": "str",
+                "list": false,
+                "display_name": "Text",
+                "advanced": false,
+                "dynamic": false,
+                "info": "",
+                "title_case": false
+              },
+              "sender": {
+                "required": false,
+                "placeholder": "",
+                "show": true,
+                "multiline": false,
+                "value": "User",
+                "password": false,
+                "name": "sender",
+                "type": "str",
+                "list": false,
+                "display_name": "Sender Type",
+                "advanced": false,
+                "dynamic": false,
+                "info": "",
+                "title_case": false
+              },
+              "sender_name": {
+                "required": false,
+                "placeholder": "",
+                "show": true,
+                "multiline": false,
+                "value": "User",
+                "password": false,
+                "name": "sender_name",
+                "type": "str",
+                "list": false,
+                "display_name": "Sender Name",
+                "advanced": false,
+                "dynamic": false,
+                "info": "",
+                "title_case": false
+              },
+              "session_id": {
+                "required": false,
+                "placeholder": "",
+                "show": true,
+                "multiline": false,
+                "value": "",
+                "password": false,
+                "name": "session_id",
+                "type": "str",
+                "list": false,
+                "display_name": "Session ID",
+                "advanced": true,
+                "dynamic": false,
+                "info": "",
+                "title_case": false
+              }
             },
-            {
-                "id": "OpenAIModel-2",
-                "type": "OpenAIModel",
-                "position": {
-                    "x": 400,
-                    "y": 200
-                },
-                "data": {
-                    "type": "OpenAIModel",
-                    "node": {
-                        "template": {
-                            "api_key": {
-                                "required": false,
-                                "placeholder": "",
-                                "show": true,
-                                "multiline": false,
-                                "value": "",
-                                "password": true,
-                                "name": "api_key",
-                                "type": "str",
-                                "list": false,
-                                "display_name": "OpenAI API Key",
-                                "advanced": false,
-                                "dynamic": false,
-                                "info": "",
-                                "title_case": false
-                            },
-                            "input_value": {
-                                "required": true,
-                                "placeholder": "",
-                                "show": true,
-                                "multiline": true,
-                                "value": "",
-                                "password": false,
-                                "name": "input_value",
-                                "type": "str",
-                                "list": false,
-                                "display_name": "Input",
-                                "advanced": false,
-                                "dynamic": false,
-                                "info": "",
-                                "title_case": false
-                            },
-                            "max_tokens": {
-                                "required": false,
-                                "placeholder": "",
-                                "show": true,
-                                "multiline": false,
-                                "value": null,
-                                "password": false,
-                                "name": "max_tokens",
-                                "type": "int",
-                                "list": false,
-                                "display_name": "Max Tokens",
-                                "advanced": false,
-                                "dynamic": false,
-                                "info": "",
-                                "title_case": false
-                            },
-                            "model_name": {
-                                "required": false,
-                                "placeholder": "",
-                                "show": true,
-                                "multiline": false,
-                                "value": "gpt-4o-mini",
-                                "password": false,
-                                "name": "model_name",
-                                "type": "str",
-                                "list": false,
-                                "display_name": "Model Name",
-                                "advanced": false,
-                                "dynamic": false,
-                                "info": "",
-                                "title_case": false
-                            },
-                            "system_message": {
-                                "required": false,
-                                "placeholder": "",
-                                "show": true,
-                                "multiline": true,
-                                "value": "You are a helpful AI assistant. Be concise, accurate, and friendly in your responses.",
-                                "password": false,
-                                "name": "system_message",
-                                "type": "str",
-                                "list": false,
-                                "display_name": "System Message",
-                                "advanced": false,
-                                "dynamic": false,
-                                "info": "",
-                                "title_case": false
-                            },
-                            "temperature": {
-                                "required": false,
-                                "placeholder": "",
-                                "show": true,
-                                "multiline": false,
-                                "value": 0.7,
-                                "password": false,
-                                "name": "temperature",
-                                "type": "float",
-                                "list": false,
-                                "display_name": "Temperature",
-                                "advanced": false,
-                                "dynamic": false,
-                                "info": "",
-                                "title_case": false
-                            }
-                        },
-                        "description": "OpenAI large language models.",
-                        "base_classes": [
-                            "BaseLanguageModel",
-                            "LanguageModel"
-                        ],
-                        "display_name": "OpenAI",
-                        "custom_fields": {},
-                        "output_types": [
-                            "LanguageModel"
-                        ],
-                        "documentation": "",
-                        "beta": false,
-                        "error": null,
-                        "official": true
-                    }
-                }
-            },
-            {
-                "id": "ChatOutput-3",
-                "type": "ChatOutput",
-                "position": {
-                    "x": 700,
-                    "y": 200
-                },
-                "data": {
-                    "type": "ChatOutput",
-                    "node": {
-                        "template": {
-                            "data_template": {
-                                "required": false,
-                                "placeholder": "",
-                                "show": true,
-                                "multiline": true,
-                                "value": "{text}",
-                                "password": false,
-                                "name": "data_template",
-                                "type": "str",
-                                "list": false,
-                                "display_name": "Data Template",
-                                "advanced": true,
-                                "dynamic": false,
-                                "info": "",
-                                "title_case": false
-                            },
-                            "input_value": {
-                                "required": true,
-                                "placeholder": "",
-                                "show": true,
-                                "multiline": true,
-                                "value": "",
-                                "password": false,
-                                "name": "input_value",
-                                "type": "str",
-                                "list": false,
-                                "display_name": "Text",
-                                "advanced": false,
-                                "dynamic": false,
-                                "info": "",
-                                "title_case": false
-                            },
-                            "sender": {
-                                "required": false,
-                                "placeholder": "",
-                                "show": true,
-                                "multiline": false,
-                                "value": "Machine",
-                                "password": false,
-                                "name": "sender",
-                                "type": "str",
-                                "list": false,
-                                "display_name": "Sender Type",
-                                "advanced": false,
-                                "dynamic": false,
-                                "info": "",
-                                "title_case": false
-                            },
-                            "sender_name": {
-                                "required": false,
-                                "placeholder": "",
-                                "show": true,
-                                "multiline": false,
-                                "value": "AI",
-                                "password": false,
-                                "name": "sender_name",
-                                "type": "str",
-                                "list": false,
-                                "display_name": "Sender Name",
-                                "advanced": false,
-                                "dynamic": false,
-                                "info": "",
-                                "title_case": false
-                            },
-                            "session_id": {
-                                "required": false,
-                                "placeholder": "",
-                                "show": true,
-                                "multiline": false,
-                                "value": "",
-                                "password": false,
-                                "name": "session_id",
-                                "type": "str",
-                                "list": false,
-                                "display_name": "Session ID",
-                                "advanced": true,
-                                "dynamic": false,
-                                "info": "",
-                                "title_case": false
-                            }
-                        },
-                        "description": "A chat output component.",
-                        "base_classes": [
-                            "Message"
-                        ],
-                        "display_name": "Chat Output",
-                        "custom_fields": {},
-                        "output_types": [
-                            "Message"
-                        ],
-                        "documentation": "",
-                        "beta": false,
-                        "error": null,
-                        "official": false
-                    }
-                }
-            }
-        ],
-        "edges": [
-            {
-                "source": "ChatInput-1",
-                "sourceHandle": "{œbaseClassesœ:[œMessageœ],œdataTypeœ:œMessageœ,œidœ:œChatInput-1œ}",
-                "target": "OpenAIModel-2",
-                "targetHandle": "{œfieldNameœ:œinput_valueœ,œidœ:œOpenAIModel-2œ,œinputTypesœ:[œMessageœ,œstrœ],œtypeœ:œstrœ}",
-                "data": {
-                    "targetHandle": {
-                        "fieldName": "input_value",
-                        "id": "OpenAIModel-2",
-                        "inputTypes": [
-                            "Message",
-                            "str"
-                        ],
-                        "type": "str"
-                    },
-                    "sourceHandle": {
-                        "baseClasses": [
-                            "Message"
-                        ],
-                        "dataType": "Message",
-                        "id": "ChatInput-1"
-                    }
-                },
-                "id": "reactflow__edge-ChatInput-1{œbaseClassesœ:[œMessageœ],œdataTypeœ:œMessageœ,œidœ:œChatInput-1œ}-OpenAIModel-2{œfieldNameœ:œinput_valueœ,œidœ:œOpenAIModel-2œ,œinputTypesœ:[œMessageœ,œstrœ],œtypeœ:œstrœ}"
-            },
-            {
-                "source": "OpenAIModel-2",
-                "sourceHandle": "{œbaseClassesœ:[œBaseLanguageModelœ,œLanguageModelœ],œdataTypeœ:œLanguageModelœ,œidœ:œOpenAIModel-2œ}",
-                "target": "ChatOutput-3",
-                "targetHandle": "{œfieldNameœ:œinput_valueœ,œidœ:œChatOutput-3œ,œinputTypesœ:[œMessageœ,œstrœ],œtypeœ:œstrœ}",
-                "data": {
-                    "targetHandle": {
-                        "fieldName": "input_value",
-                        "id": "ChatOutput-3",
-                        "inputTypes": [
-                            "Message",
-                            "str"
-                        ],
-                        "type": "str"
-                    },
-                    "sourceHandle": {
-                        "baseClasses": [
-                            "BaseLanguageModel",
-                            "LanguageModel"
-                        ],
-                        "dataType": "LanguageModel",
-                        "id": "OpenAIModel-2"
-                    }
-                },
-                "id": "reactflow__edge-OpenAIModel-2{œbaseClassesœ:[œBaseLanguageModelœ,œLanguageModelœ],œdataTypeœ:œLanguageModelœ,œidœ:œOpenAIModel-2œ}-ChatOutput-3{œfieldNameœ:œinput_valueœ,œidœ:œChatOutput-3œ,œinputTypesœ:[œMessageœ,œstrœ],œtypeœ:œstrœ}"
-            }
-        ],
-        "viewport": {
-            "x": 0,
-            "y": 0,
-            "zoom": 1
+            "description": "A chat input component.",
+            "base_classes": ["Message"],
+            "display_name": "Chat Input",
+            "custom_fields": {},
+            "output_types": ["Message"],
+            "documentation": "",
+            "beta": false,
+            "error": null,
+            "official": false
+          }
         }
-    },
-    "description": "A basic chat flow for Promptfoo evaluation",
-    "name": "Basic Chat Flow",
-    "last_tested_version": "1.0.0",
-    "endpoint_name": null
+      },
+      {
+        "id": "OpenAIModel-2",
+        "type": "OpenAIModel",
+        "position": {
+          "x": 400,
+          "y": 200
+        },
+        "data": {
+          "type": "OpenAIModel",
+          "node": {
+            "template": {
+              "api_key": {
+                "required": false,
+                "placeholder": "",
+                "show": true,
+                "multiline": false,
+                "value": "",
+                "password": true,
+                "name": "api_key",
+                "type": "str",
+                "list": false,
+                "display_name": "OpenAI API Key",
+                "advanced": false,
+                "dynamic": false,
+                "info": "",
+                "title_case": false
+              },
+              "input_value": {
+                "required": true,
+                "placeholder": "",
+                "show": true,
+                "multiline": true,
+                "value": "",
+                "password": false,
+                "name": "input_value",
+                "type": "str",
+                "list": false,
+                "display_name": "Input",
+                "advanced": false,
+                "dynamic": false,
+                "info": "",
+                "title_case": false
+              },
+              "max_tokens": {
+                "required": false,
+                "placeholder": "",
+                "show": true,
+                "multiline": false,
+                "value": null,
+                "password": false,
+                "name": "max_tokens",
+                "type": "int",
+                "list": false,
+                "display_name": "Max Tokens",
+                "advanced": false,
+                "dynamic": false,
+                "info": "",
+                "title_case": false
+              },
+              "model_name": {
+                "required": false,
+                "placeholder": "",
+                "show": true,
+                "multiline": false,
+                "value": "gpt-4o-mini",
+                "password": false,
+                "name": "model_name",
+                "type": "str",
+                "list": false,
+                "display_name": "Model Name",
+                "advanced": false,
+                "dynamic": false,
+                "info": "",
+                "title_case": false
+              },
+              "system_message": {
+                "required": false,
+                "placeholder": "",
+                "show": true,
+                "multiline": true,
+                "value": "You are a helpful AI assistant. Be concise, accurate, and friendly in your responses.",
+                "password": false,
+                "name": "system_message",
+                "type": "str",
+                "list": false,
+                "display_name": "System Message",
+                "advanced": false,
+                "dynamic": false,
+                "info": "",
+                "title_case": false
+              },
+              "temperature": {
+                "required": false,
+                "placeholder": "",
+                "show": true,
+                "multiline": false,
+                "value": 0.7,
+                "password": false,
+                "name": "temperature",
+                "type": "float",
+                "list": false,
+                "display_name": "Temperature",
+                "advanced": false,
+                "dynamic": false,
+                "info": "",
+                "title_case": false
+              }
+            },
+            "description": "OpenAI large language models.",
+            "base_classes": ["BaseLanguageModel", "LanguageModel"],
+            "display_name": "OpenAI",
+            "custom_fields": {},
+            "output_types": ["LanguageModel"],
+            "documentation": "",
+            "beta": false,
+            "error": null,
+            "official": true
+          }
+        }
+      },
+      {
+        "id": "ChatOutput-3",
+        "type": "ChatOutput",
+        "position": {
+          "x": 700,
+          "y": 200
+        },
+        "data": {
+          "type": "ChatOutput",
+          "node": {
+            "template": {
+              "data_template": {
+                "required": false,
+                "placeholder": "",
+                "show": true,
+                "multiline": true,
+                "value": "{text}",
+                "password": false,
+                "name": "data_template",
+                "type": "str",
+                "list": false,
+                "display_name": "Data Template",
+                "advanced": true,
+                "dynamic": false,
+                "info": "",
+                "title_case": false
+              },
+              "input_value": {
+                "required": true,
+                "placeholder": "",
+                "show": true,
+                "multiline": true,
+                "value": "",
+                "password": false,
+                "name": "input_value",
+                "type": "str",
+                "list": false,
+                "display_name": "Text",
+                "advanced": false,
+                "dynamic": false,
+                "info": "",
+                "title_case": false
+              },
+              "sender": {
+                "required": false,
+                "placeholder": "",
+                "show": true,
+                "multiline": false,
+                "value": "Machine",
+                "password": false,
+                "name": "sender",
+                "type": "str",
+                "list": false,
+                "display_name": "Sender Type",
+                "advanced": false,
+                "dynamic": false,
+                "info": "",
+                "title_case": false
+              },
+              "sender_name": {
+                "required": false,
+                "placeholder": "",
+                "show": true,
+                "multiline": false,
+                "value": "AI",
+                "password": false,
+                "name": "sender_name",
+                "type": "str",
+                "list": false,
+                "display_name": "Sender Name",
+                "advanced": false,
+                "dynamic": false,
+                "info": "",
+                "title_case": false
+              },
+              "session_id": {
+                "required": false,
+                "placeholder": "",
+                "show": true,
+                "multiline": false,
+                "value": "",
+                "password": false,
+                "name": "session_id",
+                "type": "str",
+                "list": false,
+                "display_name": "Session ID",
+                "advanced": true,
+                "dynamic": false,
+                "info": "",
+                "title_case": false
+              }
+            },
+            "description": "A chat output component.",
+            "base_classes": ["Message"],
+            "display_name": "Chat Output",
+            "custom_fields": {},
+            "output_types": ["Message"],
+            "documentation": "",
+            "beta": false,
+            "error": null,
+            "official": false
+          }
+        }
+      }
+    ],
+    "edges": [
+      {
+        "source": "ChatInput-1",
+        "sourceHandle": "{œbaseClassesœ:[œMessageœ],œdataTypeœ:œMessageœ,œidœ:œChatInput-1œ}",
+        "target": "OpenAIModel-2",
+        "targetHandle": "{œfieldNameœ:œinput_valueœ,œidœ:œOpenAIModel-2œ,œinputTypesœ:[œMessageœ,œstrœ],œtypeœ:œstrœ}",
+        "data": {
+          "targetHandle": {
+            "fieldName": "input_value",
+            "id": "OpenAIModel-2",
+            "inputTypes": ["Message", "str"],
+            "type": "str"
+          },
+          "sourceHandle": {
+            "baseClasses": ["Message"],
+            "dataType": "Message",
+            "id": "ChatInput-1"
+          }
+        },
+        "id": "reactflow__edge-ChatInput-1{œbaseClassesœ:[œMessageœ],œdataTypeœ:œMessageœ,œidœ:œChatInput-1œ}-OpenAIModel-2{œfieldNameœ:œinput_valueœ,œidœ:œOpenAIModel-2œ,œinputTypesœ:[œMessageœ,œstrœ],œtypeœ:œstrœ}"
+      },
+      {
+        "source": "OpenAIModel-2",
+        "sourceHandle": "{œbaseClassesœ:[œBaseLanguageModelœ,œLanguageModelœ],œdataTypeœ:œLanguageModelœ,œidœ:œOpenAIModel-2œ}",
+        "target": "ChatOutput-3",
+        "targetHandle": "{œfieldNameœ:œinput_valueœ,œidœ:œChatOutput-3œ,œinputTypesœ:[œMessageœ,œstrœ],œtypeœ:œstrœ}",
+        "data": {
+          "targetHandle": {
+            "fieldName": "input_value",
+            "id": "ChatOutput-3",
+            "inputTypes": ["Message", "str"],
+            "type": "str"
+          },
+          "sourceHandle": {
+            "baseClasses": ["BaseLanguageModel", "LanguageModel"],
+            "dataType": "LanguageModel",
+            "id": "OpenAIModel-2"
+          }
+        },
+        "id": "reactflow__edge-OpenAIModel-2{œbaseClassesœ:[œBaseLanguageModelœ,œLanguageModelœ],œdataTypeœ:œLanguageModelœ,œidœ:œOpenAIModel-2œ}-ChatOutput-3{œfieldNameœ:œinput_valueœ,œidœ:œChatOutput-3œ,œinputTypesœ:[œMessageœ,œstrœ],œtypeœ:œstrœ}"
+      }
+    ],
+    "viewport": {
+      "x": 0,
+      "y": 0,
+      "zoom": 1
+    }
+  },
+  "description": "A basic chat flow for Promptfoo evaluation",
+  "name": "Basic Chat Flow",
+  "last_tested_version": "1.0.0",
+  "endpoint_name": null
 }

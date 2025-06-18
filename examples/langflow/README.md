@@ -13,13 +13,16 @@ This example demonstrates how to evaluate AI flows created with [Langflow](https
 Before running this example, you'll need:
 
 1. **Langflow installed and running**:
+
    ```bash
    pip install langflow
    langflow run
    ```
+
    This will start Langflow at `http://localhost:7860`
 
 2. **API Keys**: Set up your LLM provider API keys (e.g., OpenAI, Anthropic)
+
    ```bash
    export OPENAI_API_KEY=your_openai_key_here
    export ANTHROPIC_API_KEY=your_anthropic_key_here
@@ -44,6 +47,7 @@ This example:
 4. **Tests flow robustness** with edge cases and different input types
 
 The example flow includes:
+
 - Chat Input component for user messages
 - OpenAI model for processing
 - Chat Output component for responses
@@ -52,23 +56,27 @@ The example flow includes:
 ## Setup
 
 1. **Start Langflow**:
+
    ```bash
    langflow run
    ```
 
 2. **Import the example flow**:
+
    - Open Langflow in your browser (`http://localhost:7860`)
    - Import the flow from `basic_chat_flow.json`
    - Note the Flow ID from the URL or Publish panel
 
 3. **Set up environment variables**:
+
    ```bash
    export LANGFLOW_API_KEY=sk-your-langflow-api-key-here
    export LANGFLOW_FLOW_ID=your-flow-id-here
    export OPENAI_API_KEY=sk-your-openai-key-here
    ```
-   
+
    Or create a `.env` file:
+
    ```bash
    # Copy and customize these values
    LANGFLOW_URL=http://localhost:7860
@@ -78,6 +86,7 @@ The example flow includes:
    ```
 
 4. **Install Python dependencies**:
+
    ```bash
    python3 -m venv venv
    source venv/bin/activate
@@ -127,4 +136,4 @@ You can modify this example by:
 - **Flow not found**: Double-check the Flow ID in your configuration
 - **Model errors**: Ensure your LLM provider API keys are configured in Langflow
 
-For more information about Langflow, visit: https://www.langflow.org/ 
+For more information about Langflow, visit: https://www.langflow.org/
