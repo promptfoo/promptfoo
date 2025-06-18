@@ -142,7 +142,7 @@ export function generateAssertionsCommand(
 ) {
   program
     .command('assertions')
-    .description('Generate additional guardrail assertions')
+    .description('Generate missing subjective/objective assertions')
     .option('-t, --type [type]', 'The type of natural language assertion to generate (pi, g-eval, or llm-rubric)', validateAssertionType, 'pi')
     .requiredOption('-c, --config [path]', 'Path to configuration file. Defaults to promptfooconfig.yaml')
     .option('-o, --output [path]', 'Path to output file. Supports YAML output')
