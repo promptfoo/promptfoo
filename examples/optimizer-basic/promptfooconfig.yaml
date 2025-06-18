@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Variable optimization with prompt optimizer
+description: Variable rewriting with prompt optimizer - completely rewrite variable values to make tests pass
 
 prompts:
   - 'Translate the following to French: {{text}}'
@@ -8,6 +8,7 @@ providers:
   - openai:gpt-4o
 
 tests:
+  # Test 1: Need to find English text that translates to something containing "bonjour"
   - provider:
       id: promptfoo:prompt-optimizer
       config:
@@ -19,6 +20,8 @@ tests:
     assert:
       - type: icontains
         value: bonjour
+  
+  # Test 2: Need to find English text that translates to something containing "matin" (morning)
   - provider:
       id: promptfoo:prompt-optimizer
       config:
@@ -30,6 +33,8 @@ tests:
     assert:
       - type: icontains
         value: matin
+  
+  # Test 3: Need to find English text that translates to something containing "merci" (thank you)
   - provider:
       id: promptfoo:prompt-optimizer
       config:
@@ -41,3 +46,16 @@ tests:
     assert:
       - type: icontains
         value: merci
+  
+  # Test 4: Challenge case - need text that translates to something containing "chat" (cat)
+  - provider:
+      id: promptfoo:prompt-optimizer
+      config:
+        maxTurns: 3
+        targetVariable: text
+        improverModel: openai:gpt-4o
+    vars:
+      text: I like animals
+    assert:
+      - type: icontains
+        value: chat

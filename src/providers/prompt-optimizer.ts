@@ -64,7 +64,10 @@ export class PromptOptimizerProvider implements ApiProvider {
   ): Promise<ProviderResponse> {
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
-
+    
+    // Get the original prompt template from context
+    const promptTemplate = context?.prompt?.raw || prompt;
+    
     const targetProvider = context.originalProvider;
     const improver = await this.getImprover(context);
     const nunjucks = getNunjucksEngine();
@@ -76,24 +79,32 @@ export class PromptOptimizerProvider implements ApiProvider {
       `Target variable "${targetVar}" not found in test vars. Available: ${Object.keys(context.vars).join(', ')}`,
     );
 
+    const originalValue = context.vars[targetVar];
     const currentVars = { ...context.vars };
     let bestVars = { ...currentVars };
     let bestScore = -Infinity;
     let bestOutput = '';
     let stall = 0;
-    const history: { vars: any; output: string; score: number }[] = [];
+    const history: { 
+      iteration: number;
+      vars: any; 
+      output: string; 
+      score: number;
+      reason?: string;
+      success: boolean;
+    }[] = [];
 
     for (let i = 0; i < this.options.maxTurns; i++) {
       // Render prompt with current variables
-      const rendered = nunjucks.renderString(prompt, currentVars);
-
+      const rendered = nunjucks.renderString(promptTemplate, currentVars);
+      
       // Test with current variables
       const resp = await targetProvider.callApi(
         rendered,
         { ...context, vars: currentVars },
         options,
       );
-
+      
       // Run assertions - convert the context.test to the expected format
       const testCase = context.test as TestCase;
       const grading = await runAssertions({
@@ -102,22 +113,24 @@ export class PromptOptimizerProvider implements ApiProvider {
         providerResponse: resp,
         test: testCase,
       });
-
+      
       const score = grading.score;
       const output = String(resp.output || '');
-
-      history.push({ vars: { ...currentVars }, output, score });
-
-      logger.debug(`PromptOptimizer iteration ${i + 1}: score=${score}, pass=${grading.pass}`);
-      logger.debug(`Current ${targetVar}: ${currentVars[targetVar]}`);
-      logger.debug(`Output: ${output}`);
-
+      
+      history.push({ 
+        iteration: i + 1,
+        vars: { ...currentVars }, 
+        output, 
+        score,
+        reason: grading.reason,
+        success: grading.pass,
+      });
+      
       // Check if we've succeeded
       if (grading.pass) {
         bestVars = { ...currentVars };
         bestScore = score;
         bestOutput = output;
-        logger.debug(`PromptOptimizer succeeded on iteration ${i + 1}`);
         break;
       }
 
@@ -130,7 +143,6 @@ export class PromptOptimizerProvider implements ApiProvider {
       } else {
         stall += 1;
         if (stall >= this.options.stallIterations) {
-          logger.debug(`PromptOptimizer stalled after ${stall} iterations`);
           break;
         }
       }
@@ -161,7 +173,7 @@ export class PromptOptimizerProvider implements ApiProvider {
       // Render the improver prompt
       const improverPrompt = nunjucks.renderString(templateStr, {
         targetVariable: targetVar,
-        promptTemplate: prompt,
+        promptTemplate: promptTemplate,
         currentValue: currentVars[targetVar],
         previousOutput: output,
         reason: grading.reason,
@@ -169,12 +181,9 @@ export class PromptOptimizerProvider implements ApiProvider {
         currentPrompt: rendered,
       });
 
-      logger.debug(`PromptOptimizer improver prompt: ${improverPrompt}`);
-
       // Get suggestion from improver
       const improvResp = await improver.callApi(improverPrompt, undefined, options);
       if (improvResp.error) {
-        logger.debug(`PromptOptimizer improver error: ${improvResp.error}`);
         break;
       }
 
@@ -182,24 +191,48 @@ export class PromptOptimizerProvider implements ApiProvider {
       const improvedValue = String(improvResp.output || '').trim();
       if (improvedValue) {
         currentVars[targetVar] = improvedValue;
-        logger.debug(`PromptOptimizer updated ${targetVar} to: ${improvedValue}`);
       } else {
-        logger.debug('PromptOptimizer got empty improvement, stopping');
         break;
       }
     }
 
+    // Update the original context vars with the optimized values
+    if (context.vars) {
+      Object.assign(context.vars, bestVars);
+    }
+
     // Return the final result with the best variables
-    const finalRendered = nunjucks.renderString(prompt, bestVars);
+    const finalRendered = nunjucks.renderString(promptTemplate, bestVars);
+    
+    const optimizationMetadata = {
+      promptOptimizer: {
+        originalValue,
+        optimizedValue: bestVars[targetVar],
+        targetVariable: targetVar,
+        iterations: history.length,
+        finalScore: bestScore,
+        succeeded: history.some(h => h.success),
+        stallIterations: this.options.stallIterations,
+        maxTurns: this.options.maxTurns,
+        history: history.map(h => ({
+          iteration: h.iteration,
+          [targetVar]: h.vars[targetVar],
+          output: h.output,
+          score: h.score,
+          reason: h.reason,
+          success: h.success,
+        })),
+      },
+      // Legacy metadata for backward compatibility
+      optimizationHistory: history,
+      finalVars: bestVars,
+      finalPrompt: finalRendered,
+      optimizedVariable: targetVar,
+    };
 
     return {
       output: bestOutput,
-      metadata: {
-        optimizationHistory: history,
-        finalVars: bestVars,
-        finalPrompt: finalRendered,
-        optimizedVariable: targetVar,
-      },
+      metadata: optimizationMetadata,
     };
   }
 

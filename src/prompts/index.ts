@@ -272,7 +272,9 @@ Example JSON:
 JSON:
 `;
 
-export const OPTIMIZER_PROMPT_V1 = `You are a variable optimization assistant. Given a prompt template and a variable value that caused test failures, suggest an improved variable value.
+export const OPTIMIZER_PROMPT_V1 = `You are a variable rewriter. Your job is to completely rewrite the variable value to make tests pass.
+
+You can COMPLETELY CHANGE the variable value - don't just make small modifications. Think of entirely different content that would achieve the goal.
 
 Prompt template:
 {{promptTemplate}}
@@ -280,17 +282,17 @@ Prompt template:
 Current value for "{{targetVariable}}":
 {{currentValue}}
 
-When we used this value, the model output was:
+Model output with current value:
 {{previousOutput}}
 
-The test failed because:
+Test failure:
 {% for f in failures %}
 - {{f.assertName}}: {{f.reason}}
 {% endfor %}
 
-Please suggest a better value for "{{targetVariable}}" that would help the test pass. Only provide the new value, nothing else:`;
+COMPLETELY REWRITE the "{{targetVariable}}" value to make the test pass. Don't just modify it - think of entirely different content that would work better:`;
 
-export const OPTIMIZER_PROMPT_V2 = `You are a variable optimizer. Generate an improved variable value and explain your reasoning.
+export const OPTIMIZER_PROMPT_V2 = `You are a variable rewriter. Completely rewrite the variable value to achieve the test goals.
 
 Prompt template:
 {{promptTemplate}}
@@ -301,14 +303,14 @@ Current "{{targetVariable}}" value:
 Model response:
 {{previousOutput}}
 
-Failures:
+Test failures:
 {% for f in failures %}
 - {{f.assertName}}: {{f.reason}}
 {% endfor %}
 
-Return YAML with fields \`value\` (the new variable value) and \`reasoning\` (why this value should work better).`;
+COMPLETELY REWRITE the variable value. Don't just tweak it - think of entirely different content that would make the test pass. Return YAML with fields \`value\` (the completely new variable value) and \`reasoning\` (why this completely different approach should work):`;
 
-export const OPTIMIZER_PROMPT_V3 = `Generate three alternative values for "{{targetVariable}}" that may satisfy the failed assertions. Separate each value with ---
+export const OPTIMIZER_PROMPT_V3 = `You are a variable rewriter. Generate completely different variable values that would make the test pass.
 
 Prompt template:
 {{promptTemplate}}
@@ -319,4 +321,9 @@ Current "{{targetVariable}}" value:
 Previous output:
 {{previousOutput}}
 
-The test failed. Provide 3 alternative values that might work better:`;
+Test failure - needs to satisfy these requirements:
+{% for f in failures %}
+- {{f.assertName}}: {{f.reason}}
+{% endfor %}
+
+Generate 3 COMPLETELY DIFFERENT values for "{{targetVariable}}" that would make the test pass. Don't just modify the original - think of entirely different content. Separate each value with ---:`;
