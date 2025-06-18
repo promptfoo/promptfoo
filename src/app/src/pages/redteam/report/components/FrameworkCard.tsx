@@ -38,6 +38,7 @@ interface FrameworkCardProps {
   nonCompliantPlugins: string[];
   sortedNonCompliantPlugins: (plugins: string[]) => string[];
   getPluginPassRate: (plugin: string) => { pass: number; total: number; rate: number };
+  idx: number;
 }
 
 const FrameworkCard: React.FC<FrameworkCardProps> = ({
@@ -49,11 +50,15 @@ const FrameworkCard: React.FC<FrameworkCardProps> = ({
   nonCompliantPlugins,
   sortedNonCompliantPlugins,
   getPluginPassRate,
+  idx,
 }) => {
   const sortedPlugins = sortedNonCompliantPlugins(nonCompliantPlugins);
-
+  const breakInside = idx === 0 ? 'undefined' : 'avoid';
   return (
-    <Card className={`framework-item ${isCompliant ? 'compliant' : 'non-compliant'}`}>
+    <Card
+      className={`framework-item ${isCompliant ? 'compliant' : 'non-compliant'}`}
+      sx={{ pageBreakInside: breakInside }}
+    >
       <CardContent>
         <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
           <Box display="flex" alignItems="center">
@@ -428,7 +433,7 @@ const FrameworkCard: React.FC<FrameworkCardProps> = ({
                 <Typography variant="subtitle2">Framework Results</Typography>
 
                 <Chip
-                  label={`${nonCompliantPlugins.length} / ${Object.keys(categoryStats).filter((plugin) => categoryStats[plugin].total > 0).length} plugins failed`}
+                  label={`${nonCompliantPlugins.length} / ${Object.keys(categoryStats).filter((plugin) => categoryStats[plugin].total > 0).length} failed`}
                   size="small"
                   sx={{
                     backgroundColor: nonCompliantPlugins.length === 0 ? '#4caf50' : '#f44336',

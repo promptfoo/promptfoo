@@ -48,7 +48,7 @@
 
   /* Framework lists flow left to right, top to bottom */
   [class*='FrameworkCompliance'] ul,
-  [class*='FrameworkCompliance'] .plugin-list {
+  [class*='FrameworkCompliance'] {
     columns: 2 !important;
     column-gap: 2rem !important;
     break-inside: avoid !important;

@@ -131,6 +131,8 @@ textarea {
   .MuiBox-root,
   .MuiPaper-root {
     background-color: white !important;
+    box-shadow: none !important;
+    border: none !important;
   }
 
   .MuiContainer-root {

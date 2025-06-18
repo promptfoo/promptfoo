@@ -63,7 +63,7 @@ const RiskCard: React.FC<{
 
   return (
     <Card>
-      <CardContent className="risk-card-container">
+      <CardContent className="risk-card-container" sx={{ pageBreakInside: 'avoid' }}>
         <Grid container spacing={3}>
           <Grid
             item
@@ -173,7 +173,10 @@ const RiskCard: React.FC<{
                         ) : (
                           <CancelIcon className="risk-card-icon-failed" />
                         )}
-                        <ArrowForwardIosIcon className="risk-card-expand-icon" fontSize="small" />
+                        <ArrowForwardIosIcon
+                          className="risk-card-expand-icon print-hide"
+                          fontSize="small"
+                        />
                       </Box>
                     </ListItem>
                   </Tooltip>
