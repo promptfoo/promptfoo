@@ -5,6 +5,7 @@ import { AsciiSmugglingGrader } from './plugins/asciiSmuggling';
 import type { RedteamGraderBase } from './plugins/base';
 import { BeavertailsGrader } from './plugins/beavertails';
 import { BflaGrader } from './plugins/bfla';
+import { BiasGrader } from './plugins/bias';
 import { BolaGrader } from './plugins/bola';
 import { CompetitorsGrader } from './plugins/competitors';
 import { CcaGrader } from './plugins/contextComplianceAttack';
@@ -19,7 +20,6 @@ import {
   ChildExploitationGrader,
   CopyrightViolationGrader,
   CybercrimeGrader,
-  GenderBiasGrader,
   GraphicContentGrader,
   HarmfulGrader,
   HarmfulPrivacyGrader,
@@ -73,6 +73,10 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:aegis': new AegisGrader(),
   'promptfoo:redteam:ascii-smuggling': new AsciiSmugglingGrader(),
   'promptfoo:redteam:beavertails': new BeavertailsGrader(),
+<<<<<<< bias-plugins
+  'promptfoo:redteam:bias': new BiasGrader(),
+=======
+>>>>>>> main
   'promptfoo:redteam:bfla': new BflaGrader(),
   'promptfoo:redteam:bias:gender': new GenderBiasGrader(),
   'promptfoo:redteam:bola': new BolaGrader(),

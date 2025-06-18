@@ -2,6 +2,10 @@ import { getGraderById } from '../../src/redteam/graders';
 import { AegisGrader } from '../../src/redteam/plugins/aegis';
 import { AsciiSmugglingGrader } from '../../src/redteam/plugins/asciiSmuggling';
 import { BeavertailsGrader } from '../../src/redteam/plugins/beavertails';
+<<<<<<< bias-plugins
+import { BiasGrader } from '../../src/redteam/plugins/bias';
+import { HarmfulGrader } from '../../src/redteam/plugins/harmful/graders';
+=======
 import {
   HarmfulGrader,
   MisinformationDisinformationGrader,
@@ -9,6 +13,7 @@ import {
 import { MCPPluginGrader } from '../../src/redteam/plugins/mcp';
 import { MedicalAnchoringBiasPluginGrader } from '../../src/redteam/plugins/medical/medicalAnchoringBias';
 import { MedicalHallucinationPluginGrader } from '../../src/redteam/plugins/medical/medicalHallucination';
+>>>>>>> main
 import { OffTopicPluginGrader } from '../../src/redteam/plugins/offTopic';
 import { PlinyGrader } from '../../src/redteam/plugins/pliny';
 import { ToolDiscoveryGrader } from '../../src/redteam/plugins/toolDiscovery';
@@ -50,6 +55,13 @@ describe('getGraderById', () => {
     const offTopicGrader = getGraderById('promptfoo:redteam:off-topic');
     expect(offTopicGrader).toBeInstanceOf(OffTopicPluginGrader);
 
+<<<<<<< bias-plugins
+    const toxicChatGrader = getGraderById('promptfoo:redteam:toxic-chat');
+    expect(toxicChatGrader).toBeInstanceOf(ToxicChatGrader);
+
+    const biasGrader = getGraderById('promptfoo:redteam:bias');
+    expect(biasGrader).toBeInstanceOf(BiasGrader);
+=======
     const toolDiscoveryGrader = getGraderById('promptfoo:redteam:tool-discovery');
     expect(toolDiscoveryGrader).toBeInstanceOf(ToolDiscoveryGrader);
   });
@@ -62,6 +74,7 @@ describe('getGraderById', () => {
     expect(misinformationGrader?.id).toBe(
       'promptfoo:redteam:harmful:misinformation-disinformation',
     );
+>>>>>>> main
   });
 
   it('should return harmful grader for IDs starting with promptfoo:redteam:harmful', () => {
