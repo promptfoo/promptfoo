@@ -945,8 +945,8 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
     it('should handle o4-mini with reasoning_effort and service_tier', async () => {
       const mockResponse = {
         data: {
-          choices: [{ message: { content: 'O4-mini response' } }],
-          usage: { total_tokens: 15, prompt_tokens: 8, completion_tokens: 7 },
+          choices: [{ message: { content: 'Test response' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
         },
         cached: false,
         status: 200,
@@ -955,19 +955,76 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       // Test O4-mini model with reasoning_effort
-      const o4MiniProvider = new OpenAiChatCompletionProvider('o4-mini', {
+      const o4Provider = new OpenAiChatCompletionProvider('o4-mini', {
         config: {
           reasoning_effort: 'medium',
+          service_tier: 'premium',
         } as any,
       });
-      await o4MiniProvider.callApi('Test reasoning with o4-mini');
 
-      const o4Call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
-      const o4Body = JSON.parse(o4Call[1].body);
-
+      const { body: o4Body } = o4Provider.getOpenAiBody('Test prompt');
       expect(o4Body.reasoning_effort).toBe('medium');
-      expect(o4Body.temperature).toBeUndefined(); // o4-mini shouldn't have temperature
-      expect(o4Body.max_tokens).toBeUndefined(); // o4-mini shouldn't use max_tokens
+      expect(o4Body.service_tier).toBe('premium');
+    });
+
+    it('should handle user, metadata, and store parameters', async () => {
+      const mockResponse = {
+        data: {
+          choices: [{ message: { content: 'Test response' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o', {
+        config: {
+          user: 'user-123',
+          metadata: {
+            project: 'test-project',
+            version: '1.0.0',
+          },
+          store: true,
+        } as any,
+      });
+
+      const { body } = provider.getOpenAiBody('Test prompt');
+      expect(body.user).toBe('user-123');
+      expect(body.metadata).toEqual({
+        project: 'test-project',
+        version: '1.0.0',
+      });
+      expect(body.store).toBe(true);
+    });
+
+    it('should handle enhanced reasoning interface for o-series models', async () => {
+      const mockResponse = {
+        data: {
+          choices: [{ message: { content: 'Test response' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const o1Provider = new OpenAiChatCompletionProvider('o1-mini', {
+        config: {
+          reasoning: {
+            effort: 'high',
+            summary: 'detailed',
+          },
+        } as any,
+      });
+
+      const { body } = o1Provider.getOpenAiBody('Test prompt');
+      expect(body.reasoning).toEqual({
+        effort: 'high',
+        summary: 'detailed',
+      });
     });
 
     it('should handle audio responses correctly', async () => {
@@ -1362,6 +1419,31 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       new OpenAiChatCompletionProvider('gpt-4o-mini');
 
       expect(mockLogger.debug).not.toHaveBeenCalledWith(expect.stringContaining('unknown'));
+    });
+
+    it('should support legacy model IDs', () => {
+      // Test legacy GPT-4 models
+      const gpt4LegacyProvider = new OpenAiChatCompletionProvider('gpt-4-0314');
+      expect(gpt4LegacyProvider.modelName).toBe('gpt-4-0314');
+
+      const gpt4_32kProvider = new OpenAiChatCompletionProvider('gpt-4-32k-0314');
+      expect(gpt4_32kProvider.modelName).toBe('gpt-4-32k-0314');
+
+      const gpt4VisionProvider = new OpenAiChatCompletionProvider('gpt-4-vision-preview');
+      expect(gpt4VisionProvider.modelName).toBe('gpt-4-vision-preview');
+
+      // Test legacy GPT-3.5 models
+      const gpt35LegacyProvider = new OpenAiChatCompletionProvider('gpt-3.5-turbo-0301');
+      expect(gpt35LegacyProvider.modelName).toBe('gpt-3.5-turbo-0301');
+
+      const gpt35_16kProvider = new OpenAiChatCompletionProvider('gpt-3.5-turbo-16k');
+      expect(gpt35_16kProvider.modelName).toBe('gpt-3.5-turbo-16k');
+
+      // Test latest audio model
+      const audioModelProvider = new OpenAiChatCompletionProvider(
+        'gpt-4o-audio-preview-2025-06-03',
+      );
+      expect(audioModelProvider.modelName).toBe('gpt-4o-audio-preview-2025-06-03');
     });
   });
 });

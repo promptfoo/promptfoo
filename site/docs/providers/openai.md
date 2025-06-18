@@ -74,18 +74,21 @@ Supported parameters include:
 | `functionToolCallbacks` | A map of function tool names to function callbacks. Each callback should accept a string and return a string or a `Promise<string>`.                                                                                                                                                              |
 | `headers`               | Additional headers to include in the request.                                                                                                                                                                                                                                                     |
 | `max_tokens`            | Controls the maximum length of the output in tokens. Not valid for reasoning models (o1, o3, o3-pro, o3-mini, o4-mini).                                                                                                                                                                           |
+| `metadata`              | Key-value pairs for request tagging and organization.                                                                                                                                                                                                                                             |
 | `organization`          | Your OpenAI organization key.                                                                                                                                                                                                                                                                     |
 | `passthrough`           | A flexible object that allows passing arbitrary parameters directly to the OpenAI API request body. Useful for experimental, new, or provider-specific parameters not yet explicitly supported in promptfoo. This parameter is merged into the final API request and can override other settings. |
 | `presence_penalty`      | Applies a penalty to new tokens (tokens that haven't appeared in the input), making them less likely to appear in the output.                                                                                                                                                                     |
+| `reasoning`             | Enhanced reasoning configuration for o-series models. Object with `effort` ('low', 'medium', 'high') and optional `summary` ('auto', 'concise', 'detailed') fields.                                                                                                                               |
 | `response_format`       | Specifies the desired output format, including `json_object` and `json_schema`. Can also be specified in the prompt config. If specified in both, the prompt config takes precedence.                                                                                                             |
 | `seed`                  | Seed used for deterministic output.                                                                                                                                                                                                                                                               |
 | `stop`                  | Defines a list of tokens that signal the end of the output.                                                                                                                                                                                                                                       |
+| `store`                 | Whether to store the conversation for future retrieval (boolean).                                                                                                                                                                                                                                 |
 | `temperature`           | Controls the randomness of the AI's output. Higher values (close to 1) make the output more random, while lower values (close to 0) make it more deterministic.                                                                                                                                   |
 | `tool_choice`           | Controls whether the AI should use a tool. See [OpenAI Tools documentation](https://platform.openai.com/docs/api-reference/chat/create#chat-create-tools)                                                                                                                                         |
 | `tools`                 | Allows you to define custom tools. See [OpenAI Tools documentation](https://platform.openai.com/docs/api-reference/chat/create#chat-create-tools)                                                                                                                                                 |
 | `top_p`                 | Controls the nucleus sampling, a method that helps control the randomness of the AI's output.                                                                                                                                                                                                     |
+| `user`                  | A unique identifier representing your end-user, for tracking and abuse prevention.                                                                                                                                                                                                                |
 | `max_completion_tokens` | Maximum number of tokens to generate for reasoning models (o1, o3, o3-pro, o3-mini, o4-mini).                                                                                                                                                                                                     |
-| `reasoning_effort`      | Allows you to control how long the reasoning model thinks before answering, 'low', 'medium' or 'high'.                                                                                                                                                                                            |
 
 Here are the type declarations of `config` parameters:
 
@@ -95,7 +98,10 @@ interface OpenAiConfig {
   temperature?: number;
   max_tokens?: number;
   max_completion_tokens?: number;
-  reasoning_effort?: 'low' | 'medium' | 'high';
+  reasoning?: {
+    effort?: 'low' | 'medium' | 'high' | null;
+    summary?: 'auto' | 'concise' | 'detailed' | null;
+  };
   top_p?: number;
   frequency_penalty?: number;
   presence_penalty?: number;
@@ -107,6 +113,9 @@ interface OpenAiConfig {
   response_format?: { type: 'json_object' | 'json_schema'; json_schema?: object };
   stop?: string[];
   seed?: number;
+  user?: string;
+  metadata?: Record<string, string>;
+  store?: boolean;
   passthrough?: object;
 
   // Function tool callbacks
@@ -176,14 +185,15 @@ When using reasoning models, there are important differences in how tokens are h
 providers:
   - id: openai:o1
     config:
-      reasoning_effort: 'medium' # Can be "low", "medium", or "high"
+      reasoning:
+        effort: 'medium' # Can be "low", "medium", or "high"
       max_completion_tokens: 25000 # Can also be set via OPENAI_MAX_COMPLETION_TOKENS env var
 ```
 
 Unlike standard models that use `max_tokens`, reasoning models use:
 
 - `max_completion_tokens` to control the total tokens generated (both reasoning and visible output)
-- `reasoning_effort` to control how thoroughly the model thinks before responding (low, medium, high)
+- `reasoning` to control how thoroughly the model thinks before responding (with `effort`: low, medium, high)
 
 #### How Reasoning Models Work
 
@@ -608,18 +618,18 @@ npx promptfoo@latest eval -c promptfooconfig.external-format.yaml
 
 These OpenAI-related environment variables are supported:
 
-| Variable                       | Description                                                                                                      |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
-| `OPENAI_TEMPERATURE`           | Temperature model parameter, defaults to 0. Not supported by reasoning models.                                   |
-| `OPENAI_MAX_TOKENS`            | Max_tokens model parameter, defaults to 1024. Not supported by reasoning models.                                 |
-| `OPENAI_MAX_COMPLETION_TOKENS` | Max_completion_tokens model parameter, defaults to 1024. Used by reasoning models.                               |
-| `OPENAI_REASONING_EFFORT`      | Reasoning_effort parameter for reasoning models, defaults to "medium". Options are "low", "medium", or "high".   |
-| `OPENAI_API_HOST`              | The hostname to use (useful if you're using an API proxy). Takes priority over `OPENAI_BASE_URL`.                |
-| `OPENAI_BASE_URL`              | The base URL (protocol + hostname + port) to use, this is a more general option than `OPENAI_API_HOST`.          |
-| `OPENAI_API_KEY`               | OpenAI API key.                                                                                                  |
-| `OPENAI_ORGANIZATION`          | The OpenAI organization key to use.                                                                              |
-| `PROMPTFOO_DELAY_MS`           | Number of milliseconds to delay between API calls. Useful if you are hitting OpenAI rate limits (defaults to 0). |
-| `PROMPTFOO_REQUEST_BACKOFF_MS` | Base number of milliseconds to backoff and retry if a request fails (defaults to 5000).                          |
+| Variable                       | Description                                                                                                                                                 |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OPENAI_TEMPERATURE`           | Temperature model parameter, defaults to 0. Not supported by reasoning models.                                                                              |
+| `OPENAI_MAX_TOKENS`            | Max_tokens model parameter, defaults to 1024. Not supported by reasoning models.                                                                            |
+| `OPENAI_MAX_COMPLETION_TOKENS` | Max_completion_tokens model parameter, defaults to 1024. Used by reasoning models.                                                                          |
+| `OPENAI_REASONING_EFFORT`      | Reasoning effort parameter for reasoning models, defaults to "medium". Options are "low", "medium", or "high". Maps to `reasoning.effort` config parameter. |
+| `OPENAI_API_HOST`              | The hostname to use (useful if you're using an API proxy). Takes priority over `OPENAI_BASE_URL`.                                                           |
+| `OPENAI_BASE_URL`              | The base URL (protocol + hostname + port) to use, this is a more general option than `OPENAI_API_HOST`.                                                     |
+| `OPENAI_API_KEY`               | OpenAI API key.                                                                                                                                             |
+| `OPENAI_ORGANIZATION`          | The OpenAI organization key to use.                                                                                                                         |
+| `PROMPTFOO_DELAY_MS`           | Number of milliseconds to delay between API calls. Useful if you are hitting OpenAI rate limits (defaults to 0).                                            |
+| `PROMPTFOO_REQUEST_BACKOFF_MS` | Base number of milliseconds to backoff and retry if a request fails (defaults to 5000).                                                                     |
 
 ## Evaluating assistants
 
@@ -1089,7 +1099,8 @@ When using reasoning models like `o1`, `o1-pro`, `o3`, `o3-pro`, `o3-mini`, or `
 providers:
   - id: openai:responses:o3
     config:
-      reasoning_effort: 'medium' # Can be "low", "medium", or "high"
+      reasoning:
+        effort: 'medium' # Can be "low", "medium", or "high"
       max_output_tokens: 1000
 ```
 
@@ -1119,12 +1130,14 @@ Example configuration:
 providers:
   - id: openai:responses:o3
     config:
-      reasoning_effort: 'high'
+      reasoning:
+        effort: 'high'
       max_output_tokens: 2000
 
   - id: openai:responses:o4-mini
     config:
-      reasoning_effort: 'medium'
+      reasoning:
+        effort: 'medium'
       max_output_tokens: 1000
 ```
 

@@ -151,6 +151,39 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         : {}),
     };
 
+    // Handle reasoning_effort and reasoning parameters for o-series models
+    if (
+      config.reasoning_effort &&
+      (this.modelName.startsWith('o1') ||
+        this.modelName.startsWith('o3') ||
+        this.modelName.startsWith('o4'))
+    ) {
+      body.reasoning_effort = config.reasoning_effort;
+    }
+
+    if (
+      config.reasoning &&
+      (this.modelName.startsWith('o1') ||
+        this.modelName.startsWith('o3') ||
+        this.modelName.startsWith('o4'))
+    ) {
+      body.reasoning = config.reasoning;
+    }
+
+    // Add other basic parameters
+    if (config.service_tier) {
+      body.service_tier = config.service_tier;
+    }
+    if (config.user) {
+      body.user = config.user;
+    }
+    if (config.metadata) {
+      body.metadata = config.metadata;
+    }
+    if (config.store !== undefined) {
+      body.store = config.store;
+    }
+
     return { body, config };
   }
 
