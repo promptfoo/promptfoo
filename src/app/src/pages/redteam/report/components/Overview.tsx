@@ -34,10 +34,10 @@ const BACKGROUND_COLORS = {
 };
 
 const DARK_MODE_BACKGROUND_COLORS = {
-  [Severity.Critical]: '#1a1a1a',
-  [Severity.High]: '#1a1a1a',
-  [Severity.Medium]: '#1a1a1a',
-  [Severity.Low]: '#1a1a1a',
+  [Severity.Critical]: '#2d1b1e',
+  [Severity.High]: '#2d251b',
+  [Severity.Medium]: '#2d2a1b',
+  [Severity.Low]: '#1b2d20',
 };
 
 const SECONDARY_TEXT_COLORS = {
@@ -103,7 +103,7 @@ const Overview: React.FC<OverviewProps> = ({ categoryStats, plugins }) => {
                   },
                   (theme) =>
                     theme.applyStyles('dark', {
-                      color: PRIMARY_TEXT_COLORS[severity],
+                      color: DARK_MODE_SECONDARY_TEXT_COLORS[severity],
                     }),
                 ]}
               >
