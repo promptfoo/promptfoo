@@ -6,6 +6,8 @@ import {
   calculateImageCost,
   callOpenAiImageApi,
   processApiResponse,
+  isContentFilterError,
+  formatContentFilterError,
   DALLE2_COSTS,
   DALLE3_COSTS,
 } from '../../../src/providers/openai/image';
@@ -340,6 +342,104 @@ describe('OpenAI Image Provider Functions', () => {
       expect(result).toHaveProperty('error');
       expect(result.error).toContain('API error:');
       expect(mockDeleteFromCache).toHaveBeenCalledWith();
+    });
+  });
+
+  describe('isContentFilterError', () => {
+    it('should return true for content_policy_violation error code', () => {
+      const data = {
+        error: {
+          code: 'content_policy_violation',
+          message: 'Content violates policy',
+        },
+      };
+      expect(isContentFilterError(data)).toBe(true);
+    });
+
+    it('should return true for content_filter error code', () => {
+      const data = {
+        error: {
+          code: 'content_filter',
+          message: 'Content filtered',
+        },
+      };
+      expect(isContentFilterError(data)).toBe(true);
+    });
+
+    it('should return true for content_policy_violation error type', () => {
+      const data = {
+        error: {
+          type: 'content_policy_violation',
+          message: 'Policy violation',
+        },
+      };
+      expect(isContentFilterError(data)).toBe(true);
+    });
+
+    it('should return false for non-content filter errors', () => {
+      const data = {
+        error: {
+          code: 'invalid_request',
+          message: 'Invalid request',
+        },
+      };
+      expect(isContentFilterError(data)).toBe(false);
+    });
+
+    it('should return false when no error is present', () => {
+      const data = {
+        data: [{ url: 'https://example.com/image.png' }],
+      };
+      expect(isContentFilterError(data)).toBe(false);
+    });
+
+    it('should return false for empty data', () => {
+      expect(isContentFilterError({})).toBe(false);
+    });
+
+    it('should return false for null/undefined data', () => {
+      expect(isContentFilterError(null)).toBe(false);
+      expect(isContentFilterError(undefined)).toBe(false);
+    });
+  });
+
+  describe('formatContentFilterError', () => {
+    it('should format error with message', () => {
+      const data = {
+        error: {
+          code: 'content_policy_violation',
+          message: 'Your request was rejected by our safety system',
+        },
+      };
+      const result = formatContentFilterError(data);
+      expect(result).toBe('Content filtered: Your request was rejected by our safety system');
+    });
+
+    it('should use default message when no message is present', () => {
+      const data = {
+        error: {
+          code: 'content_filter',
+        },
+      };
+      const result = formatContentFilterError(data);
+      expect(result).toBe('Content filtered: Content policy violation detected');
+    });
+
+    it('should handle empty error message', () => {
+      const data = {
+        error: {
+          code: 'content_policy_violation',
+          message: '',
+        },
+      };
+      const result = formatContentFilterError(data);
+      expect(result).toBe('Content filtered: Content policy violation detected');
+    });
+
+    it('should handle missing error object', () => {
+      const data = {};
+      const result = formatContentFilterError(data);
+      expect(result).toBe('Content filtered: Content policy violation detected');
     });
   });
 });

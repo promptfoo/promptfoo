@@ -103,6 +103,26 @@ export function formatOutput(
   }
 }
 
+export function isContentFilterError(data: any): boolean {
+  if (!data || !data.error) {
+    return false;
+  }
+
+  const errorCode = data.error.code;
+  const errorType = data.error.type;
+
+  return (
+    errorCode === 'content_policy_violation' ||
+    errorCode === 'content_filter' ||
+    errorType === 'content_policy_violation'
+  );
+}
+
+export function formatContentFilterError(data: any): string {
+  const baseMessage = data?.error?.message || 'Content policy violation detected';
+  return `Content filtered: ${baseMessage}`;
+}
+
 export function prepareRequestBody(
   model: string,
   prompt: string,
@@ -180,6 +200,19 @@ export async function processApiResponse(
 ): Promise<ProviderResponse> {
   if (data.error) {
     await data?.deleteFromCache?.();
+
+    // Check if this is a content filter error
+    if (isContentFilterError(data)) {
+      return {
+        error: formatContentFilterError(data),
+        metadata: {
+          contentFiltered: true,
+          errorType: 'content_filter',
+          originalError: data.error,
+        },
+      };
+    }
+
     return {
       error: formatOpenAiError(data),
     };
@@ -274,6 +307,28 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
       ));
 
       if (status < 200 || status >= 300) {
+        // Handle 400 Bad Request specifically for content filter detection
+        if (status === 400) {
+          let errorData;
+          try {
+            // Try to parse the error response to check for content filter codes
+            errorData = typeof data === 'string' ? JSON.parse(data) : data;
+            if (isContentFilterError(errorData)) {
+              return {
+                error: formatContentFilterError(errorData),
+                metadata: {
+                  contentFiltered: true,
+                  errorType: 'content_filter',
+                  statusCode: status,
+                  originalError: errorData.error,
+                },
+              };
+            }
+          } catch (parseError) {
+            // If JSON parsing fails, fall through to generic error handling
+          }
+        }
+
         return {
           error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
         };

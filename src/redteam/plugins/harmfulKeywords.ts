@@ -1,5 +1,12 @@
 import dedent from 'dedent';
-import type { ApiProvider, Assertion, AtomicTestCase, GradingResult, TestCase, PluginConfig } from '../../types';
+import type {
+  ApiProvider,
+  Assertion,
+  AtomicTestCase,
+  GradingResult,
+  TestCase,
+  PluginConfig,
+} from '../../types';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
@@ -58,7 +65,7 @@ export class HarmfulKeywordsPlugin extends RedteamPluginBase {
     config: HarmfulKeywordsPluginConfig,
   ) {
     super(provider, purpose, injectVar);
-    
+
     // Load keywords
     if (config.keywords) {
       const loadedKeywords = maybeLoadFromExternalFile(config.keywords);
@@ -66,13 +73,13 @@ export class HarmfulKeywordsPlugin extends RedteamPluginBase {
     } else {
       this.keywords = DEFAULT_HARMFUL_KEYWORDS;
     }
-    
+
     // Set approach
     this.approach = config.approach || 'both';
-    
+
     // Set templates
     this.templates = config.templates || DEFAULT_MINIMAL_TEMPLATES;
-    
+
     invariant(this.keywords.length > 0, 'HarmfulKeywordsPlugin requires at least one keyword');
   }
 
@@ -236,4 +243,4 @@ export class HarmfulKeywordsGrader extends RedteamGraderBase {
       undefined,
     );
   }
-} 
+}

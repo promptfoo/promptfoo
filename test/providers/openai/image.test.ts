@@ -469,4 +469,194 @@ describe('OpenAiImageProvider', () => {
       );
     });
   });
+
+  describe('Content filter handling', () => {
+    it('should handle content_policy_violation errors', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKey: 'test-key' },
+      });
+
+      const contentFilterResponse = {
+        data: {
+          error: {
+            code: 'content_policy_violation',
+            message: 'Your request was rejected as a result of our safety system.',
+            type: 'invalid_request_error',
+          },
+        },
+        cached: false,
+        status: 400,
+        statusText: 'Bad Request',
+      };
+
+      jest.mocked(fetchWithCache).mockResolvedValue(contentFilterResponse);
+
+      const result = await provider.callApi('Generate inappropriate content');
+
+      expect(result).toHaveProperty('error');
+      expect(result.error).toContain('Content filtered:');
+      expect(result.error).toContain('safety system');
+      expect(result).toHaveProperty('metadata');
+      expect(result.metadata?.contentFiltered).toBe(true);
+      expect(result.metadata?.errorType).toBe('content_filter');
+      expect(result.metadata?.statusCode).toBe(400);
+    });
+
+    it('should handle content_filter error codes', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKey: 'test-key' },
+      });
+
+      const contentFilterResponse = {
+        data: {
+          error: {
+            code: 'content_filter',
+            message: 'Content filtered due to policy violation.',
+            type: 'invalid_request_error',
+          },
+        },
+        cached: false,
+        status: 400,
+        statusText: 'Bad Request',
+      };
+
+      jest.mocked(fetchWithCache).mockResolvedValue(contentFilterResponse);
+
+      const result = await provider.callApi('Generate inappropriate content');
+
+      expect(result).toHaveProperty('error');
+      expect(result.error).toContain('Content filtered:');
+      expect(result.metadata?.contentFiltered).toBe(true);
+      expect(result.metadata?.errorType).toBe('content_filter');
+    });
+
+    it('should handle content_policy_violation error types', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKey: 'test-key' },
+      });
+
+      const contentFilterResponse = {
+        data: {
+          error: {
+            type: 'content_policy_violation',
+            message: 'The request violates our content policy.',
+          },
+        },
+        cached: false,
+        status: 400,
+        statusText: 'Bad Request',
+      };
+
+      jest.mocked(fetchWithCache).mockResolvedValue(contentFilterResponse);
+
+      const result = await provider.callApi('Generate inappropriate content');
+
+      expect(result).toHaveProperty('error');
+      expect(result.error).toContain('Content filtered:');
+      expect(result.metadata?.contentFiltered).toBe(true);
+      expect(result.metadata?.errorType).toBe('content_filter');
+    });
+
+    it('should handle content filter errors in HTTP status response', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKey: 'test-key' },
+      });
+
+      const contentFilterErrorString = JSON.stringify({
+        error: {
+          code: 'content_policy_violation',
+          message: 'Content filtered due to safety policies.',
+        },
+      });
+
+      jest.mocked(fetchWithCache).mockResolvedValue({
+        data: contentFilterErrorString,
+        cached: false,
+        status: 400,
+        statusText: 'Bad Request',
+      });
+
+      const result = await provider.callApi('Generate inappropriate content');
+
+      expect(result).toHaveProperty('error');
+      expect(result.error).toContain('Content filtered:');
+      expect(result.metadata?.contentFiltered).toBe(true);
+      expect(result.metadata?.errorType).toBe('content_filter');
+      expect(result.metadata?.statusCode).toBe(400);
+    });
+
+    it('should handle non-content-filter 400 errors normally', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKey: 'test-key' },
+      });
+
+      const normalErrorResponse = {
+        data: {
+          error: {
+            code: 'invalid_request',
+            message: 'Invalid request format.',
+          },
+        },
+        cached: false,
+        status: 400,
+        statusText: 'Bad Request',
+      };
+
+      jest.mocked(fetchWithCache).mockResolvedValue(normalErrorResponse);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toHaveProperty('error');
+      expect(result.error).not.toContain('Content filtered:');
+      expect(result.error).toContain('API error: 400 Bad Request');
+      expect(result).not.toHaveProperty('metadata');
+    });
+
+    it('should handle malformed JSON in 400 error responses', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKey: 'test-key' },
+      });
+
+      jest.mocked(fetchWithCache).mockResolvedValue({
+        data: 'Invalid JSON response',
+        cached: false,
+        status: 400,
+        statusText: 'Bad Request',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toHaveProperty('error');
+      expect(result.error).toContain('API error: 400 Bad Request');
+      expect(result.error).toContain('Invalid JSON response');
+    });
+
+    it('should handle content filter errors in response processing', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKey: 'test-key' },
+      });
+
+      const contentFilterResponse = {
+        data: {
+          error: {
+            code: 'content_policy_violation',
+            message: 'Content violates safety guidelines.',
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+
+      jest.mocked(fetchWithCache).mockResolvedValue(contentFilterResponse);
+
+      const result = await provider.callApi('Generate inappropriate content');
+
+      expect(result).toHaveProperty('error');
+      expect(result.error).toContain('Content filtered:');
+      expect(result.metadata?.contentFiltered).toBe(true);
+      expect(result.metadata?.errorType).toBe('content_filter');
+      expect(result.metadata?.originalError).toEqual(contentFilterResponse.data.error);
+    });
+  });
 });
