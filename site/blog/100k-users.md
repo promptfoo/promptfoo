@@ -8,7 +8,7 @@ date: 2025-06-10
 
 # Celebrating 100,000 Users: Promptfoo's Journey and the Shift to Red Teaming
 
-We're thrilled to announce that promptfoo now has over **100,000** users! This milestone reflects our incredible community of developers, enterprises, and AI enthusiasts who trust us to help build reliable and secure AI applications.
+We're thrilled to announce that Promptfoo now has over **100,000** users! This milestone reflects our incredible community of developers, enterprises, and AI enthusiasts who trust us to help build reliable and secure AI applications.
 
 Promptfoo was born out of a simple idea: prompt engineering should be systematic and measurable. Since our first open-source release in 2023, we've focused on giving developers the tools to evaluate models and prompts with confidence. Along the way, we discovered that happy path testing wasn't enough—teams also needed a way to proactively identify vulnerabilities. That realization sparked our deep investment in AI red teaming and GenAI Application Security.
 
@@ -41,7 +41,7 @@ These partnerships have helped educate thousands of developers while validating 
 
 ## Where We Stand Today
 
-Promptfoo is now trusted by individual developers, startups, and dozens of Fortune 500 companies. Our users rely on promptfoo to:
+Promptfoo is now trusted by individual developers, startups, and dozens of Fortune 500 companies. Our users rely on Promptfoo to:
 
 - Test prompts across multiple LLM providers
 - Perform red teaming to detect vulnerabilities
@@ -59,7 +59,7 @@ Reaching 100,000 users is just the beginning. We are rapidly scaling our team an
 - **Democratizing advanced AI security** — Making red teaming techniques accessible to every builder
 - **Enhanced agent and multi-agent testing capabilities** — Deeper support for simulating complex agent interactions and security scenarios
 - **Next-generation user experience** — More automation around vulnerability detection and shifting security left in the development process
-- **Expanding coverage** — As new models, modalities, APIs, and attacks emerge, promptfoo will continue to support them so your applications stay protected
+- **Expanding coverage** — As new models, modalities, APIs, and attacks emerge, Promptfoo will continue to support them so your applications stay protected
 
 ## Join Us and Get Involved
 

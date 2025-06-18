@@ -1,3 +1,4 @@
+import { formatToolsAsJSDocs } from '@app/utils/discovery';
 import ConstructionIcon from '@mui/icons-material/Construction';
 import DangerousIcon from '@mui/icons-material/Dangerous';
 import FlagIcon from '@mui/icons-material/Flag';
@@ -13,17 +14,6 @@ import {
   Paper,
 } from '@mui/material';
 import { type TargetPurposeDiscoveryResult } from '@promptfoo/redteam/commands/discover';
-
-// Type definitions for better type safety
-interface Tool {
-  name: string;
-  description: string;
-  arguments?: Array<{
-    name: string;
-    description: string;
-    type: string;
-  }>;
-}
 
 const Row = ({ label, value }: { label: React.ReactNode; value: React.ReactNode }) => {
   return (
@@ -44,35 +34,6 @@ const Row = ({ label, value }: { label: React.ReactNode; value: React.ReactNode 
       <TableCell sx={{ padding: 3 }}>{value}</TableCell>
     </TableRow>
   );
-};
-
-const formatToolsAsJSDocs = (tools: (Tool | null)[] | null | undefined): string => {
-  if (!tools || !Array.isArray(tools)) {
-    return '';
-  }
-
-  return tools
-    .filter((tool): tool is Tool => tool !== null) // Filter out null tools
-    .map((tool) => {
-      const params = tool.arguments?.map((arg) => `${arg.name}: ${arg.type}`).join(', ') || '';
-
-      // Build JSDoc comment
-      let jsDoc = '/**\n';
-      jsDoc += ` * ${tool.description}\n`;
-
-      // Add parameter descriptions
-      if (tool.arguments && tool.arguments.length > 0) {
-        tool.arguments.forEach((arg) => {
-          jsDoc += ` * @param {${arg.type}} ${arg.name} - ${arg.description}\n`;
-        });
-      }
-
-      jsDoc += ' */\n';
-      jsDoc += `${tool.name}(${params})`;
-
-      return jsDoc;
-    })
-    .join('\n\n');
 };
 
 export default function DiscoveredInformation({

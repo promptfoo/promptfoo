@@ -13,6 +13,8 @@ author: 'Steven Klein, Principal Engineer at Promptfoo'
 
 Early red teaming tools and research started with jailbreaks like "Ignore all previous instructions", and static lists of harmful prompts. At Promptfoo we took those ideas a step forward by dynamically generating attacks based on the context of the target application.
 
+<!-- truncate -->
+
 **Existing attack architecture**
 
 ![Existing Attack Architecture](/img/blog/summer-2025-new-redteam-agent/existing_redteam_flow.jpg)

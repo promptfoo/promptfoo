@@ -848,7 +848,7 @@ export class HttpProvider implements ApiProvider {
       `[HTTP Provider]: Calling ${url} with config: ${safeJsonStringify(renderedConfig)}`,
     );
 
-    const response = await (context?.fetchWithCache ?? fetchWithCache)(
+    const response = await fetchWithCache(
       url,
       {
         method: renderedConfig.method,
@@ -861,7 +861,7 @@ export class HttpProvider implements ApiProvider {
       },
       REQUEST_TIMEOUT_MS,
       'text',
-      context?.debug,
+      context?.bustCache ?? context?.debug,
       this.config.maxRetries,
     );
 
@@ -950,7 +950,7 @@ export class HttpProvider implements ApiProvider {
     logger.debug(
       `[HTTP Provider]: Calling ${url} with raw request: ${parsedRequest.method}  ${safeJsonStringify(parsedRequest.body)} \n headers: ${safeJsonStringify(parsedRequest.headers)}`,
     );
-    const response = await (context?.fetchWithCache ?? fetchWithCache)(
+    const response = await fetchWithCache(
       url,
       {
         method: parsedRequest.method,

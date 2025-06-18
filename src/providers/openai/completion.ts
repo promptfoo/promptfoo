@@ -69,7 +69,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     let data,
       cached = false;
     try {
-      ({ data, cached } = (await (context?.fetchWithCache ?? fetchWithCache)(
+      ({ data, cached } = (await fetchWithCache(
         `${this.getApiUrl()}/completions`,
         {
           method: 'POST',
@@ -82,6 +82,8 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
+        'json',
+        context?.bustCache ?? context?.debug,
       )) as unknown as any);
     } catch (err) {
       logger.error(`API call error: ${String(err)}`);

@@ -174,7 +174,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     let data, status, statusText;
     let cached = false;
     try {
-      ({ data, cached, status, statusText } = await (context?.fetchWithCache ?? fetchWithCache)(
+      ({ data, cached, status, statusText } = await fetchWithCache(
         `${this.getApiUrl()}/chat/completions`,
         {
           method: 'POST',
@@ -187,6 +187,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
+        'json',
+        context?.bustCache ?? context?.debug,
       ));
 
       if (status < 200 || status >= 300) {

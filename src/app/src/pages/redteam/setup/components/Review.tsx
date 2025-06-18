@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useState, useEffect } from 'react';
+import Code from '@app/components/Code';
 import { useEmailVerification } from '@app/hooks/useEmailVerification';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
@@ -646,19 +647,7 @@ export default function Review() {
             Save your configuration and run it from the command line. Full control over the
             evaluation process, good for larger scans:
           </Typography>
-          <Box
-            component="pre"
-            sx={{
-              p: 2,
-              mb: 2,
-              backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
-              borderRadius: 1,
-              fontFamily: 'monospace',
-              fontSize: '0.875rem',
-            }}
-          >
-            promptfoo redteam run
-          </Box>
+          <Code>promptfoo redteam run</Code>
           <Stack spacing={2}>
             <Box>
               <Button

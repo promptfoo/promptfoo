@@ -414,6 +414,8 @@ describe('AzureChatCompletionProvider', () => {
           }),
         }),
         expect.any(Number),
+        'json',
+        undefined,
       );
     });
   });

@@ -11,7 +11,7 @@ Assertions are _optional_. Many people get value out of reviewing outputs manual
 
 ## Example
 
-Let's imagine we're building an app that does language translation. This config runs each prompt through GPT-3.5 and Gemini, substituting `language` and `input` variables:
+Let's imagine we're building an app that does language translation. This config runs each prompt through GPT-4.1 and Gemini, substituting `language` and `input` variables:
 
 ```yaml
 prompts:

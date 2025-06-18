@@ -164,7 +164,7 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
     let data,
       cached = false;
     try {
-      ({ data, cached } = (await (context?.fetchWithCache ?? fetchWithCache)(
+      ({ data, cached } = (await fetchWithCache(
         `${this.getApiUrl()}/v1beta3/models/${
           this.modelName
         }:generateMessage?key=${this.getApiKey()}`,
@@ -178,7 +178,7 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
         },
         REQUEST_TIMEOUT_MS,
         'json',
-        false,
+        context?.bustCache ?? context?.debug,
       )) as unknown as any);
     } catch (err) {
       return {
@@ -281,7 +281,7 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
     let data;
     let cached = false;
     try {
-      ({ data, cached } = (await (context?.fetchWithCache ?? fetchWithCache)(
+      ({ data, cached } = (await fetchWithCache(
         `${this.getApiUrl()}/${apiVersion}/models/${
           this.modelName
         }:generateContent?key=${this.getApiKey()}`,
