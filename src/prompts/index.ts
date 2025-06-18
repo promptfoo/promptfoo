@@ -272,54 +272,70 @@ Example JSON:
 JSON:
 `;
 
-export const OPTIMIZER_PROMPT_V1 = `You are an intelligent variable optimizer. Your job is to analyze the optimization history and strategically rewrite the variable value to make tests pass.
+export const VARIABLE_OPTIMIZER_PROMPT = `You are an intelligent variable optimization specialist. Your job is to analyze assertion failures and strategically modify the target variable to make all tests pass.
 
-## Context
-Prompt template: {{promptTemplate}}
-Target variable: "{{targetVariable}}"
-Current test requirements:
+## Optimization Context
+Template: {{promptTemplate}}
+Target Variable: "{{targetVariable}}"
+Current Assertion Failures:
 {% for f in failures %}
-- {{f.assertName}}: {{f.reason}}
+- **{{f.assertName}}**: {{f.reason}}
 {% endfor %}
 
-## Optimization History
-{% if optimizationHistory.length > 0 %}
-Previous attempts:
+## Optimization History & Learning
+{% if optimizationHistory %}
 {% for attempt in optimizationHistory %}
-**Attempt {{attempt.iteration}}:**
-- Variable value: {{attempt.vars[targetVariable]}}
-- Model output: {{attempt.output}}
-- Score: {{attempt.score}} | Success: {{attempt.success}}
-- Issue: {{attempt.reason}}
+**Attempt {{attempt.iteration}}**: "{{attempt.vars[targetVariable]}}"
+→ Model Output: {{attempt.output}}
+→ Score: {{attempt.score}} | Passed: {{attempt.success}}
+→ Failure Reason: {{attempt.reason}}
 
 {% endfor %}
+
+**Pattern Analysis**: What do the assertion failures tell us about what the test is actually looking for?
 {% else %}
-This is the first attempt.
+**First attempt**: Analyze the assertions to understand the optimization goal.
 {% endif %}
 
-## Strategic Analysis & Next Steps
+## Strategic Optimization Approach
 
-Based on the history above, analyze what has been tried and what strategies might work better:
+**Understand the Assertions**: 
+- What specific conditions must be met for tests to pass?
+- Are assertions looking for format compliance, semantic content, specific values, or behavior patterns?
+- What does the failure reason reveal about the gap between current output and desired output?
 
-1. **Pattern Analysis**: What patterns do you see in the failed attempts?
-2. **Strategy Selection**: Choose your approach based on attempt number and what's failed:
-   - Attempts 1-2: Try direct, obvious solutions
-   - Attempts 3-4: Try creative but related approaches  
-   - Attempts 5+: Try completely different angles, indirect methods, or creative interpretations
+**Variable Optimization Strategies**:
 
-3. **Failure-Specific Strategies**:
-   - If looking for specific words (like "chat", "matin"): Try phrases that would naturally include those words
-   - If semantic similarity fails: Try different domains or contexts
-   - If direct translation fails: Try phrases that would force specific translations
-   - If all logical attempts fail: Try creative/unexpected approaches
+**Content Adjustments**:
+- If assertions check for specific words/phrases: Include those directly
+- If assertions validate JSON structure: Ensure proper formatting
+- If assertions test semantic meaning: Adjust tone, context, or framing
+- If assertions check classification: Guide toward the desired category
 
-## Your Task
+**Format & Structure**:
+- JSON schema compliance: Match required fields and data types
+- Length constraints: Adjust verbosity appropriately  
+- Language requirements: Modify style, formality, or terminology
+- Output structure: Organize information to meet assertion patterns
 
-Generate a completely new value for "{{targetVariable}}" that learns from previous failures. 
+**Contextual Modifications**:
+- Prompt engineering: Add context that guides toward desired outputs
+- Instruction clarity: Make requests more specific and unambiguous
+- Examples or templates: Provide patterns for the model to follow
+- Constraint specification: Define boundaries for acceptable responses
 
-Think step by step:
-1. What has been tried and why did it fail?
-2. What strategy should you use for this attempt?
-3. What specific value would likely succeed?
+**Strategic Escalation**:
+- **Attempt 1-2**: Direct adjustments based on assertion failure messages
+- **Attempt 3-4**: Contextual and structural modifications  
+- **Attempt 5+**: Creative reframing and alternative approaches
 
-Only provide the new variable value, nothing else:`;
+## Optimization Task
+
+Based on the assertion failures and optimization history, generate an improved value for "{{targetVariable}}" that addresses the specific test requirements.
+
+Analysis Steps:
+1. **What are the assertions actually testing for?** (Look at failure reasons)
+2. **What patterns do you see in failed attempts?** (Learn from history)
+3. **What specific changes would make assertions pass?** (Target the gaps)
+
+Generate only the optimized variable value:`;

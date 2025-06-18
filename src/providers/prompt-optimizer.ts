@@ -1,7 +1,6 @@
 import fs from 'fs';
 import { runAssertions } from '../assertions';
-import logger from '../logger';
-import { OPTIMIZER_PROMPT_V1 } from '../prompts';
+import { VARIABLE_OPTIMIZER_PROMPT } from '../prompts';
 import {
   type ApiProvider,
   type ProviderResponse,
@@ -167,7 +166,7 @@ export class PromptOptimizerProvider implements ApiProvider {
           templateStr = this.options.template;
         }
       } else {
-        templateStr = OPTIMIZER_PROMPT_V1;
+        templateStr = VARIABLE_OPTIMIZER_PROMPT;
       }
 
       // Render the improver prompt
@@ -205,6 +204,12 @@ export class PromptOptimizerProvider implements ApiProvider {
     // Return the final result with the best variables
     const finalRendered = nunjucks.renderString(promptTemplate, bestVars);
 
+    // Prepare the redteamFinalPrompt value for frontend display
+    const redteamFinalPrompt =
+      typeof bestVars[targetVar] === 'string'
+        ? (bestVars[targetVar] as string)
+        : JSON.stringify(bestVars[targetVar]);
+
     const optimizationMetadata = {
       promptOptimizer: {
         originalValue,
@@ -225,7 +230,7 @@ export class PromptOptimizerProvider implements ApiProvider {
         })),
       },
       // Add redteamFinalPrompt so frontend displays optimized value
-      redteamFinalPrompt: bestVars[targetVar],
+      redteamFinalPrompt,
       // Legacy metadata for backward compatibility
       optimizationHistory: history,
       finalVars: bestVars,
