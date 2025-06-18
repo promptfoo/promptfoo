@@ -224,6 +224,8 @@ export class PromptOptimizerProvider implements ApiProvider {
           success: h.success,
         })),
       },
+      // Add redteamFinalPrompt so frontend displays optimized value
+      redteamFinalPrompt: bestVars[targetVar],
       // Legacy metadata for backward compatibility
       optimizationHistory: history,
       finalVars: bestVars,
