@@ -39,6 +39,7 @@ import {
   UnsafePracticesGrader,
   ViolentCrimeGrader,
 } from './plugins/harmful/graders';
+import { HarmfulKeywordsGrader } from './plugins/harmfulKeywords';
 import { HijackingGrader } from './plugins/hijacking';
 import { ImitationGrader } from './plugins/imitation';
 import { IndirectPromptInjectionGrader } from './plugins/indirectPromptInjection';
@@ -86,6 +87,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:hallucination': new HallucinationGrader(),
   'promptfoo:redteam:harmbench': new HarmbenchGrader(),
   'promptfoo:redteam:harmful': new HarmfulGrader(),
+  'promptfoo:redteam:harmful-keywords': new HarmfulKeywordsGrader(),
   'promptfoo:redteam:harmful:chemical-biological-weapons': new HarmfulGrader(),
   'promptfoo:redteam:harmful:child-exploitation': new ChildExploitationGrader(),
   'promptfoo:redteam:harmful:copyright-violations': new CopyrightViolationGrader(),

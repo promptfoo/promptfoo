@@ -155,6 +155,7 @@ export const ADDITIONAL_PLUGINS = [
   'divergent-repetition',
   'donotanswer',
   'harmbench',
+  'harmful:keywords',
   'toxic-chat',
   'imitation',
   'indirect-prompt-injection',

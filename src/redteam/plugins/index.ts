@@ -34,6 +34,7 @@ import { HarmbenchPlugin } from './harmbench';
 import { AlignedHarmfulPlugin } from './harmful/aligned';
 import { getHarmfulAssertions } from './harmful/common';
 import { getHarmfulTests } from './harmful/unaligned';
+import { HarmfulKeywordsPlugin } from './harmfulKeywords';
 import { ImitationPlugin } from './imitation';
 import { IntentPlugin } from './intent';
 import { OverreliancePlugin } from './overreliance';
@@ -175,6 +176,10 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(ToxicChatPlugin, 'toxic-chat'),
   createPluginFactory(AegisPlugin, 'aegis'),
   createPluginFactory(HallucinationPlugin, 'hallucination'),
+  createPluginFactory<{ keywords?: string[] | string; approach?: 'direct' | 'minimal' | 'both'; templates?: string[] }>(
+    HarmfulKeywordsPlugin, 
+    'harmful:keywords'
+  ),
   createPluginFactory(ImitationPlugin, 'imitation'),
   createPluginFactory<{ intent: string }>(IntentPlugin, 'intent', (config: { intent: string }) =>
     invariant(config.intent, 'Intent plugin requires `config.intent` to be set'),
