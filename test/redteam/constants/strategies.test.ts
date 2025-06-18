@@ -60,6 +60,7 @@ describe('strategies constants', () => {
       'best-of-n',
       'camelcase',
       'citation',
+      'counterfactual',
       'crescendo',
       'gcg',
       'goat',
