@@ -8,6 +8,7 @@ import {
   STRATEGY_COLLECTIONS,
   STRATEGY_COLLECTION_MAPPINGS,
   ALL_STRATEGIES,
+  _ALL_STRATEGIES,
 } from '../../../src/redteam/constants/strategies';
 
 describe('strategies constants', () => {
@@ -60,6 +61,7 @@ describe('strategies constants', () => {
       'best-of-n',
       'camelcase',
       'citation',
+      'counterfactual',
       'crescendo',
       'gcg',
       'goat',
@@ -103,5 +105,16 @@ describe('strategies constants', () => {
     ].sort();
 
     expect(ALL_STRATEGIES).toEqual(expectedStrategies);
+  });
+
+  it('should have correct _ALL_STRATEGIES array', () => {
+    expect(_ALL_STRATEGIES).toEqual([
+      'default',
+      'basic',
+      'jailbreak',
+      'jailbreak:composite',
+      ...ADDITIONAL_STRATEGIES,
+      ...STRATEGY_COLLECTIONS,
+    ]);
   });
 });
