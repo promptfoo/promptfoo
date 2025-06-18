@@ -58,4 +58,14 @@
     break-inside: avoid !important;
     margin-bottom: 0.5rem !important;
   }
+
+  /* Dark mode print styles */
+  [data-theme='dark'] body,
+  [data-theme='dark'] .MuiBox-root,
+  [data-theme='dark'] .MuiContainer-root,
+  [data-theme='dark'] .MuiPaper-root,
+  [data-theme='dark'] .MuiStack-root,
+  [data-theme='dark'] .report-header {
+    background-color: #1a1a1a !important;
+  }
 }
