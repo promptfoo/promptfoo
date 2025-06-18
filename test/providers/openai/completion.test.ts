@@ -137,7 +137,7 @@ describe('OpenAI Provider', () => {
       expect(result.tokenUsage).toEqual({});
     });
 
-    it('should handle undefined response', async () => {
+    it('should handle fetchWithCache returning undefined response', async () => {
       mockFetchWithCache.mockResolvedValue(undefined as any);
 
       const provider = new OpenAiCompletionProvider('text-davinci-003');
