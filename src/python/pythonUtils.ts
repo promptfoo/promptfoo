@@ -18,19 +18,30 @@ let validationPromise: Promise<string> | null = null;
  * @returns The validated path if successful, or null if invalid.
  */
 export async function tryPath(path: string): Promise<string | null> {
+  let timeoutId: NodeJS.Timeout | undefined;
+
   try {
-    const result = await Promise.race([
-      execAsync(`${path} --version`),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Command timed out')), 2500),
-      ),
-    ]);
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error('Command timed out')), 2500);
+    });
+
+    const result = await Promise.race([execAsync(path + ' --version'), timeoutPromise]);
+
+    // Clear the timeout to prevent open handle
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+
     const versionOutput = (result as { stdout: string }).stdout.trim();
     if (versionOutput.startsWith('Python')) {
       return path;
     }
     return null;
   } catch {
+    // Clear the timeout to prevent open handle
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
     return null;
   }
 }
@@ -212,5 +223,3 @@ export async function runPython(
     );
   }
 }
-
-export { validationPromise };
