@@ -83,6 +83,10 @@ const ReportDownloadButton: React.FC<ReportDownloadButtonProps> = ({
       setIsDownloading(false);
     }
   };
+  const handlePdfDownload = () => {
+    window.print();
+    handleClose();
+  };
 
   return (
     <>
@@ -111,8 +115,9 @@ const ReportDownloadButton: React.FC<ReportDownloadButtonProps> = ({
           horizontal: 'right',
         }}
       >
-        <MenuItem onClick={handleCsvDownload}>Download as CSV</MenuItem>
-        <MenuItem onClick={handleJsonDownload}>Download as JSON</MenuItem>
+        <MenuItem onClick={handlePdfDownload}>PDF</MenuItem>
+        <MenuItem onClick={handleCsvDownload}>CSV</MenuItem>
+        <MenuItem onClick={handleJsonDownload}>JSON</MenuItem>
       </Menu>
     </>
   );
