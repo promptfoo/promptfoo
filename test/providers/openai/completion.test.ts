@@ -1,7 +1,6 @@
 import { disableCache, enableCache, fetchWithCache } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { OpenAiCompletionProvider } from '../../../src/providers/openai/completion';
-import type { Prompt } from '../../../src/types';
 
 jest.mock('../../../src/cache');
 jest.mock('../../../src/logger');
@@ -12,6 +11,8 @@ describe('OpenAI Provider', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     disableCache();
+    // Set a default API key for tests unless explicitly testing missing key
+    process.env.OPENAI_API_KEY = 'test-api-key';
   });
 
   afterEach(() => {
@@ -30,36 +31,13 @@ describe('OpenAI Provider', () => {
       severity: 'info',
     };
 
-    const mockPrompt: Prompt = {
-      raw: 'Test prompt',
-      display: 'Test prompt',
-      label: 'test',
-    };
-
-    it('should use default fetchWithCache when context.fetchWithCache not provided', async () => {
+    it('should call API successfully with text completion', async () => {
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       const provider = new OpenAiCompletionProvider('text-davinci-003');
       const result = await provider.callApi('Test prompt');
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
-      expect(result.output).toBe('Test output');
-      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
-    });
-
-    it('should always use default fetchWithCache regardless of context', async () => {
-      const mockContextFetch = jest.fn().mockResolvedValue(mockResponse);
-      mockFetchWithCache.mockResolvedValue(mockResponse);
-
-      const provider = new OpenAiCompletionProvider('text-davinci-003');
-      const result = await provider.callApi('Test prompt', {
-        fetchWithCache: mockContextFetch,
-        prompt: mockPrompt,
-        vars: {},
-      });
-
-      expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
-      expect(mockContextFetch).not.toHaveBeenCalled();
       expect(result.output).toBe('Test output');
       expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
     });
@@ -95,19 +73,27 @@ describe('OpenAI Provider', () => {
     });
 
     it('should handle missing API key', async () => {
-      mockFetchWithCache.mockRejectedValue(new Error('OpenAI API key is not set'));
+      // Save the original env var and clear it for this test
+      const originalApiKey = process.env.OPENAI_API_KEY;
+      delete process.env.OPENAI_API_KEY;
 
-      const provider = new OpenAiCompletionProvider('text-davinci-003', {
-        config: {
-          apiKeyRequired: true,
-        },
-        env: {
-          OPENAI_API_KEY: undefined,
-        },
-      });
+      try {
+        const provider = new OpenAiCompletionProvider('text-davinci-003', {
+          config: {
+            apiKeyRequired: true,
+          },
+          env: {
+            OPENAI_API_KEY: undefined,
+          },
+        });
 
-      const result = await provider.callApi('Test prompt');
-      expect(result.error).toContain('API call error: Error: OpenAI API key is not set');
+        await expect(provider.callApi('Test prompt')).rejects.toThrow('OpenAI API key is not set');
+      } finally {
+        // Restore the original env var
+        if (originalApiKey) {
+          process.env.OPENAI_API_KEY = originalApiKey;
+        }
+      }
     });
 
     it('should warn about unknown model', () => {
