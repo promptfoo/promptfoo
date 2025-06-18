@@ -1,12 +1,19 @@
+import path from 'path';
 import { disableCache, enableCache, fetchWithCache } from '../../../src/cache';
+import cliState from '../../../src/cliState';
+import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 
 jest.mock('../../../src/cache');
 jest.mock('../../../src/logger');
+jest.mock('../../../src/esm', () => ({
+  importModule: jest.fn(),
+}));
 
 const mockFetchWithCache = jest.mocked(fetchWithCache);
 const mockLogger = jest.mocked(logger);
+const mockImportModule = jest.mocked(importModule);
 
 describe('OpenAI Provider', () => {
   beforeEach(() => {
@@ -623,6 +630,446 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         },
       ]);
       expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+    });
+
+    describe('External Function Callbacks', () => {
+      beforeEach(() => {
+        cliState.basePath = '/test/base/path';
+        jest.clearAllMocks();
+      });
+
+      afterEach(() => {
+        cliState.basePath = undefined;
+      });
+
+      it('should load and execute external function callbacks from file', async () => {
+        const mockResponse = {
+          data: {
+            choices: [
+              {
+                message: {
+                  content: null,
+                  tool_calls: [
+                    {
+                      function: {
+                        name: 'external_function',
+                        arguments: '{"param": "test_value"}',
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+            usage: { total_tokens: 15, prompt_tokens: 10, completion_tokens: 5 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+        mockFetchWithCache.mockResolvedValue(mockResponse);
+
+        // Mock the external function
+        const mockExternalFunction = jest.fn().mockResolvedValue('External function result');
+        mockImportModule.mockResolvedValue({
+          testFunction: mockExternalFunction,
+        });
+
+        const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+          config: {
+            tools: [
+              {
+                type: 'function',
+                function: {
+                  name: 'external_function',
+                  description: 'An external function',
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      param: { type: 'string' },
+                    },
+                    required: ['param'],
+                  },
+                },
+              },
+            ],
+            functionToolCallbacks: {
+              external_function: 'file://test/callbacks.js:testFunction',
+            },
+          },
+        });
+
+        const result = await provider.callApi('Call external function');
+
+        expect(mockImportModule).toHaveBeenCalledWith(
+          path.resolve('/test/base/path', 'test/callbacks.js'),
+          'testFunction',
+        );
+        expect(mockExternalFunction).toHaveBeenCalledWith('{"param": "test_value"}');
+        expect(result.output).toBe('External function result');
+        expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5 });
+      });
+
+      it('should cache external functions and not reload them on subsequent calls', async () => {
+        const mockResponse = {
+          data: {
+            choices: [
+              {
+                message: {
+                  content: null,
+                  tool_calls: [
+                    {
+                      function: {
+                        name: 'cached_function',
+                        arguments: '{"value": 123}',
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+            usage: { total_tokens: 12, prompt_tokens: 8, completion_tokens: 4 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+        mockFetchWithCache.mockResolvedValue(mockResponse);
+
+        const mockCachedFunction = jest.fn().mockResolvedValue('Cached result');
+        mockImportModule.mockResolvedValue({
+          cachedFunction: mockCachedFunction,
+        });
+
+        const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+          config: {
+            tools: [
+              {
+                type: 'function',
+                function: {
+                  name: 'cached_function',
+                  description: 'A cached function',
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      value: { type: 'number' },
+                    },
+                    required: ['value'],
+                  },
+                },
+              },
+            ],
+            functionToolCallbacks: {
+              cached_function: 'file://callbacks/cache-test.js:cachedFunction',
+            },
+          },
+        });
+
+        // First call - should load the function
+        const result1 = await provider.callApi('First call');
+        expect(mockImportModule).toHaveBeenCalledTimes(1);
+        expect(mockCachedFunction).toHaveBeenCalledWith('{"value": 123}');
+        expect(result1.output).toBe('Cached result');
+
+        // Reset fetch mock for second call
+        mockFetchWithCache.mockResolvedValue(mockResponse);
+
+        // Second call - should use cached function, not reload
+        const result2 = await provider.callApi('Second call');
+        expect(mockImportModule).toHaveBeenCalledTimes(1); // Still only 1 call
+        expect(mockCachedFunction).toHaveBeenCalledTimes(2);
+        expect(result2.output).toBe('Cached result');
+      });
+
+      it('should handle errors in external function loading gracefully', async () => {
+        const mockResponse = {
+          data: {
+            choices: [
+              {
+                message: {
+                  content: null,
+                  tool_calls: [
+                    {
+                      function: {
+                        name: 'error_function',
+                        arguments: '{"test": "data"}',
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+            usage: { total_tokens: 10, prompt_tokens: 6, completion_tokens: 4 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+        mockFetchWithCache.mockResolvedValue(mockResponse);
+
+        // Mock import module to throw an error
+        mockImportModule.mockRejectedValue(new Error('Module not found'));
+
+        const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+          config: {
+            tools: [
+              {
+                type: 'function',
+                function: {
+                  name: 'error_function',
+                  description: 'A function that errors during loading',
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      test: { type: 'string' },
+                    },
+                  },
+                },
+              },
+            ],
+            functionToolCallbacks: {
+              error_function: 'file://nonexistent/module.js:errorFunction',
+            },
+          },
+        });
+
+        const result = await provider.callApi('Call error function');
+
+        expect(mockImportModule).toHaveBeenCalledWith(
+          path.resolve('/test/base/path', 'nonexistent/module.js'),
+          'errorFunction',
+        );
+        // Should fall back to original function call object when loading fails
+        expect(result.output).toEqual([
+          {
+            function: {
+              name: 'error_function',
+              arguments: '{"test": "data"}',
+            },
+          },
+        ]);
+      });
+
+      it('should handle errors in external function execution gracefully', async () => {
+        const mockResponse = {
+          data: {
+            choices: [
+              {
+                message: {
+                  content: null,
+                  tool_calls: [
+                    {
+                      function: {
+                        name: 'failing_function',
+                        arguments: '{"input": "test"}',
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+            usage: { total_tokens: 8, prompt_tokens: 5, completion_tokens: 3 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+        mockFetchWithCache.mockResolvedValue(mockResponse);
+
+        // Mock a function that throws during execution
+        const mockFailingFunction = jest
+          .fn()
+          .mockRejectedValue(new Error('Function execution failed'));
+        mockImportModule.mockResolvedValue({
+          failingFunction: mockFailingFunction,
+        });
+
+        const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+          config: {
+            tools: [
+              {
+                type: 'function',
+                function: {
+                  name: 'failing_function',
+                  description: 'A function that fails during execution',
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      input: { type: 'string' },
+                    },
+                  },
+                },
+              },
+            ],
+            functionToolCallbacks: {
+              failing_function: 'file://callbacks/failing.js:failingFunction',
+            },
+          },
+        });
+
+        const result = await provider.callApi('Call failing function');
+
+        expect(mockFailingFunction).toHaveBeenCalledWith('{"input": "test"}');
+        // Should fall back to original function call object when execution fails
+        expect(result.output).toEqual([
+          {
+            function: {
+              name: 'failing_function',
+              arguments: '{"input": "test"}',
+            },
+          },
+        ]);
+        expect(mockLogger.debug).toHaveBeenCalledWith(
+          expect.stringContaining('Function callback failed for failing_function'),
+        );
+      });
+
+      it('should handle file reference parsing correctly', async () => {
+        const mockResponse = {
+          data: {
+            choices: [
+              {
+                message: {
+                  content: null,
+                  tool_calls: [
+                    {
+                      function: {
+                        name: 'parsed_function',
+                        arguments: '{"data": "parsing_test"}',
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+            usage: { total_tokens: 14, prompt_tokens: 9, completion_tokens: 5 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+        mockFetchWithCache.mockResolvedValue(mockResponse);
+
+        const mockParsedFunction = jest.fn().mockResolvedValue('Parsed successfully');
+        mockImportModule.mockResolvedValue(mockParsedFunction);
+
+        const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+          config: {
+            tools: [
+              {
+                type: 'function',
+                function: {
+                  name: 'parsed_function',
+                  description: 'Tests file reference parsing',
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      data: { type: 'string' },
+                    },
+                  },
+                },
+              },
+            ],
+            functionToolCallbacks: {
+              parsed_function: 'file://deep/path/module.js:deepExport.nestedFunction',
+            },
+          },
+        });
+
+        const result = await provider.callApi('Test parsing');
+
+        expect(mockImportModule).toHaveBeenCalledWith(
+          path.resolve('/test/base/path', 'deep/path/module.js'),
+          'deepExport.nestedFunction',
+        );
+        expect(mockParsedFunction).toHaveBeenCalledWith('{"data": "parsing_test"}');
+        expect(result.output).toBe('Parsed successfully');
+      });
+
+      it('should handle mixed inline and external function callbacks', async () => {
+        const mockResponse = {
+          data: {
+            choices: [
+              {
+                message: {
+                  content: null,
+                  tool_calls: [
+                    {
+                      function: {
+                        name: 'inline_function',
+                        arguments: '{"inline": "test"}',
+                      },
+                    },
+                    {
+                      function: {
+                        name: 'external_function',
+                        arguments: '{"external": "test"}',
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+            usage: { total_tokens: 20, prompt_tokens: 12, completion_tokens: 8 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+        mockFetchWithCache.mockResolvedValue(mockResponse);
+
+        const mockInlineFunction = jest.fn().mockResolvedValue('Inline result');
+        const mockExternalFunction = jest.fn().mockResolvedValue('External result');
+        mockImportModule.mockResolvedValue({
+          externalFunc: mockExternalFunction,
+        });
+
+        const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+          config: {
+            tools: [
+              {
+                type: 'function',
+                function: {
+                  name: 'inline_function',
+                  description: 'An inline function',
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      inline: { type: 'string' },
+                    },
+                  },
+                },
+              },
+              {
+                type: 'function',
+                function: {
+                  name: 'external_function',
+                  description: 'An external function',
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      external: { type: 'string' },
+                    },
+                  },
+                },
+              },
+            ],
+            functionToolCallbacks: {
+              inline_function: mockInlineFunction,
+              external_function: 'file://mixed/callbacks.js:externalFunc',
+            },
+          },
+        });
+
+        const result = await provider.callApi('Test mixed callbacks');
+
+        expect(mockInlineFunction).toHaveBeenCalledWith('{"inline": "test"}');
+        expect(mockImportModule).toHaveBeenCalledWith(
+          path.resolve('/test/base/path', 'mixed/callbacks.js'),
+          'externalFunc',
+        );
+        expect(mockExternalFunction).toHaveBeenCalledWith('{"external": "test"}');
+        expect(result.output).toBe('Inline result\nExternal result');
+      });
     });
 
     it('should prioritize response_format from prompt config over provider config', async () => {
