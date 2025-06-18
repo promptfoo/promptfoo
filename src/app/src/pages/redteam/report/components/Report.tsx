@@ -16,7 +16,6 @@ import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { type TargetPurposeDiscoveryResult } from '@promptfoo/redteam/commands/discover';
 import {
   type EvaluateResult,
   type ResultsFile,
@@ -27,7 +26,6 @@ import {
   isProviderOptions,
 } from '@promptfoo/types';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
-import DiscoveredInformation from './DiscoveredInformation';
 import FrameworkCompliance from './FrameworkCompliance';
 import Overview from './Overview';
 import ReportDownloadButton from './ReportDownloadButton';
@@ -287,9 +285,6 @@ const App: React.FC = () => {
     setIsPromptModalOpen(false);
   };
 
-  const targetPurposeDiscoveryResult: TargetPurposeDiscoveryResult | undefined =
-    evalData?.config?.metadata?.targetPurposeDiscoveryResult;
-
   return (
     <Container maxWidth="xl">
       <Stack spacing={4} pb={8} pt={2}>
@@ -405,9 +400,6 @@ const App: React.FC = () => {
           failuresByPlugin={failuresByPlugin}
           passesByPlugin={passesByPlugin}
         />
-        {targetPurposeDiscoveryResult && (
-          <DiscoveredInformation result={targetPurposeDiscoveryResult} />
-        )}
         <TestSuites
           evalId={evalId}
           categoryStats={categoryStats}
