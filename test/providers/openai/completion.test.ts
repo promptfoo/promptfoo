@@ -146,5 +146,80 @@ describe('OpenAI Provider', () => {
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(result.error).toContain('Cannot destructure property');
     });
+
+    it('should pass custom headers from config', async () => {
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const customHeaders = {
+        'X-Test-Header': 'test-value',
+      };
+
+      const provider = new OpenAiCompletionProvider('text-davinci-003', {
+        config: {
+          headers: customHeaders,
+        },
+      });
+
+      await provider.callApi('Test prompt');
+
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'Content-Type': 'application/json',
+            'X-Test-Header': 'test-value',
+          }),
+        }),
+        expect.any(Number),
+        'json',
+        undefined,
+      );
+    });
+
+    it('should pass passthrough config fields in body', async () => {
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiCompletionProvider('text-davinci-003', {
+        config: {
+          passthrough: { logprobs: 3 },
+        },
+      });
+
+      await provider.callApi('Test prompt');
+
+      const actualCall = mockFetchWithCache.mock.calls[0];
+      const body = JSON.parse(actualCall[1]?.body as string);
+      expect(body.logprobs).toBe(3);
+    });
+
+    it('should handle response parsing errors', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {}, // Missing choices array
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new OpenAiCompletionProvider('text-davinci-003');
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.error).toMatch(/API error:/);
+    });
+
+    it('should handle invalid OPENAI_STOP env var', async () => {
+      process.env.OPENAI_STOP = '{invalid json}';
+
+      const provider = new OpenAiCompletionProvider('text-davinci-003', {
+        config: {
+          apiKey: 'test-api-key',
+        },
+      });
+
+      await expect(provider.callApi('test')).rejects.toThrow(
+        /OPENAI_STOP is not a valid JSON string/,
+      );
+
+      delete process.env.OPENAI_STOP;
+    });
   });
 });
