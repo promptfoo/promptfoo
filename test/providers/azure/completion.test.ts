@@ -156,6 +156,8 @@ describe('AzureCompletionProvider', () => {
         }),
       }),
       expect.any(Number),
+      'json',
+      undefined,
     );
   });
 
@@ -338,6 +340,8 @@ describe('AzureCompletionProvider', () => {
         }),
       }),
       expect.any(Number),
+      'json',
+      undefined,
     );
   });
 });

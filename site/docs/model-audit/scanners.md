@@ -11,7 +11,7 @@ ModelAudit includes specialized scanners for different model formats and file ty
 
 **File types:** `.pkl`, `.pickle`, `.bin` (when containing pickle data)
 
-The Pickle Scanner analyzes Python pickle files for security risks, which are common in many ML frameworks. It also detects pickle-formatted `.bin` files.
+The Pickle Scanner analyzes Python pickle files for security risks, which are common in many ML frameworks. It automatically detects pickle-formatted `.bin` files and also performs deep content analysis to detect embedded executables.
 
 **What it checks for:**
 
@@ -95,19 +95,20 @@ Model configuration files can contain settings that lead to insecure behavior, s
 
 **File types:** `.bin` (raw PyTorch tensor files)
 
-This scanner examines raw PyTorch binary tensor files that contain serialized weight data.
+This scanner examines raw PyTorch binary tensor files that contain serialized weight data. It performs enhanced binary content scanning to detect various threats.
 
 **What it checks for:**
 
 - Embedded code patterns (imports, function calls, eval/exec)
-- Executable file signatures (Windows PE, Linux ELF, macOS Mach-O)
+- Executable file signatures (Windows PE with DOS stub validation, Linux ELF, macOS Mach-O)
 - Shell script shebangs that might indicate embedded scripts
 - Blacklisted patterns specified in configuration
 - Suspiciously small files that might not be valid tensor data
 - Validation of tensor structure
+- Enhanced PE file detection with MS-DOS stub signature validation
 
 **Why it matters:**
-While `.bin` files typically contain raw tensor data, attackers could embed malicious code or executables within these files. The scanner performs deep content analysis to detect such threats.
+While `.bin` files typically contain raw tensor data, attackers could embed malicious code or executables within these files. The scanner performs deep content analysis with enhanced PE file detection (including DOS stub validation) to detect such threats.
 
 ## ZIP Archive Scanner
 
@@ -153,13 +154,29 @@ Backdoored or trojaned models often contain specific neurons that activate on tr
 **Special handling for LLMs:**
 Large language models with vocabulary layers (>10,000 outputs) use more conservative thresholds to reduce false positives, as their weight distributions naturally have more variation. LLM checking is disabled by default but can be enabled via configuration.
 
+## SafeTensors Scanner
+
+**File types:** `.safetensors`, `.bin` (when containing SafeTensors data)
+
+This scanner examines SafeTensors format files, which are designed to be a safer alternative to pickle files.
+
+**What it checks for:**
+
+- Malicious metadata in the JSON header
+- Encoded payloads in metadata values
+- Unusually large metadata sections
+- Invalid SafeTensors format structure
+
+**Why it matters:**
+While SafeTensors is designed to be safer than pickle files, the metadata section can still contain malicious content. Attackers might try to exploit parsers or include encoded payloads in the metadata.
+
 ## Auto Format Detection
 
 ModelAudit includes file format detection for `.bin` files, which can contain different types of model data:
 
 - **Pickle format**: Detected by pickle protocol magic bytes
-- **Safetensors format**: Detected by JSON header structure
+- **SafeTensors format**: Detected by JSON header structure
 - **ONNX format**: Detected by ONNX protobuf signatures
 - **Raw PyTorch tensors**: Default for `.bin` files without other signatures
 
-This allows ModelAudit to automatically apply the correct scanner based on the actual file content, not just the extension.
+This allows ModelAudit to automatically apply the correct scanner based on the actual file content, not just the extension. When a `.bin` file contains SafeTensors data, the SafeTensors scanner is automatically applied.
