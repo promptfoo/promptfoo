@@ -191,4 +191,22 @@ describe('Telemetry', () => {
     // Clean up
     cliState.config = undefined;
   });
+
+  it('should accept webui_action as a valid event type', () => {
+    delete process.env.PROMPTFOO_DISABLE_TELEMETRY;
+    const telemetry = new Telemetry();
+    telemetry.record('webui_action', { action: 'click', element: 'button' });
+
+    expect(telemetry['events']).toHaveLength(1);
+    expect(telemetry['events'][0]).toEqual({
+      event: 'webui_action',
+      packageVersion: packageJson.version,
+      properties: {
+        action: 'click',
+        element: 'button',
+        isRunningInCi: false,
+        isRedteam: false,
+      },
+    });
+  });
 });

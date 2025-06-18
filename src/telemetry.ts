@@ -166,3 +166,5 @@ export class Telemetry {
 
 const telemetry = new Telemetry();
 export default telemetry;
+
+export { TELEMETRY_ENDPOINT, CONSENT_ENDPOINT, TELEMETRY_TIMEOUT_MS, telemetry };
