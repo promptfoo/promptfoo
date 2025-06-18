@@ -54,6 +54,7 @@ import { handleContextFaithfulness } from './contextFaithfulness';
 import { handleContextRecall } from './contextRecall';
 import { handleContextRelevance } from './contextRelevance';
 import { handleCost } from './cost';
+import { handleCounterfactual } from './counterfactual';
 import { handleEquals } from './equals';
 import { handleFactuality } from './factuality';
 import { handleIsValidFunctionCall } from './functionToolCall';
@@ -242,6 +243,7 @@ export async function runAssertion({
     'context-faithfulness': handleContextFaithfulness,
     'context-recall': handleContextRecall,
     'context-relevance': handleContextRelevance,
+    'counterfactual-equality': handleCounterfactual,
     cost: handleCost,
     equals: handleEquals,
     factuality: handleFactuality,
@@ -371,8 +373,8 @@ export async function runAssertions({
     asserts,
     ASSERTIONS_MAX_CONCURRENCY,
     async ({ assertion, assertResult, index }) => {
-      if (assertion.type.startsWith('select-')) {
-        // Select-type assertions are handled separately because they depend on multiple outputs.
+      if (assertion.type.startsWith('select-') || assertion.type === 'counterfactual-equality') {
+        // Select-type and counterfactual assertions are handled separately because they depend on multiple outputs.
         return;
       }
 
@@ -430,6 +432,15 @@ export async function runCompareAssertion(
     ...result,
     assertion,
   }));
+}
+
+export async function runCounterfactualAssertion(
+  testCases: AtomicTestCase[],
+  assertion: Assertion,
+  outputs: string[],
+): Promise<GradingResult[]> {
+  const { runCounterfactualComparison } = await import('./counterfactual');
+  return await runCounterfactualComparison(testCases, outputs);
 }
 
 export async function readAssertions(filePath: string): Promise<Assertion[]> {

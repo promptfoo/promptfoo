@@ -421,6 +421,7 @@ export const BaseAssertionTypesSchema = z.enum([
   'context-faithfulness',
   'context-recall',
   'context-relevance',
+  'counterfactual-equality',
   'cost',
   'equals',
   'factuality',
@@ -463,9 +464,13 @@ type NotPrefixed<T extends string> = `not-${T}`;
 // The 'human' assertion type is added via the web UI to allow manual grading.
 // The 'select-best' assertion type compares all variations for a given test case
 // and selects the highest scoring one after all other assertions have completed.
-export type SpecialAssertionTypes = 'select-best' | 'human';
+export type SpecialAssertionTypes = 'select-best' | 'counterfactual-equality' | 'human';
 
-export const SpecialAssertionTypesSchema = z.enum(['select-best', 'human']);
+export const SpecialAssertionTypesSchema = z.enum([
+  'select-best',
+  'counterfactual-equality',
+  'human',
+]);
 
 export const NotPrefixedAssertionTypesSchema = BaseAssertionTypesSchema.transform(
   (baseType) => `not-${baseType}` as NotPrefixed<BaseAssertionTypes>,
