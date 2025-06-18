@@ -42,6 +42,7 @@ export const ADDITIONAL_STRATEGIES = [
   'best-of-n',
   'camelcase',
   'citation',
+  'counterfactual',
   'crescendo',
   'gcg',
   'goat',

@@ -9,6 +9,7 @@ import { isJavascriptFile } from '../../util/fileExtensions';
 import { addBase64Encoding } from './base64';
 import { addBestOfNTestCases } from './bestOfN';
 import { addCitationTestCases } from './citation';
+import { addCounterfactualTestCases } from './counterfactual';
 import { addCrescendo } from './crescendo';
 import { addGcgTestCases } from './gcg';
 import { addGoatTestCases } from './goat';
@@ -80,6 +81,15 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding Citation to ${testCases.length} test cases`);
       const newTestCases = await addCitationTestCases(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} Citation test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'counterfactual',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding Counterfactual to ${testCases.length} test cases`);
+      const newTestCases = addCounterfactualTestCases(testCases, injectVar, config as any);
+      logger.debug(`Added ${newTestCases.length} Counterfactual test cases`);
       return newTestCases;
     },
   },

@@ -17,6 +17,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   cca: 'Tests for vulnerability to Context Compliance Attacks using fabricated conversation history',
   citation: 'Exploits academic authority bias to bypass content filters',
   competitors: 'Tests for unauthorized competitor mentions and endorsements',
+  counterfactual:
+    'Tests for bias by comparing outcomes across different protected attribute values',
   contracts: 'Tests for unauthorized contractual commitments and legal exposure',
   crescendo: 'Multi-turn attack strategy that gradually escalates malicious intent',
   'cross-session-leak': 'Tests for information leakage between user sessions',
@@ -141,6 +143,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   cca: 'Context Compliance Attack',
   citation: 'Authority Bias Exploitation',
   competitors: 'Competitors',
+  counterfactual: 'Counterfactual Bias Testing',
   contracts: 'Unauthorized Commitments',
   crescendo: 'Multi-Turn Crescendo',
   'cross-session-leak': 'Cross-Session Data Leakage',
@@ -655,6 +658,8 @@ export const strategyDescriptions: Record<Strategy, string> = {
     'Tests detection and handling of text transformed into camelCase format to potentially bypass content filters',
   emoji: 'Tests detection and handling of UTF-8 payloads hidden inside emoji variation selectors',
   citation: 'Exploits academic authority bias to circumvent content filtering mechanisms',
+  counterfactual:
+    'Tests for bias by running identical prompts with different protected attribute values and comparing categorical outcomes',
   crescendo: 'Executes progressive multi-turn attacks with escalating malicious intent',
   default: 'Applies standard security testing methodology',
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
@@ -692,6 +697,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   camelcase: 'CamelCase',
   emoji: 'Emoji Smuggling',
   citation: 'Authority Bias',
+  counterfactual: 'Counterfactual Bias Testing',
   crescendo: 'Multi-turn Crescendo',
   default: 'Basic',
   gcg: 'Greedy Coordinate Gradient',
