@@ -47,8 +47,9 @@ describe('OpenAI Provider', () => {
       expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
     });
 
-    it('should use context.fetchWithCache when provided', async () => {
+    it('should always use default fetchWithCache regardless of context', async () => {
       const mockContextFetch = jest.fn().mockResolvedValue(mockResponse);
+      mockFetchWithCache.mockResolvedValue(mockResponse);
 
       const provider = new OpenAiCompletionProvider('text-davinci-003');
       const result = await provider.callApi('Test prompt', {
@@ -57,8 +58,8 @@ describe('OpenAI Provider', () => {
         vars: {},
       });
 
-      expect(mockContextFetch).toHaveBeenCalledTimes(1);
-      expect(mockFetchWithCache).not.toHaveBeenCalled();
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      expect(mockContextFetch).not.toHaveBeenCalled();
       expect(result.output).toBe('Test output');
       expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
     });
@@ -150,17 +151,13 @@ describe('OpenAI Provider', () => {
       expect(result.tokenUsage).toEqual({});
     });
 
-    it('should handle context.fetchWithCache returning undefined', async () => {
-      const mockContextFetch = jest.fn().mockResolvedValue(undefined);
+    it('should handle fetchWithCache returning undefined response', async () => {
+      mockFetchWithCache.mockResolvedValue(undefined as any);
 
       const provider = new OpenAiCompletionProvider('text-davinci-003');
-      const result = await provider.callApi('Test prompt', {
-        fetchWithCache: mockContextFetch,
-        prompt: mockPrompt,
-        vars: {},
-      });
+      const result = await provider.callApi('Test prompt');
 
-      expect(mockContextFetch).toHaveBeenCalledTimes(1);
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(result.error).toContain('Cannot destructure property');
     });
   });
