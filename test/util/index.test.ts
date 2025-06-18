@@ -24,6 +24,7 @@ import {
   maybeLoadToolsFromExternalFile,
   renderVarsInObject,
 } from '../../src/util';
+import { getNunjucksEngine } from '../../src/util/templates';
 import { TestGrader } from './utils';
 
 jest.mock('../../src/database', () => ({
@@ -229,19 +230,46 @@ describe('util', () => {
       expect(fs.writeFileSync).toHaveBeenCalledTimes(2);
     });
 
-    it('writeOutput with HTML template escapes special characters', async () => {
-      // Use the real fs module to read the template
+    it('writeOutput with HTML escapes special characters in output', async () => {
+      // Test the template rendering directly
       const realFs = jest.requireActual('fs') as typeof fs;
       const templatePath = path.resolve(__dirname, '../../src/tableOutput.html');
       const templateContent = realFs.readFileSync(templatePath, 'utf-8');
       
-      // Check that the template has escape filters on all user-provided content
-      expect(templateContent).toContain('{{ header | escape }}');
-      expect(templateContent).toContain('{{ cell | escape }}');
+      const nunjucks = getNunjucksEngine();
       
-      // Ensure both data-content attribute and cell content are escaped
-      const cellRegex = /<td[^>]*data-content="\{\{ cell \| escape \}\}"[^>]*>\{\{ cell \| escape \}\}<\/td>/;
-      expect(templateContent).toMatch(cellRegex);
+      // Test data with HTML special characters
+      const testData = {
+        config: { description: 'Test <HTML> escaping & "quotes"' },
+        table: [
+          // Headers row
+          ['var1', 'var2', '[test-provider] Is 1<2?'],
+          // Data rows
+          ['<script>alert("xss")</script>', 'Normal & special > chars < here', '[PASS] (1.00)\n\nYes, 1<2 & 3>2 and "quotes" work'],
+        ]
+      };
+      
+      const htmlContent = nunjucks.renderString(templateContent, testData);
+
+      // Check that the title is escaped
+      expect(htmlContent).toContain('<title>Test &lt;HTML&gt; escaping &amp; &quot;quotes&quot;</title>');
+
+      // Check that headers are escaped
+      expect(htmlContent).toContain('<th>var1</th>');
+      expect(htmlContent).toContain('<th>var2</th>');
+      expect(htmlContent).toContain('<th>[test-provider] Is 1&lt;2?</th>');
+
+      // Check that cell content is escaped
+      expect(htmlContent).toContain('<td data-content="&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;">&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;</td>');
+      expect(htmlContent).toContain('<td data-content="Normal &amp; special &gt; chars &lt; here">Normal &amp; special &gt; chars &lt; here</td>');
+      
+      // Check that output content is escaped in the cell
+      expect(htmlContent).toMatch(/Yes, 1&lt;2 &amp; 3&gt;2 and &quot;quotes&quot; work/);
+
+      // Ensure no unescaped HTML special characters exist
+      expect(htmlContent).not.toContain('<script>alert("xss")</script>');
+      expect(htmlContent).not.toContain('[test-provider] Is 1<2?');
+      expect(htmlContent).not.toContain('Yes, 1<2 & 3>2 and "quotes" work');
     });
 
     it('writes output to Google Sheets', async () => {

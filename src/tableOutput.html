@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width" />
-    <title>{{ config.description | default('Eval Output') }}</title>
+    <title>{{ config.description | default('Eval Output') | escape }}</title>
     <style>
       body {
         font-family:
