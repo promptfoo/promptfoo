@@ -19,6 +19,8 @@ import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration
 import type { BaseRedteamMetadata } from '../types';
 import type { Message } from './shared';
 import { getLastMessageContent, messagesToRedteamHistory } from './shared';
+import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
+import type { TokenUsage } from '../../types';
 
 /**
  * Represents metadata for the GOAT conversation process.
@@ -49,6 +51,11 @@ interface GoatConfig {
 
 export default class GoatProvider implements ApiProvider {
   readonly config: GoatConfig;
+  private readonly unblockingProvider = new PromptfooChatCompletionProvider({
+    task: 'blocking-question-analysis',
+    jsonOnly: true,
+    preferSmallModel: false,
+  });
 
   id() {
     return 'promptfoo:redteam:goat';
@@ -241,6 +248,8 @@ export default class GoatProvider implements ApiProvider {
           typeof targetResponse.output === 'string'
             ? targetResponse.output
             : safeJsonStringify(targetResponse.output);
+        let finalOutput = stringifiedOutput;
+        let finalResponse = targetResponse;
 
         if (!stringifiedOutput) {
           logger.debug(
@@ -255,6 +264,76 @@ export default class GoatProvider implements ApiProvider {
           content: stringifiedOutput,
         });
 
+        const unblockingResult = await this.tryUnblocking(
+          messages,
+          finalOutput,
+          context?.test?.metadata?.goal || context?.vars[this.config.injectVar],
+          context?.test?.metadata?.purpose,
+        );
+        if (unblockingResult.tokenUsage) {
+          totalTokenUsage.total += unblockingResult.tokenUsage.total || 0;
+          totalTokenUsage.prompt += unblockingResult.tokenUsage.prompt || 0;
+          totalTokenUsage.completion += unblockingResult.tokenUsage.completion || 0;
+          totalTokenUsage.numRequests += unblockingResult.tokenUsage.numRequests ?? 1;
+          totalTokenUsage.cached += unblockingResult.tokenUsage.cached || 0;
+        }
+
+        if (unblockingResult.success && unblockingResult.unblockingPrompt) {
+          logger.debug(`[GOAT] Sending unblocking response: ${unblockingResult.unblockingPrompt}`);
+
+          messages.push({ role: 'user', content: unblockingResult.unblockingPrompt });
+
+          const unblockingTargetPrompt = this.config.stateful
+            ? unblockingResult.unblockingPrompt
+            : JSON.stringify(messages);
+
+          const unblockingResponse = await targetProvider.callApi(
+            unblockingTargetPrompt,
+            context,
+            options,
+          );
+
+          if (!unblockingResponse.cached && targetProvider.delay && targetProvider.delay > 0) {
+            logger.debug(`Sleeping for ${targetProvider.delay}ms`);
+            await sleep(targetProvider.delay);
+          }
+
+          if (unblockingResponse.tokenUsage) {
+            totalTokenUsage.total += unblockingResponse.tokenUsage.total || 0;
+            totalTokenUsage.prompt += unblockingResponse.tokenUsage.prompt || 0;
+            totalTokenUsage.completion += unblockingResponse.tokenUsage.completion || 0;
+            totalTokenUsage.numRequests += unblockingResponse.tokenUsage.numRequests ?? 1;
+            totalTokenUsage.cached += unblockingResponse.tokenUsage.cached || 0;
+          } else {
+            totalTokenUsage.numRequests += 1;
+          }
+
+          const unblockingOutput =
+            typeof unblockingResponse.output === 'string'
+              ? unblockingResponse.output
+              : safeJsonStringify(unblockingResponse.output);
+
+          messages.push({ role: 'assistant', content: unblockingOutput });
+          previousTargetOutput = unblockingOutput;
+          finalOutput = unblockingOutput;
+          finalResponse = unblockingResponse;
+
+          if (unblockingResponse.sessionId) {
+            context = context ?? { vars: {}, prompt: { raw: '', label: 'target' } };
+            context.vars.sessionId = unblockingResponse.sessionId;
+          }
+
+          if (unblockingResponse.error) {
+            throw new Error(`[GOAT] Target returned an error: ${unblockingResponse.error}`);
+          }
+
+          if (!unblockingOutput) {
+            logger.debug(
+              `[GOAT] Unblocking response output is not a string or JSON: ${safeJsonStringify(unblockingResponse)}`,
+            );
+          }
+        }
+
         if (targetResponse.tokenUsage) {
           totalTokenUsage.total += targetResponse.tokenUsage.total || 0;
           totalTokenUsage.prompt += targetResponse.tokenUsage.prompt || 0;
@@ -265,13 +344,13 @@ export default class GoatProvider implements ApiProvider {
           totalTokenUsage.numRequests += 1;
         }
 
-        lastTargetResponse = targetResponse;
+        lastTargetResponse = finalResponse;
 
         const grader = assertToUse ? getGraderById(assertToUse.type) : undefined;
         if (test && grader) {
           const { grade } = await grader.getResult(
             attackerMessage.content,
-            stringifiedOutput,
+            finalOutput,
             test,
             targetProvider,
             assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
@@ -307,5 +386,69 @@ export default class GoatProvider implements ApiProvider {
       tokenUsage: totalTokenUsage,
       guardrails: lastTargetResponse?.guardrails,
     };
+  }
+
+  private async tryUnblocking(
+    messages: Message[],
+    lastResponse: string,
+    goal: string | undefined,
+    purpose?: string,
+  ): Promise<{ success: boolean; unblockingPrompt?: string; tokenUsage?: TokenUsage }> {
+    try {
+      const supportsUnblocking = await this.checkServerSupportsUnblocking();
+      if (!supportsUnblocking) {
+        logger.debug('[GOAT] Server does not support unblocking, skipping gracefully');
+        return { success: false };
+      }
+
+      const unblockingRequest = {
+        conversationObjective: goal || '',
+        recentHistory: messages.map((m) => ({ role: m.role, content: m.content })),
+        targetResponse: lastResponse,
+        purpose: purpose || '',
+      };
+
+      const response = await this.unblockingProvider.callApi(JSON.stringify(unblockingRequest), {
+        prompt: { raw: JSON.stringify(unblockingRequest), label: 'unblocking' },
+        vars: {},
+      });
+
+      if (response.error) {
+        logger.debug(`[GOAT] Unblocking provider error: ${response.error}`);
+        return { success: false, tokenUsage: response.tokenUsage };
+      }
+
+      const parsed = response.output as any;
+      logger.debug(`[GOAT] Unblocking analysis: ${JSON.stringify(parsed)}`);
+
+      if (parsed.isBlocking && parsed.unblockingAnswer) {
+        return {
+          success: true,
+          unblockingPrompt: parsed.unblockingAnswer,
+          tokenUsage: response.tokenUsage,
+        };
+      }
+
+      return { success: false, tokenUsage: response.tokenUsage };
+    } catch (error) {
+      logger.debug(`[GOAT] Error in unblocking: ${error}`);
+      return { success: false };
+    }
+  }
+
+  private async checkServerSupportsUnblocking(): Promise<boolean> {
+    if (process.env.NODE_ENV === 'test') {
+      return false;
+    }
+    try {
+      const { checkServerFeatureSupport } = await import('../../util/server');
+      return await checkServerFeatureSupport(
+        'blocking-question-analysis',
+        '2025-06-16T14:49:11-07:00',
+      );
+    } catch (error) {
+      logger.debug(`[GOAT] Feature check failed: ${error}`);
+      return false;
+    }
   }
 }
