@@ -3,220 +3,225 @@ import dedent from 'dedent';
 import logger from '../logger';
 import { loadApiProvider } from '../providers';
 import { getDefaultProviders } from '../providers/defaults';
-import type { TestCase, TestSuite, ApiProvider } from '../types';
-import {  sampleArray } from '../util/generation';
+import type { TestCase, TestSuite, ApiProvider, Assertion } from '../types';
+import { sampleArray } from '../util/generation';
 import invariant from '../util/invariant';
 import { extractJsonObjects } from '../util/json';
-import { getWithPiApiKey } from '../remoteScoring';
 
 interface SynthesizeOptions {
   instructions?: string;
   numQuestions?: number;
-  numTestCasesPerPersona?: number;
   prompts: string[];
   provider?: string;
   tests: TestCase[];
+  type?: 'pi' | 'g-eval' | 'llm-rubric';
 }
 
-export function generateNewQuestionsPrompt(prompts: string[], testCases: TestCase[], numQuestions: number): string {
-  const promptsString = dedent`<Prompts>
-    ${prompts.map((prompt) => `<Prompt>\n${prompt}\n</Prompt>`).join('\n')}
-    </Prompts>`;
-
-  const allAssertions = testCases.flatMap(c => (c.assert || []));
-
-  const testCasesString = `<ExistingTestCasesAsJson>${JSON.stringify(allAssertions)}</ExistingTestCasesAsJson>`;
+export function generateNewQuestionsPrompt(
+  prompts: string[],
+  testCases: TestCase[],
+  numQuestions: number,
+): string {
+  const allAssertions = testCases.flatMap((c) => c.assert || []);
 
   return dedent`
-    Role: You are a senior data scientist specializing in metric design for stochastic AI systems. You will be given 
-    an series of system prompts and existing assertions being tested in an evaluation, your task is to create objective evaluation questions that assess 
-    individual AI responses—not the application holistically—based on input-output pairs. Make sure to generate questions that are different from ones that already exist.
-    
-    Clarification: Some applications (like scam detection, content moderation, or classification tasks) ask the AI to evaluate an input artifact. 
-    Your task is **NOT** to evaluate the artifact (input) directly, but to assess the AI's response — i.e., how well the assistant performed the requested evaluation.
-    For example, don’t ask: “Does the message contain suspicious links?”
-    Instead, ask: “Did the response correctly identify suspicious links in the message?” or “Are the ratings in the output aligned with the rubric?”
-    
-    Core Requirements
-    1. Question Types:
-    Questions may use one of the following scoring formats: binary (Yes/No), 5-point Likert scale, or 0–1 continuous scale.
-    Design each question to naturally align with its scale—for example, use binary for clear-cut presence/absence traits, Likert for subjective gradations, and continuous for measurable properties.
-    Binary questions can still be scored on a Likert scale by mapping “Yes = 5” and “No = 1” if needed.
-    
-    IMPORTANT: Questions should be phrased so that a 'Yes' answer or higher score **always** indicates compliance with the desired metric or requirement.
-    
-    2. Focus:
-    Questions can evaluate:
-      i. Input-output relationships (e.g., "Does the output address all parts of the input query?").
-      ii. Response attributes (e.g., structure, clarity, safety).
-    Avoid holistic/system-level judgments (e.g., "Is the AI helpful?").
-    
-    3. Objectivity:
-    Be as objective as possible. Replace ambiguous terms (e.g., "inspiring," "too long") with quantifiable criteria (e.g., "Is the output > 100 words?").
-    Allowed subjectivity: Verbs/adjectives are fine if they describe inherent properties of language (e.g., "Does the response contain abusive language?").
-      Rationale: "Abusive" is a property of language, even if borderline cases exist. 
-    Avoid unbounded subjectivity (e.g., "Is the output extremely concise?" → replace with "Is the output ≤ 50 words?").
-    In general, think of ways to replace subjective ideas with objective ones.
-    
-    4. Atomicity:
-    Each question should test one attribute or relationship (e.g., split "Is the response clear and concise?" into two questions).
-    
-    5. Independence:
-    Questions should avoid overlap to prevent double-counting issues in evaluation.
-    
-    6. Self-Containment:
-    Permitted: Derive answers from the input/output text (e.g., "Does the output cite a verbatim quote from the input?").
-    Forbidden: Reliance on external knowledge (e.g., "Is the cited source reputable?" → replace with "Does the citation include a DOI?").
-    
-    7. Special Cases:
-    For creative tasks: Focus on technical execution (e.g., "Does each stanza have 4 lines?").
-    For list outputs: Evaluate per item (e.g., "Does each bullet point contain a complete sentence?").
-    
-    Each question must be preceded by a label in Title Case, no longer than three words, that serves as a concise and descriptive title for the question.
-    
-    After writing each question, **always** set 'is_lower_score_desirable' to false because if the answer to the question is “Yes” (or higher score in case of likert/0-1 scales), 
-    it always indicates a good response. You are only generating such type of questions.
-    
-    Each question should have a question_source. If the question is implied in the input application_description, use
-    IMPLIED_IN_INSTRUCTIONS; otherwise if you are generating it from scratch, use FULLY_NEWLY_GENERATED.
-    
-    Each question should have a question_type. If the question is core for this specific application, use 
-    CORE_FOR_APPLICATION. If the question is a generic check which applies to many other applications like check for
-    abusive content or toxic language, use HORIZONTAL. If the question is regarding output format or some structure
-    in the response of the application, use FORMAT_CHECK.
-    
-    Anti-Patterns to Avoid
-    1. Reasoning Dependencies:
-    Bad: "Is the argument persuasive?"
-    Fixed: "Does the response list at least 2 supporting facts?"
-    
-    2. World Knowledge:
-    Bad: "Is the cited author an expert?"
-    Fixed: "Does the citation include the author’s institutional affiliation?"
-    
-    3. Unbounded Subjectivity:
-    Bad: "Is the output extremely concise?"
-    Fixed: "Is the output ≤ 3 sentences?"
-    
-    Process
-    1. Classify the Application:
-    First classify the application into appropriate categories such as information extraction, information summarization, creative task, analysis task.
-    Note that an application can belong to multiple categories.
-    Define key attributes (e.g., accuracy, structure, safety).
-    
-    2. Extract Implied Questions (Mandatory):
-    Scan the application_description for any *implied requirements*—expectations stated or suggested in the instructions.
-    For each implied requirement, generate an evaluation question marked with:
-      - 'question_source = implied_in_instructions'
-    These must be generated **before** any newly inferred or generic questions.
-    
-    3. Generate Deep Criteria (for new questions):
-    For each key attribute not already covered by an implied question:
-      - Identify subtle failure modes
-      - Design objectively measurable, atomic, and independent evaluation criteria
-      - Use quantifiable standards and avoid vague constructs
-      - Generate questions with 'question_source = fully_newly_generated'
-    
-    4. Generate Questions:
-    ${
+      Role: You are a senior data scientist specializing in metric design for stochastic AI systems. You will be given 
+      an series of system prompts and existing assertions being tested in an evaluation, your task is to create objective evaluation questions that assess 
+      individual AI responses—not the application holistically—based on input-output pairs. 
+      
+      Make sure to generate questions that are different from ones that already exist.
+      
+      Clarification: Some applications (like scam detection, content moderation, or classification tasks) ask the AI to evaluate an input artifact. 
+      Your task is **NOT** to evaluate the artifact (input) directly, but to assess the AI's response — i.e., how well the assistant performed the requested evaluation.
+      For example, don’t ask: “Does the message contain suspicious links?”
+      Instead, ask: “Did the response correctly identify suspicious links in the message?” or “Are the ratings in the output aligned with the rubric?”
+      
+      Core Requirements
+      1. Question Types:
+      Questions may use one of the following scoring formats: binary (Yes/No), 5-point Likert scale, or 0–1 continuous scale.
+      Design each question to naturally align with its scale—for example, use binary for clear-cut presence/absence traits, Likert for subjective gradations, and continuous for measurable properties.
+      Binary questions can still be scored on a Likert scale by mapping “Yes = 5” and “No = 1” if needed.
+      
+      IMPORTANT: Questions should be phrased so that a 'Yes' answer or higher score **always** indicates compliance with the desired metric or requirement.
+      
+      2. Focus:
+      Questions can evaluate:
+        i. Input-output relationships (e.g., "Does the output address all parts of the input query?").
+        ii. Response attributes (e.g., structure, clarity, safety).
+      Avoid holistic/system-level judgments (e.g., "Is the AI helpful?").
+      
+      3. Objectivity:
+      Be as objective as possible. Replace ambiguous terms (e.g., "inspiring," "too long") with quantifiable criteria (e.g., "Is the output > 100 words?").
+      Allowed subjectivity: Verbs/adjectives are fine if they describe inherent properties of language (e.g., "Does the response contain abusive language?").
+        Rationale: "Abusive" is a property of language, even if borderline cases exist. 
+      Avoid unbounded subjectivity (e.g., "Is the output extremely concise?" → replace with "Is the output ≤ 50 words?").
+      In general, think of ways to replace subjective ideas with objective ones.
+      
+      4. Atomicity:
+      Each question should test one attribute or relationship (e.g., split "Is the response clear and concise?" into two questions).
+      
+      5. Independence:
+      Questions should avoid overlap to prevent double-counting issues in evaluation. They should not overlap with any assertions either.
+      
+      6. Self-Containment:
+      Permitted: Derive answers from the input/output text (e.g., "Does the output cite a verbatim quote from the input?").
+      Forbidden: Reliance on external knowledge (e.g., "Is the cited source reputable?" → replace with "Does the citation include a DOI?").
+      
+      7. Special Cases:
+      For creative tasks: Focus on technical execution (e.g., "Does each stanza have 4 lines?").
+      For list outputs: Evaluate per item (e.g., "Does each bullet point contain a complete sentence?").
+      
+      Each question must be preceded by a label in Title Case, no longer than three words, that serves as a concise and descriptive title for the question.
+      
+      After writing each question, **always** set 'is_lower_score_desirable' to false because if the answer to the question is “Yes” (or higher score in case of likert/0-1 scales), 
+      it always indicates a good response. You are only generating such type of questions.
+      
+      Each question should have a question_source. If the question is implied in the input application_description, use
+      IMPLIED_IN_INSTRUCTIONS; otherwise if you are generating it from scratch, use FULLY_NEWLY_GENERATED.
+      
+      Each question should have a question_type. If the question is core for this specific application, use 
+      CORE_FOR_APPLICATION. If the question is a generic check which applies to many other applications like check for
+      abusive content or toxic language, use HORIZONTAL. If the question is regarding output format or some structure
+      in the response of the application, use FORMAT_CHECK.
+      
+      Anti-Patterns to Avoid
+      1. Reasoning Dependencies:
+      Bad: "Is the argument persuasive?"
+      Fixed: "Does the response list at least 2 supporting facts?"
+      
+      2. World Knowledge:
+      Bad: "Is the cited author an expert?"
+      Fixed: "Does the citation include the author’s institutional affiliation?"
+      
+      3. Unbounded Subjectivity:
+      Bad: "Is the output extremely concise?"
+      Fixed: "Is the output ≤ 3 sentences?"
+      
+      Process
+      1. Classify the Application:
+      First classify the application into appropriate categories such as information extraction, information summarization, creative task, analysis task.
+      Note that an application can belong to multiple categories.
+      Define key attributes (e.g., accuracy, structure, safety).
+      
+      2. Extract Implied Questions (Mandatory):
+      Scan the application_description for any *implied requirements*—expectations stated or suggested in the instructions.
+      For each implied requirement, generate an evaluation question marked with:
+        - 'question_source = implied_in_instructions'
+      These must be generated **before** any newly inferred or generic questions.
+      
+      3. Generate Deep Criteria (for new questions):
+      For each key attribute not already covered by an implied question:
+        - Identify subtle failure modes
+        - Design objectively measurable, atomic, and independent evaluation criteria
+        - Use quantifiable standards and avoid vague constructs
+        - Generate questions with 'question_source = fully_newly_generated'
+      
+      4. Generate Questions:
+      ${
         numQuestions > 0
           ? `Create total ${numQuestions} questions with:`
           : `Create a comprehensive set of evaluation questions with:`
       }
-    Binary (if absolute criteria exist) or Likert/continuous scales.
-    Concrete thresholds for quantifiable traits (e.g., word/line counts).
-    
-    **IMPORTANT**: You must prioritize and fully exhaust all questions implied by the application description before generating any new questions.
-    ${
+      Binary (if absolute criteria exist) or Likert/continuous scales.
+      Concrete thresholds for quantifiable traits (e.g., word/line counts).
+      
+      **IMPORTANT**: You must prioritize and fully exhaust all questions implied by the application description before generating any new questions.
+      ${
         numQuestions > 0
           ? `Do not generate any 'fully_newly_generated' questions if the implied questions alone fulfill the requested ${numQuestions}.`
           : ``
       }
-    
-    
-    # OUTPUT FORMAT
-    
-    Only respond in JSON with no extra content.
-    
-    # EXAMPLES
-    
-    <application>
-    Describe a recipe for an input dish in bulleted list format.
-    </application>
-    
-    ${'```'}json
-    
-    {
-      "questions": [
+      
+      
+      # OUTPUT FORMAT
+      
+      Only respond in JSON with no extra content.
+      
+      # EXAMPLES
+      
+      <application>
+      Describe a recipe for an input dish in bulleted list format.
+      </application>
+      <existing_assertions>
+      [
         {
-          "label": "Ingredient Inclusion",
-          "question": "Does the output list all necessary ingredients for the dish?",
-          "question_source": "implied_in_instructions",
-          "question_type": "core_for_application"
+          "type" : "llm-rubric",
+          "value": "Does the output list all necessary ingredients for the dish?",
+          "metric": "Ingredient Inclusion"
         },
         {
-          "label": "Sequential Order",
-          "question": "Are the preparation steps listed in a logical and sequential order?",
-          "question_source": "implied_in_instructions",
-          "question_type": "core_for_application"
-        },
-        {
-          "label": "Step Completeness",
-          "question": "Does each step in the recipe provide clear and complete instructions for preparation?",
-          "question_source": "implied_in_instructions",
-          "question_type": "core_for_application"
-        },
-        {
-          "label": "Bullet Format",
-          "question": "Is each item in the recipe presented as a distinct bullet point?",
-          "question_source": "implied_in_instructions",
-          "question_type": "format_check"
-        },
-        {
-          "label": "Cooking Times",
-          "question": "Are the cooking and preparation times mentioned in the recipe?",
-          "question_source": "fully_newly_generated",
-          "question_type": "core_for_application"
-        },
-        {
-          "label": "Ingredient Quantities",
-          "question": "Are the quantities for each ingredient specified in the recipe?",
-          "question_source": "fully_newly_generated",
-          "question_type": "core_for_application"
-        },
-        {
-          "label": "Serving Size",
-          "question": "Does the recipe specify the number of servings it makes?",
-          "question_source": "fully_newly_generated",
-          "question_type": "core_for_application"
-        },
-        {
-          "label": "Filler Words",
-          "question": "Does the recipe avoid including unnecessary details?",
-          "question_source": "fully_newly_generated",
-          "question_type": "horizontal"
+          "type" : "g-eval",
+          "value": "Does each step in the recipe provide clear and complete instructions for preparation?"
         }
       ]
-    }
+      </existing_assertions>
+      ${'```'}json
+      
+      {
+        "questions": [
+          {
+            "label": "Sequential Order",
+            "question": "Are the preparation steps listed in a logical and sequential order?",
+            "question_source": "implied_in_instructions",
+            "question_type": "core_for_application"
+          },
+          {
+            "label": "Bullet Format",
+            "question": "Is each item in the recipe presented as a distinct bullet point?",
+            "question_source": "implied_in_instructions",
+            "question_type": "format_check"
+          },
+          {
+            "label": "Cooking Times",
+            "question": "Are the cooking and preparation times mentioned in the recipe?",
+            "question_source": "fully_newly_generated",
+            "question_type": "core_for_application"
+          },
+          {
+            "label": "Ingredient Quantities",
+            "question": "Are the quantities for each ingredient specified in the recipe?",
+            "question_source": "fully_newly_generated",
+            "question_type": "core_for_application"
+          },
+          {
+            "label": "Serving Size",
+            "question": "Does the recipe specify the number of servings it makes?",
+            "question_source": "fully_newly_generated",
+            "question_type": "core_for_application"
+          },
+          {
+            "label": "Filler Words",
+            "question": "Does the recipe avoid including unnecessary details?",
+            "question_source": "fully_newly_generated",
+            "question_type": "horizontal"
+          }
+        ]
+      }
     
     
-    Consider the following prompt${prompts.length > 1 ? 's' : ''} for an LLM application:
-
-    ${promptsString}
-    
-    ${allAssertions.length > 0 ? 
-      "Existing cases are below: \n " + testCasesString : "There aren't any existing test cases yet"
-    }
-    
-    `;
+      Consider the following prompt${prompts.length > 1 ? 's' : ''} and assertions for an LLM application:
+      
+      <Prompts>
+  ${prompts
+    .map(
+      (prompt, i) =>
+        `      ${i > 0 ? '  ' : ''}<Prompt>
+          ${prompt}
+        </Prompt>`,
+    )
+    .join('\n')}
+      </Prompts>
+     
+      <existing_assertions>
+        ${JSON.stringify(allAssertions, null, 2)
+          .split('\n')
+          .map((line, i) => (i > 0 ? `        ${line}` : line))
+          .join('\n')}
+      </existing_assertions>`;
 }
 
 export function convertQuestionToPythonPrompt(prompts: string[], question: string) {
-  const promptsString = dedent`<Prompts>
-    ${prompts.map((prompt) => `<Prompt>\n${prompt}\n</Prompt>`).join('\n')}
-    </Prompts>`;
-  return (
-    dedent`
+  return dedent`
     You are a specialized system that analyzes an LLM evaluation question and generates a Python function to automatically check LLM responses against the specific criterion. 
     Your task is to determine if the given evaluation question can be reliably answered using a deterministic Python function.
     
@@ -395,25 +400,38 @@ export function convertQuestionToPythonPrompt(prompts: string[], question: strin
     Remember: When in doubt, return "None". It's better to use some other evaluation mechanism than to generate an unreliable function.
       
     <application_description>
-    ${promptsString}
+      <Prompts>
+  ${prompts
+    .map(
+      (prompt, i) =>
+        `      ${i > 0 ? '  ' : ''}<Prompt>
+          ${prompt}
+        </Prompt>`,
+    )
+    .join('\n')}
+      </Prompts>
     </application_description>
     <question>
     ${question}
     </question>
-`
-  )
+`;
 }
 
-
-export interface GeneratedQuestion {label: string; question: string; question_source: string; question_type: string; code?: string};
+interface GeneratedQuestion {
+  label: string;
+  question: string;
+  question_source: string;
+  question_type: string;
+}
 
 export async function synthesize({
   prompts,
   instructions,
-  numQuestions=5,
+  numQuestions = 5,
   tests,
   provider,
-}: SynthesizeOptions):Promise<GeneratedQuestion[]> {
+  type = 'pi',
+}: SynthesizeOptions): Promise<Assertion[]> {
   if (prompts.length < 1) {
     throw new Error('Assertion synthesis requires at least one prompt.');
   }
@@ -428,9 +446,7 @@ export async function synthesize({
     progressBar.start(1 + numQuestions, 0);
   }
 
-  logger.debug(
-    `Starting assertion synthesis. We'll begin by generating a set of questions`,
-  );
+  logger.debug(`Starting assertion synthesis. We'll begin by generating a set of questions`);
 
   logger.debug(
     `Generating user personas from ${prompts.length} prompt${prompts.length > 1 ? 's' : ''}...`,
@@ -444,7 +460,7 @@ export async function synthesize({
   }
   let newQuestionsPrompt = generateNewQuestionsPrompt(prompts, tests, numQuestions);
   if (instructions) {
-    newQuestionsPrompt = `${newQuestionsPrompt}\n${instructions}`
+    newQuestionsPrompt = `${newQuestionsPrompt}\n${instructions}`;
   }
   logger.debug(`Generated questions prompt:\n${newQuestionsPrompt}`);
   const resp = await providerModel.callApi(newQuestionsPrompt);
@@ -456,7 +472,7 @@ export async function synthesize({
     respObjects.length >= 1,
     `Expected at least one JSON object in the response for questions, got ${respObjects.length}`,
   );
-  const questionsWrapper = respObjects[0] as {questions: GeneratedQuestion[]};
+  const questionsWrapper = respObjects[0] as { questions: GeneratedQuestion[] };
   const questions = sampleArray(questionsWrapper.questions, numQuestions);
 
   logger.debug(
@@ -468,31 +484,36 @@ export async function synthesize({
   }
   // Determine which dimensions should be objectively answered with python. If so, generate the python.
   providerModel.config = {
-    maxTokens: 3000
-  }
-  const convertedQuestions = await Promise.all(
-    questions.map(async q => {
+    maxTokens: 3000,
+  };
+  const assertions = await Promise.all(
+    questions.map(async (q) => {
       const pythonConvertPrompt = convertQuestionToPythonPrompt(prompts, q.question);
       const resp = await providerModel.callApi(pythonConvertPrompt);
-      const output:string = resp.output;
+      const output: string = resp.output;
       if (progressBar) {
         progressBar.increment();
       }
-      if (output.toLowerCase().trim() == "none") {
-        return q;
+
+      if (output.toLowerCase().trim() == 'none') {
+        return { type, metric: q.label, value: q.question };
       } else {
-        return {...q,code: output}
+        return {
+          type: 'python' as Assertion['type'],
+          metric: q.label,
+          value: output,
+        };
       }
-    })
-  )
-  logger.debug(`Generated ${questions.length} new questions`);
-  return convertedQuestions;
+    }),
+  );
+  logger.debug(`Generated ${assertions.length} new assertions`);
+  return assertions;
 }
 
 export async function synthesizeFromTestSuite(
   testSuite: TestSuite,
   options: Partial<SynthesizeOptions>,
-):Promise<GeneratedQuestion[]> {
+): Promise<Assertion[]> {
   return synthesize({
     ...options,
     prompts: testSuite.prompts.map((prompt) => prompt.raw),

@@ -10,6 +10,7 @@ import { deleteCommand } from './commands/delete';
 import { evalCommand } from './commands/eval';
 import { exportCommand } from './commands/export';
 import { feedbackCommand } from './commands/feedback';
+import { generateAssertionsCommand } from './commands/generate/assertions';
 import { generateDatasetCommand } from './commands/generate/dataset';
 import { importCommand } from './commands/import';
 import { initCommand } from './commands/init';
@@ -31,7 +32,6 @@ import { redteamSetupCommand } from './redteam/commands/setup';
 import { checkForUpdates } from './updates';
 import { setupEnv } from './util';
 import { loadDefaultConfig } from './util/config/default';
-import { generateAssertionsCommand } from './commands/generate/assertions';
 
 /**
  * Adds verbose and env-file options to all commands recursively

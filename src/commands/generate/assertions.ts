@@ -1,28 +1,28 @@
 import chalk from 'chalk';
-import type { Command} from 'commander';
+import type { Command } from 'commander';
 import { InvalidArgumentError } from 'commander';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
+import { synthesizeFromTestSuite } from '../../assertions/synthesis';
 import { disableCache } from '../../cache';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { type TestSuite, type UnifiedConfig } from '../../types';
 import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
 import { resolveConfigs } from '../../util/config/load';
-import { synthesizeFromTestSuite } from '../../assertions/synthesis';
 
 interface DatasetGenerateOptions {
   cache: boolean;
   config?: string;
   envFile?: string;
   instructions?: string;
-  numQuestions? : string;
+  numQuestions?: string;
   output?: string;
   provider?: string;
   write: boolean;
   defaultConfig: Partial<UnifiedConfig>;
   defaultConfigPath: string | undefined;
-  type: 'pi' | 'g-eval' | 'llm-rubric'
+  type: 'pi' | 'g-eval' | 'llm-rubric';
 }
 
 export async function doGenerateAssertions(options: DatasetGenerateOptions): Promise<void> {
@@ -40,7 +40,7 @@ export async function doGenerateAssertions(options: DatasetGenerateOptions): Pro
         config: [configPath],
       },
       options.defaultConfig,
-      'DatasetGeneration',
+      'AssertionGeneration',
     );
     testSuite = resolved.testSuite;
   } else {
@@ -57,21 +57,13 @@ export async function doGenerateAssertions(options: DatasetGenerateOptions): Pro
 
   const results = await synthesizeFromTestSuite(testSuite, {
     instructions: options.instructions,
-    numQuestions: Number.parseInt(options.numQuestions || "5", 10),
+    numQuestions: Number.parseInt(options.numQuestions || '5', 10),
     provider: options.provider,
+    type: options.type,
   });
-  const assertionType = options.type
-  const configAddition = { assert: results.map((result) => {
-    if (result.code) {
-      return {
-        type: 'python',
-        metric: result.label,
-        value: result.code,
-      }
-    } else {
-      return { type: assertionType,  metric: result.label, value: result.question };
-    }
-  }) };
+  const configAddition = {
+    assert: results,
+  };
   const yamlString = yaml.dump(configAddition);
   if (options.output) {
     // Should the output be written as a YAML or CSV?
@@ -101,39 +93,40 @@ export async function doGenerateAssertions(options: DatasetGenerateOptions): Pro
     } else if (existingTests) {
       testsArray = [existingTests];
     }
-    existingConfig.tests = testsArray.map(test => ({...test, assert: [...(test.assert || []), ...configAddition.assert]}))
+    existingConfig.tests = testsArray.map((test) => ({
+      ...test,
+      assert: [...(test.assert || []), ...configAddition.assert],
+    }));
     fs.writeFileSync(configPath, yaml.dump(existingConfig));
     logger.info(`Wrote ${results.length} new test cases to ${configPath}`);
     const runCommand = isRunningUnderNpx() ? 'npx promptfoo eval' : 'promptfoo eval';
-    logger.info(chalk.green(`Run ${chalk.bold(runCommand)} to run the generated tests`));
+    logger.info(chalk.green(`Run ${chalk.bold(runCommand)} to run the generated assertions`));
   } else {
     logger.info(
       `Copy the above test cases or run ${chalk.greenBright(
-        'promptfoo generate dataset --write',
+        'promptfoo generate assertions --write',
       )} to write directly to the config`,
     );
   }
 
   telemetry.record('command_used', {
     duration: Math.round((Date.now() - startTime) / 1000),
-    name: 'generate_dataset',
+    name: 'generate_assertions',
     numPrompts: testSuite.prompts.length,
     numTestsExisting: (testSuite.tests || []).length,
-    numTestsGenerated: results.length,
+    numAssertionsGenerated: results.length,
     provider: options.provider || 'default',
   });
   await telemetry.send();
 }
 
-
-function validateAssertionType(value:string, previous:string) {
+function validateAssertionType(value: string, previous: string) {
   const allowedStrings = ['pi', 'g-eval', 'llm-rubric'];
   if (!allowedStrings.includes(value)) {
     throw new InvalidArgumentError(`Option --type must be one of: ${allowedStrings.join(', ')}.`);
   }
   return value;
 }
-
 
 export function generateAssertionsCommand(
   program: Command,
@@ -143,8 +136,16 @@ export function generateAssertionsCommand(
   program
     .command('assertions')
     .description('Generate missing subjective/objective assertions')
-    .option('-t, --type [type]', 'The type of natural language assertion to generate (pi, g-eval, or llm-rubric)', validateAssertionType, 'pi')
-    .requiredOption('-c, --config [path]', 'Path to configuration file. Defaults to promptfooconfig.yaml')
+    .option(
+      '-t, --type [type]',
+      'The type of natural language assertion to generate (pi, g-eval, or llm-rubric)',
+      validateAssertionType,
+      'pi',
+    )
+    .requiredOption(
+      '-c, --config [path]',
+      'Path to configuration file. Defaults to promptfooconfig.yaml',
+    )
     .option('-o, --output [path]', 'Path to output file. Supports YAML output')
     .option('-w, --write', 'Write results to promptfoo configuration file')
     .option(
@@ -153,7 +154,7 @@ export function generateAssertionsCommand(
     )
     .option(
       '-i, --instructions [instructions]',
-      'Additional instructions to follow while generating test cases',
+      'Additional instructions to follow while generating assertions',
     )
     .option('--no-cache', 'Do not read or write results to disk cache', false)
     .option('--env-file, --env-path <path>', 'Path to .env file')

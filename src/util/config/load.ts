@@ -461,7 +461,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
 export async function resolveConfigs(
   cmdObj: Partial<CommandLineOptions>,
   _defaultConfig: Partial<UnifiedConfig>,
-  type?: 'DatasetGeneration',
+  type?: 'DatasetGeneration' | 'AssertionGeneration',
 ): Promise<{ testSuite: TestSuite; config: Partial<UnifiedConfig>; basePath: string }> {
   let fileConfig: Partial<UnifiedConfig> = {};
   let defaultConfig = _defaultConfig;

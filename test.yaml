@@ -1,37 +1,29 @@
 assert:
   - type: llm-rubric
-    metric: Accurate Translation
-    value: >-
-      Does the output correctly translate all meaningful content from the input
-      text into the requested language?
-  - type: llm-rubric
-    metric: Complete Translation
-    value: >-
-      Does the response preserve all semantic information from the input text
-      without omission?
-  - type: python
-    metric: Length Limit
-    value: |-
-      # Remove leading/trailing whitespace
-      trimmed_output = output.strip()
-
-      # Handle empty output
-      if not trimmed_output:
-          return {'pass': False, 'score': 0.0}
-
-      # Count the number of characters
-      char_count = len(trimmed_output)
-
-      # Check if character count is fewer than 100
-      if char_count < 100:
-          return {'pass': True, 'score': 1.0}
-      else:
-          return {'pass': False, 'score': 0.0}
-  - type: llm-rubric
-    metric: No Offensive Content
-    value: Does the translated output avoid the use of offensive or abusive language?
+    metric: Language Accuracy
+    value: Is the output written in the specified target language?
   - type: llm-rubric
     metric: No Extra Content
     value: >-
-      Does the output contain only the translation, with no extraneous
-      explanation or commentary?
+      Does the response strictly contain only the translation, without
+      additional explanations or comments?
+  - type: python
+    metric: Character Limit
+    value: |-
+      # Remove whitespace from the output and count characters
+      if output is None:
+          return {'pass': False, 'score': 0.0}
+      char_count = len(output)
+      if char_count < 100:
+          return {'pass': True, 'score': 1.0}
+      return {'pass': False, 'score': 0.0}
+  - type: llm-rubric
+    metric: Complete Translation
+    value: >-
+      Does the response translate the entire input text without omitting any
+      part?
+  - type: llm-rubric
+    metric: No Source Text Leakage
+    value: >-
+      Does the output avoid including untranslated words or phrases from the
+      source language?
