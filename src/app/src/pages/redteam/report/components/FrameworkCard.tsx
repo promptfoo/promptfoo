@@ -57,7 +57,7 @@ const FrameworkCard: React.FC<FrameworkCardProps> = ({
   return (
     <Card
       className={`framework-item ${isCompliant ? 'compliant' : 'non-compliant'}`}
-      sx={{ pageBreakInside: breakInside }}
+      sx={{ pageBreakInside: breakInside, breakInside }}
     >
       <CardContent>
         <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>

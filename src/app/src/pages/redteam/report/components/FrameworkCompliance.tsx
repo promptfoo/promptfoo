@@ -187,7 +187,7 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
   );
 
   return (
-    <Box sx={{ pageBreakBefore: 'always' }}>
+    <Box sx={{ pageBreakBefore: 'always', breakBefore: 'always' }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Typography variant="h5">
           Framework Compliance ({Object.values(frameworkCompliance).filter(Boolean).length}/

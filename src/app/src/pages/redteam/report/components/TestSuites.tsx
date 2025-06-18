@@ -185,7 +185,7 @@ const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins 
   };
 
   return (
-    <Box sx={{ pageBreakBefore: 'always' }}>
+    <Box sx={{ pageBreakBefore: 'always', breakBefore: 'always' }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Typography variant="h5" id="table">
           Vulnerabilities and Mitigations

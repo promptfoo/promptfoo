@@ -627,7 +627,12 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
       <StyledCard
         role="region"
         aria-label="Attack Methods Statistics"
-        sx={{ pageBreakInside: 'avoid', pageBreakAfter: 'always' }}
+        sx={{
+          pageBreakInside: 'avoid',
+          breakInside: 'avoid',
+          pageBreakAfter: 'always',
+          breakAfter: 'always',
+        }}
       >
         <CardContent sx={{ p: 3 }}>
           <Typography variant="h5" mb={2}>

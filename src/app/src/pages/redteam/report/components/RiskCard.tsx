@@ -63,7 +63,10 @@ const RiskCard: React.FC<{
 
   return (
     <Card>
-      <CardContent className="risk-card-container" sx={{ pageBreakInside: 'avoid' }}>
+      <CardContent
+        className="risk-card-container"
+        sx={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}
+      >
         <Grid container spacing={3}>
           <Grid
             item
