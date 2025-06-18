@@ -74,7 +74,9 @@ function createMockChildProcess(): Partial<ChildProcess> {
 describe('pythonUtils', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.mocked(execAsync).mockReset();
     pythonUtils.state.cachedPythonPath = null;
+    pythonUtils.state.validationPromise = null;
   });
 
   describe('tryPath', () => {
@@ -146,6 +148,7 @@ describe('pythonUtils', () => {
     });
 
     it('should fall back to alternative paths for non-existent programs when not explicit', async () => {
+      jest.mocked(execAsync).mockReset();
       jest
         .mocked(execAsync)
         .mockRejectedValueOnce(new Error('Command failed'))
@@ -170,6 +173,7 @@ describe('pythonUtils', () => {
     });
 
     it('should throw an error when no valid Python path is found', async () => {
+      jest.mocked(execAsync).mockReset();
       jest.mocked(execAsync).mockRejectedValue(new Error('Command failed'));
 
       await expect(pythonUtils.validatePythonPath('python', false)).rejects.toThrow(
@@ -201,14 +205,14 @@ describe('pythonUtils', () => {
       const promise1 = pythonUtils.validatePythonPath('python', false);
       const promise2 = pythonUtils.validatePythonPath('python', false);
 
-      expect(pythonUtils.validationPromise).toBeTruthy();
+      expect(pythonUtils.state.validationPromise).toBeTruthy();
       expect(promise1).toEqual(promise2);
 
       const [result1, result2] = await Promise.all([promise1, promise2]);
       expect(result1).toBe('python');
       expect(result2).toBe('python');
       expect(execAsync).toHaveBeenCalledTimes(1);
-      expect(pythonUtils.validationPromise).toBeNull();
+      expect(pythonUtils.state.validationPromise).toBeNull();
     });
 
     it('should clear validation promise after successful validation', async () => {
@@ -219,7 +223,7 @@ describe('pythonUtils', () => {
       });
 
       await pythonUtils.validatePythonPath('python', false);
-      expect(pythonUtils.validationPromise).toBeNull();
+      expect(pythonUtils.state.validationPromise).toBeNull();
     });
 
     it('should clear validation promise after failed validation', async () => {
@@ -228,7 +232,7 @@ describe('pythonUtils', () => {
       await expect(pythonUtils.validatePythonPath('python', true)).rejects.toThrow(
         'Python 3 not found. Tried "python"',
       );
-      expect(pythonUtils.validationPromise).toBeNull();
+      expect(pythonUtils.state.validationPromise).toBeNull();
     });
 
     it('should handle race conditions between concurrent validation attempts', async () => {
@@ -255,7 +259,7 @@ describe('pythonUtils', () => {
       const promise1 = pythonUtils.validatePythonPath('python3.8', false);
       const promise2 = pythonUtils.validatePythonPath('python3.9', false);
 
-      expect(pythonUtils.validationPromise).toBeTruthy();
+      expect(pythonUtils.state.validationPromise).toBeTruthy();
       expect(promise1).toEqual(promise2);
 
       if (firstResolve) {
@@ -270,7 +274,7 @@ describe('pythonUtils', () => {
       expect(result1).toBe('python3.8');
       expect(result2).toBe('python3.8');
       expect(execAsync).toHaveBeenCalledTimes(1);
-      expect(pythonUtils.validationPromise).toBeNull();
+      expect(pythonUtils.state.validationPromise).toBeNull();
     });
   });
 
