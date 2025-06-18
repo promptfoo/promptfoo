@@ -11,7 +11,6 @@ import { synthesize } from '../';
 import { disableCache } from '../../cache';
 import cliState from '../../cliState';
 import { VERSION } from '../../constants';
-import { getEnvBool } from '../../envars';
 import { getAuthor, getUserEmail } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
@@ -37,18 +36,13 @@ import {
   type Severity,
   type Plugin,
 } from '../constants';
-import { shouldGenerateRemote, neverGenerateRemote } from '../remoteGeneration';
+import { shouldGenerateRemote } from '../remoteGeneration';
 import type {
   RedteamCliGenerateOptions,
   RedteamFileConfig,
   RedteamStrategyObject,
   SynthesizeOptions,
 } from '../types';
-import {
-  type TargetPurposeDiscoveryResult,
-  doTargetPurposeDiscovery,
-  mergeTargetPurposeDiscoveryResults,
-} from './discover';
 
 function getConfigHash(configPath: string): string {
   const content = fs.readFileSync(configPath, 'utf8');
@@ -132,7 +126,6 @@ export async function doGenerateRedteam(
     shouldGenerate = true;
   }
 
-  let targetPurposeDiscoveryResult: TargetPurposeDiscoveryResult | undefined;
   let pluginSeverityOverrides: Map<Plugin, Severity> = new Map();
   let pluginSeverityOverridesId: string | undefined;
 
@@ -152,28 +145,6 @@ export async function doGenerateRedteam(
       providers.length === 1,
       'Generation can only be run with a single provider. Please specify a single provider in the config file.',
     );
-
-    if (
-      !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_TARGET_DISCOVERY_AGENT', true) &&
-      !neverGenerateRemote()
-    ) {
-      try {
-        if (testSuite.prompts.length > 1) {
-          logger.warn(
-            'More than one prompt provided, only the first prompt will be used for purpose discovery',
-          );
-        }
-        logger.info('Starting Target Discovery Agent');
-        targetPurposeDiscoveryResult = await doTargetPurposeDiscovery(
-          providers[0],
-          testSuite.prompts[0],
-        );
-      } catch (error) {
-        logger.error(
-          `Target Discovery Agent failed from error, skipping: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-    }
 
     try {
       // If the provider is a cloud provider, check for plugin severity overrides:
@@ -210,11 +181,6 @@ export async function doGenerateRedteam(
     );
     return null;
   }
-
-  const mergedPurpose = mergeTargetPurposeDiscoveryResults(
-    redteamConfig?.purpose ?? options.purpose,
-    targetPurposeDiscoveryResult,
-  );
 
   const startTime = Date.now();
   telemetry.record('command_used', {
@@ -319,7 +285,7 @@ export async function doGenerateRedteam(
     entities: redteamConfig?.entities,
     plugins,
     provider: redteamConfig?.provider || options.provider,
-    purpose: mergedPurpose,
+    purpose: redteamConfig?.purpose ?? options.purpose,
     strategies: strategyObjs,
     delay: redteamConfig?.delay || options.delay,
     sharing: redteamConfig?.sharing || options.sharing,
@@ -409,7 +375,6 @@ export async function doGenerateRedteam(
         ...(configPath && redteamTests.length > 0
           ? { configHash: getConfigHash(configPath) }
           : { configHash: 'force-regenerate' }),
-        ...(targetPurposeDiscoveryResult ? { targetPurposeDiscoveryResult } : {}),
         ...(pluginSeverityOverridesId ? { pluginSeverityOverridesId } : {}),
       },
     };
@@ -476,11 +441,10 @@ export async function doGenerateRedteam(
     };
     existingConfig.tests = [...testsArray, ...redteamTests];
     existingConfig.redteam = { ...(existingConfig.redteam || {}), ...updatedRedteamConfig };
-    // Add the result of target purpose discovery to metadata if available
+    // Add the config hash to metadata
     existingConfig.metadata = {
       ...(existingConfig.metadata || {}),
       configHash: getConfigHash(configPath),
-      ...(targetPurposeDiscoveryResult ? { targetPurposeDiscoveryResult } : {}),
     };
     const author = getAuthor();
     const userEmail = getUserEmail();

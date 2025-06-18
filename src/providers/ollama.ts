@@ -276,7 +276,7 @@ export class OllamaChatProvider implements ApiProvider {
         },
         REQUEST_TIMEOUT_MS,
         'text',
-        context?.ignoreCache ?? context?.debug,
+        context?.bustCache ?? context?.debug,
       );
     } catch (err) {
       return {
@@ -362,5 +362,3 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
     }
   }
 }
-
-export { OllamaCompletionOptionKeys };

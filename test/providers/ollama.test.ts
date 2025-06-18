@@ -198,7 +198,7 @@ describe('OllamaChatProvider', () => {
     expect(call[4]).toBe(true);
   });
 
-  it('should handle context ignoreCache parameter', async () => {
+  it('should handle context bustCache parameter', async () => {
     const provider = new OllamaChatProvider('llama2');
     const mockResponse = {
       data: '{"message":{"role":"assistant","content":"test response","images":null},"done":true}\n',
@@ -213,7 +213,7 @@ describe('OllamaChatProvider', () => {
     const context: CallApiContextParams = {
       prompt: { raw: 'test prompt', label: 'test' },
       vars: {},
-      ignoreCache: true,
+      bustCache: true,
     };
 
     await provider.callApi('test prompt', context);
