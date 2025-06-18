@@ -84,8 +84,8 @@ const ReportDownloadButton: React.FC<ReportDownloadButtonProps> = ({
     }
   };
   const handlePdfDownload = () => {
-    window.print();
     handleClose();
+    window.print();
   };
 
   return (
