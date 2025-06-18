@@ -188,7 +188,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     let data, status, statusText;
     let cached = false;
     try {
-      ({ data, cached, status, statusText } = await (context?.fetchWithCache ?? fetchWithCache)(
+      ({ data, cached, status, statusText } = await fetchWithCache(
         `${this.getApiUrl()}/responses`,
         {
           method: 'POST',

@@ -262,7 +262,7 @@ export class OllamaChatProvider implements ApiProvider {
     logger.debug(`Calling Ollama API: ${JSON.stringify(params)}`);
     let response;
     try {
-      response = await (context?.fetchWithCache ?? fetchWithCache)(
+      response = await fetchWithCache(
         `${getEnvString('OLLAMA_BASE_URL') || 'http://localhost:11434'}/api/chat`,
         {
           method: 'POST',

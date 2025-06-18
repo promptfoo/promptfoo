@@ -174,7 +174,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     let data, status, statusText;
     let cached = false;
     try {
-      ({ data, cached, status, statusText } = await (context?.fetchWithCache ?? fetchWithCache)(
+      ({ data, cached, status, statusText } = await fetchWithCache(
         `${this.getApiUrl()}/chat/completions`,
         {
           method: 'POST',
