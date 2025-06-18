@@ -335,6 +335,10 @@ const config: Config = {
               to: '/terms-of-service/',
             },
             {
+              label: 'Trust Center',
+              href: 'https://trust.promptfoo.dev',
+            },
+            {
               html: `
                 <div style="display: flex; gap: 16px; align-items: center; margin-top: 12px;">
                   <!--
