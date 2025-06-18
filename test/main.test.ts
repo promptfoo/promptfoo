@@ -1,9 +1,10 @@
 import { Command } from 'commander';
+import { generateAssertionsCommand } from '../src/commands/generate/assertions';
+import { generateDatasetCommand } from '../src/commands/generate/dataset';
 import { setLogLevel } from '../src/logger';
 import { addCommonOptionsRecursively } from '../src/main';
 import { setupEnv } from '../src/util';
 
-// Mock the dependencies
 jest.mock('../src/util', () => ({
   setupEnv: jest.fn(),
 }));
@@ -12,6 +13,14 @@ jest.mock('../src/logger', () => ({
   __esModule: true,
   default: { debug: jest.fn() },
   setLogLevel: jest.fn(),
+}));
+
+jest.mock('../src/commands/generate/assertions', () => ({
+  generateAssertionsCommand: jest.fn(),
+}));
+
+jest.mock('../src/commands/generate/dataset', () => ({
+  generateDatasetCommand: jest.fn(),
 }));
 
 describe('addCommonOptionsRecursively', () => {
@@ -53,7 +62,6 @@ describe('addCommonOptionsRecursively', () => {
     program.option('--env-file, --env-path <path>', 'Path to .env file');
     program.option('-v, --verbose', 'Show debug logs', false);
 
-    // Count options before
     const envFileOptionsBefore = program.options.filter(
       (option) => option.long === '--env-file' || option.long === '--env-path',
     ).length;
@@ -64,7 +72,6 @@ describe('addCommonOptionsRecursively', () => {
 
     addCommonOptionsRecursively(program);
 
-    // Count options after
     const envFileOptionsAfter = program.options.filter(
       (option) => option.long === '--env-file' || option.long === '--env-path',
     ).length;
@@ -73,7 +80,6 @@ describe('addCommonOptionsRecursively', () => {
       (option) => option.short === '-v' || option.long === '--verbose',
     ).length;
 
-    // Should still have the same number of options
     expect(envFileOptionsAfter).toBe(envFileOptionsBefore);
     expect(verboseOptionsAfter).toBe(verboseOptionsBefore);
   });
@@ -93,7 +99,6 @@ describe('addCommonOptionsRecursively', () => {
   });
 
   it('should add options to nested subcommands', () => {
-    // Create a deeper command structure
     const subSubCommand = subCommand.command('subsubcommand');
     subSubCommand.action(() => {});
     const subSubSubCommand = subSubCommand.command('subsubsubcommand');
@@ -101,7 +106,6 @@ describe('addCommonOptionsRecursively', () => {
 
     addCommonOptionsRecursively(program);
 
-    // Check all levels of commands have the options
     const hasMainVerboseOption = program.options.some(
       (option) => option.short === '-v' || option.long === '--verbose',
     );
@@ -141,31 +145,75 @@ describe('addCommonOptionsRecursively', () => {
   });
 
   it('should register a single hook that handles both options', () => {
-    // Create a fake action that manually mocks the Commander hook system
     const mockHookRegister = jest.fn();
     (program as any).hook = mockHookRegister;
 
-    // Apply common options
     addCommonOptionsRecursively(program);
 
-    // Verify the hook was registered only once
     expect(mockHookRegister).toHaveBeenCalledTimes(1);
     expect(mockHookRegister).toHaveBeenCalledWith('preAction', expect.any(Function));
 
-    // Get the hook function
     const preActionFn = mockHookRegister.mock.calls[0][1];
 
-    // Test verbose option
     preActionFn({ opts: () => ({ verbose: true }) });
     expect(setLogLevel).toHaveBeenCalledWith('debug');
 
-    // Test env-file option
     preActionFn({ opts: () => ({ envFile: '.env.test' }) });
     expect(setupEnv).toHaveBeenCalledWith('.env.test');
 
-    // Test both options together
     preActionFn({ opts: () => ({ verbose: true, envFile: '.env.combined' }) });
     expect(setLogLevel).toHaveBeenCalledWith('debug');
     expect(setupEnv).toHaveBeenCalledWith('.env.combined');
+  });
+});
+
+describe('generate commands', () => {
+  let generateCommand: Command;
+  const defaultConfig = { prompts: [] };
+  const defaultConfigPath = 'config.yml';
+
+  beforeEach(() => {
+    generateCommand = new Command('generate');
+    jest.clearAllMocks();
+  });
+
+  it('should register commands in correct order', () => {
+    generateDatasetCommand(generateCommand, defaultConfig, defaultConfigPath);
+    generateAssertionsCommand(generateCommand, defaultConfig, defaultConfigPath);
+
+    expect(generateDatasetCommand).toHaveBeenCalledWith(
+      generateCommand,
+      defaultConfig,
+      defaultConfigPath,
+    );
+    expect(generateAssertionsCommand).toHaveBeenCalledWith(
+      generateCommand,
+      defaultConfig,
+      defaultConfigPath,
+    );
+    expect(generateDatasetCommand).toHaveBeenCalledWith(
+      generateCommand,
+      defaultConfig,
+      defaultConfigPath,
+    );
+  });
+
+  it('should pass correct config parameters to generateAssertionsCommand', () => {
+    const customConfig = { prompts: [] };
+    const customPath = 'custom.yml';
+
+    generateAssertionsCommand(generateCommand, customConfig, customPath);
+
+    expect(generateAssertionsCommand).toHaveBeenCalledWith(
+      generateCommand,
+      customConfig,
+      customPath,
+    );
+  });
+
+  it('should handle undefined config parameters', () => {
+    generateAssertionsCommand(generateCommand, undefined as any, undefined);
+
+    expect(generateAssertionsCommand).toHaveBeenCalledWith(generateCommand, undefined, undefined);
   });
 });
