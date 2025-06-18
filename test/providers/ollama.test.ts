@@ -42,6 +42,25 @@ describe('OllamaCompletionProvider', () => {
     });
   });
 
+  it('should handle multiple response chunks', async () => {
+    const mockResponse = {
+      data: '{"response":"test response","done":false}\n{"response":" more","done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    };
+
+    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    const provider = new OllamaCompletionProvider('llama2');
+    const result = await provider.callApi('test prompt');
+
+    expect(result).toEqual({
+      output: 'test response more',
+    });
+  });
+
   it('should handle API errors', async () => {
     jest.mocked(fetchWithCache).mockRejectedValue(new Error('API error'));
 
@@ -66,6 +85,23 @@ describe('OllamaCompletionProvider', () => {
     const result = await provider.callApi('test prompt');
 
     expect(result.error).toBe('Ollama error: some error occurred');
+  });
+
+  it('should handle invalid JSON response', async () => {
+    const mockResponse = {
+      data: 'invalid json',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    };
+
+    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    const provider = new OllamaCompletionProvider('llama2');
+    const result = await provider.callApi('test prompt');
+
+    expect(result.error).toContain('Ollama API response error:');
   });
 
   it('should use default id when not provided', () => {
@@ -110,6 +146,25 @@ describe('OllamaChatProvider', () => {
 
     expect(result).toEqual({
       output: 'test response',
+    });
+  });
+
+  it('should handle multiple chat response chunks', async () => {
+    const mockResponse = {
+      data: '{"message":{"role":"assistant","content":"test response","images":null},"done":false}\n{"message":{"role":"assistant","content":" more","images":null},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    };
+
+    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    const provider = new OllamaChatProvider('llama2');
+    const result = await provider.callApi('test prompt');
+
+    expect(result).toEqual({
+      output: 'test response more',
     });
   });
 
