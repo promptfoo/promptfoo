@@ -223,3 +223,11 @@ export function addCounterfactualTestCases(
 
   return newTestCases;
 }
+
+export {
+  getOriginalPromptText,
+  containsAttributeReference,
+  replaceGenderTerms,
+  replaceAttributeInText,
+  findVariablesContainingAttribute,
+};
