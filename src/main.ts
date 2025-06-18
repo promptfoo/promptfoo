@@ -31,6 +31,7 @@ import { redteamSetupCommand } from './redteam/commands/setup';
 import { checkForUpdates } from './updates';
 import { setupEnv } from './util';
 import { loadDefaultConfig } from './util/config/default';
+import { generateAssertionsCommand } from './commands/generate/assertions';
 
 /**
  * Adds verbose and env-file options to all commands recursively
@@ -108,6 +109,7 @@ async function main() {
   showCommand(program);
 
   generateDatasetCommand(generateCommand, defaultConfig, defaultConfigPath);
+  generateAssertionsCommand(generateCommand, defaultConfig, defaultConfigPath);
   redteamGenerateCommand(generateCommand, 'redteam', defaultConfig, defaultConfigPath);
 
   const { defaultConfig: redteamConfig, defaultConfigPath: redteamConfigPath } =

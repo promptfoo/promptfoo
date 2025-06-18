@@ -1,0 +1,19 @@
+assert:
+  - type: pi
+    value: >-
+      Does the response provide a translation for the entire input text without
+      omitting any parts?
+  - type: pi
+    value: Is the translation produced in the requested target language?
+  - type: pi
+    value: >-
+      Does the response avoid mixing the source (original) language and the
+      target language in the translated output?
+  - type: pi
+    value: >-
+      Does the output avoid adding extra explanations or commentary that were
+      not present in the original input text?
+  - type: pi
+    value: >-
+      Does the translated output avoid the use of offensive or inappropriate
+      language?
