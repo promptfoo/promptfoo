@@ -1,6 +1,7 @@
 import React from 'react';
 import EnterpriseBanner from '@app/components/EnterpriseBanner';
 import { usePageMeta } from '@app/hooks/usePageMeta';
+import { useTelemetry } from '@app/hooks/useTelemetry';
 import { callApi } from '@app/utils/api';
 import ListAltIcon from '@mui/icons-material/ListAlt';
 import PrintIcon from '@mui/icons-material/Print';
@@ -45,6 +46,7 @@ const App: React.FC = () => {
   const [selectedPromptIndex, setSelectedPromptIndex] = React.useState(0);
   const [isPromptModalOpen, setIsPromptModalOpen] = React.useState(false);
   const [isToolsDialogOpen, setIsToolsDialogOpen] = React.useState(false);
+  const { recordEvent } = useTelemetry();
 
   const searchParams = new URLSearchParams(window.location.search);
   React.useEffect(() => {
@@ -54,6 +56,14 @@ const App: React.FC = () => {
       });
       const body = (await resp.json()) as SharedResults;
       setEvalData(body.data);
+
+      // Track funnel event for report viewed
+      recordEvent('funnel', {
+        type: 'redteam',
+        step: 'webui_report_viewed',
+        source: 'webui',
+        evalId: id,
+      });
     };
 
     if (searchParams) {
