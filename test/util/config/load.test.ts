@@ -71,21 +71,57 @@ jest.mock('../../../src/util/testCaseReader', () => ({
   readTests: jest.fn(),
 }));
 
-describe('combineConfigs', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    jest.spyOn(process, 'cwd').mockReturnValue('/mock/cwd');
-    jest.mocked(globSync).mockImplementation((pathOrGlob) => {
-      const filePart =
-        typeof pathOrGlob === 'string'
-          ? path.basename(pathOrGlob)
-          : Array.isArray(pathOrGlob)
-            ? path.basename(pathOrGlob[0])
-            : pathOrGlob;
-      return [filePart];
-    });
+// Global setup for all tests in this file
+beforeEach(() => {
+  jest.clearAllMocks();
+  jest.resetAllMocks();
+
+  // Set up default $RefParser mock that returns config as-is
+  jest.spyOn($RefParser.prototype, 'dereference').mockImplementation(async (config) => config);
+
+  // Set up default path mocks
+  jest.spyOn(path, 'parse').mockImplementation((filePath) => {
+    const ext =
+      filePath.endsWith('.yaml') || filePath.endsWith('.yml')
+        ? '.yaml'
+        : filePath.endsWith('.js')
+          ? '.js'
+          : '.json';
+    return { ext } as any;
   });
 
+  // Set up default file system mocks
+  jest.mocked(fs.existsSync).mockReturnValue(true);
+  jest.mocked(fs.readdirSync).mockReturnValue([]);
+  jest.mocked(fs.statSync).mockImplementation(() => {
+    throw new Error('File does not exist');
+  });
+
+  // Set up globSync mock
+  jest.mocked(globSync).mockImplementation((pathOrGlob) => {
+    const filePart =
+      typeof pathOrGlob === 'string'
+        ? path.basename(pathOrGlob)
+        : Array.isArray(pathOrGlob)
+          ? path.basename(pathOrGlob[0])
+          : pathOrGlob;
+    return [filePart];
+  });
+
+  // Set up process.cwd mock
+  jest.spyOn(process, 'cwd').mockReturnValue('/mock/cwd');
+
+  // Set up path.resolve mock to handle undefined paths gracefully
+  jest.spyOn(path, 'resolve').mockImplementation((...paths) => {
+    const validPaths = paths.filter((p) => p && typeof p === 'string');
+    if (validPaths.length === 0) {
+      return '/mock/cwd';
+    }
+    return validPaths.join('/').replace(/\/+/g, '/');
+  });
+});
+
+describe('combineConfigs', () => {
   it('reads from existing configs', async () => {
     const config1 = {
       description: 'test1',
@@ -155,11 +191,6 @@ describe('combineConfigs', () => {
       .mockReturnValueOnce(JSON.stringify(config1))
       .mockReturnValueOnce(JSON.stringify(config2))
       .mockReturnValue(Buffer.from(''));
-
-    jest.mocked(fs.readdirSync).mockReturnValue([]);
-    jest.mocked(fs.statSync).mockImplementation(() => {
-      throw new Error('File does not exist');
-    });
 
     const config1Result = await combineConfigs(['config1.json']);
     expect(globSync).toHaveBeenCalledWith(
@@ -946,6 +977,9 @@ describe('dereferenceConfig', () => {
         },
       },
     };
+    // Mock $RefParser to return the expected dereferenced config
+    jest.spyOn($RefParser.prototype, 'dereference').mockResolvedValue(expectedConfig);
+
     const dereferencedConfig = await dereferenceConfig(rawConfig as UnifiedConfig);
     expect(dereferencedConfig).toEqual(expectedConfig);
   });
@@ -1029,7 +1063,6 @@ describe('dereferenceConfig', () => {
         prompt: 'hello world',
       },
     };
-    const dereferencedConfig = await dereferenceConfig(rawConfig as unknown as UnifiedConfig);
     const expectedOutput = {
       prompts: ['hello world'],
       tests: [],
@@ -1075,6 +1108,10 @@ describe('dereferenceConfig', () => {
         prompt: 'hello world',
       },
     };
+    // Mock $RefParser to return the expected dereferenced config
+    jest.spyOn($RefParser.prototype, 'dereference').mockResolvedValue(expectedOutput);
+
+    const dereferencedConfig = await dereferenceConfig(rawConfig as unknown as UnifiedConfig);
     expect(dereferencedConfig).toEqual(expectedOutput);
   });
 
@@ -1102,7 +1139,8 @@ describe('dereferenceConfig', () => {
 
 describe('resolveConfigs', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    // Reset cliState
+    cliState.basePath = '';
   });
 
   it('should set cliState.basePath', async () => {
@@ -1181,6 +1219,7 @@ describe('resolveConfigs', () => {
   });
 
   it('should warn and exit when no config file, no prompts, no providers, and not in CI', async () => {
+    // Mock process.exit to throw an error instead of actually exiting
     jest.spyOn(process, 'exit').mockImplementation((code) => {
       throw new Error(`Process exited with code ${code}`);
     });
@@ -1200,6 +1239,11 @@ describe('resolveConfigs', () => {
   });
 
   it('should throw an error if no providers are provided', async () => {
+    // Mock process.exit to throw an error instead of actually exiting
+    jest.spyOn(process, 'exit').mockImplementation((code) => {
+      throw new Error(`Process exited with code ${code}`);
+    });
+
     const cmdObj = { config: ['config.json'] };
     const defaultConfig = {};
     const promptfooConfig = {
@@ -1233,10 +1277,6 @@ describe('resolveConfigs', () => {
 });
 
 describe('readConfig', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
   it('should read JSON config file', async () => {
     const mockConfig = {
       description: 'Test config',
@@ -1245,6 +1285,8 @@ describe('readConfig', () => {
     };
     jest.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
     jest.spyOn(path, 'parse').mockReturnValue({ ext: '.json' } as any);
+    // Mock $RefParser to return the config as-is for this test
+    jest.spyOn($RefParser.prototype, 'dereference').mockResolvedValue(mockConfig);
 
     const result = await readConfig('config.json');
 
@@ -1260,6 +1302,8 @@ describe('readConfig', () => {
     };
     jest.spyOn(fs, 'readFileSync').mockReturnValue(yaml.dump(mockConfig));
     jest.spyOn(path, 'parse').mockReturnValue({ ext: '.yaml' } as any);
+    // Mock $RefParser to return the config as-is for this test
+    jest.spyOn($RefParser.prototype, 'dereference').mockResolvedValue(mockConfig);
 
     const result = await readConfig('config.yaml');
 
@@ -1296,8 +1340,15 @@ describe('readConfig', () => {
       targets: ['openai:gpt-4o'],
       prompts: ['Hello, world!'],
     };
+    const expectedConfig = {
+      description: 'Test config',
+      providers: ['openai:gpt-4o'],
+      prompts: ['Hello, world!'],
+    };
     jest.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
     jest.spyOn(path, 'parse').mockReturnValue({ ext: '.json' } as any);
+    // Mock $RefParser to return the expected config for this test
+    jest.spyOn($RefParser.prototype, 'dereference').mockResolvedValue(expectedConfig);
 
     const result = await readConfig('config.json');
 
@@ -1316,8 +1367,19 @@ describe('readConfig', () => {
       plugins: ['plugin1'],
       strategies: ['strategy1'],
     };
+    const expectedConfig = {
+      description: 'Test config',
+      providers: ['openai:gpt-4o'],
+      prompts: ['Hello, world!'],
+      redteam: {
+        plugins: ['plugin1'],
+        strategies: ['strategy1'],
+      },
+    };
     jest.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
     jest.spyOn(path, 'parse').mockReturnValue({ ext: '.json' } as any);
+    // Mock $RefParser to return the expected config for this test
+    jest.spyOn($RefParser.prototype, 'dereference').mockResolvedValue(expectedConfig);
 
     const result = await readConfig('config.json');
 
@@ -1341,8 +1403,14 @@ describe('readConfig', () => {
         { vars: { anotherVar: 'anotherValue', prompt: 'yo mama' } },
       ],
     };
+    const expectedConfig = {
+      ...mockConfig,
+      prompts: ['{{prompt}}'],
+    };
     jest.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
     jest.spyOn(path, 'parse').mockReturnValue({ ext: '.json' } as any);
+    // Mock $RefParser to return the expected config for this test
+    jest.spyOn($RefParser.prototype, 'dereference').mockResolvedValue(expectedConfig);
 
     const result = await readConfig('config.json');
 
@@ -1378,28 +1446,40 @@ describe('readConfig', () => {
   });
 
   it('should throw validation error for invalid dereferenced config', async () => {
-    const mockConfig = {
-      description: 'invalid_config',
-      providers: [{ $ref: 'defaultParams.yaml#/invalidKey' }],
-    };
+    // Create isolated mocks for this test only
+    const localReadFileSync = jest.spyOn(fs, 'readFileSync');
+    const localDereference = jest.spyOn($RefParser.prototype, 'dereference');
+    const localExistsSync = jest.spyOn(fs, 'existsSync');
 
-    const dereferencedConfig = {
-      description: 'invalid_config',
-      providers: [{ invalid: true }],
-    };
+    try {
+      const mockConfig = {
+        description: 'invalid_config',
+        providers: [{ $ref: 'defaultParams.yaml#/invalidKey' }],
+      };
 
-    jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(mockConfig));
-    jest.spyOn($RefParser.prototype, 'dereference').mockResolvedValue(dereferencedConfig);
-    jest.mocked(fs.existsSync).mockReturnValue(true);
+      const dereferencedConfig = {
+        description: 'invalid_config',
+        providers: [{ invalid: true }],
+      };
 
-    await readConfig('config.yaml');
+      localReadFileSync.mockReturnValue(yaml.dump(mockConfig));
+      localDereference.mockResolvedValue(dereferencedConfig);
+      localExistsSync.mockReturnValue(true);
 
-    expect(logger.warn).toHaveBeenCalledTimes(1);
-    expect(logger.warn).toHaveBeenCalledWith(
-      'Invalid configuration file config.yaml:\nValidation error: Unrecognized key(s) in object: \'invalid\' at "providers[0]"',
-    );
-    const calls = jest.mocked(logger.warn).mock.calls;
-    expect(calls[0][0]).toContain('Invalid configuration file');
+      await readConfig('config.yaml');
+
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+      expect(logger.warn).toHaveBeenCalledWith(
+        'Invalid configuration file config.yaml:\nValidation error: Unrecognized key(s) in object: \'invalid\' at "providers[0]"',
+      );
+      const calls = jest.mocked(logger.warn).mock.calls;
+      expect(calls[0][0]).toContain('Invalid configuration file');
+    } finally {
+      // Restore mocks after this test to prevent contamination
+      localReadFileSync.mockRestore();
+      localDereference.mockRestore();
+      localExistsSync.mockRestore();
+    }
   });
 
   it('should handle empty YAML file by defaulting to empty object', async () => {

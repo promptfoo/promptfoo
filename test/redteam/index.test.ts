@@ -75,6 +75,14 @@ describe('synthesize', () => {
       stop: jest.fn(),
       update: jest.fn(),
     } as any);
+    // Disable remote generation by default to avoid health checks interfering
+    // with tests that don't explicitly set this behaviour
+    jest.mocked(shouldGenerateRemote).mockReturnValue(false);
+    jest.mocked(getRemoteHealthUrl).mockReturnValue('https://api.test/health');
+    jest.mocked(checkRemoteHealth).mockResolvedValue({
+      status: 'OK',
+      message: 'Cloud API is healthy',
+    });
   });
 
   // Input handling tests
