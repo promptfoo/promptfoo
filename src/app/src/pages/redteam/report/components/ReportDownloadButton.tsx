@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useUIStore } from '@app/stores/uiStore';
 import DownloadIcon from '@mui/icons-material/Download';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -24,6 +25,7 @@ const ReportDownloadButton: React.FC<ReportDownloadButtonProps> = ({
   const [isHovering, setIsHovering] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const setNavbarVisible = useUIStore((state) => state.setNavbarVisible);
+  const { recordEvent } = useTelemetry();
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -46,6 +48,12 @@ const ReportDownloadButton: React.FC<ReportDownloadButtonProps> = ({
     setIsDownloading(true);
     handleClose();
     setNavbarVisible(false);
+
+    // Track report export
+    recordEvent('webui_action', {
+      action: 'redteam_report_export',
+      format: 'pdf',
+    });
 
     try {
       setTimeout(async () => {
@@ -74,6 +82,12 @@ const ReportDownloadButton: React.FC<ReportDownloadButtonProps> = ({
     setIsDownloading(true);
     handleClose();
 
+    // Track report export
+    recordEvent('webui_action', {
+      action: 'redteam_report_export',
+      format: 'csv',
+    });
+
     try {
       const csv = convertEvalDataToCsv(evalData);
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -96,6 +110,12 @@ const ReportDownloadButton: React.FC<ReportDownloadButtonProps> = ({
   const handleJsonDownload = () => {
     setIsDownloading(true);
     handleClose();
+
+    // Track report export
+    recordEvent('webui_action', {
+      action: 'redteam_report_export',
+      format: 'json',
+    });
 
     try {
       const jsonData = JSON.stringify(evalData, null, 2);

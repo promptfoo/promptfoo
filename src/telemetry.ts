@@ -12,6 +12,7 @@ export const TelemetryEventSchema = z.object({
     'eval_ran',
     'feature_used',
     'funnel',
+    'webui_action',
     'webui_api',
     'webui_page_view',
   ]),
@@ -165,3 +166,5 @@ export class Telemetry {
 
 const telemetry = new Telemetry();
 export default telemetry;
+
+export { TELEMETRY_ENDPOINT, CONSENT_ENDPOINT, TELEMETRY_TIMEOUT_MS, telemetry };

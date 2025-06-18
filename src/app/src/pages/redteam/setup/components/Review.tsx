@@ -224,6 +224,16 @@ export default function Review() {
       targetType: config.target.id,
     });
 
+    // Track funnel milestone - evaluation started
+    recordEvent('funnel', {
+      type: 'redteam',
+      step: 'webui_evaluation_started',
+      source: 'webui',
+      numPlugins: config.plugins.length,
+      numStrategies: config.strategies.length,
+      targetType: config.target.id,
+    });
+
     setIsRunning(true);
     setLogs([]);
     setEvalId(null);
@@ -260,6 +270,14 @@ export default function Review() {
 
           if (status.status === 'complete' && status.result && status.evalId) {
             setEvalId(status.evalId);
+
+            // Track funnel milestone - evaluation completed
+            recordEvent('funnel', {
+              type: 'redteam',
+              step: 'webui_evaluation_completed',
+              source: 'webui',
+              evalId: status.evalId,
+            });
           } else if (status.status === 'complete') {
             console.warn('No evaluation result was generated');
             showToast(

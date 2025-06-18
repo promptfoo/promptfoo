@@ -149,7 +149,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
     logger.info(`Running model scan on: ${resolvedPaths.join(', ')}`);
 
     // Track the scan
-    await telemetry.recordAndSend('webui_api', {
+    await telemetry.recordAndSend('webui_action', {
       event: 'model_scan',
       pathCount: paths.length,
       hasBlacklist: options.blacklist?.length > 0,
