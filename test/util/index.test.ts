@@ -234,13 +234,14 @@ describe('util', () => {
       const realFs = jest.requireActual('fs') as typeof fs;
       const templatePath = path.resolve(__dirname, '../../src/tableOutput.html');
       const templateContent = realFs.readFileSync(templatePath, 'utf-8');
-      
+
       // Check that the template has escape filters on all user-provided content
       expect(templateContent).toContain('{{ header | escape }}');
       expect(templateContent).toContain('{{ cell | escape }}');
-      
+
       // Ensure both data-content attribute and cell content are escaped
-      const cellRegex = /<td[^>]*data-content="\{\{ cell \| escape \}\}"[^>]*>\{\{ cell \| escape \}\}<\/td>/;
+      const cellRegex =
+        /<td[^>]*data-content="\{\{ cell \| escape \}\}"[^>]*>\{\{ cell \| escape \}\}<\/td>/;
       expect(templateContent).toMatch(cellRegex);
     });
 
