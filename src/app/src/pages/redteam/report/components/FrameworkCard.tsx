@@ -168,7 +168,8 @@ const FrameworkCard: React.FC<FrameworkCardProps> = ({
                             label="No Plugins"
                             size="small"
                             sx={{
-                              backgroundColor: '#9e9e9e',
+                              backgroundColor:
+                                nonCompliantCategoryPlugins.length === 0 ? '#4caf50' : '#9e9e9e',
                               color: 'white',
                               fontSize: '0.7rem',
                               height: 20,
@@ -176,11 +177,7 @@ const FrameworkCard: React.FC<FrameworkCardProps> = ({
                           />
                         ) : testedPlugins.length > 0 ? (
                           <Chip
-                            label={
-                              nonCompliantCategoryPlugins.length === 0
-                                ? '0% ASR'
-                                : `${Math.round((nonCompliantCategoryPlugins.length / testedPlugins.length) * 100)}% ASR`
-                            }
+                            label={`${nonCompliantCategoryPlugins.length} / ${testedPlugins.length} plugins failed`}
                             size="small"
                             sx={{
                               backgroundColor:
@@ -429,29 +426,17 @@ const FrameworkCard: React.FC<FrameworkCardProps> = ({
                 }}
               >
                 <Typography variant="subtitle2">Framework Results</Typography>
-                {nonCompliantPlugins.length === 0 ? (
-                  <Chip
-                    label="0%"
-                    size="small"
-                    sx={{
-                      backgroundColor: '#4caf50',
-                      color: 'white',
-                      fontSize: '0.7rem',
-                      height: 20,
-                    }}
-                  />
-                ) : (
-                  <Chip
-                    label={`${Math.round((nonCompliantPlugins.length / Object.keys(categoryStats).filter((plugin) => categoryStats[plugin].total > 0).length) * 100)}%`}
-                    size="small"
-                    sx={{
-                      backgroundColor: '#f44336',
-                      color: 'white',
-                      fontSize: '0.7rem',
-                      height: 20,
-                    }}
-                  />
-                )}
+
+                <Chip
+                  label={`${nonCompliantPlugins.length} / ${Object.keys(categoryStats).filter((plugin) => categoryStats[plugin].total > 0).length} plugins failed`}
+                  size="small"
+                  sx={{
+                    backgroundColor: nonCompliantPlugins.length === 0 ? '#4caf50' : '#f44336',
+                    color: 'white',
+                    fontSize: '0.7rem',
+                    height: 20,
+                  }}
+                />
               </Box>
 
               <List dense sx={{ py: 0 }}>
