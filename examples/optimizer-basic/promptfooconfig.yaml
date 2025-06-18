@@ -17,8 +17,8 @@ tests:
     vars:
       text: Hello world
     assert:
-      - type: contains
-        value: Bonjour
+      - type: icontains
+        value: bonjour
   - provider:
       id: promptfoo:prompt-optimizer
       config:
@@ -28,7 +28,7 @@ tests:
     vars:
       text: Good morning
     assert:
-      - type: contains
+      - type: icontains
         value: matin
   - provider:
       id: promptfoo:prompt-optimizer
@@ -39,5 +39,5 @@ tests:
     vars:
       text: Thank you very much
     assert:
-      - type: contains
+      - type: icontains
         value: merci
