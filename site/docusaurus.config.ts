@@ -336,9 +336,14 @@ const config: Config = {
             },
             {
               html: `
-                <div style="position: relative; margin-top:8px">
-                  <span style="position: absolute; left: 65px; top: 25px; font-size: 10px; font-weight: bold; background-color: #25842c; padding: 2px 4px; border-radius: 4px;">In Progress</span>
-                  <img loading="lazy" src="/img/badges/soc2.png" alt="SOC2 Compliance in progress" style="width:80px; height: auto"/>
+                <div style="display: flex; gap: 16px; align-items: center; margin-top: 12px;">
+                  <!--
+                  <div style="position: relative;">
+                    <span style="position: absolute; left: 65px; top: 25px; font-size: 10px; font-weight: bold; background-color: #25842c; padding: 2px 4px; border-radius: 4px;">In Progress</span>
+                    <img loading="lazy" src="/img/badges/soc2.png" alt="SOC2 Compliance in progress" style="width:80px; height: auto"/>
+                  </div>
+                  -->
+                  <img loading="lazy" src="/img/badges/iso27001.png" alt="ISO 27001 Certified" style="width:90px; height: auto"/>
                 </div>
                 `,
             },
