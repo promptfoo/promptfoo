@@ -1,19 +1,37 @@
 assert:
-  - type: pi
+  - type: llm-rubric
+    metric: Accurate Translation
     value: >-
-      Does the response provide a translation for the entire input text without
-      omitting any parts?
-  - type: pi
-    value: Is the translation produced in the requested target language?
-  - type: pi
+      Does the output correctly translate all meaningful content from the input
+      text into the requested language?
+  - type: llm-rubric
+    metric: Complete Translation
     value: >-
-      Does the response avoid mixing the source (original) language and the
-      target language in the translated output?
-  - type: pi
+      Does the response preserve all semantic information from the input text
+      without omission?
+  - type: python
+    metric: Length Limit
+    value: |-
+      # Remove leading/trailing whitespace
+      trimmed_output = output.strip()
+
+      # Handle empty output
+      if not trimmed_output:
+          return {'pass': False, 'score': 0.0}
+
+      # Count the number of characters
+      char_count = len(trimmed_output)
+
+      # Check if character count is fewer than 100
+      if char_count < 100:
+          return {'pass': True, 'score': 1.0}
+      else:
+          return {'pass': False, 'score': 0.0}
+  - type: llm-rubric
+    metric: No Offensive Content
+    value: Does the translated output avoid the use of offensive or abusive language?
+  - type: llm-rubric
+    metric: No Extra Content
     value: >-
-      Does the output avoid adding extra explanations or commentary that were
-      not present in the original input text?
-  - type: pi
-    value: >-
-      Does the translated output avoid the use of offensive or inappropriate
-      language?
+      Does the output contain only the translation, with no extraneous
+      explanation or commentary?

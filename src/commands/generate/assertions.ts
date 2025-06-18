@@ -1,5 +1,6 @@
 import chalk from 'chalk';
-import type { Command } from 'commander';
+import type { Command} from 'commander';
+import { InvalidArgumentError } from 'commander';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import { disableCache } from '../../cache';
@@ -21,6 +22,7 @@ interface DatasetGenerateOptions {
   write: boolean;
   defaultConfig: Partial<UnifiedConfig>;
   defaultConfigPath: string | undefined;
+  type: 'pi' | 'g-eval' | 'llm-rubric'
 }
 
 export async function doGenerateAssertions(options: DatasetGenerateOptions): Promise<void> {
@@ -58,7 +60,18 @@ export async function doGenerateAssertions(options: DatasetGenerateOptions): Pro
     numQuestions: Number.parseInt(options.numQuestions || "5", 10),
     provider: options.provider,
   });
-  const configAddition = { assert: results.map((result) => ({ type: 'pi', value: result })) };
+  const assertionType = options.type
+  const configAddition = { assert: results.map((result) => {
+    if (result.code) {
+      return {
+        type: 'python',
+        metric: result.label,
+        value: result.code,
+      }
+    } else {
+      return { type: assertionType,  metric: result.label, value: result.question };
+    }
+  }) };
   const yamlString = yaml.dump(configAddition);
   if (options.output) {
     // Should the output be written as a YAML or CSV?
@@ -112,6 +125,16 @@ export async function doGenerateAssertions(options: DatasetGenerateOptions): Pro
   await telemetry.send();
 }
 
+
+function validateAssertionType(value:string, previous:string) {
+  const allowedStrings = ['pi', 'g-eval', 'llm-rubric'];
+  if (!allowedStrings.includes(value)) {
+    throw new InvalidArgumentError(`Option --type must be one of: ${allowedStrings.join(', ')}.`);
+  }
+  return value;
+}
+
+
 export function generateAssertionsCommand(
   program: Command,
   defaultConfig: Partial<UnifiedConfig>,
@@ -119,17 +142,18 @@ export function generateAssertionsCommand(
 ) {
   program
     .command('assertions')
-    .description('Generate additional headroom assertions')
-    .option(
-      '-i, --instructions [instructions]',
-      'Additional instructions to follow while generating test cases',
-    )
-    .option('-c, --config [path]', 'Path to configuration file. Defaults to promptfooconfig.yaml')
+    .description('Generate additional guardrail assertions')
+    .option('-t, --type [type]', 'The type of natural language assertion to generate (pi, g-eval, or llm-rubric)', validateAssertionType, 'pi')
+    .requiredOption('-c, --config [path]', 'Path to configuration file. Defaults to promptfooconfig.yaml')
     .option('-o, --output [path]', 'Path to output file. Supports YAML output')
     .option('-w, --write', 'Write results to promptfoo configuration file')
     .option(
       '--provider <provider>',
       `Provider to use for generating assertions. Defaults to the default grading provider.`,
+    )
+    .option(
+      '-i, --instructions [instructions]',
+      'Additional instructions to follow while generating test cases',
     )
     .option('--no-cache', 'Do not read or write results to disk cache', false)
     .option('--env-file, --env-path <path>', 'Path to .env file')

@@ -4,7 +4,7 @@ providers:
   - openai:gpt-4.1-mini
 
 prompts:
-  - 'Translate the following text to {{language}}: {{text}}'
+  - 'Translate the following text to {{language}}: {{text}}.  IMPORTANT: Ensure the response is less than 100 characters'
 
 defaultTest:
   assert:
