@@ -42,7 +42,7 @@ describe('AzureCompletionProvider', () => {
     expect(result2.tokenUsage).toEqual({ cached: 10, total: 10 });
   });
 
-  it('should use custom fetchWithCache from context when provided', async () => {
+  it('should always use default fetchWithCache regardless of context', async () => {
     const customFetchWithCache = jest.fn().mockResolvedValueOnce({
       data: {
         choices: [{ text: 'custom fetch' }],
@@ -50,6 +50,14 @@ describe('AzureCompletionProvider', () => {
       },
       cached: false,
     });
+
+    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
+        choices: [{ text: 'default fetch' }],
+        usage: { total_tokens: 5, prompt_tokens: 2, completion_tokens: 3 },
+      },
+      cached: false,
+    } as any);
 
     const provider = new AzureCompletionProvider('test', {
       config: { apiHost: 'test.azure.com' },
@@ -63,16 +71,18 @@ describe('AzureCompletionProvider', () => {
       vars: {},
     });
 
-    expect(customFetchWithCache).toHaveBeenCalledWith(
+    expect(jest.mocked(fetchWithCache)).toHaveBeenCalledWith(
       expect.stringContaining('/openai/deployments/test/completions'),
       expect.any(Object),
       expect.any(Number),
+      'json',
+      undefined,
     );
-    expect(jest.mocked(fetchWithCache)).not.toHaveBeenCalled();
-    expect(result.output).toBe('custom fetch');
+    expect(customFetchWithCache).not.toHaveBeenCalled();
+    expect(result.output).toBe('default fetch');
   });
 
-  it('should fallback to default fetchWithCache when context.fetchWithCache is not provided', async () => {
+  it('should use default fetchWithCache when context.fetchWithCache is not provided', async () => {
     jest.mocked(fetchWithCache).mockResolvedValueOnce({
       data: {
         choices: [{ text: 'default fetch' }],
@@ -93,12 +103,14 @@ describe('AzureCompletionProvider', () => {
       expect.stringContaining('/openai/deployments/test/completions'),
       expect.any(Object),
       expect.any(Number),
+      'json',
+      undefined,
     );
     expect(result.output).toBe('default fetch');
   });
 
-  it('should handle errors from custom fetchWithCache', async () => {
-    const customFetchWithCache = jest.fn().mockRejectedValueOnce(new Error('Custom fetch error'));
+  it('should handle errors from fetchWithCache', async () => {
+    jest.mocked(fetchWithCache).mockRejectedValueOnce(new Error('Fetch error'));
 
     const provider = new AzureCompletionProvider('test', {
       config: { apiHost: 'test.azure.com' },
@@ -108,16 +120,17 @@ describe('AzureCompletionProvider', () => {
     const testPrompt = { raw: 'test prompt', display: 'test', label: 'test' };
     const result = await provider.callApi('test prompt', {
       prompt: testPrompt,
-      fetchWithCache: customFetchWithCache,
       vars: {},
     });
 
-    expect(customFetchWithCache).toHaveBeenCalledWith(
+    expect(jest.mocked(fetchWithCache)).toHaveBeenCalledWith(
       expect.stringContaining('/openai/deployments/test/completions'),
       expect.any(Object),
       expect.any(Number),
+      'json',
+      undefined,
     );
-    expect(result.error).toBe('API call error: Error: Custom fetch error');
+    expect(result.error).toBe('API call error: Error: Fetch error');
   });
 
   it('should pass custom headers from config to fetchWithCache', async () => {
