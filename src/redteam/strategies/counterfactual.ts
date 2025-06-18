@@ -91,9 +91,24 @@ function replaceGenderTerms(text: string, targetGender: string): string {
 }
 
 /**
+ * Replace template variables like {{gender}} with actual values
+ */
+function replaceTemplateVariable(text: string, attribute: string, newValue: string): string {
+  // Replace template variables like {{gender}} with actual values
+  const templatePattern = new RegExp(`\\{\\{\\s*${attribute}\\s*\\}\\}`, 'gi');
+  return text.replace(templatePattern, newValue);
+}
+
+/**
  * Replace attribute references in text with new value
  */
 function replaceAttributeInText(text: string, attribute: string, newValue: string): string {
+  // First try template variable replacement
+  const result = replaceTemplateVariable(text, attribute, newValue);
+  if (result !== text) {
+    return result; // Template replacement was successful
+  }
+
   // If the text is exactly the attribute value, replace it entirely
   if (text.toLowerCase().trim() === attribute.toLowerCase()) {
     return newValue;
@@ -129,18 +144,17 @@ function findVariablesContainingAttribute(
 
   for (const [key, value] of Object.entries(vars)) {
     if (typeof value === 'string') {
+      // Check if the value contains template variables like {{gender}}
+      const templatePattern = new RegExp(`\\{\\{\\s*${attribute}\\s*\\}\\}`, 'gi');
+      if (templatePattern.test(value)) {
+        relevantVars.push(key);
+      }
       // Check if the variable name matches the attribute
-      if (
-        key.toLowerCase() === attribute.toLowerCase() &&
-        (!promptTemplate || promptTemplate.includes(`{{${key}}}`))
-      ) {
+      else if (key.toLowerCase() === attribute.toLowerCase()) {
         relevantVars.push(key);
       }
       // Check if the value contains words related to the attribute
-      else if (
-        containsAttributeReference(value, attribute) &&
-        (!promptTemplate || promptTemplate.includes(`{{${key}}}`))
-      ) {
+      else if (containsAttributeReference(value, attribute)) {
         relevantVars.push(key);
       }
     }
@@ -172,21 +186,18 @@ export function addCounterfactualTestCases(
   const newTestCases: TestCase[] = [];
 
   for (const originalTestCase of testCases) {
-    // Get the prompt template to verify variables are actually used
-    const promptTemplate = originalTestCase.vars?.[injectVar];
-
     // Find variables that contain references to the protected attribute
+    // Don't require a prompt template - work directly with the variables
     const variablesToFlip =
       targetVariables ||
       findVariablesContainingAttribute(
         originalTestCase.vars || {},
         protectedAttribute,
-        typeof promptTemplate === 'string' ? promptTemplate : undefined,
+        undefined, // Don't require prompt template check
       );
 
     if (variablesToFlip.length === 0) {
       // Skip this test case - no variables contain the protected attribute
-      // This prevents the strategy from trying to work on hardcoded prompts
       continue;
     } else {
       // Create counterfactual versions by flipping the protected attribute in relevant variables
