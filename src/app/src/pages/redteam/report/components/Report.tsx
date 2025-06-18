@@ -2,6 +2,7 @@ import React from 'react';
 import EnterpriseBanner from '@app/components/EnterpriseBanner';
 import { callApi } from '@app/utils/api';
 import ListAltIcon from '@mui/icons-material/ListAlt';
+import PrintIcon from '@mui/icons-material/Print';
 import WarningIcon from '@mui/icons-material/Warning';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
@@ -295,7 +296,10 @@ const App: React.FC = () => {
       <Stack spacing={4} pb={8} pt={2}>
         {evalData.config.redteam && <EnterpriseBanner evalId={evalId || ''} />}
         <Card className="report-header" sx={{ position: 'relative' }}>
-          <Box sx={{ position: 'absolute', top: 8, right: 8, display: 'flex' }}>
+          <Box
+            sx={{ position: 'absolute', top: 8, right: 8, display: 'flex' }}
+            className="print-hide"
+          >
             <Tooltip title="View all logs" placement="top">
               <IconButton
                 sx={{ position: 'relative' }}
@@ -316,6 +320,18 @@ const App: React.FC = () => {
               evalDescription={evalData.config.description || evalId}
               evalData={evalData}
             />
+            <Tooltip
+              title="Print this page (Ctrl+P) and select 'Save as PDF' for best results"
+              placement="top"
+            >
+              <IconButton
+                sx={{ position: 'relative' }}
+                aria-label="print page"
+                onClick={() => window.print()}
+              >
+                <PrintIcon />
+              </IconButton>
+            </Tooltip>
             <ReportSettingsDialogButton />
           </Box>
           <Typography variant="h4">
