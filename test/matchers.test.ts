@@ -264,8 +264,20 @@ describe('matchesLlmRubric', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.resetAllMocks();
     jest.mocked(fs.existsSync).mockReturnValue(true);
     jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
+
+    // Reset cliState to default
+    (cliState as any).config = {};
+
+    // Reset remote grading mock
+    jest.mocked(remoteGrading.doRemoteGrading).mockReset();
+    jest.mocked(remoteGrading.doRemoteGrading).mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Remote grading passed',
+    });
   });
 
   it('should pass when the grading provider returns a passing result', async () => {
@@ -1004,8 +1016,16 @@ describe('matchesLlmRubric', () => {
       },
     };
 
+    // Clear and set up specific mock behavior for this test
+    jest.mocked(remoteGrading.doRemoteGrading).mockClear();
+    jest.mocked(remoteGrading.doRemoteGrading).mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Remote grading passed',
+    });
+
     // Give it a redteam config
-    cliState.config = { redteam: {} };
+    (cliState as any).config = { redteam: {} };
 
     await matchesLlmRubric(rubric, llmOutput, grading);
 
