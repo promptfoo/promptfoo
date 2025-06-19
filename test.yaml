@@ -1,29 +1,32 @@
 assert:
-  - type: llm-rubric
-    metric: Language Accuracy
-    value: Is the output written in the specified target language?
-  - type: llm-rubric
-    metric: No Extra Content
-    value: >-
-      Does the response strictly contain only the translation, without
-      additional explanations or comments?
   - type: python
-    metric: Character Limit
+    metric: Length Limit
     value: |-
-      # Remove whitespace from the output and count characters
-      if output is None:
-          return {'pass': False, 'score': 0.0}
-      char_count = len(output)
-      if char_count < 100:
+      # Remove leading/trailing whitespace
+      output_stripped = output.strip()
+
+      # Measure the length of the output (in Unicode code points)
+      length = len(output_stripped)
+
+      # Check if the output is fewer than 100 characters
+      if length < 100:
           return {'pass': True, 'score': 1.0}
       return {'pass': False, 'score': 0.0}
   - type: llm-rubric
-    metric: Complete Translation
+    metric: Language Output
     value: >-
-      Does the response translate the entire input text without omitting any
-      part?
+      Is the translation provided in the target language specified in the
+      prompt?
   - type: llm-rubric
-    metric: No Source Text Leakage
+    metric: Translation Accuracy
     value: >-
-      Does the output avoid including untranslated words or phrases from the
-      source language?
+      Does the output preserve the original meaning of the input text when
+      translated?
+  - type: llm-rubric
+    metric: No Extraneous Content
+    value: >-
+      Does the translated output exclude any additional comments, explanations,
+      or metadata?
+  - type: llm-rubric
+    metric: No Source Text
+    value: Does the response avoid including or repeating the original source text?

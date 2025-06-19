@@ -1,15 +1,15 @@
 import fs from 'fs';
 import yaml from 'js-yaml';
+import { synthesizeFromTestSuite } from '../../../src/assertions/synthesis';
 import { disableCache } from '../../../src/cache';
-import { doGenerateDataset } from '../../../src/commands/generate/dataset';
+import { doGenerateAssertions } from '../../../src/commands/generate/assertions';
 import telemetry from '../../../src/telemetry';
-import { synthesizeFromTestSuite } from '../../../src/testCase/synthesis';
-import type { TestSuite, VarMapping } from '../../../src/types';
+import type { Assertion, TestSuite } from '../../../src/types';
 import { resolveConfigs } from '../../../src/util/config/load';
 
 jest.mock('fs');
 jest.mock('js-yaml');
-jest.mock('../../../src/testCase/synthesis');
+jest.mock('../../../src/assertions/synthesis');
 jest.mock('../../../src/util/config/load');
 jest.mock('../../../src/cache');
 jest.mock('../../../src/logger');
@@ -39,7 +39,16 @@ describe('assertion generation', () => {
   describe('doGenerateAssertions', () => {
     const mockTestSuite: TestSuite = {
       prompts: [{ raw: 'test prompt', label: 'test' }],
-      tests: [],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'llm-rubric',
+              value: 'test question',
+            },
+          ],
+        },
+      ],
       providers: [
         {
           id: () => 'test-provider',
@@ -48,7 +57,10 @@ describe('assertion generation', () => {
       ],
     };
 
-    const mockResults: VarMapping[] = [{ var1: 'value1' }, { var1: 'value2' }];
+    const mockResults: Assertion[] = [
+      { type: 'pi', value: 'additional assertion' },
+      { type: 'pi', value: 'additional assertion 2' },
+    ];
 
     beforeEach(() => {
       jest.mocked(synthesizeFromTestSuite).mockResolvedValue(mockResults);
@@ -70,11 +82,11 @@ describe('assertion generation', () => {
     it('should write YAML output', async () => {
       const configPath = 'config.yaml';
 
-      await doGenerateDataset({
+      await doGenerateAssertions({
         cache: true,
         config: configPath,
-        numPersonas: '5',
-        numTestCasesPerPersona: '3',
+        numQuestions: '2',
+        type: 'pi',
         output: 'output.yaml',
         write: false,
         defaultConfig: {},
@@ -84,33 +96,15 @@ describe('assertion generation', () => {
       expect(fs.writeFileSync).toHaveBeenCalledWith('output.yaml', 'yaml content');
     });
 
-    it('should write CSV output', async () => {
-      const configPath = 'config.yaml';
-
-      await doGenerateDataset({
-        cache: true,
-        config: configPath,
-        numPersonas: '5',
-        numTestCasesPerPersona: '3',
-        output: 'output.csv',
-        write: false,
-        defaultConfig: {},
-        defaultConfigPath: configPath,
-      });
-
-      const expectedCsv = 'var1\n"value1"\n"value2"\n';
-      expect(fs.writeFileSync).toHaveBeenCalledWith('output.csv', expectedCsv);
-    });
-
     it('should throw error for unsupported file type', async () => {
       const configPath = 'config.yaml';
 
       await expect(
-        doGenerateDataset({
+        doGenerateAssertions({
           cache: true,
           config: configPath,
-          numPersonas: '5',
-          numTestCasesPerPersona: '3',
+          numQuestions: '2',
+          type: 'pi',
           output: 'output.txt',
           write: false,
           defaultConfig: {},
@@ -122,11 +116,11 @@ describe('assertion generation', () => {
     it('should write to config file when write option is true', async () => {
       const configPath = 'config.yaml';
 
-      await doGenerateDataset({
+      await doGenerateAssertions({
         cache: true,
         config: configPath,
-        numPersonas: '5',
-        numTestCasesPerPersona: '3',
+        numQuestions: '2',
+        type: 'pi',
         write: true,
         defaultConfig: {},
         defaultConfigPath: configPath,
@@ -137,10 +131,10 @@ describe('assertion generation', () => {
 
     it('should throw error when no config file found', async () => {
       await expect(
-        doGenerateDataset({
+        doGenerateAssertions({
           cache: true,
-          numPersonas: '5',
-          numTestCasesPerPersona: '3',
+          numQuestions: '2',
+          type: 'pi',
           write: false,
           defaultConfig: {},
           defaultConfigPath: undefined,
@@ -152,11 +146,11 @@ describe('assertion generation', () => {
       const configPath = 'config.yaml';
 
       await expect(
-        doGenerateDataset({
+        doGenerateAssertions({
           cache: true,
           config: configPath,
-          numPersonas: '5',
-          numTestCasesPerPersona: '3',
+          numQuestions: '2',
+          type: 'pi',
           output: 'output',
           write: false,
           defaultConfig: {},
@@ -170,11 +164,11 @@ describe('assertion generation', () => {
       const configPath = 'config.yaml';
 
       await expect(
-        doGenerateDataset({
+        doGenerateAssertions({
           cache: true,
           config: configPath,
-          numPersonas: '5',
-          numTestCasesPerPersona: '3',
+          numQuestions: '2',
+          type: 'pi',
           output: 'output.yaml',
           write: false,
           defaultConfig: {},

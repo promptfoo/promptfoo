@@ -86,17 +86,10 @@ export async function doGenerateAssertions(options: DatasetGenerateOptions): Pro
   if (options.write && configPath) {
     const existingConfig = yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>;
     // Handle the union type for tests (string | TestGeneratorConfig | Array<...>)
-    const existingTests = existingConfig.tests;
-    let testsArray: any[] = [];
-    if (Array.isArray(existingTests)) {
-      testsArray = existingTests;
-    } else if (existingTests) {
-      testsArray = [existingTests];
-    }
-    existingConfig.tests = testsArray.map((test) => ({
-      ...test,
-      assert: [...(test.assert || []), ...configAddition.assert],
-    }));
+    existingConfig.defaultTest = {
+      ...existingConfig.defaultTest,
+      assert: [...(existingConfig.defaultTest?.assert || []), ...configAddition.assert],
+    };
     fs.writeFileSync(configPath, yaml.dump(existingConfig));
     logger.info(`Wrote ${results.length} new test cases to ${configPath}`);
     const runCommand = isRunningUnderNpx() ? 'npx promptfoo eval' : 'promptfoo eval';

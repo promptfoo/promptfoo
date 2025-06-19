@@ -247,7 +247,10 @@ describe('generateNewQuestionsPrompt', () => {
 
 describe('convertQuestionToPythonPrompt', () => {
   it('should generate a prompt that uses multiple system prompts and all assertions', () => {
-    const result = convertQuestionToPythonPrompt(['What is the capital of France?', 'What is the capital of Germany?'], 'Is the response clear?');
+    const result = convertQuestionToPythonPrompt(
+      ['What is the capital of France?', 'What is the capital of Germany?'],
+      'Is the response clear?',
+    );
     console.log(result);
     expect(result).toBe(dedent`
 You are a specialized system that analyzes an LLM evaluation question and generates a Python function to automatically check LLM responses against the specific criterion. 
