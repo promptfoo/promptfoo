@@ -1,6 +1,7 @@
 ---
 date: 2025-02-14
 image: /img/blog/agent-security/panda_tools.png
+authors: [vanessa]
 ---
 
 # Understanding AI Agent Security

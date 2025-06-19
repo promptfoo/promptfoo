@@ -2,6 +2,7 @@
 sidebar_label: Excessive agency in LLMs
 image: /img/blog/excessive-agency/detecting-excessive-agency.svg
 date: 2024-10-08
+authors: [ian]
 ---
 
 # Understanding Excessive Agency in LLMs

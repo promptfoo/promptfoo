@@ -4,6 +4,7 @@ title: 'Inside MCP: A Protocol for AI Integration'
 description: 'A hands-on exploration of Model Context Protocol - the standard that connects AI systems with real-world tools and data'
 image: /img/blog/mcp/mcp.png
 date: 2025-05-06
+authors: [asmi]
 ---
 
 import MCPConnectionSimulator from './mcp/components/MCPConnectionSimulator';

@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import * as path from 'path';
+import { z } from 'zod';
 import cliState from './cliState';
 import { getEnvBool } from './envars';
 import { importModule } from './esm';
@@ -8,10 +9,21 @@ import { getPrompt as getHeliconePrompt } from './integrations/helicone';
 import { getPrompt as getLangfusePrompt } from './integrations/langfuse';
 import { getPrompt as getPortkeyPrompt } from './integrations/portkey';
 import logger from './logger';
+import type EvalResult from './models/evalResult';
 import { isPackagePath, loadFromPackage } from './providers/packageParser';
 import { runPython } from './python/pythonUtils';
 import telemetry from './telemetry';
-import type { ApiProvider, NunjucksFilterMap, Prompt } from './types';
+import {
+  type ApiProvider,
+  type NunjucksFilterMap,
+  type Prompt,
+  TestCaseSchema,
+  type TestSuite,
+  type CompletedPrompt,
+  type EvaluateResult,
+  TestSuiteSchema,
+  type TestCase,
+} from './types';
 import { renderVarsInObject } from './util';
 import { isJavascriptFile, isImageFile, isVideoFile, isAudioFile } from './util/fileExtensions';
 import invariant from './util/invariant';
@@ -324,29 +336,162 @@ export async function renderPrompt(
   }
 }
 
+// ================================
+// Extension Hooks
+// ================================
+
+// TODO(chore): Move the extension hooks logic into a separate file.
+
+const BeforeAllExtensionHookContextSchema = z.object({
+  suite: TestSuiteSchema,
+});
+
+const BeforeEachExtensionHookContextSchema = z.object({
+  test: TestCaseSchema,
+});
+
 /**
- * Runs extension hooks for the given hook name and context.
+ * Defines the set of fields on BeforeAllExtensionHookContextSchema that may be mutated by the extension hook.
+ */
+const MutableBeforeAllExtensionHookContextSchema = z.object({
+  suite: z.object({
+    prompts: TestSuiteSchema.shape.prompts,
+    providerPromptMap: TestSuiteSchema.shape.providerPromptMap,
+    tests: TestSuiteSchema.shape.tests,
+    scenarios: TestSuiteSchema.shape.scenarios,
+    defaultTest: TestSuiteSchema.shape.defaultTest,
+    nunjucksFilters: TestSuiteSchema.shape.nunjucksFilters,
+    derivedMetrics: TestSuiteSchema.shape.derivedMetrics,
+    redteam: TestSuiteSchema.shape.redteam,
+  }),
+});
+
+const MutableBeforeEachExtensionHookContextSchema = z
+  .object({
+    test: TestCaseSchema,
+  })
+  .strict();
+
+type BeforeAllExtensionHookContext = z.infer<typeof BeforeAllExtensionHookContextSchema>;
+type BeforeEachExtensionHookContext = z.infer<typeof BeforeEachExtensionHookContextSchema>;
+
+type AfterEachExtensionHookContext = {
+  test: TestCase;
+  result: EvaluateResult;
+};
+
+type AfterAllExtensionHookContext = {
+  suite: TestSuite;
+  results: EvalResult[];
+  prompts: CompletedPrompt[];
+};
+
+// Maps hook names to their context types.
+type HookContextMap = {
+  beforeAll: BeforeAllExtensionHookContext;
+  beforeEach: BeforeEachExtensionHookContext;
+  afterEach: AfterEachExtensionHookContext;
+  afterAll: AfterAllExtensionHookContext;
+};
+
+export type ExtensionHookContext =
+  | BeforeAllExtensionHookContext
+  | BeforeEachExtensionHookContext
+  | AfterEachExtensionHookContext
+  | AfterAllExtensionHookContext;
+
+/**
+ * Runs extension hooks for the given hook name and context. The hook will be called with the context object,
+ * and can update the context object to persist data into provider calls.
  * @param extensions - An array of extension paths, or null.
  * @param hookName - The name of the hook to run.
- * @param context - The context object to pass to the hook.
- * @returns A Promise that resolves when all hooks have been run.
+ * @param context - The context object to pass to the hook. T depends on the type of the hook.
+ * @returns A Promise that resolves with one of the following:
+ *  - The original context object, if no extensions are provided OR if the returned context is not valid.
+ *  - The updated context object, if the extension hook returns a valid context object. The updated context,
+ *    if defined, must conform to the type T; otherwise, a validation error is thrown.
  */
-export async function runExtensionHook(
+export async function runExtensionHook<HookName extends keyof HookContextMap>(
   extensions: string[] | null | undefined,
-  hookName: string,
-  context: any,
-) {
+  hookName: HookName,
+  context: HookContextMap[HookName],
+): Promise<HookContextMap[HookName]> {
   if (!extensions || !Array.isArray(extensions) || extensions.length === 0) {
-    return;
+    return context;
   }
 
+  // Guard against runtime type drift by validating the context object matches the expected schema.
+  // This ensures that the context object is valid prior to passing it to the extension hook, upstreaming
+  // type errors.
+  switch (hookName) {
+    case 'beforeAll': {
+      const parsed = BeforeAllExtensionHookContextSchema.safeParse(context);
+      invariant(
+        parsed.success,
+        `Invalid context passed to beforeAll hook: ${parsed.error?.message}`,
+      );
+      break;
+    }
+    case 'beforeEach': {
+      const parsed = BeforeEachExtensionHookContextSchema.safeParse(context);
+      invariant(
+        parsed.success,
+        `Invalid context passed to beforeEach hook: ${parsed.error?.message}`,
+      );
+      break;
+    }
+  }
+
+  // TODO(Will): It would be nice if this logged the hooks used.
   telemetry.recordOnce('feature_used', {
     feature: 'extension_hook',
   });
 
+  let updatedContext: HookContextMap[HookName] = { ...context };
+
   for (const extension of extensions) {
     invariant(typeof extension === 'string', 'extension must be a string');
     logger.debug(`Running extension hook ${hookName} with context ${JSON.stringify(context)}`);
-    await transform(extension, hookName, context, false);
+
+    const extensionReturnValue = await transform(extension, hookName, context, false);
+
+    // If the extension hook returns a value, update the context with the value's mutable fields.
+    // This also provides backwards compatibility for extension hooks that do not return a value.
+    if (extensionReturnValue) {
+      switch (hookName) {
+        case 'beforeAll': {
+          const parsed = MutableBeforeAllExtensionHookContextSchema.safeParse(extensionReturnValue);
+          if (parsed.success) {
+            (updatedContext as BeforeAllExtensionHookContext) = {
+              suite: {
+                ...(context as BeforeAllExtensionHookContext).suite,
+                ...parsed.data.suite,
+              },
+            };
+          } else {
+            logger.error(parsed.error.message);
+            throw new Error(
+              `[${extension}] Invalid context returned by beforeAll hook: ${parsed.error.message}`,
+            );
+          }
+          break;
+        }
+        case 'beforeEach': {
+          const parsed =
+            MutableBeforeEachExtensionHookContextSchema.safeParse(extensionReturnValue);
+          if (parsed.success) {
+            (updatedContext as BeforeEachExtensionHookContext) = { test: parsed.data.test };
+          } else {
+            logger.error(parsed.error.message);
+            throw new Error(
+              `[${extension}] Invalid context returned by beforeEach hook: ${parsed.error.message}`,
+            );
+          }
+          break;
+        }
+      }
+    }
   }
+
+  return updatedContext;
 }

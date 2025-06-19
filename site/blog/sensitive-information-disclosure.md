@@ -2,6 +2,7 @@
 sidebar_label: 'Sensitive Information Disclosure'
 image: /img/blog/sensitive-information-disclosure/memorization_pandas.png
 date: 2025-03-11
+authors: [vanessa]
 ---
 
 # Sensitive Information Disclosure in LLMs: Privacy and Compliance in Generative AI

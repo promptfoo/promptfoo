@@ -1,6 +1,7 @@
 ---
 date: 2024-12-21
 image: /img/blog/cyberseceval/cyberseceval-illustration.jpg
+authors: [ian]
 ---
 
 # How to run CyberSecEval

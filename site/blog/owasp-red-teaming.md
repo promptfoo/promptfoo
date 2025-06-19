@@ -1,6 +1,7 @@
 ---
 date: 2025-03-25
 image: /img/blog/owasp-red-team/ninja_panda.png
+authors: [vanessa]
 ---
 
 # OWASP Red Teaming: A Practical Guide to Getting Started

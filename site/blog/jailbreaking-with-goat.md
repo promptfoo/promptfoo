@@ -3,6 +3,7 @@ sidebar_label: Introducing GOAT
 title: Introducing GOAT—Promptfoo's Latest Strategy
 image: /img/blog/goat/promptfoo_panda_harnessing_goat.png
 date: 2024-11-05
+authors: [vanessa]
 ---
 
 import { Promise } from 'canvas-confetti';
