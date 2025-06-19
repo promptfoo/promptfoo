@@ -271,12 +271,19 @@ describe('matchesLlmRubric', () => {
     // Reset cliState to default
     (cliState as any).config = {};
 
-    // Reset remote grading mock
+    // Reset remote grading mock with default behavior
     jest.mocked(remoteGrading.doRemoteGrading).mockReset();
     jest.mocked(remoteGrading.doRemoteGrading).mockResolvedValue({
       pass: true,
       score: 1,
       reason: 'Remote grading passed',
+    });
+
+    // Reset DefaultGradingProvider mock to prevent contamination
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockReset();
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+      output: JSON.stringify({ pass: true, score: 1, reason: 'Test passed' }),
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
   });
 
@@ -287,6 +294,12 @@ describe('matchesLlmRubric', () => {
       rubricPrompt: 'Grading prompt',
       provider: Grader,
     };
+
+    // Ensure Grader mock is properly set up for this test
+    jest.spyOn(Grader, 'callApi').mockResolvedValue({
+      output: JSON.stringify({ pass: true, reason: 'Test grading output' }),
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
 
     await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
       pass: true,
@@ -1024,6 +1037,10 @@ describe('matchesLlmRubric', () => {
       reason: 'Remote grading passed',
     });
 
+    // Import and set up shouldGenerateRemote mock properly
+    const { shouldGenerateRemote } = jest.requireMock('../src/redteam/remoteGeneration');
+    jest.mocked(shouldGenerateRemote).mockReturnValue(true);
+
     // Give it a redteam config
     (cliState as any).config = { redteam: {} };
 
@@ -1044,6 +1061,15 @@ describe('matchesLlmRubric', () => {
 describe('matchesFactuality', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.resetAllMocks();
+
+    // Reset DefaultGradingProvider mock to prevent contamination
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockReset();
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+      output:
+        '(A) The submitted answer is a subset of the expert answer and is fully consistent with it.',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
   });
 
   afterEach(() => {
@@ -1375,6 +1401,22 @@ The submitted answer may either be a subset or superset of the expert answer, or
 });
 
 describe('matchesClosedQa', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.resetAllMocks();
+
+    // Reset DefaultGradingProvider mock to prevent contamination
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockReset();
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+      output: 'foo \n \n bar\n Y Y \n',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   it('should pass when the closed QA check passes', async () => {
     const input = 'Input text';
     const expected = 'Expected output';
@@ -1637,6 +1679,29 @@ describe('getAndCheckProvider', () => {
 });
 
 describe('matchesAnswerRelevance', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.resetAllMocks();
+
+    // Reset DefaultGradingProvider and DefaultEmbeddingProvider mocks to prevent contamination
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockReset();
+    jest.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockReset();
+
+    // Set up robust default mocks that work for most tests
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+      output: 'foobar',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+    jest.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockResolvedValue({
+      embedding: [1, 0, 0],
+      tokenUsage: { total: 5, prompt: 2, completion: 3 },
+    });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   it('should pass when the relevance score is above the threshold', async () => {
     const input = 'Input text';
     const output = 'Sample output';
@@ -1674,9 +1739,6 @@ describe('matchesAnswerRelevance', () => {
       expect.stringContaining(ANSWER_RELEVANCY_GENERATE.slice(0, 50)),
     );
     expect(mockCallEmbeddingApi).toHaveBeenCalledWith('Input text');
-
-    mockCallApi.mockRestore();
-    mockCallEmbeddingApi.mockRestore();
   });
 
   it('should fail when the relevance score is below the threshold', async () => {
@@ -1726,9 +1788,6 @@ describe('matchesAnswerRelevance', () => {
     expect(mockCallEmbeddingApi).toHaveBeenCalledWith(
       expect.stringContaining(ANSWER_RELEVANCY_GENERATE.slice(0, 50)),
     );
-
-    mockCallApi.mockRestore();
-    mockCallEmbeddingApi.mockRestore();
   });
 });
 
@@ -1838,6 +1897,14 @@ describe('matchesClassification', () => {
 describe('matchesContextRelevance', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.resetAllMocks();
+
+    // Reset DefaultGradingProvider mock to prevent contamination
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockReset();
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+      output: 'foo\nbar\nbaz Insufficient Information\n',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
   });
 
   afterEach(() => {
@@ -1904,6 +1971,24 @@ describe('matchesContextRelevance', () => {
 describe('matchesContextFaithfulness', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.resetAllMocks();
+
+    // Reset DefaultGradingProvider mock to prevent contamination
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockReset();
+    jest
+      .spyOn(DefaultGradingProvider, 'callApi')
+      .mockImplementationOnce(() => {
+        return Promise.resolve({
+          output: 'Statement 1\nStatement 2\nStatement 3\n',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        });
+      })
+      .mockImplementationOnce(() => {
+        return Promise.resolve({
+          output: 'Final verdict for each statement in order: Yes. No. Yes.',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        });
+      });
   });
 
   afterEach(() => {
@@ -1988,6 +2073,14 @@ describe('matchesContextFaithfulness', () => {
 describe('matchesContextRecall', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.resetAllMocks();
+
+    // Reset DefaultGradingProvider mock to prevent contamination
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockReset();
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+      output: 'foo [Attributed]\nbar [Not attributed]\nbaz [Attributed]\n',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
   });
 
   afterEach(() => {
