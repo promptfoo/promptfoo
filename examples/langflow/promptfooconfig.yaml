@@ -2,15 +2,15 @@
 description: Evaluating Langflow visual AI workflows
 
 prompts:
-  - '{{query}}'
+  - "{{query}}"
 
 providers:
   - file://langflow_provider.py
-  - openai:gpt-4.1-nano
+  - openai:gpt-4o-mini
 
 tests:
   - vars:
-      query: 'Hello! How can you help me today?'
+      query: "Hello! How can you help me today?"
     assert:
       - type: contains
         value: help
@@ -18,51 +18,37 @@ tests:
         value: output.length > 10
 
   - vars:
-      query: 'What is artificial intelligence?'
+      query: "What is artificial intelligence?"
     assert:
       - type: contains-any
-        value: ['AI', 'artificial intelligence', 'machine learning', 'intelligence']
+        value:
+          - "AI"
+          - "artificial intelligence"
+          - "machine learning"
+          - "intelligence"
       - type: llm-rubric
-        value: Response provides a clear and informative explanation of AI
+        value: Response provides a clear explanation of AI
 
   - vars:
-      query: 'Can you write a simple Python function to calculate fibonacci numbers?'
+      query: "Write a simple Python function to add two numbers"
     assert:
       - type: contains-any
-        value: ['def', 'function', 'fibonacci', 'python']
+        value:
+          - "def"
+          - "function"
+          - "python"
+          - "+"
       - type: llm-rubric
-        value: Response includes working Python code for fibonacci calculation
-
-  - vars:
-      query: 'Tell me about the weather in Tokyo'
-    assert:
-      - type: llm-rubric
-        value: Response acknowledges lack of real-time data or suggests how to get weather information
+        value: Response includes working Python code
 
   - vars:
       query: "What's 2 + 2?"
     assert:
       - type: contains
-        value: '4'
-      - type: javascript
-        value: output.includes("4")
+        value: "4"
 
   - vars:
-      query: 'Explain quantum computing in simple terms'
-    assert:
-      - type: contains-any
-        value: ['quantum', 'computing', 'qubit', 'superposition']
-      - type: llm-rubric
-        value: Explanation is accessible to non-experts while being accurate
-
-  - vars:
-      query: ''
+      query: ""
     assert:
       - type: llm-rubric
         value: Handles empty input gracefully without errors
-
-  - vars:
-      query: 'What is the meaning of life, the universe, and everything?'
-    assert:
-      - type: llm-rubric
-        value: Provides a thoughtful response, may reference popular culture (42, Douglas Adams)

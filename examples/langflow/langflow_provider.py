@@ -11,7 +11,7 @@ def call_api(prompt, options, context):
     # Get configuration from environment variables
     langflow_url = os.getenv("LANGFLOW_URL", "http://localhost:7860")
     langflow_api_key = os.getenv("LANGFLOW_API_KEY")
-    flow_id = os.getenv("LANGFLOW_FLOW_ID", "YOUR_FLOW_ID_HERE")
+    flow_id = os.getenv("LANGFLOW_FLOW_ID")
     
     if not langflow_api_key:
         return {
@@ -19,9 +19,9 @@ def call_api(prompt, options, context):
             "output": None
         }
     
-    if flow_id == "YOUR_FLOW_ID_HERE":
+    if not flow_id:
         return {
-            "error": "Please set LANGFLOW_FLOW_ID environment variable with your actual flow ID",
+            "error": "LANGFLOW_FLOW_ID environment variable is required",
             "output": None
         }
     
@@ -53,20 +53,10 @@ def call_api(prompt, options, context):
                 if "results" in output_data and "message" in output_data["results"]:
                     message = output_data["results"]["message"]
                     if "text" in message:
-                        return {
-                            "output": message["text"],
-                            "tokenUsage": {
-                                "total": len(prompt) + len(message["text"]),
-                                "prompt": len(prompt),
-                                "completion": len(message["text"])
-                            }
-                        }
+                        return {"output": message["text"]}
         
         # Fallback parsing
-        if "output" in result:
-            return {"output": result["output"]}
-        
-        return {"output": json.dumps(result)}
+        return {"output": result.get("output", json.dumps(result))}
         
     except requests.exceptions.RequestException as e:
         return {
