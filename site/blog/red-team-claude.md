@@ -1,6 +1,18 @@
 ---
-date: 2025-05-22
+title: 'How to Red Team Claude: Complete Security Testing Guide for Anthropic Models'
+description: 'Learn how to red team Claude models from Anthropic. Complete guide covering security testing, vulnerability assessment, and best practices for Claude evaluation.'
 image: /img/blog/red-team-claude.png
+keywords:
+  [
+    Claude red teaming,
+    Anthropic security testing,
+    Claude jailbreak,
+    LLM security testing,
+    AI model evaluation,
+    Claude vulnerabilities,
+    AI safety testing,
+  ]
+date: 2025-05-22
 authors: [ian]
 ---
 

@@ -1,6 +1,19 @@
 ---
+title: 'Prompt Injection: A Comprehensive Guide to Detection and Prevention'
 sidebar_label: Prompt injection
+description: 'Complete guide to prompt injection attacks, including direct and indirect injection techniques, detection methods, and prevention strategies for LLM security.'
 image: /img/blog/prompt-injection/direct-vs-indirect.svg
+keywords:
+  [
+    prompt injection,
+    LLM security,
+    AI security,
+    indirect prompt injection,
+    jailbreak attacks,
+    LLM vulnerabilities,
+    AI safety,
+    prompt engineering security,
+  ]
 date: 2024-10-09
 # https://www.tldraw.com/r/f_RRQMHxGe4erRNUVAfZA?d=v-171.-485.3560.2381.page
 authors: [ian]

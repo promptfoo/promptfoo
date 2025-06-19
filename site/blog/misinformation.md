@@ -1,7 +1,19 @@
 ---
 sidebar_label: Misinformation in LLMs—Causes and Prevention Strategies
 title: Misinformation in LLMs—Causes and Prevention Strategies
+description: 'Learn about misinformation risks in LLMs, root causes, detection methods, and prevention strategies. Comprehensive guide to combating AI-generated misinformation.'
 image: /img/blog/misinformation/misinformed_panda.png
+keywords:
+  [
+    LLM misinformation,
+    AI misinformation,
+    hallucination detection,
+    fact-checking AI,
+    LLM accuracy,
+    misinformation prevention,
+    AI reliability,
+    information quality,
+  ]
 date: 2025-03-19
 authors: [vanessa]
 ---

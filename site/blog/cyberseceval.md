@@ -1,6 +1,19 @@
 ---
-date: 2024-12-21
+title: 'How to Run CyberSecEval: Complete Guide to LLM Security Testing'
+description: "Learn how to use Meta's CyberSecEval benchmark to test LLMs against prompt injection and cybersecurity vulnerabilities with Promptfoo's open-source framework."
 image: /img/blog/cyberseceval/cyberseceval-illustration.jpg
+keywords:
+  [
+    CyberSecEval,
+    LLM security testing,
+    prompt injection,
+    cybersecurity evaluation,
+    AI security,
+    model vulnerability testing,
+    red teaming,
+    LLM benchmarks,
+  ]
+date: 2024-12-21
 authors: [ian]
 ---
 

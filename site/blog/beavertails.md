@@ -1,6 +1,20 @@
 ---
-date: 2024-12-22
+title: 'Red Team Your LLM with BeaverTails: Complete Guide to AI Safety Testing'
+description: "Learn how to use the BeaverTails dataset to red team and evaluate LLM safety against harmful content across 14 categories with Promptfoo's open-source tools."
 image: /img/blog/beavertails/beaver-coding.jpg
+keywords:
+  [
+    BeaverTails,
+    LLM red teaming,
+    AI safety testing,
+    harmful content detection,
+    model evaluation,
+    LLM security,
+    AI safety,
+    prompt injection,
+    jailbreak detection,
+  ]
+date: 2024-12-22
 authors: [ian]
 ---
 

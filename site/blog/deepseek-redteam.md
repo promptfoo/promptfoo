@@ -1,6 +1,19 @@
 ---
-date: 2025-02-03
+title: 'DeepSeek-R1 Security Risks: Complete Red Team Analysis and Vulnerability Assessment'
+description: 'Comprehensive red team analysis of DeepSeek-R1 reveals significant vulnerabilities to jailbreaks, toxic content, and harmful outputs. Learn the security risks and mitigation strategies.'
 image: /img/blog/deepseek-redteam/red_whale.png
+keywords:
+  [
+    DeepSeek security,
+    DeepSeek vulnerabilities,
+    AI red teaming,
+    LLM jailbreak,
+    foundation model security,
+    Chinese AI models,
+    AI safety testing,
+    model evaluation,
+  ]
+date: 2025-02-03
 authors: [vanessa]
 ---
 

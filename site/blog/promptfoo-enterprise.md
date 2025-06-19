@@ -1,6 +1,19 @@
 ---
-date: 2024-08-21
+title: 'Promptfoo for Enterprise: AI Evaluation and Red Teaming at Scale'
+description: 'Learn about Promptfoo Enterprise features for large-scale AI evaluation, red teaming, and continuous monitoring. Built for enterprise security and compliance needs.'
 image: /img/continuous-testing.png
+keywords:
+  [
+    Promptfoo Enterprise,
+    enterprise AI evaluation,
+    LLM testing platform,
+    AI red teaming,
+    continuous monitoring,
+    enterprise security,
+    AI governance,
+    compliance,
+  ]
+date: 2024-08-21
 authors: [ian]
 ---
 

@@ -1,6 +1,17 @@
 ---
-date: 2024-11-20
+title: 'How to Red Team a HuggingFace Model: Complete Security Testing Guide'
+description: 'Learn how to red team HuggingFace models for security vulnerabilities. Step-by-step guide covering jailbreak testing, safety evaluation, and security assessment.'
 image: /img/blog/huggingface-red-team.png
+keywords:
+  [
+    HuggingFace red teaming,
+    open source model security,
+    HuggingFace security testing,
+    model jailbreak testing,
+    AI model evaluation,
+    LLM security assessment,
+  ]
+date: 2024-11-20
 authors: [ian]
 ---
 

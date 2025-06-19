@@ -2,6 +2,17 @@
 title: 'RAG Data Poisoning: Key Concepts Explained'
 description: How attackers can manipulate AI responses by corrupting the knowledge base.
 image: /img/docs/rag-poisoning.svg
+keywords:
+  [
+    RAG poisoning,
+    data poisoning,
+    retrieval augmented generation,
+    AI security,
+    vector database security,
+    knowledge base security,
+    indirect prompt injection,
+    RAG vulnerabilities,
+  ]
 date: 2024-11-04
 authors: [ian]
 ---

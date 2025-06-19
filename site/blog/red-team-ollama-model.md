@@ -1,6 +1,18 @@
 ---
-date: 2024-11-23
+title: 'How to Red Team an Ollama Model: Complete Local LLM Security Testing Guide'
+description: 'Learn how to red team Ollama models running locally. Comprehensive guide covering jailbreak testing, vulnerability assessment, and security evaluation for local LLMs.'
 image: /img/blog/llama-red-team/llama-hacker.webp
+keywords:
+  [
+    Ollama red teaming,
+    local LLM security,
+    Ollama security testing,
+    local model testing,
+    open source LLM security,
+    model jailbreak testing,
+    AI security,
+  ]
+date: 2024-11-23
 authors: [ian]
 ---
 

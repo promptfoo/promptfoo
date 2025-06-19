@@ -1,6 +1,18 @@
 ---
-date: 2025-01-18
+title: 'How to Red Team a LangChain Application: Complete Security Testing Guide'
+description: 'Learn how to red team LangChain applications for security vulnerabilities. Step-by-step guide covering agent testing, chain security, and vulnerability assessment.'
 image: /img/blog/langchain/red-team-langchain-banner.jpg
+keywords:
+  [
+    LangChain red teaming,
+    LangChain security,
+    AI agent testing,
+    chain security testing,
+    LangChain vulnerabilities,
+    AI application security,
+    framework security,
+  ]
+date: 2025-01-18
 authors: [ian]
 ---
 

@@ -1,6 +1,19 @@
 ---
-date: 2025-06-07
+title: 'How to Red Team GPT: Complete Security Testing Guide for OpenAI Models'
+description: 'Learn how to red team GPT models from OpenAI. Comprehensive guide covering jailbreak testing, vulnerability assessment, and security evaluation techniques.'
 image: /img/blog/gpt-red-team.png
+keywords:
+  [
+    GPT red teaming,
+    OpenAI security testing,
+    GPT jailbreak,
+    ChatGPT security,
+    LLM security testing,
+    AI model evaluation,
+    GPT vulnerabilities,
+    AI safety testing,
+  ]
+date: 2025-06-07
 authors: [ian]
 ---
 

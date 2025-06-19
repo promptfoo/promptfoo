@@ -1,6 +1,20 @@
 ---
-date: 2025-06-18
+title: "How to Red Team Gemini: Complete Security Testing Guide for Google's AI Models"
+description: 'Learn how to red team Google Gemini models including 2.5 Pro. Comprehensive guide covering multimodal testing, security evaluation, and vulnerability assessment.'
 image: /img/blog/red-team-gemini.png
+keywords:
+  [
+    Gemini red teaming,
+    Google AI security,
+    Gemini security testing,
+    multimodal AI testing,
+    Google Vertex AI,
+    AI model evaluation,
+    Gemini vulnerabilities,
+    AI safety testing,
+  ]
+date: 2025-06-18
+authors: [ian]
 ---
 
 # How to Red Team Gemini

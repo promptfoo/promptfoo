@@ -1,6 +1,19 @@
 ---
 sidebar_label: 'Sensitive Information Disclosure'
+title: 'Sensitive Information Disclosure in LLMs: Privacy and Compliance in Generative AI'
+description: 'Learn about sensitive information disclosure risks in LLMs, privacy compliance requirements, and prevention strategies. Complete guide to protecting sensitive data in AI systems.'
 image: /img/blog/sensitive-information-disclosure/memorization_pandas.png
+keywords:
+  [
+    sensitive information disclosure,
+    LLM privacy,
+    data leakage prevention,
+    AI compliance,
+    PII protection,
+    GDPR compliance,
+    AI data privacy,
+    information security,
+  ]
 date: 2025-03-11
 authors: [vanessa]
 ---

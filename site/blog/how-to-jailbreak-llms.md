@@ -1,6 +1,20 @@
 ---
-date: 2025-01-07
+title: 'Jailbreaking LLMs: A Comprehensive Guide With Examples and Defense Strategies'
+description: 'Complete guide to LLM jailbreaking techniques including prompt engineering, context manipulation, and technical exploits. Learn attack methods and defense strategies.'
 image: /img/blog/jailbreak-llms/get-out-of-jail-free.jpg
+keywords:
+  [
+    LLM jailbreak,
+    prompt injection,
+    AI security,
+    jailbreak techniques,
+    prompt engineering attacks,
+    LLM security,
+    AI safety,
+    social engineering,
+    model manipulation,
+  ]
+date: 2025-01-07
 authors: [ian]
 ---
 
