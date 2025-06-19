@@ -22,11 +22,7 @@ import type { RedteamFileConfig, RedteamPluginObject, RedteamStrategy } from '..
 import { isJavascriptFile } from '../util/fileExtensions';
 import { ProviderSchema } from '../validators/providers';
 
-const pluginOptions: string[] = [
-  ...COLLECTIONS,
-  ...REDTEAM_ALL_PLUGINS,
-  ...ALIASED_PLUGINS,
-].sort();
+const pluginOptions: string[] = [...COLLECTIONS, ...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS].sort();
 /**
  * Schema for individual redteam plugins
  */

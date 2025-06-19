@@ -413,5 +413,3 @@ export class UnsafeBenchGrader extends RedteamGraderBase {
     `;
   }
 }
-
-;
