@@ -301,4 +301,4 @@ This allows ModelAudit to automatically apply the correct scanner based on the a
 
 - [ModelAudit Overview](./index.md) - Introduction to ModelAudit and supported formats
 - [Installation & Usage](./usage.md) - How to install and use ModelAudit
-- [Command Line Reference](./usage.md#basic-command-structure) - CLI options and examples
+- [Command Line Reference](./usage.md#command-line-interface) - CLI options and examples
