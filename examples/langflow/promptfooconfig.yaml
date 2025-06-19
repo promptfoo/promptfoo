@@ -6,7 +6,6 @@ prompts:
 
 providers:
   - file://langflow_provider.py
-  - openai:gpt-4o-mini
 
 tests:
   - vars:
@@ -26,8 +25,6 @@ tests:
           - "artificial intelligence"
           - "machine learning"
           - "intelligence"
-      - type: llm-rubric
-        value: Response provides a clear explanation of AI
 
   - vars:
       query: "Write a simple Python function to add two numbers"
@@ -38,8 +35,6 @@ tests:
           - "function"
           - "python"
           - "+"
-      - type: llm-rubric
-        value: Response includes working Python code
 
   - vars:
       query: "What's 2 + 2?"
@@ -50,5 +45,5 @@ tests:
   - vars:
       query: ""
     assert:
-      - type: llm-rubric
-        value: Handles empty input gracefully without errors
+      - type: javascript
+        value: output.length > 0

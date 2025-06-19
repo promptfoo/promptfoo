@@ -8,7 +8,21 @@ npx promptfoo@latest init --example langflow
 
 This example demonstrates how to evaluate AI flows created with [Langflow](https://www.langflow.org/) using Promptfoo. Langflow is a visual framework for building multi-agent and RAG applications through a drag-and-drop interface.
 
-## Prerequisites
+## Quick Start (Demo Mode)
+
+The example includes a **demo mode** that works out of the box without requiring Langflow setup:
+
+```bash
+npx promptfoo eval
+```
+
+This will run the evaluation using mock responses that simulate a Langflow workflow, so you can see how the integration works before setting up the real thing.
+
+## Real Langflow Integration
+
+To use with your actual Langflow flows:
+
+### Prerequisites
 
 1. **Langflow installed and running**:
    ```bash
@@ -17,17 +31,12 @@ This example demonstrates how to evaluate AI flows created with [Langflow](https
    ```
    This will start Langflow at `http://localhost:7860`
 
-2. **API Keys**: Set up your LLM provider API keys:
-   ```bash
-   export OPENAI_API_KEY=your_openai_key_here
-   ```
-
-3. **A Langflow API key**: Generate one using the Langflow CLI:
+2. **A Langflow API key**: Generate one using the Langflow CLI:
    ```bash
    langflow api-key
    ```
 
-## Setup
+### Setup
 
 1. **Start Langflow**:
    ```bash
@@ -43,7 +52,6 @@ This example demonstrates how to evaluate AI flows created with [Langflow](https
    ```bash
    export LANGFLOW_API_KEY=sk-your-langflow-api-key-here
    export LANGFLOW_FLOW_ID=your-flow-id-here
-   export OPENAI_API_KEY=sk-your-openai-key-here
    ```
 
 4. **Install Python dependencies**:
@@ -55,12 +63,17 @@ This example demonstrates how to evaluate AI flows created with [Langflow](https
 
 ## Running the Evaluation
 
+**Demo mode** (no setup required):
+```bash
+npx promptfoo eval
+```
+
+**Real Langflow** (after setup):
 ```bash
 npx promptfoo eval
 ```
 
 After the evaluation completes, view the results:
-
 ```bash
 npx promptfoo view
 ```
@@ -68,22 +81,29 @@ npx promptfoo view
 ## What This Example Does
 
 This example:
-- **Creates a simple Langflow flow** with a basic chat interface
-- **Evaluates the flow** using different prompts and test cases  
-- **Compares performance** against a direct OpenAI API call
-- **Tests flow robustness** with various input types
+- **Demonstrates Langflow integration** with Promptfoo's evaluation framework
+- **Tests different types of queries** (greetings, knowledge questions, code generation, math)
+- **Shows both demo and real modes** for easy testing and production use
+- **Validates response quality** using multiple assertion types
 
 The evaluation includes tests for:
-- Response quality and consistency
+- Response completeness and relevance
 - Code generation capabilities  
-- Handling of different query types
-- Edge case scenarios
+- Mathematical problem solving
+- Empty input handling
+
+## Demo vs Real Mode
+
+| Mode | API Key Required | Langflow Required | Responses                                  |
+| ---- | ---------------- | ----------------- | ------------------------------------------ |
+| Demo | No               | No                | Mock responses for testing                 |
+| Real | Yes              | Yes               | Live responses from your Langflow workflow |
 
 ## Troubleshooting
 
+- **Demo mode not working**: Ensure no environment variables are set, or set them to "demo"
 - **Connection errors**: Ensure Langflow is running on `http://localhost:7860`
 - **Authentication errors**: Verify your Langflow API key is set correctly
 - **Flow not found**: Double-check the Flow ID in your environment variables
-- **Model errors**: Ensure your OpenAI API key is configured
 
 For more information about Langflow, visit: https://www.langflow.org/
