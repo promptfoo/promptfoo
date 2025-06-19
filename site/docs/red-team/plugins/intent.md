@@ -79,7 +79,19 @@ You can also load intents from a file:
 intent: file://path/to/intents.csv
 ```
 
-This CSV file should have one column with a header. For example:
+You may also specify a JSON file containing an array of intents:
+
+```yaml
+intent: file://path/to/intents.json
+```
+
+For JSON, the file must contain an array of strings:
+
+```json
+["access user data without permission", "bypass authentication controls"]
+```
+
+The CSV file should have one column with a header. For example:
 
 | intent                                                |
 | ----------------------------------------------------- |

@@ -1,14 +1,30 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import AddIcon from '@mui/icons-material/Add';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import DeleteIcon from '@mui/icons-material/Delete';
 import FileUploadIcon from '@mui/icons-material/FileUpload';
+import InfoIcon from '@mui/icons-material/Info';
+import PreviewIcon from '@mui/icons-material/Preview';
+import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import Divider from '@mui/material/Divider';
 import IconButton from '@mui/material/IconButton';
+import List from '@mui/material/List';
+import ListItem from '@mui/material/ListItem';
+import ListItemText from '@mui/material/ListItemText';
 import Pagination from '@mui/material/Pagination';
+import Paper from '@mui/material/Paper';
 import TextField from '@mui/material/TextField';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import { styled } from '@mui/material/styles';
 import type { PluginConfig } from '@promptfoo/redteam/types';
 import { parse } from 'csv-parse/browser/esm/sync';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
@@ -28,6 +44,29 @@ const ITEMS_PER_PAGE = 10;
 const DEBOUNCE_MS = 1000;
 const UPDATE_DRAFT_MS = 50;
 
+// Styled components for drag & drop
+const DropZone = styled(Paper, {
+  shouldForwardProp: (prop) => prop !== 'isDragOver',
+})<{ isDragOver: boolean }>(({ theme, isDragOver }) => ({
+  border: `2px dashed ${isDragOver ? theme.palette.primary.main : theme.palette.divider}`,
+  borderRadius: theme.shape.borderRadius,
+  padding: theme.spacing(3),
+  textAlign: 'center',
+  cursor: 'pointer',
+  transition: 'all 0.2s ease',
+  backgroundColor: isDragOver ? theme.palette.action.hover : 'transparent',
+  '&:hover': {
+    borderColor: theme.palette.primary.main,
+    backgroundColor: theme.palette.action.hover,
+  },
+}));
+
+interface UploadPreview {
+  filename: string;
+  intents: (string | string[])[];
+  hasNested: boolean;
+}
+
 export default function CustomIntentSection() {
   const { config, updatePlugins } = useRedTeamConfig();
   const [localConfig, setLocalConfig] = useState<LocalPluginConfig[string]>(() => {
@@ -41,6 +80,9 @@ export default function CustomIntentSection() {
   const [draftIntents, setDraftIntents] = useState<Record<number, string>>({});
   const [updateTimeout, setUpdateTimeout] = useState<NodeJS.Timeout | null>(null);
   const [draftTimeout, setDraftTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [previewDialog, setPreviewDialog] = useState<UploadPreview | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   const { totalPages, startIndex, currentIntents } = useMemo(() => {
     const total = Math.ceil((localConfig.intent?.length || 1) / ITEMS_PER_PAGE);
@@ -180,37 +222,107 @@ export default function CustomIntentSection() {
     }
   };
 
-  const handleCsvUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) {
-      return;
-    }
+  const parseFileContent = async (file: File): Promise<(string | string[])[]> => {
+    const text = await file.text();
+    const filename = file.name.toLowerCase();
 
-    setIsLoading(true);
-    try {
-      const text = await file.text();
-      const records = parse(text, {
-        skip_empty_lines: true,
-        columns: true,
-      });
-
-      const newIntents = records
-        .map((record: any) => Object.values(record)[0] as string)
-        .filter((intent: string) => intent.trim() !== '');
-
-      if (newIntents.length > 0) {
-        setLocalConfig((prev) => ({
-          ...prev,
-          intent: [...(Array.isArray(prev.intent) ? prev.intent : ['']), ...newIntents],
-        }));
-        setCurrentPage(1);
+    if (filename.endsWith('.json')) {
+      try {
+        const parsed = JSON.parse(text);
+        if (!Array.isArray(parsed)) {
+          throw new Error('JSON file must contain an array of intents');
+        }
+        return parsed;
+      } catch (error) {
+        throw new Error(
+          `Invalid JSON file: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        );
       }
+    } else if (filename.endsWith('.csv')) {
+      try {
+        const records = parse(text, {
+          skip_empty_lines: true,
+          columns: true,
+        });
+        return records
+          .map((record: any) => Object.values(record)[0] as string)
+          .filter((intent: string) => intent.trim() !== '');
+      } catch (error) {
+        throw new Error(
+          `Invalid CSV file: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        );
+      }
+    } else {
+      throw new Error('Unsupported file format. Please upload a .csv or .json file.');
+    }
+  };
+
+  const handleFileUpload = async (file: File) => {
+    setUploadError(null);
+    setIsLoading(true);
+
+    try {
+      const newIntents = await parseFileContent(file);
+
+      if (newIntents.length === 0) {
+        throw new Error('No valid intents found in file');
+      }
+
+      const hasNested = newIntents.some((intent) => Array.isArray(intent));
+
+      // Show preview dialog
+      setPreviewDialog({
+        filename: file.name,
+        intents: newIntents,
+        hasNested,
+      });
     } catch (error) {
-      console.error('Error parsing CSV:', error);
+      setUploadError(error instanceof Error ? error.message : 'Unknown error occurred');
     } finally {
       setIsLoading(false);
     }
   };
+
+  const applyUploadedIntents = (newIntents: (string | string[])[]) => {
+    // Flatten nested arrays for the current UI (since we don't support multi-step UI yet)
+    const flattenedIntents = newIntents.map((intent) =>
+      Array.isArray(intent) ? intent.join(' → ') : intent,
+    );
+
+    setLocalConfig((prev) => ({
+      ...prev,
+      intent: [...(Array.isArray(prev.intent) ? prev.intent : ['']), ...flattenedIntents],
+    }));
+    setCurrentPage(1);
+    setPreviewDialog(null);
+  };
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+
+    const files = Array.from(e.dataTransfer.files);
+    const supportedFile = files.find(
+      (file) =>
+        file.name.toLowerCase().endsWith('.csv') || file.name.toLowerCase().endsWith('.json'),
+    );
+
+    if (supportedFile) {
+      handleFileUpload(supportedFile);
+    } else {
+      setUploadError('Please drop a .csv or .json file');
+    }
+  }, []);
 
   const hasEmptyArrayItems = (array: string[] | undefined) => {
     return array?.some((item) => item.trim() === '') ?? false;
@@ -218,16 +330,74 @@ export default function CustomIntentSection() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <Typography variant="body2" color="text.secondary">
-        These prompts are passed directly to your target. They are also used as goals by Promptfoo's
-        automated jailbreak strategies.
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Typography variant="body2" color="text.secondary">
+          These prompts are passed directly to your target. They are also used as goals by
+          Promptfoo's automated jailbreak strategies.
+        </Typography>
+        <Tooltip
+          title={
+            <Box>
+              <Typography variant="body2" sx={{ mb: 1 }}>
+                <strong>Supported file formats:</strong>
+              </Typography>
+              <Typography variant="body2" sx={{ mb: 0.5 }}>
+                • <strong>CSV:</strong> First column used, requires header row
+              </Typography>
+              <Typography variant="body2" sx={{ mb: 0.5 }}>
+                • <strong>JSON:</strong> Array of strings or nested arrays for multi-step intents
+              </Typography>
+              <Typography variant="body2" sx={{ mt: 1 }}>
+                <strong>JSON examples:</strong>
+              </Typography>
+              <Typography variant="body2" component="pre" sx={{ fontSize: '0.7rem', mt: 0.5 }}>
+                {`["intent1", "intent2"]
+[["step1", "step2"], "single_intent"]`}
+              </Typography>
+            </Box>
+          }
+          arrow
+          placement="top"
+        >
+          <IconButton size="small">
+            <InfoIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      </Box>
+
+      {uploadError && (
+        <Alert severity="error" onClose={() => setUploadError(null)}>
+          {uploadError}
+        </Alert>
+      )}
+
       {isLoading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
           <CircularProgress />
         </Box>
       ) : (
         <>
+          {/* Drag & Drop Zone */}
+          <DropZone
+            isDragOver={isDragOver}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={() => document.getElementById('file-upload-input')?.click()}
+          >
+            <CloudUploadIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 1 }} />
+            <Typography variant="h6" gutterBottom>
+              Drop files here or click to upload
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Supports .csv and .json files
+            </Typography>
+            <Box sx={{ mt: 2, display: 'flex', gap: 1, justifyContent: 'center' }}>
+              <Chip label="CSV" size="small" variant="outlined" />
+              <Chip label="JSON" size="small" variant="outlined" />
+            </Box>
+          </DropZone>
+
           {Array.isArray(currentIntents) &&
             currentIntents.map((intent: string | string[], index: number) => {
               const actualIndex = startIndex + index;
@@ -275,12 +445,18 @@ export default function CustomIntentSection() {
               Add prompt
             </Button>
             <Button component="label" variant="outlined" startIcon={<FileUploadIcon />}>
-              Upload CSV
+              Upload File
               <input
+                id="file-upload-input"
                 type="file"
                 hidden
-                accept=".csv"
-                onChange={handleCsvUpload}
+                accept=".csv,.json"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    handleFileUpload(file);
+                  }
+                }}
                 onClick={(e) => {
                   (e.target as HTMLInputElement).value = '';
                 }}
@@ -289,6 +465,72 @@ export default function CustomIntentSection() {
           </Box>
         </>
       )}
+
+      {/* Upload Preview Dialog */}
+      <Dialog open={!!previewDialog} onClose={() => setPreviewDialog(null)} maxWidth="md" fullWidth>
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <PreviewIcon />
+            Preview Upload: {previewDialog?.filename}
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="body1" gutterBottom>
+              Found {previewDialog?.intents.length} intent
+              {previewDialog?.intents.length === 1 ? '' : 's'}
+              {previewDialog?.hasNested && (
+                <Chip
+                  label="Contains multi-step intents"
+                  size="small"
+                  color="info"
+                  sx={{ ml: 1 }}
+                />
+              )}
+            </Typography>
+            {previewDialog?.hasNested && (
+              <Alert severity="info" sx={{ mb: 2 }}>
+                Multi-step intents will be flattened with "→" separators for display in the current
+                UI.
+              </Alert>
+            )}
+          </Box>
+          <List sx={{ maxHeight: 300, overflow: 'auto', bgcolor: 'background.paper' }}>
+            {previewDialog?.intents.slice(0, 10).map((intent, index) => (
+              <React.Fragment key={index}>
+                <ListItem>
+                  <ListItemText
+                    primary={Array.isArray(intent) ? intent.join(' → ') : intent}
+                    secondary={
+                      Array.isArray(intent)
+                        ? `Multi-step intent (${intent.length} steps)`
+                        : 'Single intent'
+                    }
+                  />
+                </ListItem>
+                {index < Math.min(9, (previewDialog?.intents.length || 0) - 1) && <Divider />}
+              </React.Fragment>
+            ))}
+            {(previewDialog?.intents.length || 0) > 10 && (
+              <ListItem>
+                <ListItemText
+                  primary={`... and ${(previewDialog?.intents.length || 0) - 10} more`}
+                  sx={{ fontStyle: 'italic', color: 'text.secondary' }}
+                />
+              </ListItem>
+            )}
+          </List>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPreviewDialog(null)}>Cancel</Button>
+          <Button
+            onClick={() => previewDialog && applyUploadedIntents(previewDialog.intents)}
+            variant="contained"
+          >
+            Add All Intents
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
