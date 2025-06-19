@@ -3,6 +3,14 @@ import { CrescendoProvider, MemorySystem } from '../../../../src/redteam/provide
 import type { Message } from '../../../../src/redteam/providers/shared';
 import type { ApiProvider } from '../../../../src/types';
 
+// Mock the redteam provider manager
+jest.mock('../../../../src/redteam/providers/shared', () => ({
+  redteamProviderManager: {
+    getProvider: jest.fn(),
+  },
+}));
+
+// Mock the promptfoo provider
 jest.mock('../../../../src/providers/promptfoo', () => ({
   PromptfooChatCompletionProvider: jest.fn().mockImplementation(() => ({
     id: () => 'mock-unblocking',
@@ -11,11 +19,13 @@ jest.mock('../../../../src/providers/promptfoo', () => ({
   })),
 }));
 
+// Mock server feature support
 const mockCheckServerFeatureSupport = jest.fn();
 jest.mock('../../../../src/util/server', () => ({
   checkServerFeatureSupport: mockCheckServerFeatureSupport,
 }));
 
+// Mock graders
 jest.mock('../../../../src/redteam/graders', () => ({
   getGraderById: jest.fn(),
 }));
@@ -64,9 +74,9 @@ describe('MemorySystem', () => {
 });
 
 describe('CrescendoProvider', () => {
-  let mockTargetProvider: ApiProvider;
   let mockRedTeamProvider: ApiProvider;
   let mockScoringProvider: ApiProvider;
+  let mockTargetProvider: ApiProvider;
 
   beforeEach(() => {
     // Set up server feature support mock
@@ -121,52 +131,133 @@ describe('CrescendoProvider', () => {
     });
 
     expect(provider.id()).toBe('promptfoo:redteam:crescendo');
+    expect(provider.config.injectVar).toBe('objective');
+    expect(provider.config.redteamProvider).toBe(mockRedTeamProvider);
   });
 
-  it('should default continueAfterSuccess to false', () => {
+  it('should initialize with default config values', () => {
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxTurns: 10,
+      maxBacktracks: 10,
+      redteamProvider: mockRedTeamProvider,
+      stateful: true,
+    });
+
+    expect(provider.config.injectVar).toBe('objective');
+    expect(provider.config.redteamProvider).toBe(mockRedTeamProvider);
+    expect(provider.config.maxTurns).toBe(10);
+    expect(provider.config.maxBacktracks).toBe(10);
+    expect(provider.config.stateful).toBe(true);
+    expect(provider.config.continueAfterSuccess).toBe(false); // New default
+  });
+
+  describe('continueAfterSuccess functionality', () => {
+    it('should default continueAfterSuccess to false', () => {
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+        redteamProvider: mockRedTeamProvider,
+      });
+
+      expect(provider.config.continueAfterSuccess).toBe(false);
+    });
+
+    it('should respect continueAfterSuccess configuration', () => {
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+        redteamProvider: mockRedTeamProvider,
+        continueAfterSuccess: true,
+      });
+
+      expect(provider.config.continueAfterSuccess).toBe(true);
+    });
+
+    it('should initialize successful attacks tracking', () => {
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+        redteamProvider: mockRedTeamProvider,
+      });
+
+      // Check that the provider has the private property for tracking
+      expect(provider).toBeDefined();
+      expect(typeof provider.callApi).toBe('function');
+    });
+
+    it('should have the expected metadata interface', () => {
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+        redteamProvider: mockRedTeamProvider,
+      });
+
+      // Test that the provider can be instantiated with continueAfterSuccess
+      const providerWithContinue = new CrescendoProvider({
+        injectVar: 'objective',
+        redteamProvider: mockRedTeamProvider,
+        continueAfterSuccess: true,
+      });
+
+      expect(provider.config.continueAfterSuccess).toBe(false);
+      expect(providerWithContinue.config.continueAfterSuccess).toBe(true);
+    });
+  });
+
+  it('should return correct provider id', () => {
     const provider = new CrescendoProvider({
       injectVar: 'objective',
       redteamProvider: mockRedTeamProvider,
     });
-
-    expect(provider.config.continueAfterSuccess).toBe(false);
+    expect(provider.id()).toBe('promptfoo:redteam:crescendo');
   });
 
-  it('should respect continueAfterSuccess configuration', () => {
+  it('should handle maxTurns configuration', () => {
     const provider = new CrescendoProvider({
       injectVar: 'objective',
+      maxTurns: 5,
       redteamProvider: mockRedTeamProvider,
-      continueAfterSuccess: true,
     });
 
-    expect(provider.config.continueAfterSuccess).toBe(true);
+    expect(provider.config.maxTurns).toBe(5);
   });
 
-  it('should initialize successful attacks tracking', () => {
+  it('should handle maxBacktracks configuration', () => {
     const provider = new CrescendoProvider({
       injectVar: 'objective',
+      maxBacktracks: 3,
       redteamProvider: mockRedTeamProvider,
     });
 
-    // Check that the provider has the private property for tracking
-    expect(provider).toBeDefined();
-    expect(typeof provider.callApi).toBe('function');
+    expect(provider.config.maxBacktracks).toBe(3);
   });
 
-  it('should have the expected metadata interface', () => {
+  it('should handle stateful configuration', () => {
     const provider = new CrescendoProvider({
       injectVar: 'objective',
+      stateful: true,
       redteamProvider: mockRedTeamProvider,
     });
 
-    // Test that the provider can be instantiated with continueAfterSuccess
-    const providerWithContinue = new CrescendoProvider({
-      injectVar: 'objective',
-      redteamProvider: mockRedTeamProvider,
-      continueAfterSuccess: true,
-    });
-
-    expect(provider.config.continueAfterSuccess).toBe(false);
-    expect(providerWithContinue.config.continueAfterSuccess).toBe(true);
+    expect(provider.config.stateful).toBe(true);
   });
-});
+
+  it('should handle excludeTargetOutputFromAgenticAttackGeneration configuration', () => {
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      excludeTargetOutputFromAgenticAttackGeneration: true,
+      redteamProvider: mockRedTeamProvider,
+    });
+
+    expect(provider.config.excludeTargetOutputFromAgenticAttackGeneration).toBe(true);
+  });
+
+  it('should set maxBacktracks to 0 when stateful is true', () => {
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxBacktracks: 5,
+      stateful: true,
+      redteamProvider: mockRedTeamProvider,
+    });
+
+    // When stateful is true, maxBacktracks should be set to 0
+    expect(provider.config.stateful).toBe(true);
+  });
+}); 
