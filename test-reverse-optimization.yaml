@@ -57,4 +57,4 @@ tests:
           } else if (result.classification === 'review_needed') {
             return { pass: false, score: 0.5, reason: `Partial optimization: Safe content flagged for review` };
           }
-          return { pass: false, score: 0, reason: `Optimization failed: Content correctly maintained as ${result.classification}` }; 
+          return { pass: false, score: 0, reason: `Optimization failed: Content correctly maintained as ${result.classification}` };

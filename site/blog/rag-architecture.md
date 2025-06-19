@@ -52,9 +52,9 @@ While foundation models have their strengths, they are also limited in their use
 
 |                                | Heavy Reliance on Prompt Engineering for Outputs | Improved Performance on Domain-Specific Tasks | Real-Time Retrieval with Citable Sources | Reduced Risk of Hallucination for Factual Recall |
 | ------------------------------ | ------------------------------------------------ | --------------------------------------------- | ---------------------------------------- | ------------------------------------------------ |
-| Foundation Model               | ✅                                                |                                               |                                          |                                                  |
-| Fine-Tuned Model               |                                                  | ✅                                             |                                          | ✅                                                |
-| Retrieval Augmented Generation | ✅                                                | ✅                                             | ✅                                        | ✅                                                |
+| Foundation Model               | ✅                                               |                                               |                                          |                                                  |
+| Fine-Tuned Model               |                                                  | ✅                                            |                                          | ✅                                               |
+| Retrieval Augmented Generation | ✅                                               | ✅                                            | ✅                                       | ✅                                               |
 
 ## The Case for Fine-Tuning
 
