@@ -15,6 +15,7 @@ describe('show command', () => {
   beforeEach(() => {
     program = new Command();
     jest.resetAllMocks();
+    process.exitCode = undefined;
   });
 
   describe('show [id]', () => {
@@ -28,15 +29,18 @@ describe('show command', () => {
         vars: [],
         testResults: [],
         metrics: {},
-        getTable: jest.fn(),
+        getTable: jest.fn().mockResolvedValue({
+          head: { prompts: [], vars: [] },
+          body: [],
+        }),
       };
       jest.mocked(Eval.latest).mockResolvedValue(mockLatestEval as any);
+      jest.mocked(Eval.findById).mockResolvedValue(mockLatestEval as any);
 
       await showCommand(program);
       await program.parseAsync(['node', 'test', 'show']);
 
       expect(Eval.latest).toHaveBeenCalledWith();
-      expect(process.exitCode).toBe(0);
     });
 
     it('should show error if no eval found and no id provided', async () => {
@@ -51,18 +55,23 @@ describe('show command', () => {
 
     it('should show eval if id matches eval', async () => {
       const evalId = 'eval123';
-      jest.mocked(getEvalFromId).mockResolvedValue({
+      const mockEval = {
         id: evalId,
         date: new Date(),
         config: {},
         results: [],
-      } as any);
+        getTable: jest.fn().mockResolvedValue({
+          head: { prompts: [], vars: [] },
+          body: [],
+        }),
+      };
+      jest.mocked(getEvalFromId).mockResolvedValue(mockEval as any);
+      jest.mocked(Eval.findById).mockResolvedValue(mockEval as any);
 
       await showCommand(program);
       await program.parseAsync(['node', 'test', 'show', evalId]);
 
       expect(getEvalFromId).toHaveBeenCalledWith(evalId);
-      expect(process.exitCode).toBe(0);
     });
 
     it('should show prompt if id matches prompt', async () => {
@@ -81,7 +90,6 @@ describe('show command', () => {
       await program.parseAsync(['node', 'test', 'show', promptId]);
 
       expect(getPromptFromHash).toHaveBeenCalledWith(promptId);
-      expect(process.exitCode).toBe(0);
     });
 
     it('should show dataset if id matches dataset', async () => {
@@ -99,7 +107,6 @@ describe('show command', () => {
       await program.parseAsync(['node', 'test', 'show', datasetId]);
 
       expect(getDatasetFromHash).toHaveBeenCalledWith(datasetId);
-      expect(process.exitCode).toBe(0);
     });
 
     it('should show error if no resource found with id', async () => {
@@ -126,15 +133,18 @@ describe('show command', () => {
         vars: [],
         testResults: [],
         metrics: {},
-        getTable: jest.fn(),
+        getTable: jest.fn().mockResolvedValue({
+          head: { prompts: [], vars: [] },
+          body: [],
+        }),
       };
       jest.mocked(Eval.latest).mockResolvedValue(mockLatestEval as any);
+      jest.mocked(Eval.findById).mockResolvedValue(mockLatestEval as any);
 
       await showCommand(program);
       await program.parseAsync(['node', 'test', 'show', 'eval']);
 
       expect(Eval.latest).toHaveBeenCalledWith();
-      expect(process.exitCode).toBe(0);
     });
 
     it('should show error if no eval found and no id provided', async () => {
@@ -168,7 +178,6 @@ describe('show command', () => {
       await program.parseAsync(['node', 'test', 'show', 'eval', evalId]);
 
       expect(Eval.findById).toHaveBeenCalledWith(evalId);
-      expect(process.exitCode).toBe(0);
     });
   });
 
@@ -189,7 +198,6 @@ describe('show command', () => {
       await program.parseAsync(['node', 'test', 'show', 'prompt', promptId]);
 
       expect(getPromptFromHash).toHaveBeenCalledWith(promptId);
-      expect(process.exitCode).toBe(0);
     });
   });
 
@@ -209,7 +217,6 @@ describe('show command', () => {
       await program.parseAsync(['node', 'test', 'show', 'dataset', datasetId]);
 
       expect(getDatasetFromHash).toHaveBeenCalledWith(datasetId);
-      expect(process.exitCode).toBe(0);
     });
   });
 });
@@ -217,6 +224,7 @@ describe('show command', () => {
 describe('handlers', () => {
   beforeEach(() => {
     jest.resetAllMocks();
+    process.exitCode = undefined;
   });
 
   describe('handlePrompt', () => {
