@@ -1,4 +1,21 @@
 ---
+description: Complete guide to ModelAudit's security scanners for different ML model formats including PyTorch, TensorFlow, Keras, ONNX, GGUF, and more.
+keywords:
+  [
+    modelaudit,
+    model security,
+    AI security,
+    ML security scanning,
+    pickle scanner,
+    pytorch security,
+    tensorflow security,
+    keras security,
+    onnx security,
+    model vulnerability detection,
+    malicious code detection,
+    backdoor detection,
+    model file scanning,
+  ]
 sidebar_label: Scanners
 sidebar_position: 200
 ---
@@ -9,9 +26,9 @@ ModelAudit includes specialized scanners for different model formats and file ty
 
 ## Pickle Scanner
 
-**File types:** `.pkl`, `.pickle`, `.bin` (when containing pickle data)
+**File types:** `.pkl`, `.pickle`, `.bin` (when containing pickle data), `.pt`, `.pth`, `.ckpt`
 
-The Pickle Scanner analyzes Python pickle files for security risks, which are common in many ML frameworks. It automatically detects pickle-formatted `.bin` files and also performs deep content analysis to detect embedded executables.
+The Pickle Scanner analyzes Python pickle files for security risks, which are common in many ML frameworks. It automatically detects pickle-formatted `.bin` files and performs deep content analysis to detect embedded executables.
 
 **What it checks for:**
 
@@ -20,6 +37,14 @@ The Pickle Scanner analyzes Python pickle files for security risks, which are co
 - Malicious serialization patterns often used in pickle exploits
 - Encoded payloads that might contain hidden code
 - Suspicious string patterns that could indicate code injection
+- Dangerous pickle opcodes (REDUCE, INST, OBJ, NEWOBJ, STACK_GLOBAL)
+- Code execution patterns in STACK_GLOBAL operations
+- Anomalous opcode sequences suggesting malicious intent
+
+**Advanced Features:**
+
+- **Framework Detection**: Recognizes PyTorch, TensorFlow, YOLO, scikit-learn, and Hugging Face patterns
+- **Binary Content Analysis**: Scans additional binary content in `.bin` files for embedded executables with enhanced PE file detection
 
 **Why it matters:**
 Pickle files are a common serialization format for ML models but can execute arbitrary code during unpickling. Attackers can craft malicious pickle files that execute harmful commands when loaded.
@@ -57,6 +82,22 @@ This scanner analyzes Keras models stored in HDF5 format.
 **Why it matters:**
 Keras models with Lambda layers can contain arbitrary Python code that executes when the model is loaded or run. This could be exploited to execute malicious code on the host system.
 
+## ONNX Scanner
+
+**File types:** `.onnx`
+
+This scanner examines ONNX (Open Neural Network Exchange) model files for security issues and integrity problems.
+
+**What it checks for:**
+
+- **Custom operators**: Identifies custom operator domains that might contain malicious functionality
+- **External data integrity**: Validates external data file references and prevents path traversal attacks
+- **Tensor validation**: Checks tensor sizes and data integrity to detect corruption or tampering
+- **File size mismatches**: Detects discrepancies between expected and actual tensor data sizes
+
+**Why it matters:**
+ONNX models can reference external data files and custom operators. Malicious actors could exploit these features to include harmful custom operations or manipulate external data references to access unauthorized files on the system.
+
 ## PyTorch Zip Scanner
 
 **File types:** `.pt`, `.pth`
@@ -73,6 +114,72 @@ This scanner examines PyTorch model files, which are ZIP archives containing pic
 **Why it matters:**
 PyTorch models are essentially ZIP archives containing pickled objects, which can include malicious code. The scanner unpacks these archives and applies pickle security checks to the contents.
 
+## GGUF/GGML Scanner
+
+**File types:** `.gguf`, `.ggml`
+
+This scanner validates GGUF (GPT-Generated Unified Format) and GGML model files commonly used for large language models like LLaMA, Alpaca, and other quantized models.
+
+**What it checks for:**
+
+- **Header validation**: Verifies file format integrity and header structure
+- **Metadata security**: Scans JSON metadata for suspicious content and path traversal attempts
+- **Tensor integrity**: Validates tensor dimensions, types, and data alignment
+- **Resource limits**: Enforces security limits to prevent denial of service attacks
+- **Compression validation**: Checks for reasonable tensor sizes and prevents decompression bombs
+
+**Why it matters:**
+GGUF/GGML files are increasingly popular for distributing large language models. While generally safer than pickle formats, they can still contain malicious metadata or be crafted to cause resource exhaustion attacks. The scanner ensures these files are structurally sound and don't contain hidden threats.
+
+## Joblib Scanner
+
+**File types:** `.joblib`
+
+This scanner analyzes joblib serialized files, which are commonly used by scikit-learn and other ML libraries for model persistence.
+
+**What it checks for:**
+
+- **Compression bomb detection**: Identifies files with suspicious compression ratios that could cause resource exhaustion
+- **Embedded pickle analysis**: Decompresses and scans embedded pickle content for malicious code
+- **Size limits**: Enforces maximum decompressed size limits to prevent memory exhaustion
+- **Format validation**: Distinguishes between ZIP archives and compressed pickle data
+
+**Why it matters:**
+Joblib files often contain compressed pickle data, inheriting the same security risks as pickle files. Additionally, malicious actors could craft compression bombs that consume excessive memory or CPU resources when loaded. The scanner provides safe decompression with security limits.
+
+## NumPy Scanner
+
+**File types:** `.npy`
+
+This scanner validates NumPy binary array files for integrity issues and potential security risks.
+
+**What it checks for:**
+
+- **Array validation**: Checks array dimensions and data types for malicious manipulation
+- **Header integrity**: Validates NumPy file headers and magic numbers
+- **Dangerous data types**: Detects potentially harmful data types like object arrays
+- **Size validation**: Prevents loading of excessively large arrays that could cause memory exhaustion
+- **Dimension limits**: Enforces reasonable limits on array dimensions to prevent DoS attacks
+
+**Why it matters:**
+While NumPy files are generally safer than pickle files, they can still be crafted maliciously. Object arrays can contain arbitrary Python objects (including code), and extremely large arrays can cause denial of service. The scanner ensures arrays are safe to load and don't contain hidden threats.
+
+## OCI Layer Scanner
+
+**File types:** `.manifest` (with `.tar.gz` layer references)
+
+This scanner examines OCI (Open Container Initiative) and Docker manifest files that contain embedded model files in compressed layers.
+
+**What it checks for:**
+
+- **Layer extraction**: Safely extracts and scans model files from `.tar.gz` layers
+- **Manifest validation**: Parses JSON and YAML manifest formats
+- **Recursive scanning**: Applies appropriate scanners to model files found within container layers
+- **Path validation**: Prevents directory traversal attacks during layer extraction
+
+**Why it matters:**
+Container images are increasingly used to distribute ML models and datasets. These containers can contain multiple layers with various file types, potentially hiding malicious models within what appears to be a legitimate container image. The scanner ensures that all model files within container layers are safe.
+
 ## Manifest Scanner
 
 **File types:** `.json`, `.yaml`, `.yml`, `.xml`, `.toml`, `.config`, etc.
@@ -87,6 +194,7 @@ This scanner analyzes model configuration files and manifests.
   - File system access (paths, directories, file operations)
   - Code execution (commands, scripts, shell access)
   - Credentials (passwords, tokens, secrets)
+- Framework-specific patterns in Hugging Face, PyTorch, and TensorFlow configurations
 
 **Why it matters:**
 Model configuration files can contain settings that lead to insecure behavior, such as downloading content from untrusted sources, accessing sensitive files, or executing commands.
@@ -112,7 +220,7 @@ While `.bin` files typically contain raw tensor data, attackers could embed mali
 
 ## ZIP Archive Scanner
 
-**File types:** `.zip`
+**File types:** `.zip`, `.npz`
 
 This scanner examines ZIP archives and their contents recursively.
 
@@ -162,21 +270,35 @@ This scanner examines SafeTensors format files, which are designed to be a safer
 
 **What it checks for:**
 
-- Malicious metadata in the JSON header
-- Encoded payloads in metadata values
-- Unusually large metadata sections
-- Invalid SafeTensors format structure
+- **Header validation**: Verifies SafeTensors format structure and JSON header integrity
+- **Metadata security**: Scans metadata for suspicious content, encoded payloads, and unusually large sections
+- **Tensor validation**: Validates tensor offsets, sizes, and data type consistency
+- **Offset integrity**: Ensures tensor data offsets are contiguous and within file bounds
 
 **Why it matters:**
-While SafeTensors is designed to be safer than pickle files, the metadata section can still contain malicious content. Attackers might try to exploit parsers or include encoded payloads in the metadata.
+While SafeTensors is designed to be safer than pickle files, the metadata section can still contain malicious content. Attackers might try to exploit parsers or include encoded payloads in the metadata. The scanner ensures the format integrity and metadata safety.
 
 ## Auto Format Detection
 
-ModelAudit includes file format detection for `.bin` files, which can contain different types of model data:
+ModelAudit includes comprehensive file format detection for ambiguous file extensions, particularly `.bin` files, which can contain different types of model data:
 
-- **Pickle format**: Detected by pickle protocol magic bytes
-- **SafeTensors format**: Detected by JSON header structure
+- **Pickle format**: Detected by pickle protocol magic bytes (\x80\x02, \x80\x03, etc.)
+- **SafeTensors format**: Detected by JSON header structure and metadata patterns
 - **ONNX format**: Detected by ONNX protobuf signatures
-- **Raw PyTorch tensors**: Default for `.bin` files without other signatures
+- **PyTorch ZIP format**: Detected by ZIP magic bytes (PK headers)
+- **Raw PyTorch tensors**: Default for `.bin` files without other recognizable signatures
 
-This allows ModelAudit to automatically apply the correct scanner based on the actual file content, not just the extension. When a `.bin` file contains SafeTensors data, the SafeTensors scanner is automatically applied.
+**Enhanced Detection Features:**
+
+- **Magic byte analysis**: Reads file headers to determine actual format regardless of extension
+- **Content-based routing**: Automatically applies the most appropriate scanner based on detected format
+- **Multi-format support**: Handles cases where files might be misnamed or have generic extensions
+- **Fallback handling**: Gracefully handles unknown formats with generic binary scanning
+
+This allows ModelAudit to automatically apply the correct scanner based on the actual file content, not just the extension. When a `.bin` file contains SafeTensors data, the SafeTensors scanner is automatically applied instead of assuming it's a raw binary file.
+
+## See Also
+
+- [ModelAudit Overview](./index.md) - Introduction to ModelAudit and supported formats
+- [Installation & Usage](./usage.md) - How to install and use ModelAudit
+- [Command Line Reference](./usage.md#command-line-interface) - CLI options and examples
