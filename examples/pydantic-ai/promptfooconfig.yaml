@@ -6,12 +6,12 @@ prompts:
 
 providers:
   - id: file://provider.py
-    label: PydanticAI GPT-4o-mini
+    label: PydanticAI GPT-4.1-mini
     config:
-      model: openai:gpt-4o-mini
+      model: openai:gpt-4.1-mini
 
-  - id: file://provider.py:call_api_with_gpt4
-    label: PydanticAI GPT-4o
+  - id: file://provider.py:call_api_with_gpt41
+    label: PydanticAI GPT-4.1
 
 tests:
   - description: 'Basic weather query for major city'

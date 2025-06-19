@@ -178,7 +178,7 @@ providers:
       model: anthropic:claude-3-5-sonnet-latest
   - id: file://provider.py
     config:
-      model: openai:gpt-4o
+      model: openai:gpt-4.1
 ```
 
 ### Real API Integration

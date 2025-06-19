@@ -65,7 +65,7 @@ class Deps(BaseModel):
     weather_api_key: Optional[str] = None
     geo_api_key: Optional[str] = None
 
-def get_weather_agent(model: str = 'openai:gpt-4o-mini') -> Agent:
+def get_weather_agent(model: str = 'openai:gpt-4.1-mini') -> Agent:
     agent = Agent(
         model,
         deps_type=Deps,
@@ -113,7 +113,7 @@ async def get_weather(ctx: RunContext[Deps], lat: float, lng: float, location_na
         'wind_speed': weather['wind']
     }
 
-async def run_weather_agent(query: str, model: str = 'openai:gpt-4o-mini') -> WeatherResponse:
+async def run_weather_agent(query: str, model: str = 'openai:gpt-4.1-mini') -> WeatherResponse:
     async with httpx.AsyncClient() as client:
         deps = Deps(client=client)
         try:
@@ -147,7 +147,7 @@ from agent import run_weather_agent
 
 def call_api(prompt: str, options: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
     """Main provider function for PydanticAI weather agent."""
-    model = options.get('config', {}).get('model', 'openai:gpt-4o-mini')
+    model = options.get('config', {}).get('model', 'openai:gpt-4.1-mini')
     result = asyncio.run(run_weather_agent(prompt, model))
 
     output_dict = result.model_dump() if hasattr(result, 'model_dump') else result
@@ -162,12 +162,12 @@ def call_api(prompt: str, options: Dict[str, Any], context: Dict[str, Any]) -> D
         }
     }
 
-def call_api_with_gpt4(prompt: str, options: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
-    """Provider function for GPT-4o."""
+def call_api_with_gpt41(prompt: str, options: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    """Provider function for GPT-4.1."""
     options_copy = options.copy()
     if 'config' not in options_copy:
         options_copy['config'] = {}
-    options_copy['config']['model'] = 'openai:gpt-4o'
+    options_copy['config']['model'] = 'openai:gpt-4.1'
     return call_api(prompt, options_copy, context)
 ```
 
@@ -182,9 +182,9 @@ prompts:
 
 providers:
   - id: file://provider.py
-    label: PydanticAI GPT-4o-mini
-  - id: file://provider.py:call_api_with_gpt4
-    label: PydanticAI GPT-4o
+    label: PydanticAI GPT-4.1-mini
+    - id: file://provider.py:call_api_with_gpt41
+    label: PydanticAI GPT-4.1
 
 tests:
   # Basic functionality
@@ -247,9 +247,9 @@ assert:
 ```yaml
 providers:
   - id: file://provider.py
-    config: { model: 'openai:gpt-4o-mini' }
+    config: { model: 'openai:gpt-4.1-mini' }
   - id: file://provider.py
-    config: { model: 'openai:gpt-4o' }
+    config: { model: 'openai:gpt-4.1' }
   - id: file://provider.py
     config: { model: 'anthropic:claude-3-5-sonnet-latest' }
 ```
