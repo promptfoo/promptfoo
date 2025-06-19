@@ -67,10 +67,10 @@ describe('synthesize', () => {
     jest.resetAllMocks();
 
     // Set up logger mocks
-    jest.mocked(logger.info).mockImplementation(() => {});
-    jest.mocked(logger.warn).mockImplementation(() => {});
-    jest.mocked(logger.error).mockImplementation(() => {});
-    jest.mocked(logger.debug).mockImplementation(() => {});
+    jest.mocked(logger.info).mockReturnValue(logger as any);
+    jest.mocked(logger.warn).mockReturnValue(logger as any);
+    jest.mocked(logger.error).mockReturnValue(logger as any);
+    jest.mocked(logger.debug).mockReturnValue(logger as any);
 
     // Set up templates mock with consistent default behavior
     jest.mocked(extractVariablesFromTemplates).mockReturnValue(['query']);
@@ -556,10 +556,10 @@ describe('synthesize', () => {
       jest.resetAllMocks();
 
       // Reset logger mocks
-      jest.mocked(logger.info).mockImplementation(() => {});
-      jest.mocked(logger.warn).mockImplementation(() => {});
-      jest.mocked(logger.error).mockImplementation(() => {});
-      jest.mocked(logger.debug).mockImplementation(() => {});
+      jest.mocked(logger.info).mockReturnValue(logger as any);
+      jest.mocked(logger.warn).mockReturnValue(logger as any);
+      jest.mocked(logger.error).mockReturnValue(logger as any);
+      jest.mocked(logger.debug).mockReturnValue(logger as any);
 
       // Set up templates mock with consistent default behavior
       jest.mocked(extractVariablesFromTemplates).mockReturnValue(['query']);
@@ -767,10 +767,10 @@ describe('resolvePluginConfig', () => {
     jest.resetAllMocks();
 
     // Set up logger mocks
-    jest.mocked(logger.info).mockImplementation(() => {});
-    jest.mocked(logger.warn).mockImplementation(() => {});
-    jest.mocked(logger.error).mockImplementation(() => {});
-    jest.mocked(logger.debug).mockImplementation(() => {});
+    jest.mocked(logger.info).mockReturnValue(logger as any);
+    jest.mocked(logger.warn).mockReturnValue(logger as any);
+    jest.mocked(logger.error).mockReturnValue(logger as any);
+    jest.mocked(logger.debug).mockReturnValue(logger as any);
   });
 
   afterEach(() => {

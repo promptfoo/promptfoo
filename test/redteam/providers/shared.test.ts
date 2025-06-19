@@ -27,7 +27,7 @@ jest.mock('../../../src/cliState', () => ({
   default: {
     config: {
       redteam: {
-        provider: null,
+        provider: undefined,
       },
     },
   },
@@ -58,7 +58,7 @@ describe('shared redteam provider utilities', () => {
     // Reset cliState to default
     cliState.config = {
       redteam: {
-        provider: null,
+        provider: undefined,
       },
     };
 
@@ -257,7 +257,7 @@ describe('shared redteam provider utilities', () => {
       expect(result).toBe(mockStateProvider);
 
       // Clean up for next test
-      cliState.config!.redteam!.provider = null;
+      cliState.config!.redteam!.provider = undefined;
     });
 
     it('sets and reuses providers', async () => {
