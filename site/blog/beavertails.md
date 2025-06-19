@@ -1,6 +1,20 @@
 ---
-date: 2024-12-22
+title: 'Red Team Your LLM with BeaverTails'
+description: 'Test your LLM against 700+ harmful prompts across 14 risk categories. See how well your model handles everything from hate speech to misinformation using the BeaverTails dataset.'
 image: /img/blog/beavertails/beaver-coding.jpg
+keywords:
+  [
+    BeaverTails,
+    LLM red teaming,
+    AI safety testing,
+    harmful content detection,
+    model evaluation,
+    LLM security,
+    AI safety,
+    prompt injection,
+    jailbreak detection,
+  ]
+date: 2024-12-22
 authors: [ian]
 ---
 
