@@ -1,3 +1,9 @@
+adel:
+  name: Adel Müürsepp
+  title: Contributor
+  url: https://github.com/adelmuursepp
+  image_url: https://github.com/adelmuursepp.png
+
 asmi:
   name: Asmi Gulati
   title: AI Red Team
@@ -41,16 +47,10 @@ shuo:
   image_url: /img/team/shuo.jpeg
 
 steve:
-  name: Steve Klein
-  title: Staff Engineer
-  url: https://github.com/stevekleinjr
-  image_url: /img/team/steve.jpeg
-
-steven:
   name: Steven Klein
-  title: principal engineer @ promptfoo
+  title: Principal Engineer
   url: https://github.com/sklein12
-  image_url: https://github.com/sklein12.png
+  image_url: /img/team/steve.jpeg
 
 tabs:
   name: Tabs Fakier
@@ -64,20 +64,14 @@ vanessa:
   url: https://github.com/vsauter
   image_url: /img/team/vanessa.jpeg
 
+vedantr:
+  name: Vedant Rautela
+  title: Contributor
+  url: https://github.com/vedantr
+  image_url: https://github.com/vedantr.png
+
 will:
   name: Will Holley
   title: Senior Engineer
   url: https://github.com/willholley
   image_url: /img/team/will.jpg
-
-adel:
-  name: Adel Müürsepp
-  title: contributor
-  url: https://github.com/adelmuursepp
-  image_url: https://github.com/adelmuursepp.png
-
-vedantr:
-  name: Vedant Rautela
-  title: contributor
-  url: https://github.com/vedantr
-  image_url: https://github.com/vedantr.png
