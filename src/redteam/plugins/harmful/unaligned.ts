@@ -7,7 +7,7 @@ import type { UNALIGNED_PROVIDER_HARM_PLUGINS } from '../../constants';
 import { createTestCase } from './common';
 
 export async function getHarmfulTests(
-  { purpose, injectVar, n, delayMs = 0 }: PluginActionParams,
+  { purpose, injectVar, n, delayMs = 0, config }: PluginActionParams,
   plugin: keyof typeof UNALIGNED_PROVIDER_HARM_PLUGINS,
 ): Promise<TestCase[]> {
   const maxHarmfulTests = getEnvInt('PROMPTFOO_MAX_HARMFUL_TESTS_PER_REQUEST', 5);
@@ -15,6 +15,7 @@ export async function getHarmfulTests(
     purpose,
     n: Math.min(n, maxHarmfulTests),
     harmCategory: plugin,
+    config,
   });
 
   const generatePrompts = async (): Promise<string[]> => {

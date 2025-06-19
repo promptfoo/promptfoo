@@ -58,11 +58,15 @@ ModelAudit has different dependencies depending on which model formats you want 
 | TensorFlow SavedModel | `tensorflow`                                               |
 | Keras H5              | `h5py`, `tensorflow`                                       |
 | PyTorch               | `zipfile` (built-in), `torch` for weight analysis          |
+| ONNX                  | `onnx`                                                     |
+| GGUF/GGML             | Built-in (no additional dependencies)                      |
+| Joblib                | `joblib`                                                   |
+| NumPy arrays          | `numpy` (built-in)                                         |
+| SafeTensors           | `safetensors`                                              |
+| OCI/Docker containers | Built-in (no additional dependencies)                      |
 | YAML manifests        | `pyyaml`                                                   |
 | ZIP archives          | Built-in (no additional dependencies)                      |
 | Weight Distribution   | `numpy`, `scipy`, format-specific libs (torch, h5py, etc.) |
-| ONNX                  | `onnx` (optional)                                          |
-| SafeTensors           | `safetensors` (optional)                                   |
 
 ## Advanced Usage
 
@@ -164,7 +168,7 @@ repos:
         name: ModelAudit
         entry: promptfoo scan-model
         language: system
-        files: '\.(pkl|h5|pb|pt|pth|keras|hdf5|json|yaml|yml|zip|onnx|safetensors)$'
+        files: '\.(pkl|h5|pb|pt|pth|keras|hdf5|json|yaml|yml|zip|onnx|safetensors|bin)$'
         pass_filenames: true
 ```
 
@@ -188,6 +192,7 @@ on:
       - '**.zip'
       - '**.onnx'
       - '**.safetensors'
+      - '**.bin'
 
 jobs:
   scan:
@@ -208,10 +213,10 @@ jobs:
       - name: Scan models
         run: modelaudit scan models/ --format json --output scan-results.json
 
-      - name: Check for errors
+      - name: Check for critical issues
         run: |
-          if grep -q '"severity":"error"' scan-results.json; then
-            echo "Security issues found in models!"
+          if grep -q '"severity":"critical"' scan-results.json; then
+            echo "Critical security issues found in models!"
             exit 1
           fi
 
@@ -232,7 +237,7 @@ model_security_scan:
   script:
     - pip install modelaudit[all]
     - modelaudit scan models/ --format json --output scan-results.json
-    - if grep -q '"severity":"error"' scan-results.json; then echo "Security issues found!"; exit 1; fi
+    - if grep -q '"severity":"critical"' scan-results.json; then echo "Critical security issues found!"; exit 1; fi
   artifacts:
     paths:
       - scan-results.json
@@ -248,6 +253,7 @@ model_security_scan:
       - '**/*.zip'
       - '**/*.onnx'
       - '**/*.safetensors'
+      - '**/*.bin'
 ```
 
 ## Programmatic Usage
@@ -332,7 +338,7 @@ class CustomModelScanner(BaseScanner):
         except Exception as e:
             result.add_issue(
                 f"Error scanning file: {str(e)}",
-                severity=IssueSeverity.ERROR,
+                severity=IssueSeverity.CRITICAL,
                 location=path,
                 details={"exception": str(e)}
             )
@@ -409,4 +415,4 @@ results = scan_model_directory_or_file("path/to/custom_model.mymodel")
    Info: Detected safetensors format in .bin file
    ```
 
-   Note: ModelAudit automatically detects the actual format of `.bin` files and applies the appropriate scanner. Supported formats include pickle, safetensors, ONNX, and raw PyTorch tensors.
+   Note: ModelAudit automatically detects the actual format of `.bin` files and applies the appropriate scanner. Supported formats include pickle, SafeTensors, ONNX, and raw PyTorch tensors. The enhanced binary scanner also detects embedded executables with improved PE file detection.

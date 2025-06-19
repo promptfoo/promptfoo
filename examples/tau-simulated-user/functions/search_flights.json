@@ -1,0 +1,45 @@
+{
+  "type": "function",
+  "function": {
+    "name": "search_flights",
+    "description": "Search for available flights based on criteria",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "origin": {
+          "type": "string",
+          "description": "Departure city/airport code"
+        },
+        "destination": {
+          "type": "string",
+          "description": "Arrival city/airport code"
+        },
+        "departure_date": {
+          "type": "string",
+          "description": "Departure date in YYYY-MM-DD format"
+        },
+        "return_date": {
+          "type": "string",
+          "description": "Return date in YYYY-MM-DD format (for round trip)"
+        },
+        "trip_type": {
+          "type": "string",
+          "enum": ["one_way", "round_trip"],
+          "description": "Type of trip"
+        },
+        "cabin_class": {
+          "type": "string",
+          "enum": ["basic_economy", "economy", "business", "first"],
+          "description": "Preferred cabin class"
+        },
+        "passengers": {
+          "type": "integer",
+          "description": "Number of passengers",
+          "minimum": 1,
+          "maximum": 5
+        }
+      },
+      "required": ["origin", "destination", "departure_date", "trip_type", "passengers"]
+    }
+  }
+}

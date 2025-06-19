@@ -4,8 +4,6 @@ sidebar_label: Custom Python
 
 # Python Provider
 
-## Overview
-
 The Python provider enables you to create custom evaluation logic using Python scripts. This allows you to integrate Promptfoo with any Python-based model, API, or custom logic.
 
 **Common use cases:**

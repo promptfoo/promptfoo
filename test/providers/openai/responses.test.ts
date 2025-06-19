@@ -108,6 +108,8 @@ describe('OpenAiResponsesProvider', () => {
         }),
       }),
       expect.any(Number),
+      'json',
+      undefined,
     );
 
     expect(result.error).toBeUndefined();
@@ -157,6 +159,8 @@ describe('OpenAiResponsesProvider', () => {
         body: expect.stringContaining('"instructions":"You are a helpful assistant"'),
       }),
       expect.any(Number),
+      'json',
+      undefined,
     );
   });
 
@@ -221,6 +225,8 @@ describe('OpenAiResponsesProvider', () => {
         body: expect.stringContaining('"tools":[{'),
       }),
       expect.any(Number),
+      'json',
+      undefined,
     );
 
     expect(result.raw).toHaveProperty('output');
@@ -288,6 +294,8 @@ describe('OpenAiResponsesProvider', () => {
         body: expect.stringContaining('"parallel_tool_calls":true'),
       }),
       expect.any(Number),
+      'json',
+      undefined,
     );
   });
 
@@ -380,6 +388,8 @@ describe('OpenAiResponsesProvider', () => {
         body: expect.stringContaining('"store":true'),
       }),
       expect.any(Number),
+      'json',
+      undefined,
     );
   });
 
@@ -520,6 +530,8 @@ describe('OpenAiResponsesProvider', () => {
         body: expect.stringContaining('"stream":true'),
       }),
       expect.any(Number),
+      'json',
+      undefined,
     );
   });
 
@@ -630,6 +642,8 @@ describe('OpenAiResponsesProvider', () => {
         body: expect.stringContaining('"reasoning":{"effort":"medium"}'),
       }),
       expect.any(Number),
+      'json',
+      undefined,
     );
 
     // Assertions
@@ -894,6 +908,8 @@ describe('OpenAiResponsesProvider', () => {
       expect.stringContaining('/responses'),
       expect.anything(),
       expect.anything(),
+      'json',
+      undefined,
     );
     expect(result.output).toBe('Test response');
     expect(result.error).toBeUndefined();
@@ -2366,5 +2382,33 @@ describe('OpenAiResponsesProvider', () => {
         'MCP tool call failed for ask_question: Repository not found',
       );
     });
+  });
+
+  it('should include all expected model names', () => {
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4o');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4o-2024-08-06');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4o-2024-11-20');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4o-2024-05-13');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o1');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o1-2024-12-17');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o1-preview');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o1-preview-2024-09-12');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o1-mini');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o1-mini-2024-09-12');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o1-pro');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o1-pro-2025-03-19');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3-pro');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3-pro-2025-06-10');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3-2025-04-16');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o4-mini');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o4-mini-2025-04-16');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3-mini');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3-mini-2025-01-31');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4.5-preview');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain(
+      'gpt-4.5-preview-2025-02-27',
+    );
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('codex-mini-latest');
   });
 });

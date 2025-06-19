@@ -52,7 +52,7 @@ export class SimulatedUser implements ApiProvider {
 
     const response = await userProvider.callApi(JSON.stringify(flippedMessages));
     logger.debug(`User: ${response.output}`);
-    return [...messages, { role: 'user', content: response.output }];
+    return [...messages, { role: 'user', content: String(response.output || '') }];
   }
 
   private async sendMessageToAgent(
@@ -68,7 +68,7 @@ export class SimulatedUser implements ApiProvider {
       await sleep(targetProvider.delay);
     }
     logger.debug(`Agent: ${response.output}`);
-    return [...messages, { role: 'assistant', content: response.output }];
+    return [...messages, { role: 'assistant', content: String(response.output || '') }];
   }
 
   async callApi(
@@ -90,7 +90,11 @@ export class SimulatedUser implements ApiProvider {
     for (let i = 0; i < maxTurns; i++) {
       const messagesToUser = await this.sendMessageToUser(messages, userProvider);
       const lastMessage = messagesToUser[messagesToUser.length - 1];
-      if (lastMessage.content.includes('###STOP###')) {
+      if (
+        lastMessage.content &&
+        typeof lastMessage.content === 'string' &&
+        lastMessage.content.includes('###STOP###')
+      ) {
         break;
       }
 

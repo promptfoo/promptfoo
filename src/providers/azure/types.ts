@@ -102,7 +102,10 @@ export type AzureAssistantOptions = AzureCompletionOptions &
      * If set, automatically call these functions when the assistant activates
      * these function tools.
      */
-    functionToolCallbacks?: Record<FunctionDefinition['name'], (arg: string) => Promise<string>>;
+    functionToolCallbacks?: Record<
+      FunctionDefinition['name'],
+      ((arg: string) => Promise<string>) | string
+    >;
     /**
      * Model to use for the assistant.
      */

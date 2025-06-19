@@ -6,6 +6,11 @@ import { fromZodError } from 'zod-validation-error';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { loadApiProvider } from '../../providers';
+import {
+  doTargetPurposeDiscovery,
+  type TargetPurposeDiscoveryResult,
+} from '../../redteam/commands/discover';
+import { neverGenerateRemote } from '../../redteam/remoteGeneration';
 import type { ProviderOptions, ProviderTestResponse } from '../../types/providers';
 import invariant from '../../util/invariant';
 import { ProviderOptionsSchema } from '../../validators/providers';
@@ -99,3 +104,49 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
     return;
   }
 });
+
+providersRouter.post(
+  '/discover',
+  async (
+    req: Request,
+    res: Response<TargetPurposeDiscoveryResult | { error: string }>,
+  ): Promise<void> => {
+    const body = req.body;
+    let providerOptions: ProviderOptions;
+    try {
+      providerOptions = ProviderOptionsSchema.parse(body);
+    } catch (e) {
+      res.status(400).json({ error: fromZodError(e as ZodError).toString() });
+      return;
+    }
+    invariant(providerOptions.id, 'Provider ID (`id`) is required');
+
+    // Check that remote generation is enabled:
+    if (neverGenerateRemote()) {
+      res.status(400).json({ error: 'Requires remote generation be enabled.' });
+      return;
+    }
+
+    try {
+      const loadedProvider = await loadApiProvider(providerOptions.id, {
+        options: providerOptions,
+      });
+      const result = await doTargetPurposeDiscovery(loadedProvider, undefined, false);
+
+      if (result) {
+        res.json(result);
+      } else {
+        res.status(500).json({ error: "Discovery failed to discover the target's purpose." });
+      }
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : String(e);
+      const serializedError = dedent`
+        [POST /providers/discover] Error calling target purpose discovery
+        error: ${errorMessage}
+        providerOptions: ${JSON.stringify(providerOptions)}`;
+      logger.error(serializedError);
+      res.status(500).json({ error: serializedError });
+      return;
+    }
+  },
+);
