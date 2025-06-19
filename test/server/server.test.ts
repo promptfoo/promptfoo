@@ -225,7 +225,7 @@ describe('Static file serving', () => {
     app = createApp();
   });
 
-  it('should serve index.html for /*splat route', async () => {
+  it('should serve index.html for wildcard route', async () => {
     await request(app).get('/any/path').expect(200).expect('Content-Type', /html/);
     expect(true).toBeTruthy();
   });

@@ -242,17 +242,29 @@ export function createApp() {
   app.use(express.static(staticDir));
 
   // Ignore NotFoundError from static middleware so client routing can handle it
-  app.use((err: unknown, _req: Request, _res: Response, next: express.NextFunction) => {
-    if ((err as { status?: number }).status === 404) {
+  app.use((err: unknown, req: Request, _res: Response, next: express.NextFunction) => {
+    // Type-safe check for 404 errors
+    if (
+      err &&
+      typeof err === 'object' &&
+      'status' in err &&
+      (err as { status: number }).status === 404
+    ) {
+      logger.debug(`Static file not found, passing to client routing: ${req.path}`);
       return next();
     }
+
+    // Log other static middleware errors
+    logger.error(`Static middleware error for ${req.path}: ${String(err)}`);
     return next(err);
   });
 
-  // Handle client routing, return all requests to the app
-  app.use((req: Request, res: Response): void => {
+  // Handle client routing - catch all unmatched routes and serve index.html for SPA
+  app.get(/^(?!\/api).*$/, (req: Request, res: Response): void => {
+    // Serve index.html for all non-API routes (SPA routing)
     res.sendFile(path.join(staticDir, 'index.html'));
   });
+
   return app;
 }
 
