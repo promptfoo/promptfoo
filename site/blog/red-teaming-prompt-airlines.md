@@ -1,6 +1,6 @@
 ---
 title: 'Jailbreaking Black-Box LLMs Using Promptfoo: A Complete Walkthrough'
-description: 'We jailbroke Wiz\'s Prompt Airlines CTF using automated red teaming. Follow our step-by-step process to break black-box LLM systems at scale.'
+description: "We jailbroke Wiz's Prompt Airlines CTF using automated red teaming. Follow our step-by-step process to break black-box LLM systems at scale."
 image: /img/blog/prompt-airlines/prompt_airlines_enumeration.png
 keywords:
   [

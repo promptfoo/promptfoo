@@ -1,6 +1,6 @@
 ---
 title: 'How to Red Team GPT: Complete Security Testing Guide for OpenAI Models'
-description: 'OpenAI\'s latest GPT models are more capable but also more vulnerable. Discover new attack vectors and systematic approaches to testing GPT security.'
+description: "OpenAI's latest GPT models are more capable but also more vulnerable. Discover new attack vectors and systematic approaches to testing GPT security."
 image: /img/blog/gpt-red-team.png
 keywords:
   [
