@@ -47,6 +47,12 @@ export interface CrescendoMetadata extends BaseRedteamMetadata {
     | 'Internal evaluator success'
     | 'Max rounds reached'
     | 'Max backtracks reached';
+  successfulAttacks?: Array<{
+    turn: number;
+    prompt: string;
+    response: string;
+  }>;
+  totalSuccessfulAttacks?: number;
 }
 
 /**
@@ -63,6 +69,7 @@ interface CrescendoConfig {
   redteamProvider: RedteamFileConfig['provider'];
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
   stateful?: boolean;
+  continueAfterSuccess?: boolean;
 }
 
 export class MemorySystem {
@@ -106,6 +113,11 @@ export class CrescendoProvider implements ApiProvider {
   private maxBacktracks: number;
   private stateful: boolean;
   private excludeTargetOutputFromAgenticAttackGeneration: boolean;
+  private successfulAttacks: Array<{
+    turn: number;
+    prompt: string;
+    response: string;
+  }> = [];
 
   constructor(config: CrescendoConfig) {
     this.config = config;
@@ -123,6 +135,10 @@ export class CrescendoProvider implements ApiProvider {
     if (this.stateful) {
       this.maxBacktracks = 0;
     }
+
+    // Ensure continueAfterSuccess defaults to false
+    this.config.continueAfterSuccess = config.continueAfterSuccess ?? false;
+
     logger.debug(
       `[Crescendo] CrescendoProvider initialized with config: ${JSON.stringify(config)}`,
     );
@@ -444,19 +460,53 @@ export class CrescendoProvider implements ApiProvider {
         logger.debug(`[Crescendo] Eval score: flag=${evalFlag}, percentage=${evalPercentage}`);
 
         if (evalPercentage === 100) {
-          exitReason = 'Internal evaluator success';
-          logger.debug(
-            `[Crescendo] Jailbreak Successful via Internal Evaluator, EXITING at ROUND ${roundNum}`,
-          );
-          break;
+          // Record successful attack via internal evaluator (only if not already recorded for this turn)
+          const alreadyRecorded = this.successfulAttacks.some((attack) => attack.turn === roundNum);
+          if (!alreadyRecorded) {
+            this.successfulAttacks.push({
+              turn: roundNum,
+              prompt: attackPrompt,
+              response: lastResponse.output,
+            });
+          }
+
+          // Only break early if continueAfterSuccess is false
+          if (this.config.continueAfterSuccess) {
+            logger.debug(
+              `[Crescendo] Jailbreak Successful via Internal Evaluator at ROUND ${roundNum}, continuing due to continueAfterSuccess`,
+            );
+          } else {
+            exitReason = 'Internal evaluator success';
+            logger.debug(
+              `[Crescendo] Jailbreak Successful via Internal Evaluator, EXITING at ROUND ${roundNum}`,
+            );
+            break;
+          }
         }
 
         if (graderPassed === false) {
-          exitReason = 'Grader failed';
-          logger.debug(
-            `[Crescendo] Jailbreak Successful via External Grader, EXITING at ROUND ${roundNum}`,
-          );
-          break;
+          // Record successful attack via external grader (only if not already recorded for this turn)
+          const alreadyRecorded = this.successfulAttacks.some((attack) => attack.turn === roundNum);
+          if (!alreadyRecorded) {
+            this.successfulAttacks.push({
+              turn: roundNum,
+              prompt: attackPrompt,
+              response: lastResponse.output,
+            });
+          }
+
+          // Only break early if continueAfterSuccess is false
+          if (this.config.continueAfterSuccess) {
+            logger.debug(
+              `[Crescendo] Jailbreak Successful via External Grader at ROUND ${roundNum}, continuing due to continueAfterSuccess`,
+            );
+          } else {
+            exitReason = 'Grader failed';
+            logger.debug(
+              `[Crescendo] Jailbreak Successful via External Grader, EXITING at ROUND ${roundNum}`,
+            );
+            break;
+          }
         }
 
         logger.debug('[Crescendo] Jailbreak Unsuccessful, continuing to next round');
@@ -482,6 +532,12 @@ export class CrescendoProvider implements ApiProvider {
     this.logChatHistory(this.redTeamingChatConversationId);
     delete vars['sessionId'];
 
+    // Determine final exit reason and result
+    const hasSuccessfulAttacks = this.successfulAttacks.length > 0;
+    if (hasSuccessfulAttacks) {
+      evalFlag = true;
+    }
+
     const messages = this.memory.getConversation(this.targetConversationId);
     return {
       output: lastResponse.output,
@@ -494,6 +550,8 @@ export class CrescendoProvider implements ApiProvider {
         crescendoConfidence: evalPercentage,
         stopReason: exitReason,
         redteamHistory: messagesToRedteamHistory(messages),
+        successfulAttacks: this.successfulAttacks,
+        totalSuccessfulAttacks: this.successfulAttacks.length,
       },
       tokenUsage: totalTokenUsage,
       guardrails: lastResponse.guardrails,
