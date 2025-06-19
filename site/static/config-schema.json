@@ -584,6 +584,9 @@
                                       },
                                       "transform": {
                                         "type": "string"
+                                      },
+                                      "contextTransform": {
+                                        "type": "string"
                                       }
                                     },
                                     "additionalProperties": false
