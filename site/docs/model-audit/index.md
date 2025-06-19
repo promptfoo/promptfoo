@@ -75,10 +75,16 @@ promptfoo scan-model model.pkl --blacklist "unsafe_model" --blacklist "malicious
 ModelAudit can scan:
 
 - **PyTorch models** (`.pt`, `.pth`, `.bin`)
-- **TensorFlow SavedModel** format
+- **TensorFlow SavedModel** format (`.pb` files and directories)
 - **Keras models** (`.h5`, `.keras`, `.hdf5`)
-- **Pickle files** (`.pkl`, `.pickle`, `.bin`)
+- **ONNX models** (`.onnx`)
+- **GGUF/GGML models** (`.gguf`, `.ggml`) - popular for LLaMA, Alpaca, and other quantized LLMs
+- **Pickle files** (`.pkl`, `.pickle`, `.bin`, `.ckpt`)
+- **Joblib files** (`.joblib`) - commonly used by scikit-learn
+- **NumPy arrays** (`.npy`)
 - **SafeTensors models** (`.safetensors`, `.bin` with SafeTensors format)
+- **Container manifests** (`.manifest`) with embedded model layers
+- **ZIP archives** (`.zip`, `.npz`) with recursive content scanning
 - **Binary model files** (`.bin`) including:
   - SafeTensors format (auto-detected)
   - ONNX models
@@ -91,13 +97,17 @@ ModelAudit can scan:
 The scanner looks for various security issues, including:
 
 - **Malicious Code**: Detecting potentially dangerous code in pickled models
-- **Suspicious Operations**: Identifying risky TensorFlow operations
+- **Suspicious Operations**: Identifying risky TensorFlow operations and custom ONNX operators
 - **Unsafe Layers**: Finding potentially unsafe Keras Lambda layers
 - **Blacklisted Names**: Checking for models with names matching suspicious patterns
 - **Dangerous Serialization**: Detecting unsafe pickle opcodes and patterns
 - **Encoded Payloads**: Looking for suspicious strings that might indicate hidden code
 - **Risky Configurations**: Identifying dangerous settings in model architectures
-- **Embedded Executables**: Detecting Windows PE, Linux ELF, and macOS Mach-O files
+- **Embedded Executables**: Detecting Windows PE, Linux ELF, and macOS Mach-O files with enhanced validation
+- **Container Security**: Scanning model files within OCI/Docker container layers
+- **Compression Attacks**: Detecting zip bombs and decompression attacks in archives and joblib files
+- **Weight Anomalies**: Statistical analysis to detect potential backdoors or trojans
+- **Format Integrity**: Validating file format structure and preventing malformed file attacks
 
 ## Interpreting Results
 
