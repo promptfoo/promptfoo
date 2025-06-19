@@ -251,7 +251,6 @@ describe('convertQuestionToPythonPrompt', () => {
       ['What is the capital of France?', 'What is the capital of Germany?'],
       'Is the response clear?',
     );
-    console.log(result);
     expect(result).toBe(dedent`
 You are a specialized system that analyzes an LLM evaluation question and generates a Python function to automatically check LLM responses against the specific criterion. 
     Your task is to determine if the given evaluation question can be reliably answered using a deterministic Python function.
