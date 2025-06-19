@@ -1,6 +1,5 @@
 ---
 sidebar_label: Mixtral vs GPT
-authors: [ian]
 ---
 
 # Mixtral vs GPT: Run a benchmark with your own data
@@ -90,7 +89,7 @@ prompts:
   - 'Answer this as best you can: {{query}}'
 ```
 
-If desired, you can test multiple prompts (just add more to the list), or test [different prompts for each model](/docs/configuration/parameters#different-prompts-per-model).
+If desired, you can test multiple prompts (just add more to the list), or test [different prompts for each model](/docs/configuration/prompts#model-specific-prompts).
 
 ## Step 4: Add test cases
 

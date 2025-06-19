@@ -1,6 +1,5 @@
 ---
 sidebar_label: GPT-4o vs GPT-4o-mini
-authors: [michael]
 ---
 
 # GPT-4o vs GPT-4o-mini: Benchmark on Your Own Data

@@ -1,6 +1,5 @@
 ---
 sidebar_label: OpenAI vs Azure benchmark
-authors: [ian]
 ---
 
 # OpenAI vs Azure: How to benchmark

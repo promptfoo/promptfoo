@@ -1,6 +1,5 @@
 ---
 sidebar_label: Gemini vs GPT
-authors: [ian]
 ---
 
 # Gemini vs GPT: benchmark on your own data

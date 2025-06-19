@@ -1,6 +1,5 @@
 ---
 sidebar_label: Red teaming a Chatbase Chatbot
-authors: [michael]
 ---
 
 # Red teaming a Chatbase Chatbot

@@ -1,6 +1,5 @@
 ---
 sidebar_label: Evaluating LLM text-to-SQL performance
-authors: [ian]
 ---
 
 # Evaluating LLM text-to-SQL performance

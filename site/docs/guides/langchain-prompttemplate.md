@@ -1,6 +1,5 @@
 ---
 sidebar_label: Using LangChain PromptTemplate with Promptfoo
-authors: [adel]
 ---
 
 # Using LangChain PromptTemplate with Promptfoo

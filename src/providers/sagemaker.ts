@@ -688,7 +688,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     }
 
     // Check if we should use cache - use the transformed prompt for cache key
-    const bustCache = context?.debug === true; // If debug mode is on, bust the cache
+    const bustCache = context?.bustCache ?? context?.debug === true; // If debug mode is on, bust the cache
     if (isCacheEnabled() && !bustCache) {
       const cacheKey = this.getCacheKey(transformedPrompt);
       const cache = (await getCache)

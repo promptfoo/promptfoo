@@ -431,6 +431,7 @@ export async function synthesize({
   targetLabels,
   showProgressBar: showProgressBarOverride,
   excludeTargetOutputFromAgenticAttackGeneration,
+  testGenerationInstructions,
 }: SynthesizeOptions): Promise<{
   purpose: string;
   entities: string[];
@@ -613,6 +614,10 @@ export async function synthesize({
       try {
         registeredPlugin.validate({
           language,
+          modifiers: {
+            testGenerationInstructions,
+            ...(plugin.config?.modifiers || {}),
+          },
           ...resolvePluginConfig(plugin.config),
         });
       } catch (error) {
@@ -706,6 +711,10 @@ export async function synthesize({
         delayMs: delay || 0,
         config: {
           language,
+          modifiers: {
+            testGenerationInstructions,
+            ...(plugin.config?.modifiers || {}),
+          },
           ...resolvePluginConfig(plugin.config),
         },
       });

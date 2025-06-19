@@ -1,6 +1,5 @@
 ---
 sidebar_label: Deepseek benchmark
-authors: [ian]
 ---
 
 # Deepseek vs GPT vs O3 vs Llama: Run a Custom Benchmark

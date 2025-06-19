@@ -1,6 +1,5 @@
 ---
 sidebar_label: GPT 3.5 vs GPT 4
-authors: [ian]
 ---
 
 # GPT 3.5 vs GPT 4: benchmark on your own data

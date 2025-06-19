@@ -1,11 +1,11 @@
 import React from 'react';
-import {useDoc} from '@docusaurus/plugin-content-docs/client';
+import { useDoc } from '@docusaurus/plugin-content-docs/client';
 import authorsData from '@site/blog/authors.json';
 import styles from './styles.module.css';
 
 export default function DocItemAuthors() {
-  const {frontMatter} = useDoc();
-  let {authors} = frontMatter;
+  const { frontMatter } = useDoc();
+  let { authors } = frontMatter;
 
   if (!authors) {
     return null;
@@ -20,9 +20,7 @@ export default function DocItemAuthors() {
       if (typeof authorKeyOrObj === 'string') {
         const authorInfo = authorsData[authorKeyOrObj];
         if (!authorInfo) {
-          console.warn(
-            `No author data found for key '${authorKeyOrObj}' in authors.json`
-          );
+          console.warn(`No author data found for key '${authorKeyOrObj}' in authors.json`);
           return null;
         }
         return {
@@ -33,7 +31,7 @@ export default function DocItemAuthors() {
           description: authorInfo.description,
         };
       } else {
-        const {name, title, url, image_url, imageURL, description} = authorKeyOrObj;
+        const { name, title, url, image_url, imageURL, description } = authorKeyOrObj;
         return {
           name,
           title,
@@ -52,12 +50,10 @@ export default function DocItemAuthors() {
   return (
     <div className={`${styles.docAuthors} margin-bottom--md`}>
       {resolvedAuthors.map((author, index) => {
-        const {name, title, url, imageURL, description} = author;
+        const { name, title, url, imageURL, description } = author;
         return (
           <div key={index} className={styles.docAuthor}>
-            {imageURL && (
-              <img src={imageURL} alt={name} className={styles.docAuthorImg} />
-            )}
+            {imageURL && <img src={imageURL} alt={name} className={styles.docAuthorImg} />}
             <div className={styles.docAuthorContent}>
               <div className={styles.docAuthorName}>
                 {url ? (
@@ -69,13 +65,11 @@ export default function DocItemAuthors() {
                 )}
               </div>
               {title && <div className={styles.docAuthorTitle}>{title}</div>}
-              {description && (
-                <div className={styles.docAuthorDesc}>{description}</div>
-              )}
+              {description && <div className={styles.docAuthorDesc}>{description}</div>}
             </div>
           </div>
         );
       })}
     </div>
   );
-} 
+}

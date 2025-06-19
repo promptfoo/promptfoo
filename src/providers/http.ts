@@ -861,7 +861,7 @@ export class HttpProvider implements ApiProvider {
       },
       REQUEST_TIMEOUT_MS,
       'text',
-      context?.debug,
+      context?.bustCache ?? context?.debug,
       this.config.maxRetries,
     );
 

@@ -1,6 +1,5 @@
 ---
 sidebar_label: Evaluating OpenAI Assistants
-authors: [ian]
 ---
 
 # How to evaluate OpenAI Assistants

@@ -1,6 +1,5 @@
 ---
 sidebar_label: Qwen vs Llama vs GPT
-authors: [ian]
 ---
 
 # Qwen vs Llama vs GPT: Run a Custom Benchmark

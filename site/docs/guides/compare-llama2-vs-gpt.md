@@ -1,6 +1,5 @@
 ---
 sidebar_label: Llama vs GPT benchmark
-authors: [ian]
 ---
 
 # Llama 3.1 vs GPT: Benchmark on your own data

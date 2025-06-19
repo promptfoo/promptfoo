@@ -1,6 +1,5 @@
 ---
 sidebar_label: Evaluating LLM safety with HarmBench
-authors: [vedantr]
 ---
 
 # Evaluating LLM safety with HarmBench

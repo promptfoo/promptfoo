@@ -1,6 +1,5 @@
 ---
 sidebar_label: Gemma vs Llama
-authors: [ian]
 ---
 
 # Gemma vs Llama: benchmark on your own data

@@ -1,6 +1,5 @@
 ---
 sidebar_label: Choosing the best GPT model
-authors: [ian]
 ---
 
 # Choosing the best GPT model: benchmark on your own data

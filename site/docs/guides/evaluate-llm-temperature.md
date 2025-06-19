@@ -1,6 +1,5 @@
 ---
 sidebar_label: Choosing the right temperature for your LLM
-authors: [ian]
 ---
 
 # Choosing the right temperature for your LLM

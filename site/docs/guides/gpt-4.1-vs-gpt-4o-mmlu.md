@@ -4,7 +4,6 @@ description: Compare GPT-4.1 and GPT-4o performance on MMLU academic reasoning t
 image: /img/docs/gpt-4.1-vs-gpt-4o-mmlu.png
 keywords: [gpt-4.1, gpt-4o, mmlu, benchmark, comparison, academic reasoning, openai, evaluation]
 sidebar_label: GPT-4.1 vs GPT-4o MMLU
-authors: [michael]
 ---
 
 # GPT-4.1 vs GPT-4o: MMLU Benchmark Comparison

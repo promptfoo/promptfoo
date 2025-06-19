@@ -1,7 +1,6 @@
 ---
 sidebar_label: 'gpt-4.1 vs o1'
 description: 'Learn how to benchmark OpenAI o1 and o1-mini. Discover which model performs best for your specific use case.'
-authors: [ian]
 ---
 
 # gpt-4.1 vs o1: Benchmark on Your Own Data

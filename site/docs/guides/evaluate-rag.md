@@ -1,6 +1,5 @@
 ---
 sidebar_position: 2
-authors: [ian]
 ---
 
 # Evaluating RAG pipelines

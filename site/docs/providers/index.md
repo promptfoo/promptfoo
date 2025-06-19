@@ -15,7 +15,7 @@ providers:
   - anthropic:messages:claude-sonnet-4-20250514
   - openai:gpt-4.1
   - openai:o4-mini
-  - google:gemini-2.5-flash-preview-04-17
+  - google:gemini-2.5-pro-preview-06-05
   - vertex:gemini-2.5-pro-exp-03-25
   - mistral:magistral-medium-latest
   - mistral:magistral-small-latest
@@ -44,8 +44,8 @@ providers:
 | [fal.ai](./fal.md)                                  | Image Generation Provider                         | `fal:image:fal-ai/fast-sdxl`                       |
 | [Fireworks AI](./fireworks.md)                      | Various hosted models                             | `fireworks:accounts/fireworks/models/qwen-v2p5-7b` |
 | [GitHub](./github.md)                               | GitHub AI Gateway                                 | `github:gpt-4.1`                                   |
-| [Google AI Studio](./google.md)                     | Gemini models                                     | `google:gemini-2.5-flash-preview-04-17`            |
-| [Google Vertex AI](./vertex.md)                     | Google Cloud's AI platform                        | `vertex:gemini-2.5-flash-preview-04-17`            |
+| [Google AI Studio](./google.md)                     | Gemini models                                     | `google:gemini-2.5-pro`, `google:gemini-2.5-flash` |
+| [Google Vertex AI](./vertex.md)                     | Google Cloud's AI platform                        | `vertex:gemini-2.5-pro`, `vertex:gemini-2.5-flash` |
 | [Groq](./groq.md)                                   | High-performance inference API                    | `groq:llama-3.3-70b-versatile`                     |
 | [Hyperbolic](./hyperbolic.md)                       | OpenAI-compatible Llama 3 provider                | `hyperbolic:meta-llama/Llama-3.3-70B-Instruct`     |
 | [Hugging Face](./huggingface.md)                    | Access thousands of models                        | `huggingface:text-generation:gpt2`                 |
