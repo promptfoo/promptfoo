@@ -78,6 +78,7 @@ describe('auth command', () => {
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Successfully logged in'));
       expect(telemetry.record).toHaveBeenCalledWith('command_used', { name: 'auth login' });
       expect(telemetry.send).toHaveBeenCalledTimes(1);
+      expect(process.exitCode).toBe(0);
     });
 
     it('should show login instructions when no API key is provided', async () => {
@@ -100,6 +101,7 @@ describe('auth command', () => {
 
       expect(telemetry.record).toHaveBeenCalledWith('command_used', { name: 'auth login' });
       expect(telemetry.send).toHaveBeenCalledTimes(1);
+      expect(process.exitCode).toBe(0);
     });
 
     it('should use custom host when provided', async () => {
@@ -190,6 +192,7 @@ describe('auth command', () => {
       expect(cloudConfig.delete).toHaveBeenCalledWith();
       expect(setUserEmail).toHaveBeenCalledWith('');
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Successfully logged out'));
+      expect(process.exitCode).toBe(0);
     });
 
     it('should show "already logged out" message when no session exists', async () => {
@@ -206,6 +209,7 @@ describe('auth command', () => {
       expect(logger.info).toHaveBeenCalledWith(
         expect.stringContaining("You're already logged out"),
       );
+      expect(process.exitCode).toBe(0);
     });
   });
 
@@ -234,6 +238,7 @@ describe('auth command', () => {
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Currently logged in as:'));
       expect(telemetry.record).toHaveBeenCalledWith('command_used', { name: 'auth whoami' });
       expect(telemetry.send).toHaveBeenCalledTimes(1);
+      expect(process.exitCode).toBe(0);
     });
 
     it('should handle not logged in state', async () => {
@@ -257,6 +262,7 @@ describe('auth command', () => {
       expect(infoMessages[0]).toContain('promptfoo auth login');
 
       // No telemetry is recorded in this case (as per implementation)
+      expect(process.exitCode).toBe(0);
     });
 
     it('should handle API error', async () => {

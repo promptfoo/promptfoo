@@ -43,6 +43,7 @@ ${fromError(configParse.error).message}`,
       return;
     }
     logger.info(chalk.green('Configuration is valid.'));
+    process.exitCode = 0;
   } catch (err) {
     logger.error(`Failed to validate configuration: ${err instanceof Error ? err.message : err}`);
     process.exitCode = 1;

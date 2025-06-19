@@ -90,6 +90,7 @@ export function redteamRunCommand(program: Command) {
           cliState.remote = true;
         }
         await doRedteamRun(opts);
+        process.exitCode = 0;
       } catch (error) {
         if (error instanceof z.ZodError) {
           logger.error('Invalid options:');

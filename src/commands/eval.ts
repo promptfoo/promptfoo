@@ -641,6 +641,7 @@ export async function doEval(
         return ret;
       } else {
         logger.info('\nDone.');
+        process.exitCode = 0;
       }
     }
     if (testSuite.redteam) {

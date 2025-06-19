@@ -169,7 +169,9 @@ export async function showCommand(program: Command) {
       if (!id) {
         const latestEval = await Eval.latest();
         if (latestEval) {
-          return handleEval(latestEval.id);
+          await handleEval(latestEval.id);
+          process.exitCode = 0;
+          return;
         }
         logger.error('No eval found');
         process.exitCode = 1;
@@ -178,17 +180,23 @@ export async function showCommand(program: Command) {
 
       const evl = await getEvalFromId(id);
       if (evl) {
-        return handleEval(id);
+        await handleEval(id);
+        process.exitCode = 0;
+        return;
       }
 
       const prompt = await getPromptFromHash(id);
       if (prompt) {
-        return handlePrompt(id);
+        await handlePrompt(id);
+        process.exitCode = 0;
+        return;
       }
 
       const dataset = await getDatasetFromHash(id);
       if (dataset) {
-        return handleDataset(id);
+        await handleDataset(id);
+        process.exitCode = 0;
+        return;
       }
 
       logger.error(`No resource found with ID ${id}`);
@@ -201,22 +209,31 @@ export async function showCommand(program: Command) {
       if (!id) {
         const latestEval = await Eval.latest();
         if (latestEval) {
-          return handleEval(latestEval.id);
+          await handleEval(latestEval.id);
+          process.exitCode = 0;
+          return;
         }
         logger.error('No eval found');
         process.exitCode = 1;
         return;
       }
-      return handleEval(id);
+      await handleEval(id);
+      process.exitCode = 0;
     });
 
   showCommand
     .command('prompt <id>')
     .description('Show details of a specific prompt')
-    .action(handlePrompt);
+    .action(async (id: string) => {
+      await handlePrompt(id);
+      process.exitCode = 0;
+    });
 
   showCommand
     .command('dataset <id>')
     .description('Show details of a specific dataset')
-    .action(handleDataset);
+    .action(async (id: string) => {
+      await handleDataset(id);
+      process.exitCode = 0;
+    });
 }

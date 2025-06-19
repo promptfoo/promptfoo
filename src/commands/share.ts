@@ -130,6 +130,7 @@ export function shareCommand(program: Command) {
         }
 
         await createAndDisplayShareableUrl(eval_, cmdObj.showAuth);
+        process.exitCode = 0;
       },
     );
 }

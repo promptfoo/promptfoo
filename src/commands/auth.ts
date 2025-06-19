@@ -41,6 +41,7 @@ export function authCommand(program: Command) {
           }
           setUserEmail(user.email);
           logger.info(chalk.green('Successfully logged in'));
+          process.exitCode = 0;
           return;
         } else {
           logger.info(
@@ -52,6 +53,7 @@ export function authCommand(program: Command) {
           );
         }
 
+        process.exitCode = 0;
         return;
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
@@ -70,6 +72,7 @@ export function authCommand(program: Command) {
 
       if (!email && !apiKey) {
         logger.info(chalk.yellow("You're already logged out - no active session to terminate"));
+        process.exitCode = 0;
         return;
       }
 
@@ -77,6 +80,7 @@ export function authCommand(program: Command) {
       // Always unset email on logout
       setUserEmail('');
       logger.info(chalk.green('Successfully logged out'));
+      process.exitCode = 0;
       return;
     });
 
@@ -90,6 +94,7 @@ export function authCommand(program: Command) {
 
         if (!email || !apiKey) {
           logger.info(`Not logged in. Run ${chalk.bold('promptfoo auth login')} to login.`);
+          process.exitCode = 0;
           return;
         }
 
@@ -116,6 +121,7 @@ export function authCommand(program: Command) {
           name: 'auth whoami',
         });
         await telemetry.send();
+        process.exitCode = 0;
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         logger.error(`Failed to get user info: ${errorMessage}`);
