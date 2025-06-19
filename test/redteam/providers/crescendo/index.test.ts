@@ -96,7 +96,7 @@ describe('CrescendoProvider', () => {
     });
 
     // Mock server feature support to return true so unblocking logic runs
-    (jest.mocked(checkServerFeatureSupport)).mockResolvedValue(true);
+    jest.mocked(checkServerFeatureSupport).mockResolvedValue(true);
   });
 
   it('should initialize with default config values', () => {
