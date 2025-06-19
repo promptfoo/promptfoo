@@ -169,9 +169,7 @@ export async function showCommand(program: Command) {
       if (!id) {
         const latestEval = await Eval.latest();
         if (latestEval) {
-          await handleEval(latestEval.id);
-          process.exitCode = 0;
-          return;
+          return handleEval(latestEval.id);
         }
         logger.error('No eval found');
         process.exitCode = 1;
@@ -180,23 +178,17 @@ export async function showCommand(program: Command) {
 
       const evl = await getEvalFromId(id);
       if (evl) {
-        await handleEval(id);
-        process.exitCode = 0;
-        return;
+        return handleEval(id);
       }
 
       const prompt = await getPromptFromHash(id);
       if (prompt) {
-        await handlePrompt(id);
-        process.exitCode = 0;
-        return;
+        return handlePrompt(id);
       }
 
       const dataset = await getDatasetFromHash(id);
       if (dataset) {
-        await handleDataset(id);
-        process.exitCode = 0;
-        return;
+        return handleDataset(id);
       }
 
       logger.error(`No resource found with ID ${id}`);
@@ -209,31 +201,22 @@ export async function showCommand(program: Command) {
       if (!id) {
         const latestEval = await Eval.latest();
         if (latestEval) {
-          await handleEval(latestEval.id);
-          process.exitCode = 0;
-          return;
+          return handleEval(latestEval.id);
         }
         logger.error('No eval found');
         process.exitCode = 1;
         return;
       }
-      await handleEval(id);
-      process.exitCode = 0;
+      return handleEval(id);
     });
 
   showCommand
     .command('prompt <id>')
     .description('Show details of a specific prompt')
-    .action(async (id: string) => {
-      await handlePrompt(id);
-      process.exitCode = 0;
-    });
+    .action(handlePrompt);
 
   showCommand
     .command('dataset <id>')
     .description('Show details of a specific dataset')
-    .action(async (id: string) => {
-      await handleDataset(id);
-      process.exitCode = 0;
-    });
+    .action(handleDataset);
 }

@@ -10,7 +10,6 @@ async function handleEvalDelete(evalId: string, envPath?: string) {
   try {
     await deleteEval(evalId);
     logger.info(`Evaluation with ID ${evalId} has been successfully deleted.`);
-    process.exitCode = 0;
   } catch (error) {
     logger.error(`Could not delete evaluation with ID ${evalId}:\n${error}`);
     process.exit(1);
@@ -23,12 +22,10 @@ async function handleEvalDeleteAll() {
       'Are you sure you want to delete all stored evaluations? This action cannot be undone.',
   });
   if (!confirmed) {
-    process.exitCode = 0;
     return;
   }
   await deleteAllEvals();
   logger.info('All evaluations have been deleted.');
-  process.exitCode = 0;
 }
 
 export function deleteCommand(program: Command) {
@@ -48,7 +45,6 @@ export function deleteCommand(program: Command) {
       }
 
       logger.error(`No resource found with ID ${id}`);
-      process.exitCode = 1;
     });
 
   deleteCommand
@@ -80,5 +76,3 @@ export function deleteCommand(program: Command) {
       }
     });
 }
-
-export { handleEvalDelete, handleEvalDeleteAll };

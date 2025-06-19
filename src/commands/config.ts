@@ -29,7 +29,6 @@ export function configCommand(program: Command) {
         configKey: 'email',
       });
       await telemetry.send();
-      process.exitCode = 0;
     });
 
   setCommand
@@ -57,7 +56,6 @@ export function configCommand(program: Command) {
         configKey: 'email',
       });
       await telemetry.send();
-      process.exitCode = 0;
     });
 
   unsetCommand
@@ -76,7 +74,6 @@ export function configCommand(program: Command) {
       const currentEmail = getUserEmail();
       if (!currentEmail) {
         logger.info('No email is currently set.');
-        process.exitCode = 0;
         return;
       }
 
@@ -88,7 +85,6 @@ export function configCommand(program: Command) {
 
         if (!shouldUnset) {
           logger.info('Operation cancelled.');
-          process.exitCode = 0;
           return;
         }
       }
@@ -100,6 +96,5 @@ export function configCommand(program: Command) {
         configKey: 'email',
       });
       await telemetry.send();
-      process.exitCode = 0;
     });
 }
