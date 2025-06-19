@@ -3,6 +3,7 @@ sidebar_label: Misinformation in LLMs—Causes and Prevention Strategies
 title: Misinformation in LLMs—Causes and Prevention Strategies
 image: /img/blog/misinformation/misinformed_panda.png
 date: 2025-03-19
+authors: [vanessa]
 ---
 
 # Misinformation in LLMs: Causes and Prevention Strategies

@@ -2,6 +2,7 @@
 sidebar_label: Defending Against Data Poisoning Attacks on LLMs—A Comprehensive Guide
 image: /img/blog/data-poisoning/poisoning-panda.jpeg
 date: 2025-01-07
+authors: [vanessa]
 ---
 
 # Defending Against Data Poisoning Attacks on LLMs: A Comprehensive Guide

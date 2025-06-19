@@ -1,6 +1,7 @@
 ---
 image: /img/blog/launch-announcement.png
 date: 2024-07-23
+authors: [ian]
 ---
 
 # Promptfoo raises $5M to fix vulnerabilities in AI applications

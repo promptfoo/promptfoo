@@ -2,6 +2,7 @@
 sidebar_label: Preventing bias & toxicity
 image: /img/blog/bias/llm-bias-mitigation-diagram.svg
 date: 2024-10-08
+authors: [ian]
 ---
 
 # Preventing Bias & Toxicity in Generative AI

@@ -1,6 +1,7 @@
 ---
 date: 2025-02-03
 image: /img/blog/deepseek-redteam/red_whale.png
+authors: [vanessa]
 ---
 
 # What are the Security Risks of Deploying DeepSeek-R1?
