@@ -574,6 +574,7 @@ class Evaluator {
     const prompts: CompletedPrompt[] = [];
     const assertionTypes = new Set<string>();
     const rowsWithSelectBestAssertion = new Set<number>();
+    const rowsWithCounterfactualAssertion = new Set<number>();
 
     const beforeAllOut = await runExtensionHook(testSuite.extensions, 'beforeAll', {
       suite: testSuite,
@@ -929,6 +930,9 @@ class Evaluator {
 
         if (evalStep.test.assert?.some((a) => a.type === 'select-best')) {
           rowsWithSelectBestAssertion.add(row.testIdx);
+        }
+        if (evalStep.test.assert?.some((a) => a.type === 'counterfactual-equality')) {
+          rowsWithCounterfactualAssertion.add(row.testIdx);
         }
         for (const assert of evalStep.test.assert || []) {
           if (assert.type) {
@@ -1416,6 +1420,88 @@ class Evaluator {
       }
     }
 
+    // Do we have to run counterfactual comparisons?
+    const counterfactualRowsCount = rowsWithCounterfactualAssertion.size;
+
+    let counterfactualProgressBar;
+    if (counterfactualRowsCount > 0 && multibar && !isWebUI) {
+      counterfactualProgressBar = multibar.create(counterfactualRowsCount, 0, {
+        provider: 'Running counterfactual bias checks',
+        prompt: '',
+        vars: '',
+      });
+    }
+
+    let counterfactualCount = 0;
+    for (const testIdx of rowsWithCounterfactualAssertion) {
+      counterfactualCount++;
+
+      if (isWebUI) {
+        logger.info(
+          `Running counterfactual comparison ${counterfactualCount} of ${counterfactualRowsCount}...`,
+        );
+      }
+
+      const resultsToCompare = this.evalRecord.persisted
+        ? await this.evalRecord.fetchResultsByTestIdx(testIdx)
+        : this.evalRecord.results.filter((r) => r.testIdx === testIdx);
+      if (resultsToCompare.length === 0) {
+        logger.warn(`Expected results to be found for test index ${testIdx}`);
+        continue;
+      }
+
+      const counterfactualAssertion = resultsToCompare[0].testCase.assert?.find(
+        (a) => a.type === 'counterfactual-equality',
+      ) as Assertion;
+
+      if (counterfactualAssertion) {
+        const { runCounterfactualAssertion } = await import('./assertions');
+        const outputs = resultsToCompare.map((r) => r.response?.output || '');
+        const testCases = resultsToCompare.map((r) => r.testCase);
+
+        const gradingResults = await runCounterfactualAssertion(
+          testCases,
+          counterfactualAssertion,
+          outputs,
+        );
+
+        for (let index = 0; index < resultsToCompare.length; index++) {
+          const result = resultsToCompare[index];
+          const gradingResult = gradingResults[index];
+
+          if (result.gradingResult) {
+            result.success = result.gradingResult.pass =
+              result.gradingResult.pass && gradingResult.pass;
+            if (!gradingResult.pass) {
+              // Failure overrides the reason and the score
+              result.gradingResult.reason = gradingResult.reason;
+              result.score = result.gradingResult.score = gradingResult.score;
+            }
+            if (!result.gradingResult.componentResults) {
+              result.gradingResult.componentResults = [];
+            }
+            result.gradingResult.componentResults.push(gradingResult);
+          } else {
+            result.gradingResult = gradingResult;
+          }
+
+          if (this.evalRecord.persisted) {
+            await result.save();
+          }
+        }
+
+        if (counterfactualProgressBar) {
+          counterfactualProgressBar.increment({
+            prompt: resultsToCompare[0].prompt.raw.slice(0, 10).replace(/\n/g, ''),
+          });
+        } else if (!isWebUI) {
+          logger.debug(
+            `Counterfactual comparison #${counterfactualCount} of ${counterfactualRowsCount} complete`,
+          );
+        }
+      }
+    }
+
     await this.evalRecord.addPrompts(prompts);
 
     // Finish up
@@ -1424,6 +1510,9 @@ class Evaluator {
     }
     if (progressBar) {
       progressBar.stop();
+    }
+    if (counterfactualProgressBar) {
+      counterfactualProgressBar.stop();
     }
 
     if (globalTimeout) {
