@@ -1,7 +1,7 @@
 ---
 sidebar_label: Introducing GOAT
 title: Introducing GOAT—Promptfoo's Latest Strategy
-description: "Learn about GOAT (Gradient-based Optimization of Adversarial Tokens), Promptfoo's latest jailbreaking strategy for red teaming LLMs with advanced adversarial techniques."
+description: 'Meet GOAT: our advanced multi-turn jailbreaking strategy that uses AI attackers to break AI defenders. See how gradient-based optimization makes jailbreaks more sophisticated.'
 image: /img/blog/goat/promptfoo_panda_harnessing_goat.png
 keywords:
   [

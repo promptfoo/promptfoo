@@ -1,6 +1,6 @@
 ---
 title: 'New Red Teaming Plugins for LLM Agents: Enhancing API Security'
-description: 'Discover new red teaming plugins designed for LLM agents, including BOLA and BFLA security testing. Learn how to secure your AI agents against API vulnerabilities.'
+description: 'LLM agents with API access create new attack surfaces. Our latest plugins test for BOLA, BFLA, and SSRF vulnerabilities that traditional security tools miss.'
 image: /img/blog/bola.svg
 keywords:
   [

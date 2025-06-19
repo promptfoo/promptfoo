@@ -1,6 +1,6 @@
 ---
 title: 'How to Red Team a LangChain Application: Complete Security Testing Guide'
-description: 'Learn how to red team LangChain applications for security vulnerabilities. Step-by-step guide covering agent testing, chain security, and vulnerability assessment.'
+description: 'LangChain apps combine multiple AI components, creating complex attack surfaces. Learn how to red team agents, chains, and tool integrations systematically.'
 image: /img/blog/langchain/red-team-langchain-banner.jpg
 keywords:
   [

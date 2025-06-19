@@ -1,6 +1,6 @@
 ---
-title: '1,156 Questions Censored by DeepSeek: Complete Analysis and Jailbreak Guide'
-description: "Analysis of DeepSeek-R1's censorship of CCP-sensitive topics with 1,156 test prompts. Learn how to detect and bypass political censorship in Chinese AI models."
+title: '1,156 Questions Censored by DeepSeek'
+description: 'We tested DeepSeek-R1 with 1,156 politically sensitive prompts. The results reveal extensive CCP censorship and how to detect political bias in Chinese AI models.'
 image: /img/blog/deepseek/deepseek_panda.png
 keywords:
   [

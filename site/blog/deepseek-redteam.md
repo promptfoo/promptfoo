@@ -1,6 +1,6 @@
 ---
-title: 'DeepSeek-R1 Security Risks: Complete Red Team Analysis and Vulnerability Assessment'
-description: 'Comprehensive red team analysis of DeepSeek-R1 reveals significant vulnerabilities to jailbreaks, toxic content, and harmful outputs. Learn the security risks and mitigation strategies.'
+title: 'What are the Security Risks of Deploying DeepSeek-R1?'
+description: 'Our red team analysis found DeepSeek-R1 fails 60%+ of harmful content tests. See the shocking vulnerabilities we discovered and what they mean for AI safety.'
 image: /img/blog/deepseek-redteam/red_whale.png
 keywords:
   [

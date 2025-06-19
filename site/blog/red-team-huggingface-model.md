@@ -1,6 +1,6 @@
 ---
 title: 'How to Red Team a HuggingFace Model: Complete Security Testing Guide'
-description: 'Learn how to red team HuggingFace models for security vulnerabilities. Step-by-step guide covering jailbreak testing, safety evaluation, and security assessment.'
+description: 'Open source models on HuggingFace often lack safety training. Learn how to red team these models and assess their vulnerabilities before deployment.'
 image: /img/blog/huggingface-red-team.png
 keywords:
   [

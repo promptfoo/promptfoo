@@ -1,7 +1,7 @@
 ---
 title: 'Defending Against Data Poisoning Attacks on LLMs: A Comprehensive Guide'
 sidebar_label: Defending Against Data Poisoning Attacks on LLMs—A Comprehensive Guide
-description: 'Learn how to protect LLMs from data poisoning attacks during training, fine-tuning, and RAG retrieval. Comprehensive guide with detection and prevention strategies.'
+description: 'Data poisoning attacks can corrupt LLMs during training, fine-tuning, and RAG retrieval. Discover how attackers exploit your data pipeline and how to defend against it.'
 image: /img/blog/data-poisoning/poisoning-panda.jpeg
 keywords:
   [

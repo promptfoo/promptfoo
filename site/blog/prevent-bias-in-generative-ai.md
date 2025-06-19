@@ -1,7 +1,7 @@
 ---
-title: 'Preventing Bias & Toxicity in Generative AI: Complete Detection and Mitigation Guide'
+title: 'Preventing Bias & Toxicity in Generative AI'
 sidebar_label: Preventing bias & toxicity
-description: 'Learn how to detect and prevent bias and toxicity in generative AI models. Comprehensive guide with testing strategies, mitigation techniques, and best practices.'
+description: 'Biased AI outputs can destroy trust and violate regulations. Discover practical methods to detect, measure, and prevent bias in your generative AI applications.'
 image: /img/blog/bias/llm-bias-mitigation-diagram.svg
 keywords:
   [

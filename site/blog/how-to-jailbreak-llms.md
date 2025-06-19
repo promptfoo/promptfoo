@@ -1,6 +1,6 @@
 ---
-title: 'Jailbreaking LLMs: A Comprehensive Guide With Examples and Defense Strategies'
-description: 'Complete guide to LLM jailbreaking techniques including prompt engineering, context manipulation, and technical exploits. Learn attack methods and defense strategies.'
+title: 'Jailbreaking LLMs: A Comprehensive Guide (With Examples)'
+description: 'From simple prompt tricks to sophisticated context manipulation, discover how LLM jailbreaks actually work. Essential reading for anyone building with AI.'
 image: /img/blog/jailbreak-llms/get-out-of-jail-free.jpg
 keywords:
   [

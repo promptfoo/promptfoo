@@ -1,7 +1,7 @@
 ---
 sidebar_label: Does Fuzzing LLMs Actually Work?
 title: Does Fuzzing LLMs Actually Work?
-description: 'Comprehensive analysis of LLM fuzzing effectiveness. Learn about different fuzzing techniques, their success rates, and practical applications for AI security testing.'
+description: 'Traditional fuzzing fails against LLMs. We analyzed why static payloads don\'t work and what actually succeeds at finding vulnerabilities in AI systems.'
 image: /img/blog/fuzzing/red_panda_firewood.png
 keywords:
   [

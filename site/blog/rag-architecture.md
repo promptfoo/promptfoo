@@ -1,6 +1,6 @@
 ---
-title: 'How Do You Secure RAG Applications? Complete Security Architecture Guide'
-description: 'Learn how to secure RAG applications with comprehensive security architecture. Cover data poisoning prevention, access controls, and best practices for AI security.'
+title: 'How Do You Secure RAG Applications?'
+description: 'RAG applications face unique security challenges beyond foundation models. Discover the vulnerabilities in retrieval systems and how to build secure AI architectures.'
 image: /img/blog/rag-architecture/promptfoo_panda_rag.png
 keywords:
   [

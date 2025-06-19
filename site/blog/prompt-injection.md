@@ -1,7 +1,7 @@
 ---
-title: 'Prompt Injection: A Comprehensive Guide to Detection and Prevention'
+title: 'Prompt Injection: A Comprehensive Guide'
 sidebar_label: Prompt injection
-description: 'Complete guide to prompt injection attacks, including direct and indirect injection techniques, detection methods, and prevention strategies for LLM security.'
+description: 'Prompt injections are the most critical LLM vulnerability. From Microsoft Copilot data theft to ChatGPT jailbreaks, see how these attacks work and how to defend.'
 image: /img/blog/prompt-injection/direct-vs-indirect.svg
 keywords:
   [

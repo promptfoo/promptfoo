@@ -1,7 +1,7 @@
 ---
-title: 'Leveraging Promptfoo for EU AI Act Compliance: Complete Guide and Best Practices'
+title: 'Leveraging Promptfoo for EU AI Act Compliance'
 sidebar_label: Leveraging Promptfoo for EU AI Act Compliance
-description: 'Learn how to ensure EU AI Act compliance with Promptfoo. Complete guide to testing prohibited AI behaviors, red teaming strategies, and regulatory requirements.'
+description: 'The EU AI Act bans specific AI behaviors starting February 2025. Discover which systems are prohibited and how to test for compliance before you deploy.'
 image: /img/blog/eu-ai-act/panda-in-eu.jpeg
 keywords:
   [

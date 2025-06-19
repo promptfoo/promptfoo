@@ -1,6 +1,6 @@
 ---
-title: 'Red Team Your LLM with BeaverTails: Complete Guide to AI Safety Testing'
-description: "Learn how to use the BeaverTails dataset to red team and evaluate LLM safety against harmful content across 14 categories with Promptfoo's open-source tools."
+title: 'Red Team Your LLM with BeaverTails'
+description: 'Test your LLM against 700+ harmful prompts across 14 risk categories. See how well your model handles everything from hate speech to misinformation using the BeaverTails dataset.'
 image: /img/blog/beavertails/beaver-coding.jpg
 keywords:
   [

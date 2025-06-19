@@ -1,6 +1,6 @@
 ---
 title: 'Promptfoo Raises $5M to Fix Vulnerabilities in AI Applications'
-description: 'Promptfoo announces $5M seed funding to advance AI security and fix vulnerabilities in AI applications. Learn about our mission and vision for safer AI systems.'
+description: 'Promptfoo raised $5M from Andreessen Horowitz to build the red team for AI applications. See our mission to fix vulnerabilities before they reach users.'
 image: /img/blog/launch-announcement.png
 keywords:
   [

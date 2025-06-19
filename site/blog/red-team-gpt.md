@@ -1,6 +1,6 @@
 ---
 title: 'How to Red Team GPT: Complete Security Testing Guide for OpenAI Models'
-description: 'Learn how to red team GPT models from OpenAI. Comprehensive guide covering jailbreak testing, vulnerability assessment, and security evaluation techniques.'
+description: 'OpenAI\'s latest GPT models are more capable but also more vulnerable. Discover new attack vectors and systematic approaches to testing GPT security.'
 image: /img/blog/gpt-red-team.png
 keywords:
   [

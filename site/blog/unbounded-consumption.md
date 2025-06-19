@@ -1,7 +1,7 @@
 ---
 sidebar_label: 'Beyond DoS: How Unbounded Consumption is Reshaping LLM Security'
 title: 'Beyond DoS: How Unbounded Consumption is Reshaping LLM Security'
-description: 'Learn about unbounded consumption attacks on LLMs, including resource exhaustion, denial of wallet attacks, and prevention strategies for AI applications.'
+description: 'OWASP replaced DoS attacks with "unbounded consumption" in their 2025 Top 10. Learn why this broader threat category matters and how to defend against it.'
 image: /img/blog/unbounded-consumption/panda-eating-tokens.png
 keywords:
   [

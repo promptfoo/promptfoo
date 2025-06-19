@@ -1,6 +1,6 @@
 ---
 title: 'How to Red Team Claude: Complete Security Testing Guide for Anthropic Models'
-description: 'Learn how to red team Claude models from Anthropic. Complete guide covering security testing, vulnerability assessment, and best practices for Claude evaluation.'
+description: 'Claude is known for safety, but how secure is it really? Step-by-step guide to red teaming Anthropic\'s models and uncovering hidden vulnerabilities.'
 image: /img/blog/red-team-claude.png
 keywords:
   [

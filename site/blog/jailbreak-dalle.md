@@ -1,6 +1,6 @@
 ---
 title: 'Automated Jailbreaking Techniques with DALL-E: Complete Red Team Guide'
-description: 'Learn how to automatically discover jailbreaks for DALL-E and other image models. Complete guide with examples, techniques, and red teaming strategies.'
+description: 'We automated DALL-E jailbreaking and generated disturbing images that bypass safety filters. See the techniques and why image model security matters.'
 image: https://storage.googleapis.com/promptfoo-public-1/promptfoo.dev/blog/jailbreak-dalle/gallery-blurred.png
 keywords:
   [
