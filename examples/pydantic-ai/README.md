@@ -2,6 +2,12 @@
 
 This example demonstrates how to evaluate [PydanticAI](https://ai.pydantic.dev/) agents using promptfoo. PydanticAI is a Python agent framework that makes it easier to build production-grade applications with Generative AI using structured outputs and type safety.
 
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example pydantic-ai
+```
+
 ## What This Example Shows
 
 - Creating a PydanticAI agent with tools and structured outputs
@@ -13,34 +19,45 @@ This example demonstrates how to evaluate [PydanticAI](https://ai.pydantic.dev/)
 ## Prerequisites
 
 - Python 3.9+
-- OpenAI API key (set as `OPENAI_API_KEY` environment variable)
-- Optional: Anthropic API key (set as `ANTHROPIC_API_KEY` environment variable)
+- Node.js for promptfoo
+- OpenAI API key (required)
+- Anthropic API key (optional)
 
-## Environment Setup
+## Environment Variables
 
-Create a `.env` file in your project root (or the promptfoo root directory):
+This example requires the following environment variables:
+
+- `OPENAI_API_KEY` - Your OpenAI API key from [OpenAI Platform](https://platform.openai.com/api-keys)
+- `ANTHROPIC_API_KEY` - Your Anthropic API key from [Anthropic Console](https://console.anthropic.com/) (optional)
+
+You can set these in a `.env` file in your project root:
 
 ```bash
 OPENAI_API_KEY=your_openai_api_key_here
-ANTHROPIC_API_KEY=your_anthropic_api_key_here  # Optional
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
 ```
 
-Or set environment variables directly:
+Or set them directly in your environment:
 
 ```bash
 export OPENAI_API_KEY=your_openai_api_key_here
-export ANTHROPIC_API_KEY=your_anthropic_api_key_here  # Optional
+export ANTHROPIC_API_KEY=your_anthropic_api_key_here
 ```
 
 ## Quick Start
 
-You can run this example with:
+### Option 1: Using the init command (recommended)
 
 ```bash
 npx promptfoo@latest init --example pydantic-ai
+cd pydantic-ai
+export OPENAI_API_KEY=your_openai_api_key_here
+pip install -r requirements.txt
+npx promptfoo@latest eval --no-cache
+npx promptfoo@latest view
 ```
 
-Or set it up manually:
+### Option 2: Manual setup
 
 ```bash
 # Install dependencies
@@ -58,12 +75,25 @@ npx promptfoo@latest view
 
 **Note**: Use `--no-cache` flag when testing latency assertions to get accurate timing measurements.
 
+## Local Development
+
+When working on this example or testing with local changes to promptfoo:
+
+```bash
+# Use the local version instead of the published package
+npm run local -- eval --no-cache
+
+# For specific configuration files
+npm run local -- eval -c promptfooconfig.yaml --no-cache
+```
+
 ## Example Structure
 
 - `agent.py` - PydanticAI agent with weather tools and structured output
 - `provider.py` - Promptfoo Python provider that runs the PydanticAI agent
 - `promptfooconfig.yaml` - Evaluation configuration with multiple test scenarios
 - `requirements.txt` - Python dependencies
+- `README.md` - This documentation
 
 ## What Gets Evaluated
 
@@ -101,7 +131,7 @@ This example demonstrates multiple evaluation patterns:
 - **Latency thresholds** - Ensures responses within acceptable time limits
 - **Complex queries** - Tests performance with multi-part requests
 
-## Test Results
+## Expected Results
 
 When you run the evaluation, you'll see results for:
 
@@ -111,6 +141,15 @@ When you run the evaluation, you'll see results for:
 - ✅ Response quality and usefulness
 - ✅ Performance benchmarks
 - ✅ Error handling
+
+Example output:
+
+```
+Successes: 6, Failures: 0, Errors: 0
+Pass Rate: 100.00%
+Duration: 9s (concurrency: 4)
+Token Usage: 678 tokens total
+```
 
 ## Customizing the Example
 
@@ -137,6 +176,9 @@ providers:
   - id: file://provider.py
     config:
       model: anthropic:claude-3-5-sonnet-latest
+  - id: file://provider.py
+    config:
+      model: openai:gpt-4o
 ```
 
 ### Real API Integration
@@ -146,6 +188,15 @@ To use real weather APIs instead of mock data:
 1. Get API keys from weather services (e.g., Tomorrow.io, OpenWeatherMap)
 2. Set environment variables: `WEATHER_API_KEY`, `GEO_API_KEY`
 3. The agent will automatically use real APIs when keys are available
+
+## Troubleshooting
+
+| Issue                   | Solution                                                 |
+| ----------------------- | -------------------------------------------------------- |
+| Module not found errors | Ensure dependencies installed and Python path correct    |
+| API key errors          | Verify environment variables are set                     |
+| Timeout errors          | Increase latency thresholds or optimize performance      |
+| Inconsistent results    | Add deterministic test cases, check for model randomness |
 
 ## Next Steps
 
