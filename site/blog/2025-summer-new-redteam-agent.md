@@ -4,7 +4,7 @@ description: Promptfoo is introducing our revolutionary, next-generation red tea
 image: /img/blog/summer-2025-new-redteam-agent/title.jpg
 keywords: [promptfoo, AI security, red teaming, LLM evaluation, prompt engineering, AI agents]
 date: 2025-06-15
-authors: [steven]
+authors: [steve]
 ---
 
 # The Next Generation of Red Teaming for LLM Agents

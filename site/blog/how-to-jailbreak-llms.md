@@ -1,6 +1,7 @@
 ---
 date: 2025-01-07
 image: /img/blog/jailbreak-llms/get-out-of-jail-free.jpg
+authors: [ian]
 ---
 
 import ChatInterface from './goat/components/ChatInterface';

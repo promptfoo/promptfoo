@@ -1,6 +1,7 @@
 ---
 date: 2024-10-14
 image: /img/blog/rag-architecture/promptfoo_panda_rag.png
+authors: [vanessa]
 ---
 
 # How Do You Secure RAG Applications?

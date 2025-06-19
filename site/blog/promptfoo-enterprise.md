@@ -1,6 +1,7 @@
 ---
 date: 2024-08-21
 image: /img/continuous-testing.png
+authors: [ian]
 ---
 
 # Promptfoo for Enterprise
