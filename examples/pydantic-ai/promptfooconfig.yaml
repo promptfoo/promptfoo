@@ -33,8 +33,8 @@ tests:
         value: "output.location && output.location.toLowerCase().includes('new york')"
       - type: javascript
         value: 'output.humidity && output.humidity !== null'
-      - type: contains-json
-        value: { 'location': 'New York' }
+      - type: javascript
+        value: "output.location && typeof output.location === 'string'"
 
   - description: 'International city weather query'
     vars:
@@ -71,8 +71,8 @@ tests:
         value: 'output.location && output.temperature && output.description'
       - type: javascript
         value: "typeof output.location === 'string' && typeof output.temperature === 'string'"
-      - type: contains-json
-        value: { 'location': 'Boston' }
+      - type: javascript
+        value: "output.location && output.location.toLowerCase().includes('boston')"
 
   - description: 'LLM-based quality assessment'
     vars:

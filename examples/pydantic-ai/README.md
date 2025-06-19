@@ -50,11 +50,13 @@ pip install -r requirements.txt
 export OPENAI_API_KEY=your_openai_api_key_here
 
 # Run the evaluation
-npx promptfoo@latest eval
+npx promptfoo@latest eval --no-cache
 
 # View results in the web UI
 npx promptfoo@latest view
 ```
+
+**Note**: Use `--no-cache` flag when testing latency assertions to get accurate timing measurements.
 
 ## Example Structure
 
