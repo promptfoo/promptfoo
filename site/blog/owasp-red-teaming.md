@@ -1,6 +1,18 @@
 ---
-date: 2025-03-25
+title: 'OWASP Red Teaming: A Practical Guide to Getting Started'
+description: 'OWASP released the first official red teaming guide for AI systems. Learn the structured methodology that security teams need to test LLMs properly.'
 image: /img/blog/owasp-red-team/ninja_panda.png
+keywords:
+  [
+    OWASP red teaming,
+    AI security testing,
+    LLM red teaming,
+    cybersecurity methodology,
+    penetration testing,
+    AI vulnerability assessment,
+    security testing framework,
+  ]
+date: 2025-03-25
 authors: [vanessa]
 ---
 
