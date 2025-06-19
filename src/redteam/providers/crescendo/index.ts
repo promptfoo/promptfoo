@@ -232,6 +232,9 @@ export class CrescendoProvider implements ApiProvider {
       `[Crescendo] Starting attack with: prompt=${JSON.stringify(prompt)}, filtersPresent=${!!filters}, varsKeys=${Object.keys(vars)}, providerType=${provider.constructor.name}`,
     );
 
+    // Reset successful attacks array for each new attack
+    this.successfulAttacks = [];
+
     let roundNum = 0;
     let backtrackCount = 0;
 
@@ -460,15 +463,7 @@ export class CrescendoProvider implements ApiProvider {
         logger.debug(`[Crescendo] Eval score: flag=${evalFlag}, percentage=${evalPercentage}`);
 
         if (evalPercentage === 100) {
-          // Record successful attack via internal evaluator (only if not already recorded for this turn)
-          const alreadyRecorded = this.successfulAttacks.some((attack) => attack.turn === roundNum);
-          if (!alreadyRecorded) {
-            this.successfulAttacks.push({
-              turn: roundNum,
-              prompt: attackPrompt,
-              response: lastResponse.output,
-            });
-          }
+          this.recordSuccessfulAttack(roundNum, attackPrompt, lastResponse.output);
 
           // Only break early if continueAfterSuccess is false
           if (this.config.continueAfterSuccess) {
@@ -485,15 +480,7 @@ export class CrescendoProvider implements ApiProvider {
         }
 
         if (graderPassed === false) {
-          // Record successful attack via external grader (only if not already recorded for this turn)
-          const alreadyRecorded = this.successfulAttacks.some((attack) => attack.turn === roundNum);
-          if (!alreadyRecorded) {
-            this.successfulAttacks.push({
-              turn: roundNum,
-              prompt: attackPrompt,
-              response: lastResponse.output,
-            });
-          }
+          this.recordSuccessfulAttack(roundNum, attackPrompt, lastResponse.output);
 
           // Only break early if continueAfterSuccess is false
           if (this.config.continueAfterSuccess) {
@@ -870,6 +857,17 @@ export class CrescendoProvider implements ApiProvider {
       } catch (error) {
         logger.warn(`Error logging message in conversation: ${error}`);
       }
+    }
+  }
+
+  private recordSuccessfulAttack(roundNum: number, attackPrompt: string, response: string): void {
+    const alreadyRecorded = this.successfulAttacks.some((attack) => attack.turn === roundNum);
+    if (!alreadyRecorded) {
+      this.successfulAttacks.push({
+        turn: roundNum,
+        prompt: attackPrompt,
+        response,
+      });
     }
   }
 

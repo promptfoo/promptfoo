@@ -102,6 +102,9 @@ export default class GoatProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<GoatResponse> {
+    // Reset successful attacks array for each new call
+    this.successfulAttacks = [];
+
     let response: Response | undefined = undefined;
     logger.debug(`[GOAT] callApi context: ${safeJsonStringify(context)}`);
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
