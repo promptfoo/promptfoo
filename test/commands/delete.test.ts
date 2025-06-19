@@ -28,7 +28,6 @@ describe('delete command', () => {
       expect(logger.info).toHaveBeenCalledWith(
         'Evaluation with ID test-id has been successfully deleted.',
       );
-      expect(process.exitCode).toBe(0);
     });
 
     it('should handle error when deleting evaluation', async () => {
@@ -55,7 +54,6 @@ describe('delete command', () => {
 
       expect(database.deleteAllEvals).toHaveBeenCalledWith();
       expect(logger.info).toHaveBeenCalledWith('All evaluations have been deleted.');
-      expect(process.exitCode).toBe(0);
     });
 
     it('should not delete evaluations when not confirmed', async () => {
@@ -64,7 +62,6 @@ describe('delete command', () => {
       await handleEvalDeleteAll();
 
       expect(database.deleteAllEvals).not.toHaveBeenCalled();
-      expect(process.exitCode).toBe(0);
     });
   });
 

@@ -6,29 +6,26 @@ import telemetry from '../telemetry';
 import { setupEnv } from '../util';
 import { deleteAllEvals, deleteEval, getEvalFromId } from '../util/database';
 
-async function handleEvalDelete(evalId: string, envPath?: string) {
+export async function handleEvalDelete(evalId: string, envPath?: string) {
   try {
     await deleteEval(evalId);
     logger.info(`Evaluation with ID ${evalId} has been successfully deleted.`);
-    process.exitCode = 0;
   } catch (error) {
     logger.error(`Could not delete evaluation with ID ${evalId}:\n${error}`);
     process.exit(1);
   }
 }
 
-async function handleEvalDeleteAll() {
+export async function handleEvalDeleteAll() {
   const confirmed = await confirm({
     message:
       'Are you sure you want to delete all stored evaluations? This action cannot be undone.',
   });
   if (!confirmed) {
-    process.exitCode = 0;
     return;
   }
   await deleteAllEvals();
   logger.info('All evaluations have been deleted.');
-  process.exitCode = 0;
 }
 
 export function deleteCommand(program: Command) {
@@ -80,5 +77,3 @@ export function deleteCommand(program: Command) {
       }
     });
 }
-
-export { handleEvalDelete, handleEvalDeleteAll };
