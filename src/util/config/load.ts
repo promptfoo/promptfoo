@@ -550,7 +550,6 @@ export async function resolveConfigs(
     `);
     process.exit(1);
   }
-
   if (!hasPrompts) {
     logger.error('You must provide at least 1 prompt');
     process.exit(1);
@@ -559,6 +558,7 @@ export async function resolveConfigs(
   if (
     // Dataset configs don't require providers
     type !== 'DatasetGeneration' &&
+    type !== 'AssertionGeneration' &&
     !hasProviders
   ) {
     logger.error('You must specify at least 1 provider (for example, openai:gpt-4.1)');

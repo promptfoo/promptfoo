@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Example showing how to override scoring functions
+description: Example base config that can be used to generate additional assertions
 providers:
   - openai:gpt-4.1-mini
 

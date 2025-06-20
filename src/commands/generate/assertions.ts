@@ -16,7 +16,7 @@ interface DatasetGenerateOptions {
   config?: string;
   envFile?: string;
   instructions?: string;
-  numQuestions?: string;
+  numAssertions?: string;
   output?: string;
   provider?: string;
   write: boolean;
@@ -57,7 +57,7 @@ export async function doGenerateAssertions(options: DatasetGenerateOptions): Pro
 
   const results = await synthesizeFromTestSuite(testSuite, {
     instructions: options.instructions,
-    numQuestions: Number.parseInt(options.numQuestions || '5', 10),
+    numQuestions: Number.parseInt(options.numAssertions || '5', 10),
     provider: options.provider,
     type: options.type,
   });
@@ -128,19 +128,20 @@ export function generateAssertionsCommand(
 ) {
   program
     .command('assertions')
-    .description('Generate missing subjective/objective assertions')
+    .description('Generate additional subjective/objective assertions')
     .option(
       '-t, --type [type]',
       'The type of natural language assertion to generate (pi, g-eval, or llm-rubric)',
       validateAssertionType,
       'pi',
     )
-    .requiredOption(
+    .option(
       '-c, --config [path]',
-      'Path to configuration file. Defaults to promptfooconfig.yaml',
+      'Path to configuration file. Defaults to promptfooconfig.yaml. Requires at least 1 prompt to be defined.',
     )
     .option('-o, --output [path]', 'Path to output file. Supports YAML output')
     .option('-w, --write', 'Write results to promptfoo configuration file')
+    .option('--numAssertions <amount>', 'Number of assertions to generate')
     .option(
       '--provider <provider>',
       `Provider to use for generating assertions. Defaults to the default grading provider.`,
@@ -150,6 +151,5 @@ export function generateAssertionsCommand(
       'Additional instructions to follow while generating assertions',
     )
     .option('--no-cache', 'Do not read or write results to disk cache', false)
-    .option('--env-file, --env-path <path>', 'Path to .env file')
     .action((opts) => doGenerateAssertions({ ...opts, defaultConfig, defaultConfigPath }));
 }
