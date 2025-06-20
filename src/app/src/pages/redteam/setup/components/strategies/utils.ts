@@ -1,5 +1,5 @@
 import type { Strategy } from '@promptfoo/redteam/constants';
-import { REDTEAM_SIMULATED_USER_STRATEGY_ID } from '@promptfoo/redteam/providers/simulatedUser';
+import { REDTEAM_SIMULATED_USER_STRATEGY_ID } from '@promptfoo/redteam/constants/strategies';
 import type { RedteamStrategy } from '@promptfoo/redteam/types';
 import type { Config } from '../../types';
 

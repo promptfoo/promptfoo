@@ -1,5 +1,3 @@
-import { REDTEAM_SIMULATED_USER_STRATEGY_ID } from '../providers/simulatedUser';
-
 // These are exposed on the frontend under the framework compliance section
 export const FRAMEWORK_COMPLIANCE_IDS = [
   'mitre:atlas',
@@ -9,6 +7,8 @@ export const FRAMEWORK_COMPLIANCE_IDS = [
   'eu:ai-act',
 ] as const;
 export type FrameworkComplianceId = (typeof FRAMEWORK_COMPLIANCE_IDS)[number];
+
+export const REDTEAM_SIMULATED_USER_STRATEGY_ID = 'simulated-user';
 
 export const DEFAULT_STRATEGIES = ['basic', 'jailbreak', 'jailbreak:composite'] as const;
 export type DefaultStrategy = (typeof DEFAULT_STRATEGIES)[number];

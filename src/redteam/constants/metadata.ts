@@ -1,6 +1,6 @@
 import { MEMORY_POISONING_PLUGIN_ID } from '../plugins/agentic/constants';
-import { REDTEAM_SIMULATED_USER_STRATEGY_ID } from '../providers/simulatedUser';
 import type { Plugin } from './plugins';
+import { REDTEAM_SIMULATED_USER_STRATEGY_ID } from './strategies';
 import type { Strategy } from './strategies';
 
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {

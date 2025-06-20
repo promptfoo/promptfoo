@@ -7,8 +7,7 @@ import type {
   ProviderResponse,
 } from '../../types';
 import invariant from '../../util/invariant';
-
-export const REDTEAM_SIMULATED_USER_STRATEGY_ID = 'simulated-user';
+import { REDTEAM_SIMULATED_USER_STRATEGY_ID } from '../constants/strategies';
 
 export default class RedteamSimulatedUserProvider implements ApiProvider {
   private readonly injectVar: string;

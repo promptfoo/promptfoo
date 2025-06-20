@@ -6,7 +6,7 @@ import { importModule } from '../../esm';
 import logger from '../../logger';
 import type { RedteamStrategyObject, TestCase, TestCaseWithPlugin } from '../../types';
 import { isJavascriptFile } from '../../util/fileExtensions';
-import { REDTEAM_SIMULATED_USER_STRATEGY_ID } from '../providers/simulatedUser';
+import { REDTEAM_SIMULATED_USER_STRATEGY_ID } from '../constants/strategies';
 import { addBase64Encoding } from './base64';
 import { addBestOfNTestCases } from './bestOfN';
 import { addCitationTestCases } from './citation';

@@ -2,6 +2,7 @@ import dedent from 'dedent';
 import path from 'path';
 import { importModule } from '../esm';
 import logger from '../logger';
+import { REDTEAM_SIMULATED_USER_STRATEGY_ID } from '../redteam/constants/strategies';
 import { MEMORY_POISONING_PLUGIN_ID } from '../redteam/plugins/agentic/constants';
 import { MemoryPoisoningProvider } from '../redteam/providers/agentic/memoryPoisoning';
 import RedteamBestOfNProvider from '../redteam/providers/bestOfN';
@@ -11,9 +12,7 @@ import RedteamIterativeProvider from '../redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from '../redteam/providers/iterativeTree';
 import RedteamPandamoniumProvider from '../redteam/providers/pandamonium';
-import RedteamSimulatedUserProvider, {
-  REDTEAM_SIMULATED_USER_STRATEGY_ID,
-} from '../redteam/providers/simulatedUser';
+import RedteamSimulatedUserProvider from '../redteam/providers/simulatedUser';
 import type { LoadApiProviderContext } from '../types';
 import type { ApiProvider, ProviderOptions } from '../types/providers';
 import { isJavascriptFile } from '../util/fileExtensions';

@@ -1,5 +1,5 @@
 import type { TestCase } from '../../types';
-import { REDTEAM_SIMULATED_USER_STRATEGY_ID } from '../providers/simulatedUser';
+import { REDTEAM_SIMULATED_USER_STRATEGY_ID } from '../constants/strategies';
 
 export function addSimulatedUser(
   testCases: TestCase[],
