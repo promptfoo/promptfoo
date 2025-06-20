@@ -7,6 +7,7 @@ import {
   FormControlLabel,
   Radio,
   RadioGroup,
+  Alert,
 } from '@mui/material';
 import { STRATEGY_PRESETS, PRESET_IDS } from './types';
 
@@ -15,6 +16,7 @@ interface RecommendedOptionsProps {
   isStatefulValue: boolean;
   onMultiTurnChange: (checked: boolean) => void;
   onStatefulChange: (isStateful: boolean) => void;
+  hasSessionParser: boolean;
 }
 
 export function RecommendedOptions({
@@ -22,6 +24,7 @@ export function RecommendedOptions({
   isStatefulValue,
   onMultiTurnChange,
   onStatefulChange,
+  hasSessionParser,
 }: RecommendedOptionsProps) {
   const mediumPreset = STRATEGY_PRESETS[PRESET_IDS.MEDIUM];
   if (!mediumPreset?.options?.multiTurn) {
@@ -66,6 +69,12 @@ export function RecommendedOptions({
                 label="No - my system is not stateful, the full conversation history must be sent on every request"
               />
             </RadioGroup>
+            {!hasSessionParser && isStatefulValue && (
+              <Alert severity="warning" sx={{ mt: 2 }}>
+                Your system is stateful but you don't have session handling set up. Please return to
+                your Target setup to configure it.
+              </Alert>
+            )}
           </Box>
         )}
       </Box>
