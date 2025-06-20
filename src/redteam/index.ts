@@ -161,9 +161,20 @@ const formatTestCount = (numTests: number, strategy: boolean): string =>
     : `${numTests} ${strategy ? 'additional' : ''} tests`;
 
 /**
- * Checks if a plugin matches any of the strategy's target plugins
- * @param strategyId - The ID of the strategy being applied
- * @param targetPlugins - Optional array of plugin IDs to match against
+ * Determines whether a strategy should be applied to a test case based on plugin targeting rules.
+ *
+ * This function evaluates multiple criteria to decide if a strategy matches a test case:
+ * - Excludes strategy-exempt plugins (defined in STRATEGY_EXEMPT_PLUGINS)
+ * - Excludes sequence providers (which are verbatim and don't support strategies)
+ * - Respects plugin-level strategy exclusions via excludeStrategies config
+ * - Matches against target plugins through direct ID match or category prefixes
+ *
+ * @param testCase - The test case containing plugin metadata to evaluate
+ * @param strategyId - The ID of the strategy being considered for application
+ * @param targetPlugins - Optional array of plugin IDs or categories that the strategy targets.
+ *                       If undefined or empty, strategy applies to all non-exempt plugins.
+ *                       Supports both exact matches and category prefixes (e.g., 'harmful' matches 'harmful:hate')
+ * @returns True if the strategy should be applied to this test case, false otherwise
  */
 function pluginMatchesStrategyTargets(
   testCase: TestCaseWithPlugin,

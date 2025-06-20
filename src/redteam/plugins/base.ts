@@ -206,7 +206,10 @@ export abstract class RedteamPluginBase {
       metadata: {
         pluginId: getShortPluginId(this.id),
         pluginConfig: {
-          excludeStrategies: this.config.excludeStrategies,
+          ...(this.config.excludeStrategies &&
+            this.config.excludeStrategies.length > 0 && {
+              excludeStrategies: this.config.excludeStrategies,
+            }),
         },
       },
     }));

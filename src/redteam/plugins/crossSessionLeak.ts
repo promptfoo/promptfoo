@@ -3,6 +3,7 @@ import logger from '../../logger';
 import type { Assertion, AtomicTestCase, GradingResult, TestCase } from '../../types';
 import { extractJsonObjects } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
+import { MULTI_TURN_STRATEGIES } from '../constants/strategies';
 import { redteamProviderManager } from '../providers/shared';
 import { getShortPluginId } from '../util';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
@@ -33,7 +34,7 @@ export class CrossSessionLeakPlugin extends RedteamPluginBase {
   readonly id = PLUGIN_ID;
 
   protected getDefaultExcludedStrategies(): string[] {
-    return ['crescendo', 'goat'];
+    return [...MULTI_TURN_STRATEGIES];
   }
 
   protected async getTemplate(): Promise<string> {
