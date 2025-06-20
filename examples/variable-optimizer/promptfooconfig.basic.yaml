@@ -1,0 +1,41 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Variable rewriting with prompt optimizer - completely rewrite variable values to make tests pass
+
+prompts:
+  - 'Translate the following to French: {{text}}'
+
+providers:
+  - openai:gpt-4.1
+
+defaultTest:
+  provider:
+    id: promptfoo:prompt-optimizer
+    config:
+      maxTurns: 10
+      targetVariable: text
+      improverModel: openai:gpt-4.1
+
+tests:
+  - vars:
+      text: Hello world
+    assert:
+      - type: icontains
+        value: bonjour
+
+  - vars:
+      text: Good morning
+    assert:
+      - type: equals
+        value: goodbye
+
+  - vars:
+      text: Thank you very much
+    assert:
+      - type: equals
+        value: My hovercraft is full of eels
+
+  - vars:
+      text: The weather is nice today
+    assert:
+      - type: icontains
+        value: nuit
