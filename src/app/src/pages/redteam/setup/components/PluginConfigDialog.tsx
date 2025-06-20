@@ -10,6 +10,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import IconButton from '@mui/material/IconButton';
 import TextField from '@mui/material/TextField';
 import type { Plugin } from '@promptfoo/redteam/constants';
+import type { PluginConfig } from '@promptfoo/redteam/types';
 import type { LocalPluginConfig } from '../types';
 
 interface PluginConfigDialogProps {
@@ -39,7 +40,9 @@ export default function PluginConfigDialog({
 
   const handleArrayInputChange = (key: string, index: number, value: string) => {
     setLocalConfig((prev) => {
-      const currentArray = Array.isArray(prev[key]) ? [...(prev[key] as string[])] : [''];
+      const currentArray = Array.isArray(prev[key as keyof PluginConfig])
+        ? [...(prev[key as keyof PluginConfig] as string[])]
+        : [''];
       currentArray[index] = value;
       return {
         ...prev,
@@ -51,13 +54,20 @@ export default function PluginConfigDialog({
   const addArrayItem = (key: string) => {
     setLocalConfig((prev) => ({
       ...prev,
-      [key]: [...(Array.isArray(prev[key]) ? (prev[key] as string[]) : []), ''],
+      [key]: [
+        ...(Array.isArray(prev[key as keyof PluginConfig])
+          ? (prev[key as keyof PluginConfig] as string[])
+          : []),
+        '',
+      ],
     }));
   };
 
   const removeArrayItem = (key: string, index: number) => {
     setLocalConfig((prev) => {
-      const currentArray = Array.isArray(prev[key]) ? [...(prev[key] as string[])] : [''];
+      const currentArray = Array.isArray(prev[key as keyof PluginConfig])
+        ? [...(prev[key as keyof PluginConfig] as string[])]
+        : [''];
       currentArray.splice(index, 1);
       if (currentArray.length === 0) {
         currentArray.push('');

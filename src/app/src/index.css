@@ -96,3 +96,46 @@ textarea {
 * {
   box-sizing: border-box;
 }
+
+@media print {
+  header,
+  footer,
+  .MuiAppBar-root,
+  .MuiToolbar-root,
+  .MuiContainer-root nav,
+  [role='navigation'],
+  .MuiAppBar-positionStatic,
+  .print-hide {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  @page {
+    size: A4;
+    margin: 0.25in;
+  }
+
+  /* Body and container styles */
+  body {
+    -webkit-print-color-adjust: exact;
+    color-adjust: exact;
+    background-color: white !important;
+  }
+
+  .report-header {
+    padding-right: 24px !important;
+  }
+
+  /* Target main container backgrounds */
+  .MuiContainer-root,
+  .MuiBox-root,
+  .MuiPaper-root {
+    background-color: white !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  .MuiContainer-root {
+    max-width: 100% !important;
+  }
+}

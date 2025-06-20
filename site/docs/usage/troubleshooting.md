@@ -264,3 +264,14 @@ Remember that promptfoo runs your Python script in a separate process, so some s
    ```bash
    unset PROMPTFOO_ENABLE_DATABASE_LOGS
    ```
+
+## Finding log files
+
+promptfoo logs errors to `${PROMPTFOO_LOG_DIR}/promptfoo-errors.log` by default.
+`PROMPTFOO_LOG_DIR` defaults to the current working directory, so the log file
+is created next to where you run your command.
+
+Set `PROMPTFOO_DISABLE_ERROR_LOG=true` to turn off file logging, or change the
+location by setting `PROMPTFOO_LOG_DIR` to a different directory.
+
+Increase verbosity by running commands with `LOG_LEVEL=debug`.
