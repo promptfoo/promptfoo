@@ -1,7 +1,22 @@
 ---
+title: 'Understanding Excessive Agency in LLMs'
 sidebar_label: Excessive agency in LLMs
+description: 'When LLMs have too much power, they become dangerous. Learn how excessive agency vulnerabilities work and why they made the OWASP Top 10 for AI risks.'
 image: /img/blog/excessive-agency/detecting-excessive-agency.svg
+keywords:
+  [
+    excessive agency,
+    LLM security,
+    AI security,
+    OWASP Top 10,
+    LLM vulnerabilities,
+    AI agent security,
+    access control,
+    privilege escalation,
+    LLM red teaming,
+  ]
 date: 2024-10-08
+authors: [ian]
 ---
 
 # Understanding Excessive Agency in LLMs

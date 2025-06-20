@@ -1,19 +1,32 @@
 ---
-date: 2024-09-26
+title: 'Jailbreaking Black-Box LLMs Using Promptfoo: A Complete Walkthrough'
+description: "We jailbroke Wiz's Prompt Airlines CTF using automated red teaming. Follow our step-by-step process to break black-box LLM systems at scale."
 image: /img/blog/prompt-airlines/prompt_airlines_enumeration.png
+keywords:
+  [
+    black-box LLM testing,
+    LLM jailbreaking,
+    Promptfoo walkthrough,
+    AI security testing,
+    red teaming tutorial,
+    LLM vulnerability assessment,
+    penetration testing,
+  ]
+date: 2024-09-26
+authors: [vanessa]
 ---
 
 # Jailbreaking Black-Box LLMs Using Promptfoo: A Walkthrough
 
 Promptfoo is an open-source framework for testing LLM applications against security, privacy, and policy risks. It is designed for developers to easily discover and fix critical LLM failures. Promptfoo also offers red team tools that can be leveraged against external endpoints. These attacks are ideal for internal red teaming exercises, third-party penetration testing, and bug bounty programs, ultimately saving security researchers dozens of hours in manual prompt engineering and adversarial testing.
 
-In this blog, we’ll demonstrate how to utilize Promptfoo’s red team tool in a black-box LLM security assessment. Using Wiz’s AI CTF, [Prompt Airlines](https://promptairlines.com/), we’ll walk you step by step through Promptfoo’s configuration to ultimately find the malicious queries that broke the chatbot’s guidelines.
+In this blog, we'll demonstrate how to utilize Promptfoo's red team tool in a black-box LLM security assessment. Using Wiz's AI CTF, [Prompt Airlines](https://promptairlines.com/), we'll walk you step by step through Promptfoo's configuration to ultimately find the malicious queries that broke the chatbot's guidelines.
 
 <!-- truncate -->
 
 ## Prerequisites
 
-Before getting started, you’ll need to install Node 18 or later in the IDE of your choice. You’ll need an API key from your preferred LLM provider. Using a proxy such as Burp Suite may also help.
+Before getting started, you'll need to install Node 18 or later in the IDE of your choice. You'll need an API key from your preferred LLM provider. Using a proxy such as Burp Suite may also help.
 
 ## Initial Reconnaissance
 
@@ -44,7 +57,7 @@ If using Burp, you can copy the request to a file so that you can send the raw r
 
 LLM applications should have guardrails to protect against adversarial jailbreaks that trick LLMs into responding to malicious queries or generating harmful content that violate policies.
 
-Each LLM application offers different use cases and may have unique policies, content filters, and guardrails in place. Prompt Airlines already provides details about its intended use case within the “Under the Hood” section. You can also obtain a rough idea of its use case by simply provoking the bot, or even using Promptfoo's [prompt extraction plugin](https://www.promptfoo.dev/docs/red-team/plugins/prompt-extraction/).
+Each LLM application offers different use cases and may have unique policies, content filters, and guardrails in place. Prompt Airlines already provides details about its intended use case within the "Under the Hood" section. You can also obtain a rough idea of its use case by simply provoking the bot, or even using Promptfoo's [prompt extraction plugin](https://www.promptfoo.dev/docs/red-team/plugins/prompt-extraction/).
 
 ![prompt airlines policy enumeration](/img/blog/prompt-airlines/prompt_airlines_enumeration.png)
 
@@ -54,7 +67,7 @@ Each LLM application offers different use cases and may have unique policies, co
 
 We now have all the ingredients necessary to launch a Promptfoo red team assessment against Prompt Airlines. The purpose of this assessment will be to trick the chatbot into providing rogue responses that violate its policies and instructions.
 
-First, you’ll need to install Promptfoo through your CLI. We recommend installing globally using npm:
+First, you'll need to install Promptfoo through your CLI. We recommend installing globally using npm:
 
 ```sh
 npm install -g promptfoo
@@ -84,7 +97,7 @@ Promptfoo will also ask you to choose strategies for attacks based on proven met
 
 ![selecting strategies](/img/blog/prompt-airlines/redteam_strategy.png)
 
-Once you’ve configured your payloads, you will need to update your promptfooconfig.yaml to include details about the HTTP endpoint. Include your raw request in your project folder, then edit your promptfooconfig.yaml to include the raw request.
+Once you've configured your payloads, you will need to update your promptfooconfig.yaml to include details about the HTTP endpoint. Include your raw request in your project folder, then edit your promptfooconfig.yaml to include the raw request.
 
 ![configuring yaml](/img/blog/prompt-airlines/yaml_configuration.png)
 
@@ -96,7 +109,7 @@ In this case, the appropriate language would be `{{ prompt | dump }}`. You can l
 
 ### Generating the Attack and Evaluating Results
 
-When you’ve successfully configured your YAML file, run the following command to generate the payloads:
+When you've successfully configured your YAML file, run the following command to generate the payloads:
 
 ```sh
 promptfoo redteam generate
@@ -136,7 +149,7 @@ You can also inspect the full prompt through the magnifier:
 
 ![inspecting the full prompt](/img/blog/prompt-airlines/magnifier_glass.png)
 
-Promptfoo’s red team assessment shows us that Prompt Airlines chatbot is vulnerable to jailbreaking through impersonation and character roleplay, two common techniques in adversarial attacks. Queries using leetspeak and base64 encoding were unsuccessful, and direct questions with malicious queries were neutralized.
+Promptfoo's red team assessment shows us that Prompt Airlines chatbot is vulnerable to jailbreaking through impersonation and character roleplay, two common techniques in adversarial attacks. Queries using leetspeak and base64 encoding were unsuccessful, and direct questions with malicious queries were neutralized.
 
 We can use this information to further refine our adversarial prompts against Prompt Airlines and continue testing other endpoints.
 
@@ -144,6 +157,6 @@ We can use this information to further refine our adversarial prompts against Pr
 
 Promptfoo achieves in minutes what manual testing achieves in hours. Using this entirely open-source tool, you can rapidly test black-box targets for nuanced LLM vulnerabilities.
 
-Want to explore more? Take a look at Promptfoo’s red team tool for [RAG applications](https://www.promptfoo.dev/docs/red-team/rag/) and [LLM agents](https://www.promptfoo.dev/docs/red-team/agents/). You can also [contribute to Promptfoo](https://www.promptfoo.dev/docs/contributing/) and join its growing open-source community of developers.
+Want to explore more? Take a look at Promptfoo's red team tool for [RAG applications](https://www.promptfoo.dev/docs/red-team/rag/) and [LLM agents](https://www.promptfoo.dev/docs/red-team/agents/). You can also [contribute to Promptfoo](https://www.promptfoo.dev/docs/contributing/) and join its growing open-source community of developers.
 
 Interested in deploying Promptfoo for your AI applications? [Reach out](https://www.promptfoo.dev/contact/) to meet with the team.

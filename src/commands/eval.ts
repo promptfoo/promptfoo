@@ -421,16 +421,6 @@ export async function doEval(
 
     const isRedteam = Boolean(config.redteam);
 
-    logger.info(chalk.green.bold(`Successes: ${successes}`));
-    logger.info(chalk.red.bold(`Failures: ${failures}`));
-    if (!Number.isNaN(errors)) {
-      logger.info(chalk.red.bold(`Errors: ${errors}`));
-    }
-    if (!Number.isNaN(passRate)) {
-      logger.info(chalk.blue.bold(`Pass Rate: ${passRate.toFixed(2)}%`));
-    }
-    logger.info(chalk.blue.bold(`Duration: ${durationDisplay} (concurrency: ${maxConcurrency})`));
-
     // Handle token usage display
     if (tokenUsage.total > 0 || (tokenUsage.prompt || 0) + (tokenUsage.completion || 0) > 0) {
       const combinedTotal = (tokenUsage.prompt || 0) + (tokenUsage.completion || 0);
@@ -446,7 +436,6 @@ export async function doEval(
         },
       };
 
-      printBorder();
       logger.info(chalk.bold('Token Usage Summary:'));
 
       if (isRedteam) {
@@ -547,7 +536,19 @@ export async function doEval(
       logger.info(
         `\n  ${chalk.blue.bold('Grand Total:')} ${chalk.white.bold(grandTotal.toLocaleString())} tokens`,
       );
+      printBorder();
     }
+
+    logger.info(chalk.gray(`Duration: ${durationDisplay} (concurrency: ${maxConcurrency})`));
+    logger.info(chalk.green.bold(`Successes: ${successes}`));
+    logger.info(chalk.red.bold(`Failures: ${failures}`));
+    if (!Number.isNaN(errors)) {
+      logger.info(chalk.red.bold(`Errors: ${errors}`));
+    }
+    if (!Number.isNaN(passRate)) {
+      logger.info(chalk.blue.bold(`Pass Rate: ${passRate.toFixed(2)}%`));
+    }
+    printBorder();
 
     telemetry.record('command_used', {
       name: 'eval',

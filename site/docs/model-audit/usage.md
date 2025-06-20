@@ -58,11 +58,15 @@ ModelAudit has different dependencies depending on which model formats you want 
 | TensorFlow SavedModel | `tensorflow`                                               |
 | Keras H5              | `h5py`, `tensorflow`                                       |
 | PyTorch               | `zipfile` (built-in), `torch` for weight analysis          |
+| ONNX                  | `onnx`                                                     |
+| GGUF/GGML             | Built-in (no additional dependencies)                      |
+| Joblib                | `joblib`                                                   |
+| NumPy arrays          | `numpy` (built-in)                                         |
+| SafeTensors           | `safetensors`                                              |
+| OCI/Docker containers | Built-in (no additional dependencies)                      |
 | YAML manifests        | `pyyaml`                                                   |
 | ZIP archives          | Built-in (no additional dependencies)                      |
 | Weight Distribution   | `numpy`, `scipy`, format-specific libs (torch, h5py, etc.) |
-| ONNX                  | `onnx` (optional)                                          |
-| SafeTensors           | `safetensors` (recommended for SafeTensors scanning)       |
 
 ## Advanced Usage
 
