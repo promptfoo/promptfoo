@@ -1,4 +1,5 @@
 import type { Strategy } from '@promptfoo/redteam/constants';
+import { REDTEAM_SIMULATED_USER_STRATEGY_ID } from '@promptfoo/redteam/providers/simulatedUser';
 import type { RedteamStrategy } from '@promptfoo/redteam/types';
 import type { Config } from '../../types';
 
@@ -35,7 +36,7 @@ export const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   'prompt-injection': 1,
   retry: 1,
   rot13: 1,
-  'simulated-user': 5,
+  [REDTEAM_SIMULATED_USER_STRATEGY_ID]: 5,
   video: 1,
 };
 
