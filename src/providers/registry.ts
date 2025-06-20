@@ -1085,7 +1085,7 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
-      const { PromptOptimizerProvider } = await import('./prompt-optimizer');
+      const { PromptOptimizerProvider } = await import('./variableOptimizer');
       return new PromptOptimizerProvider(providerOptions);
     },
   },

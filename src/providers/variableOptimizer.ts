@@ -157,7 +157,7 @@ interface OptimizerConfig {
   numCandidates?: number;
 }
 
-export class PromptOptimizerProvider implements ApiProvider {
+export class VariableOptimizerProvider implements ApiProvider {
   private readonly identifier: string;
   private readonly options: Required<OptimizerConfig>;
   private improver?: ApiProvider;
@@ -494,4 +494,4 @@ export class PromptOptimizerProvider implements ApiProvider {
   }
 }
 
-export default PromptOptimizerProvider;
+export default VariableOptimizerProvider;

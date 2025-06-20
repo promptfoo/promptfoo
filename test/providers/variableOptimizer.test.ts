@@ -1,6 +1,6 @@
 import { runAssertions } from '../../src/assertions';
 import { EchoProvider } from '../../src/providers/echo';
-import { PromptOptimizerProvider } from '../../src/providers/prompt-optimizer';
+import { PromptOptimizerProvider } from '../../src/providers/variableOptimizer';
 
 jest.mock('../../src/assertions', () => ({
   runAssertions: jest.fn(),
