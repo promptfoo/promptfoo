@@ -36,7 +36,7 @@ export type HyperbolicImageOptions = {
 export const HYPERBOLIC_IMAGE_MODELS = [
   {
     id: 'Flux.1-dev',
-    aliases: ['flux-dev', 'flux.1-dev'],
+    aliases: ['flux-dev', 'flux.1-dev', 'FLUX.1-dev'],
     cost: 0.025, // $0.025 per image
   },
   {

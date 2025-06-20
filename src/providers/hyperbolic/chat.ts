@@ -77,7 +77,7 @@ export const HYPERBOLIC_CHAT_MODELS = [
       input: 0.15 / 1e6,
       output: 0.6 / 1e6,
     },
-    aliases: ['QwQ-32B-Preview'],
+    aliases: ['QwQ-32B-Preview', 'Qwen/QwQ-32B-Preview'],
   },
   {
     id: 'qwen/Qwen2.5-72B-Instruct',
@@ -134,7 +134,7 @@ export const HYPERBOLIC_CHAT_MODELS = [
       input: 0.35 / 1e6,
       output: 0.4 / 1e6,
     },
-    aliases: ['Llama-3.1-70B'],
+    aliases: ['Llama-3.1-70B', 'Meta-Llama-3.1-70B-Instruct'],
   },
   {
     id: 'meta-llama/Llama-3.1-8B',
@@ -160,6 +160,31 @@ export const HYPERBOLIC_CHAT_MODELS = [
       output: 0.4 / 1e6,
     },
     aliases: ['Hermes-3-70B'],
+  },
+  // Vision-Language Models
+  {
+    id: 'qwen/Qwen2.5-VL-7B-Instruct',
+    cost: {
+      input: 0.2 / 1e6,
+      output: 0.2 / 1e6,
+    },
+    aliases: ['Qwen2.5-VL-7B-Instruct', 'Qwen/Qwen2.5-VL-7B-Instruct'],
+  },
+  {
+    id: 'qwen/Qwen2.5-VL-72B-Instruct',
+    cost: {
+      input: 0.6 / 1e6,
+      output: 0.6 / 1e6,
+    },
+    aliases: ['Qwen2.5-VL-72B-Instruct', 'qwen/Qwen2.5-VL-72B-Instruct'],
+  },
+  {
+    id: 'mistralai/Pixtral-12B',
+    cost: {
+      input: 0.15 / 1e6,
+      output: 0.15 / 1e6,
+    },
+    aliases: ['Pixtral-12B'],
   },
 ];
 
