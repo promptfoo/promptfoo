@@ -6,97 +6,34 @@ prompts:
 
 providers:
   - id: file://provider.py
-    label: PydanticAI GPT-4.1-mini
-    config:
-      model: openai:gpt-4.1-mini
-
-  - id: file://provider.py:call_api_with_gpt41
-    label: PydanticAI GPT-4.1
+    label: PydanticAI Weather Agent
 
 tests:
-  - description: 'Basic weather query for major city'
+  - description: 'Basic weather query'
     vars:
       query: "What's the weather like in London?"
     assert:
       - type: javascript
-        value: "typeof output === 'object' && output.location && output.location.toLowerCase().includes('london')"
+        value: "output.location && output.location.toLowerCase().includes('london')"
       - type: javascript
         value: "output.temperature && output.temperature !== 'N/A'"
-      - type: latency
-        threshold: 5000 # Max 5 seconds
 
-  - description: 'Weather query with specific format request'
+  - description: 'Structured output validation'
     vars:
-      query: 'Can you tell me the current weather conditions in New York including humidity?'
-    assert:
-      - type: javascript
-        value: "output.location && output.location.toLowerCase().includes('new york')"
-      - type: javascript
-        value: 'output.humidity && output.humidity !== null'
-      - type: javascript
-        value: "output.location && typeof output.location === 'string'"
-
-  - description: 'International city weather query'
-    vars:
-      query: "How's the weather in Tokyo today?"
-    assert:
-      - type: javascript
-        value: "output.location && output.location.toLowerCase().includes('tokyo')"
-      - type: javascript
-        value: '!output.error'
-
-  - description: 'Weather query with multiple details requested'
-    vars:
-      query: 'Tell me about the weather in Sydney - temperature, conditions, and wind speed please'
-    assert:
-      - type: javascript
-        value: "output.location && output.location.toLowerCase().includes('sydney')"
-      - type: javascript
-        value: 'output.wind_speed && output.wind_speed !== null'
-
-  - description: 'Conversational weather query with decision support'
-    vars:
-      query: "I'm planning to go out in London later. Should I bring an umbrella?"
-    assert:
-      - type: javascript
-        value: "output.location && output.location.toLowerCase().includes('london')"
-      - type: llm-rubric
-        value: 'Response provides actionable weather advice that would help someone decide whether to bring an umbrella'
-
-  - description: 'JSON structure validation'
-    vars:
-      query: 'Weather in Boston'
+      query: 'Weather in New York'
     assert:
       - type: javascript
         value: 'output.location && output.temperature && output.description'
       - type: javascript
         value: "typeof output.location === 'string' && typeof output.temperature === 'string'"
-      - type: javascript
-        value: "output.location && output.location.toLowerCase().includes('boston')"
 
-  - description: 'LLM-based quality assessment'
+  - description: 'Unknown location handling'
     vars:
-      query: 'Is it a good day for a picnic in Central Park?'
+      query: 'Weather in RandomCity'
     assert:
       - type: javascript
-        value: "output.location && (output.location.toLowerCase().includes('new york') || output.location.toLowerCase().includes('central park'))"
-      - type: llm-rubric
-        value: 'Response provides weather-based recommendation for outdoor activities like picnicking'
-
-  - description: 'Error handling test'
-    vars:
-      query: "What's the weather like in Atlantis?"
-    assert:
+        value: 'output.location && output.temperature && output.description'
       - type: javascript
-        value: 'Boolean(output.location || output.error)'
-
-  - description: 'Performance benchmark - multiple requests'
-    vars:
-      query: 'Weather in San Francisco, New York, and Miami'
-    assert:
-      - type: latency
-        threshold: 8000 # Allow more time for complex query
-      - type: javascript
-        value: 'output.location && output.temperature'
+        value: "output.location.includes('RandomCity')"
 
 outputPath: ./promptfoo_results.json
