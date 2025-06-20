@@ -157,13 +157,13 @@ interface OptimizerConfig {
   numCandidates?: number;
 }
 
-export class VariableOptimizerProvider implements ApiProvider {
+export class PromptOptimizerProvider implements ApiProvider {
   private readonly identifier: string;
   private readonly options: Required<OptimizerConfig>;
   private improver?: ApiProvider;
 
   constructor({ id, label, config }: ProviderOptions) {
-    this.identifier = id ?? label ?? 'promptfoo:variable-optimizer';
+    this.identifier = id ?? label ?? 'promptfoo:var-optimizer';
     this.options = {
       maxTurns: config?.maxTurns ?? 10,
       improverModel: config?.improverModel,
@@ -494,4 +494,4 @@ export class VariableOptimizerProvider implements ApiProvider {
   }
 }
 
-export default VariableOptimizerProvider;
+export default PromptOptimizerProvider;

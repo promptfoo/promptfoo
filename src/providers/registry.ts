@@ -1079,7 +1079,7 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
-    test: (providerPath: string) => providerPath === 'promptfoo:prompt-optimizer',
+    test: (providerPath: string) => providerPath === 'promptfoo:var-optimizer',
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,

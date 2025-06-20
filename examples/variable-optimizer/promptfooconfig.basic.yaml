@@ -9,7 +9,7 @@ providers:
 
 defaultTest:
   provider:
-    id: promptfoo:prompt-optimizer
+    id: promptfoo:var-optimizer
     config:
       maxTurns: 5
       targetVariable: text

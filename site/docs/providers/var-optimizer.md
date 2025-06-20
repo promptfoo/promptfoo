@@ -10,7 +10,7 @@ The Variable Optimizer Provider automatically improves variable values within yo
 
 ```yaml
 provider:
-  id: promptfoo:prompt-optimizer
+  id: promptfoo:var-optimizer
   config:
     targetVariable: text
     maxTurns: 3
@@ -39,7 +39,7 @@ providers:
 
 tests:
   - provider:
-      id: promptfoo:prompt-optimizer
+      id: promptfoo:var-optimizer
       config:
         targetVariable: text
         maxTurns: 3
@@ -74,7 +74,7 @@ The `targetVariable` parameter specifies which variable to optimize:
 ```yaml
 # Optimize the 'query' variable
 provider:
-  id: promptfoo:prompt-optimizer
+  id: promptfoo:var-optimizer
   config:
     targetVariable: query
 ```
@@ -85,7 +85,7 @@ Control the optimization process with these settings:
 
 ```yaml
 provider:
-  id: promptfoo:prompt-optimizer
+  id: promptfoo:var-optimizer
   config:
     maxTurns: 5 # Try up to 5 improvements
     stallIterations: 3 # Stop if 3 attempts don't improve
@@ -101,7 +101,7 @@ Apply optimization to all tests with `defaultTest`:
 ```yaml
 defaultTest:
   provider:
-    id: promptfoo:prompt-optimizer
+    id: promptfoo:var-optimizer
     config:
       targetVariable: text
       maxTurns: 3
@@ -125,7 +125,7 @@ Provide your own template for how the optimizer should analyze and improve varia
 
 ```yaml
 provider:
-  id: promptfoo:prompt-optimizer
+  id: promptfoo:var-optimizer
   config:
     template: file://prompts/my-optimizer.txt
 ```
@@ -195,7 +195,7 @@ The optimizer works with any assertion type:
 ```yaml
 tests:
   - provider:
-      id: promptfoo:prompt-optimizer
+      id: promptfoo:var-optimizer
       config:
         targetVariable: content
     vars:
@@ -218,7 +218,7 @@ prompts:
   - 'Write a {{content_type}} about {{topic}}'
 tests:
   - provider:
-      id: promptfoo:prompt-optimizer
+      id: promptfoo:var-optimizer
       config:
         targetVariable: topic
     vars:
@@ -238,7 +238,7 @@ prompts:
   - 'Translate "{{english}}" to Spanish'
 tests:
   - provider:
-      id: promptfoo:prompt-optimizer
+      id: promptfoo:var-optimizer
       config:
         targetVariable: english
     vars:
@@ -255,7 +255,7 @@ prompts:
   - 'Convert this to JSON: {{data}}'
 tests:
   - provider:
-      id: promptfoo:prompt-optimizer
+      id: promptfoo:var-optimizer
       config:
         targetVariable: data
     vars:
