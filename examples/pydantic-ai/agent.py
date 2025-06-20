@@ -14,22 +14,6 @@ class WeatherResponse(BaseModel):
     temperature: str
     description: str
 
-def get_weather_agent(model: str = 'openai:gpt-4o-mini') -> Agent:
-    """Create a weather agent with structured output"""
-    agent = Agent(
-        model,
-        output_type=WeatherResponse,
-        system_prompt=(
-            'You are a helpful weather assistant. '
-            'Use the get_weather tool to fetch weather data for locations. '
-            'Always return responses in the required structured format.'
-        ),
-    )
-    
-    agent.tool(get_weather)
-    return agent
-
-@agent.tool
 def get_weather(location: str) -> dict:
     """Get weather data for a location (mock implementation for demo)"""
     # Simple mock weather data for demonstration
@@ -37,7 +21,6 @@ def get_weather(location: str) -> dict:
         "london": {"temp": "18°C", "desc": "Cloudy"},
         "new york": {"temp": "22°C", "desc": "Sunny"},
         "tokyo": {"temp": "16°C", "desc": "Rainy"},
-        "paris": {"temp": "20°C", "desc": "Partly Cloudy"},
     }
     
     location_lower = location.lower()
@@ -56,6 +39,21 @@ def get_weather(location: str) -> dict:
         'description': 'Clear'
     }
 
+def get_weather_agent(model: str = 'openai:gpt-4o-mini') -> Agent:
+    """Create a weather agent with structured output"""
+    agent = Agent(
+        model,
+        output_type=WeatherResponse,
+        system_prompt=(
+            'You are a helpful weather assistant. '
+            'Use the get_weather tool to fetch weather data for locations. '
+            'Always return responses in the required structured format.'
+        ),
+    )
+    
+    agent.tool(get_weather)
+    return agent
+
 async def run_weather_agent(query: str, model: str = 'openai:gpt-4o-mini') -> WeatherResponse:
     """Run the weather agent with a query"""
     try:
@@ -73,15 +71,9 @@ if __name__ == "__main__":
     import asyncio
 
     async def test_agent():
-        """Test the weather agent"""
-        queries = [
-            "What's the weather like in London?",
-            "How's the weather in New York?",
-        ]
-
+        queries = ["What's the weather like in London?"]
         for query in queries:
-            print(f"\nQuery: {query}")
             result = await run_weather_agent(query)
-            print(f"Response: {result.model_dump_json(indent=2)}")
+            print(f"{query} -> {result.model_dump_json()}")
 
     asyncio.run(test_agent())

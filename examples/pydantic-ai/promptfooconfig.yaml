@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: PydanticAI weather agent evaluation
+description: PydanticAI agent evaluation
 
 prompts:
   - '{{query}}'

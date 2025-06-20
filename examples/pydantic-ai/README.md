@@ -1,11 +1,16 @@
-# PydanticAI Example
+# pydantic-ai
 
 This example demonstrates how to evaluate [PydanticAI](https://ai.pydantic.dev/) agents using promptfoo. PydanticAI is a Python agent framework that provides structured outputs and type safety for AI applications.
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example pydantic-ai
+```
 
 ## Quick Start
 
 ```bash
-npx promptfoo@latest init --example pydantic-ai
 cd pydantic-ai
 pip install -r requirements.txt
 export OPENAI_API_KEY=your_openai_api_key_here
