@@ -35,8 +35,10 @@ describe('VariableOptimizerProvider', () => {
       .mockResolvedValueOnce({ pass: false, score: 0, reason: 'Translation not found' })
       .mockResolvedValueOnce({ pass: true, score: 1, reason: 'All assertions passed' });
 
-    // Mock improver to suggest better value
-    mockImprover.callApi.mockResolvedValue({ output: 'Bonjour le monde' });
+    // Mock improver to suggest better value in JSON format with candidates array
+    mockImprover.callApi.mockResolvedValue({
+      output: JSON.stringify({ candidates: ['Bonjour le monde'] }),
+    });
 
     const provider = new VariableOptimizerProvider({
       config: {
@@ -69,7 +71,7 @@ describe('VariableOptimizerProvider', () => {
       iterations: 2,
       finalScore: 1,
       succeeded: true,
-      stallIterations: 2,
+      stallIterations: 5, // Default value from implementation
       maxTurns: 3,
       history: [
         {
@@ -134,19 +136,32 @@ describe('VariableOptimizerProvider', () => {
   });
 
   it('stops optimization when stalled and records metadata correctly', async () => {
+    // First iteration: score 0.5 (best so far)
+    // Second iteration: score 0.4 (worse - stall count = 1)
+    // Third iteration: score 0.3 (worse - stall count = 2)
+    // Fourth iteration: score 0.2 (worse - stall count = 3)
+    // Fifth iteration: score 0.1 (worse - stall count = 4)
+    // Sixth iteration: score 0.0 (worse - stall count = 5, should stop)
     mockedRun
       .mockResolvedValueOnce({ pass: false, score: 0.5, reason: 'not good enough' })
       .mockResolvedValueOnce({ pass: false, score: 0.4, reason: 'worse' })
-      .mockResolvedValueOnce({ pass: false, score: 0.3, reason: 'even worse' });
+      .mockResolvedValueOnce({ pass: false, score: 0.3, reason: 'even worse' })
+      .mockResolvedValueOnce({ pass: false, score: 0.2, reason: 'still worse' })
+      .mockResolvedValueOnce({ pass: false, score: 0.1, reason: 'very bad' })
+      .mockResolvedValueOnce({ pass: false, score: 0.0, reason: 'terrible' });
 
+    // Mock improver to return JSON candidates
     mockImprover.callApi
-      .mockResolvedValueOnce({ output: 'attempt 1' })
-      .mockResolvedValueOnce({ output: 'attempt 2' });
+      .mockResolvedValueOnce({ output: JSON.stringify({ candidates: ['attempt 1'] }) })
+      .mockResolvedValueOnce({ output: JSON.stringify({ candidates: ['attempt 2'] }) })
+      .mockResolvedValueOnce({ output: JSON.stringify({ candidates: ['attempt 3'] }) })
+      .mockResolvedValueOnce({ output: JSON.stringify({ candidates: ['attempt 4'] }) })
+      .mockResolvedValueOnce({ output: JSON.stringify({ candidates: ['attempt 5'] }) });
 
     const provider = new VariableOptimizerProvider({
       config: {
-        maxTurns: 5,
-        stallIterations: 2,
+        maxTurns: 10,
+        stallIterations: 5, // Should stop after 5 iterations without improvement
         targetVariable: 'text',
         improverModel: 'openai:gpt-4o',
       },
@@ -162,14 +177,56 @@ describe('VariableOptimizerProvider', () => {
 
     const result = await provider.callApi('Test {{text}}', context);
 
-    // Should stop after 3 attempts due to stalling (2 worse scores)
-    expect(mockedRun).toHaveBeenCalledTimes(3);
-    expect(result.metadata?.promptOptimizer.iterations).toBe(3);
+    // Should stop after 6 attempts due to stalling (5 consecutive worse scores after the first)
+    expect(mockedRun).toHaveBeenCalledTimes(6);
+    expect(result.metadata?.promptOptimizer.iterations).toBe(6);
     expect(result.metadata?.promptOptimizer.succeeded).toBe(false);
-    expect(result.metadata?.promptOptimizer.finalScore).toBe(0.5);
-    expect(result.metadata?.promptOptimizer.history).toHaveLength(3);
+    expect(result.metadata?.promptOptimizer.finalScore).toBe(0.5); // Best score from first iteration
+    expect(result.metadata?.promptOptimizer.history).toHaveLength(6);
 
-    // Original vars should be updated to best attempt
+    // Original vars should be updated to best attempt (first iteration)
     expect(context.vars.text).toBe('original'); // First iteration had best score
+  });
+
+  it('generates multiple candidates and selects the best one', async () => {
+    mockedRun
+      .mockResolvedValueOnce({ pass: false, score: 0, reason: 'Initial failure' })
+      .mockResolvedValueOnce({ pass: false, score: 0.3, reason: 'Candidate 1 partial' })
+      .mockResolvedValueOnce({ pass: false, score: 0.7, reason: 'Candidate 2 better' })
+      .mockResolvedValueOnce({ pass: true, score: 1.0, reason: 'Candidate 3 success' });
+
+    // Mock improver to return multiple candidates
+    mockImprover.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        candidates: ['candidate1', 'candidate2', 'candidate3'],
+      }),
+    });
+
+    const provider = new VariableOptimizerProvider({
+      config: {
+        maxTurns: 3,
+        targetVariable: 'text',
+        improverModel: 'openai:gpt-4o',
+        numCandidates: 3,
+      },
+    });
+
+    const target = new EchoProvider();
+    const context = {
+      originalProvider: target,
+      prompt: { raw: 'Test {{text}}', label: 'test-prompt' },
+      vars: { text: 'original' },
+      test: { assert: [{ type: 'contains', value: 'target' }] } as any,
+    };
+
+    const result = await provider.callApi('Test {{text}}', context);
+
+    // Should test original + 3 candidates = 4 total calls
+    expect(mockedRun).toHaveBeenCalledTimes(4);
+    expect(result.metadata?.promptOptimizer.succeeded).toBe(true);
+    expect(result.metadata?.promptOptimizer.optimizedValue).toBe('candidate3');
+    expect(result.metadata?.promptOptimizer.finalScore).toBe(1.0);
+
+    expect(mockImprover.callApi).toHaveBeenCalledTimes(1);
   });
 });
