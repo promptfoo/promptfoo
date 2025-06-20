@@ -1,3 +1,5 @@
+import { REDTEAM_SIMULATED_USER_STRATEGY_ID } from '../providers/simulatedUser';
+
 // These are exposed on the frontend under the framework compliance section
 export const FRAMEWORK_COMPLIANCE_IDS = [
   'mitre:atlas',
@@ -11,13 +13,17 @@ export type FrameworkComplianceId = (typeof FRAMEWORK_COMPLIANCE_IDS)[number];
 export const DEFAULT_STRATEGIES = ['basic', 'jailbreak', 'jailbreak:composite'] as const;
 export type DefaultStrategy = (typeof DEFAULT_STRATEGIES)[number];
 
-export const MULTI_TURN_STRATEGIES = ['crescendo', 'goat', 'simulated-user'] as const;
+export const MULTI_TURN_STRATEGIES = [
+  'crescendo',
+  'goat',
+  REDTEAM_SIMULATED_USER_STRATEGY_ID,
+] as const;
 export type MultiTurnStrategy = (typeof MULTI_TURN_STRATEGIES)[number];
 
 export const AGENTIC_STRATEGIES = [
   'crescendo',
   'goat',
-  'simulated-user',
+  REDTEAM_SIMULATED_USER_STRATEGY_ID,
   'jailbreak',
   'jailbreak:tree',
   'pandamonium',
@@ -46,7 +52,7 @@ export const ADDITIONAL_STRATEGIES = [
   'crescendo',
   'gcg',
   'goat',
-  'simulated-user',
+  REDTEAM_SIMULATED_USER_STRATEGY_ID,
   'hex',
   'homoglyph',
   'image',

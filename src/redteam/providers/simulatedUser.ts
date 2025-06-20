@@ -8,6 +8,8 @@ import type {
 } from '../../types';
 import invariant from '../../util/invariant';
 
+export const REDTEAM_SIMULATED_USER_STRATEGY_ID = 'simulated-user';
+
 export default class RedteamSimulatedUserProvider implements ApiProvider {
   private readonly injectVar: string;
   private readonly maxTurns?: number;
@@ -21,7 +23,7 @@ export default class RedteamSimulatedUserProvider implements ApiProvider {
   }
 
   id() {
-    return 'promptfoo:redteam:simulated-user';
+    return `promptfoo:redteam:${REDTEAM_SIMULATED_USER_STRATEGY_ID}`;
   }
 
   async callApi(
