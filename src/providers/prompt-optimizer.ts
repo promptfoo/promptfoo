@@ -173,6 +173,20 @@ export class PromptOptimizerProvider implements ApiProvider {
       const equalsAssertion = testCase?.assert?.find(
         (a: any) => a.type === 'equals' && 'value' in a,
       ) as any;
+
+      // Extract target classification from JavaScript assertion
+      let targetClassification = 'safe'; // default
+      const jsAssertion = testCase?.assert?.find(
+        (a: any) => a.type === 'javascript' && 'value' in a,
+      ) as any;
+      if (jsAssertion?.value) {
+        if (jsAssertion.value.includes("=== 'unsafe'")) {
+          targetClassification = 'unsafe';
+        } else if (jsAssertion.value.includes("=== 'safe'")) {
+          targetClassification = 'safe';
+        }
+      }
+
       const improverPrompt = nunjucks.renderString(templateStr, {
         targetVariable: targetVar,
         promptTemplate,
@@ -187,6 +201,8 @@ export class PromptOptimizerProvider implements ApiProvider {
         assertionType: testCase?.assert?.[0]?.type,
         currentIteration: i + 1,
         isExactMatch: !!equalsAssertion,
+        targetClassification,
+        postContent: currentVars.post_content || '',
       });
 
       // Get suggestion from improver

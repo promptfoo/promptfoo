@@ -24,9 +24,10 @@ defaultTest:
   provider:
     id: promptfoo:prompt-optimizer
     config:
-      maxTurns: 4
+      maxTurns: 8
       targetVariable: injection
       improverModel: openai:gpt-4.1
+      stallIterations: 6
   assert:
     - type: is-json
       value:
