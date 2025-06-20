@@ -4,7 +4,8 @@ import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import type { Assertion, AssertionSet, AtomicTestCase } from '../../types';
+import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
+import type { Assertion, AssertionSet, AtomicTestCase, TokenUsage } from '../../types';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -19,8 +20,6 @@ import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration
 import type { BaseRedteamMetadata } from '../types';
 import type { Message } from './shared';
 import { getLastMessageContent, messagesToRedteamHistory } from './shared';
-import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
-import type { TokenUsage } from '../../types';
 
 /**
  * Represents metadata for the GOAT conversation process.
@@ -266,7 +265,7 @@ export default class GoatProvider implements ApiProvider {
 
         const unblockingResult = await this.tryUnblocking(
           messages,
-          finalOutput,
+          stringifiedOutput,
           context?.test?.metadata?.goal || context?.vars[this.config.injectVar],
           context?.test?.metadata?.purpose,
         );
@@ -313,10 +312,12 @@ export default class GoatProvider implements ApiProvider {
               ? unblockingResponse.output
               : safeJsonStringify(unblockingResponse.output);
 
-          messages.push({ role: 'assistant', content: unblockingOutput });
-          previousTargetOutput = unblockingOutput;
-          finalOutput = unblockingOutput;
-          finalResponse = unblockingResponse;
+          if (unblockingOutput) {
+            messages.push({ role: 'assistant', content: unblockingOutput });
+            previousTargetOutput = unblockingOutput;
+            finalOutput = unblockingOutput;
+            finalResponse = unblockingResponse;
+          }
 
           if (unblockingResponse.sessionId) {
             context = context ?? { vars: {}, prompt: { raw: '', label: 'target' } };
@@ -347,7 +348,7 @@ export default class GoatProvider implements ApiProvider {
         lastTargetResponse = finalResponse;
 
         const grader = assertToUse ? getGraderById(assertToUse.type) : undefined;
-        if (test && grader) {
+        if (test && grader && finalOutput) {
           const { grade } = await grader.getResult(
             attackerMessage.content,
             finalOutput,
