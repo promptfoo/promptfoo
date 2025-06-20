@@ -22,7 +22,7 @@ providers:
 
 defaultTest:
   provider:
-    id: promptfoo:var-optimizer
+    id: promptfoo:variable-optimizer
     config:
       maxTurns: 8
       targetVariable: injection

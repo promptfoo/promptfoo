@@ -1079,14 +1079,14 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
-    test: (providerPath: string) => providerPath === 'promptfoo:var-optimizer',
+    test: (providerPath: string) => providerPath === 'promptfoo:variable-optimizer',
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
-      const { PromptOptimizerProvider } = await import('./variableOptimizer');
-      return new PromptOptimizerProvider(providerOptions);
+      const { VariableOptimizerProvider } = await import('./variableOptimizer');
+      return new VariableOptimizerProvider(providerOptions);
     },
   },
   {

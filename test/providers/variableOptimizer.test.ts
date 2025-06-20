@@ -1,6 +1,7 @@
 import { runAssertions } from '../../src/assertions';
 import { EchoProvider } from '../../src/providers/echo';
-import { PromptOptimizerProvider } from '../../src/providers/variableOptimizer';
+import { loadApiProvider } from '../../src/providers/index';
+import { VariableOptimizerProvider } from '../../src/providers/variableOptimizer';
 
 jest.mock('../../src/assertions', () => ({
   runAssertions: jest.fn(),
@@ -12,9 +13,9 @@ jest.mock('../../src/providers/index', () => ({
 }));
 
 const mockedRun = jest.mocked(runAssertions);
-const { loadApiProvider } = require('../../src/providers/index');
+const mockedLoadApiProvider = jest.mocked(loadApiProvider);
 
-describe('PromptOptimizerProvider', () => {
+describe('VariableOptimizerProvider', () => {
   let mockImprover: jest.Mocked<any>;
 
   beforeEach(() => {
@@ -26,7 +27,7 @@ describe('PromptOptimizerProvider', () => {
       id: () => 'mock-improver',
     };
 
-    loadApiProvider.mockResolvedValue(mockImprover);
+    mockedLoadApiProvider.mockResolvedValue(mockImprover);
   });
 
   it('optimizes variable values until assertions pass', async () => {
@@ -37,7 +38,7 @@ describe('PromptOptimizerProvider', () => {
     // Mock improver to suggest better value
     mockImprover.callApi.mockResolvedValue({ output: 'Bonjour le monde' });
 
-    const provider = new PromptOptimizerProvider({
+    const provider = new VariableOptimizerProvider({
       config: {
         maxTurns: 3,
         targetVariable: 'text',
@@ -99,7 +100,7 @@ describe('PromptOptimizerProvider', () => {
   });
 
   it('handles missing target variable', async () => {
-    const provider = new PromptOptimizerProvider({
+    const provider = new VariableOptimizerProvider({
       config: { targetVariable: 'missing' },
     });
 
@@ -118,7 +119,7 @@ describe('PromptOptimizerProvider', () => {
   it('uses default target variable "text" when not specified', async () => {
     mockedRun.mockResolvedValue({ pass: true, score: 1, reason: 'passed' });
 
-    const provider = new PromptOptimizerProvider({ config: {} });
+    const provider = new VariableOptimizerProvider({ config: {} });
     const target = new EchoProvider();
 
     const result = await provider.callApi('Test {{text}}', {
@@ -142,7 +143,7 @@ describe('PromptOptimizerProvider', () => {
       .mockResolvedValueOnce({ output: 'attempt 1' })
       .mockResolvedValueOnce({ output: 'attempt 2' });
 
-    const provider = new PromptOptimizerProvider({
+    const provider = new VariableOptimizerProvider({
       config: {
         maxTurns: 5,
         stallIterations: 2,
