@@ -13,10 +13,11 @@ The **Simulated User** strategy uses the simulated user provider to create a mul
 Enable it in your `promptfooconfig.yaml`:
 
 ```yaml title="promptfooconfig.yaml"
-strategies:
-  - id: simulated-user
-    config:
-      maxTurns: 5
+redteam:
+  strategies:
+    - id: simulated-user
+      config:
+        maxTurns: 5
 ```
 
 The strategy sends user instructions stored in the variable specified by `injectVar` to your target model over multiple turns. The conversation stops when the maximum number of turns is reached or the agent responds with `###STOP###`.
