@@ -217,6 +217,9 @@ export type EnvVars = {
   HF_API_TOKEN?: string;
   HF_TOKEN?: string;
 
+  // Hyperbolic
+  HYPERBOLIC_API_KEY?: string;
+
   // Langfuse
   LANGFUSE_HOST?: string;
   LANGFUSE_PUBLIC_KEY?: string;
