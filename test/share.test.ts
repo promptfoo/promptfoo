@@ -10,7 +10,7 @@ import {
   isSharingEnabled,
   hasEvalBeenShared,
 } from '../src/share';
-import { cloudCanAcceptChunkedResults, makeRequest } from '../src/util/cloud';
+import { makeRequest } from '../src/util/cloud';
 
 function buildMockEval(): Partial<Eval> {
   return {
@@ -57,7 +57,6 @@ jest.mock('../src/globalConfig/accounts', () => ({
 }));
 
 jest.mock('../src/util/cloud', () => ({
-  cloudCanAcceptChunkedResults: jest.fn(),
   makeRequest: jest.fn(),
 }));
 
@@ -307,7 +306,6 @@ describe('createShareableUrl', () => {
     jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
     jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
     jest.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
-    jest.mocked(cloudCanAcceptChunkedResults).mockResolvedValue(false);
 
     const originalId = randomUUID();
     const newId = randomUUID();
@@ -356,7 +354,6 @@ describe('createShareableUrl', () => {
       jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
       jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
       jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
-      jest.mocked(cloudCanAcceptChunkedResults).mockResolvedValue(true);
 
       // Set up mock responses
       mockFetch
@@ -378,14 +375,14 @@ describe('createShareableUrl', () => {
       await createShareableUrl(mockEval as Eval);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://api.example.com/results',
+        'https://api.example.com/api/v1/results',
         expect.objectContaining({
           method: 'POST',
           body: expect.stringContaining('"results":[]'),
         }),
       );
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://api.example.com/results/mock-eval-id/results',
+        'https://api.example.com/api/v1/results/mock-eval-id/results',
         expect.objectContaining({
           method: 'POST',
           body: expect.stringContaining('[{"id":"1"},{"id":"2"}]'),

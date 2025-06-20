@@ -42,7 +42,7 @@ describe('Global Config', () => {
     });
   });
 
-  const mockConfig = { id: 'test-id', account: { email: 'test@example.com' } };
+  const mockConfig = { account: { email: 'test@example.com' } };
 
   describe('readGlobalConfig', () => {
     describe('when config file exists', () => {
@@ -70,7 +70,7 @@ describe('Global Config', () => {
 
         const result = globalConfig.readGlobalConfig();
 
-        expect(result).toEqual({ id: expect.any(String) });
+        expect(result).toEqual({});
       });
     });
 
@@ -81,7 +81,7 @@ describe('Global Config', () => {
         jest.mocked(fs.mkdirSync).mockImplementation();
       });
 
-      it('should create new config directory and file with empty config and id', () => {
+      it('should create new config directory and file with empty config', () => {
         const result = globalConfig.readGlobalConfig();
 
         expect(fs.existsSync).toHaveBeenCalledTimes(2);
@@ -91,7 +91,7 @@ describe('Global Config', () => {
           expect.stringContaining('promptfoo.yaml'),
           expect.any(String),
         );
-        expect(result).toEqual({ id: expect.any(String) });
+        expect(result).toEqual({});
       });
     });
 
@@ -107,9 +107,7 @@ describe('Global Config', () => {
 
   describe('writeGlobalConfig', () => {
     it('should write config to file in YAML format', () => {
-      globalConfig.writeGlobalConfig({
-        ...mockConfig,
-      });
+      globalConfig.writeGlobalConfig(mockConfig);
 
       expect(fs.writeFileSync).toHaveBeenCalledWith(
         expect.stringContaining('promptfoo.yaml'),
@@ -163,7 +161,7 @@ describe('Global Config', () => {
 
       globalConfig.writeGlobalConfigPartial(partialConfig);
 
-      const writeCall = jest.mocked(fs.writeFileSync).mock.calls[1][1] as string;
+      const writeCall = jest.mocked(fs.writeFileSync).mock.calls[0][1] as string;
       const writtenConfig = yaml.load(writeCall) as any;
 
       expect(writtenConfig.cloud.apiKey).toBe('new-key');

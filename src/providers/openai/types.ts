@@ -13,7 +13,48 @@ export interface OpenAiSharedOptions {
   headers?: { [key: string]: string };
 }
 
-export type ReasoningEffort = 'low' | 'medium' | 'high';
+export type ReasoningEffort = 'low' | 'medium' | 'high' | null;
+
+/**
+ * **o-series models only**
+ *
+ * Configuration options for
+ * [reasoning models](https://platform.openai.com/docs/guides/reasoning).
+ */
+export interface Reasoning {
+  /**
+   * **o-series models only**
+   *
+   * Constraints effort on reasoning for
+   * [reasoning models](https://platform.openai.com/docs/guides/reasoning). Currently
+   * supported values are `low`, `medium`, and `high`. Reducing reasoning effort can
+   * result in faster responses and fewer tokens used on reasoning in a response.
+   */
+  effort?: ReasoningEffort;
+
+  /**
+   * A summary of the reasoning performed by the model. This can be useful for
+   * debugging and understanding the model's reasoning process. One of `auto`,
+   * `concise`, or `detailed`.
+   */
+  summary?: 'auto' | 'concise' | 'detailed' | null;
+}
+
+// OpenAI MCP tool configuration for Responses API
+export interface OpenAiMCPTool {
+  type: 'mcp';
+  server_label: string;
+  server_url: string;
+  require_approval?:
+    | 'never'
+    | {
+        never?: {
+          tool_names: string[];
+        };
+      };
+  allowed_tools?: string[];
+  headers?: Record<string, string>;
+}
 
 export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   temperature?: number;
@@ -25,7 +66,7 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   best_of?: number;
   functions?: OpenAiFunction[];
   function_call?: 'none' | 'auto' | { name: string };
-  tools?: OpenAiTool[];
+  tools?: (OpenAiTool | OpenAiMCPTool)[];
   tool_choice?: 'none' | 'auto' | 'required' | { type: 'function'; function?: { name: string } };
   tool_resources?: Record<string, any>;
   showThinking?: boolean;
@@ -50,6 +91,8 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   seed?: number;
   passthrough?: object;
   reasoning_effort?: ReasoningEffort;
+  reasoning?: Reasoning;
+  service_tier?: ('auto' | 'default' | 'premium') | null;
   modalities?: string[];
   audio?: {
     bitrate?: string;
@@ -75,7 +118,7 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
    */
   functionToolCallbacks?: Record<
     OpenAI.FunctionDefinition['name'],
-    (arg: string) => Promise<string>
+    ((arg: string) => Promise<string>) | string
   >;
   mcp?: MCPConfig;
 };

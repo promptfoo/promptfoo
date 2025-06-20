@@ -20,7 +20,6 @@ import {
   type EvaluateTable,
   type PromptWithMetadata,
   type ResultsFile,
-  type TestCase,
   type TestCasesWithMetadata,
   type TestCasesWithMetadataPrompt,
   type UnifiedConfig,
@@ -93,12 +92,24 @@ export async function writeResultsToDatabase(
 
   // Record dataset relation
   const datasetId = sha256(JSON.stringify(config.tests || []));
+  const testsForStorage = Array.isArray(config.tests) ? config.tests : [];
+
+  // Log when non-array tests are converted to empty array for database storage
+  if (config.tests && !Array.isArray(config.tests)) {
+    const testsType = typeof config.tests;
+    const hasPath =
+      typeof config.tests === 'object' && config.tests !== null && 'path' in config.tests;
+    logger.debug(
+      `Converting non-array test configuration to empty array for database storage. Type: ${testsType}, hasPath: ${hasPath}`,
+    );
+  }
+
   promises.push(
     db
       .insert(datasetsTable)
       .values({
         id: datasetId,
-        tests: config.tests,
+        tests: testsForStorage,
       })
       .onConflictDoNothing()
       .run(),
@@ -200,11 +211,6 @@ export async function updateResult(
   }
 }
 
-export async function getLatestEval(filterDescription?: string): Promise<ResultsFile | undefined> {
-  const eval_ = await Eval.latest();
-  return await eval_?.toResultsFile();
-}
-
 export async function getPromptsWithPredicate(
   predicate: (result: ResultsFile) => boolean,
   limit: number,
@@ -270,12 +276,6 @@ export function getPromptsForTestCasesHash(
   }, limit);
 }
 
-export function getPromptsForTestCases(testCases: TestCase[]) {
-  const testCasesJson = JSON.stringify(testCases);
-  const testCasesSha256 = sha256(testCasesJson);
-  return getPromptsForTestCasesHash(testCasesSha256);
-}
-
 export async function getTestCasesWithPredicate(
   predicate: (result: ResultsFile) => boolean,
   limit: number,
@@ -290,7 +290,20 @@ export async function getTestCasesWithPredicate(
     const testCases = resultWrapper.config.tests;
     if (testCases && predicate(resultWrapper)) {
       const evalId = eval_.id;
-      const datasetId = sha256(JSON.stringify(testCases));
+      // For database storage, we need to handle the union type properly
+      // Only store actual test case arrays, not generator configs
+      let storableTestCases: string | Array<string | any>;
+      if (typeof testCases === 'string') {
+        storableTestCases = testCases;
+      } else if (Array.isArray(testCases)) {
+        storableTestCases = testCases;
+      } else {
+        // If it's a TestGeneratorConfig object, we can't store it directly
+        // This case should be rare as the database typically stores resolved tests
+        logger.warn('Skipping TestGeneratorConfig object in database storage');
+        continue;
+      }
+      const datasetId = sha256(JSON.stringify(storableTestCases));
 
       if (datasetId in groupedTestCases) {
         groupedTestCases[datasetId].recentEvalDate = new Date(
@@ -324,7 +337,7 @@ export async function getTestCasesWithPredicate(
         groupedTestCases[datasetId] = {
           id: datasetId,
           count: 1,
-          testCases,
+          testCases: storableTestCases,
           recentEvalDate: new Date(createdAt),
           recentEvalId: evalId,
           prompts: Object.values(promptsById),

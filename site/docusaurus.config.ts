@@ -4,6 +4,7 @@ import type { Config } from '@docusaurus/types';
 import type { ConfigureWebpackResult } from '@docusaurus/types/src/plugin';
 import * as fs from 'fs';
 import * as path from 'path';
+import { sanitizeMarkdown } from './src/utils/markdown';
 
 const lightCodeTheme = themes.github;
 const darkCodeTheme = themes.duotoneDark;
@@ -78,6 +79,8 @@ const config: Config = {
           // Remove this to remove the "edit this page" links.
           editUrl: 'https://github.com/promptfoo/promptfoo/tree/main/site',
           sidebarCollapsed: false,
+          showLastUpdateAuthor: true,
+          showLastUpdateTime: true,
         },
         blog: {
           showReadingTime: false,
@@ -334,10 +337,19 @@ const config: Config = {
               to: '/terms-of-service/',
             },
             {
+              label: 'Trust Center',
+              href: 'https://trust.promptfoo.dev',
+            },
+            {
               html: `
-                <div style="position: relative; margin-top:8px">
-                  <span style="position: absolute; left: 65px; top: 25px; font-size: 10px; font-weight: bold; background-color: #25842c; padding: 2px 4px; border-radius: 4px;">In Progress</span>
-                  <img loading="lazy" src="/img/badges/soc2.png" alt="SOC2 Compliance in progress" style="width:80px; height: auto"/>
+                <div style="display: flex; gap: 16px; align-items: center; margin-top: 12px;">
+                  <!--
+                  <div style="position: relative;">
+                    <span style="position: absolute; left: 65px; top: 25px; font-size: 10px; font-weight: bold; background-color: #25842c; padding: 2px 4px; border-radius: 4px;">In Progress</span>
+                    <img loading="lazy" src="/img/badges/soc2.png" alt="SOC2 Compliance in progress" style="width:80px; height: auto"/>
+                  </div>
+                  -->
+                  <img loading="lazy" src="/img/badges/iso27001.png" alt="ISO 27001 Certified" style="width:90px; height: auto"/>
                 </div>
                 `,
             },
@@ -500,10 +512,9 @@ const config: Config = {
                   if (foundFile) {
                     try {
                       // Read the file directly from the filesystem
-                      let content = await fs.promises.readFile(filePath, 'utf8');
-
-                      // Remove frontmatter
-                      content = content.replace(/^---[\s\S]*?---\s*/m, '');
+                      const content = sanitizeMarkdown(
+                        await fs.promises.readFile(filePath, 'utf8'),
+                      );
 
                       // Set appropriate headers for raw markdown content
                       res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
@@ -547,7 +558,8 @@ const config: Config = {
             try {
               // Create nested directories if needed
               await fs.promises.mkdir(outDirname, { recursive: true });
-              await fs.promises.writeFile(outPath, content);
+              const sanitized = sanitizeMarkdown(content);
+              await fs.promises.writeFile(outPath, sanitized);
             } catch (err) {
               console.error(`Error writing markdown file ${filePath}:`, err);
             }

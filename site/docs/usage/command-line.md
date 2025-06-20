@@ -29,6 +29,7 @@ The `promptfoo` command line utility supports the following subcommands:
 - `scan-model` - Scan ML models for security vulnerabilities.
 - `show <id>` - Show details of a specific resource (evaluation, prompt, dataset).
 - `delete <id>` - Delete a resource by its ID (currently, just evaluations)
+- `validate` - Validate a promptfoo configuration file.
 - `feedback <message>` - Send feedback to the Promptfoo developers.
 - `import <filepath>` - Import an eval file from JSON format.
 - `export <evalId>` - Export an eval record to JSON format.
@@ -109,11 +110,10 @@ Initialize a new project with dummy files.
 
 Start a browser UI for visualization of results.
 
-| Option                           | Description                             |
-| -------------------------------- | --------------------------------------- |
-| `-p, --port <number>`            | Port number for the local server        |
-| `-y, --yes`                      | Skip confirmation and auto-open the URL |
-| `--filter-description <pattern>` | Filter evals by description using regex |
+| Option                | Description                             |
+| --------------------- | --------------------------------------- |
+| `-p, --port <number>` | Port number for the local server        |
+| `-y, --yes`           | Skip confirmation and auto-open the URL |
 
 If you've used `PROMPTFOO_CONFIG_DIR` to override the promptfoo output directory, run `promptfoo view [directory]`.
 
@@ -186,6 +186,31 @@ Export an eval record to JSON format. To export the most recent, use evalId `lat
 | Option                    | Description                                 |
 | ------------------------- | ------------------------------------------- |
 | `-o, --output <filepath>` | File to write. Writes to stdout by default. |
+
+## `promptfoo validate`
+
+Validate a promptfoo configuration file to ensure it follows the correct schema and structure.
+
+| Option                    | Description                                                             |
+| ------------------------- | ----------------------------------------------------------------------- |
+| `-c, --config <paths...>` | Path to configuration file(s). Automatically loads promptfooconfig.yaml |
+
+This command validates both the configuration file and the test suite to ensure they conform to the expected schema. It will report any validation errors with detailed messages to help you fix configuration issues.
+
+Examples:
+
+```sh
+# Validate the default promptfooconfig.yaml
+promptfoo validate
+
+# Validate a specific configuration file
+promptfoo validate -c my-config.yaml
+
+# Validate multiple configuration files
+promptfoo validate -c config1.yaml config2.yaml
+```
+
+The command will exit with code `1` if validation fails, making it useful for CI/CD pipelines to catch configuration errors early.
 
 ## `promptfoo scan-model`
 
@@ -305,11 +330,10 @@ For more detail, see [red team configuration](/docs/red-team/configuration/).
 
 Start browser UI and open to red team setup.
 
-| Option                           | Description                                     | Default |
-| -------------------------------- | ----------------------------------------------- | ------- |
-| `[configDirectory]`              | Directory containing configuration files        |         |
-| `-p, --port <number>`            | Port number for the local server                | 15500   |
-| `--filter-description <pattern>` | Filter evals by description using regex pattern |         |
+| Option                | Description                              | Default |
+| --------------------- | ---------------------------------------- | ------- |
+| `[configDirectory]`   | Directory containing configuration files |         |
+| `-p, --port <number>` | Port number for the local server         | 15500   |
 
 ## `promptfoo redteam run`
 
@@ -330,16 +354,18 @@ Run the complete red teaming process (init, generate, and evaluate).
 
 ## `promptfoo redteam discover`
 
-Automatically discovers the [purpose](https://www.promptfoo.dev/docs/red-team/configuration/#purpose) of your target application.
+Runs the [Target Discovery Agent](/docs/red-team/discovery) against your application.
 
-| Option                | Description                                                                                | Default        |
-| --------------------- | ------------------------------------------------------------------------------------------ | -------------- |
-| `-c, --config <path>` | Path to `promptfooconfig.yaml` configuration file.                                         |                |
-| `-o, --output <path>` | Path to output file.                                                                       | `redteam.yaml` |
-| `--overwrite`         | Overwrite the existing purpose if it already exists.                                       | false          |
-| `-t, --target <id>`   | UUID of a Cloud-defined target to run the discovery on                                     |                |
-| `--preview`           | Preview discovery results without writing to an output file                                | false          |
-| `--turns <turns>`     | A maximum number of turns to run the discovery process. Lower is faster but less accurate. | 50             |
+:::info
+
+Only a configuration file or target can be specified
+
+:::
+
+| Option                | Description                                          | Default |
+| --------------------- | ---------------------------------------------------- | ------- |
+| `-c, --config <path>` | Path to `promptfooconfig.yaml` configuration file.   |         |
+| `-t, --target <id>`   | UUID of a target defined in Promptfoo Cloud to scan. |         |
 
 ## `promptfoo redteam generate`
 
@@ -406,11 +432,10 @@ Works the same as [`promptfoo eval`](#promptfoo-eval), but defaults to loading `
 
 Start a browser UI and open the red teaming report.
 
-| Option                           | Description                                        | Default |
-| -------------------------------- | -------------------------------------------------- | ------- |
-| `[directory]`                    | Directory containing the red teaming configuration | .       |
-| `-p, --port <number>`            | Port number for the server                         | 15500   |
-| `--filter-description <pattern>` | Filter evals by description using a regex pattern  |         |
+| Option                | Description                                        | Default |
+| --------------------- | -------------------------------------------------- | ------- |
+| `[directory]`         | Directory containing the red teaming configuration | .       |
+| `-p, --port <number>` | Port number for the server                         | 15500   |
 
 Example:
 
@@ -467,29 +492,37 @@ FORCE_COLOR=0 promptfoo eval --no-progress-bar --no-table
 
 These general-purpose environment variables are supported:
 
-| Name                                   | Description                                                                                                                                      | Default        |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | -------------- |
-| `FORCE_COLOR`                          | Set to 0 to disable terminal colors for printed outputs                                                                                          |                |
-| `PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY` | How many assertions to run at a time                                                                                                             | 3              |
-| `PROMPTFOO_CONFIG_DIR`                 | Directory that stores eval history                                                                                                               | `~/.promptfoo` |
-| `PROMPTFOO_DISABLE_AJV_STRICT_MODE`    | If set, disables AJV strict mode for JSON schema validation                                                                                      |                |
-| `PROMPTFOO_DISABLE_CONVERSATION_VAR`   | Prevents the `_conversation` variable from being set                                                                                             |                |
-| `PROMPTFOO_DISABLE_ERROR_LOG`          | Prevents error logs from being written to a file                                                                                                 |                |
-| `PROMPTFOO_DISABLE_JSON_AUTOESCAPE`    | If set, disables smart variable substitution within JSON prompts                                                                                 |                |
-| `PROMPTFOO_DISABLE_REF_PARSER`         | Prevents JSON schema dereferencing                                                                                                               |                |
-| `PROMPTFOO_DISABLE_TEMPLATING`         | Disable Nunjucks rendering                                                                                                                       |                |
-| `PROMPTFOO_DISABLE_VAR_EXPANSION`      | Prevents Array-type vars from being expanded into multiple test cases                                                                            |                |
-| `PROMPTFOO_FAILED_TEST_EXIT_CODE`      | Override the exit code when there is at least 1 test case failure or when the pass rate is below PROMPTFOO_PASS_RATE_THRESHOLD                   | 100            |
-| `PROMPTFOO_LOG_DIR`                    | Directory to write error logs                                                                                                                    | `.`            |
-| `PROMPTFOO_PASS_RATE_THRESHOLD`        | Set a minimum pass rate threshold (as a percentage). If not set, defaults to 100% (no failures allowed)                                          | 100            |
-| `PROMPTFOO_REQUIRE_JSON_PROMPTS`       | By default the chat completion provider will wrap non-JSON messages in a single user message. Setting this envar to true disables that behavior. |                |
-| `PROMPTFOO_STRIP_PROMPT_TEXT`          | Strip prompt text from results to reduce memory usage                                                                                            | false          |
-| `PROMPTFOO_STRIP_RESPONSE_OUTPUT`      | Strip model response outputs from results to reduce memory usage                                                                                 | false          |
-| `PROMPTFOO_STRIP_TEST_VARS`            | Strip test variables from results to reduce memory usage                                                                                         | false          |
-| `PROMPTFOO_STRIP_GRADING_RESULT`       | Strip grading results from results to reduce memory usage                                                                                        | false          |
-| `PROMPTFOO_STRIP_METADATA`             | Strip metadata from results to reduce memory usage                                                                                               | false          |
-| `PROMPTFOO_SHARE_CHUNK_SIZE`           | Number of results to send in each chunk. This is used to estimate the size of the results and to determine the number of chunks to send.         |                |
+| Name                                   | Description                                                                                                                                                                                             | Default        |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| `FORCE_COLOR`                          | Set to 0 to disable terminal colors for printed outputs                                                                                                                                                 |                |
+| `PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY` | How many assertions to run at a time                                                                                                                                                                    | 3              |
+| `PROMPTFOO_CACHE_ENABLED`              | Enable LLM request/response caching                                                                                                                                                                     | `false`        |
+| `PROMPTFOO_CONFIG_DIR`                 | Directory that stores eval history                                                                                                                                                                      | `~/.promptfoo` |
+| `PROMPTFOO_DISABLE_AJV_STRICT_MODE`    | If set, disables AJV strict mode for JSON schema validation                                                                                                                                             |                |
+| `PROMPTFOO_DISABLE_CONVERSATION_VAR`   | Prevents the `_conversation` variable from being set                                                                                                                                                    |                |
+| `PROMPTFOO_DISABLE_ERROR_LOG`          | Prevents error logs from being written to a file                                                                                                                                                        |                |
+| `PROMPTFOO_DISABLE_JSON_AUTOESCAPE`    | If set, disables smart variable substitution within JSON prompts                                                                                                                                        |                |
+| `PROMPTFOO_DISABLE_OBJECT_STRINGIFY`   | Disable object stringification in templates. When false (default), objects are stringified to prevent `[object Object]` issues. When true, allows direct property access (e.g., `{{output.property}}`). | `false`        |
+| `PROMPTFOO_DISABLE_REF_PARSER`         | Prevents JSON schema dereferencing                                                                                                                                                                      |                |
+| `PROMPTFOO_DISABLE_TEMPLATING`         | Disables Nunjucks template processing                                                                                                                                                                   | `false`        |
+| `PROMPTFOO_DISABLE_VAR_EXPANSION`      | Prevents Array-type vars from being expanded into multiple test cases                                                                                                                                   |                |
+| `PROMPTFOO_FAILED_TEST_EXIT_CODE`      | Override the exit code when there is at least 1 test case failure or when the pass rate is below PROMPTFOO_PASS_RATE_THRESHOLD                                                                          | 100            |
+| `PROMPTFOO_LOG_DIR`                    | Directory to write error logs                                                                                                                                                                           | `.`            |
+| `PROMPTFOO_PASS_RATE_THRESHOLD`        | Set a minimum pass rate threshold (as a percentage). If not set, defaults to 100% (no failures allowed)                                                                                                 | 100            |
+| `PROMPTFOO_REQUIRE_JSON_PROMPTS`       | By default the chat completion provider will wrap non-JSON messages in a single user message. Setting this envar to true disables that behavior.                                                        |                |
+| `PROMPTFOO_SHARE_CHUNK_SIZE`           | Number of results to send in each chunk. This is used to estimate the size of the results and to determine the number of chunks to send.                                                                |                |
+| `PROMPTFOO_EVAL_TIMEOUT_MS`            | Timeout in milliseconds for each evaluation step.                                                                                                                                                       |                |
+| `PROMPTFOO_MAX_EVAL_TIME_MS`           | Maximum runtime in milliseconds for the entire evaluation.                                                                                                                                              |                |
+| `PROMPTFOO_STRIP_GRADING_RESULT`       | Strip grading results from results to reduce memory usage                                                                                                                                               | false          |
+| `PROMPTFOO_STRIP_METADATA`             | Strip metadata from results to reduce memory usage                                                                                                                                                      | false          |
+| `PROMPTFOO_STRIP_PROMPT_TEXT`          | Strip prompt text from results to reduce memory usage                                                                                                                                                   | false          |
+| `PROMPTFOO_STRIP_RESPONSE_OUTPUT`      | Strip model response outputs from results to reduce memory usage                                                                                                                                        | false          |
+| `PROMPTFOO_STRIP_TEST_VARS`            | Strip test variables from results to reduce memory usage                                                                                                                                                | false          |
 
 :::tip
 promptfoo will load environment variables from the `.env` in your current working directory.
+:::
+
+:::tip
+For detailed information on using timeout features, including configuration examples and troubleshooting tips, see [Timeout errors in the troubleshooting guide](/docs/usage/troubleshooting#how-to-triage-stuck-evals).
 :::

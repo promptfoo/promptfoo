@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import React, { useEffect } from 'react';
 import {
   createBrowserRouter,
   createRoutesFromElements,
@@ -18,6 +18,7 @@ import EvalsIndexPage from './pages/evals/page';
 import HistoryPage from './pages/history/page';
 import LauncherPage from './pages/launcher/page';
 import LoginPage from './pages/login';
+import ModelAuditPage from './pages/model-audit/page';
 import PromptsPage from './pages/prompts/page';
 import ReportPage from './pages/redteam/report/page';
 import RedteamSetupPage from './pages/redteam/setup/page';
@@ -62,6 +63,7 @@ const router = createBrowserRouter(
           <Route path="/history" element={<HistoryPage />} />
 
           <Route path="/prompts" element={<PromptsPage />} />
+          <Route path="/model-audit" element={<ModelAuditPage />} />
           <Route path="/redteam" element={<Navigate to="/redteam/setup" replace />} />
           <Route path="/redteam/setup" element={<RedteamSetupPage />} />
           <Route path="/report" element={<ReportPage />} />

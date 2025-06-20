@@ -1,4 +1,7 @@
 ---
+title: Getting Started
+description: Learn how to set up your first promptfoo config file, create prompts, configure providers, and run your first LLM evaluation.
+keywords: [getting started, setup, configuration, prompts, providers, evaluation, llm testing]
 sidebar_position: 5
 ---
 
@@ -8,7 +11,11 @@ import TabItem from '@theme/TabItem';
 
 # Getting started
 
-Install promptfoo and set up your first config file by running this command with [npx](https://nodejs.org/en/download), [npm](https://nodejs.org/en/download), or [brew](https://brew.sh/):
+After [installing](/docs/installation) promptfoo, you can set up your first config file in two ways:
+
+## Running with Example
+
+Set up your first config file with a pre-built example by running this command with [npx](https://nodejs.org/en/download), [npm](https://nodejs.org/en/download), or [brew](https://brew.sh/):
 
   <Tabs groupId="promptfoo-command">
     <TabItem value="npx" label="npx" default>
@@ -35,7 +42,29 @@ This will create a new directory with a basic example that tests translation pro
 - A configuration file `promptfooconfig.yaml` with sample prompts, providers, and test cases.
 - A `README.md` file explaining how the example works.
 
-If you prefer to start from scratch instead of using the example, simply run `promptfoo init` without the `--example` flag. The command will guide you through an interactive setup process.
+## Starting from Scratch
+
+If you prefer to start from scratch instead of using the example, simply run `promptfoo init` without the `--example` flag:
+
+<Tabs groupId="promptfoo-command">
+  <TabItem value="npx" label="npx" default>
+    <CodeBlock language="bash">
+      npx promptfoo@latest init
+    </CodeBlock>
+  </TabItem>
+  <TabItem value="npm" label="npm">
+    <CodeBlock language="bash">
+      promptfoo init
+    </CodeBlock>
+  </TabItem>
+  <TabItem value="brew" label="brew">
+    <CodeBlock language="bash">
+      promptfoo init
+    </CodeBlock>
+  </TabItem>
+</Tabs>
+
+The command will guide you through an interactive setup process to create your custom configuration.
 
 ## Configuration
 
@@ -55,17 +84,19 @@ Next, we can review the example configuration file and make changes to it.
 
    ```yaml
    providers:
-     - openai:o3-mini
-     - anthropic:messages:claude-3-5-sonnet-20241022
-     - vertex:gemini-pro
+     - openai:gpt-4.1
+     - openai:o4-mini
+     - anthropic:messages:claude-sonnet-4-20250514
+     - vertex:gemini-2.5-pro-exp-03-25
      # Or use your own custom provider
      - file://path/to/custom/provider.py
    ```
 
    Each provider is specified using a simple format: `provider_name:model_name`. For example:
 
-   - `openai:o3-mini` for OpenAI's o3-mini
-   - `anthropic:messages:claude-3-5-sonnet-20241022` for Anthropic's Claude
+   - `openai:gpt-4.1` for GPT-4.1
+   - `openai:o4-mini` for OpenAI's o4-mini
+   - `anthropic:messages:claude-sonnet-4-20250514` for Anthropic's Claude
    - `bedrock:us.meta.llama3-3-70b-instruct-v1:0` for Meta's Llama 3.3 70B via AWS Bedrock
 
    Most providers need authentication. For example, with OpenAI:
@@ -159,40 +190,51 @@ See the [Configuration docs](/docs/configuration/guide) for a detailed guide.
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Automatic response evaluation using LLM rubric scoring
+
+# Load prompts
 prompts:
   - file://prompts.txt
 providers:
-  - openai:gpt-4.1-mini
+  - openai:gpt-4.1
+defaultTest:
+  assert:
+    - type: llm-rubric
+      value: Do not mention that you are an AI or chat assistant
+    - type: javascript
+      # Shorter is better
+      value: Math.max(0, Math.min(1, 1 - (output.length - 100) / 900));
 tests:
-  - description: First test case - automatic review
-    vars:
-      var1: first variable's value
-      var2: another value
-      var3: some other value
-    assert:
-      - type: equals
-        value: expected LLM output goes here
-      - type: javascript
-        value: output.includes('some text')
-
-  - description: Second test case - manual review
-    # Test cases don't need assertions if you prefer to review the output yourself
-    vars:
-      var1: new value
-      var2: another value
-      var3: third value
-
-  - description: Third test case - other types of automatic review
-    vars:
-      var1: yet another value
-      var2: and another
-      var3: dear llm, please output your response in json format
-    assert:
-      - type: contains-json
-      - type: similar
-        value: ensures that output is semantically similar to this text
-      - type: llm-rubric
-        value: must contain a reference to X
+  - vars:
+      name: Bob
+      question: Can you help me find a specific product on your website?
+  - vars:
+      name: Jane
+      question: Do you have any promotions or discounts currently available?
+  - vars:
+      name: Ben
+      question: Can you check the availability of a product at a specific store location?
+  - vars:
+      name: Dave
+      question: What are your shipping and return policies?
+  - vars:
+      name: Jim
+      question: Can you provide more information about the product specifications or features?
+  - vars:
+      name: Alice
+      question: Can you recommend products that are similar to what I've been looking at?
+  - vars:
+      name: Sophie
+      question: Do you have any recommendations for products that are currently popular or trending?
+  - vars:
+      name: Jessie
+      question: How can I track my order after it has been shipped?
+  - vars:
+      name: Kim
+      question: What payment methods do you accept?
+  - vars:
+      name: Emily
+      question: Can you help me with a problem I'm having with my account or order?
 ```
 
 </details>
@@ -203,29 +245,44 @@ tests:
 
 In [this example](https://github.com/promptfoo/promptfoo/tree/main/examples/self-grading), we evaluate whether adding adjectives to the personality of an assistant bot affects the responses.
 
+You can quickly set up this example by running:
+
+<Tabs groupId="promptfoo-command">
+  <TabItem value="npx" label="npx" default>
+    <CodeBlock language="bash">
+      npx promptfoo@latest init --example self-grading
+    </CodeBlock>
+  </TabItem>
+  <TabItem value="npm" label="npm">
+    <CodeBlock language="bash">
+      promptfoo init --example self-grading
+    </CodeBlock>
+  </TabItem>
+  <TabItem value="brew" label="brew">
+    <CodeBlock language="bash">
+      promptfoo init --example self-grading
+    </CodeBlock>
+  </TabItem>
+</Tabs>
+
 Here is the configuration:
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 # Load prompts
 prompts:
-  - file://prompt1.txt
-  - file://prompt2.txt
+  - file://prompts.txt
 
 # Set an LLM
 providers:
-  - openai:gpt-4.1-mini
+  - openai:gpt-4.1
 
 # These test properties are applied to every test
 defaultTest:
   assert:
-    # Verify that the output doesn't contain "AI language model"
-    - type: not-contains
-      value: AI language model
-
-    # Verify that the output doesn't apologize
+    # Ensure the assistant doesn't mention being an AI
     - type: llm-rubric
-      value: must not contain an apology
+      value: Do not mention that you are an AI or chat assistant
 
     # Prefer shorter outputs using a scoring function
     - type: javascript
@@ -236,19 +293,33 @@ tests:
   - vars:
       name: Bob
       question: Can you help me find a specific product on your website?
-    assert:
-      - type: contains
-        value: search
   - vars:
       name: Jane
       question: Do you have any promotions or discounts currently available?
-    assert:
-      - type: starts-with
-        value: Yes
   - vars:
       name: Ben
       question: Can you check the availability of a product at a specific store location?
-  # ...
+  - vars:
+      name: Dave
+      question: What are your shipping and return policies?
+  - vars:
+      name: Jim
+      question: Can you provide more information about the product specifications or features?
+  - vars:
+      name: Alice
+      question: Can you recommend products that are similar to what I've been looking at?
+  - vars:
+      name: Sophie
+      question: Do you have any recommendations for products that are currently popular or trending?
+  - vars:
+      name: Jessie
+      question: How can I track my order after it has been shipped?
+  - vars:
+      name: Kim
+      question: What payment methods do you accept?
+  - vars:
+      name: Emily
+      question: Can you help me with a problem I'm having with my account or order?
 ```
 
 A simple `npx promptfoo@latest eval` will run this example from the command line:
@@ -283,7 +354,27 @@ You can also output a nice [spreadsheet](https://docs.google.com/spreadsheets/d/
 
 ### Model quality
 
-In [this next example](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-4o-vs-4o-mini), we evaluate the difference between GPT 4o and GPT 4o mini outputs for a given prompt:
+In [this next example](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-4o-vs-4o-mini), we evaluate the difference between GPT-4.1 and o4-mini outputs for a given prompt:
+
+You can quickly set up this example by running:
+
+<Tabs groupId="promptfoo-command">
+  <TabItem value="npx" label="npx" default>
+    <CodeBlock language="bash">
+      npx promptfoo@latest init --example gpt-4o-vs-4o-mini
+    </CodeBlock>
+  </TabItem>
+  <TabItem value="npm" label="npm">
+    <CodeBlock language="bash">
+      promptfoo init --example gpt-4o-vs-4o-mini
+    </CodeBlock>
+  </TabItem>
+  <TabItem value="brew" label="brew">
+    <CodeBlock language="bash">
+      promptfoo init --example gpt-4o-vs-4o-mini
+    </CodeBlock>
+  </TabItem>
+</Tabs>
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
@@ -292,7 +383,7 @@ prompts:
 
 # Set the LLMs we want to test
 providers:
-  - openai:gpt-4.1-mini
+  - openai:o4-mini
   - openai:gpt-4.1
 ```
 
@@ -301,24 +392,24 @@ A simple `npx promptfoo@latest eval` will run the example. Also note that you ca
 <Tabs groupId="promptfoo-command">
   <TabItem value="npx" label="npx" default>
     <CodeBlock language="bash">
-      npx promptfoo@latest eval -p prompts.txt -r openai:gpt-4.1-mini openai:gpt-4.1 -o output.html
+      npx promptfoo@latest eval -p prompts.txt -r openai:o4-mini openai:gpt-4.1 -o output.html
     </CodeBlock>
   </TabItem>
   <TabItem value="npm" label="npm">
     <CodeBlock language="bash">
-      promptfoo eval -p prompts.txt -r openai:gpt-4.1-mini openai:gpt-4.1 -o output.html
+      promptfoo eval -p prompts.txt -r openai:o4-mini openai:gpt-4.1 -o output.html
     </CodeBlock>
   </TabItem>
   <TabItem value="brew" label="brew">
     <CodeBlock language="bash">
-      promptfoo eval -p prompts.txt -r openai:gpt-4.1-mini openai:gpt-4.1 -o output.html
+      promptfoo eval -p prompts.txt -r openai:o4-mini openai:gpt-4.1 -o output.html
     </CodeBlock>
   </TabItem>
 </Tabs>
 
 Produces this HTML table:
 
-![Side-by-side evaluation of LLM model quality, gpt-4.1 vs gpt-4.1-mini, html output](https://user-images.githubusercontent.com/310310/235490527-e0c31f40-00a0-493a-8afc-8ed6322bb5ca.png)
+![Side-by-side evaluation of LLM model quality, gpt-4.1 vs o4-mini, html output](https://user-images.githubusercontent.com/310310/235490527-e0c31f40-00a0-493a-8afc-8ed6322bb5ca.png)
 
 Full setup and output [here](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-4o-vs-4o-mini).
 

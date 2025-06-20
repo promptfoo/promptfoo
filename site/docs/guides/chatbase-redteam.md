@@ -1,3 +1,7 @@
+---
+sidebar_label: Red teaming a Chatbase Chatbot
+---
+
 # Red teaming a Chatbase Chatbot
 
 [Chatbase](https://www.chatbase.co) is a platform for building custom AI chatbots that can be embedded into websites for customer support, lead generation, and user engagement. These chatbots use RAG (Retrieval-Augmented Generation) to access your organization's knowledge base and maintain conversations with users.

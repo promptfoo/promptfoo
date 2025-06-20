@@ -90,6 +90,7 @@ describe('homoglyph strategy', () => {
           },
           metadata: {
             strategyId: 'homoglyph',
+            originalText: 'Hello World! 123',
           },
           assert: [
             {

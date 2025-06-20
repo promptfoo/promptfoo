@@ -22,6 +22,7 @@ import type {
   TestCaseWithVarsFile,
   TestSuiteConfig,
 } from '../types';
+import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
 
 export async function readTestFiles(
@@ -70,7 +71,9 @@ export async function readTestFiles(
 export async function readStandaloneTestsFile(
   varsPath: string,
   basePath: string = '',
+  config?: Record<string, any>,
 ): Promise<TestCase[]> {
+  const finalConfig = config ? maybeLoadConfigFromExternalFile(config) : config;
   const resolvedVarsPath = path.resolve(basePath, varsPath.replace(/^file:\/\//, ''));
   // Split on the last colon to handle Windows drive letters correctly
   const colonCount = resolvedVarsPath.split(':').length - 1;
@@ -91,23 +94,28 @@ export async function readStandaloneTestsFile(
   const fileExtension = parsePath(pathWithoutFunction).ext.slice(1);
 
   if (varsPath.startsWith('huggingface://datasets/')) {
-    telemetry.record('feature_used', {
+    telemetry.recordAndSendOnce('feature_used', {
       feature: 'huggingface dataset',
     });
     return await fetchHuggingFaceDataset(varsPath);
   }
   if (isJavascriptFile(pathWithoutFunction)) {
-    telemetry.record('feature_used', {
+    telemetry.recordAndSendOnce('feature_used', {
       feature: 'js tests file',
     });
     const mod = await importModule(pathWithoutFunction, maybeFunctionName);
-    return typeof mod === 'function' ? await mod() : mod;
+    return typeof mod === 'function' ? await mod(finalConfig) : mod;
   }
   if (fileExtension === 'py') {
-    telemetry.record('feature_used', {
+    telemetry.recordAndSendOnce('feature_used', {
       feature: 'python tests file',
     });
-    const result = await runPython(pathWithoutFunction, maybeFunctionName ?? 'generate_tests', []);
+    const args = finalConfig === undefined ? [] : [finalConfig];
+    const result = await runPython(
+      pathWithoutFunction,
+      maybeFunctionName ?? 'generate_tests',
+      args,
+    );
     if (!Array.isArray(result)) {
       throw new Error(
         `Python test function must return a list of test cases, got ${typeof result}`,
@@ -119,12 +127,12 @@ export async function readStandaloneTestsFile(
   let rows: CsvRow[] = [];
 
   if (varsPath.startsWith('https://docs.google.com/spreadsheets/')) {
-    telemetry.record('feature_used', {
+    telemetry.recordAndSendOnce('feature_used', {
       feature: 'csv tests file - google sheet',
     });
     rows = await fetchCsvFromGoogleSheet(varsPath);
   } else if (fileExtension === 'csv') {
-    telemetry.record('feature_used', {
+    telemetry.recordAndSendOnce('feature_used', {
       feature: 'csv tests file - local',
     });
     const delimiter = getEnvString('PROMPTFOO_CSV_DELIMITER', ',');
@@ -168,7 +176,7 @@ export async function readStandaloneTestsFile(
       throw e;
     }
   } else if (fileExtension === 'json') {
-    telemetry.record('feature_used', {
+    telemetry.recordAndSendOnce('feature_used', {
       feature: 'json tests file',
     });
     const fileContent = fs.readFileSync(resolvedVarsPath, 'utf-8');
@@ -181,7 +189,7 @@ export async function readStandaloneTestsFile(
   }
   // Handle .jsonl files
   else if (fileExtension === 'jsonl') {
-    telemetry.record('feature_used', {
+    telemetry.recordAndSendOnce('feature_used', {
       feature: 'jsonl tests file',
     });
 
@@ -198,7 +206,7 @@ export async function readStandaloneTestsFile(
         };
       });
   } else if (fileExtension === 'yaml' || fileExtension === 'yml') {
-    telemetry.record('feature_used', {
+    telemetry.recordAndSendOnce('feature_used', {
       feature: 'yaml tests file',
     });
     rows = yaml.load(fs.readFileSync(resolvedVarsPath, 'utf-8')) as unknown as any;
@@ -285,7 +293,7 @@ export async function loadTestsFromGlob(
   basePath: string = '',
 ): Promise<TestCase[]> {
   if (loadTestsGlob.startsWith('huggingface://datasets/')) {
-    telemetry.record('feature_used', {
+    telemetry.recordAndSendOnce('feature_used', {
       feature: 'huggingface dataset',
     });
     return await fetchHuggingFaceDataset(loadTestsGlob);
@@ -376,6 +384,13 @@ export async function readTests(
     }
     // Points to a tests.{csv,json,yaml,yml,py,js,ts,mjs} or Google Sheet
     return readStandaloneTestsFile(tests, basePath);
+  } else if (
+    typeof tests === 'object' &&
+    !Array.isArray(tests) &&
+    'path' in tests &&
+    typeof tests.path === 'string'
+  ) {
+    return readStandaloneTestsFile(tests.path, basePath, tests.config);
   }
   if (Array.isArray(tests)) {
     for (const globOrTest of tests) {
@@ -392,9 +407,11 @@ export async function readTests(
           // Resolve globs for other file types
           ret.push(...(await loadTestsFromGlob(globOrTest, basePath)));
         }
+      } else if ('path' in globOrTest) {
+        ret.push(...(await readStandaloneTestsFile(globOrTest.path, basePath, globOrTest.config)));
       } else {
         // Load individual TestCase
-        ret.push(await readTest(globOrTest, basePath));
+        ret.push(await readTest(globOrTest as TestCaseWithVarsFile, basePath));
       }
     }
   } else if (tests !== undefined && tests !== null) {

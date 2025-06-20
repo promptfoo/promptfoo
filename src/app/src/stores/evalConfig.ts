@@ -98,6 +98,7 @@ export const useStore = create<State>()(
           scenarios,
           testCases,
           evaluateOptions,
+          defaultTest,
         } = get();
         return {
           description,
@@ -108,6 +109,7 @@ export const useStore = create<State>()(
           scenarios,
           tests: testCases,
           evaluateOptions,
+          defaultTest,
         };
       },
     }),

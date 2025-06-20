@@ -45,7 +45,6 @@ export interface ProviderOptions {
 }
 
 export interface CallApiContextParams {
-  fetchWithCache?: any;
   filters?: NunjucksFilterMap;
   getCache?: any;
   logger?: winston.Logger;
@@ -56,6 +55,7 @@ export interface CallApiContextParams {
   // This was added so we have access to the grader inside the provider.
   // Vars and prompts should be access using the arguments above.
   test?: AtomicTestCase;
+  bustCache?: boolean;
 }
 
 export interface CallApiOptionsParams {
@@ -114,6 +114,11 @@ export interface ProviderResponse {
   logProbs?: number[];
   metadata?: {
     redteamFinalPrompt?: string;
+    http?: {
+      status: number;
+      statusText: string;
+      headers: Record<string, string>;
+    };
     [key: string]: any;
   };
   raw?: string | any;

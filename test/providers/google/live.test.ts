@@ -1,10 +1,16 @@
 import axios from 'axios';
 import dedent from 'dedent';
+import path from 'path';
 import WebSocket from 'ws';
+import cliState from '../../../src/cliState';
+import { importModule } from '../../../src/esm';
 import { GoogleLiveProvider } from '../../../src/providers/google/live';
 
 jest.mock('ws');
 jest.mock('axios');
+jest.mock('../../../src/esm', () => ({
+  importModule: jest.fn(),
+}));
 jest.mock('../../../src/python/pythonUtils', () => ({
   validatePythonPath: jest.fn().mockImplementation(async (path) => path),
 }));
@@ -21,6 +27,8 @@ jest.mock('child_process', () => ({
     killed: false,
   })),
 }));
+
+const mockImportModule = jest.mocked(importModule);
 
 const simulateMessage = (mockWs: jest.Mocked<WebSocket>, simulated_data: any) => {
   setTimeout(() => {
@@ -617,6 +625,7 @@ describe('GoogleLiveProvider', () => {
       metadata: {},
     });
     expect(mockedAxios.get).toHaveBeenCalledTimes(6);
+    expect(mockedAxios.get).toHaveBeenLastCalledWith('http://127.0.0.1:5000/get_state');
   });
   describe('Python executable integration', () => {
     it('should handle Python executable validation correctly', async () => {
@@ -852,6 +861,452 @@ describe('GoogleLiveProvider', () => {
       await providerWithCleanup.callApi('Test prompt');
 
       expect(mockProcess.kill).toHaveBeenCalledWith('SIGTERM');
+    });
+  });
+
+  describe('Audio configurations', () => {
+    it('should correctly format proactivity configuration', async () => {
+      provider = new GoogleLiveProvider('gemini-2.5-flash-preview-native-audio-dialog', {
+        config: {
+          apiVersion: 'v1alpha',
+          generationConfig: {
+            response_modalities: ['audio'],
+            proactivity: {
+              proactiveAudio: true,
+            },
+          },
+          timeoutMs: 500,
+          apiKey: 'test-api-key',
+        },
+      });
+
+      jest.mocked(WebSocket).mockImplementation(() => {
+        setTimeout(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        }, 10);
+        return mockWs;
+      });
+
+      await provider.callApi('test prompt');
+
+      expect(mockWs.send).toHaveBeenCalledWith(
+        expect.stringContaining('"proactivity":{"proactive_audio":true}'),
+      );
+    });
+
+    it('should correctly format enableAffectiveDialog configuration', async () => {
+      provider = new GoogleLiveProvider('gemini-2.5-flash-exp-native-audio-thinking-dialog', {
+        config: {
+          apiVersion: 'v1alpha',
+          generationConfig: {
+            response_modalities: ['audio'],
+            enableAffectiveDialog: true,
+          },
+          timeoutMs: 500,
+          apiKey: 'test-api-key',
+        },
+      });
+
+      jest.mocked(WebSocket).mockImplementation(() => {
+        setTimeout(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        }, 10);
+        return mockWs;
+      });
+
+      await provider.callApi('test prompt');
+
+      expect(mockWs.send).toHaveBeenCalledWith(
+        expect.stringContaining('"enable_affective_dialog":true'),
+      );
+    });
+
+    it('should correctly format outputAudioTranscription configuration', async () => {
+      const transcriptionConfig = {
+        includeTextualContent: true,
+        language: 'en-US',
+      };
+
+      provider = new GoogleLiveProvider('gemini-2.5-flash-preview-native-audio-dialog', {
+        config: {
+          generationConfig: {
+            response_modalities: ['audio'],
+            outputAudioTranscription: transcriptionConfig,
+          },
+          timeoutMs: 500,
+          apiKey: 'test-api-key',
+        },
+      });
+
+      jest.mocked(WebSocket).mockImplementation(() => {
+        setTimeout(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        }, 10);
+        return mockWs;
+      });
+
+      await provider.callApi('test prompt');
+
+      expect(mockWs.send).toHaveBeenCalledWith(
+        expect.stringContaining(
+          '"output_audio_transcription":{"includeTextualContent":true,"language":"en-US"}',
+        ),
+      );
+    });
+
+    it('should correctly format inputAudioTranscription configuration', async () => {
+      const transcriptionConfig = {
+        autoDetectLanguage: true,
+      };
+
+      provider = new GoogleLiveProvider('gemini-2.5-flash-preview-native-audio-dialog', {
+        config: {
+          generationConfig: {
+            response_modalities: ['audio'],
+            inputAudioTranscription: transcriptionConfig,
+          },
+          timeoutMs: 500,
+          apiKey: 'test-api-key',
+        },
+      });
+
+      jest.mocked(WebSocket).mockImplementation(() => {
+        setTimeout(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        }, 10);
+        return mockWs;
+      });
+
+      await provider.callApi('test prompt');
+
+      expect(mockWs.send).toHaveBeenCalledWith(
+        expect.stringContaining('"input_audio_transcription":{"autoDetectLanguage":true}'),
+      );
+    });
+
+    it('should handle all audio configurations together', async () => {
+      provider = new GoogleLiveProvider('gemini-2.5-flash-preview-native-audio-dialog', {
+        config: {
+          apiVersion: 'v1alpha',
+          generationConfig: {
+            response_modalities: ['audio'],
+            proactivity: {
+              proactiveAudio: true,
+            },
+            enableAffectiveDialog: true,
+            outputAudioTranscription: {
+              includeTextualContent: true,
+            },
+            inputAudioTranscription: {
+              autoDetectLanguage: true,
+            },
+          },
+          timeoutMs: 500,
+          apiKey: 'test-api-key',
+        },
+      });
+
+      jest.mocked(WebSocket).mockImplementation(() => {
+        setTimeout(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        }, 10);
+        return mockWs;
+      });
+
+      await provider.callApi('test prompt');
+
+      const sentMessage = JSON.parse(mockWs.send.mock.calls[0][0] as string);
+      const generationConfig = sentMessage.setup.generation_config;
+
+      expect(generationConfig.proactivity).toEqual({ proactive_audio: true });
+      expect(generationConfig.enable_affective_dialog).toBe(true);
+      expect(sentMessage.setup.output_audio_transcription).toEqual({ includeTextualContent: true });
+      expect(sentMessage.setup.input_audio_transcription).toEqual({ autoDetectLanguage: true });
+    });
+
+    it('should not include audio configurations when they are not specified', async () => {
+      provider = new GoogleLiveProvider('gemini-2.5-flash-preview-native-audio-dialog', {
+        config: {
+          generationConfig: {
+            response_modalities: ['audio'],
+          },
+          timeoutMs: 500,
+          apiKey: 'test-api-key',
+        },
+      });
+
+      jest.mocked(WebSocket).mockImplementation(() => {
+        setTimeout(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        }, 10);
+        return mockWs;
+      });
+
+      await provider.callApi('test prompt');
+
+      const sentMessage = JSON.parse(mockWs.send.mock.calls[0][0] as string);
+      const generationConfig = sentMessage.setup.generation_config;
+
+      expect(generationConfig.proactivity).toBeUndefined();
+      expect(generationConfig.enable_affective_dialog).toBeUndefined();
+      expect(generationConfig.output_audio_transcription).toBeUndefined();
+      expect(generationConfig.input_audio_transcription).toBeUndefined();
+    });
+  });
+
+  describe('External Function Callbacks', () => {
+    beforeEach(() => {
+      // Set cliState basePath for external function loading
+      cliState.basePath = '/test/base/path';
+    });
+
+    afterEach(() => {
+      jest.clearAllMocks();
+      cliState.basePath = undefined;
+    });
+
+    it('should load and execute external function callbacks from file', async () => {
+      jest.mocked(WebSocket).mockImplementation(() => {
+        setTimeout(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          simulateSetupMessage(mockWs);
+          simulateFunctionCallMessage(mockWs, [
+            { name: 'external_function', args: { param: 'test_value' }, id: 'function-call-ext-1' },
+          ]);
+          simulateTextMessage(mockWs, 'External function result');
+          simulateCompletionMessage(mockWs);
+        }, 60);
+        return mockWs;
+      });
+
+      // Mock importModule to return our test function
+      const mockExternalFunction = jest.fn().mockResolvedValue('External function result');
+      mockImportModule.mockResolvedValue(mockExternalFunction);
+
+      provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
+        config: {
+          generationConfig: { response_modalities: ['text'] },
+          timeoutMs: 500,
+          apiKey: 'test-api-key',
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'external_function',
+                  description: 'An external function',
+                  parameters: {
+                    type: 'OBJECT',
+                    properties: { param: { type: 'STRING' } },
+                    required: ['param'],
+                  },
+                },
+              ],
+            },
+          ],
+          functionToolCallbacks: {
+            external_function: 'file://test/callbacks.js:testFunction',
+          },
+        },
+      });
+
+      const response = await provider.callApi('Call external function');
+
+      expect(mockImportModule).toHaveBeenCalledWith(
+        path.resolve('/test/base/path', 'test/callbacks.js'),
+        'testFunction',
+      );
+      expect(mockExternalFunction).toHaveBeenCalledWith('{"param":"test_value"}');
+      expect(response.output.text).toBe('External function result');
+    });
+
+    it('should cache external functions and not reload them on subsequent calls', async () => {
+      jest.mocked(WebSocket).mockImplementation(() => {
+        setTimeout(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          simulateSetupMessage(mockWs);
+          simulateFunctionCallMessage(mockWs, [
+            { name: 'cached_function', args: { value: 123 }, id: 'function-call-cache-1' },
+          ]);
+          simulateTextMessage(mockWs, 'Cached result');
+          simulateCompletionMessage(mockWs);
+        }, 60);
+        return mockWs;
+      });
+
+      const mockCachedFunction = jest.fn().mockResolvedValue('Cached result');
+      mockImportModule.mockResolvedValue(mockCachedFunction);
+
+      provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
+        config: {
+          generationConfig: { response_modalities: ['text'] },
+          timeoutMs: 500,
+          apiKey: 'test-api-key',
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'cached_function',
+                  description: 'A cached function',
+                  parameters: {
+                    type: 'OBJECT',
+                    properties: { value: { type: 'NUMBER' } },
+                    required: ['value'],
+                  },
+                },
+              ],
+            },
+          ],
+          functionToolCallbacks: {
+            cached_function: 'file://callbacks/cache-test.js:cachedFunction',
+          },
+        },
+      });
+
+      // First call - should load the function
+      const result1 = await provider.callApi('First call');
+      expect(mockImportModule).toHaveBeenCalledTimes(1);
+      expect(mockCachedFunction).toHaveBeenCalledWith('{"value":123}');
+      expect(result1.output.text).toBe('Cached result');
+
+      // Reset WebSocket mock for second call
+      jest.mocked(WebSocket).mockImplementation(() => {
+        setTimeout(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          simulateSetupMessage(mockWs);
+          simulateFunctionCallMessage(mockWs, [
+            { name: 'cached_function', args: { value: 456 }, id: 'function-call-cache-2' },
+          ]);
+          simulateTextMessage(mockWs, 'Cached result');
+          simulateCompletionMessage(mockWs);
+        }, 60);
+        return mockWs;
+      });
+
+      // Second call - should use cached function, not reload
+      const result2 = await provider.callApi('Second call');
+      expect(mockImportModule).toHaveBeenCalledTimes(1); // Still only 1 call
+      expect(mockCachedFunction).toHaveBeenCalledTimes(2);
+      expect(result2.output.text).toBe('Cached result');
+    });
+
+    it('should handle errors in external function loading gracefully', async () => {
+      jest.mocked(WebSocket).mockImplementation(() => {
+        setTimeout(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          simulateSetupMessage(mockWs);
+          simulateFunctionCallMessage(mockWs, [
+            { name: 'error_function', args: { test: 'data' }, id: 'function-call-error-1' },
+          ]);
+          simulateTextMessage(mockWs, 'Function failed gracefully');
+          simulateCompletionMessage(mockWs);
+        }, 60);
+        return mockWs;
+      });
+
+      // Mock import module to throw an error
+      mockImportModule.mockRejectedValue(new Error('Module not found'));
+
+      provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
+        config: {
+          generationConfig: { response_modalities: ['text'] },
+          timeoutMs: 500,
+          apiKey: 'test-api-key',
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'error_function',
+                  description: 'A function that errors during loading',
+                  parameters: {
+                    type: 'OBJECT',
+                    properties: { test: { type: 'STRING' } },
+                  },
+                },
+              ],
+            },
+          ],
+          functionToolCallbacks: {
+            error_function: 'file://nonexistent/module.js:errorFunction',
+          },
+        },
+      });
+
+      const response = await provider.callApi('Call error function');
+
+      expect(mockImportModule).toHaveBeenCalledWith(
+        path.resolve('/test/base/path', 'nonexistent/module.js'),
+        'errorFunction',
+      );
+      // Should continue with normal flow despite error
+      expect(response.output.text).toBe('Function failed gracefully');
+    });
+
+    it('should handle mixed inline and external function callbacks', async () => {
+      jest.mocked(WebSocket).mockImplementation(() => {
+        setTimeout(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          simulateSetupMessage(mockWs);
+          simulateFunctionCallMessage(mockWs, [
+            { name: 'inline_function', args: { inline: 'test' }, id: 'function-call-inline-1' },
+            {
+              name: 'external_function',
+              args: { external: 'test' },
+              id: 'function-call-external-1',
+            },
+          ]);
+          simulateTextMessage(mockWs, 'Mixed functions completed');
+          simulateCompletionMessage(mockWs);
+        }, 60);
+        return mockWs;
+      });
+
+      const mockInlineFunction = jest.fn().mockResolvedValue('Inline result');
+      const mockExternalFunction = jest.fn().mockResolvedValue('External result');
+      mockImportModule.mockResolvedValue(mockExternalFunction);
+
+      provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
+        config: {
+          generationConfig: { response_modalities: ['text'] },
+          timeoutMs: 500,
+          apiKey: 'test-api-key',
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'inline_function',
+                  description: 'An inline function',
+                  parameters: {
+                    type: 'OBJECT',
+                    properties: { inline: { type: 'STRING' } },
+                  },
+                },
+                {
+                  name: 'external_function',
+                  description: 'An external function',
+                  parameters: {
+                    type: 'OBJECT',
+                    properties: { external: { type: 'STRING' } },
+                  },
+                },
+              ],
+            },
+          ],
+          functionToolCallbacks: {
+            inline_function: mockInlineFunction,
+            external_function: 'file://mixed/callbacks.js:externalFunc',
+          },
+        },
+      });
+
+      const response = await provider.callApi('Test mixed callbacks');
+
+      expect(mockInlineFunction).toHaveBeenCalledWith('{"inline":"test"}');
+      expect(mockImportModule).toHaveBeenCalledWith(
+        path.resolve('/test/base/path', 'mixed/callbacks.js'),
+        'externalFunc',
+      );
+      expect(mockExternalFunction).toHaveBeenCalledWith('{"external":"test"}');
+      expect(response.output.text).toBe('Mixed functions completed');
     });
   });
 });

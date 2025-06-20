@@ -6,27 +6,38 @@ import type {
   ApiProvider,
   Assertion,
   AssertionValue,
+  AtomicTestCase,
+  GradingResult,
   PluginConfig,
   ResultSuggestion,
   TestCase,
 } from '../../types';
-import type { AtomicTestCase, GradingResult } from '../../types';
 import { maybeLoadToolsFromExternalFile } from '../../util';
 import { retryWithDeduplication, sampleArray } from '../../util/generation';
 import invariant from '../../util/invariant';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { redteamProviderManager } from '../providers/shared';
-import { getShortPluginId, removePrefix } from '../util';
-import { isBasicRefusal, isEmptyResponse } from '../util';
+import { getShortPluginId, isBasicRefusal, isEmptyResponse, removePrefix } from '../util';
 
 /**
  * Parses the LLM response of generated prompts into an array of objects.
+ * Handles prompts with "Prompt:" or "PromptBlock:" markers.
  *
  * @param generatedPrompts - The LLM response of generated prompts.
  * @returns An array of { prompt: string } objects. Each of these objects represents a test case.
  */
 export function parseGeneratedPrompts(generatedPrompts: string): { prompt: string }[] {
+  // Try PromptBlock: first (for multi-line content)
+  if (generatedPrompts.includes('PromptBlock:')) {
+    return generatedPrompts
+      .split('PromptBlock:')
+      .map((block) => block.trim())
+      .filter((block) => block.length > 0)
+      .map((block) => ({ prompt: block }));
+  }
+
+  // Legacy parsing for backwards compatibility
   const parsePrompt = (line: string): string | null => {
     if (!line.toLowerCase().includes('prompt:')) {
       return null;
@@ -131,7 +142,7 @@ export abstract class RedteamPluginBase {
         examples: this.config.examples,
       });
 
-      const finalTemplate = this.appendModifiers(renderedTemplate);
+      const finalTemplate = RedteamPluginBase.appendModifiers(renderedTemplate, this.config);
       const { output: generatedPrompts, error } = await this.provider.callApi(finalTemplate);
       if (delayMs > 0) {
         logger.debug(`Delaying for ${delayMs}ms`);
@@ -186,15 +197,13 @@ export abstract class RedteamPluginBase {
    * @param template - The template to append modifiers to.
    * @returns The modified template.
    */
-  private appendModifiers(template: string): string {
+  static appendModifiers(template: string, config: PluginConfig): string {
     // Take everything under "modifiers" config key
-    const modifiers: Record<string, string> =
-      (this.config.modifiers as Record<string, string>) ?? {};
+    const modifiers: Record<string, string> = (config.modifiers as Record<string, string>) ?? {};
 
-    // `language` is a special top-level config field
-    if (this.config.language) {
-      invariant(typeof this.config.language === 'string', 'language must be a string');
-      modifiers.language = this.config.language;
+    if (config.language) {
+      invariant(typeof config.language === 'string', 'language must be a string');
+      modifiers.language = config.language;
     }
 
     // No modifiers
@@ -207,7 +216,7 @@ export abstract class RedteamPluginBase {
 
     // Append all modifiers
     const modifierSection = Object.entries(modifiers)
-      .filter(([key, value]) => typeof value !== 'undefined' && value !== '')
+      .filter(([_, value]) => typeof value !== 'undefined' && value !== '')
       .map(([key, value]) => `${key}: ${value}`)
       .join('\n');
 
@@ -296,6 +305,7 @@ export abstract class RedteamGraderBase {
 
     const vars = {
       ...test.metadata,
+      goal: test.metadata?.goal || prompt,
       prompt,
       entities: test.metadata?.entities ?? [],
       tools: provider?.config?.tools

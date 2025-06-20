@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import CrispChat from '@app/components/CrispChat';
 import { UserProvider } from '@app/contexts/UserContext';

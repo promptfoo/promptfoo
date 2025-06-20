@@ -4,6 +4,15 @@ import { parseChatPrompt, toTitleCase, calculateCost } from '../../src/providers
 jest.mock('../../src/envars');
 
 describe('Shared Provider Functions', () => {
+  beforeEach(() => {
+    // Clear all mocks between tests to prevent contamination
+    jest.clearAllMocks();
+    jest.resetAllMocks();
+
+    // Reset getEnvBool to default behavior (false)
+    jest.mocked(getEnvBool).mockReturnValue(false);
+  });
+
   describe('parseChatPrompt', () => {
     it('should parse YAML prompt', () => {
       const yamlPrompt = `
@@ -45,7 +54,10 @@ describe('Shared Provider Functions', () => {
     });
 
     it('should throw error for invalid JSON when PROMPTFOO_REQUIRE_JSON_PROMPTS is true', () => {
+      // Clear previous mock state and set specific behavior for this test
+      jest.mocked(getEnvBool).mockClear();
       jest.mocked(getEnvBool).mockReturnValue(true);
+
       const invalidJson = '"role": "user", "content": "Hello" }'; // Missing array brackets
       expect(() => parseChatPrompt(invalidJson, [])).toThrow(
         'Chat Completion prompt is not a valid JSON string',
@@ -53,7 +65,10 @@ describe('Shared Provider Functions', () => {
     });
 
     it('should throw error for invalid JSON when prompt starts with { or [', () => {
+      // Clear previous mock state and set specific behavior for this test
+      jest.mocked(getEnvBool).mockClear();
       jest.mocked(getEnvBool).mockReturnValue(false);
+
       const invalidJson = '{ "invalid: "json" }';
       expect(() => parseChatPrompt(invalidJson, [])).toThrow(
         'Chat Completion prompt is not a valid JSON string',

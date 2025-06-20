@@ -1,0 +1,62 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Code generation with Mistral Codestral models'
+
+providers:
+  - id: mistral:codestral-latest
+    config:
+      temperature: 0.2
+      max_tokens: 2000
+
+prompts:
+  - '{{request}}'
+
+tests:
+  - vars:
+      request: 'Write a Python function that calculates the factorial of a number using recursion. Include docstring and type hints.'
+    assert:
+      - type: contains
+        value: 'def factorial'
+      - type: contains
+        value: 'int'
+      - type: contains
+        value: 'recursion'
+      - type: regex
+        value: '""".*"""'
+
+  - vars:
+      request: 'Create a JavaScript function that validates an email address using regex. Make it robust and handle edge cases.'
+    assert:
+      - type: contains
+        value: 'function'
+      - type: contains
+        value: 'email'
+      - type: contains
+        value: 'regex'
+      - type: contains
+        value: '@'
+
+  - vars:
+      request: 'Write a simple REST API endpoint in Python using FastAPI that accepts POST requests with user data (name, email) and returns a success message.'
+    assert:
+      - type: contains
+        value: '@app.post'
+      - type: contains
+        value: 'FastAPI'
+      - type: contains
+        value: 'async def'
+      - type: contains
+        value: 'name'
+      - type: contains
+        value: 'email'
+
+  - vars:
+      request: 'Create a React component that displays a user profile card with name, avatar, and email. Use modern React with hooks.'
+    assert:
+      - type: contains
+        value: 'export'
+      - type: contains
+        value: 'useState'
+      - type: contains
+        value: 'React'
+      - type: contains
+        value: 'avatar'

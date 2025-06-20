@@ -1,3 +1,7 @@
+---
+sidebar_label: Factuality
+---
+
 # Factuality
 
 The `factuality` assertion evaluates the factual consistency between an LLM output and a reference answer. It uses a structured prompt based on [OpenAI's evals](https://github.com/openai/evals/blob/main/evals/registry/modelgraded/fact.yaml) to determine if the output is factually consistent with the reference.
@@ -96,7 +100,7 @@ You can customize the evaluation prompt using the `rubricPrompt` property. The p
 
 - `{{input}}`: The original prompt/question
 - `{{ideal}}`: The reference answer (from the `value` field)
-- `{{completion}}`: The LLM's actual response
+- `{{completion}}`: The LLM's actual response (provided automatically by promptfoo)
 
 Your custom prompt should instruct the model to either:
 

@@ -91,7 +91,7 @@ export abstract class SageMakerGenericProvider {
     this.providerId = id; // Store custom ID if provided
 
     // Record telemetry for SageMaker usage
-    telemetry.record('feature_used', {
+    telemetry.recordAndSendOnce('feature_used', {
       feature: 'sagemaker',
     });
   }
@@ -688,7 +688,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     }
 
     // Check if we should use cache - use the transformed prompt for cache key
-    const bustCache = context?.debug === true; // If debug mode is on, bust the cache
+    const bustCache = context?.bustCache ?? context?.debug === true; // If debug mode is on, bust the cache
     if (isCacheEnabled() && !bustCache) {
       const cacheKey = this.getCacheKey(transformedPrompt);
       const cache = (await getCache)
