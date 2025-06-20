@@ -474,59 +474,30 @@ export function calculateThreadsPerBar(
  * @param maxLength - Maximum length of the final formatted string
  * @returns Formatted variables string or fallback message
  */
-function formatVarsForDisplay(vars: Record<string, any> | undefined, maxLength: number): string {
+export function formatVarsForDisplay(
+  vars: Record<string, any> | undefined,
+  maxLength: number,
+): string {
   if (!vars || Object.keys(vars).length === 0) {
     return '';
   }
 
   try {
-    // Calculate reasonable per-value limit to avoid double truncation
-    const entries = Object.entries(vars);
-    const maxValueLength = Math.max(
-      1,
-      Math.floor((maxLength - entries.length * 3) / entries.length),
-    ); // Account for "k=v " format
+    // Simple approach: limit individual values, then truncate the whole result
+    const formatted = Object.entries(vars)
+      .map(([key, value]) => {
+        // Prevent memory issues by limiting individual values first
+        const valueStr = String(value).slice(0, 100);
+        return `${key}=${valueStr}`;
+      })
+      .join(' ')
+      .replace(/\n/g, ' ')
+      .slice(0, maxLength);
 
-    const formattedPairs: string[] = [];
-    let currentLength = 0;
-
-    for (const [key, value] of entries) {
-      // Convert value to string safely and truncate early to prevent memory issues
-      let valueStr: string;
-      try {
-        // Handle different value types efficiently
-        if (typeof value === 'string') {
-          valueStr = value.length > maxValueLength ? value.slice(0, maxValueLength) : value;
-        } else if (value === null || value === undefined) {
-          valueStr = String(value);
-        } else {
-          // For objects/arrays, convert to string then truncate
-          const fullStr = String(value);
-          valueStr = fullStr.length > maxValueLength ? fullStr.slice(0, maxValueLength) : fullStr;
-        }
-      } catch {
-        // Fallback for values that can't be converted to string
-        valueStr = '[unconvertible]';
-      }
-
-      const pair = `${key}=${valueStr}`;
-
-      // Check if adding this pair would exceed the limit
-      if (currentLength + pair.length + 1 > maxLength && formattedPairs.length > 0) {
-        break;
-      }
-
-      formattedPairs.push(pair);
-      currentLength += pair.length + 1; // +1 for space separator
-    }
-
-    return formattedPairs.join(' ').replace(/\n/g, ' ');
-  } catch (err) {
-    if (err instanceof RangeError) {
-      return '[vars too long]';
-    }
-    // Re-throw unexpected errors for debugging
-    throw err;
+    return formatted;
+  } catch {
+    // Any error - return safe fallback
+    return '[vars unavailable]';
   }
 }
 
