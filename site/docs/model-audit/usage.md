@@ -56,11 +56,13 @@ ModelAudit has different dependencies depending on which model formats you want 
 | --------------------- | ---------------------------------------------------------- |
 | Pickle files          | Built-in (no additional dependencies)                      |
 | TensorFlow SavedModel | `tensorflow`                                               |
+| TensorFlow Lite       | `tensorflow` (for tflite runtime)                          |
 | Keras H5              | `h5py`, `tensorflow`                                       |
 | PyTorch               | `zipfile` (built-in), `torch` for weight analysis          |
 | ONNX                  | `onnx`                                                     |
 | GGUF/GGML             | Built-in (no additional dependencies)                      |
 | Joblib                | `joblib`                                                   |
+| Flax/JAX              | `msgpack`                                                  |
 | NumPy arrays          | `numpy` (built-in)                                         |
 | SafeTensors           | `safetensors`                                              |
 | OCI/Docker containers | Built-in (no additional dependencies)                      |
@@ -88,6 +90,7 @@ modelaudit scan [OPTIONS] PATH [PATH...]
 | `--timeout`, `-t`   | Scan timeout in seconds (default: 300)                          |
 | `--verbose`, `-v`   | Enable verbose output                                           |
 | `--max-file-size`   | Maximum file size to scan in bytes                              |
+| `--max-total-size`  | Maximum total bytes to scan before stopping                     |
 
 ### Configuration File
 
@@ -168,7 +171,7 @@ repos:
         name: ModelAudit
         entry: promptfoo scan-model
         language: system
-        files: '\.(pkl|h5|pb|pt|pth|keras|hdf5|json|yaml|yml|zip|onnx|safetensors|bin)$'
+        files: '\.(pkl|h5|pb|pt|pth|keras|hdf5|json|yaml|yml|zip|onnx|safetensors|bin|tflite|msgpack)$'
         pass_filenames: true
 ```
 
@@ -193,6 +196,8 @@ on:
       - '**.onnx'
       - '**.safetensors'
       - '**.bin'
+      - '**.tflite'
+      - '**.msgpack'
 
 jobs:
   scan:
@@ -254,6 +259,8 @@ model_security_scan:
       - '**/*.onnx'
       - '**/*.safetensors'
       - '**/*.bin'
+      - '**/*.tflite'
+      - '**/*.msgpack'
 ```
 
 ## Programmatic Usage
