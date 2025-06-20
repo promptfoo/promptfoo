@@ -173,7 +173,7 @@ describe('Provider Registry', () => {
         config: {
           ...mockProviderOptions.config,
           injectVar: 'test',
-          maxRounds: 3,
+          maxTurns: 3,
           maxBacktracks: 2,
           redteamProvider: 'test-provider',
         },

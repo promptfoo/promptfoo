@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { useUIStore } from '@app/stores/uiStore';
 import DownloadIcon from '@mui/icons-material/Download';
 import CircularProgress from '@mui/material/CircularProgress';
 import IconButton from '@mui/material/IconButton';
@@ -7,8 +6,6 @@ import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import Tooltip from '@mui/material/Tooltip';
 import type { ResultsFile } from '@promptfoo/types';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
 import { convertEvalDataToCsv } from '../utils/csvExport';
 
 interface ReportDownloadButtonProps {
@@ -23,7 +20,6 @@ const ReportDownloadButton: React.FC<ReportDownloadButtonProps> = ({
   const [isDownloading, setIsDownloading] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const setNavbarVisible = useUIStore((state) => state.setNavbarVisible);
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -40,34 +36,6 @@ const ReportDownloadButton: React.FC<ReportDownloadButtonProps> = ({
           .replace(/[^a-z0-9]+/g, '-')
           .replace(/(^-|-$)/g, '')}.${extension}`
       : `report.${extension}`;
-  };
-
-  const handlePdfDownload = async () => {
-    setIsDownloading(true);
-    handleClose();
-    setNavbarVisible(false);
-
-    try {
-      setTimeout(async () => {
-        const element = document.documentElement;
-        const canvas = await html2canvas(element, {
-          height: Math.max(element.scrollHeight, element.offsetHeight),
-          windowHeight: document.documentElement.scrollHeight,
-        });
-        const data = canvas.toDataURL('image/png');
-
-        const pdf = new jsPDF('p', 'pt', [canvas.width, canvas.height]);
-        pdf.addImage(data, 'PNG', 0, 0, canvas.width, canvas.height);
-        pdf.save(getFilename('pdf'));
-
-        setIsDownloading(false);
-        setNavbarVisible(true);
-      }, 100);
-    } catch (error) {
-      console.error('Error generating PDF:', error);
-      setIsDownloading(false);
-      setNavbarVisible(true);
-    }
   };
 
   const handleCsvDownload = () => {
@@ -115,6 +83,10 @@ const ReportDownloadButton: React.FC<ReportDownloadButtonProps> = ({
       setIsDownloading(false);
     }
   };
+  const handlePdfDownload = () => {
+    handleClose();
+    window.print();
+  };
 
   return (
     <>
@@ -143,9 +115,9 @@ const ReportDownloadButton: React.FC<ReportDownloadButtonProps> = ({
           horizontal: 'right',
         }}
       >
-        <MenuItem onClick={handlePdfDownload}>Download as PDF</MenuItem>
-        <MenuItem onClick={handleCsvDownload}>Download as CSV</MenuItem>
-        <MenuItem onClick={handleJsonDownload}>Download as JSON</MenuItem>
+        <MenuItem onClick={handlePdfDownload}>PDF</MenuItem>
+        <MenuItem onClick={handleCsvDownload}>CSV</MenuItem>
+        <MenuItem onClick={handleJsonDownload}>JSON</MenuItem>
       </Menu>
     </>
   );

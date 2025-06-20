@@ -7,7 +7,7 @@ import { globSync } from 'glob';
 import * as path from 'path';
 import type winston from 'winston';
 import { MODEL_GRADED_ASSERTION_TYPES, runAssertions, runCompareAssertion } from './assertions';
-import { fetchWithCache, getCache } from './cache';
+import { getCache } from './cache';
 import cliState from './cliState';
 import { FILE_METADATA_KEY } from './constants';
 import { updateSignalFile } from './database/signal';
@@ -269,7 +269,6 @@ export async function runEval({
 
           // All of these are removed in python and script providers, but every Javascript provider gets them
           logger: logger as unknown as winston.Logger,
-          fetchWithCache,
           getCache,
         },
         abortSignal ? { abortSignal } : undefined,
@@ -603,7 +602,9 @@ class Evaluator {
   }
 
   async evaluate(): Promise<Eval> {
-    const { testSuite, options } = this;
+    const { options } = this;
+    let { testSuite } = this;
+
     const startTime = Date.now();
     const maxEvalTimeMs = options.maxEvalTimeMs ?? getMaxEvalTimeMs();
     let evalTimedOut = false;
@@ -621,12 +622,15 @@ class Evaluator {
         globalAbortController?.abort();
       }, maxEvalTimeMs);
     }
+
     const vars = new Set<string>();
     const checkAbort = () => {
       if (options.abortSignal?.aborted) {
         throw new Error('Operation cancelled');
       }
     };
+
+    logger.info(`Starting evaluation ${this.evalRecord.id}`);
 
     // Add abort checks at key points
     checkAbort();
@@ -635,7 +639,10 @@ class Evaluator {
     const assertionTypes = new Set<string>();
     const rowsWithSelectBestAssertion = new Set<number>();
 
-    await runExtensionHook(testSuite.extensions, 'beforeAll', { suite: testSuite });
+    const beforeAllOut = await runExtensionHook(testSuite.extensions, 'beforeAll', {
+      suite: testSuite,
+    });
+    testSuite = beforeAllOut.suite;
 
     if (options.generateSuggestions) {
       // TODO(ian): Move this into its own command/file
@@ -717,6 +724,8 @@ class Evaluator {
         prompts.push(completedPrompt);
       }
     }
+
+    this.evalRecord.addPrompts(prompts);
 
     // Aggregate all vars across test cases
     let tests =
@@ -884,7 +893,7 @@ class Evaluator {
                 evaluateOptions: options,
                 conversations: this.conversations,
                 registers: this.registers,
-                isRedteam: this.testSuite.redteam != null,
+                isRedteam: testSuite.redteam != null,
                 allTests: runEvalOptions,
                 concurrency,
                 abortSignal: options.abortSignal,
@@ -920,9 +929,10 @@ class Evaluator {
         throw new Error('Expected index to be a number');
       }
 
-      await runExtensionHook(testSuite.extensions, 'beforeEach', {
+      const beforeEachOut = await runExtensionHook(testSuite.extensions, 'beforeEach', {
         test: evalStep.test,
       });
+      evalStep.test = beforeEachOut.test;
 
       const rows = await runEval(evalStep);
 
@@ -1343,6 +1353,7 @@ class Evaluator {
         const idx = runEvalOptions.indexOf(evalStep);
         await processEvalStepWithTimeout(evalStep, idx);
         processedIndices.add(idx);
+        await this.evalRecord.addPrompts(prompts);
       });
     } catch (err) {
       if (options.abortSignal?.aborted) {

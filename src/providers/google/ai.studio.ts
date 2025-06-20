@@ -178,7 +178,7 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
         },
         REQUEST_TIMEOUT_MS,
         'json',
-        false,
+        context?.bustCache ?? context?.debug,
       )) as unknown as any);
     } catch (err) {
       return {
