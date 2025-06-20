@@ -37,7 +37,7 @@ export const DEFAULT_MAX_BACKTRACKS = 10;
 /**
  * Represents metadata for the Crescendo conversation process.
  */
-export interface CrescendoMetadata extends BaseRedteamMetadata {
+interface CrescendoMetadata extends BaseRedteamMetadata {
   crescendoRoundsCompleted: number;
   crescendoBacktrackCount: number;
   crescendoResult: boolean;
@@ -52,7 +52,7 @@ export interface CrescendoMetadata extends BaseRedteamMetadata {
 /**
  * Represents the complete response from a Crescendo conversation.
  */
-export interface CrescendoResponse extends ProviderResponse {
+interface CrescendoResponse extends ProviderResponse {
   metadata: CrescendoMetadata;
 }
 
@@ -899,5 +899,3 @@ export class CrescendoProvider implements ApiProvider {
     }
   }
 }
-
-export default CrescendoProvider;

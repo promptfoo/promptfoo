@@ -2,7 +2,7 @@ import dedent from 'dedent';
 import type { Assertion } from '../../types';
 import { RedteamPluginBase, RedteamGraderBase } from './base';
 
-export const PLUGIN_ID = 'promptfoo:redteam:tool-discovery';
+const PLUGIN_ID = 'promptfoo:redteam:tool-discovery';
 
 const DEFAULT_EXAMPLES = dedent`
     <Example>

@@ -32,7 +32,7 @@ export type ICloudflareProviderBaseConfig = {
   apiBaseUrl?: string;
 };
 
-export type ICloudflareTextGenerationOptions = {
+type ICloudflareTextGenerationOptions = {
   frequency_penalty?: number;
   lora?: number;
   max_tokens?: number;
@@ -47,14 +47,14 @@ export type ICloudflareTextGenerationOptions = {
 export type ICloudflareProviderConfig = ICloudflareProviderBaseConfig &
   ICloudflareTextGenerationOptions;
 
-export type ICloudflareSuccessResponse<SuccessData extends Record<string, unknown>> = {
+type ICloudflareSuccessResponse<SuccessData extends Record<string, unknown>> = {
   success: true;
   errors: [];
   messages: unknown[];
   result: SuccessData;
 };
 
-export type IBuildCloudflareResponse<SuccessData extends Record<string, unknown>> =
+type IBuildCloudflareResponse<SuccessData extends Record<string, unknown>> =
   | ICloudflareSuccessResponse<SuccessData>
   | { success: false; errors: unknown[]; messages: unknown[] };
 

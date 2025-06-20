@@ -8,7 +8,7 @@ export const PromptConfigSchema = z.object({
   suffix: z.string().optional(),
 });
 
-export const PromptFunctionSchema = z
+const PromptFunctionSchema = z
   .function()
   .args(
     z.object({

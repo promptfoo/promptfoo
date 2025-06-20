@@ -3,7 +3,7 @@ import path from 'path';
 import { ProxyAgent, setGlobalDispatcher } from 'undici';
 import cliState from '../src/cliState';
 import { VERSION } from '../src/constants';
-import { getEnvBool, getEnvInt, getEnvString } from '../src/envars';
+import { getEnvBool, getEnvString } from '../src/envars';
 import {
   fetchWithProxy,
   fetchWithRetries,
