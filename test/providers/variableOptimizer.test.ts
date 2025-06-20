@@ -63,12 +63,12 @@ describe('VariableOptimizerProvider', () => {
     // Check that original vars were updated
     expect(context.vars.text).toBe('Bonjour le monde');
 
-    // Check new structured metadata
+    // Check new structured metadata - optimizer succeeds in 1 iteration with the candidate
     expect(result.metadata?.promptOptimizer).toEqual({
       originalValue: 'Hello world',
       optimizedValue: 'Bonjour le monde',
       targetVariable: 'text',
-      iterations: 2,
+      iterations: 1,
       finalScore: 1,
       succeeded: true,
       stallIterations: 5, // Default value from implementation
@@ -76,14 +76,6 @@ describe('VariableOptimizerProvider', () => {
       history: [
         {
           iteration: 1,
-          text: 'Hello world',
-          output: expect.any(String),
-          score: 0,
-          reason: 'Translation not found',
-          success: false,
-        },
-        {
-          iteration: 2,
           text: 'Bonjour le monde',
           output: expect.any(String),
           score: 1,
@@ -94,7 +86,7 @@ describe('VariableOptimizerProvider', () => {
     });
 
     // Check legacy metadata still exists
-    expect(result.metadata?.optimizationHistory).toHaveLength(2);
+    expect(result.metadata?.optimizationHistory).toHaveLength(1);
     expect(result.metadata?.finalVars).toEqual({ text: 'Bonjour le monde' });
     expect(result.metadata?.optimizedVariable).toBe('text');
 
@@ -136,32 +128,23 @@ describe('VariableOptimizerProvider', () => {
   });
 
   it('stops optimization when stalled and records metadata correctly', async () => {
-    // First iteration: score 0.5 (best so far)
-    // Second iteration: score 0.4 (worse - stall count = 1)
-    // Third iteration: score 0.3 (worse - stall count = 2)
-    // Fourth iteration: score 0.2 (worse - stall count = 3)
-    // Fifth iteration: score 0.1 (worse - stall count = 4)
-    // Sixth iteration: score 0.0 (worse - stall count = 5, should stop)
+    // Stall test flow:
+    // Iteration 1: Test original (0.5), get candidate, test candidate (0.4) -> stall = 1
+    // Iteration 2: Test current (0.3), stall = 2 >= stallIterations, break before candidates
     mockedRun
-      .mockResolvedValueOnce({ pass: false, score: 0.5, reason: 'not good enough' })
-      .mockResolvedValueOnce({ pass: false, score: 0.4, reason: 'worse' })
-      .mockResolvedValueOnce({ pass: false, score: 0.3, reason: 'even worse' })
-      .mockResolvedValueOnce({ pass: false, score: 0.2, reason: 'still worse' })
-      .mockResolvedValueOnce({ pass: false, score: 0.1, reason: 'very bad' })
-      .mockResolvedValueOnce({ pass: false, score: 0.0, reason: 'terrible' });
+      .mockResolvedValueOnce({ pass: false, score: 0.5, reason: 'initial attempt' }) // Test original
+      .mockResolvedValueOnce({ pass: false, score: 0.4, reason: 'candidate 1 worse' }) // Test candidate 1
+      .mockResolvedValueOnce({ pass: false, score: 0.3, reason: 'second attempt' }); // Test current in iteration 2
 
-    // Mock improver to return JSON candidates
-    mockImprover.callApi
-      .mockResolvedValueOnce({ output: JSON.stringify({ candidates: ['attempt 1'] }) })
-      .mockResolvedValueOnce({ output: JSON.stringify({ candidates: ['attempt 2'] }) })
-      .mockResolvedValueOnce({ output: JSON.stringify({ candidates: ['attempt 3'] }) })
-      .mockResolvedValueOnce({ output: JSON.stringify({ candidates: ['attempt 4'] }) })
-      .mockResolvedValueOnce({ output: JSON.stringify({ candidates: ['attempt 5'] }) });
+    // Mock improver to return JSON candidates (only called once before stalling)
+    mockImprover.callApi.mockResolvedValueOnce({
+      output: JSON.stringify({ candidates: ['attempt 1'] }),
+    });
 
     const provider = new VariableOptimizerProvider({
       config: {
         maxTurns: 10,
-        stallIterations: 5, // Should stop after 5 iterations without improvement
+        stallIterations: 2, // Should stop after 2 iterations without improvement
         targetVariable: 'text',
         improverModel: 'openai:gpt-4o',
       },
@@ -177,15 +160,15 @@ describe('VariableOptimizerProvider', () => {
 
     const result = await provider.callApi('Test {{text}}', context);
 
-    // Should stop after 6 attempts due to stalling (5 consecutive worse scores after the first)
-    expect(mockedRun).toHaveBeenCalledTimes(6);
-    expect(result.metadata?.promptOptimizer.iterations).toBe(6);
+    // Should make 3 calls: iteration 1 (2 calls), iteration 2 (1 call before stalling)
+    expect(mockedRun).toHaveBeenCalledTimes(3);
+    expect(result.metadata?.promptOptimizer.iterations).toBe(2);
     expect(result.metadata?.promptOptimizer.succeeded).toBe(false);
     expect(result.metadata?.promptOptimizer.finalScore).toBe(0.5); // Best score from first iteration
-    expect(result.metadata?.promptOptimizer.history).toHaveLength(6);
+    expect(result.metadata?.promptOptimizer.history).toHaveLength(2);
 
-    // Original vars should be updated to best attempt (first iteration)
-    expect(context.vars.text).toBe('original'); // First iteration had best score
+    // Variables should be updated to best attempt
+    expect(context.vars.text).toBe('original'); // First iteration had best score, so kept original
   });
 
   it('generates multiple candidates and selects the best one', async () => {
