@@ -170,15 +170,23 @@ export class PromptOptimizerProvider implements ApiProvider {
       }
 
       // Render the improver prompt
+      const equalsAssertion = testCase?.assert?.find(
+        (a: any) => a.type === 'equals' && 'value' in a,
+      ) as any;
       const improverPrompt = nunjucks.renderString(templateStr, {
         targetVariable: targetVar,
-        promptTemplate: promptTemplate,
+        promptTemplate,
         currentValue: currentVars[targetVar],
         previousOutput: output,
         reason: grading.reason,
         failures,
         currentPrompt: rendered,
         optimizationHistory: history,
+        // Add more context for the optimizer
+        expectedOutput: equalsAssertion?.value,
+        assertionType: testCase?.assert?.[0]?.type,
+        currentIteration: i + 1,
+        isExactMatch: !!equalsAssertion,
       });
 
       // Get suggestion from improver

@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Single test case for variable optimizer - the challenging "hovercraft" case
+
+prompts:
+  - 'Translate the following to French: {{text}}'
+
+providers:
+  - openai:gpt-4.1
+
+defaultTest:
+  provider:
+    id: promptfoo:prompt-optimizer
+    config:
+      maxTurns: 8
+      targetVariable: text
+      improverModel: openai:gpt-4.1
+      stallIterations: 6
+
+tests:
+  - vars:
+      text: Thank you very much
+    assert:
+      - type: equals
+        value: My hovercraft is full of eels
