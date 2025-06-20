@@ -226,7 +226,24 @@ describe('Static file serving', () => {
   });
 
   it('should serve index.html for wildcard route', async () => {
-    await request(app).get('/any/path').expect(200).expect('Content-Type', /html/);
-    expect(true).toBeTruthy();
+    const response = await request(app).get('/any/path').expect(200).expect('Content-Type', /html/);
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toMatch(/html/);
+  });
+
+  it('should return 404 for unknown API endpoints', async () => {
+    const response = await request(app).get('/api/nonexistent').expect(404);
+    expect(response.status).toBe(404);
+    expect(response.body).toEqual({ error: 'API endpoint not found' });
+  });
+
+  it('should serve index.html for non-existent static files (SPA fallback)', async () => {
+    // Non-existent static files should fall back to serving index.html for SPA routing
+    const response = await request(app)
+      .get('/favicon.ico')
+      .expect(200)
+      .expect('Content-Type', /html/);
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toMatch(/html/);
   });
 });

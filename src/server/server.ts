@@ -241,28 +241,23 @@ export function createApp() {
 
   app.use(express.static(staticDir));
 
-  // Ignore NotFoundError from static middleware so client routing can handle it
-  app.use((err: unknown, req: Request, _res: Response, next: express.NextFunction) => {
-    // Type-safe check for 404 errors
-    if (
-      err &&
-      typeof err === 'object' &&
-      'status' in err &&
-      (err as { status: number }).status === 404
-    ) {
-      logger.debug(`Static file not found, passing to client routing: ${req.path}`);
-      return next();
+  // Handle client routing - serve index.html for all non-API routes (SPA routing)
+  app.use((req: Request, res: Response): void => {
+    // Skip API routes - they should have been handled above
+    if (req.path.startsWith('/api/')) {
+      logger.debug(`API endpoint not found: ${req.method} ${req.path}`);
+      res.status(404).json({ error: 'API endpoint not found' });
+      return;
     }
 
-    // Log other static middleware errors
-    logger.error(`Static middleware error for ${req.path}: ${String(err)}`);
-    return next(err);
-  });
-
-  // Handle client routing - catch all unmatched routes and serve index.html for SPA
-  app.get(/^(?!\/api).*$/, (req: Request, res: Response): void => {
-    // Serve index.html for all non-API routes (SPA routing)
-    res.sendFile(path.join(staticDir, 'index.html'));
+    // Serve index.html for all other routes (client-side routing)
+    logger.debug(`Serving SPA for client route: ${req.path}`);
+    res.sendFile(path.join(staticDir, 'index.html'), (err) => {
+      if (err) {
+        logger.error(`Failed to serve index.html for ${req.path}: ${err.message}`);
+        res.status(500).json({ error: 'Failed to load application' });
+      }
+    });
   });
 
   return app;
