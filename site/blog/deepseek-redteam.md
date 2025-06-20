@@ -1,6 +1,19 @@
 ---
-date: 2025-02-03
+title: 'What are the Security Risks of Deploying DeepSeek-R1?'
+description: 'Our red team analysis found DeepSeek-R1 fails 60%+ of harmful content tests. See the shocking vulnerabilities we discovered and what they mean for AI safety.'
 image: /img/blog/deepseek-redteam/red_whale.png
+keywords:
+  [
+    DeepSeek security,
+    DeepSeek vulnerabilities,
+    AI red teaming,
+    LLM jailbreak,
+    foundation model security,
+    Chinese AI models,
+    AI safety testing,
+    model evaluation,
+  ]
+date: 2025-02-03
 authors: [vanessa]
 ---
 
