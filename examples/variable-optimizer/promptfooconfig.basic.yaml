@@ -11,9 +11,11 @@ defaultTest:
   provider:
     id: promptfoo:prompt-optimizer
     config:
-      maxTurns: 10
+      maxTurns: 5
       targetVariable: text
       improverModel: openai:gpt-4.1
+      numCandidates: 4
+      stallIterations: 3
 
 tests:
   - vars:
