@@ -11,6 +11,9 @@ import RedteamIterativeProvider from '../redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from '../redteam/providers/iterativeTree';
 import RedteamPandamoniumProvider from '../redteam/providers/pandamonium';
+import RedteamSimulatedUserProvider, {
+  REDTEAM_SIMULATED_USER_STRATEGY_ID,
+} from '../redteam/providers/simulatedUser';
 import type { LoadApiProviderContext } from '../types';
 import type { ApiProvider, ProviderOptions } from '../types/providers';
 import { isJavascriptFile } from '../util/fileExtensions';
@@ -1029,15 +1032,13 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
-    test: (providerPath: string) => providerPath === 'promptfoo:redteam:simulated-user',
+    test: (providerPath: string) =>
+      providerPath === `promptfoo:redteam:${REDTEAM_SIMULATED_USER_STRATEGY_ID}`,
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
-      const { default: RedteamSimulatedUserProvider } = await import(
-        '../redteam/providers/simulatedUser'
-      );
       return new RedteamSimulatedUserProvider(providerOptions.config);
     },
   },
