@@ -5,6 +5,7 @@ import { FILE_METADATA_KEY } from '../src/constants';
 import {
   calculateThreadsPerBar,
   evaluate,
+  formatVarsForDisplay,
   generateVarCombinations,
   isAllowedPrompt,
   newTokenUsage,
@@ -2794,5 +2795,123 @@ describe('calculateThreadsPerBar', () => {
     // Large numbers
     expect(calculateThreadsPerBar(101, 20, 0)).toBe(6); // 5 with 1 extra
     expect(calculateThreadsPerBar(101, 20, 19)).toBe(5); // Last bar gets no extra
+  });
+});
+
+describe('formatVarsForDisplay', () => {
+  it('should return empty string for empty or undefined vars', () => {
+    expect(formatVarsForDisplay({}, 50)).toBe('');
+    expect(formatVarsForDisplay(undefined, 50)).toBe('');
+    expect(formatVarsForDisplay(null as any, 50)).toBe('');
+  });
+
+  it('should format simple variables correctly', () => {
+    const vars = { name: 'John', age: 25, city: 'NYC' };
+    const result = formatVarsForDisplay(vars, 50);
+
+    expect(result).toBe('name=John age=25 city=NYC');
+  });
+
+  it('should handle different variable types', () => {
+    const vars = {
+      string: 'hello',
+      number: 42,
+      boolean: true,
+      nullValue: null,
+      undefinedValue: undefined,
+      object: { nested: 'value' },
+      array: [1, 2, 3],
+    };
+
+    const result = formatVarsForDisplay(vars, 200);
+
+    expect(result).toContain('string=hello');
+    expect(result).toContain('number=42');
+    expect(result).toContain('boolean=true');
+    expect(result).toContain('nullValue=null');
+    expect(result).toContain('undefinedValue=undefined');
+    expect(result).toContain('object=[object Object]');
+    expect(result).toContain('array=1,2,3');
+  });
+
+  it('should truncate individual values to prevent memory issues', () => {
+    const bigValue = 'x'.repeat(200);
+    const vars = { bigVar: bigValue };
+
+    const result = formatVarsForDisplay(vars, 200);
+
+    // Should truncate the value to 100 chars
+    expect(result).toBe(`bigVar=${'x'.repeat(100)}`);
+    expect(result.length).toBeLessThanOrEqual(200);
+  });
+
+  it('should handle extremely large vars without crashing', () => {
+    // This would have caused RangeError before the fix
+    const megaString = 'x'.repeat(5 * 1024 * 1024); // 5MB string
+    const vars = {
+      mega1: megaString,
+      mega2: megaString,
+      small: 'normal',
+    };
+
+    expect(() => formatVarsForDisplay(vars, 50)).not.toThrow();
+
+    const result = formatVarsForDisplay(vars, 50);
+    expect(typeof result).toBe('string');
+    expect(result.length).toBeLessThanOrEqual(50);
+  });
+
+  it('should truncate final result to maxLength', () => {
+    const vars = {
+      var1: 'value1',
+      var2: 'value2',
+      var3: 'value3',
+      var4: 'value4',
+    };
+
+    const result = formatVarsForDisplay(vars, 20);
+
+    expect(result.length).toBeLessThanOrEqual(20);
+    expect(result).toBe('var1=value1 var2=val');
+  });
+
+  it('should replace newlines with spaces', () => {
+    const vars = {
+      multiline: 'line1\nline2\nline3',
+    };
+
+    const result = formatVarsForDisplay(vars, 100);
+
+    expect(result).toBe('multiline=line1 line2 line3');
+    expect(result).not.toContain('\n');
+  });
+
+  it('should return fallback message on any error', () => {
+    // Create a problematic object that might throw during String() conversion
+    const problematicVars = {
+      badProp: {
+        toString() {
+          throw new Error('Cannot convert to string');
+        },
+      },
+    };
+
+    const result = formatVarsForDisplay(problematicVars, 50);
+
+    expect(result).toBe('[vars unavailable]');
+  });
+
+  it('should handle multiple variables with space distribution', () => {
+    const vars = {
+      a: 'short',
+      b: 'medium_value',
+      c: 'a_very_long_value_that_exceeds_normal_length',
+    };
+
+    const result = formatVarsForDisplay(vars, 30);
+
+    expect(result.length).toBeLessThanOrEqual(30);
+    expect(result).toContain('a=short');
+    // Should fit as much as possible within the limit
   });
 });

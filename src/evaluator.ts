@@ -461,9 +461,44 @@ export function calculateThreadsPerBar(
   numProgressBars: number,
   barIndex: number,
 ): number {
-  const minThreadsPerBar = Math.floor(concurrency / numProgressBars);
+  const threadsPerBar = Math.floor(concurrency / numProgressBars);
   const extraThreads = concurrency % numProgressBars;
-  return barIndex < extraThreads ? minThreadsPerBar + 1 : minThreadsPerBar;
+  return barIndex < extraThreads ? threadsPerBar + 1 : threadsPerBar;
+}
+
+/**
+ * Safely formats variables for display in progress bars and logs.
+ * Handles extremely large variables that could cause RangeError crashes.
+ *
+ * @param vars - Variables to format
+ * @param maxLength - Maximum length of the final formatted string
+ * @returns Formatted variables string or fallback message
+ */
+export function formatVarsForDisplay(
+  vars: Record<string, any> | undefined,
+  maxLength: number,
+): string {
+  if (!vars || Object.keys(vars).length === 0) {
+    return '';
+  }
+
+  try {
+    // Simple approach: limit individual values, then truncate the whole result
+    const formatted = Object.entries(vars)
+      .map(([key, value]) => {
+        // Prevent memory issues by limiting individual values first
+        const valueStr = String(value).slice(0, 100);
+        return `${key}=${valueStr}`;
+      })
+      .join(' ')
+      .replace(/\n/g, ' ')
+      .slice(0, maxLength);
+
+    return formatted;
+  } catch {
+    // Any error - return safe fallback
+    return '[vars unavailable]';
+  }
 }
 
 export function generateVarCombinations(
@@ -1169,11 +1204,7 @@ class Evaluator {
 
       if (isWebUI) {
         const provider = evalStep.provider.label || evalStep.provider.id();
-        const vars = Object.entries(evalStep.test.vars || {})
-          .map(([k, v]) => `${k}=${v}`)
-          .join(' ')
-          .slice(0, 50)
-          .replace(/\n/g, ' ');
+        const vars = formatVarsForDisplay(evalStep.test.vars, 50);
         logger.info(`[${numComplete}/${total}] Running ${provider} with vars: ${vars}`);
       } else if (multibar && evalStep) {
         const numProgressBars = Math.min(concurrency, 20);
@@ -1189,14 +1220,11 @@ class Evaluator {
           progressBarIndex,
         );
 
+        const vars = formatVarsForDisplay(evalStep.test.vars, 10);
         progressbar.increment({
           provider: evalStep.provider.label || evalStep.provider.id(),
           prompt: evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ' '),
-          vars: Object.entries(evalStep.test.vars || {})
-            .map(([k, v]) => `${k}=${v}`)
-            .join(' ')
-            .slice(0, 10)
-            .replace(/\n/g, ' '),
+          vars,
           activeThreads: threadsForThisBar,
         });
       } else {
@@ -1276,11 +1304,7 @@ class Evaluator {
         for (const evalStep of serialRunEvalOptions) {
           if (isWebUI) {
             const provider = evalStep.provider.label || evalStep.provider.id();
-            const vars = Object.entries(evalStep.test.vars || {})
-              .map(([k, v]) => `${k}=${v}`)
-              .join(' ')
-              .slice(0, 50)
-              .replace(/\n/g, ' ');
+            const vars = formatVarsForDisplay(evalStep.test.vars || {}, 50);
             logger.info(
               `[${numComplete}/${serialRunEvalOptions.length}] Running ${provider} with vars: ${vars}`,
             );
