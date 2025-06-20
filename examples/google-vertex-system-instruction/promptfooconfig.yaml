@@ -24,11 +24,11 @@ providers:
       systemInstruction: file://system-instruction.txt
 
 prompts:
-  - "What is the capital of France?"
-  - "Tell me a joke"
+  - 'What is the capital of France?'
+  - 'Tell me a joke'
 
 tests:
   - vars:
-      topic: "artificial intelligence"
+      topic: 'artificial intelligence'
   - vars:
-      topic: "quantum computing"
+      topic: 'quantum computing'

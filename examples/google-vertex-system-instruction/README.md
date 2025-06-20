@@ -33,11 +33,13 @@ promptfoo eval
 The system instruction can be provided in multiple ways:
 
 1. **Direct text in config:**
+
    ```yaml
-   systemInstruction: "You are a helpful assistant"
+   systemInstruction: 'You are a helpful assistant'
    ```
 
 2. **From a file (as shown in this example):**
+
    ```yaml
    systemInstruction: file://path/to/instruction.txt
    ```
@@ -46,10 +48,11 @@ The system instruction can be provided in multiple ways:
    ```yaml
    systemInstruction:
      parts:
-       - text: "You are a helpful assistant"
+       - text: 'You are a helpful assistant'
    ```
 
 The file-based approach is particularly useful for:
+
 - Reusing system instructions across multiple configurations
 - Managing long or complex system prompts
 - Version controlling system instructions separately
