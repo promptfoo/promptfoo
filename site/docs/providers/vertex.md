@@ -288,24 +288,24 @@ defaultTest:
 
 ### Configuration Reference
 
-| Option                             | Description                        | Default                              |
-| ---------------------------------- | ---------------------------------- | ------------------------------------ |
-| `apiKey`                           | GCloud API token                   | None                                 |
-| `apiHost`                          | API host override                  | `{region}-aiplatform.googleapis.com` |
-| `apiVersion`                       | API version                        | `v1`                                 |
-| `projectId`                        | GCloud project ID                  | None                                 |
-| `region`                           | GCloud region                      | `us-central1`                        |
-| `publisher`                        | Model publisher                    | `google`                             |
-| `context`                          | Model context                      | None                                 |
-| `examples`                         | Few-shot examples                  | None                                 |
-| `safetySettings`                   | Content filtering                  | None                                 |
-| `generationConfig.temperature`     | Randomness control                 | None                                 |
-| `generationConfig.maxOutputTokens` | Max tokens to generate             | None                                 |
-| `generationConfig.topP`            | Nucleus sampling                   | None                                 |
-| `generationConfig.topK`            | Sampling diversity                 | None                                 |
-| `generationConfig.stopSequences`   | Generation stop triggers           | `[]`                                 |
-| `toolConfig`                       | Tool/function calling config       | None                                 |
-| `systemInstruction`                | System prompt (supports `{{var}}`) | None                                 |
+| Option                             | Description                                      | Default                              |
+| ---------------------------------- | ------------------------------------------------ | ------------------------------------ |
+| `apiKey`                           | GCloud API token                                 | None                                 |
+| `apiHost`                          | API host override                                | `{region}-aiplatform.googleapis.com` |
+| `apiVersion`                       | API version                                      | `v1`                                 |
+| `projectId`                        | GCloud project ID                                | None                                 |
+| `region`                           | GCloud region                                    | `us-central1`                        |
+| `publisher`                        | Model publisher                                  | `google`                             |
+| `context`                          | Model context                                    | None                                 |
+| `examples`                         | Few-shot examples                                | None                                 |
+| `safetySettings`                   | Content filtering                                | None                                 |
+| `generationConfig.temperature`     | Randomness control                               | None                                 |
+| `generationConfig.maxOutputTokens` | Max tokens to generate                           | None                                 |
+| `generationConfig.topP`            | Nucleus sampling                                 | None                                 |
+| `generationConfig.topK`            | Sampling diversity                               | None                                 |
+| `generationConfig.stopSequences`   | Generation stop triggers                         | `[]`                                 |
+| `toolConfig`                       | Tool/function calling config                     | None                                 |
+| `systemInstruction`                | System prompt (supports `{{var}}` and `file://`) | None                                 |
 
 :::note
 Not all models support all parameters. See [Google's documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/overview) for model-specific details.
@@ -402,7 +402,18 @@ providers:
 
 ### System Instructions
 
-Configure system-level instructions for the model:
+Configure system-level instructions for the model. System instructions can be provided in multiple ways:
+
+#### Direct text in config:
+
+```yaml
+providers:
+  - id: vertex:gemini-2.0-pro
+    config:
+      systemInstruction: 'You are a helpful assistant'
+```
+
+#### As structured content:
 
 ```yaml
 providers:
@@ -412,6 +423,21 @@ providers:
         parts:
           - text: 'You are a helpful assistant that {{role}}' # Supports Nunjucks templates
 ```
+
+#### From an external file:
+
+```yaml
+providers:
+  - id: vertex:gemini-2.0-pro
+    config:
+      systemInstruction: file://path/to/system-instruction.txt
+```
+
+The file-based approach is particularly useful for:
+
+- Reusing system instructions across multiple configurations
+- Managing long or complex system prompts
+- Version controlling system instructions separately
 
 ### Generation Configuration
 
