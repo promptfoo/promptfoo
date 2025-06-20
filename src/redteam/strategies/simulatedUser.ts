@@ -1,6 +1,6 @@
 import type { TestCase } from '../../types';
 
-export function addTau(
+export function addSimulatedUser(
   testCases: TestCase[],
   injectVar: string,
   config: Record<string, any>,
@@ -8,7 +8,7 @@ export function addTau(
   return testCases.map((testCase) => ({
     ...testCase,
     provider: {
-      id: 'promptfoo:redteam:tau',
+      id: 'promptfoo:redteam:simulated-user',
       config: {
         injectVar,
         ...config,
@@ -16,11 +16,11 @@ export function addTau(
     },
     assert: testCase.assert?.map((assertion) => ({
       ...assertion,
-      metric: `${assertion.metric}/Tau`,
+      metric: `${assertion.metric}/SimulatedUser`,
     })),
     metadata: {
       ...testCase.metadata,
-      strategyId: 'tau',
+      strategyId: 'simulated-user',
     },
   }));
 }

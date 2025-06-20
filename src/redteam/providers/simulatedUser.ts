@@ -8,7 +8,7 @@ import type {
 } from '../../types';
 import invariant from '../../util/invariant';
 
-export default class RedteamTauProvider implements ApiProvider {
+export default class RedteamSimulatedUserProvider implements ApiProvider {
   private readonly injectVar: string;
   private readonly maxTurns?: number;
   private readonly userProvider?: ProviderOptions;
@@ -21,7 +21,7 @@ export default class RedteamTauProvider implements ApiProvider {
   }
 
   id() {
-    return 'promptfoo:redteam:tau';
+    return 'promptfoo:redteam:simulated-user';
   }
 
   async callApi(

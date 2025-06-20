@@ -87,7 +87,7 @@ strategies:
   - id: 'crescendo'
     config:
       stateful: true
-  - id: 'tau'
+  - id: 'simulated-user'
     config:
       stateful: true
 ```

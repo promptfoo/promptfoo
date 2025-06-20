@@ -17,7 +17,7 @@ You can use it with the following configuration:
 ```yaml title="promptfooconfig.yaml"
 strategies:
   - crescendo
-  - tau
+  - simulated-user
 ```
 
 Or tune it with the following parameters:
@@ -29,7 +29,7 @@ strategies:
       maxTurns: 5
       maxBacktracks: 5
       stateful: false # Sends the entire conversation history with each turn (Default)
-  - id: tau
+  - id: simulated-user
     config:
       maxTurns: 5
 ```
@@ -77,7 +77,7 @@ The backtracking automation also saves an enormous amount of time compared to ma
 ## Related Concepts
 
 - [GOAT Strategy](goat.md) - Another multi-turn jailbreaking approach
-- [Tau Strategy](tau.md) - Multi-turn conversations with a simulated user
+- [Simulated User Strategy](simulated-user.md) - Multi-turn conversations with a simulated user
 - [Iterative Jailbreaks](iterative.md) - Single-turn version of this approach
 - [Tree-based Jailbreaks](tree.md) - Alternative approach to jailbreaking
 - [The Crescendo Attack](https://crescendo-the-multiturn-jailbreak.github.io//) from Microsoft Research

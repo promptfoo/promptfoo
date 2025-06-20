@@ -1029,14 +1029,16 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
-    test: (providerPath: string) => providerPath === 'promptfoo:redteam:tau',
+    test: (providerPath: string) => providerPath === 'promptfoo:redteam:simulated-user',
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
-      const { default: RedteamTauProvider } = await import('../redteam/providers/tau');
-      return new RedteamTauProvider(providerOptions.config);
+      const { default: RedteamSimulatedUserProvider } = await import(
+        '../redteam/providers/simulatedUser'
+      );
+      return new RedteamSimulatedUserProvider(providerOptions.config);
     },
   },
   {

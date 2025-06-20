@@ -98,57 +98,13 @@ redteam:
   strategies:
     - goat
     - crescendo
-    - tau
+    - simulated-user
 ```
 
 ## Implementation Guide
 
 ### Basic Configuration
 
-```yaml title="promptfooconfig.yaml"
-redteam:
-  strategies:
-    - jailbreak # string syntax
-    - id: jailbreak:composite # object syntax
 ```
 
-### Advanced Configuration
-
-Some strategies allow you to specify options in the configuration object. For example, the `multilingual` strategy allows you to specify the languages to use.
-
-```yaml title="promptfooconfig.yaml"
-redteam:
-  strategies:
-    - id: multilingual
-      config:
-        languages:
-          - french
-          - zh-CN # Chinese (IETF)
-          - de # German (ISO 639-1)
 ```
-
-Strategies can be applied to specific plugins or the entire test suite. By default, strategies are applied to all plugins. You can override this by specifying the `plugins` option in the strategy which will only apply the strategy to the specified plugins.
-
-```yaml title="promptfooconfig.yaml"
-redteam:
-  strategies:
-    - id: jailbreak:tree
-      config:
-        plugins:
-          - harmful:hate
-```
-
-### Custom Strategies
-
-For advanced use cases, you can create custom strategies. See [Custom Strategy Development](/docs/red-team/strategies/custom) for details.
-
-## Related Concepts
-
-- [LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Understand the types of vulnerabilities strategies can test
-- [Red Team Plugins](/docs/red-team/plugins/) - Learn about the plugins that generate the base test cases
-- [Custom Strategies](/docs/red-team/strategies/custom) - Create your own strategies
-
-## Next Steps
-
-1. Review [LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types/)
-2. Set up your first test suite

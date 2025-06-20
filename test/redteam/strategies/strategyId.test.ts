@@ -94,7 +94,7 @@ describe('Strategy IDs', () => {
       'prompt-injection': 'promptInjections/index.ts',
       retry: 'retry.ts',
       rot13: 'rot13.ts',
-      tau: 'tau.ts',
+      'simulated-user': 'simulatedUser.ts',
       video: 'simpleVideo.ts',
     };
 

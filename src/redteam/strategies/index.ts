@@ -27,8 +27,8 @@ import { addRot13 } from './rot13';
 import { addAudioToBase64 } from './simpleAudio';
 import { addImageToBase64 } from './simpleImage';
 import { addVideoToBase64 } from './simpleVideo';
+import { addSimulatedUser } from './simulatedUser';
 import { addCompositeTestCases } from './singleTurnComposite';
-import { addTau } from './tau';
 
 export interface Strategy {
   id: string;
@@ -112,11 +112,11 @@ export const Strategies: Strategy[] = [
     },
   },
   {
-    id: 'tau',
+    id: 'simulated-user',
     action: async (testCases, injectVar, config) => {
-      logger.debug(`Adding Tau to ${testCases.length} test cases`);
-      const newTestCases = addTau(testCases, injectVar, config);
-      logger.debug(`Added ${newTestCases.length} Tau test cases`);
+      logger.debug(`Adding simulated user test cases to ${testCases.length} test cases`);
+      const newTestCases = await addSimulatedUser(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} simulated user test cases`);
       return newTestCases;
     },
   },

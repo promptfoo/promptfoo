@@ -103,7 +103,7 @@ redteam:
   strategies:
     - 'jailbreak'
     - 'crescendo' # Multi-turn strategy that gradually builds up an attack
-    - 'tau' # Simulated user conversations
+    - 'simulated-user' # Simulated user conversations
 ```
 
 The Memory Poisoning plugin creates scenarios with specific "memories" the agent should maintain, sends a poisoned message attempting to corrupt this established memory, and then tests the effectiveness of the attack with a follow-up question that relies on the original memory.

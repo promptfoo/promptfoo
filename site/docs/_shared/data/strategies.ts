@@ -137,13 +137,13 @@ export const strategies: Strategy[] = [
   },
   {
     category: 'Multi-turn',
-    strategy: 'tau',
-    displayName: 'Tau',
+    strategy: 'simulated-user',
+    displayName: 'Simulated User',
     description: 'Simulated user conversations',
     longDescription: 'Simulates a user over multiple turns using Tau-bench style instructions',
     cost: 'High',
     asrIncrease: '60-80%',
-    link: '/docs/red-team/strategies/tau/',
+    link: '/docs/red-team/strategies/simulated-user/',
   },
   {
     category: 'Static (Single-Turn)',

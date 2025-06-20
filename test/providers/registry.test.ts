@@ -162,7 +162,7 @@ describe('Provider Registry', () => {
         'promptfoo:redteam:best-of-n',
         'promptfoo:redteam:crescendo',
         'promptfoo:redteam:goat',
-        'promptfoo:redteam:tau',
+        'promptfoo:redteam:simulated-user',
         'promptfoo:redteam:iterative',
         'promptfoo:redteam:iterative:image',
         'promptfoo:redteam:iterative:tree',

@@ -1,12 +1,12 @@
 ---
-sidebar_label: Tau
-title: Tau Simulated User Strategy
+sidebar_label: Simulated User
+title: Simulated User Strategy
 description: Multi-turn red teaming strategy that simulates a user conversation
 ---
 
-# Tau Simulated User Strategy
+# Simulated User Strategy
 
-The **Tau** strategy uses the simulated user provider to create a multi-turn conversation with your application. It is inspired by the [Tau-bench](https://github.com/sierra-research/tau-bench) approach.
+The **Simulated User** strategy uses the simulated user provider to create a multi-turn conversation with your application. It is inspired by the [Tau-bench](https://github.com/sierra-research/tau-bench) approach.
 
 ## Implementation
 
@@ -14,7 +14,7 @@ Enable it in your `promptfooconfig.yaml`:
 
 ```yaml title="promptfooconfig.yaml"
 strategies:
-  - id: tau
+  - id: simulated-user
     config:
       maxTurns: 5
 ```
