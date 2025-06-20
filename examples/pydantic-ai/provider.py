@@ -7,7 +7,7 @@ for evaluation by promptfoo.
 
 import asyncio
 import os
-from typing import Dict, Any
+from typing import Any, Dict
 
 from agent import run_weather_agent
 
