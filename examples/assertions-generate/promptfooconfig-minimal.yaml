@@ -1,0 +1,5 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Minimum config required to generate additional assertions
+
+prompts:
+  - 'Translate the following text to {{language}}: {{text}}.  IMPORTANT: Ensure the response is less than 100 characters'

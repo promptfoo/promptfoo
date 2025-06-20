@@ -10,6 +10,7 @@ import { deleteCommand } from './commands/delete';
 import { evalCommand } from './commands/eval';
 import { exportCommand } from './commands/export';
 import { feedbackCommand } from './commands/feedback';
+import { generateAssertionsCommand } from './commands/generate/assertions';
 import { generateDatasetCommand } from './commands/generate/dataset';
 import { importCommand } from './commands/import';
 import { initCommand } from './commands/init';
@@ -108,6 +109,7 @@ async function main() {
   showCommand(program);
 
   generateDatasetCommand(generateCommand, defaultConfig, defaultConfigPath);
+  generateAssertionsCommand(generateCommand, defaultConfig, defaultConfigPath);
   redteamGenerateCommand(generateCommand, 'redteam', defaultConfig, defaultConfigPath);
 
   const { defaultConfig: redteamConfig, defaultConfigPath: redteamConfigPath } =
