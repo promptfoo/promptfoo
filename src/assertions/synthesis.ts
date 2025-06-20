@@ -507,6 +507,9 @@ export async function synthesize({
     }),
   );
   logger.debug(`Generated ${assertions.length} new assertions`);
+  if (progressBar) {
+    progressBar.stop();
+  }
   return assertions;
 }
 
