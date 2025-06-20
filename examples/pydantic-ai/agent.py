@@ -6,7 +6,7 @@ in a consistent format using Pydantic models.
 """
 
 from pydantic import BaseModel
-from pydantic_ai import Agent
+from pydantic_ai import Agent, RunContext
 
 class WeatherResponse(BaseModel):
     """Structured weather response"""
@@ -14,7 +14,7 @@ class WeatherResponse(BaseModel):
     temperature: str
     description: str
 
-def get_weather(location: str) -> dict:
+def get_weather(ctx: RunContext, location: str) -> dict:
     """Get weather data for a location (mock implementation for demo)"""
     # Simple mock weather data for demonstration
     mock_weather = {
@@ -39,7 +39,7 @@ def get_weather(location: str) -> dict:
         'description': 'Clear'
     }
 
-def get_weather_agent(model: str = 'openai:gpt-4o-mini') -> Agent:
+def get_weather_agent(model: str = 'openai:gpt-4.1-mini') -> Agent:
     """Create a weather agent with structured output"""
     agent = Agent(
         model,
@@ -54,7 +54,7 @@ def get_weather_agent(model: str = 'openai:gpt-4o-mini') -> Agent:
     agent.tool(get_weather)
     return agent
 
-async def run_weather_agent(query: str, model: str = 'openai:gpt-4o-mini') -> WeatherResponse:
+async def run_weather_agent(query: str, model: str = 'openai:gpt-4.1-mini') -> WeatherResponse:
     """Run the weather agent with a query"""
     try:
         agent = get_weather_agent(model)

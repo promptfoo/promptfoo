@@ -8,32 +8,38 @@ providers:
   - id: file://provider.py
     label: PydanticAI Weather Agent
 
+defaultTest:
+  assert:
+    - type: is-json
+      value:
+        type: object
+        properties:
+          location:
+            type: string
+          temperature:
+            type: string
+          description:
+            type: string
+        required: ['location', 'temperature', 'description']
+
 tests:
-  - description: 'Basic weather query'
+  - description: 'Basic weather query with JavaScript assertion'
     vars:
       query: "What's the weather like in London?"
     assert:
       - type: javascript
-        value: "output.location && output.location.toLowerCase().includes('london')"
-      - type: javascript
-        value: "output.temperature && output.temperature !== 'N/A'"
+        value: output.location.toLowerCase().includes('london') && output.temperature !== 'N/A'
 
-  - description: 'Structured output validation'
+  - description: 'Structured output validation with Python assertion'
     vars:
       query: 'Weather in New York'
     assert:
-      - type: javascript
-        value: 'output.location && output.temperature && output.description'
-      - type: javascript
-        value: "typeof output.location === 'string' && typeof output.temperature === 'string'"
+      - type: python
+        value: "'new york' in output.get('location', '').lower() and output.get('temperature', '').endswith(('°C', '°F'))"
 
-  - description: 'Unknown location handling'
+  - description: 'Weather quality assessment with LLM rubric'
     vars:
-      query: 'Weather in RandomCity'
+      query: 'Weather in Tokyo'
     assert:
-      - type: javascript
-        value: 'output.location && output.temperature && output.description'
-      - type: javascript
-        value: "output.location.includes('RandomCity')"
-
-outputPath: ./promptfoo_results.json
+      - type: llm-rubric
+        value: 'The weather response should be realistic and include proper temperature units. The location should be correctly identified as Tokyo.'
