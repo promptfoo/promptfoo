@@ -85,7 +85,7 @@ describe('assertion generation', () => {
       await doGenerateAssertions({
         cache: true,
         config: configPath,
-        numQuestions: '2',
+        numAssertions: '2',
         type: 'pi',
         output: 'output.yaml',
         write: false,
@@ -103,7 +103,7 @@ describe('assertion generation', () => {
         doGenerateAssertions({
           cache: true,
           config: configPath,
-          numQuestions: '2',
+          numAssertions: '2',
           type: 'pi',
           output: 'output.txt',
           write: false,
@@ -119,7 +119,7 @@ describe('assertion generation', () => {
       await doGenerateAssertions({
         cache: true,
         config: configPath,
-        numQuestions: '2',
+        numAssertions: '2',
         type: 'pi',
         write: true,
         defaultConfig: {},
@@ -133,7 +133,7 @@ describe('assertion generation', () => {
       await expect(
         doGenerateAssertions({
           cache: true,
-          numQuestions: '2',
+          numAssertions: '2',
           type: 'pi',
           write: false,
           defaultConfig: {},
@@ -149,7 +149,7 @@ describe('assertion generation', () => {
         doGenerateAssertions({
           cache: true,
           config: configPath,
-          numQuestions: '2',
+          numAssertions: '2',
           type: 'pi',
           output: 'output',
           write: false,
@@ -167,7 +167,7 @@ describe('assertion generation', () => {
         doGenerateAssertions({
           cache: true,
           config: configPath,
-          numQuestions: '2',
+          numAssertions: '2',
           type: 'pi',
           output: 'output.yaml',
           write: false,
