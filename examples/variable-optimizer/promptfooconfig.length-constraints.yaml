@@ -1,0 +1,61 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Variable Optimizer - Length Constraint Testing
+
+prompts:
+  - 'Write a tweet about {{topic}}'
+
+providers:
+  - openai:gpt-4.1
+
+defaultTest:
+  provider:
+    id: promptfoo:variable-optimizer
+    config:
+      maxTurns: 6
+      targetVariable: topic
+      numCandidates: 3
+      stallIterations: 4
+
+tests:
+  # Test 1: Twitter character limit (280 chars)
+  - vars:
+      topic: artificial intelligence revolutionizing healthcare diagnostics and treatment plans
+    assert:
+      - type: javascript
+        value: output.length <= 280
+      - type: icontains
+        value: AI
+
+  # Test 2: Very short constraint (50 chars max)
+  - vars:
+      topic: the future of sustainable energy and renewable resources for climate change
+    assert:
+      - type: javascript
+        value: output.length <= 50
+      - type: icontains
+        value: energy
+
+  # Test 3: Exact length constraint (100 chars)
+  - vars:
+      topic: machine learning applications in modern business
+    assert:
+      - type: javascript
+        value: output.length === 100
+
+  # Test 4: Minimum length constraint (150 chars)
+  - vars:
+      topic: space exploration
+    assert:
+      - type: javascript
+        value: output.length >= 150
+      - type: icontains
+        value: space
+
+  # Test 5: Range constraint (between 80-120 chars)
+  - vars:
+      topic: quantum computing breakthroughs and their implications for cybersecurity
+    assert:
+      - type: javascript
+        value: output.length >= 80 && output.length <= 120
+      - type: icontains
+        value: quantum 

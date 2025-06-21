@@ -35,9 +35,12 @@ describe('VariableOptimizerProvider', () => {
       .mockResolvedValueOnce({ pass: false, score: 0, reason: 'Translation not found' })
       .mockResolvedValueOnce({ pass: true, score: 1, reason: 'All assertions passed' });
 
-    // Mock improver to suggest better value in JSON format with candidates array
+    // Mock improver to suggest better value in JSON format with candidates array and reasoning
     mockImprover.callApi.mockResolvedValue({
-      output: JSON.stringify({ candidates: ['Bonjour le monde'] }),
+      output: JSON.stringify({ 
+        reasoning: 'Testing translation with French greeting',
+        candidates: ['Bonjour le monde'] 
+      }),
     });
 
     const provider = new VariableOptimizerProvider({
@@ -81,6 +84,7 @@ describe('VariableOptimizerProvider', () => {
           score: 1,
           reason: 'All assertions passed',
           success: true,
+          reasoning: 'Testing translation with French greeting',
         },
       ],
     });
@@ -141,10 +145,16 @@ describe('VariableOptimizerProvider', () => {
     // Mock improver to return JSON candidates for both iterations
     mockImprover.callApi
       .mockResolvedValueOnce({
-        output: JSON.stringify({ candidates: ['attempt 1'] }),
+        output: JSON.stringify({ 
+          reasoning: 'Trying first improvement strategy',
+          candidates: ['attempt 1'] 
+        }),
       })
       .mockResolvedValueOnce({
-        output: JSON.stringify({ candidates: ['attempt 2'] }),
+        output: JSON.stringify({ 
+          reasoning: 'Trying second improvement strategy',
+          candidates: ['attempt 2'] 
+        }),
       });
 
     const provider = new VariableOptimizerProvider({
@@ -187,6 +197,7 @@ describe('VariableOptimizerProvider', () => {
     // Mock improver to return multiple candidates
     mockImprover.callApi.mockResolvedValue({
       output: JSON.stringify({
+        reasoning: 'Testing multiple optimization strategies simultaneously',
         candidates: ['candidate1', 'candidate2', 'candidate3'],
       }),
     });

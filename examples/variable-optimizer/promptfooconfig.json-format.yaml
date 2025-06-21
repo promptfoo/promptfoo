@@ -1,0 +1,111 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Variable Optimizer - JSON Format Compliance Testing
+
+prompts:
+  - |
+    {{instruction}}
+    
+    Topic: {{topic}}
+    
+    Respond with valid JSON only:
+
+providers:
+  - openai:gpt-4.1
+
+defaultTest:
+  provider:
+    id: promptfoo:variable-optimizer
+    config:
+      maxTurns: 7
+      targetVariable: instruction
+      numCandidates: 3
+      stallIterations: 4
+
+tests:
+  # Test 1: Simple JSON structure
+  - vars:
+      instruction: "Create a simple profile"
+      topic: "software engineer"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          return data.hasOwnProperty('name') && data.hasOwnProperty('profession');
+
+  # Test 2: Complex nested JSON with arrays
+  - vars:
+      instruction: "Generate a detailed report"
+      topic: "quarterly sales data"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          return data.hasOwnProperty('summary') && 
+                 data.hasOwnProperty('metrics') && 
+                 Array.isArray(data.metrics) &&
+                 data.metrics.length > 0;
+
+  # Test 3: Specific JSON schema compliance
+  - vars:
+      instruction: "Create a product catalog entry"
+      topic: "wireless headphones"
+    assert:
+      - type: is-json
+        value:
+          type: object
+          properties:
+            id:
+              type: number
+            name:
+              type: string
+            price:
+              type: number
+            inStock:
+              type: boolean
+            tags:
+              type: array
+              items:
+                type: string
+          required: ["id", "name", "price", "inStock"]
+
+  # Test 4: JSON with specific field values
+  - vars:
+      instruction: "Generate an error response"
+      topic: "authentication failure"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          return data.error === true && 
+                 typeof data.message === 'string' &&
+                 data.code >= 400 && data.code < 500;
+
+  # Test 5: Multi-level nested JSON
+  - vars:
+      instruction: "Create a user profile with settings"
+      topic: "premium account holder"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          return data.hasOwnProperty('user') &&
+                 data.user.hasOwnProperty('settings') &&
+                 typeof data.user.settings === 'object' &&
+                 data.user.settings.hasOwnProperty('notifications');
+
+  # Test 6: JSON array format
+  - vars:
+      instruction: "List top items"
+      topic: "bestselling books"
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          return Array.isArray(data) && 
+                 data.length >= 3 &&
+                 data.every(item => item.hasOwnProperty('title') && item.hasOwnProperty('rank')); 
