@@ -18,8 +18,8 @@ The OpenAI provider supports the following model formats:
 - `openai:responses:<model name>` - uses responses API models over HTTP connections
 - `openai:assistant:<assistant id>` - use an assistant
 - `openai:<model name>` - uses a specific model name (mapped automatically to chat or completion endpoint)
-- `openai:chat` - defaults to `gpt-4o-mini`
-- `openai:chat:ft:gpt-4o-mini:company-name:ID` - example of a fine-tuned chat completion model
+- `openai:chat` - defaults to `gpt-4.1-mini`
+- `openai:chat:ft:gpt-4.1-mini:company-name:ID` - example of a fine-tuned chat completion model
 - `openai:completion` - defaults to `text-davinci-003`
 - `openai:completion:<model name>` - uses any model name against the `/v1/completions` endpoint
 - `openai:embeddings:<model name>` - uses any model name against the `/v1/embeddings` endpoint
@@ -52,7 +52,7 @@ The `providers` list takes a `config` key that allows you to set parameters like
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:gpt-4o-mini
+  - id: openai:gpt-4.1-mini
     config:
       temperature: 0
       max_tokens: 128

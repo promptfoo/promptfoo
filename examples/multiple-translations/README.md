@@ -5,6 +5,7 @@ This example demonstrates two different approaches to testing translation qualit
 ## Configuration Files
 
 ### 1. Array-based Testing (`promptfooconfig.yaml`)
+
 The default configuration uses variable arrays to test different input/language combinations with LLM-based grading. This approach is simpler and good for exploratory testing.
 
 ```bash
@@ -12,6 +13,7 @@ promptfoo eval
 ```
 
 ### 2. Scenario-based Testing (`promptfooconfig-scenarios.yaml`)
+
 Uses predefined expected translations with high similarity thresholds for more precise evaluation. This approach is better when you have specific expected outputs.
 
 ```bash
@@ -38,12 +40,14 @@ This example requires at least one of the following API keys:
 After setting your environment variables:
 
 **Array-based approach (default):**
+
 ```bash
 promptfoo eval
 promptfoo view
 ```
 
 **Scenario-based approach:**
+
 ```bash
 promptfoo eval -c promptfooconfig-scenarios.yaml
 promptfoo view
@@ -55,4 +59,3 @@ promptfoo view
 - **Scenario-based**: Tests specific translations against expected results with similarity matching
 
 Both approaches help evaluate translation quality but serve different testing needs.
-

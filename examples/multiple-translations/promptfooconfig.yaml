@@ -6,15 +6,15 @@ prompts:
   - file://prompts.txt
 
 providers:
-  - openai:o4-mini
+  - openai:gpt-4.1-mini
   - openai:gpt-4.1
-  - anthropic:claude-4
+  - anthropic:claude-sonnet-4-20250514
 
 tests:
   - vars:
       language:
         - French
-        - German  
+        - German
         - Spanish
         - Italian
         - Portuguese

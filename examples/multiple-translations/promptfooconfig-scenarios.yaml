@@ -6,9 +6,9 @@ prompts:
   - file://prompts.txt
 
 providers:
-  - openai:o4-mini
+  - openai:gpt-4.1-mini
   - openai:gpt-4.1
-  - anthropic:claude-4
+  - anthropic:claude-sonnet-4-20250514
 
 scenarios:
   - description: Translation accuracy with expected results
@@ -49,4 +49,4 @@ scenarios:
         assert:
           - type: similar
             value: '{{expectedHowAreYou}}'
-            threshold: 0.90 
+            threshold: 0.90
