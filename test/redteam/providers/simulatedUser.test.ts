@@ -46,7 +46,6 @@ describe('RedteamSimulatedUserProvider', () => {
     const provider = new RedteamSimulatedUserProvider({
       injectVar: 'test_var',
       maxTurns: 5,
-      userProvider: { id: 'test-provider' },
     });
 
     const prompt: Prompt = { raw: 'test prompt', display: 'test prompt', label: 'test' };
@@ -63,18 +62,17 @@ describe('RedteamSimulatedUserProvider', () => {
     await provider.callApi('test prompt', context, options);
 
     expect(SimulatedUser).toHaveBeenCalledWith({
-      id: provider.id(),
+      id: `promptfoo:redteam:${REDTEAM_SIMULATED_USER_STRATEGY_ID}`,
       config: {
         instructions: '{{test_var}}',
         maxTurns: 5,
-        userProvider: { id: 'test-provider' },
       },
     });
 
     expect(mockCallApi).toHaveBeenCalledWith('test prompt', context, options);
   });
 
-  it('should handle undefined maxTurns and userProvider', async () => {
+  it('should handle undefined maxTurns', async () => {
     const mockCallApi = jest.fn().mockResolvedValue({ output: 'test response' });
     jest.mocked(SimulatedUser).mockImplementation(function (this: any) {
       this.id = () => 'test-id';
@@ -94,11 +92,10 @@ describe('RedteamSimulatedUserProvider', () => {
     await provider.callApi('test');
 
     expect(SimulatedUser).toHaveBeenCalledWith({
-      id: provider.id(),
+      id: `promptfoo:redteam:${REDTEAM_SIMULATED_USER_STRATEGY_ID}`,
       config: {
         instructions: '{{test_var}}',
         maxTurns: undefined,
-        userProvider: undefined,
       },
     });
   });
