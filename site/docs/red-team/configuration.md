@@ -504,7 +504,7 @@ strategies:
 
 ### Purpose
 
-The `purpose` field provides context to guide the generation of adversarial inputs. It is derived automatically, or you can set it.
+The `purpose` field provides context to guide the generation of adversarial inputs.
 
 The purpose should be descriptive, as it will be used as the basis for generated adversarial tests and grading. For example:
 

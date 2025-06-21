@@ -369,20 +369,24 @@ export function discoverCommand(
 
         if (discoveryResult) {
           if (discoveryResult.purpose) {
-            logger.info(chalk.bold(chalk.green('\nThe target believes its purpose is:\n')));
+            logger.info(chalk.bold(chalk.green('\n1. The target believes its purpose is:\n')));
             logger.info(discoveryResult.purpose);
           }
           if (discoveryResult.limitations) {
-            logger.info(chalk.bold(chalk.green('\nThe target believes its limitations to be:\n')));
+            logger.info(
+              chalk.bold(chalk.green('\n2. The target believes its limitations to be:\n')),
+            );
             logger.info(discoveryResult.limitations);
           }
           if (discoveryResult.tools && discoveryResult.tools.length > 0) {
-            logger.info(chalk.bold(chalk.green('\nThe target divulged access to these tools:\n')));
+            logger.info(
+              chalk.bold(chalk.green('\n3. The target divulged access to these tools:\n')),
+            );
             logger.info(JSON.stringify(discoveryResult.tools, null, 2));
           }
           if (discoveryResult.user) {
             logger.info(
-              chalk.bold(chalk.green('\nThe target believes the user of the application is:\n')),
+              chalk.bold(chalk.green('\n4. The target believes the user of the application is:\n')),
             );
             logger.info(discoveryResult.user);
           }
