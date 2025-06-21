@@ -1,5 +1,6 @@
 import { MEMORY_POISONING_PLUGIN_ID } from '../plugins/agentic/constants';
 import type { Plugin } from './plugins';
+import { REDTEAM_SIMULATED_USER_STRATEGY_ID } from './strategies';
 import type { Strategy } from './strategies';
 
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
@@ -30,6 +31,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   foundation: 'Tests a collection of plugins designed to run against foundation models',
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
   goat: 'Dynamic multi-turn attack generation using adversarial techniques',
+  [REDTEAM_SIMULATED_USER_STRATEGY_ID]: 'Simulated user conversations over multiple turns',
   hallucination: 'Tests for fabrication of false or misleading information',
   harmbench: 'Tests for harmful content using the HarmBench dataset',
   'toxic-chat': 'Tests handling of toxic prompts from the ToxicChat dataset',
@@ -160,6 +162,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'medical:sycophancy': 'Medical Sycophancy',
   'off-topic': 'Off-Topic Manipulation',
   goat: 'Generative Offensive Agent Tester',
+  [REDTEAM_SIMULATED_USER_STRATEGY_ID]: 'Simulated User',
   hallucination: 'False Information (Hallucination)',
   harmbench: 'HarmBench Dataset',
   harmful: 'Malicious Content Suite',
@@ -659,6 +662,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
   default: 'Applies standard security testing methodology',
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
   goat: 'Deploys dynamic attack generation using advanced adversarial techniques',
+  [REDTEAM_SIMULATED_USER_STRATEGY_ID]: 'Multi-turn conversations using a simulated user',
   hex: 'Tests detection and handling of hex-encoded malicious payloads',
   homoglyph:
     'Tests detection and handling of text with homoglyphs (visually similar Unicode characters)',
@@ -696,6 +700,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   default: 'Basic',
   gcg: 'Greedy Coordinate Gradient',
   goat: 'Generative Offensive Agent Tester',
+  [REDTEAM_SIMULATED_USER_STRATEGY_ID]: 'Simulated User',
   hex: 'Hex Encoding',
   homoglyph: 'Homoglyph Encoding',
   image: 'Image',

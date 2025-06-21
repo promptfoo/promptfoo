@@ -87,6 +87,9 @@ strategies:
   - id: 'crescendo'
     config:
       stateful: true
+  - id: 'simulated-user'
+    config:
+      stateful: true
 ```
 
 ## Test Execution
