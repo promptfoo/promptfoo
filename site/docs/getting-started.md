@@ -354,7 +354,7 @@ You can also output a nice [spreadsheet](https://docs.google.com/spreadsheets/d/
 
 ### Model quality
 
-In [this next example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-responses), we evaluate the difference between GPT-4o and GPT-4o-mini outputs for a given prompt:
+In [this next example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-responses), we evaluate the difference between GPT-4.1 and GPT-4o-mini outputs for a given prompt:
 
 You can quickly set up this example by running:
 
@@ -384,7 +384,7 @@ prompts:
 # Set the LLMs we want to test
 providers:
   - openai:gpt-4o-mini
-  - openai:gpt-4o
+  - openai:gpt-4.1
 ```
 
 A simple `npx promptfoo@latest eval` will run the example. Also note that you can override parameters directly from the command line. For example, this command:
@@ -392,17 +392,17 @@ A simple `npx promptfoo@latest eval` will run the example. Also note that you ca
 <Tabs groupId="promptfoo-command">
   <TabItem value="npx" label="npx" default>
     <CodeBlock language="bash">
-      npx promptfoo@latest eval -p prompts.txt -r openai:gpt-4o-mini openai:gpt-4o -o output.html
+      npx promptfoo@latest eval -p prompts.txt -r openai:gpt-4o-mini openai:gpt-4.1 -o output.html
     </CodeBlock>
   </TabItem>
   <TabItem value="npm" label="npm">
     <CodeBlock language="bash">
-      promptfoo eval -p prompts.txt -r openai:gpt-4o-mini openai:gpt-4o -o output.html
+      promptfoo eval -p prompts.txt -r openai:gpt-4o-mini openai:gpt-4.1 -o output.html
     </CodeBlock>
   </TabItem>
   <TabItem value="brew" label="brew">
     <CodeBlock language="bash">
-      promptfoo eval -p prompts.txt -r openai:gpt-4o-mini openai:gpt-4o -o output.html
+      promptfoo eval -p prompts.txt -r openai:gpt-4o-mini openai:gpt-4.1 -o output.html
     </CodeBlock>
   </TabItem>
 </Tabs>

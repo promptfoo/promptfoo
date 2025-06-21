@@ -49,7 +49,7 @@ Example using Codex models for code generation tasks.
 
 ### Model Comparison (`promptfooconfig.comparison.yaml`)
 
-Example comparing GPT-4o and GPT-4o-mini performance on riddles and puzzles. This configuration demonstrates:
+Example comparing GPT-4.1 and GPT-4o-mini performance on riddles and puzzles. This configuration demonstrates:
 
 - Side-by-side model comparisons
 - Cost and latency assertions
