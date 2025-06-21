@@ -241,10 +241,25 @@ export function createApp() {
 
   app.use(express.static(staticDir));
 
-  // Handle client routing, return all requests to the app
-  app.get('/*splat', (req: Request, res: Response): void => {
-    res.sendFile(path.join(staticDir, 'index.html'));
+  // Handle client routing - serve index.html for all non-API routes (SPA routing)
+  app.use((req: Request, res: Response): void => {
+    // Skip API routes - they should have been handled above
+    if (req.path.startsWith('/api/')) {
+      logger.debug(`API endpoint not found: ${req.method} ${req.path}`);
+      res.status(404).json({ error: 'API endpoint not found' });
+      return;
+    }
+
+    // Serve index.html for all other routes (client-side routing)
+    logger.debug(`Serving SPA for client route: ${req.path}`);
+    res.sendFile(path.join(staticDir, 'index.html'), (err) => {
+      if (err) {
+        logger.error(`Failed to serve index.html for ${req.path}: ${err.message}`);
+        res.status(500).json({ error: 'Failed to load application' });
+      }
+    });
   });
+
   return app;
 }
 
