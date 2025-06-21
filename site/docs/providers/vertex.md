@@ -195,7 +195,7 @@ Configure model behavior using the following options:
 ```yaml
 providers:
   # For Gemini models
-  - id: vertex:gemini-2.0-pro
+  - id: vertex:gemini-2.5-flash
     config:
       generationConfig:
         temperature: 0
@@ -399,6 +399,8 @@ providers:
     config:
       tools: 'file://tools.json' # Supports variable substitution
 ```
+
+For practical examples of function calling with Vertex AI models, see the [google-vertex-tools example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-vertex-tools) which demonstrates both basic tool declarations and callback execution.
 
 ### System Instructions
 
