@@ -257,6 +257,8 @@ providers:
           mode: 'auto' # or 'none' to disable
 ```
 
+For practical examples of function calling with Google AI models, see the [google-vertex-tools example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-vertex-tools) which demonstrates both basic tool declarations and callback execution patterns that work with Google AI Studio models.
+
 ### Structured Output
 
 You can constrain the model to output structured JSON responses in two ways:

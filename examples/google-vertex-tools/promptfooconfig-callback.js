@@ -6,7 +6,7 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
   ],
   providers: [
     {
-      id: 'vertex:gemini-2.0-flash-001',
+      id: 'vertex:gemini-2.5-flash-002',
       config: {
         tools: [
           {
