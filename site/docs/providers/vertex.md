@@ -402,42 +402,20 @@ providers:
 
 ### System Instructions
 
-Configure system-level instructions for the model. System instructions can be provided in multiple ways:
-
-#### Direct text in config:
+Configure system-level instructions for the model:
 
 ```yaml
 providers:
   - id: vertex:gemini-2.5-pro
     config:
+      # Direct text
       systemInstruction: 'You are a helpful assistant'
+      
+      # Or load from file
+      systemInstruction: file://system-instruction.txt
 ```
 
-#### As structured content:
-
-```yaml
-providers:
-  - id: vertex:gemini-2.5-pro
-    config:
-      systemInstruction:
-        parts:
-          - text: 'You are a helpful assistant that {{role}}' # Supports Nunjucks templates
-```
-
-#### From an external file:
-
-```yaml
-providers:
-  - id: vertex:gemini-2.5-pro
-    config:
-      systemInstruction: file://path/to/system-instruction.txt
-```
-
-The file-based approach is particularly useful for:
-
-- Reusing system instructions across multiple configurations
-- Managing long or complex system prompts
-- Version controlling system instructions separately
+System instructions support Nunjucks templating and can be loaded from external files for better organization and reusability.
 
 ### Generation Configuration
 
