@@ -47,6 +47,17 @@ Example showing web search capabilities.
 
 Example using Codex models for code generation tasks.
 
+### Model Comparison (`promptfooconfig.comparison.yaml`)
+
+Example comparing GPT-4o and GPT-4o-mini performance on riddles and puzzles. This configuration demonstrates:
+
+- Side-by-side model comparisons
+- Cost and latency assertions
+- Multiple test cases with varied complexity
+- LLM-rubric grading for subjective evaluation
+
+Perfect for understanding the performance trade-offs between different OpenAI models.
+
 ### MCP (Model Context Protocol) (`promptfooconfig.mcp.yaml`)
 
 Example demonstrating OpenAI's MCP integration with remote MCP servers. This example uses the DeepWiki MCP server to query GitHub repositories.
@@ -68,6 +79,9 @@ npx promptfoo eval -c promptfooconfig.yaml
 
 # External response format example
 npx promptfoo eval -c promptfooconfig.external-format.yaml
+
+# Model comparison example
+npx promptfoo eval -c promptfooconfig.comparison.yaml
 
 # MCP example
 npx promptfoo eval -c promptfooconfig.mcp.yaml

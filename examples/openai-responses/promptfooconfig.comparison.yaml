@@ -6,7 +6,7 @@ prompts:
 
 providers:
   - openai:gpt-4o
-  - openai:gpt-4.1-mini
+  - openai:gpt-4o-mini
 
 defaultTest:
   assert:
