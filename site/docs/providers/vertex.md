@@ -400,6 +400,8 @@ providers:
       tools: 'file://tools.json' # Supports variable substitution
 ```
 
+For practical examples of function calling with Vertex AI models, see the [google-vertex-tools example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-vertex-tools) which demonstrates both basic tool declarations and callback execution.
+
 ### System Instructions
 
 Configure system-level instructions for the model:

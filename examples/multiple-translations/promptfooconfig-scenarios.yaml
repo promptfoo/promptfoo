@@ -1,13 +1,18 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Multiple translation scenarios with different evaluation criteria
+
+description: Scenario-based translation with expected values
 
 prompts:
   - file://prompts.txt
+
 providers:
   - openai:gpt-4.1-mini
-  - openai:gpt-4o
+  - openai:gpt-4.1
+  - anthropic:claude-sonnet-4-20250514
+
 scenarios:
-  - config:
+  - description: Translation accuracy with expected results
+    config:
       - vars:
           language: Spanish
           expectedHelloWorld: 'Hola mundo'
@@ -23,7 +28,6 @@ scenarios:
           expectedHelloWorld: 'Hallo Welt'
           expectedGoodMorning: 'Guten Morgen'
           expectedHowAreYou: 'Wie geht es dir?'
-
     tests:
       - description: Translated Hello World
         vars:
@@ -32,7 +36,6 @@ scenarios:
           - type: similar
             value: '{{expectedHelloWorld}}'
             threshold: 0.90
-
       - description: Translated Good Morning
         vars:
           input: 'Good morning'
@@ -40,7 +43,6 @@ scenarios:
           - type: similar
             value: '{{expectedGoodMorning}}'
             threshold: 0.90
-
       - description: Translated How are you?
         vars:
           input: 'How are you?'
