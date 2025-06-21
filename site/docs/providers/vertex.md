@@ -410,7 +410,7 @@ providers:
     config:
       # Direct text
       systemInstruction: 'You are a helpful assistant'
-      
+
       # Or load from file
       systemInstruction: file://system-instruction.txt
 ```
