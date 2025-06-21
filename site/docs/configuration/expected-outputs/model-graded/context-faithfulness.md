@@ -1,3 +1,7 @@
+---
+sidebar_label: Context Faithfulness
+---
+
 # Context Faithfulness
 
 The `context-faithfulness` assertion evaluates whether the LLM's output is faithful to the provided context, ensuring that the response doesn't include information or claims that aren't supported by the context. This is essential for RAG (Retrieval-Augmented Generation) applications to prevent hallucination.
@@ -55,7 +59,7 @@ Like other model-graded assertions, you can override the default grader:
 1. Using the CLI:
 
    ```sh
-   promptfoo eval --grader openai:gpt-4o-mini
+   promptfoo eval --grader openai:gpt-4.1-mini
    ```
 
 2. Using test options:
@@ -63,7 +67,7 @@ Like other model-graded assertions, you can override the default grader:
    ```yaml
    defaultTest:
      options:
-       provider: openai:gpt-4o-mini
+       provider: openai:gpt-4.1-mini
    ```
 
 3. Using assertion-level override:
@@ -71,7 +75,7 @@ Like other model-graded assertions, you can override the default grader:
    assert:
      - type: context-faithfulness
        threshold: 0.9
-       provider: openai:gpt-4o-mini
+       provider: openai:gpt-4.1-mini
    ```
 
 ### Customizing the Prompt

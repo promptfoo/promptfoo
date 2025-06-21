@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - Tell me a really funny joke about {{topic}}. The joke should contain the word {{topic}}
 

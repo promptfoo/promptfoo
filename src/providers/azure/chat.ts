@@ -14,7 +14,6 @@ import { calculateAzureCost } from './util';
 
 export class AzureChatCompletionProvider extends AzureGenericProvider {
   private mcpClient: MCPClient | null = null;
-  protected initializationPromise: Promise<void> | null = null;
 
   constructor(...args: ConstructorParameters<typeof AzureGenericProvider>) {
     super(...args);
@@ -161,10 +160,13 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           headers: {
             'Content-Type': 'application/json',
             ...this.authHeaders,
+            ...this.config.headers,
           },
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
+        'json',
+        context?.bustCache ?? context?.debug,
       );
 
       cached = isCached;

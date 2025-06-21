@@ -1,3 +1,7 @@
+---
+sidebar_label: OpenRouter
+---
+
 # OpenRouter
 
 [OpenRouter](https://openrouter.ai/) provides a unified interface for accessing various LLM APIs, including models from OpenAI, Meta, Perplexity, and others. It follows the OpenAI API format - see our [OpenAI provider documentation](/docs/providers/openai/) for base API details.
@@ -50,8 +54,8 @@ Latest releases:
 | [mistralai/mistral-nemo](https://openrouter.ai/mistralai/mistral-nemo)                                     | 131,072              |
 | [mistralai/ministral-8b](https://openrouter.ai/mistralai/ministral-8b)                                     | 131,072              |
 | [neversleep/llama-3-lumimaid-8b:extended](https://openrouter.ai/neversleep/llama-3-lumimaid-8b:extended)   | 24,576               |
-| [openai/gpt-4o-mini](https://openrouter.ai/openai/gpt-4o-mini)                                             | 128,000              |
-| [openai/gpt-4o-mini-2024-07-18](https://openrouter.ai/openai/gpt-4o-mini-2024-07-18)                       | 128,000              |
+| [openai/gpt-4.1-mini](https://openrouter.ai/openai/gpt-4.1-mini)                                           | 128,000              |
+| [openai/gpt-4.1-mini-2024-07-18](https://openrouter.ai/openai/gpt-4.1-mini-2024-07-18)                     | 128,000              |
 | [openhands/openhands-lm-32b-v0.1](https://openrouter.ai/openhands/openhands-lm-32b-v0.1)                   | 16,384               |
 | [openrouter/quasar-alpha](https://openrouter.ai/openrouter/quasar-alpha)                                   | 1,000,000            |
 | [eva-unit-01/eva-qwen-2.5-72b](https://openrouter.ai/eva-unit-01/eva-qwen-2.5-72b)                         | 16,384               |

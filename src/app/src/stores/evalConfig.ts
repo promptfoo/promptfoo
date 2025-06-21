@@ -1,7 +1,7 @@
 import type {
   EnvOverrides,
   EvaluateOptions,
-  EvaluateTestSuite,
+  EvaluateTestSuiteWithEvaluateOptions,
   ProviderOptions,
   TestCase,
   UnifiedConfig,
@@ -29,7 +29,7 @@ export interface State {
   setEvaluateOptions: (options: EvaluateOptions) => void;
   setScenarios: (scenarios: Scenario[]) => void;
   setStateFromConfig: (config: Partial<UnifiedConfig>) => void;
-  getTestSuite: () => EvaluateTestSuite;
+  getTestSuite: () => EvaluateTestSuiteWithEvaluateOptions;
   setExtensions: (extensions: string[]) => void;
 }
 
@@ -89,7 +89,17 @@ export const useStore = create<State>()(
         set(updates);
       },
       getTestSuite: () => {
-        const { description, env, extensions, prompts, providers, scenarios, testCases } = get();
+        const {
+          description,
+          env,
+          extensions,
+          prompts,
+          providers,
+          scenarios,
+          testCases,
+          evaluateOptions,
+          defaultTest,
+        } = get();
         return {
           description,
           env,
@@ -98,6 +108,8 @@ export const useStore = create<State>()(
           providers,
           scenarios,
           tests: testCases,
+          evaluateOptions,
+          defaultTest,
         };
       },
     }),

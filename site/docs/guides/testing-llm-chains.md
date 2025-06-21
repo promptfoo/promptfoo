@@ -59,9 +59,9 @@ python langchain_example.py "What is 2+2?"
 Now, let's configure promptfoo to run this LangChain script with a bunch of test cases:
 
 ```yaml
-prompts: prompt.txt
+prompts: file://prompt.txt
 providers:
-  - openai:chat:gpt-4o
+  - openai:chat:gpt-4.1
   - exec:python langchain_example.py
 tests:
   - vars:
@@ -99,7 +99,7 @@ A custom provider is a short Javascript file that defines a `callApi` function. 
 
 In the example below, we set up a custom provider that runs a Python script with a prompt as the argument. The output of the Python script is the final result of the chain.
 
-```js title=chainProvider.js
+```js title="chainProvider.js"
 const { spawn } = require('child_process');
 
 class ChainProvider {

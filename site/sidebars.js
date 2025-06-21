@@ -38,7 +38,11 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'configuration/guide' },
         { type: 'doc', id: 'configuration/reference' },
-        { type: 'doc', id: 'configuration/parameters' },
+        // Page still exists for backwards compatibility, but we don't put it in the sidebar
+        // { type: 'doc', id: 'configuration/parameters' },
+        { type: 'doc', id: 'configuration/prompts' },
+        { type: 'doc', id: 'configuration/test-cases' },
+        { type: 'doc', id: 'configuration/outputs' },
         { type: 'doc', id: 'configuration/chat' },
         { type: 'doc', id: 'configuration/datasets' },
         { type: 'doc', id: 'configuration/scenarios' },
@@ -120,6 +124,7 @@ const sidebars = {
         { type: 'doc', id: 'enterprise/red-teams' },
         { type: 'doc', id: 'enterprise/findings' },
         { type: 'doc', id: 'enterprise/webhooks' },
+        { type: 'doc', id: 'enterprise/audit-logging' },
         {
           type: 'link',
           label: 'API Reference',
@@ -148,6 +153,7 @@ const sidebars = {
     { type: 'doc', id: 'enterprise/red-teams' },
     { type: 'doc', id: 'enterprise/findings' },
     { type: 'doc', id: 'enterprise/webhooks' },
+    { type: 'doc', id: 'enterprise/audit-logging' },
     {
       type: 'link',
       label: 'API Reference',
@@ -224,6 +230,7 @@ const sidebars = {
             'red-team/plugins/cyberseceval',
             'red-team/plugins/donotanswer',
             'red-team/plugins/harmbench',
+            'red-team/plugins/aegis',
             'red-team/plugins/harmful',
             'red-team/plugins/pliny',
             'red-team/plugins/politics',
@@ -247,7 +254,7 @@ const sidebars = {
           type: 'category',
           label: 'Custom',
           collapsed: true,
-          items: ['red-team/plugins/custom', 'red-team/plugins/intent'],
+          items: ['red-team/plugins/policy', 'red-team/plugins/intent', 'red-team/plugins/custom'],
         },
       ],
     },
@@ -315,6 +322,10 @@ const sidebars = {
       label: 'Tools',
       collapsed: true,
       items: [
+        {
+          type: 'doc',
+          id: 'red-team/discovery',
+        },
         {
           type: 'doc',
           id: 'red-team/guardrails',

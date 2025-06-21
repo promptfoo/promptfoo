@@ -4,6 +4,7 @@ title: 'The Invisible Threat: How Zero-Width Unicode Characters Can Silently Bac
 description: 'Explore how invisible Unicode characters can be used to manipulate AI coding assistants and LLMs, potentially leading to security vulnerabilities in your code.'
 image: /img/blog/unicode-threats/unicode.png
 date: 2025-04-10
+authors: [asmi]
 ---
 
 import RevealButton from './unicode-threats/components/RevealButton';

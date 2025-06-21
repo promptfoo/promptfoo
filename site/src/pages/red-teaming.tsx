@@ -147,7 +147,7 @@ function DifferentiatorsSection() {
             <div className={styles.benefitContent}>
               <h3>Battle-tested with wide industry adoption</h3>
               <p>
-                Used by foundation model labs, Fortune 50 enterprises, and 80,000 open source users
+                Used by foundation model labs, Fortune 50 enterprises, and 100,000 open source users
                 - we're the closest thing to an industry standard tool for AI security testing.
               </p>
             </div>

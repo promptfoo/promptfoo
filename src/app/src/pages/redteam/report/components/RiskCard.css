@@ -99,3 +99,60 @@
 [data-theme='dark'] .risk-card-percentage-low {
   color: #e57373;
 }
+
+/* Print styles for compact layout */
+@media print {
+  .risk-card-container {
+    padding-top: 0.5rem !important;
+    padding-bottom: 0.5rem !important;
+  }
+
+  /* Reduce spacing in the grid container */
+  .risk-card-container .MuiGrid-container {
+    margin: 0 !important;
+  }
+
+  .risk-card-container .MuiGrid-item {
+    padding: 0.25rem !important;
+  }
+
+  /* Force side-by-side layout for risk cards */
+  .risk-card-container .MuiGrid-item:first-of-type {
+    flex: 0 0 50% !important;
+    max-width: 50% !important;
+  }
+
+  .risk-card-container .MuiGrid-item:last-of-type {
+    flex: 0 0 33.333% !important;
+    max-width: 33.333% !important;
+  }
+
+  /* Compact the title and subtitle */
+  .risk-card-title {
+    margin-bottom: 0.25rem !important;
+  }
+
+  .risk-card-container .MuiTypography-subtitle1 {
+    margin-bottom: 0.5rem !important;
+  }
+
+  /* Reduce spacing around the gauge and stats */
+  .risk-card-container .MuiBox-root {
+    margin-bottom: 0.25rem !important;
+  }
+
+  .risk-card-tests-passed {
+    margin-top: 0.25rem !important;
+  }
+
+  /* Compact the list */
+  .risk-card-container .MuiList-root {
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+  }
+
+  .risk-card-list-item {
+    padding: 2px 4px !important;
+    margin-bottom: 2px !important;
+  }
+}

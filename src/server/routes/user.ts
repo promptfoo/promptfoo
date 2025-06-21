@@ -3,7 +3,7 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
 import { getEnvBool } from '../../envars';
-import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
+import { checkEmailStatus, getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { ApiSchemas } from '../apiSchemas';
@@ -38,34 +38,42 @@ userRouter.post('/email', async (req: Request, res: Response): Promise<void> => 
         message: `Email updated`,
       }),
     );
-    await telemetry.record('webui_api', {
+    await telemetry.recordAndSend('webui_api', {
       event: 'email_set',
       email,
       selfHosted: getEnvBool('PROMPTFOO_SELF_HOSTED'),
+    });
+    await telemetry.saveConsent(email, {
+      source: 'webui_redteam',
     });
   } catch (error) {
     logger.error(`Error setting email: ${error}`);
     if (error instanceof z.ZodError) {
       res.status(400).json({ error: fromError(error).toString() });
     } else {
-      res.status(500).json({ error: 'Failed to set email' });
+      res.status(500).json({ error: String(error) });
     }
   }
 });
 
-userRouter.post('/consent', async (req: Request, res: Response) => {
-  const { email, metadata } = req.body;
-
-  if (!email) {
-    res.status(400).json({ error: 'Email is required' });
-    return;
-  }
-
+userRouter.get('/email/status', async (req: Request, res: Response): Promise<void> => {
   try {
-    await telemetry.saveConsent(email, metadata);
-    res.status(200).json({ success: true });
+    const result = await checkEmailStatus();
+
+    res.json(
+      ApiSchemas.User.EmailStatus.Response.parse({
+        hasEmail: result.hasEmail,
+        email: result.email,
+        status: result.status,
+        message: result.message,
+      }),
+    );
   } catch (error) {
-    logger.debug(`Failed to save consent: ${(error as Error).message}`);
-    res.status(500).json({ error: 'Failed to save consent' });
+    logger.error(`Error checking email status: ${error}`);
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: fromError(error).toString() });
+    } else {
+      res.status(500).json({ error: 'Failed to check email status' });
+    }
   }
 });

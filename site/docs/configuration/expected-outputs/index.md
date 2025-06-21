@@ -281,7 +281,7 @@ The `value` of an assertion can be loaded directly from a file using the `file:/
 
 If the file ends in `.js`, the Javascript is executed:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 - assert:
     - type: javascript
       value: file://path/to/assert.js
@@ -324,7 +324,7 @@ You can also use Javascript files in non-`javascript`-type asserts. For example,
 
 If the file ends in `.py`, the Python is executed:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 - assert:
     - type: python
       value: file://path/to/assert.py
@@ -352,7 +352,7 @@ print(json.dumps({
 
 ## Load assertions from CSV
 
-The [Tests file](/docs/configuration/parameters#tests-and-vars) is an optional format that lets you specify test cases outside of the main config file.
+The [Tests file](/docs/configuration/test-cases) is an optional format that lets you specify test cases outside of the main config file.
 
 To add an assertion to a test case in a vars file, use the special `__expected` column.
 
@@ -395,7 +395,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
   - localai:chat:vicuna
 tests:
   - vars:

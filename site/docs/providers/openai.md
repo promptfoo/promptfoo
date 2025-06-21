@@ -18,8 +18,8 @@ The OpenAI provider supports the following model formats:
 - `openai:responses:<model name>` - uses responses API models over HTTP connections
 - `openai:assistant:<assistant id>` - use an assistant
 - `openai:<model name>` - uses a specific model name (mapped automatically to chat or completion endpoint)
-- `openai:chat` - defaults to `gpt-4o-mini`
-- `openai:chat:ft:gpt-4o-mini:company-name:ID` - example of a fine-tuned chat completion model
+- `openai:chat` - defaults to `gpt-4.1-mini`
+- `openai:chat:ft:gpt-4.1-mini:company-name:ID` - example of a fine-tuned chat completion model
 - `openai:completion` - defaults to `text-davinci-003`
 - `openai:completion:<model name>` - uses any model name against the `/v1/completions` endpoint
 - `openai:embeddings:<model name>` - uses any model name against the `/v1/embeddings` endpoint
@@ -34,7 +34,7 @@ The OpenAI provider supports a handful of [configuration options](https://github
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:gpt-4o-mini
+  - id: openai:gpt-4.1-mini
     config:
       temperature: 0
       max_tokens: 1024
@@ -52,7 +52,7 @@ The `providers` list takes a `config` key that allows you to set parameters like
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:gpt-4o-mini
+  - id: openai:gpt-4.1-mini
     config:
       temperature: 0
       max_tokens: 128
@@ -73,19 +73,22 @@ Supported parameters include:
 | `functions`             | Allows you to define custom functions. Each function should be an object with a `name`, optional `description`, and `parameters`.                                                                                                                                                                 |
 | `functionToolCallbacks` | A map of function tool names to function callbacks. Each callback should accept a string and return a string or a `Promise<string>`.                                                                                                                                                              |
 | `headers`               | Additional headers to include in the request.                                                                                                                                                                                                                                                     |
-| `max_tokens`            | Controls the maximum length of the output in tokens. Not valid for reasoning models (o1, o3-mini).                                                                                                                                                                                                |
+| `max_tokens`            | Controls the maximum length of the output in tokens. Not valid for reasoning models (o1, o3, o3-pro, o3-mini, o4-mini).                                                                                                                                                                           |
+| `metadata`              | Key-value pairs for request tagging and organization.                                                                                                                                                                                                                                             |
 | `organization`          | Your OpenAI organization key.                                                                                                                                                                                                                                                                     |
 | `passthrough`           | A flexible object that allows passing arbitrary parameters directly to the OpenAI API request body. Useful for experimental, new, or provider-specific parameters not yet explicitly supported in promptfoo. This parameter is merged into the final API request and can override other settings. |
 | `presence_penalty`      | Applies a penalty to new tokens (tokens that haven't appeared in the input), making them less likely to appear in the output.                                                                                                                                                                     |
+| `reasoning`             | Enhanced reasoning configuration for o-series models. Object with `effort` ('low', 'medium', 'high') and optional `summary` ('auto', 'concise', 'detailed') fields.                                                                                                                               |
 | `response_format`       | Specifies the desired output format, including `json_object` and `json_schema`. Can also be specified in the prompt config. If specified in both, the prompt config takes precedence.                                                                                                             |
 | `seed`                  | Seed used for deterministic output.                                                                                                                                                                                                                                                               |
 | `stop`                  | Defines a list of tokens that signal the end of the output.                                                                                                                                                                                                                                       |
+| `store`                 | Whether to store the conversation for future retrieval (boolean).                                                                                                                                                                                                                                 |
 | `temperature`           | Controls the randomness of the AI's output. Higher values (close to 1) make the output more random, while lower values (close to 0) make it more deterministic.                                                                                                                                   |
 | `tool_choice`           | Controls whether the AI should use a tool. See [OpenAI Tools documentation](https://platform.openai.com/docs/api-reference/chat/create#chat-create-tools)                                                                                                                                         |
 | `tools`                 | Allows you to define custom tools. See [OpenAI Tools documentation](https://platform.openai.com/docs/api-reference/chat/create#chat-create-tools)                                                                                                                                                 |
 | `top_p`                 | Controls the nucleus sampling, a method that helps control the randomness of the AI's output.                                                                                                                                                                                                     |
-| `max_completion_tokens` | Maximum number of tokens to generate for reasoning models (o1, o3-mini).                                                                                                                                                                                                                          |
-| `reasoning_effort`      | Allows you to control how long the reasoning model thinks before answering, 'low', 'medium' or 'high'.                                                                                                                                                                                            |
+| `user`                  | A unique identifier representing your end-user, for tracking and abuse prevention.                                                                                                                                                                                                                |
+| `max_completion_tokens` | Maximum number of tokens to generate for reasoning models (o1, o3, o3-pro, o3-mini, o4-mini).                                                                                                                                                                                                     |
 
 Here are the type declarations of `config` parameters:
 
@@ -95,7 +98,10 @@ interface OpenAiConfig {
   temperature?: number;
   max_tokens?: number;
   max_completion_tokens?: number;
-  reasoning_effort?: 'low' | 'medium' | 'high';
+  reasoning?: {
+    effort?: 'low' | 'medium' | 'high' | null;
+    summary?: 'auto' | 'concise' | 'detailed' | null;
+  };
   top_p?: number;
   frequency_penalty?: number;
   presence_penalty?: number;
@@ -107,6 +113,9 @@ interface OpenAiConfig {
   response_format?: { type: 'json_object' | 'json_schema'; json_schema?: object };
   stop?: string[];
   seed?: number;
+  user?: string;
+  metadata?: Record<string, string>;
+  store?: boolean;
   passthrough?: object;
 
   // Function tool callbacks
@@ -166,9 +175,9 @@ providers:
   - id: openai:chat:gpt-4.1-nano-2025-04-14 # Nano
 ```
 
-### Reasoning Models (o1, o3-mini)
+### Reasoning Models (o1, o3, o3-pro, o3-mini, o4-mini)
 
-Reasoning models, like `o1` and `o3-mini`, are new large language models trained with reinforcement learning to perform complex reasoning. These models excel in complex problem solving, coding, scientific reasoning, and multi-step planning for agentic workflows.
+Reasoning models, like `o1`, `o3`, `o3-pro`, `o3-mini`, and `o4-mini`, are large language models trained with reinforcement learning to perform complex reasoning. These models excel in complex problem-solving, coding, scientific reasoning, and multi-step planning for agentic workflows.
 
 When using reasoning models, there are important differences in how tokens are handled:
 
@@ -176,14 +185,15 @@ When using reasoning models, there are important differences in how tokens are h
 providers:
   - id: openai:o1
     config:
-      reasoning_effort: 'medium' # Can be "low", "medium", or "high"
+      reasoning:
+        effort: 'medium' # Can be "low", "medium", or "high"
       max_completion_tokens: 25000 # Can also be set via OPENAI_MAX_COMPLETION_TOKENS env var
 ```
 
 Unlike standard models that use `max_tokens`, reasoning models use:
 
 - `max_completion_tokens` to control the total tokens generated (both reasoning and visible output)
-- `reasoning_effort` to control how thoroughly the model thinks before responding (low, medium, high)
+- `reasoning` to control how thoroughly the model thinks before responding (with `effort`: low, medium, high)
 
 #### How Reasoning Models Work
 
@@ -193,7 +203,7 @@ Reasoning models "think before they answer," generating internal reasoning token
 - Count towards token usage and billing
 - Occupy space in the context window
 
-Both `o1` and `o3-mini` models have a 128,000 token context window. OpenAI recommends reserving at least 25,000 tokens for reasoning and outputs when starting with these models.
+Both `o1` and `o3-mini` models have a 128,000 token context window, while `o3-pro` and `o4-mini` have a 200,000 token context window. OpenAI recommends reserving at least 25,000 tokens for reasoning and outputs when starting with these models.
 
 ### GPT-4.5 Models (Preview)
 
@@ -225,7 +235,7 @@ prompts:
   - file://prompt.json
 
 providers:
-  - openai:gpt-4o
+  - openai:gpt-4.1
 
 tests:
   - vars:
@@ -304,7 +314,7 @@ Tools can be defined inline or loaded from an external file:
 prompts:
   - file://prompt.txt
 providers:
-  - id: openai:chat:gpt-4o-mini
+  - id: openai:chat:gpt-4.1-mini
     // highlight-start
     config:
       # Load tools from external file
@@ -426,7 +436,7 @@ Use the `functions` config to define custom functions. Each function should be a
 prompts:
   - file://prompt.txt
 providers:
-  - id: openai:chat:gpt-4o-mini
+  - id: openai:chat:gpt-4.1-mini
     // highlight-start
     config:
       functions:
@@ -508,7 +518,7 @@ providers:
 Here's an example of how your `provider_with_function.yaml` might look:
 
 ```yaml title="provider_with_function.yaml"
-id: openai:chat:gpt-4o-mini
+id: openai:chat:gpt-4.1-mini
 config:
   functions:
     - name: get_current_weather
@@ -551,7 +561,7 @@ prompts:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:chat:gpt-4o-mini
+  - id: openai:chat:gpt-4.1-mini
     config:
       response_format:
         type: json_schema
@@ -560,35 +570,66 @@ providers:
 
 #### External file references
 
-To make it easier to manage large JSON schemas, external file references are supported:
+To make it easier to manage large JSON schemas, external file references are supported for `response_format` in both Chat and Responses APIs. This is particularly useful for:
+
+- Reusing complex JSON schemas across multiple configurations
+- Managing large schemas in separate files for better organization
+- Version controlling schemas independently from configuration files
 
 ```yaml
 config:
   response_format: file://./path/to/response_format.json
 ```
 
-For a complete example, see the [OpenAI Structured Output example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-structured-output) or initialize it with:
+The external file should contain the complete `response_format` configuration object:
+
+```json title="response_format.json"
+{
+  "type": "json_schema",
+  "name": "event_extraction",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "event_name": { "type": "string" },
+      "date": { "type": "string" },
+      "location": { "type": "string" }
+    },
+    "required": ["event_name", "date", "location"],
+    "additionalProperties": false
+  }
+}
+```
+
+For a complete example with the Chat API, see the [OpenAI Structured Output example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-structured-output) or initialize it with:
 
 ```bash
 npx promptfoo@latest init --example openai-structured-output
+```
+
+For an example with the Responses API, see the [OpenAI Responses API example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-responses) and run:
+
+```bash
+npx promptfoo@latest init --example openai-responses
+cd openai-responses
+npx promptfoo@latest eval -c promptfooconfig.external-format.yaml
 ```
 
 ## Supported environment variables
 
 These OpenAI-related environment variables are supported:
 
-| Variable                       | Description                                                                                                      |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
-| `OPENAI_TEMPERATURE`           | Temperature model parameter, defaults to 0. Not supported by o1-models.                                          |
-| `OPENAI_MAX_TOKENS`            | Max_tokens model parameter, defaults to 1024. Not supported by o1-models.                                        |
-| `OPENAI_MAX_COMPLETION_TOKENS` | Max_completion_tokens model parameter, defaults to 1024. Used by reasoning models.                               |
-| `OPENAI_REASONING_EFFORT`      | Reasoning_effort parameter for reasoning models, defaults to "medium". Options are "low", "medium", or "high".   |
-| `OPENAI_API_HOST`              | The hostname to use (useful if you're using an API proxy). Takes priority over `OPENAI_BASE_URL`.                |
-| `OPENAI_BASE_URL`              | The base URL (protocol + hostname + port) to use, this is a more general option than `OPENAI_API_HOST`.          |
-| `OPENAI_API_KEY`               | OpenAI API key.                                                                                                  |
-| `OPENAI_ORGANIZATION`          | The OpenAI organization key to use.                                                                              |
-| `PROMPTFOO_DELAY_MS`           | Number of milliseconds to delay between API calls. Useful if you are hitting OpenAI rate limits (defaults to 0). |
-| `PROMPTFOO_REQUEST_BACKOFF_MS` | Base number of milliseconds to backoff and retry if a request fails (defaults to 5000).                          |
+| Variable                       | Description                                                                                                                                                 |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OPENAI_TEMPERATURE`           | Temperature model parameter, defaults to 0. Not supported by reasoning models.                                                                              |
+| `OPENAI_MAX_TOKENS`            | Max_tokens model parameter, defaults to 1024. Not supported by reasoning models.                                                                            |
+| `OPENAI_MAX_COMPLETION_TOKENS` | Max_completion_tokens model parameter, defaults to 1024. Used by reasoning models.                                                                          |
+| `OPENAI_REASONING_EFFORT`      | Reasoning effort parameter for reasoning models, defaults to "medium". Options are "low", "medium", or "high". Maps to `reasoning.effort` config parameter. |
+| `OPENAI_API_HOST`              | The hostname to use (useful if you're using an API proxy). Takes priority over `OPENAI_BASE_URL`.                                                           |
+| `OPENAI_BASE_URL`              | The base URL (protocol + hostname + port) to use, this is a more general option than `OPENAI_API_HOST`.                                                     |
+| `OPENAI_API_KEY`               | OpenAI API key.                                                                                                                                             |
+| `OPENAI_ORGANIZATION`          | The OpenAI organization key to use.                                                                                                                         |
+| `PROMPTFOO_DELAY_MS`           | Number of milliseconds to delay between API calls. Useful if you are hitting OpenAI rate limits (defaults to 0).                                            |
+| `PROMPTFOO_REQUEST_BACKOFF_MS` | Base number of milliseconds to backoff and retry if a request fails (defaults to 5000).                                                                     |
 
 ## Evaluating assistants
 
@@ -632,7 +673,7 @@ providers:
   // highlight-start
   - id: openai:assistant:asst_fEhNN3MClMamLfKLkIaoIpgZ
     config:
-      model: gpt-4o
+      model: gpt-4.1
       instructions: "You always speak like a pirate"
       temperature: 0.2
       toolChoice:
@@ -668,7 +709,7 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
       id: 'openai:assistant:asst_fEhNN3MClMamLfKLkIaoIpgZ',
       config:
         /** @type {InstanceType<import('promptfoo')["providers"]["OpenAiAssistantProvider"]>["config"]} */ ({
-          model: 'gpt-4o',
+          model: 'gpt-4.1',
           instructions: 'You can add two numbers together using the `addNumbers` tool',
           tools: [
             {
@@ -784,7 +825,7 @@ The Realtime API allows for real-time communication with GPT-4o class models usi
 ### Supported Realtime Models
 
 - `gpt-4o-realtime-preview-2024-12-17`
-- `gpt-4o-mini-realtime-preview-2024-12-17`
+- `gpt-4.1-mini-realtime-preview-2024-12-17`
 
 ### Using Realtime API
 
@@ -884,19 +925,21 @@ The Realtime API supports multi-turn conversations with persistent context. For 
 
 ## Responses API
 
-OpenAI's Responses API is the most advanced interface for generating model responses, supporting text and image inputs, function calling, and conversation state. It provides access to OpenAI's full suite of features including reasoning models like o1 and o3 series.
+OpenAI's Responses API is the most advanced interface for generating model responses, supporting text and image inputs, function calling, and conversation state. It provides access to OpenAI's full suite of features including reasoning models like o1, o3, and o4 series.
 
 ### Supported Responses Models
 
 The Responses API supports a wide range of models, including:
 
-- `gpt-4o` - OpenAI's most capable vision model
+- `gpt-4.1` - OpenAI's most capable vision model
 - `o1` - Powerful reasoning model
 - `o1-mini` - Smaller, more affordable reasoning model
 - `o1-pro` - Enhanced reasoning model with more compute
+- `o3-pro` - Highest-tier reasoning model
 - `o3` - OpenAI's most powerful reasoning model
 - `o3-mini` - Smaller, more affordable reasoning model
 - `o4-mini` - Latest fast, cost-effective reasoning model
+- `codex-mini-latest` - Fast reasoning model optimized for the Codex CLI
 
 ### Using the Responses API
 
@@ -904,7 +947,7 @@ To use the OpenAI Responses API, use the provider format `openai:responses:<mode
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:responses:gpt-4o
+  - id: openai:responses:gpt-4.1
     config:
       temperature: 0.7
       max_output_tokens: 500
@@ -926,15 +969,138 @@ The Responses API configuration supports these parameters in addition to standar
 | `truncation`           | Strategy to handle context window overflow        | 'disabled' | 'auto', 'disabled'                  |
 | `reasoning`            | Configuration for reasoning models                | None       | Object with `effort` field          |
 
+### MCP (Model Context Protocol) Support
+
+The Responses API supports OpenAI's MCP integration, allowing models to use remote MCP servers to perform tasks. MCP tools enable access to external services and APIs through a standardized protocol.
+
+#### Basic MCP Configuration
+
+To use MCP tools with the Responses API, add them to the `tools` array:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:gpt-4.1-2025-04-14
+    config:
+      tools:
+        - type: mcp
+          server_label: deepwiki
+          server_url: https://mcp.deepwiki.com/mcp
+          require_approval: never
+```
+
+#### MCP Tool Configuration Options
+
+| Parameter          | Description                             | Required | Options                                  |
+| ------------------ | --------------------------------------- | -------- | ---------------------------------------- |
+| `type`             | Tool type (must be 'mcp')               | Yes      | 'mcp'                                    |
+| `server_label`     | Label to identify the MCP server        | Yes      | Any string                               |
+| `server_url`       | URL of the remote MCP server            | Yes      | Valid URL                                |
+| `require_approval` | Approval settings for tool calls        | No       | 'never' or object with approval settings |
+| `allowed_tools`    | Specific tools to allow from the server | No       | Array of tool names                      |
+| `headers`          | Custom headers for authentication       | No       | Object with header key-value pairs       |
+
+#### Authentication with MCP Servers
+
+Most MCP servers require authentication. Use the `headers` parameter to provide API keys or tokens:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:gpt-4.1-2025-04-14
+    config:
+      tools:
+        - type: mcp
+          server_label: stripe
+          server_url: https://mcp.stripe.com
+          headers:
+            Authorization: 'Bearer sk-test_...'
+          require_approval: never
+```
+
+#### Filtering MCP Tools
+
+To limit which tools are available from an MCP server, use the `allowed_tools` parameter:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:gpt-4.1-2025-04-14
+    config:
+      tools:
+        - type: mcp
+          server_label: deepwiki
+          server_url: https://mcp.deepwiki.com/mcp
+          allowed_tools: ['ask_question']
+          require_approval: never
+```
+
+#### Approval Settings
+
+By default, OpenAI requires approval before sharing data with MCP servers. You can configure approval settings:
+
+```yaml title="promptfooconfig.yaml"
+# Never require approval for all tools
+providers:
+  - id: openai:responses:gpt-4.1-2025-04-14
+    config:
+      tools:
+        - type: mcp
+          server_label: deepwiki
+          server_url: https://mcp.deepwiki.com/mcp
+          require_approval: never
+
+# Never require approval for specific tools only
+providers:
+  - id: openai:responses:gpt-4.1-2025-04-14
+    config:
+      tools:
+        - type: mcp
+          server_label: deepwiki
+          server_url: https://mcp.deepwiki.com/mcp
+          require_approval:
+            never:
+              tool_names: ["ask_question", "read_wiki_structure"]
+```
+
+#### Complete MCP Example
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+prompts:
+  - 'What are the transport protocols supported in the MCP specification for {{repo}}?'
+
+providers:
+  - id: openai:responses:gpt-4.1-2025-04-14
+    config:
+      tools:
+        - type: mcp
+          server_label: deepwiki
+          server_url: https://mcp.deepwiki.com/mcp
+          require_approval: never
+          allowed_tools: ['ask_question']
+
+tests:
+  - vars:
+      repo: modelcontextprotocol/modelcontextprotocol
+    assert:
+      - type: contains
+        value: 'transport protocols'
+```
+
+For a complete working example, see the [OpenAI MCP example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-mcp) or initialize it with:
+
+```bash
+npx promptfoo@latest init --example openai-mcp
+```
+
 ### Reasoning Models
 
-When using reasoning models like `o1`, `o1-pro`, `o3`, `o3-mini`, or `o4-mini`, you can control the reasoning effort:
+When using reasoning models like `o1`, `o1-pro`, `o3`, `o3-pro`, `o3-mini`, or `o4-mini`, you can control the reasoning effort:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
   - id: openai:responses:o3
     config:
-      reasoning_effort: 'medium' # Can be "low", "medium", or "high"
+      reasoning:
+        effort: 'medium' # Can be "low", "medium", or "high"
       max_output_tokens: 1000
 ```
 
@@ -964,12 +1130,14 @@ Example configuration:
 providers:
   - id: openai:responses:o3
     config:
-      reasoning_effort: 'high'
+      reasoning:
+        effort: 'high'
       max_output_tokens: 2000
 
   - id: openai:responses:o4-mini
     config:
-      reasoning_effort: 'medium'
+      reasoning:
+        effort: 'medium'
       max_output_tokens: 1000
 ```
 
@@ -1004,7 +1172,7 @@ The Responses API supports tool and function calling, similar to the Chat API:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:responses:gpt-4o
+  - id: openai:responses:gpt-4.1
     config:
       tools:
         - type: function
@@ -1044,3 +1212,18 @@ There are a few things you can do if you encounter OpenAI rate limits (most comm
 ### OpenAI flakiness
 
 To retry HTTP requests that are Internal Server errors, set the `PROMPTFOO_RETRY_5XX` environment variable to `1`.
+
+## Agents SDK Integration
+
+Promptfoo supports evaluation of OpenAI's Agents SDK, which enables building multi-agent systems with specialized agents, handoffs, and persistent context. You can integrate the Agents SDK as a [Python provider](./python.md).
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - file://agent_provider.py:call_api
+```
+
+For a complete working example of an airline customer service system with multiple agents, see the [OpenAI Agents SDK example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-agents) or initialize it with:
+
+```bash
+npx promptfoo@latest init --example openai-agents
+```

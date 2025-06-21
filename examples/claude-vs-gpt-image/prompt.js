@@ -76,7 +76,7 @@ async function formatImagePrompt(context) {
     ];
   }
   // We can use the label if provided in the config.
-  if (context.provider.label === 'custom label for gpt-4o') {
+  if (context.provider.label === 'custom label for gpt-4.1') {
     return [
       {
         role: 'system',

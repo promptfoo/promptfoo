@@ -1,3 +1,7 @@
+---
+sidebar_label: Context Relevance
+---
+
 # Context Relevance
 
 The `context-relevance` assertion evaluates whether the retrieved context is relevant to the original query. This is crucial for RAG (Retrieval-Augmented Generation) applications to ensure that the retrieved information is actually useful for answering the question.
@@ -58,7 +62,7 @@ Like other model-graded assertions, you can override the default grader:
 1. Using the CLI:
 
    ```sh
-   promptfoo eval --grader openai:gpt-4o-mini
+   promptfoo eval --grader openai:gpt-4.1-mini
    ```
 
 2. Using test options:
@@ -66,7 +70,7 @@ Like other model-graded assertions, you can override the default grader:
    ```yaml
    defaultTest:
      options:
-       provider: openai:gpt-4o-mini
+       provider: openai:gpt-4.1-mini
    ```
 
 3. Using assertion-level override:
@@ -74,7 +78,7 @@ Like other model-graded assertions, you can override the default grader:
    assert:
      - type: context-relevance
        threshold: 0.8
-       provider: openai:gpt-4o-mini
+       provider: openai:gpt-4.1-mini
    ```
 
 ### Customizing the Prompt

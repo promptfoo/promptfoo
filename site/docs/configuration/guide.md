@@ -11,14 +11,14 @@ Assertions are _optional_. Many people get value out of reviewing outputs manual
 
 ## Example
 
-Let's imagine we're building an app that does language translation. This config runs each prompt through GPT-3.5 and Gemini, substituting `language` and `input` variables:
+Let's imagine we're building an app that does language translation. This config runs each prompt through GPT-4.1 and Gemini, substituting `language` and `input` variables:
 
 ```yaml
 prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
   - vertex:gemini-2.0-flash-exp
 tests:
   - vars:
@@ -46,7 +46,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
   - vertex:gemini-2.0-flash-exp
 tests:
   - vars:
@@ -70,7 +70,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
   - vertex:gemini-2.0-flash-exp
 tests:
   - vars:
@@ -110,7 +110,7 @@ providers:
 Where the provider file looks like this:
 
 ```yaml
-id: openai:gpt-4o-mini
+id: openai:gpt-4.1-mini
 label: Foo bar
 config:
   temperature: 0.9
@@ -122,7 +122,7 @@ The `tests` config property takes a list of paths to files or directories. For e
 
 ```yaml
 prompts: file://prompts.txt
-providers: openai:gpt-4o-mini
+providers: openai:gpt-4.1-mini
 
 # Load & runs all test cases matching these filepaths
 tests:
@@ -154,7 +154,7 @@ tests:
 ```
 
 :::tip
-Test files can be defined in YAML/JSON, JSONL, [CSV](/docs/configuration/parameters/#import-from-csv), and TypeScript/JavaScript. We also support [Google Sheets](/docs/integrations/google-sheets) CSV datasets.
+Test files can be defined in YAML/JSON, JSONL, [CSV](/docs/configuration/test-cases#csv-format), and TypeScript/JavaScript. We also support [Google Sheets](/docs/integrations/google-sheets) CSV datasets.
 :::
 
 ## Import vars from separate files
@@ -270,7 +270,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
   - vertex:gemini-2.0-flash-exp
 // highlight-start
 defaultTest:
@@ -300,7 +300,7 @@ You can also use `defaultTest` to override the model used for each test. This ca
 ```yaml
 defaultTest:
   options:
-    provider: openai:gpt-4o-mini-0613
+    provider: openai:gpt-4.1-mini-0613
 ```
 
 ### Default variables
@@ -332,7 +332,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
   - vertex:gemini-2.0-flash-exp
 tests:
   - vars:
@@ -371,7 +371,7 @@ For example:
 ```yaml
 prompts: file://prompts.txt
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
   - openai:gpt-4
 tests:
   - vars:
@@ -813,14 +813,14 @@ promptfoo eval -c config1.yaml -c config2.yaml -c config3.yaml
 
 ## Loading tests from CSV
 
-YAML is nice, but some organizations maintain their LLM tests in spreadsheets for ease of collaboration. promptfoo supports a special [CSV file format](/docs/configuration/parameters#tests-and-vars).
+YAML is nice, but some organizations maintain their LLM tests in spreadsheets for ease of collaboration. promptfoo supports a special [CSV file format](/docs/configuration/test-cases#csv-format).
 
 ```yaml
 prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
   - vertex:gemini-2.0-flash-exp
 // highlight-next-line
 tests: file://tests.csv
@@ -833,7 +833,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
   - vertex:gemini-2.0-flash-exp
 // highlight-next-line
 tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing

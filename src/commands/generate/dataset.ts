@@ -53,6 +53,7 @@ export async function doGenerateDataset(options: DatasetGenerateOptions): Promis
     numPrompts: testSuite.prompts.length,
     numTestsExisting: (testSuite.tests || []).length,
   });
+  await telemetry.send();
 
   const results = await synthesizeFromTestSuite(testSuite, {
     instructions: options.instructions,
@@ -84,7 +85,15 @@ export async function doGenerateDataset(options: DatasetGenerateOptions): Promis
   printBorder();
   if (options.write && configPath) {
     const existingConfig = yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>;
-    existingConfig.tests = [...(existingConfig.tests || []), ...configAddition.tests];
+    // Handle the union type for tests (string | TestGeneratorConfig | Array<...>)
+    const existingTests = existingConfig.tests;
+    let testsArray: any[] = [];
+    if (Array.isArray(existingTests)) {
+      testsArray = existingTests;
+    } else if (existingTests) {
+      testsArray = [existingTests];
+    }
+    existingConfig.tests = [...testsArray, ...configAddition.tests];
     fs.writeFileSync(configPath, yaml.dump(existingConfig));
     logger.info(`Wrote ${results.length} new test cases to ${configPath}`);
     const runCommand = isRunningUnderNpx() ? 'npx promptfoo eval' : 'promptfoo eval';
@@ -105,6 +114,7 @@ export async function doGenerateDataset(options: DatasetGenerateOptions): Promis
     numTestsGenerated: results.length,
     provider: options.provider || 'default',
   });
+  await telemetry.send();
 }
 
 export function generateDatasetCommand(

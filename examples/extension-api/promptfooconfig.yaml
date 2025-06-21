@@ -5,7 +5,7 @@ prompts:
   - 'Rephrase this in {{language}}: {{body}}'
 
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
 
 extensions:
   - file://hooks.py:extension_hook

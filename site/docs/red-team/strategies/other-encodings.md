@@ -1,12 +1,58 @@
 ---
 sidebar_position: 102
 title: Other Encodings - Alternative Text Transformation Strategies
-description: Learn how to test LLM resilience using Morse code and Pig Latin text transformations to bypass content filters and evaluate model security.
+description: Learn how to test LLM resilience using camelCase, Morse code, Pig Latin, and emoji-based text transformations to bypass content filters and evaluate model security.
 ---
 
 # Other Encodings
 
-The other encodings strategies provide additional text transformation methods to test model resilience against evasion techniques that use alternative text representations.
+The other-encodings strategy collection provides multiple text transformation methods to test model resilience against evasion techniques that use alternative text representations. This collection automatically includes camelCase, Morse code, Pig Latin, and emoji-based encodings.
+
+## Strategy Collection
+
+You can use the `other-encodings` collection in your configuration to automatically include all encoding strategies in this collection:
+
+```yaml title="promptfooconfig.yaml"
+strategies:
+  - other-encodings # Includes camelCase, Morse code, Pig Latin, and emoji encoding
+```
+
+This is equivalent to specifying each strategy individually:
+
+```yaml title="promptfooconfig.yaml"
+strategies:
+  - camelcase
+  - morse
+  - piglatin
+```
+
+## camelCase
+
+The camelCase strategy converts text to camelCase by removing spaces and capitalizing the first letter of each subsequent word.
+
+### How It Works
+
+The transformation follows these rules:
+
+- The first word starts with a lowercase letter
+- Each subsequent word has its first letter capitalized
+- Spaces between words are removed
+- Punctuation and numbers remain unchanged
+
+For example, "Hello World" becomes:
+
+```
+helloWorld
+```
+
+### Configuration
+
+Add the camelCase strategy individually to your red team configuration:
+
+```yaml title="promptfooconfig.yaml"
+strategies:
+  - camelcase # Apply camelCase transformation
+```
 
 ## Morse Code
 
@@ -28,7 +74,7 @@ For example, "Hello World" becomes:
 
 ### Configuration
 
-Add the Morse code strategy to your red team configuration:
+Add the Morse code strategy individually to your red team configuration:
 
 ```yaml title="promptfooconfig.yaml"
 strategies:
@@ -55,16 +101,35 @@ elloHay orldWay
 
 ### Configuration
 
-Add the Pig Latin strategy to your red team configuration:
+Add the Pig Latin strategy individually to your red team configuration:
 
 ```yaml title="promptfooconfig.yaml"
 strategies:
   - piglatin # Apply Pig Latin transformation
 ```
 
+## Emoji Encoding
+
+The Emoji encoding strategy hides a UTF-8 payload inside invisible Unicode variation selectors appended to an emoji. This allows short strings to contain arbitrary data while remaining mostly unreadable.
+
+### How It Works
+
+- Each byte of the UTF-8 text is mapped to one of 256 variation selectors.
+- The selector sequence is appended to a base emoji (😊 by default).
+- Decoding reverses the mapping to recover the original text.
+
+### Configuration
+
+Add the emoji strategy individually to your red team configuration:
+
+```yaml title="promptfooconfig.yaml"
+strategies:
+  - emoji # Hide text inside an emoji
+```
+
 ## Example
 
-Here's a complete example that applies these encoding transformations to test cases:
+Here's a complete example that applies the encoding collection to test cases:
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -80,8 +145,7 @@ redteam:
     - owasp:llm
   strategies:
     - basic # Include original prompts
-    - morse # Apply Morse code transformation
-    - piglatin # Apply Pig Latin transformation
+    - other-encodings # Includes camelCase, Morse code, Pig Latin, and emoji encoding
 ```
 
 ## Technical Details

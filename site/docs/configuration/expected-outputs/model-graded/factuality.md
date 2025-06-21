@@ -1,3 +1,7 @@
+---
+sidebar_label: Factuality
+---
+
 # Factuality
 
 The `factuality` assertion evaluates the factual consistency between an LLM output and a reference answer. It uses a structured prompt based on [OpenAI's evals](https://github.com/openai/evals/blob/main/evals/registry/modelgraded/fact.yaml) to determine if the output is factually consistent with the reference.
@@ -33,7 +37,7 @@ Here's a complete example showing how to use factuality checks:
 prompts:
   - 'What is the capital of {{state}}?'
 providers:
-  - openai:gpt-4o
+  - openai:gpt-4.1
   - anthropic:claude-3-7-sonnet-20250219
 tests:
   - vars:
@@ -70,7 +74,7 @@ Like other model-graded assertions, you can override the default grader:
 1. Using the CLI:
 
    ```sh
-   promptfoo eval --grader openai:gpt-4o-mini
+   promptfoo eval --grader openai:gpt-4.1-mini
    ```
 
 2. Using test options:
@@ -87,7 +91,7 @@ Like other model-graded assertions, you can override the default grader:
    assert:
      - type: factuality
        value: Sacramento is the capital of California
-       provider: openai:gpt-4o-mini
+       provider: openai:gpt-4.1-mini
    ```
 
 ## Customizing the Prompt
@@ -96,7 +100,7 @@ You can customize the evaluation prompt using the `rubricPrompt` property. The p
 
 - `{{input}}`: The original prompt/question
 - `{{ideal}}`: The reference answer (from the `value` field)
-- `{{completion}}`: The LLM's actual response
+- `{{completion}}`: The LLM's actual response (provided automatically by promptfoo)
 
 Your custom prompt should instruct the model to either:
 

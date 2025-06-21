@@ -1,3 +1,7 @@
+---
+sidebar_label: LiteLLM
+---
+
 # LiteLLM
 
 The [LiteLLM](https://docs.litellm.ai/docs/) provides access to hundreds of LLMs.
@@ -13,10 +17,10 @@ providers:
   - id: litellm:<model name>
 ```
 
-For example, to use gpt-4o:
+For example, to use gpt-4.1:
 
 ```yaml
-- id: litellm:gpt-4o
+- id: litellm:gpt-4.1
 ```
 
 Or to use Anthropic's Claude:
@@ -29,7 +33,7 @@ By default, the provider will connect to `http://0.0.0.0:4000`. You can customiz
 
 ```yaml
 providers:
-  - id: litellm:gpt-4o
+  - id: litellm:gpt-4.1
     config:
       apiBaseUrl: https://your-litellm-server.com
       apiKey: your-api-key # Optional

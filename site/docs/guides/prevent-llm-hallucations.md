@@ -32,7 +32,7 @@ For example, let's imagine we're building an app that provides real-time informa
 
 Let's create a YAML file that defines test cases for real-time inquiries:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 tests:
   - vars:
       question: What's the weather in New York?
@@ -75,13 +75,13 @@ Changing the LLM prompt to remind it of its limitations can be an effective tool
 
 Consider a basic prompt:
 
-```nothing title=prompt1.txt
+```nothing title="prompt1.txt"
 You are a helpful assistant. Reply with a concise answer to this inquiry: "{{question}}"
 ```
 
 Modify the prompt to enumerate its limitations:
 
-```nothing title=prompt1.txt
+```nothing title="prompt1.txt"
 You are a helpful assistant. Reply with a concise answer to this inquiry: "{{question}}"
 
 - Think carefully & step-by-step.
@@ -95,9 +95,9 @@ Note that the above is just an example. The key here is to use a test framework 
 
 Once you've set up a few prompts, add them to the config file:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 // highlight-next-line
-prompts: [prompt1.txt, prompt2.txt]
+prompts: [file://prompt1.txt, file://prompt2.txt]
 tests:
   - vars:
       question: What's the weather in New York?
@@ -116,7 +116,7 @@ To set this up, we use the `defaultTest` property to set a requirement on every 
 
 ```yaml
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
 prompts:
   - file://prompt1.txt
   - file://prompt2.txt
@@ -157,7 +157,7 @@ Determining the perplexity threshold is a bit of trial and error. You can also r
 ```yaml
 providers:
   - openai:gpt-4
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
 
 tests:
   # ...
@@ -177,7 +177,7 @@ By using a script as a custom provider, we can fetch relevant information and in
 
 Here's an example of using a custom LangChain provider to fetch the latest weather report and produce an answer:
 
-```python title=langchain_provider.py
+```python title="langchain_provider.py"
 import os
 import sys
 from langchain import initialize_agent, Tool, AgentType
@@ -210,7 +210,7 @@ prompts:
   - file://prompt1.txt
 // highlight-start
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
   - exec:python langchain_provider.py
 // highlight-end
 tests:

@@ -1,13 +1,20 @@
 import * as fs from 'fs';
 import { createRequire } from 'node:module';
 import * as path from 'path';
-import { renderPrompt, resolveVariables, runExtensionHook } from '../src/evaluatorHelpers';
-import type { Prompt } from '../src/types';
+import {
+  renderPrompt,
+  resolveVariables,
+  runExtensionHook,
+  extractTextFromPDF,
+  collectFileMetadata,
+} from '../src/evaluatorHelpers';
+import type { Prompt, TestSuite, ApiProvider, TestCase } from '../src/types';
 import { transform } from '../src/util/transform';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
 }));
+
 jest.mock('glob', () => ({
   globSync: jest.fn(),
 }));
@@ -33,17 +40,71 @@ jest.mock('fs', () => ({
   },
 }));
 
+jest.mock('pdf-parse', () => ({
+  __esModule: true,
+  default: jest
+    .fn()
+    .mockImplementation((buffer) => Promise.resolve({ text: 'Extracted PDF text' })),
+}));
+
 jest.mock('../src/esm');
 jest.mock('../src/database', () => ({
   getDb: jest.fn(),
 }));
+
 jest.mock('../src/util/transform', () => ({
   transform: jest.fn(),
 }));
 
+const mockApiProvider: ApiProvider = {
+  id: function id() {
+    return 'test-provider';
+  },
+  callApi: jest.fn().mockResolvedValue({
+    output: 'Test output',
+    tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+  }),
+};
+
 function toPrompt(text: string): Prompt {
   return { raw: text, label: text };
 }
+
+describe('extractTextFromPDF', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should extract text from PDF successfully', async () => {
+    const mockPDFText = 'Extracted PDF text';
+    jest.spyOn(fs, 'readFileSync').mockReturnValueOnce(Buffer.from('mock pdf content'));
+
+    const result = await extractTextFromPDF('test.pdf');
+    expect(result).toBe(mockPDFText);
+  });
+
+  it('should throw error when pdf-parse is not installed', async () => {
+    jest.spyOn(fs, 'readFileSync').mockReturnValueOnce(Buffer.from('mock pdf content'));
+    const mockPDFParse = jest.requireMock('pdf-parse');
+    mockPDFParse.default.mockImplementationOnce(() => {
+      throw new Error("Cannot find module 'pdf-parse'");
+    });
+
+    await expect(extractTextFromPDF('test.pdf')).rejects.toThrow(
+      'pdf-parse is not installed. Please install it with: npm install pdf-parse',
+    );
+  });
+
+  it('should handle PDF extraction errors', async () => {
+    jest.spyOn(fs, 'readFileSync').mockReturnValueOnce(Buffer.from('mock pdf content'));
+    const mockPDFParse = jest.requireMock('pdf-parse');
+    mockPDFParse.default.mockRejectedValueOnce(new Error('PDF parsing failed'));
+
+    await expect(extractTextFromPDF('test.pdf')).rejects.toThrow(
+      'Failed to extract text from PDF test.pdf: PDF parsing failed',
+    );
+  });
+});
 
 describe('renderPrompt', () => {
   beforeEach(() => {
@@ -96,6 +157,22 @@ describe('renderPrompt', () => {
       {},
     );
     expect(renderedPrompt).toBe(JSON.stringify({ text: 'value1' }, null, 2));
+  });
+
+  it('should render environment variables in JSON prompts', async () => {
+    process.env.TEST_ENV_VAR = 'env_value';
+    const prompt = toPrompt('{"text": "{{ env.TEST_ENV_VAR }}"}');
+    const renderedPrompt = await renderPrompt(prompt, {}, {});
+    expect(renderedPrompt).toBe(JSON.stringify({ text: 'env_value' }, null, 2));
+    delete process.env.TEST_ENV_VAR;
+  });
+
+  it('should render environment variables in non-JSON prompts', async () => {
+    process.env.TEST_ENV_VAR = 'env_value';
+    const prompt = toPrompt('Test prompt {{ env.TEST_ENV_VAR }}');
+    const renderedPrompt = await renderPrompt(prompt, {}, {});
+    expect(renderedPrompt).toBe('Test prompt env_value');
+    delete process.env.TEST_ENV_VAR;
   });
 
   it('should handle complex variable substitutions in JSON prompts', async () => {
@@ -189,13 +266,11 @@ describe('renderPrompt', () => {
 
     jest.doMock(
       path.resolve('/node_modules/@promptfoo/fake/index.js'),
-      () => {
-        return {
-          testFunction: (varName: any, prompt: any, vars: any) => ({
-            output: `Dynamic value for ${varName}`,
-          }),
-        };
-      },
+      () => ({
+        testFunction: (varName: any, prompt: any, vars: any) => ({
+          output: `Dynamic value for ${varName}`,
+        }),
+      }),
       { virtual: true },
     );
 
@@ -265,7 +340,7 @@ describe('renderPrompt', () => {
     expect(renderedPrompt).toBe('{{ var1 }}');
   });
 
-  it('should respect Nunjucks escaped strings when variable is provided as a template string', async () => {
+  it('should respect Nunjucks escaped strings when variable is provided as a string', async () => {
     const prompt = toPrompt(`{{ '{{ var1 }}' }}`);
     const renderedPrompt = await renderPrompt(prompt, { var1: 'value1' }, {});
     expect(renderedPrompt).toBe('{{ var1 }}');
@@ -292,7 +367,6 @@ describe('renderPrompt', () => {
   it('should not double-wrap prompts already wrapped in {% raw %}', async () => {
     const prompt = toPrompt('{% raw %}This is a partial tag: {%{% endraw %}');
     const renderedPrompt = await renderPrompt(prompt, {}, {});
-    // Should not add another raw block, and should output the literal content
     expect(renderedPrompt).toBe('This is a partial tag: {%');
   });
 
@@ -445,43 +519,296 @@ describe('resolveVariables', () => {
 describe('runExtensionHook', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Reset the transform mock to return undefined by default
+    jest.mocked(transform).mockResolvedValue(undefined);
   });
 
-  it('should not call transform if extensions array is empty', async () => {
-    await runExtensionHook([], 'testHook', { data: 'test' });
-    expect(transform).not.toHaveBeenCalled();
+  describe('beforeAll', () => {
+    const hookName = 'beforeAll';
+    const context = {
+      suite: {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('Test prompt {{ var1 }} {{ var2 }}')],
+        tests: [
+          {
+            vars: { var1: 'value1', var2: 'value2' },
+          },
+        ],
+      } as TestSuite,
+    };
+
+    describe('no extensions provided', () => {
+      it('should not call transform', async () => {
+        await runExtensionHook([], hookName, context);
+        expect(transform).not.toHaveBeenCalled();
+
+        await runExtensionHook(undefined, hookName, context);
+        expect(transform).not.toHaveBeenCalled();
+
+        await runExtensionHook(null, hookName, context);
+        expect(transform).not.toHaveBeenCalled();
+      });
+
+      it('should return the original context', async () => {
+        const out = await runExtensionHook([], hookName, context);
+        expect(out).toEqual(context);
+        const out2 = await runExtensionHook(undefined, hookName, context);
+        expect(out2).toEqual(context);
+        const out3 = await runExtensionHook(null, hookName, context);
+        expect(out3).toEqual(context);
+      });
+    });
+
+    describe('extensions provided', () => {
+      it('should call transform for each extension', async () => {
+        const extensions = ['ext1', 'ext2', 'ext3'];
+        await runExtensionHook(extensions, hookName, context);
+        expect(transform).toHaveBeenCalledTimes(3);
+        expect(transform).toHaveBeenNthCalledWith(1, 'ext1', hookName, context, false);
+        expect(transform).toHaveBeenNthCalledWith(2, 'ext2', hookName, context, false);
+        expect(transform).toHaveBeenNthCalledWith(3, 'ext3', hookName, context, false);
+      });
+
+      it('should return the original context when extension(s) do not return a value', async () => {
+        const out = await runExtensionHook(['ext1', 'ext2', 'ext3'], hookName, context);
+        expect(out).toEqual(context);
+      });
+
+      it('returned context should conform to the expected schema', async () => {
+        // Re-mock the transform function to return a valid context (with a new tag)
+        jest.mocked(transform).mockResolvedValue({
+          suite: {
+            providers: context.suite.providers,
+            prompts: context.suite.prompts,
+            tests: context.suite.tests,
+          },
+        });
+
+        const out = await runExtensionHook(['ext1', 'ext2', 'ext3'], hookName, context);
+
+        // Check the structure without relying on exact function name matching
+        expect(out.suite.providers).toHaveLength(1);
+        expect(out.suite.providers[0]).toHaveProperty('id');
+        expect(out.suite.providers[0]).toHaveProperty('callApi');
+        expect(typeof out.suite.providers[0].id).toBe('function');
+        expect(out.suite.providers[0].id()).toBe('test-provider');
+        expect(out.suite.prompts).toEqual(context.suite.prompts);
+        expect(out.suite.tests).toEqual(context.suite.tests);
+      });
+
+      it('should throw a validation error if the returned context does not conform to the expected schema', async () => {
+        // Re-mock the transform function to return an invalid context (dropped `providers` field)
+        jest.mocked(transform).mockResolvedValue({
+          suite: { foo: 'bar' },
+        });
+
+        // Expect the hook to throw an error
+        await expect(runExtensionHook(['ext1', 'ext2', 'ext3'], hookName, context)).rejects.toThrow(
+          `[ext1] Invalid context returned by beforeAll hook`,
+        );
+      });
+    });
   });
 
-  it('should not call transform if extensions is undefined', async () => {
-    await runExtensionHook(undefined, 'testHook', { data: 'test' });
-    expect(transform).not.toHaveBeenCalled();
+  describe('beforeEach', () => {
+    const hookName = 'beforeEach';
+    const context = {
+      test: {
+        vars: { var1: 'value1', var2: 'value2' },
+        assert: [{ type: 'equals', value: 'expected' }],
+      } as TestCase,
+    };
+
+    describe('no extensions provided', () => {
+      it('should not call transform', async () => {
+        await runExtensionHook([], hookName, context);
+        expect(transform).not.toHaveBeenCalled();
+
+        await runExtensionHook(undefined, hookName, context);
+        expect(transform).not.toHaveBeenCalled();
+
+        await runExtensionHook(null, hookName, context);
+        expect(transform).not.toHaveBeenCalled();
+      });
+
+      it('should return the original context', async () => {
+        const out = await runExtensionHook([], hookName, context);
+        expect(out).toEqual(context);
+        const out2 = await runExtensionHook(undefined, hookName, context);
+        expect(out2).toEqual(context);
+        const out3 = await runExtensionHook(null, hookName, context);
+        expect(out3).toEqual(context);
+      });
+    });
+
+    describe('extensions provided', () => {
+      beforeEach(() => {
+        // Reset the mock to return undefined for these tests
+        jest.mocked(transform).mockResolvedValue(undefined);
+      });
+
+      it('should call transform for each extension', async () => {
+        const extensions = ['ext1', 'ext2', 'ext3'];
+        await runExtensionHook(extensions, hookName, context);
+        expect(transform).toHaveBeenCalledTimes(3);
+        expect(transform).toHaveBeenNthCalledWith(1, 'ext1', hookName, context, false);
+        expect(transform).toHaveBeenNthCalledWith(2, 'ext2', hookName, context, false);
+        expect(transform).toHaveBeenNthCalledWith(3, 'ext3', hookName, context, false);
+      });
+
+      it('should return the original context when extension(s) do not return a value', async () => {
+        const out = await runExtensionHook(['ext1', 'ext2', 'ext3'], hookName, context);
+        expect(out).toEqual(context);
+      });
+
+      it('returned context should conform to the expected schema', async () => {
+        // Re-mock the transform function to return a valid context (with modified test)
+        jest.mocked(transform).mockResolvedValue({
+          test: {
+            vars: { var1: 'modified_value1', var2: 'modified_value2' },
+            assert: [{ type: 'equals', value: 'modified_expected' }],
+          },
+        });
+
+        const out = await runExtensionHook(['ext1', 'ext2', 'ext3'], hookName, context);
+
+        expect(out.test.vars).toEqual({ var1: 'modified_value1', var2: 'modified_value2' });
+        expect(out.test.assert).toEqual([{ type: 'equals', value: 'modified_expected' }]);
+      });
+
+      it('should throw a validation error if the returned context does not conform to the expected schema', async () => {
+        // Re-mock the transform function to return an invalid context (test should be an object, not a string)
+        jest.mocked(transform).mockResolvedValue({
+          test: 'invalid_test_value',
+        });
+
+        // Expect the hook to throw an error
+        await expect(runExtensionHook(['ext1', 'ext2', 'ext3'], hookName, context)).rejects.toThrow(
+          `[ext1] Invalid context returned by beforeEach hook`,
+        );
+      });
+    });
+  });
+});
+
+describe('collectFileMetadata', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.spyOn(path, 'resolve').mockImplementation((...paths) => {
+      return paths[paths.length - 1];
+    });
   });
 
-  it('should not call transform if extensions is null', async () => {
-    await runExtensionHook(null, 'testHook', { data: 'test' });
-    expect(transform).not.toHaveBeenCalled();
+  it('should identify image files correctly', () => {
+    const vars = {
+      image1: 'file://path/to/image.jpg',
+      image2: 'file://path/to/image.png',
+      image3: 'file://path/to/image.webp',
+      text: 'This is not a file',
+      otherFile: 'file://path/to/document.txt',
+    };
+
+    const metadata = collectFileMetadata(vars);
+
+    expect(metadata).toEqual({
+      image1: {
+        path: 'file://path/to/image.jpg',
+        type: 'image',
+        format: 'jpg',
+      },
+      image2: {
+        path: 'file://path/to/image.png',
+        type: 'image',
+        format: 'png',
+      },
+      image3: {
+        path: 'file://path/to/image.webp',
+        type: 'image',
+        format: 'webp',
+      },
+    });
   });
 
-  it('should call transform for each extension', async () => {
-    const extensions = ['ext1', 'ext2', 'ext3'];
-    const hookName = 'testHook';
-    const context = { data: 'test' };
+  it('should identify video files correctly', () => {
+    const vars = {
+      video1: 'file://path/to/video.mp4',
+      video2: 'file://path/to/video.webm',
+      video3: 'file://path/to/video.mkv',
+      text: 'This is not a file',
+    };
 
-    await runExtensionHook(extensions, hookName, context);
+    const metadata = collectFileMetadata(vars);
 
-    expect(transform).toHaveBeenCalledTimes(3);
-    expect(transform).toHaveBeenNthCalledWith(1, 'ext1', hookName, context, false);
-    expect(transform).toHaveBeenNthCalledWith(2, 'ext2', hookName, context, false);
-    expect(transform).toHaveBeenNthCalledWith(3, 'ext3', hookName, context, false);
+    expect(metadata).toEqual({
+      video1: {
+        path: 'file://path/to/video.mp4',
+        type: 'video',
+        format: 'mp4',
+      },
+      video2: {
+        path: 'file://path/to/video.webm',
+        type: 'video',
+        format: 'webm',
+      },
+      video3: {
+        path: 'file://path/to/video.mkv',
+        type: 'video',
+        format: 'mkv',
+      },
+    });
   });
 
-  it('should throw an error if an extension is not a string', async () => {
-    const extensions = ['ext1', 123, 'ext3'] as string[];
-    const hookName = 'testHook';
-    const context = { data: 'test' };
+  it('should identify audio files correctly', () => {
+    const vars = {
+      audio1: 'file://path/to/audio.mp3',
+      audio2: 'file://path/to/audio.wav',
+      text: 'This is not a file',
+    };
 
-    await expect(runExtensionHook(extensions, hookName, context)).rejects.toThrow(
-      'extension must be a string',
-    );
+    const metadata = collectFileMetadata(vars);
+
+    expect(metadata).toEqual({
+      audio1: {
+        path: 'file://path/to/audio.mp3',
+        type: 'audio',
+        format: 'mp3',
+      },
+      audio2: {
+        path: 'file://path/to/audio.wav',
+        type: 'audio',
+        format: 'wav',
+      },
+    });
+  });
+
+  it('should return an empty object when no media files are found', () => {
+    const vars = {
+      text1: 'This is not a file',
+      text2: 'file://path/to/document.txt',
+      text3: 'file://path/to/document.pdf',
+    };
+
+    const metadata = collectFileMetadata(vars);
+
+    expect(metadata).toEqual({});
+  });
+
+  it('should handle non-string values correctly', () => {
+    const vars = {
+      text: 'file://path/to/image.jpg',
+      object: { key: 'value' },
+      array: ['file://path/to/video.mp4'],
+      number: 42 as unknown as string,
+    };
+
+    const metadata = collectFileMetadata(vars);
+
+    expect(metadata).toEqual({
+      text: {
+        path: 'file://path/to/image.jpg',
+        type: 'image',
+        format: 'jpg',
+      },
+    });
   });
 });

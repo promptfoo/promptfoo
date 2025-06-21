@@ -6,7 +6,7 @@ sidebar_label: Deepseek benchmark
 
 Deepseek is a new Mixture-of-Experts (MoE) model that's all the rage due to its impressive performance, especially in code tasks. Its MoE architecture has 671B total parameters, though only 37B are activated for each token. This allows for efficient inference while maintaining powerful capabilities.
 
-When evaluating LLMs for your application, generic benchmarks often fall short of capturing the specific requirements of your use case. This guide will walk you through creating a tailored benchmark to compare Deepseek-V3, OpenAI's gpt-4o and o3-mini, and Llama-3-70B for your specific needs.
+When evaluating LLMs for your application, generic benchmarks often fall short of capturing the specific requirements of your use case. This guide will walk you through creating a tailored benchmark to compare Deepseek-V3, OpenAI's gpt-4.1 and o3-mini, and Llama-3-70B for your specific needs.
 
 In this guide, we'll create a practical comparison that results in a detailed side-by-side analysis view.
 
@@ -28,16 +28,16 @@ npx promptfoo@latest init --no-interactive deepseek-benchmark
 
 Edit your `promptfooconfig.yaml` to include the three models:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 providers:
-  - 'openai:gpt-4o'
+  - 'openai:gpt-4.1'
   - 'openai:o3-mini'
   - 'openrouter:meta-llama/llama-3-70b-instruct'
   - 'openrouter:deepseek/deepseek-chat'
 
 # Optional: Configure model parameters
 providers:
-  - id: openai:gpt-4o
+  - id: openai:gpt-4.1
     config:
       temperature: 0.7
       max_tokens: 1000

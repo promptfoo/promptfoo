@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Inline Python assertions for output validation
+
+prompts:
+  - 'Write a tweet about {{topic}}'
+
+providers:
+  - openai:gpt-4.1-mini
+
+tests:
+  - vars:
+      topic: bananas
+    assert:
+      - type: python
+        value: "context['vars']['topic'] in output"
+
+  - vars:
+      topic: potatoes
+    assert:
+      - type: python
+        value: |
+          # Insert your scoring logic here...
+          if output == 'Expected output':
+              return {
+                'pass': True,
+                'score': 0.5,
+                'reason': 'Looks good to me',
+              }
+          else:
+              return {
+                'pass': False,
+                'score': 0,
+                'reason': 'Did not contain expected output',
+              }
