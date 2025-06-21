@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import AddIcon from '@mui/icons-material/Add';
+import ClearIcon from '@mui/icons-material/Clear';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import DeleteIcon from '@mui/icons-material/Delete';
 import FileUploadIcon from '@mui/icons-material/FileUpload';
@@ -83,6 +84,7 @@ export default function CustomIntentSection() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [previewDialog, setPreviewDialog] = useState<UploadPreview | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   const { totalPages, startIndex, currentIntents } = useMemo(() => {
     const total = Math.ceil((localConfig.intent?.length || 1) / ITEMS_PER_PAGE);
@@ -92,7 +94,7 @@ export default function CustomIntentSection() {
   }, [localConfig.intent, currentPage]);
 
   const debouncedUpdatePlugins = useCallback(
-    (newIntents: string[]) => {
+    (newIntents: (string | string[])[]) => {
       if (updateTimeout) {
         clearTimeout(updateTimeout);
       }
@@ -102,7 +104,11 @@ export default function CustomIntentSection() {
           typeof p === 'object' && 'id' in p ? p.id !== 'intent' : true,
         );
 
-        const nonEmptyIntents = newIntents.filter((intent) => intent.trim() !== '');
+        const nonEmptyIntents = newIntents.filter((intent) =>
+          typeof intent === 'string'
+            ? intent.trim() !== ''
+            : Array.isArray(intent) && intent.length > 0,
+        );
         if (nonEmptyIntents.length === 0) {
           updatePlugins([...otherPlugins] as Array<string | { id: string; config: any }>);
           return;
@@ -144,7 +150,7 @@ export default function CustomIntentSection() {
 
   useEffect(() => {
     if (localConfig?.intent) {
-      debouncedUpdatePlugins(localConfig.intent as unknown as string[]);
+      debouncedUpdatePlugins(localConfig.intent as (string | string[])[]);
     }
   }, [localConfig, debouncedUpdatePlugins]);
 
@@ -244,9 +250,17 @@ export default function CustomIntentSection() {
           skip_empty_lines: true,
           columns: true,
         });
+
+        // Get the first column header name for more reliable parsing
+        const headers = Object.keys(records[0] || {});
+        if (headers.length === 0) {
+          throw new Error('CSV file must have at least one column');
+        }
+        const firstColumn = headers[0];
+
         return records
-          .map((record: any) => Object.values(record)[0] as string)
-          .filter((intent: string) => intent.trim() !== '');
+          .map((record: any) => record[firstColumn] as string)
+          .filter((intent: string) => intent?.trim() !== '');
       } catch (error) {
         throw new Error(
           `Invalid CSV file: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -284,14 +298,15 @@ export default function CustomIntentSection() {
   };
 
   const applyUploadedIntents = (newIntents: (string | string[])[]) => {
-    // Flatten nested arrays for the current UI (since we don't support multi-step UI yet)
-    const flattenedIntents = newIntents.map((intent) =>
-      Array.isArray(intent) ? intent.join(' → ') : intent,
+    // Filter out empty intents from existing config and preserve nested arrays
+    const existingIntents = Array.isArray(localConfig.intent) ? localConfig.intent : [''];
+    const nonEmptyExisting = existingIntents.filter((intent) =>
+      typeof intent === 'string' ? intent.trim() !== '' : true,
     );
 
     setLocalConfig((prev) => ({
       ...prev,
-      intent: [...(Array.isArray(prev.intent) ? prev.intent : ['']), ...flattenedIntents],
+      intent: [...nonEmptyExisting, ...newIntents],
     }));
     setCurrentPage(1);
     setPreviewDialog(null);
@@ -324,8 +339,23 @@ export default function CustomIntentSection() {
     }
   }, []);
 
-  const hasEmptyArrayItems = (array: string[] | undefined) => {
-    return array?.some((item) => item.trim() === '') ?? false;
+  const hasEmptyArrayItems = (array: (string | string[])[] | undefined) => {
+    return array?.some((item) => (typeof item === 'string' ? item.trim() === '' : false)) ?? false;
+  };
+
+  const clearAllIntents = () => {
+    setDraftIntents({});
+    setLocalConfig((prev) => ({
+      ...prev,
+      intent: [''],
+    }));
+    setCurrentPage(1);
+    setShowClearConfirm(false);
+  };
+
+  const shouldDisableClearAll = () => {
+    const intents = localConfig.intent || [''];
+    return intents.length === 1 && typeof intents[0] === 'string' && intents[0].trim() === '';
   };
 
   return (
@@ -401,7 +431,11 @@ export default function CustomIntentSection() {
           {Array.isArray(currentIntents) &&
             currentIntents.map((intent: string | string[], index: number) => {
               const actualIndex = startIndex + index;
+              const isArrayIntent = Array.isArray(intent);
               const value = actualIndex in draftIntents ? draftIntents[actualIndex] : intent;
+              const displayValue = isArrayIntent
+                ? (intent as string[]).join(' → ')
+                : (value as string);
 
               return (
                 <Box key={actualIndex} sx={{ display: 'flex', gap: 1 }}>
@@ -409,9 +443,20 @@ export default function CustomIntentSection() {
                     fullWidth
                     multiline
                     rows={2}
-                    value={value}
-                    onChange={(e) => handleArrayInputChange('intent', index, e.target.value)}
+                    value={displayValue}
+                    onChange={
+                      isArrayIntent
+                        ? undefined
+                        : (e) => handleArrayInputChange('intent', index, e.target.value)
+                    }
                     placeholder={EXAMPLE_INTENTS[index % EXAMPLE_INTENTS.length]}
+                    disabled={isArrayIntent}
+                    helperText={isArrayIntent ? 'Multi-step intent (read-only)' : undefined}
+                    sx={{
+                      '& .MuiInputBase-input': {
+                        fontStyle: isArrayIntent ? 'italic' : 'normal',
+                      },
+                    }}
                   />
                   <IconButton
                     onClick={() => removeArrayItem('intent', index)}
@@ -435,12 +480,12 @@ export default function CustomIntentSection() {
             </Box>
           )}
 
-          <Box sx={{ display: 'flex', gap: 1 }}>
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
             <Button
               startIcon={<AddIcon />}
               onClick={() => addArrayItem('intent')}
               variant="contained"
-              disabled={hasEmptyArrayItems(localConfig.intent as string[])}
+              disabled={hasEmptyArrayItems(localConfig.intent as (string | string[])[])}
             >
               Add prompt
             </Button>
@@ -461,6 +506,15 @@ export default function CustomIntentSection() {
                   (e.target as HTMLInputElement).value = '';
                 }}
               />
+            </Button>
+            <Button
+              startIcon={<ClearIcon />}
+              onClick={() => setShowClearConfirm(true)}
+              variant="outlined"
+              color="error"
+              disabled={shouldDisableClearAll()}
+            >
+              Clear All
             </Button>
           </Box>
         </>
@@ -490,8 +544,8 @@ export default function CustomIntentSection() {
             </Typography>
             {previewDialog?.hasNested && (
               <Alert severity="info" sx={{ mb: 2 }}>
-                Multi-step intents will be flattened with "→" separators for display in the current
-                UI.
+                Multi-step intents will be preserved as sequential prompts for advanced testing
+                scenarios.
               </Alert>
             )}
           </Box>
@@ -528,6 +582,22 @@ export default function CustomIntentSection() {
             variant="contained"
           >
             Add All Intents
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Clear All Confirmation Dialog */}
+      <Dialog open={showClearConfirm} onClose={() => setShowClearConfirm(false)}>
+        <DialogTitle>Clear All Intents</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to clear all intents? This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowClearConfirm(false)}>Cancel</Button>
+          <Button onClick={clearAllIntents} color="error" variant="contained">
+            Clear All
           </Button>
         </DialogActions>
       </Dialog>
