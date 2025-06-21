@@ -109,6 +109,45 @@ providers:
           probability: BLOCK_ONLY_HIGH # or other thresholds
 ```
 
+### System Instructions
+
+Configure system-level instructions for the model. System instructions can be provided in multiple ways:
+
+#### Direct text in config:
+
+```yaml
+providers:
+  - id: google:gemini-2.5-pro
+    config:
+      systemInstruction: 'You are a helpful assistant'
+```
+
+#### As structured content:
+
+```yaml
+providers:
+  - id: google:gemini-2.5-pro
+    config:
+      systemInstruction:
+        parts:
+          - text: 'You are a helpful assistant that {{role}}' # Supports Nunjucks templates
+```
+
+#### From an external file:
+
+```yaml
+providers:
+  - id: google:gemini-2.5-pro
+    config:
+      systemInstruction: file://path/to/system-instruction.txt
+```
+
+The file-based approach is particularly useful for:
+
+- Reusing system instructions across multiple configurations
+- Managing long or complex system prompts
+- Version controlling system instructions separately
+
 For more details on capabilities and configuration options, see the [Gemini API documentation](https://ai.google.dev/docs).
 
 ## Model Examples

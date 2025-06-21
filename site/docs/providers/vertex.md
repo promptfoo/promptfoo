@@ -195,7 +195,7 @@ Configure model behavior using the following options:
 ```yaml
 providers:
   # For Gemini models
-  - id: vertex:gemini-2.0-pro
+  - id: vertex:gemini-2.5-pro
     config:
       generationConfig:
         temperature: 0
@@ -372,7 +372,7 @@ Gemini and Claude models support function calling and tool use. Configure tools 
 
 ```yaml
 providers:
-  - id: vertex:gemini-2.0-pro
+  - id: vertex:gemini-2.5-pro
     config:
       toolConfig:
         functionCallingConfig:
@@ -395,7 +395,7 @@ Tools can also be loaded from external files:
 
 ```yaml
 providers:
-  - id: vertex:gemini-2.0-pro
+  - id: vertex:gemini-2.5-pro
     config:
       tools: 'file://tools.json' # Supports variable substitution
 ```
@@ -408,7 +408,7 @@ Configure system-level instructions for the model. System instructions can be pr
 
 ```yaml
 providers:
-  - id: vertex:gemini-2.0-pro
+  - id: vertex:gemini-2.5-pro
     config:
       systemInstruction: 'You are a helpful assistant'
 ```
@@ -417,7 +417,7 @@ providers:
 
 ```yaml
 providers:
-  - id: vertex:gemini-2.0-pro
+  - id: vertex:gemini-2.5-pro
     config:
       systemInstruction:
         parts:
@@ -428,7 +428,7 @@ providers:
 
 ```yaml
 providers:
-  - id: vertex:gemini-2.0-pro
+  - id: vertex:gemini-2.5-pro
     config:
       systemInstruction: file://path/to/system-instruction.txt
 ```
@@ -445,7 +445,7 @@ Fine-tune model behavior with these parameters:
 
 ```yaml
 providers:
-  - id: vertex:gemini-2.0-pro
+  - id: vertex:gemini-2.5-pro
     config:
       generationConfig:
         temperature: 0.7 # Controls randomness (0.0 to 1.0)
@@ -461,7 +461,7 @@ Provide context and few-shot examples:
 
 ```yaml
 providers:
-  - id: vertex:gemini-2.0-pro
+  - id: vertex:gemini-2.5-pro
     config:
       context: 'You are an expert in machine learning'
       examples:
@@ -475,7 +475,7 @@ Configure content filtering with granular control:
 
 ```yaml
 providers:
-  - id: vertex:gemini-2.0-pro
+  - id: vertex:gemini-2.5-pro
     config:
       safetySettings:
         - category: 'HARM_CATEGORY_HARASSMENT'
@@ -524,7 +524,7 @@ Use the object format to enable Search grounding:
 
 ```yaml
 providers:
-  - id: vertex:gemini-2.0-pro
+  - id: vertex:gemini-2.5-pro
     config:
       tools:
         - googleSearch: {}
