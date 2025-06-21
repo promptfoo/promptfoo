@@ -490,7 +490,7 @@ export class VariableOptimizerProvider implements ApiProvider {
   }
 
   toString() {
-    return '[Prompt Optimizer Provider]';
+    return '[Variable Optimizer Provider]';
   }
 }
 
