@@ -35,15 +35,23 @@ providers:
 
   - google:gemini-2.0-flash-thinking-exp
 
-  - id: google:gemini-1.5-pro
+  - id: google:gemini-2.5-pro
     config:
       temperature: 0.7
       maxOutputTokens: 1024
       topP: 0.9
       topK: 40
 
+  # System instruction from file example
+  - id: google:gemini-2.5-pro
+    label: gemini-with-system-instruction-file
+    config:
+      temperature: 0.3
+      maxOutputTokens: 1024
+      systemInstruction: file://system-instruction.txt
+
   # Structured output example
-  - id: google:gemini-1.5-pro
+  - id: google:gemini-2.5-pro
     config:
       generationConfig:
         temperature: 0
@@ -64,7 +72,7 @@ providers:
           required: ['answer', 'confidence', 'method_used']
 
   # Function calling example
-  - id: google:gemini-1.5-pro
+  - id: google:gemini-2.5-pro
     config:
       tools:
         function_declarations:

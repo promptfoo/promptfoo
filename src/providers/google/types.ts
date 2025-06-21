@@ -187,7 +187,7 @@ export interface CompletionOptions {
     pythonExecutable?: string;
   };
 
-  systemInstruction?: Content;
+  systemInstruction?: Content | string;
 
   /**
    * Model-specific configuration for Llama models
