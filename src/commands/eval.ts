@@ -405,7 +405,7 @@ export async function doEval(
 
         logger.info(
           `» This project needs your feedback. What's one thing we can improve? ${chalk.greenBright.bold(
-            'https://forms.gle/YFLgTe1dKJKNSCsU7',
+            'https://promptfoo.dev/feedback',
           )}`,
         );
       }
