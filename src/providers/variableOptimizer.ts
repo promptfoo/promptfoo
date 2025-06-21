@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import fs from 'fs';
+import fs from 'node:fs';
 import { runAssertions } from '../assertions';
 import {
   type ApiProvider,
@@ -12,6 +12,7 @@ import {
 import invariant from '../util/invariant';
 import { extractFirstJsonObject } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
+import { getDefaultProviders } from './defaults';
 import { loadApiProvider } from './index';
 
 export const VARIABLE_OPTIMIZER_PROMPT = dedent`
@@ -187,8 +188,9 @@ export class VariableOptimizerProvider implements ApiProvider {
         // Remove env property as it's not part of the interface
       });
     } else {
-      invariant(context?.originalProvider, 'Expected originalProvider to be set');
-      this.improver = context.originalProvider;
+      // Use the default synthesize provider for generating improved variables
+      const defaultProviders = await getDefaultProviders();
+      this.improver = defaultProviders.synthesizeProvider;
     }
     return this.improver;
   }
@@ -218,7 +220,7 @@ export class VariableOptimizerProvider implements ApiProvider {
     const originalValue = context.vars[targetVar];
     const currentVars = { ...context.vars };
     let bestVars = { ...currentVars };
-    let bestScore = -Infinity;
+    let bestScore = Number.NEGATIVE_INFINITY;
     let bestOutput = '';
     let stall = 0;
     const history: {
@@ -250,37 +252,40 @@ export class VariableOptimizerProvider implements ApiProvider {
         test: testCase,
       });
 
+      if (!grading) {
+        // If grading fails, break the optimization loop
+        break;
+      }
+
       const score = grading.score;
       const output = String(resp.output || '');
 
-      history.push({
-        iteration: i + 1,
-        vars: { ...currentVars },
-        output,
-        score,
-        reason: grading.reason,
-        success: grading.pass,
-      });
-
       // Check if we've succeeded
       if (grading.pass) {
+        // Update history with successful result
+        history.push({
+          iteration: i + 1,
+          vars: { ...currentVars },
+          output,
+          score,
+          reason: grading.reason,
+          success: grading.pass,
+        });
+
         bestVars = { ...currentVars };
         bestScore = score;
         bestOutput = output;
         break;
       }
 
-      // Track best result
+      // Track best result - only increment stall once per iteration
+      let shouldIncrementStall = true;
       if (score > bestScore) {
         bestVars = { ...currentVars };
         bestScore = score;
         bestOutput = output;
         stall = 0;
-      } else {
-        stall += 1;
-        if (stall >= this.options.stallIterations) {
-          break;
-        }
+        shouldIncrementStall = false;
       }
 
       // Prepare failure information for the improver
@@ -333,7 +338,16 @@ export class VariableOptimizerProvider implements ApiProvider {
 
       // Get suggestion from improver
       const improvResp = await improver.callApi(improverPrompt, undefined, options);
-      if (improvResp.error) {
+      if (!improvResp || improvResp.error) {
+        // Add current attempt to history before breaking
+        history.push({
+          iteration: i + 1,
+          vars: { ...currentVars },
+          output,
+          score,
+          reason: grading.reason,
+          success: grading.pass,
+        });
         break;
       }
 
@@ -354,12 +368,21 @@ export class VariableOptimizerProvider implements ApiProvider {
       }
 
       if (candidates.length === 0) {
+        // Add current attempt to history before breaking
+        history.push({
+          iteration: i + 1,
+          vars: { ...currentVars },
+          output,
+          score,
+          reason: grading.reason,
+          success: grading.pass,
+        });
         break;
       }
 
       // Test each candidate and find the best one
       let bestCandidate = '';
-      let bestCandidateScore = -Infinity;
+      let bestCandidateScore = Number.NEGATIVE_INFINITY;
       let bestCandidateOutput = '';
       let bestCandidateGrading: any = null;
 
@@ -401,7 +424,6 @@ export class VariableOptimizerProvider implements ApiProvider {
           }
         } catch {
           // Skip this candidate if it causes an error
-          continue;
         }
       }
 
@@ -409,23 +431,23 @@ export class VariableOptimizerProvider implements ApiProvider {
       if (bestCandidate) {
         currentVars[targetVar] = bestCandidate;
 
-        // Update the history with the best candidate result
-        history[history.length - 1] = {
-          ...history[history.length - 1],
+        // Add to history with the best candidate result
+        history.push({
+          iteration: i + 1,
           vars: { ...currentVars },
           output: bestCandidateOutput,
           score: bestCandidateScore,
           reason: bestCandidateGrading?.reason,
           success: bestCandidateGrading?.pass || false,
-        };
+        });
 
-        // Update tracking for the best candidate
+        // Update tracking for the best candidate - fix stall counter bug
         if (bestCandidateScore > bestScore) {
           bestVars = { ...currentVars };
           bestScore = bestCandidateScore;
           bestOutput = bestCandidateOutput;
           stall = 0;
-        } else {
+        } else if (shouldIncrementStall) {
           stall += 1;
         }
 
@@ -436,8 +458,29 @@ export class VariableOptimizerProvider implements ApiProvider {
           bestOutput = bestCandidateOutput;
           break;
         }
+
+        // Check stall condition after processing candidates
+        if (stall >= this.options.stallIterations) {
+          break;
+        }
       } else {
-        break;
+        // No valid candidates found, add current attempt to history
+        history.push({
+          iteration: i + 1,
+          vars: { ...currentVars },
+          output,
+          score,
+          reason: grading.reason,
+          success: grading.pass,
+        });
+
+        if (shouldIncrementStall) {
+          stall += 1;
+        }
+
+        if (stall >= this.options.stallIterations) {
+          break;
+        }
       }
     }
 
