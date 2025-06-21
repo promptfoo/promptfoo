@@ -427,7 +427,7 @@ export async function doEval(
       const evalTokens = {
         prompt: tokenUsage.prompt || 0,
         completion: tokenUsage.completion || 0,
-        total: combinedTotal,
+        total: tokenUsage.total || combinedTotal,
         cached: tokenUsage.cached || 0,
         completionDetails: tokenUsage.completionDetails || {
           reasoning: 0,
@@ -532,7 +532,7 @@ export async function doEval(
       }
 
       // Grand total
-      const grandTotal = evalTokens.total + tokenUsage.assertions.total;
+      const grandTotal = evalTokens.total + (tokenUsage.assertions.total || 0);
       logger.info(
         `\n  ${chalk.blue.bold('Grand Total:')} ${chalk.white.bold(grandTotal.toLocaleString())} tokens`,
       );

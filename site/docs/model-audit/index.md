@@ -59,16 +59,21 @@ promptfoo scan-model model.pkl --format json --output results.json
 promptfoo scan-model model.pkl --blacklist "unsafe_model" --blacklist "malicious_net"
 ```
 
+:::info
+You can also install the modelaudit binary directly using `pip install modelaudit`. `modelaudit scan` behaves the same as `promptfoo scan-model`.
+:::
+
 ### Options
 
-| Option              | Description                                                |
-| ------------------- | ---------------------------------------------------------- |
-| `--blacklist`, `-b` | Additional blacklist patterns to check against model names |
-| `--format`, `-f`    | Output format (`text` or `json`) [default: text]           |
-| `--output`, `-o`    | Output file path (prints to stdout if not specified)       |
-| `--timeout`, `-t`   | Scan timeout in seconds [default: 300]                     |
-| `--verbose`, `-v`   | Enable verbose output                                      |
-| `--max-file-size`   | Maximum file size to scan in bytes [default: unlimited]    |
+| Option              | Description                                                      |
+| ------------------- | ---------------------------------------------------------------- |
+| `--blacklist`, `-b` | Additional blacklist patterns to check against model names       |
+| `--format`, `-f`    | Output format (`text` or `json`) [default: text]                 |
+| `--output`, `-o`    | Output file path (prints to stdout if not specified)             |
+| `--timeout`, `-t`   | Scan timeout in seconds [default: 300]                           |
+| `--verbose`, `-v`   | Enable verbose output                                            |
+| `--max-file-size`   | Maximum file size to scan in bytes [default: unlimited]          |
+| `--max-total-size`  | Maximum total bytes to scan before stopping [default: unlimited] |
 
 ## Supported Model Formats
 
@@ -76,9 +81,11 @@ ModelAudit can scan:
 
 - **PyTorch models** (`.pt`, `.pth`, `.bin`)
 - **TensorFlow SavedModel** format (`.pb` files and directories)
+- **TensorFlow Lite models** (`.tflite`)
 - **Keras models** (`.h5`, `.keras`, `.hdf5`)
 - **ONNX models** (`.onnx`)
 - **GGUF/GGML models** (`.gguf`, `.ggml`) - popular for LLaMA, Alpaca, and other quantized LLMs
+- **Flax/JAX models** (`.msgpack`) - JAX neural network checkpoints
 - **Pickle files** (`.pkl`, `.pickle`, `.bin`, `.ckpt`)
 - **Joblib files** (`.joblib`) - commonly used by scikit-learn
 - **NumPy arrays** (`.npy`)

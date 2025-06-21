@@ -66,6 +66,23 @@ This scanner examines TensorFlow models saved in the SavedModel format.
 **Why it matters:**
 TensorFlow models can contain operations that interact with the filesystem or execute arbitrary code, which could be exploited if a malicious model is loaded.
 
+## TensorFlow Lite Scanner
+
+**File types:** `.tflite`
+
+This scanner examines TensorFlow Lite model files, which are optimized for mobile and embedded devices.
+
+**What it checks for:**
+
+- Custom operations that could contain malicious code
+- Flex delegate operations that enable full TensorFlow ops execution
+- Model metadata that could contain executable content or malicious payloads
+- Suspicious operator configurations or patterns
+- Buffer validation to detect tampering or corruption
+
+**Why it matters:**
+While TensorFlow Lite models are generally safer than full TensorFlow models due to their limited operator set, they can still include custom operations or use the Flex delegate to access the full TensorFlow runtime, potentially introducing security risks. Malicious actors could embed harmful code in custom ops or metadata.
+
 ## Keras H5 Scanner
 
 **File types:** `.h5`, `.hdf5`, `.keras`
@@ -146,6 +163,23 @@ This scanner analyzes joblib serialized files, which are commonly used by scikit
 
 **Why it matters:**
 Joblib files often contain compressed pickle data, inheriting the same security risks as pickle files. Additionally, malicious actors could craft compression bombs that consume excessive memory or CPU resources when loaded. The scanner provides safe decompression with security limits.
+
+## Flax/JAX Scanner
+
+**File types:** `.msgpack`
+
+This scanner analyzes Flax/JAX model files serialized in MessagePack format.
+
+**What it checks for:**
+
+- Suspicious MessagePack structures that could exploit deserializers
+- Embedded code objects or executable content
+- Malformed or oversized data structures that could cause resource exhaustion
+- Potentially dangerous nested objects or recursive structures
+- Unusual data types that might indicate tampering
+
+**Why it matters:**
+Flax models serialized as msgpack files can potentially contain embedded code or malicious data structures. While MessagePack is generally safer than pickle, it can still be exploited through carefully crafted payloads that target specific deserializer vulnerabilities or cause denial of service through resource exhaustion.
 
 ## NumPy Scanner
 
