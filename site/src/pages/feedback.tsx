@@ -30,6 +30,7 @@ export default function Feedback(): JSX.Element {
             sandbox="allow-scripts allow-forms allow-same-origin"
             style={iframeStyle}
             loading="lazy"
+            title="Feedback Form"
           >
             Loading…
           </iframe>
