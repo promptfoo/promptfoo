@@ -1,12 +1,14 @@
 import React from 'react';
 import { useColorMode } from '@docusaurus/theme-common';
+import useIsBrowser from '@docusaurus/useIsBrowser';
 import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
 import Typography from '@mui/material/Typography';
 import Layout from '@theme/Layout';
 
 export default function Feedback(): JSX.Element {
-  const { colorMode } = useColorMode();
+  const isBrowser = useIsBrowser();
+  const { colorMode } = isBrowser ? useColorMode() : { colorMode: 'light' };
   const iframeStyle: React.CSSProperties = {
     width: '100%',
     height: '800px',
