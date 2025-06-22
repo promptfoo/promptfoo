@@ -69,7 +69,9 @@ export class OTLPReceiver {
   private setupRoutes(): void {
     // OTLP HTTP endpoint for traces
     this.app.post('/v1/traces', async (req, res) => {
-      logger.debug(`[OtlpReceiver] Received trace request: ${req.headers['content-type']} with ${JSON.stringify(req.body).length} bytes`);
+      logger.debug(
+        `[OtlpReceiver] Received trace request: ${req.headers['content-type']} with ${JSON.stringify(req.body).length} bytes`,
+      );
       try {
         let traces: ParsedTrace[] = [];
 
@@ -130,12 +132,16 @@ export class OTLPReceiver {
 
   private parseOTLPJSONRequest(body: OTLPTraceRequest): ParsedTrace[] {
     const traces: ParsedTrace[] = [];
-    logger.debug(`[OtlpReceiver] Parsing request with ${body.resourceSpans?.length || 0} resource spans`);
+    logger.debug(
+      `[OtlpReceiver] Parsing request with ${body.resourceSpans?.length || 0} resource spans`,
+    );
 
     for (const resourceSpan of body.resourceSpans) {
       // Extract resource attributes if needed
       const resourceAttributes = this.parseAttributes(resourceSpan.resource?.attributes);
-      logger.debug(`[OtlpReceiver] Parsed ${Object.keys(resourceAttributes).length} resource attributes`);
+      logger.debug(
+        `[OtlpReceiver] Parsed ${Object.keys(resourceAttributes).length} resource attributes`,
+      );
 
       for (const scopeSpan of resourceSpan.scopeSpans) {
         for (const span of scopeSpan.spans) {
@@ -143,7 +149,9 @@ export class OTLPReceiver {
           const traceId = this.base64ToHex(span.traceId);
           const spanId = this.base64ToHex(span.spanId);
           const parentSpanId = span.parentSpanId ? this.base64ToHex(span.parentSpanId) : undefined;
-          logger.debug(`[OtlpReceiver] Processing span: ${span.name} (${spanId}) in trace ${traceId}`);
+          logger.debug(
+            `[OtlpReceiver] Processing span: ${span.name} (${spanId}) in trace ${traceId}`,
+          );
 
           // Parse attributes
           const attributes = {
@@ -219,7 +227,9 @@ export class OTLPReceiver {
   private base64ToHex(base64: string): string {
     try {
       const hex = Buffer.from(base64, 'base64').toString('hex');
-      logger.debug(`[OtlpReceiver] Converted base64 to hex: ${base64.substring(0, 8)}... -> ${hex.substring(0, 8)}...`);
+      logger.debug(
+        `[OtlpReceiver] Converted base64 to hex: ${base64.substring(0, 8)}... -> ${hex.substring(0, 8)}...`,
+      );
       return hex;
     } catch (error) {
       logger.error(`[OtlpReceiver] Failed to convert base64 to hex: ${error}`);

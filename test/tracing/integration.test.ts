@@ -39,17 +39,17 @@ describe('OpenTelemetry Tracing Integration', () => {
       return {
         ...actualFs,
         readFileSync: jest.fn((path: string) => {
-        if (path.endsWith('mock-traced-provider.js')) {
-          return mockTracedProvider;
-        }
-        return actualFs.readFileSync(path);
-      }),
-      existsSync: jest.fn((path: string) => {
-        if (path.endsWith('mock-traced-provider.js')) {
-          return true;
-        }
-        return actualFs.existsSync(path);
-      }),
+          if (path.endsWith('mock-traced-provider.js')) {
+            return mockTracedProvider;
+          }
+          return actualFs.readFileSync(path);
+        }),
+        existsSync: jest.fn((path: string) => {
+          if (path.endsWith('mock-traced-provider.js')) {
+            return true;
+          }
+          return actualFs.existsSync(path);
+        }),
       };
     });
 
@@ -96,7 +96,9 @@ describe('OpenTelemetry Tracing Integration', () => {
     expect(firstResult.response).toBeDefined();
     expect(firstResult.response?.metadata).toBeDefined();
     expect(firstResult.response?.metadata?.traceparent).toBeDefined();
-    expect(firstResult.response?.metadata?.traceparent).toMatch(/^00-[a-f0-9]{32}-[a-f0-9]{16}-01$/);
+    expect(firstResult.response?.metadata?.traceparent).toMatch(
+      /^00-[a-f0-9]{32}-[a-f0-9]{16}-01$/,
+    );
     expect(firstResult.response?.metadata?.evaluationId).toBeDefined();
     expect(firstResult.response?.metadata?.testCaseId).toBeDefined();
   });

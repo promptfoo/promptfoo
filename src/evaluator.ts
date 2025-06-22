@@ -263,7 +263,7 @@ export async function runEval({
       // Check if tracing is enabled from test metadata
       const tracingEnabled =
         test.metadata?.tracingEnabled === true || process.env.PROMPTFOO_TRACING_ENABLED === 'true';
-      
+
       if (tracingEnabled) {
         logger.debug('[Evaluator] Tracing enabled for test case');
       }

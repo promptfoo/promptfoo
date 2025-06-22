@@ -40,7 +40,9 @@ export class TraceStore {
 
   async createTrace(trace: TraceData): Promise<void> {
     try {
-      logger.debug(`[TraceStore] Creating trace ${trace.traceId} for evaluation ${trace.evaluationId}`);
+      logger.debug(
+        `[TraceStore] Creating trace ${trace.traceId} for evaluation ${trace.evaluationId}`,
+      );
       const db = this.getDatabase();
       await db.insert(tracesTable).values({
         id: randomUUID(),
