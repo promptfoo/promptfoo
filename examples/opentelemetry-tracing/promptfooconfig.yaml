@@ -1,0 +1,64 @@
+# Example configuration for OpenTelemetry tracing with Promptfoo
+
+# Enable tracing
+tracing:
+  enabled: true
+  
+  # OTLP receiver configuration
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+      # Accept both protobuf and JSON for easier adoption
+      acceptFormats: ['json']
+    # gRPC support will be added in phase 2
+    # grpc:
+    #   enabled: false
+    #   port: 4317
+  
+  # Storage configuration  
+  storage:
+    type: sqlite
+    retentionDays: 30
+  
+  # Optional: Forward traces to another collector
+  # forwarding:
+  #   enabled: true
+  #   endpoint: 'http://jaeger-collector:4318'
+  #   headers:
+  #     'api-key': '${JAEGER_API_KEY}'
+
+# Providers that support tracing
+providers:
+  - id: file://./provider-with-tracing.js
+  - id: file://./provider-simple.ts
+
+# Example prompts
+prompts:
+  - "What are the key principles of AI safety?"
+  - "Explain machine learning in simple terms"
+  - "How do neural networks learn?"
+
+# Test cases
+tests:
+  - vars:
+      topic: "artificial intelligence"
+    assert:
+      - type: contains
+        value: "AI"
+  
+  - vars:
+      topic: "climate change"
+    assert:
+      - type: llm-rubric
+        value: "Response should be informative and accurate"
+  
+  - vars:
+      topic: "quantum computing"
+    assert:
+      - type: javascript
+        value: |
+          output.length > 100
+
+# Output configuration
+outputPath: results.json
