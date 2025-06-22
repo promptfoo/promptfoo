@@ -286,7 +286,7 @@ export function orderKeys<T extends object>(obj: T, order: (keyof T)[]): T {
 /**
  * Type definition for a logging-safe summary of an EvaluateResult.
  */
-export interface LoggableEvaluateResultSummary {
+interface LoggableEvaluateResultSummary {
   id?: string;
   testIdx: number;
   promptIdx: number;

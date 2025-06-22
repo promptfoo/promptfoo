@@ -49,9 +49,6 @@ export const DEFAULT_HTTP_TARGET: ProviderOptions = {
   },
 };
 
-export const PROMPT_EXAMPLE =
-  'You are a travel agent specialized in budget trips to Europe\n\nUser query: {{prompt}}';
-
 const defaultConfig: Config = {
   description: 'My Red Team Configuration',
   prompts: ['{{prompt}}'],
@@ -223,7 +220,7 @@ export const EXAMPLE_APPLICATION_DEFINITION: ApplicationDefinition = {
   forbiddenActions: 'Access other patient data, modify system settings, bypass authentication',
 };
 
-export const TRAVEL_RAG_EXAMPLE_APPLICATION_DEFINITION: ApplicationDefinition = {
+const TRAVEL_RAG_EXAMPLE_APPLICATION_DEFINITION: ApplicationDefinition = {
   purpose:
     'Help employees at Travel R Us, a hotel search company, find information faster in their internal documentation.',
   features:

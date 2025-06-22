@@ -6,7 +6,7 @@ import type { EnvOverrides } from '../../types/env';
 /**
  * Base options shared by all Anthropic provider implementations
  */
-export interface AnthropicBaseOptions {
+interface AnthropicBaseOptions {
   apiKey?: string;
   apiBaseUrl?: string;
   headers?: Record<string, string>;

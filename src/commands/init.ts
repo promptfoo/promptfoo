@@ -100,7 +100,7 @@ export async function getExamplesList(): Promise<string[]> {
   }
 }
 
-export async function selectExample(): Promise<string> {
+async function selectExample(): Promise<string> {
   const examples = await getExamplesList();
   const choices = [
     { name: 'None (initialize with dummy files)', value: '' },

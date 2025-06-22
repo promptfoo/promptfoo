@@ -5,7 +5,7 @@ import logger from '../logger';
 import { MEMORY_POISONING_PLUGIN_ID } from '../redteam/plugins/agentic/constants';
 import { MemoryPoisoningProvider } from '../redteam/providers/agentic/memoryPoisoning';
 import RedteamBestOfNProvider from '../redteam/providers/bestOfN';
-import RedteamCrescendoProvider from '../redteam/providers/crescendo';
+import { CrescendoProvider as RedteamCrescendoProvider } from '../redteam/providers/crescendo';
 import RedteamGoatProvider from '../redteam/providers/goat';
 import RedteamIterativeProvider from '../redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../redteam/providers/iterativeImage';

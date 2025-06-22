@@ -29,7 +29,7 @@ type Tests = NonNullable<TestSuite['tests']>;
  * @param pathOrId - Either a file path to a JSON results file or an eval ID
  * @returns A filtered array of tests that failed in the specified eval
  */
-export async function filterFailingTests(testSuite: TestSuite, pathOrId: string): Promise<Tests> {
+async function filterFailingTests(testSuite: TestSuite, pathOrId: string): Promise<Tests> {
   return filterTestsByResults(testSuite, pathOrId, (result) => !result.success);
 }
 
@@ -39,7 +39,7 @@ export async function filterFailingTests(testSuite: TestSuite, pathOrId: string)
  * @param pathOrId - Either a file path to a JSON results file or an eval ID
  * @returns A filtered array of tests that resulted in errors in the specified evaluation
  */
-export async function filterErrorTests(testSuite: TestSuite, pathOrId: string): Promise<Tests> {
+async function filterErrorTests(testSuite: TestSuite, pathOrId: string): Promise<Tests> {
   return filterTestsByResults(
     testSuite,
     pathOrId,

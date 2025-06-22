@@ -12,7 +12,7 @@ import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
 import { makeRequest as makeCloudRequest } from './util/cloud';
 
-export interface ShareDomainResult {
+interface ShareDomainResult {
   domain: string;
   isPublicShare: boolean;
 }

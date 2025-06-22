@@ -1,0 +1,13 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": ["src/index.ts", "src/app/src/index.ts"],
+  "project": ["src/**/*.{js,ts,tsx}"],
+  "ignore": [
+    "site/**/*.{js,ts,tsx, md, mdx}",
+    "dist/**/*.{js,ts,tsx}",
+    "examples/**/*.{js,ts,tsx, mjs}"
+  ],
+  "paths": {
+    "@promptfoo/*": ["./src/*"]
+  }
+}
