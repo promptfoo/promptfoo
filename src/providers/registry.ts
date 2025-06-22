@@ -740,7 +740,7 @@ export const providerMap: ProviderFactory[] = [
             ...(providerOptions.config.models && { models: providerOptions.config.models }),
             ...(providerOptions.config.route && { route: providerOptions.config.route }),
             ...(providerOptions.config.provider && { provider: providerOptions.config.provider }),
-            ...providerOptions.config.passthrough,
+            ...(providerOptions.config.passthrough || {}),
           },
         },
       });
