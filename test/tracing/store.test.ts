@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
-import { TraceStore } from '../../src/tracing/store';
+import { eq } from 'drizzle-orm';
 import { getDb } from '../../src/database';
 import { tracesTable, spansTable } from '../../src/database/tables';
-import { eq } from 'drizzle-orm';
+import { TraceStore } from '../../src/tracing/store';
 
 // Mock the database
 jest.mock('../../src/database');
@@ -19,11 +19,11 @@ describe('TraceStore', () => {
     // Create mock database methods
     mockDb = {
       insert: jest.fn().mockReturnThis(),
-      values: jest.fn().mockResolvedValue(undefined),
+      values: jest.fn().mockImplementation(() => Promise.resolve()),
       select: jest.fn().mockReturnThis(),
       from: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
-      limit: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockImplementation(() => Promise.resolve([])),
       delete: jest.fn().mockReturnThis(),
     };
 
@@ -76,8 +76,8 @@ describe('TraceStore', () => {
   describe('addSpans', () => {
     it('should add spans to an existing trace', async () => {
       // Mock trace exists check
-      mockDb.limit.mockResolvedValueOnce([{ traceId: 'test-trace-id' }]);
-      
+      mockDb.limit.mockImplementationOnce(() => Promise.resolve([{ traceId: 'test-trace-id' }]));
+
       const spans = [
         {
           spanId: 'span-1',
@@ -102,7 +102,7 @@ describe('TraceStore', () => {
       expect(mockDb.select).toHaveBeenCalled();
       expect(mockDb.from).toHaveBeenCalledWith(tracesTable);
       expect(mockDb.where).toHaveBeenCalledWith(eq(tracesTable.traceId, 'test-trace-id'));
-      
+
       expect(mockDb.insert).toHaveBeenCalledWith(spansTable);
       expect(mockDb.values).toHaveBeenCalledWith([
         {
@@ -134,36 +134,40 @@ describe('TraceStore', () => {
 
     it('should skip spans if trace does not exist', async () => {
       // Mock trace does not exist
-      mockDb.limit.mockResolvedValueOnce([]);
-      
-      const spans = [{
-        spanId: 'span-1',
-        name: 'operation-1',
-        startTime: 1000,
-      }];
+      mockDb.limit.mockImplementationOnce(() => Promise.resolve([]));
+
+      const spans = [
+        {
+          spanId: 'span-1',
+          name: 'operation-1',
+          startTime: 1000,
+        },
+      ];
 
       await traceStore.addSpans('non-existent-trace', spans);
 
       // Should check for trace existence
       expect(mockDb.select).toHaveBeenCalled();
-      
+
       // Should not insert spans
       expect(mockDb.insert).not.toHaveBeenCalledWith(spansTable);
     });
 
     it('should handle errors when adding spans', async () => {
       // Mock trace exists
-      mockDb.limit.mockResolvedValueOnce([{ traceId: 'test-trace-id' }]);
-      
+      mockDb.limit.mockImplementationOnce(() => Promise.resolve([{ traceId: 'test-trace-id' }]));
+
       // Mock insert error
       const error = new Error('Insert failed');
       mockDb.values.mockRejectedValueOnce(error);
-      
-      const spans = [{
-        spanId: 'span-1',
-        name: 'operation-1',
-        startTime: 1000,
-      }];
+
+      const spans = [
+        {
+          spanId: 'span-1',
+          name: 'operation-1',
+          startTime: 1000,
+        },
+      ];
 
       await expect(traceStore.addSpans('test-trace-id', spans)).rejects.toThrow('Insert failed');
     });
@@ -175,22 +179,20 @@ describe('TraceStore', () => {
         { id: '1', traceId: 'trace-1', evaluationId: 'eval-1' },
         { id: '2', traceId: 'trace-2', evaluationId: 'eval-1' },
       ];
-      
+
       const mockSpans = {
         'trace-1': [
           { id: '1', traceId: 'trace-1', spanId: 'span-1-1' },
           { id: '2', traceId: 'trace-1', spanId: 'span-1-2' },
         ],
-        'trace-2': [
-          { id: '3', traceId: 'trace-2', spanId: 'span-2-1' },
-        ],
+        'trace-2': [{ id: '3', traceId: 'trace-2', spanId: 'span-2-1' }],
       };
 
       // Mock trace query
       const traceQuery = {
         select: jest.fn().mockReturnThis(),
         from: jest.fn().mockReturnThis(),
-        where: jest.fn().mockResolvedValue(mockTraces),
+        where: jest.fn().mockImplementation(() => Promise.resolve(mockTraces)),
       };
       mockDb.select.mockReturnValueOnce(traceQuery);
 
@@ -198,16 +200,14 @@ describe('TraceStore', () => {
       const spanQuery1 = {
         select: jest.fn().mockReturnThis(),
         from: jest.fn().mockReturnThis(),
-        where: jest.fn().mockResolvedValue(mockSpans['trace-1']),
+        where: jest.fn().mockImplementation(() => Promise.resolve(mockSpans['trace-1'])),
       };
       const spanQuery2 = {
         select: jest.fn().mockReturnThis(),
         from: jest.fn().mockReturnThis(),
-        where: jest.fn().mockResolvedValue(mockSpans['trace-2']),
+        where: jest.fn().mockImplementation(() => Promise.resolve(mockSpans['trace-2'])),
       };
-      mockDb.select
-        .mockReturnValueOnce(spanQuery1)
-        .mockReturnValueOnce(spanQuery2);
+      mockDb.select.mockReturnValueOnce(spanQuery1).mockReturnValueOnce(spanQuery2);
 
       const result = await traceStore.getTracesByEvaluation('eval-1');
 
@@ -226,7 +226,7 @@ describe('TraceStore', () => {
       const traceQuery = {
         select: jest.fn().mockReturnThis(),
         from: jest.fn().mockReturnThis(),
-        where: jest.fn().mockResolvedValue([]),
+        where: jest.fn().mockImplementation(() => Promise.resolve([])),
       };
       mockDb.select.mockReturnValue(traceQuery);
 
@@ -245,13 +245,13 @@ describe('TraceStore', () => {
       ];
 
       // Mock trace query
-      mockDb.limit.mockResolvedValueOnce([mockTrace]);
-      
+      mockDb.limit.mockImplementationOnce(() => Promise.resolve([mockTrace]));
+
       // Mock spans query
       const spanQuery = {
         select: jest.fn().mockReturnThis(),
         from: jest.fn().mockReturnThis(),
-        where: jest.fn().mockResolvedValue(mockSpans),
+        where: jest.fn().mockImplementation(() => Promise.resolve(mockSpans)),
       };
       mockDb.select.mockReturnValueOnce(spanQuery);
 
@@ -264,7 +264,7 @@ describe('TraceStore', () => {
     });
 
     it('should return null if trace not found', async () => {
-      mockDb.limit.mockResolvedValueOnce([]);
+      mockDb.limit.mockImplementationOnce(() => Promise.resolve([]));
 
       const result = await traceStore.getTrace('non-existent-trace');
 
@@ -285,7 +285,7 @@ describe('TraceStore', () => {
 
     it('should handle errors when deleting old traces', async () => {
       const error = new Error('Delete failed');
-      mockDb.where.mockRejectedValueOnce(error);
+      mockDb.where.mockImplementation(() => Promise.reject(error));
 
       await expect(traceStore.deleteOldTraces(30)).rejects.toThrow('Delete failed');
     });

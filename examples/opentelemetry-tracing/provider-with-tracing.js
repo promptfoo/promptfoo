@@ -35,24 +35,24 @@ const tracer = trace.getTracer('example-rag-provider', '1.0.0');
 const mockVectorStore = {
   async search(query) {
     // Simulate vector search
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 100));
     return [
       { id: '1', content: 'Document about AI safety', score: 0.95 },
       { id: '2', content: 'Document about machine learning', score: 0.87 },
     ];
-  }
+  },
 };
 
 // Mock LLM for demonstration
 const mockLLM = {
   async generate(prompt, documents) {
     // Simulate LLM generation
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 200));
     return {
       text: `Based on the documents, here's my response to "${prompt}"...`,
       tokenCount: 150,
     };
-  }
+  },
 };
 
 // Provider implementation with tracing
@@ -66,26 +66,23 @@ module.exports = {
     if (context.traceparent) {
       // Parse the W3C trace context
       const matches = context.traceparent.match(/^(\d{2})-([a-f0-9]{32})-([a-f0-9]{16})-(\d{2})$/);
-      
+
       if (matches) {
         const [, version, traceId, parentId, traceFlags] = matches;
-        
+
         // Create parent context from Promptfoo's trace
-        const parentCtx = trace.setSpanContext(
-          context.ROOT_CONTEXT || context.active(),
-          {
-            traceId: traceId,
-            spanId: parentId,
-            traceFlags: parseInt(traceFlags, 16),
-            isRemote: true,
-          }
-        );
-        
+        const parentCtx = trace.setSpanContext(context.ROOT_CONTEXT || context.active(), {
+          traceId: traceId,
+          spanId: parentId,
+          traceFlags: parseInt(traceFlags, 16),
+          isRemote: true,
+        });
+
         // Run our operations within the parent context
         return context.with(parentCtx, () => this._tracedCallApi(prompt, context));
       }
     }
-    
+
     // No trace context - run without tracing
     return this._untracedCallApi(prompt, context);
   },
@@ -99,7 +96,7 @@ module.exports = {
         'promptfoo.test_case_id': context.testCaseId,
         'prompt.length': prompt.length,
         'prompt.preview': prompt.substring(0, 50),
-      }
+      },
     });
 
     try {
@@ -108,7 +105,7 @@ module.exports = {
         attributes: {
           'search.query': prompt,
           'search.type': 'vector',
-        }
+        },
       });
 
       let documents;
@@ -121,9 +118,9 @@ module.exports = {
         retrievalSpan.setStatus({ code: SpanStatusCode.OK });
       } catch (error) {
         retrievalSpan.recordException(error);
-        retrievalSpan.setStatus({ 
-          code: SpanStatusCode.ERROR, 
-          message: error.message 
+        retrievalSpan.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: error.message,
         });
         throw error;
       } finally {
@@ -134,18 +131,16 @@ module.exports = {
       const contextSpan = tracer.startSpan('prepare_context', {
         attributes: {
           'context.document_count': documents.length,
-        }
+        },
       });
 
       let augmentedPrompt;
       try {
         // Prepare context from retrieved documents
-        const contextText = documents
-          .map(doc => doc.content)
-          .join('\n\n');
-        
+        const contextText = documents.map((doc) => doc.content).join('\n\n');
+
         augmentedPrompt = `Context:\n${contextText}\n\nQuestion: ${prompt}`;
-        
+
         contextSpan.setAttributes({
           'context.length': contextText.length,
           'prompt.augmented_length': augmentedPrompt.length,
@@ -161,13 +156,13 @@ module.exports = {
           'llm.model': 'gpt-4',
           'llm.temperature': 0.7,
           'llm.max_tokens': 500,
-        }
+        },
       });
 
       let response;
       try {
         response = await mockLLM.generate(augmentedPrompt, documents);
-        
+
         generationSpan.setAttributes({
           'llm.response_length': response.text.length,
           'llm.token_count': response.tokenCount,
@@ -176,9 +171,9 @@ module.exports = {
         generationSpan.setStatus({ code: SpanStatusCode.OK });
       } catch (error) {
         generationSpan.recordException(error);
-        generationSpan.setStatus({ 
-          code: SpanStatusCode.ERROR, 
-          message: error.message 
+        generationSpan.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: error.message,
         });
         throw error;
       } finally {
@@ -202,15 +197,14 @@ module.exports = {
         },
         cost: response.tokenCount * 0.00002, // Example cost calculation
       };
-
     } catch (error) {
       // Record error on main span
       span.recordException(error);
-      span.setStatus({ 
-        code: SpanStatusCode.ERROR, 
-        message: error.message 
+      span.setStatus({
+        code: SpanStatusCode.ERROR,
+        message: error.message,
       });
-      
+
       // Return error in Promptfoo format
       return {
         error: error.message,
@@ -225,10 +219,10 @@ module.exports = {
   async _untracedCallApi(prompt, context) {
     try {
       const documents = await mockVectorStore.search(prompt);
-      const contextText = documents.map(doc => doc.content).join('\n\n');
+      const contextText = documents.map((doc) => doc.content).join('\n\n');
       const augmentedPrompt = `Context:\n${contextText}\n\nQuestion: ${prompt}`;
       const response = await mockLLM.generate(augmentedPrompt, documents);
-      
+
       return {
         output: response.text,
         tokenUsage: {
@@ -243,5 +237,5 @@ module.exports = {
         error: error.message,
       };
     }
-  }
+  },
 };

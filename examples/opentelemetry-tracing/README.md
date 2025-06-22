@@ -5,6 +5,7 @@ This example demonstrates how to use OpenTelemetry to trace the internal operati
 ## Overview
 
 Promptfoo's OpenTelemetry integration allows you to:
+
 - Trace internal operations of your providers without a custom SDK
 - Use standard OpenTelemetry libraries in any language
 - Send traces to any OpenTelemetry-compatible backend
@@ -57,7 +58,7 @@ module.exports = {
       // Parse and use the trace context
       // ... (see provider examples)
     }
-    
+
     // Your provider logic with spans
     const span = tracer.startSpan('my_operation');
     try {
@@ -67,7 +68,7 @@ module.exports = {
     } finally {
       span.end();
     }
-  }
+  },
 };
 ```
 
@@ -100,6 +101,7 @@ export PROMPTFOO_TRACING_ENABLED=true
 ### JavaScript Provider with RAG Pipeline
 
 See `provider-with-tracing.js` for a complete example of a RAG provider with:
+
 - Document retrieval tracing
 - Context preparation spans
 - LLM generation monitoring
@@ -108,6 +110,7 @@ See `provider-with-tracing.js` for a complete example of a RAG provider with:
 ### TypeScript Simple Provider
 
 See `provider-simple.ts` for a minimal TypeScript example showing:
+
 - Type-safe integration
 - Basic span creation
 - Event logging
@@ -116,6 +119,7 @@ See `provider-simple.ts` for a minimal TypeScript example showing:
 ## Viewing Traces
 
 Currently, traces are stored in SQLite. Future releases will include:
+
 - Web UI trace visualization
 - Trace export to common formats
 - Integration with popular APM tools

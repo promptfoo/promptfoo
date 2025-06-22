@@ -3,7 +3,7 @@
 # Enable tracing
 tracing:
   enabled: true
-  
+
   # OTLP receiver configuration
   otlp:
     http:
@@ -15,12 +15,12 @@ tracing:
     # grpc:
     #   enabled: false
     #   port: 4317
-  
-  # Storage configuration  
+
+  # Storage configuration
   storage:
     type: sqlite
     retentionDays: 30
-  
+
   # Optional: Forward traces to another collector
   # forwarding:
   #   enabled: true
@@ -35,26 +35,26 @@ providers:
 
 # Example prompts
 prompts:
-  - "What are the key principles of AI safety?"
-  - "Explain machine learning in simple terms"
-  - "How do neural networks learn?"
+  - 'What are the key principles of AI safety?'
+  - 'Explain machine learning in simple terms'
+  - 'How do neural networks learn?'
 
 # Test cases
 tests:
   - vars:
-      topic: "artificial intelligence"
+      topic: 'artificial intelligence'
     assert:
       - type: contains
-        value: "AI"
-  
+        value: 'AI'
+
   - vars:
-      topic: "climate change"
+      topic: 'climate change'
     assert:
       - type: llm-rubric
-        value: "Response should be informative and accurate"
-  
+        value: 'Response should be informative and accurate'
+
   - vars:
-      topic: "quantum computing"
+      topic: 'quantum computing'
     assert:
       - type: javascript
         value: |

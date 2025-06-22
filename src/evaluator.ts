@@ -259,16 +259,21 @@ export async function runEval({
       let traceparent: string | undefined;
       let evaluationId: string | undefined;
       let testCaseId: string | undefined;
-      
+
       // Check if tracing is enabled from test metadata
-      const tracingEnabled = test.metadata?.tracingEnabled === true || 
-                           process.env.PROMPTFOO_TRACING_ENABLED === 'true';
+      const tracingEnabled =
+        test.metadata?.tracingEnabled === true || process.env.PROMPTFOO_TRACING_ENABLED === 'true';
       
       if (tracingEnabled) {
+        logger.debug('[Evaluator] Tracing enabled for test case');
+      }
+
+      if (tracingEnabled) {
         // Import trace store dynamically to avoid circular dependencies
+        logger.debug('[Evaluator] Importing trace store');
         const { getTraceStore } = await import('./tracing/store');
         const traceStore = getTraceStore();
-        
+
         // Generate 16-byte trace ID
         const traceId = randomBytes(16).toString('hex');
         // Generate 8-byte span ID
@@ -277,13 +282,16 @@ export async function runEval({
         const version = '00';
         const traceFlags = '01'; // sampled
         traceparent = `${version}-${traceId}-${spanId}-${traceFlags}`;
-        
+        logger.debug(`[Evaluator] Generated trace context: traceId=${traceId}, spanId=${spanId}`);
+
         // Get evaluation ID from test metadata or generate one
-        evaluationId = test.metadata?.evaluationId || evaluateOptions?.eventSource || `eval-${Date.now()}`;
+        evaluationId =
+          test.metadata?.evaluationId || evaluateOptions?.eventSource || `eval-${Date.now()}`;
         testCaseId = (test as any).id || `${testIdx}-${promptIdx}`;
-        
+
         // Store trace association in trace store
         try {
+          logger.debug(`[Evaluator] Creating trace record for traceId=${traceId}`);
           await traceStore.createTrace({
             traceId,
             evaluationId: evaluationId || '',
@@ -292,15 +300,16 @@ export async function runEval({
               testIdx,
               promptIdx,
               vars: test.vars,
-            }
+            },
           });
+          logger.debug('[Evaluator] Trace record created successfully');
         } catch (error) {
-          logger.error(`Failed to create trace: ${error}`);
+          logger.error(`[Evaluator] Failed to create trace: ${error}`);
         }
-        
-        logger.debug(`Generated trace context: ${traceparent} for test case ${testCaseId}`);
+
+        logger.debug(`[Evaluator] Trace context ready: ${traceparent} for test case ${testCaseId}`);
       }
-      
+
       response = await activeProvider.callApi(
         renderedPrompt,
         {
@@ -316,7 +325,7 @@ export async function runEval({
           // All of these are removed in python and script providers, but every Javascript provider gets them
           logger: logger as unknown as winston.Logger,
           getCache,
-          
+
           // W3C Trace Context headers
           traceparent,
           evaluationId,
@@ -566,17 +575,17 @@ class Evaluator {
   conversations: EvalConversations;
   registers: EvalRegisters;
   fileWriters: JsonlFileWriter[];
-  
+
   private generateTraceId(): string {
     // Generate 16-byte trace ID
     return randomBytes(16).toString('hex');
   }
-  
+
   private generateSpanId(): string {
     // Generate 8-byte span ID
     return randomBytes(8).toString('hex');
   }
-  
+
   private generateTraceparent(traceId: string, spanId: string, sampled: boolean = true): string {
     // W3C Trace Context format: version-trace-id-parent-id-trace-flags
     const version = '00';
@@ -615,17 +624,22 @@ class Evaluator {
     let globalTimeout: NodeJS.Timeout | undefined;
     let globalAbortController: AbortController | undefined;
     const processedIndices = new Set<number>();
-    
+
     // Start OTLP receiver if tracing is enabled
     if (testSuite.tracing?.enabled && testSuite.tracing?.otlp?.http?.enabled) {
       try {
+        logger.debug('[Evaluator] Tracing configuration detected, starting OTLP receiver');
         const { startOTLPReceiver } = await import('./tracing/otlpReceiver');
         const port = testSuite.tracing.otlp.http.port || 4318;
-        startOTLPReceiver(port);
-        logger.info(`Started OTLP receiver on port ${port} for tracing`);
+        const host = testSuite.tracing.otlp.http.host || '0.0.0.0';
+        logger.debug(`[Evaluator] Starting OTLP receiver on ${host}:${port}`);
+        startOTLPReceiver(port, host);
+        logger.info(`[Evaluator] Started OTLP receiver on port ${port} for tracing`);
       } catch (error) {
-        logger.error(`Failed to start OTLP receiver: ${error}`);
+        logger.error(`[Evaluator] Failed to start OTLP receiver: ${error}`);
       }
+    } else {
+      logger.debug('[Evaluator] Tracing not enabled or OTLP HTTP receiver not configured');
     }
 
     if (maxEvalTimeMs > 0) {
@@ -901,15 +915,15 @@ class Evaluator {
                   ...prompt,
                   raw: prependToPrompt + prompt.raw + appendToPrompt,
                 },
-                test: { 
-                  ...testCase, 
-                  vars, 
+                test: {
+                  ...testCase,
+                  vars,
                   options: testCase.options,
                   metadata: {
                     ...testCase.metadata,
                     tracingEnabled: testSuite.tracing?.enabled || false,
                     evaluationId: this.evalRecord.id,
-                  }
+                  },
                 },
                 nunjucksFilters: testSuite.nunjucksFilters,
                 testIdx,
