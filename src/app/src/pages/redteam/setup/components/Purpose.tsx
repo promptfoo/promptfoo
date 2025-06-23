@@ -449,15 +449,7 @@ export default function Purpose({ onNext }: PromptsProps) {
                 The quality and specificity of your responses directly determines how targeted and
                 realistic the generated attacks will be. Detailed information leads to{' '}
                 <strong>significantly</strong> better security testing and{' '}
-                <strong>more accurate</strong> grading of attack effectiveness.{' '}
-                <a
-                  href="https://promptfoo.dev/docs/red-team/setup/#application-details"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ color: 'inherit', textDecoration: 'underline' }}
-                >
-                  View setup guide
-                </a>
+                <strong>more accurate</strong> grading of attack effectiveness.
               </Typography>
 
               <Box sx={{}}>
