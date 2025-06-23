@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Responses API image generation
+
+prompts:
+  - 'Generate an image showing {{image_prompt}}'
+
+providers:
+  - id: openai:responses:gpt-4.1-mini
+    config:
+      tools:
+        - type: image_generation
+          quality: 'medium'
+          size: '1024x1024'
+
+tests:
+  - vars:
+      image_prompt: 'a futuristic conference room with developers coding'
+  - vars:
+      image_prompt: 'a serene mountain lake at sunset'

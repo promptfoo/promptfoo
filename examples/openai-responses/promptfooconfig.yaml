@@ -1,9 +1,8 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: OpenAI Responses API with structured output and image generation
+description: OpenAI Responses API with Different Response Formats
 
 prompts:
   - 'Extract information about the event: {{event}}'
-  - 'Generate an image showing {{image_prompt}}'
 
 providers:
   - id: openai:responses:gpt-4.5-preview
@@ -34,18 +33,8 @@ providers:
           required: ['event_name', 'date', 'location', 'participants']
           additionalProperties: false
 
-  - id: openai:responses:gpt-4.1-mini
-    label: image-generation
-    config:
-      tools:
-        - type: image_generation
-          quality: 'medium'
-          size: '1024x1024'
-
 tests:
   - vars:
       event: 'Alice and Bob are attending a JSON schema conference in New York on September 15th, 2025.'
   - vars:
       event: 'The annual music festival will take place in Central Park this weekend, featuring local artists and food vendors.'
-  - vars:
-      image_prompt: 'a futuristic conference room with developers coding'
