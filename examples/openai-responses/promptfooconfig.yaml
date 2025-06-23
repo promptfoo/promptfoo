@@ -21,7 +21,7 @@ providers:
               description: 'The name of the event'
             date:
               type: 'string'
-              description: 'When the event takes place'  
+              description: 'When the event takes place'
             location:
               type: 'string'
               description: 'Where the event takes place'

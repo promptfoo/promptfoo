@@ -6,7 +6,7 @@ This example demonstrates how to use OpenAI's image generation models with promp
 
 - **DALL-E 3 Image Generation**: High-quality image creation from text prompts
 - **Multiple Quality Levels**: Standard and HD quality options
-- **Flexible Sizing**: Square and portrait/landscape orientations  
+- **Flexible Sizing**: Square and portrait/landscape orientations
 - **Inline Prompts**: Clean configuration without external files
 
 ## Configuration Options
@@ -40,14 +40,16 @@ npx promptfoo@latest init --example openai-image-generation
 ## Cost Considerations
 
 DALL-E 3 pricing:
+
 - **Standard 1024×1024**: $0.040 per image
-- **Standard 1024×1792 or 1792×1024**: $0.080 per image  
+- **Standard 1024×1792 or 1792×1024**: $0.080 per image
 - **HD 1024×1024**: $0.080 per image
 - **HD 1024×1792 or 1792×1024**: $0.120 per image
 
 ## Example Output
 
 The example includes various scenarios:
+
 - Nature and landscape scenes with photorealistic style
 - Fantasy content with artistic flair
 - Different prompt structures to test model capabilities
@@ -57,7 +59,8 @@ Each test demonstrates different aspects of DALL-E 3's image generation while sh
 ## Future Plans
 
 **GPT Image 1 Support**: Once OpenAI releases GPT Image 1 to their public API, this example will be updated to include advanced features like:
+
 - Token-based pricing model
 - Background transparency control
 - Multiple output formats (PNG, JPEG, WebP)
-- Compression control for optimization 
+- Compression control for optimization
