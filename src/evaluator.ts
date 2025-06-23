@@ -1272,7 +1272,7 @@ class Evaluator {
     try {
       if (serialRunEvalOptions.length > 0) {
         // Run serial evaluations first
-        logger.info(`Running ${serialRunEvalOptions.length} serial evaluations...`);
+        logger.info(`Running ${serialRunEvalOptions.length} test cases serially...`);
         for (const evalStep of serialRunEvalOptions) {
           if (isWebUI) {
             const provider = evalStep.provider.label || evalStep.provider.id();
@@ -1293,7 +1293,7 @@ class Evaluator {
 
       // Then run concurrent evaluations
       logger.info(
-        `Running ${concurrentRunEvalOptions.length} concurrent evaluations with up to ${concurrency} threads...`,
+        `Running ${concurrentRunEvalOptions.length} test cases (up to ${concurrency} at a time)...`,
       );
       await async.forEachOfLimit(concurrentRunEvalOptions, concurrency, async (evalStep) => {
         checkAbort();
