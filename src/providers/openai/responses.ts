@@ -151,7 +151,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // Handle prompt parameter (can be string ID or ResponsePrompt object)
     let promptParam;
     let promptVariables;
-    
+
     if (config.prompt) {
       if (typeof config.prompt === 'string') {
         promptParam = config.prompt;
