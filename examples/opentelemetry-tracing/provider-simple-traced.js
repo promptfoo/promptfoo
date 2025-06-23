@@ -41,7 +41,7 @@ async function runInSpan(spanOrName, attributesOrFn, maybeFn) {
   let span;
   let fn;
   let attributes = {};
-  
+
   // Handle overloaded parameters
   if (typeof spanOrName === 'string') {
     // Called with (name, attributes, fn) or (name, fn)
@@ -57,9 +57,9 @@ async function runInSpan(spanOrName, attributesOrFn, maybeFn) {
     span = spanOrName;
     fn = attributesOrFn;
   }
-  
+
   const ctx = trace.setSpan(context.active(), span);
-  
+
   try {
     const result = await context.with(ctx, fn);
     span.setStatus({ code: SpanStatusCode.OK });

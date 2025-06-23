@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { eq } from 'drizzle-orm';
+import { eq, lt } from 'drizzle-orm';
 import { getDb } from '../database';
 import { tracesTable, spansTable } from '../database/tables';
 import logger from '../logger';
@@ -177,7 +177,7 @@ export class TraceStore {
       const cutoffTime = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
 
       // Delete old traces (spans will be cascade deleted due to foreign key)
-      await db.delete(tracesTable).where(eq(tracesTable.createdAt, cutoffTime));
+      await db.delete(tracesTable).where(lt(tracesTable.createdAt, cutoffTime));
 
       logger.debug(`[TraceStore] Successfully deleted traces older than ${retentionDays} days`);
     } catch (error) {

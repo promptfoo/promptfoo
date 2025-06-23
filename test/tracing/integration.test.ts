@@ -1,59 +1,68 @@
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { evaluate } from '../../src/index';
-import type { EvaluateTestSuite } from '../../src/types';
+import type { EvaluateTestSuite, ProviderOptions, ApiProvider } from '../../src/types';
 
-// Mock provider that uses tracing
-const mockTracedProvider = `
-const { trace, context } = require('@opentelemetry/api');
+// Mock traced provider
+class MockTracedProvider implements ApiProvider {
+  id() {
+    return 'mock-traced-provider';
+  }
 
-module.exports = {
-  id: () => 'mock-traced-provider',
-  
-  async callApi(prompt, context) {
+  async callApi(prompt: string, context: any) {
     // Check for trace context
     if (context.traceparent) {
       return {
-        output: \`Traced response for: \${prompt}\`,
+        output: `Traced response for: ${prompt}`,
         metadata: {
           traceparent: context.traceparent,
           evaluationId: context.evaluationId,
           testCaseId: context.testCaseId,
-        }
+        },
       };
     }
-    
+
     return {
-      output: \`Untraced response for: \${prompt}\`,
+      output: `Untraced response for: ${prompt}`,
     };
   }
-};
-`;
+}
+
+// Mock loadApiProviders to return our mock provider
+jest.mock('../../src/providers/index', () => {
+  const actual = jest.requireActual('../../src/providers/index');
+
+  // Define the mock provider class inside the mock
+  class MockTracedProviderInstance {
+    id() {
+      return 'mock-traced-provider';
+    }
+
+    async callApi(prompt: string, context: any) {
+      if (context.traceparent) {
+        return {
+          output: `Traced response for: ${prompt}`,
+          metadata: {
+            traceparent: context.traceparent,
+            evaluationId: context.evaluationId,
+            testCaseId: context.testCaseId,
+          },
+        };
+      }
+      return {
+        output: `Untraced response for: ${prompt}`,
+      };
+    }
+  }
+
+  return {
+    ...actual,
+    loadApiProviders: jest.fn(async () => [new MockTracedProviderInstance()]),
+  };
+});
 
 describe('OpenTelemetry Tracing Integration', () => {
-  let mockProviderPath: string;
-
   beforeEach(() => {
-    // Mock file system for provider
-    jest.mock('fs', () => {
-      const actualFs = jest.requireActual('fs') as any;
-      return {
-        ...actualFs,
-        readFileSync: jest.fn((path: string) => {
-          if (path.endsWith('mock-traced-provider.js')) {
-            return mockTracedProvider;
-          }
-          return actualFs.readFileSync(path);
-        }),
-        existsSync: jest.fn((path: string) => {
-          if (path.endsWith('mock-traced-provider.js')) {
-            return true;
-          }
-          return actualFs.existsSync(path);
-        }),
-      };
-    });
-
-    mockProviderPath = './mock-traced-provider.js';
+    jest.clearAllMocks();
   });
 
   afterEach(() => {
@@ -62,7 +71,7 @@ describe('OpenTelemetry Tracing Integration', () => {
 
   it('should pass trace context to providers when tracing is enabled', async () => {
     const config: Partial<EvaluateTestSuite> = {
-      providers: [`file://${mockProviderPath}`],
+      providers: ['mock-traced-provider'],
       prompts: ['Test prompt'],
       tests: [
         {
@@ -105,7 +114,7 @@ describe('OpenTelemetry Tracing Integration', () => {
 
   it('should not pass trace context when tracing is disabled', async () => {
     const config: Partial<EvaluateTestSuite> = {
-      providers: [`file://${mockProviderPath}`],
+      providers: ['mock-traced-provider'],
       prompts: ['Test prompt'],
       tests: [
         {
@@ -135,7 +144,7 @@ describe('OpenTelemetry Tracing Integration', () => {
 
   it('should generate unique trace IDs for each test case', async () => {
     const config: Partial<EvaluateTestSuite> = {
-      providers: [`file://${mockProviderPath}`],
+      providers: ['mock-traced-provider'],
       prompts: ['Prompt 1', 'Prompt 2'],
       tests: [{ vars: { topic: 'test1' } }, { vars: { topic: 'test2' } }],
       tracing: {
@@ -165,7 +174,7 @@ describe('OpenTelemetry Tracing Integration', () => {
     process.env.PROMPTFOO_TRACING_ENABLED = 'true';
 
     const config: Partial<EvaluateTestSuite> = {
-      providers: [`file://${mockProviderPath}`],
+      providers: ['mock-traced-provider'],
       prompts: ['Test prompt'],
       tests: [{ vars: { topic: 'testing' } }],
       // No tracing config in YAML

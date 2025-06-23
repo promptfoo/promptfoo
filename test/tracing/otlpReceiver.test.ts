@@ -6,6 +6,11 @@ import { TraceStore } from '../../src/tracing/store';
 // Mock the trace store
 jest.mock('../../src/tracing/store');
 
+// Import the mocked module after mocking
+const mockedTraceStore = jest.requireMock('../../src/tracing/store') as {
+  getTraceStore: jest.MockedFunction<() => TraceStore>;
+};
+
 describe('OTLPReceiver', () => {
   let receiver: OTLPReceiver;
   let mockTraceStore: jest.Mocked<TraceStore>;
@@ -24,7 +29,7 @@ describe('OTLPReceiver', () => {
     } as unknown as jest.Mocked<TraceStore>;
 
     // Mock the getTraceStore function
-    (require('../../src/tracing/store') as any).getTraceStore = jest.fn(() => mockTraceStore);
+    mockedTraceStore.getTraceStore.mockReturnValue(mockTraceStore);
 
     // Create receiver instance
     receiver = new OTLPReceiver();
