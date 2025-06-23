@@ -1,13 +1,9 @@
 {
   "mcpServers": {
-    "promptfoo-stdio": {
-      "command": "node",
-      "args": [
-        "/Users/guangshuozang/Dev-Promptfoo/subfolder/promptfoo-cloud/promptfoo/dist/src/main.js",
-        "mcp",
-        "--transport",
-        "stdio"
-      ]
+    "promptfoo": {
+      "command": "/Users/guangshuozang/Dev-Promptfoo/subfolder/promptfoo-cloud/promptfoo/mcp-server.sh",
+      "args": ["mcp", "--transport", "stdio"],
+      "description": "Promptfoo MCP server for LLM evaluation and testing"
     }
   }
 }
