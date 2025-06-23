@@ -66,7 +66,7 @@ export default function Review() {
   const { showToast } = useToast();
   const [forceRegeneration /*, setForceRegeneration*/] = React.useState(true);
   const [debugMode, setDebugMode] = React.useState(false);
-  const [maxConcurrency, setMaxConcurrency] = React.useState('1');
+  const [maxConcurrency, setMaxConcurrency] = React.useState(String(config.maxConcurrency || 4));
   const [delayMs, setDelayMs] = React.useState('0');
   const [isJobStatusDialogOpen, setIsJobStatusDialogOpen] = useState(false);
   const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
@@ -85,6 +85,11 @@ export default function Review() {
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_review' });
   }, []);
+
+  // Sync local maxConcurrency state with config
+  useEffect(() => {
+    setMaxConcurrency(String(config.maxConcurrency || 4));
+  }, [config.maxConcurrency]);
 
   const handleSaveYaml = () => {
     const blob = new Blob([yamlContent], { type: 'text/yaml' });
@@ -872,6 +877,7 @@ export default function Review() {
                       // Ensure non-negative numbers only
                       if (!Number.isNaN(Number(value)) && Number(value) >= 0) {
                         setMaxConcurrency(value);
+                        updateConfig('maxConcurrency', Number(value));
                         // If concurrency > 1, disable delay by setting it to 0
                         if (Number(value) > 1) {
                           setDelayMs('0');

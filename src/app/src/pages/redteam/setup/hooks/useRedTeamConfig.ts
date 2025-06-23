@@ -61,6 +61,7 @@ const defaultConfig: Config = {
   purpose: '',
   entities: [],
   numTests: 10,
+  maxConcurrency: 4,
   applicationDefinition: {
     purpose: '',
     features: '',
@@ -268,6 +269,7 @@ export const EXAMPLE_CONFIG: Config = {
   purpose: applicationDefinitionToPurpose(TRAVEL_RAG_EXAMPLE_APPLICATION_DEFINITION),
   entities: [],
   numTests: 10,
+  maxConcurrency: 4,
   applicationDefinition: TRAVEL_RAG_EXAMPLE_APPLICATION_DEFINITION,
 };
 
