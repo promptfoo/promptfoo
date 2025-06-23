@@ -74,6 +74,11 @@ export default function Eval({
     return body.data;
   };
 
+  /**
+   * Triggers the fetching of a specific eval by id. Eval data is populated in the table store.
+   *
+   * @returns {Boolean} Whether the eval was loaded successfully.
+   */
   const loadEvalById = React.useCallback(
     async (id: string) => {
       try {
@@ -95,6 +100,9 @@ export default function Eval({
     [fetchEvalData, setFailed, setEvalId],
   );
 
+  /**
+   * Updates the URL with the selected eval id, triggering a re-render of the Eval component.
+   */
   const handleRecentEvalSelection = useCallback(
     async (id: string) => {
       navigate({
