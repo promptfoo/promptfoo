@@ -15,6 +15,9 @@ import { useResultsViewSettingsStore, useTableStore } from './store';
 import './Eval.css';
 
 interface EvalOptions {
+  /**
+   * ID of a specific eval to load.
+   */
   fetchId: string | null;
   preloadedData?: SharedResults;
   recentEvals?: ResultLightweightWithLabel[];
@@ -29,6 +32,7 @@ export default function Eval({
 }: EvalOptions) {
   const navigate = useNavigate();
   const { apiBaseUrl } = useApiConfig();
+  const [searchParams] = useSearchParams();
 
   const {
     table,
@@ -43,11 +47,23 @@ export default function Eval({
 
   const { setInComparisonMode, setComparisonEvalIds } = useResultsViewSettingsStore();
 
+  // ================================
+  // State
+  // ================================
+
   const [loaded, setLoaded] = React.useState(false);
   const [failed, setFailed] = React.useState(false);
   const [recentEvals, setRecentEvals] = React.useState<ResultLightweightWithLabel[]>(
     recentEvalsProp || [],
   );
+
+  const [defaultEvalId, setDefaultEvalId] = React.useState<string>(
+    defaultEvalIdProp || recentEvals[0]?.evalId,
+  );
+
+  // ================================
+  // Handlers
+  // ================================
 
   const fetchRecentFileEvals = async () => {
     const resp = await callApi(`/results`, { cache: 'no-store' });
@@ -81,8 +97,6 @@ export default function Eval({
     [fetchEvalData, setFailed, setEvalId],
   );
 
-  const [searchParams] = useSearchParams();
-
   const handleRecentEvalSelection = useCallback(
     async (id: string) => {
       navigate({
@@ -93,9 +107,9 @@ export default function Eval({
     [searchParams, navigate],
   );
 
-  const [defaultEvalId, setDefaultEvalId] = React.useState<string>(
-    defaultEvalIdProp || recentEvals[0]?.evalId,
-  );
+  // ================================
+  // Effects
+  // ================================
 
   React.useEffect(() => {
     if (fetchId) {
@@ -196,9 +210,16 @@ export default function Eval({
     preloadedData,
   ]);
 
+  /**
+   * Set the document title to the eval description or eval id.
+   */
   React.useEffect(() => {
     document.title = `${config?.description || evalId || 'Eval'} | promptfoo`;
   }, [config, evalId]);
+
+  // ================================
+  // Rendering
+  // ================================
 
   if (failed) {
     return <div className="notice">404 Eval not found</div>;
