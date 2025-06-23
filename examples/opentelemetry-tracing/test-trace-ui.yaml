@@ -1,0 +1,28 @@
+description: Test trace UI visualization
+
+providers:
+  - file://provider-with-tracing.js
+
+prompts:
+  - 'Explain how {{topic}} works in simple terms'
+
+tests:
+  - vars:
+      topic: 'quantum computing'
+    metadata:
+      tracingEnabled: true
+      testCaseId: 'test-case-1'
+
+  - vars:
+      topic: 'machine learning'
+    metadata:
+      tracingEnabled: true
+      testCaseId: 'test-case-2'
+
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+      host: 'localhost'

@@ -118,11 +118,38 @@ See `provider-simple.ts` for a minimal TypeScript example showing:
 
 ## Viewing Traces
 
-Currently, traces are stored in SQLite. Future releases will include:
+### Web UI Trace Visualization
 
-- Web UI trace visualization
-- Trace export to common formats
-- Integration with popular APM tools
+Promptfoo now includes built-in trace visualization in the web UI:
+
+1. Run your evaluation with tracing enabled:
+
+   ```bash
+   promptfoo eval -c test-trace-ui.yaml
+   ```
+
+2. Open the web UI:
+
+   ```bash
+   promptfoo view
+   ```
+
+3. Click on any test result's magnifying glass icon (🔎) to open the output dialog
+
+4. Scroll down to see the "Trace Timeline" section showing:
+   - Hierarchical span visualization
+   - Duration bars showing relative timing
+   - Status indicators (OK/ERROR)
+   - Hover tooltips with detailed span information
+
+### Trace Storage
+
+Traces are stored in SQLite and linked to evaluations. The storage includes:
+
+- Full span hierarchy with parent-child relationships
+- Span attributes and metadata
+- Timing information in nanoseconds
+- Status codes and error messages
 
 ## Best Practices
 

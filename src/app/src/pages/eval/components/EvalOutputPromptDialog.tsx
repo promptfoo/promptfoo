@@ -18,6 +18,7 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
 import { ellipsize } from '../../../../../util/text';
+import TraceView from '../../../components/traces/TraceView';
 import ChatMessages, { type Message } from './ChatMessages';
 import Citations from './Citations';
 import type { GradingResult } from './types';
@@ -279,6 +280,8 @@ interface EvalOutputPromptDialogProps {
   output?: string;
   gradingResults?: GradingResult[];
   metadata?: Record<string, any>;
+  evaluationId?: string;
+  testCaseId?: string;
 }
 
 // URL detection function
@@ -299,6 +302,8 @@ export default function EvalOutputPromptDialog({
   output,
   gradingResults,
   metadata,
+  evaluationId,
+  testCaseId,
 }: EvalOutputPromptDialogProps) {
   const [copied, setCopied] = useState(false);
   const [copiedFields, setCopiedFields] = useState<{ [key: string]: boolean }>({});
@@ -461,6 +466,14 @@ export default function EvalOutputPromptDialog({
                 </TableBody>
               </Table>
             </TableContainer>
+          </Box>
+        )}
+        {evaluationId && (
+          <Box mt={2}>
+            <Typography variant="subtitle1" sx={subtitleTypographySx}>
+              Trace Timeline
+            </Typography>
+            <TraceView evaluationId={evaluationId} testCaseId={testCaseId} />
           </Box>
         )}
         {(metadata?.redteamHistory || metadata?.redteamTreeHistory) && (

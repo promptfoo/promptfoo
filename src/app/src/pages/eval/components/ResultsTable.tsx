@@ -755,6 +755,8 @@ function ResultsTable({
                     showDiffs={filterMode === 'different' && visiblePromptCount > 1}
                     searchText={debouncedSearchText}
                     showStats={showStats}
+                    evaluationId={evalId || undefined}
+                    testCaseId={info.row.original.test?.metadata?.testCaseId || output.id}
                   />
                 </ErrorBoundary>
               ) : (
