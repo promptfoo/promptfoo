@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import EnterpriseBanner from '@app/components/EnterpriseBanner';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
@@ -137,7 +137,9 @@ export default function Eval({
 
       socket.on('init', (data) => {
         console.log('Initialized socket connection', data);
-        setLoaded(true);
+        // NOTE: Constructing the table is a time-expensive operation; therefore `setLoaded(true)` is not called
+        // until after the table is constructed. Otherwise, `loaded` will be true before the table is defined resulting
+        // in a race condition.
         setTableFromResultsFile(data);
         setConfig(data?.config);
         setAuthor(data?.author || null);
@@ -215,6 +217,15 @@ export default function Eval({
   React.useEffect(() => {
     document.title = `${config?.description || evalId || 'Eval'} | promptfoo`;
   }, [config, evalId]);
+
+  /**
+   * If loading is waiting for the table to be populated, set loaded to true.
+   */
+  useEffect(() => {
+    if (table && !loaded) {
+      setLoaded(true);
+    }
+  }, [table, loaded]);
 
   // ================================
   // Rendering
