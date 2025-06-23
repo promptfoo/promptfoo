@@ -26,8 +26,14 @@ export default function TraceView({ evaluationId, testCaseId }: TraceViewProps) 
       try {
         setLoading(true);
         setError(null);
-        const data = await callApi(`/traces/evaluation/${evaluationId}`);
-        setTraces((data as any).traces || []);
+        const response = await callApi(`/traces/evaluation/${evaluationId}`);
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        setTraces(data.traces || []);
       } catch (err) {
         console.error('Error fetching traces:', err);
         setError(err instanceof Error ? err.message : 'Failed to fetch traces');
