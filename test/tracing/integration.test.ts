@@ -55,7 +55,7 @@ jest.mock('../../src/providers/index', () => {
   }
 
   return {
-    ...actual,
+    ...(actual as any),
     loadApiProviders: jest.fn(async () => [new MockTracedProviderInstance()]),
   };
 });

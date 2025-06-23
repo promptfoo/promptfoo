@@ -27,7 +27,7 @@ export function traceCommand(program: Command) {
         // Start the OTLP receiver
         logger.info('[Trace] Starting OTLP receiver...');
         const { startOTLPReceiver } = await import('../tracing/otlpReceiver');
-        const port = parseInt(cmdObj.port);
+        const port = Number.parseInt(cmdObj.port);
         startOTLPReceiver(port, '0.0.0.0');
 
         // Wait for receiver to start
@@ -68,7 +68,7 @@ export function traceCommand(program: Command) {
         await traceStore.createTrace({
           traceId,
           evaluationId: testEvaluationId,
-          testCaseId: testCaseId,
+          testCaseId,
           metadata: {
             source: 'selftest',
             timestamp: new Date().toISOString(),

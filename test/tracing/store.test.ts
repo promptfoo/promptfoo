@@ -5,7 +5,7 @@ import { TraceStore } from '../../src/tracing/store';
 // Mock crypto before importing TraceStore
 const mockUUID = jest.fn(() => 'test-uuid');
 jest.mock('crypto', () => ({
-  ...jest.requireActual('crypto'),
+  ...(jest.requireActual('crypto') as any),
   randomUUID: () => 'test-uuid',
 }));
 
@@ -16,21 +16,21 @@ describe('TraceStore', () => {
   beforeEach(() => {
     // Create mock database methods that properly chain
     const mockInsertChain = {
-      values: jest.fn().mockResolvedValue(undefined),
+      values: jest.fn(() => Promise.resolve(undefined)),
     };
     const mockSelectChain = {
       from: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
-      limit: jest.fn().mockResolvedValue([]),
+      limit: jest.fn(() => Promise.resolve([])),
     };
     const mockDeleteChain = {
-      where: jest.fn().mockResolvedValue(undefined),
+      where: jest.fn(() => Promise.resolve(undefined)),
     };
 
     mockDb = {
-      insert: jest.fn().mockReturnValue(mockInsertChain),
-      select: jest.fn().mockReturnValue(mockSelectChain),
-      delete: jest.fn().mockReturnValue(mockDeleteChain),
+      insert: jest.fn(() => mockInsertChain),
+      select: jest.fn(() => mockSelectChain),
+      delete: jest.fn(() => mockDeleteChain),
     };
 
     // Create trace store and inject mock DB
@@ -206,16 +206,15 @@ describe('TraceStore', () => {
 
       // Mock span queries
       // Reset and set up new select mock chains for spans
-      mockDb.select = jest.fn();
       const spanQuery1 = {
         from: jest.fn().mockReturnThis(),
-        where: jest.fn().mockResolvedValueOnce(mockSpans['trace-1']),
+        where: jest.fn(() => Promise.resolve(mockSpans['trace-1'])),
       };
       const spanQuery2 = {
         from: jest.fn().mockReturnThis(),
-        where: jest.fn().mockResolvedValueOnce(mockSpans['trace-2']),
+        where: jest.fn(() => Promise.resolve(mockSpans['trace-2'])),
       };
-      mockDb.select.mockReturnValueOnce(spanQuery1).mockReturnValueOnce(spanQuery2);
+      mockDb.select = jest.fn().mockReturnValueOnce(spanQuery1).mockReturnValueOnce(spanQuery2);
 
       const result = await traceStore.getTracesByEvaluation('eval-1');
 
@@ -251,16 +250,19 @@ describe('TraceStore', () => {
       const traceSelectChain = {
         from: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockResolvedValueOnce([mockTrace]),
+        limit: jest.fn(() => Promise.resolve([mockTrace])),
       };
-      mockDb.select = jest.fn().mockReturnValueOnce(traceSelectChain);
 
       // Mock spans query
       const spanQuery = {
         from: jest.fn().mockReturnThis(),
-        where: jest.fn().mockResolvedValueOnce(mockSpans),
+        where: jest.fn(() => Promise.resolve(mockSpans)),
       };
-      mockDb.select.mockReturnValueOnce(spanQuery);
+
+      mockDb.select = jest
+        .fn()
+        .mockReturnValueOnce(traceSelectChain)
+        .mockReturnValueOnce(spanQuery);
 
       const result = await traceStore.getTrace('trace-1');
 
@@ -275,9 +277,9 @@ describe('TraceStore', () => {
       const traceSelectChain = {
         from: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockResolvedValueOnce([]),
+        limit: jest.fn(() => Promise.resolve([])),
       };
-      mockDb.select = jest.fn().mockReturnValueOnce(traceSelectChain);
+      mockDb.select = jest.fn().mockReturnValue(traceSelectChain);
 
       const result = await traceStore.getTrace('non-existent-trace');
 
