@@ -1,3 +1,0 @@
-{{initial_prompt}}
-
-After generating the image, please also {{followup_prompt}} 
