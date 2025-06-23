@@ -41,10 +41,12 @@ The Pickle Scanner analyzes Python pickle files for security risks, which are co
 - Code execution patterns in STACK_GLOBAL operations
 - Anomalous opcode sequences suggesting malicious intent
 
-**Advanced Features:**
+**Features:**
 
-- **Framework Detection**: Recognizes PyTorch, TensorFlow, YOLO, scikit-learn, and Hugging Face patterns
-- **Binary Content Analysis**: Scans additional binary content in `.bin` files for embedded executables with enhanced PE file detection
+- **ML Context Detection**: Framework detection for major ML libraries and model architectures
+- **Pattern Analysis**: Distinguishes between legitimate ML operations (like `torch.nn` imports) and actual security threats
+- **Binary Analysis**: Scans additional binary content in `.bin` files for embedded executables with PE file detection including DOS stub validation
+- **Opcode Analysis**: Context-aware evaluation of dangerous opcodes (REDUCE, INST, OBJ)
 
 **Why it matters:**
 Pickle files are a common serialization format for ML models but can execute arbitrary code during unpickling. Attackers can craft malicious pickle files that execute harmful commands when loaded.
@@ -152,7 +154,7 @@ GGUF/GGML files are increasingly popular for distributing large language models.
 
 **File types:** `.joblib`
 
-This scanner analyzes joblib serialized files, which are commonly used by scikit-learn and other ML libraries for model persistence.
+This scanner analyzes joblib serialized files, which are commonly used by ML libraries for model persistence.
 
 **What it checks for:**
 
@@ -228,7 +230,7 @@ This scanner analyzes model configuration files and manifests.
   - File system access (paths, directories, file operations)
   - Code execution (commands, scripts, shell access)
   - Credentials (passwords, tokens, secrets)
-- Framework-specific patterns in Hugging Face, PyTorch, and TensorFlow configurations
+- Framework-specific patterns in popular ML library configurations
 
 **Why it matters:**
 Model configuration files can contain settings that lead to insecure behavior, such as downloading content from untrusted sources, accessing sensitive files, or executing commands.
@@ -237,7 +239,7 @@ Model configuration files can contain settings that lead to insecure behavior, s
 
 **File types:** `.bin` (raw PyTorch tensor files)
 
-This scanner examines raw PyTorch binary tensor files that contain serialized weight data. It performs enhanced binary content scanning to detect various threats.
+This scanner examines raw PyTorch binary tensor files that contain serialized weight data. It performs binary content scanning to detect various threats.
 
 **What it checks for:**
 
@@ -247,10 +249,10 @@ This scanner examines raw PyTorch binary tensor files that contain serialized we
 - Blacklisted patterns specified in configuration
 - Suspiciously small files that might not be valid tensor data
 - Validation of tensor structure
-- Enhanced PE file detection with MS-DOS stub signature validation
+- PE file detection with MS-DOS stub signature validation
 
 **Why it matters:**
-While `.bin` files typically contain raw tensor data, attackers could embed malicious code or executables within these files. The scanner performs deep content analysis with enhanced PE file detection (including DOS stub validation) to detect such threats.
+While `.bin` files typically contain raw tensor data, attackers could embed malicious code or executables within these files. The scanner performs deep content analysis with PE file detection (including DOS stub validation) to detect such threats.
 
 ## ZIP Archive Scanner
 
@@ -294,7 +296,7 @@ This scanner analyzes neural network weight distributions to detect potential ba
 Backdoored or trojaned models often contain specific neurons that activate on trigger inputs. These malicious neurons typically have weight patterns that are statistically anomalous compared to benign neurons. By analyzing weight distributions, this scanner can detect models that have been tampered with to include hidden behaviors.
 
 **Special handling for LLMs:**
-Large language models with vocabulary layers (>10,000 outputs) use more conservative thresholds to reduce false positives, as their weight distributions naturally have more variation. LLM checking is disabled by default but can be enabled via configuration.
+Large language models with vocabulary layers (>10,000 outputs) use more conservative thresholds due to their naturally varied weight distributions. LLM checking is disabled by default but can be enabled via configuration.
 
 ## SafeTensors Scanner
 
@@ -312,6 +314,30 @@ This scanner examines SafeTensors format files, which are designed to be a safer
 **Why it matters:**
 While SafeTensors is designed to be safer than pickle files, the metadata section can still contain malicious content. Attackers might try to exploit parsers or include encoded payloads in the metadata. The scanner ensures the format integrity and metadata safety.
 
+## PMML Scanner
+
+**File types:** `.pmml`
+
+This scanner performs security checks on PMML (Predictive Model Markup Language) files to detect potential XML External Entity (XXE) attacks, malicious scripts, and suspicious external references.
+
+**What it checks for:**
+
+- **XXE Attack Prevention**: Detects `<!DOCTYPE`, `<!ENTITY`, `<!ELEMENT`, and `<!ATTLIST` declarations that could enable XML External Entity attacks
+- **Safe XML Parsing**: Uses defusedxml when available for secure XML parsing; warns when using unsafe parsers
+- **Malicious Content Detection**: Scans for suspicious patterns like `<script>`, `eval()`, `exec()`, system commands, and imports
+- **External Resource References**: Identifies suspicious URLs (HTTP, HTTPS, FTP, file://) in model content
+- **PMML Structure Validation**: Validates PMML version and root element structure
+- **Extension Element Analysis**: Performs deep inspection of `<Extension>` elements which can contain arbitrary content
+
+**Security features:**
+
+- **XML Security**: Uses defusedxml library when available to prevent XXE and billion laughs attacks
+- **Content Scanning**: Recursive analysis of all element text content and attributes for malicious patterns
+- **Well-formedness Validation**: Ensures XML structure integrity and UTF-8 encoding compliance
+
+**Why it matters:**
+PMML files are XML-based and can be exploited through XML vulnerabilities like XXE attacks. Extension elements can contain arbitrary content that might execute scripts or access external resources. The scanner ensures PMML files don't contain hidden security threats while maintaining model functionality.
+
 ## Auto Format Detection
 
 ModelAudit includes comprehensive file format detection for ambiguous file extensions, particularly `.bin` files, which can contain different types of model data:
@@ -322,7 +348,7 @@ ModelAudit includes comprehensive file format detection for ambiguous file exten
 - **PyTorch ZIP format**: Detected by ZIP magic bytes (PK headers)
 - **Raw PyTorch tensors**: Default for `.bin` files without other recognizable signatures
 
-**Enhanced Detection Features:**
+**Detection Features:**
 
 - **Magic byte analysis**: Reads file headers to determine actual format regardless of extension
 - **Content-based routing**: Automatically applies the most appropriate scanner based on detected format
