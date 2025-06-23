@@ -2411,4 +2411,446 @@ describe('OpenAiResponsesProvider', () => {
     );
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('codex-mini-latest');
   });
+
+  describe('Enhanced Responses API features', () => {
+    describe('ResponsePrompt interface and prompt parameter', () => {
+      it('should handle reusable prompt parameter correctly', async () => {
+        const mockApiResponse = {
+          id: 'resp_abc123',
+          status: 'completed',
+          model: 'gpt-4o',
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [
+                {
+                  type: 'output_text',
+                  text: 'Response using reusable prompt',
+                },
+              ],
+            },
+          ],
+          usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
+        };
+
+        jest.mocked(cache.fetchWithCache).mockResolvedValue({
+          data: mockApiResponse,
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+        const provider = new OpenAiResponsesProvider('gpt-4o', {
+          config: {
+            apiKey: 'test-key',
+            prompt: 'prompt_12345',
+          },
+        });
+
+        await provider.callApi('Test input');
+
+        expect(cache.fetchWithCache).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.objectContaining({
+            body: expect.stringContaining('"prompt":"prompt_12345"'),
+          }),
+          expect.any(Number),
+          'json',
+          undefined,
+        );
+      });
+
+      it('should handle prompt parameter with variables', async () => {
+        const mockApiResponse = {
+          id: 'resp_abc123',
+          status: 'completed',
+          model: 'gpt-4o',
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [
+                {
+                  type: 'output_text',
+                  text: 'Response with prompt variables',
+                },
+              ],
+            },
+          ],
+          usage: { input_tokens: 20, output_tokens: 15, total_tokens: 35 },
+        };
+
+        jest.mocked(cache.fetchWithCache).mockResolvedValue({
+          data: mockApiResponse,
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+        const provider = new OpenAiResponsesProvider('gpt-4o', {
+          config: {
+            apiKey: 'test-key',
+            prompt: 'prompt_variables_test',
+            prompt_variables: {
+              name: 'John',
+              age: 30,
+              city: 'San Francisco',
+            },
+          },
+        });
+
+        await provider.callApi('Test input');
+
+        const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+        const reqOptions = mockCall[1] as { body: string };
+        const body = JSON.parse(reqOptions.body);
+
+        expect(body.prompt).toBe('prompt_variables_test');
+        expect(body.prompt_variables).toEqual({
+          name: 'John',
+          age: 30,
+          city: 'San Francisco',
+        });
+      });
+    });
+
+    describe('Optional model and input parameters', () => {
+      it('should work without model parameter when using prompt', async () => {
+        const mockApiResponse = {
+          id: 'resp_abc123',
+          status: 'completed',
+          model: 'gpt-4o', // API returns the model used
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [
+                {
+                  type: 'output_text',
+                  text: 'Response without explicit model',
+                },
+              ],
+            },
+          ],
+          usage: { input_tokens: 10, output_tokens: 8, total_tokens: 18 },
+        };
+
+        jest.mocked(cache.fetchWithCache).mockResolvedValue({
+          data: mockApiResponse,
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+        const provider = new OpenAiResponsesProvider('gpt-4o', {
+          config: {
+            apiKey: 'test-key',
+            prompt: 'prompt_without_model',
+          },
+        });
+
+        await provider.callApi('Test input');
+
+        const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+        const reqOptions = mockCall[1] as { body: string };
+        const body = JSON.parse(reqOptions.body);
+
+        expect(body.prompt).toBe('prompt_without_model');
+        expect(body.input).toBeDefined();
+        // model should not be in the request body when using prompt
+        expect(body.model).toBeUndefined();
+      });
+
+      it('should work without input parameter when using prompt with variables', async () => {
+        const mockApiResponse = {
+          id: 'resp_abc123',
+          status: 'completed',
+          model: 'gpt-4o',
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [
+                {
+                  type: 'output_text',
+                  text: 'Response without explicit input',
+                },
+              ],
+            },
+          ],
+          usage: { input_tokens: 12, output_tokens: 9, total_tokens: 21 },
+        };
+
+        jest.mocked(cache.fetchWithCache).mockResolvedValue({
+          data: mockApiResponse,
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+        const provider = new OpenAiResponsesProvider('gpt-4o', {
+          config: {
+            apiKey: 'test-key',
+            prompt: 'prompt_no_input',
+            prompt_variables: {
+              context: 'test context',
+            },
+          },
+        });
+
+        // Passing empty input to simulate no input scenario
+        await provider.callApi('');
+
+        const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+        const reqOptions = mockCall[1] as { body: string };
+        const body = JSON.parse(reqOptions.body);
+
+        expect(body.prompt).toBe('prompt_no_input');
+        expect(body.prompt_variables).toEqual({ context: 'test context' });
+        // input should still be present but could be empty
+        expect(body.input).toBeDefined();
+      });
+
+      it('should handle both prompt and traditional input/model together', async () => {
+        const mockApiResponse = {
+          id: 'resp_abc123',
+          status: 'completed',
+          model: 'gpt-4o',
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [
+                {
+                  type: 'output_text',
+                  text: 'Response with both prompt and input',
+                },
+              ],
+            },
+          ],
+          usage: { input_tokens: 25, output_tokens: 12, total_tokens: 37 },
+        };
+
+        jest.mocked(cache.fetchWithCache).mockResolvedValue({
+          data: mockApiResponse,
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+        const provider = new OpenAiResponsesProvider('gpt-4o', {
+          config: {
+            apiKey: 'test-key',
+            prompt: 'base_prompt',
+            prompt_variables: { theme: 'technical' },
+          },
+        });
+
+        await provider.callApi('Additional input content');
+
+        const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+        const reqOptions = mockCall[1] as { body: string };
+        const body = JSON.parse(reqOptions.body);
+
+        expect(body.prompt).toBe('base_prompt');
+        expect(body.prompt_variables).toEqual({ theme: 'technical' });
+        expect(body.input).toBeDefined();
+        expect(body.model).toBeUndefined(); // model not included when using prompt
+      });
+    });
+
+    describe('Service tier support', () => {
+      it('should handle flex service_tier correctly', async () => {
+        const mockApiResponse = {
+          id: 'resp_abc123',
+          status: 'completed',
+          model: 'gpt-4o',
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [
+                {
+                  type: 'output_text',
+                  text: 'Response with flex service tier',
+                },
+              ],
+            },
+          ],
+          usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
+        };
+
+        jest.mocked(cache.fetchWithCache).mockResolvedValue({
+          data: mockApiResponse,
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+        const provider = new OpenAiResponsesProvider('gpt-4o', {
+          config: {
+            apiKey: 'test-key',
+            service_tier: 'flex',
+          },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect(cache.fetchWithCache).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.objectContaining({
+            body: expect.stringContaining('"service_tier":"flex"'),
+          }),
+          expect.any(Number),
+          'json',
+          undefined,
+        );
+      });
+
+      it('should handle scale service_tier correctly', async () => {
+        const mockApiResponse = {
+          id: 'resp_abc123',
+          status: 'completed',
+          model: 'gpt-4o',
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [
+                {
+                  type: 'output_text',
+                  text: 'Response with scale service tier',
+                },
+              ],
+            },
+          ],
+          usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
+        };
+
+        jest.mocked(cache.fetchWithCache).mockResolvedValue({
+          data: mockApiResponse,
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+        const provider = new OpenAiResponsesProvider('gpt-4o', {
+          config: {
+            apiKey: 'test-key',
+            service_tier: 'scale',
+          },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect(cache.fetchWithCache).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.objectContaining({
+            body: expect.stringContaining('"service_tier":"scale"'),
+          }),
+          expect.any(Number),
+          'json',
+          undefined,
+        );
+      });
+
+      it('should handle auto and default service_tier correctly', async () => {
+        const mockApiResponse = {
+          id: 'resp_abc123',
+          status: 'completed',
+          model: 'gpt-4o',
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [
+                {
+                  type: 'output_text',
+                  text: 'Response with auto service tier',
+                },
+              ],
+            },
+          ],
+          usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
+        };
+
+        jest.mocked(cache.fetchWithCache).mockResolvedValue({
+          data: mockApiResponse,
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+        const provider = new OpenAiResponsesProvider('gpt-4o', {
+          config: {
+            apiKey: 'test-key',
+            service_tier: 'auto',
+          },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect(cache.fetchWithCache).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.objectContaining({
+            body: expect.stringContaining('"service_tier":"auto"'),
+          }),
+          expect.any(Number),
+          'json',
+          undefined,
+        );
+      });
+
+      it('should combine service_tier with prompt parameter', async () => {
+        const mockApiResponse = {
+          id: 'resp_abc123',
+          status: 'completed',
+          model: 'gpt-4o',
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [
+                {
+                  type: 'output_text',
+                  text: 'Response with service tier and prompt',
+                },
+              ],
+            },
+          ],
+          usage: { input_tokens: 20, output_tokens: 12, total_tokens: 32 },
+        };
+
+        jest.mocked(cache.fetchWithCache).mockResolvedValue({
+          data: mockApiResponse,
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+        const provider = new OpenAiResponsesProvider('gpt-4o', {
+          config: {
+            apiKey: 'test-key',
+            prompt: 'priority_prompt',
+            service_tier: 'scale',
+            prompt_variables: {
+              priority: 'high',
+            },
+          },
+        });
+
+        await provider.callApi('Test prompt');
+
+        const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+        const reqOptions = mockCall[1] as { body: string };
+        const body = JSON.parse(reqOptions.body);
+
+        expect(body.prompt).toBe('priority_prompt');
+        expect(body.service_tier).toBe('scale');
+        expect(body.prompt_variables).toEqual({ priority: 'high' });
+        expect(body.input).toBeDefined();
+      });
+    });
+  });
 });

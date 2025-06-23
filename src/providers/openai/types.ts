@@ -128,7 +128,8 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   metadata?: Record<string, string>;
   parallel_tool_calls?: boolean;
   previous_response_id?: string;
-  prompt?: ResponsePrompt;
+  prompt?: ResponsePrompt | string;
+  prompt_variables?: Record<string, any>;
   store?: boolean;
   stream?: boolean;
   truncation?: 'auto' | 'disabled';

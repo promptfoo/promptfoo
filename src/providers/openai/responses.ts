@@ -148,9 +148,27 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       textFormat = { format: { type: 'text' } };
     }
 
+    // Handle prompt parameter (can be string ID or ResponsePrompt object)
+    let promptParam;
+    let promptVariables;
+    
+    if (config.prompt) {
+      if (typeof config.prompt === 'string') {
+        promptParam = config.prompt;
+        promptVariables = config.prompt_variables;
+      } else {
+        // ResponsePrompt object
+        promptParam = config.prompt.id;
+        promptVariables = config.prompt.variables || config.prompt_variables;
+      }
+    }
+
     const body = {
-      ...(this.modelName ? { model: this.modelName } : {}),
-      ...(input ? { input } : {}),
+      // Only include model if not using a prompt parameter
+      ...(this.modelName && !promptParam ? { model: this.modelName } : {}),
+      ...(input !== undefined ? { input } : {}),
+      ...(promptParam ? { prompt: promptParam } : {}),
+      ...(promptVariables ? { prompt_variables: promptVariables } : {}),
       ...(maxOutputTokens ? { max_output_tokens: maxOutputTokens } : {}),
       ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
       ...(temperature ? { temperature } : {}),
@@ -163,7 +181,6 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.previous_response_id ? { previous_response_id: config.previous_response_id } : {}),
-      ...(config.prompt ? { prompt: config.prompt } : {}),
       ...(config.service_tier ? { service_tier: config.service_tier } : {}),
       text: textFormat,
       ...(config.truncation ? { truncation: config.truncation } : {}),
