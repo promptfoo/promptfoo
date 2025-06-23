@@ -243,7 +243,7 @@ export function createApp() {
 
   // Handle client routing, return all requests to the app
   app.get('/*splat', (req: Request, res: Response): void => {
-    res.sendFile(path.join(staticDir, 'index.html'));
+    res.sendFile('index.html', { root: staticDir });
   });
   return app;
 }
