@@ -1,12 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import Code from '@app/components/Code';
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
-import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
 import { formatToolsAsJSDocs } from '@app/utils/discovery';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import { Alert } from '@mui/material';
@@ -15,12 +14,10 @@ import AccordionDetails from '@mui/material/AccordionDetails';
 import AccordionSummary from '@mui/material/AccordionSummary';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import IconButton from '@mui/material/IconButton';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
-import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { alpha, useTheme } from '@mui/material/styles';
 import { type TargetPurposeDiscoveryResult } from '@promptfoo/redteam/commands/discover';
@@ -34,22 +31,32 @@ interface PromptsProps {
 /**
  * Component to display auto-discovery results with copy functionality
  */
-function DiscoveryResult({ text }: { text: string }) {
-  const { showToast } = useToast();
+function DiscoveryResult({
+  text,
+  section,
+}: {
+  text: string;
+  section: keyof ApplicationDefinition;
+}) {
   const { recordEvent } = useTelemetry();
   const theme = useTheme();
-  const isClipboardAvailable = typeof navigator !== 'undefined' && navigator.clipboard;
+  const { updateApplicationDefinition, config } = useRedTeamConfig();
+  const sectionValue = config.applicationDefinition?.[section];
 
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-      showToast('Copied to clipboard!', 'success');
-      recordEvent('feature_used', { feature: 'redteam_discovery_copy_discovery_result' });
-    } catch (error) {
-      console.error('Failed to copy to clipboard:', error);
-      showToast('Failed to copy to clipboard', 'error');
-    }
-  };
+  /**
+   * Appends the text to the section.
+   */
+  const handleApply = useCallback(() => {
+    updateApplicationDefinition(section, sectionValue ? `${sectionValue}\n\n${text}` : text);
+    recordEvent('feature_used', { feature: 'redteam_discovery_apply_discovery_result' });
+  }, [section, text, updateApplicationDefinition, recordEvent, sectionValue]);
+
+  /**
+   * Is the text already applied to the section?
+   */
+  const applied = useMemo(() => {
+    return (sectionValue ?? '').includes(text);
+  }, [sectionValue, text]);
 
   return (
     <Box
@@ -69,7 +76,7 @@ function DiscoveryResult({ text }: { text: string }) {
         position: 'relative',
       }}
     >
-      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 4 }}>
         <Box sx={{ flex: 1 }}>
           <Typography
             variant="subtitle2"
@@ -99,37 +106,16 @@ function DiscoveryResult({ text }: { text: string }) {
             {text}
           </Typography>
         </Box>
-        {isClipboardAvailable && (
-          <Tooltip title="Copy to clipboard">
-            <IconButton
-              size="small"
-              onClick={handleCopy}
-              sx={{
-                color: theme.palette.primary.main,
-                '&:hover': {
-                  backgroundColor:
-                    theme.palette.mode === 'dark'
-                      ? alpha(theme.palette.primary.main, 0.2)
-                      : alpha(theme.palette.primary.main, 0.1),
-                },
-              }}
-            >
-              <ContentCopyIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        )}
+        <Button
+          size="small"
+          variant="contained"
+          onClick={handleApply}
+          startIcon={<AutoAwesomeIcon fontSize="small" />}
+          disabled={applied}
+        >
+          Apply
+        </Button>
       </Box>
-      <Typography
-        variant="caption"
-        sx={{
-          color: theme.palette.text.secondary,
-          fontStyle: 'italic',
-          mt: 1,
-          display: 'block',
-        }}
-      >
-        To use this as a starting point, copy the text and modify it as needed.
-      </Typography>
     </Box>
   );
 }
@@ -487,7 +473,7 @@ export default function Purpose({ onNext }: PromptsProps) {
                   </Typography>
 
                   {discoveryResult && discoveryResult.purpose && (
-                    <DiscoveryResult text={discoveryResult.purpose} />
+                    <DiscoveryResult text={discoveryResult.purpose} section="purpose" />
                   )}
 
                   <TextField
@@ -624,7 +610,10 @@ export default function Purpose({ onNext }: PromptsProps) {
                       </Typography>
 
                       {discoveryResult && discoveryResult.limitations && (
-                        <DiscoveryResult text={discoveryResult.limitations} />
+                        <DiscoveryResult
+                          text={discoveryResult.limitations}
+                          section="attackConstraints"
+                        />
                       )}
 
                       <TextField
@@ -692,7 +681,9 @@ export default function Purpose({ onNext }: PromptsProps) {
                         vulnerabilities.
                       </Typography>
 
-                      {discoveryResult && toolsAsJSDocs && <DiscoveryResult text={toolsAsJSDocs} />}
+                      {discoveryResult && toolsAsJSDocs && (
+                        <DiscoveryResult text={toolsAsJSDocs} section="hasAccessTo" />
+                      )}
 
                       <TextField
                         fullWidth
@@ -1059,7 +1050,7 @@ export default function Purpose({ onNext }: PromptsProps) {
                 </Typography>
 
                 {discoveryResult && discoveryResult.user && (
-                  <DiscoveryResult text={discoveryResult.user} />
+                  <DiscoveryResult text={discoveryResult.user} section="redteamUser" />
                 )}
 
                 <TextField
