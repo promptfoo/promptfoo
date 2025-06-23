@@ -87,9 +87,10 @@ ModelAudit can scan:
 - **GGUF/GGML models** (`.gguf`, `.ggml`) - popular for LLaMA, Alpaca, and other quantized LLMs
 - **Flax/JAX models** (`.msgpack`) - JAX neural network checkpoints
 - **Pickle files** (`.pkl`, `.pickle`, `.bin`, `.ckpt`)
-- **Joblib files** (`.joblib`) - commonly used by scikit-learn
+- **Joblib files** (`.joblib`) - commonly used by ML libraries
 - **NumPy arrays** (`.npy`)
 - **SafeTensors models** (`.safetensors`, `.bin` with SafeTensors format)
+- **PMML models** (`.pmml`) - Predictive Model Markup Language with XML security validation
 - **Container manifests** (`.manifest`) with embedded model layers
 - **ZIP archives** (`.zip`, `.npz`) with recursive content scanning
 - **Binary model files** (`.bin`) including:
@@ -110,10 +111,11 @@ The scanner looks for various security issues, including:
 - **Dangerous Serialization**: Detecting unsafe pickle opcodes and patterns
 - **Encoded Payloads**: Looking for suspicious strings that might indicate hidden code
 - **Risky Configurations**: Identifying dangerous settings in model architectures
-- **Embedded Executables**: Detecting Windows PE, Linux ELF, and macOS Mach-O files with enhanced validation
+- **XML Security**: Detecting XXE attacks and malicious content in PMML files using secure parsing
+- **Embedded Executables**: Detecting Windows PE (with DOS stub validation), Linux ELF, and macOS Mach-O files
 - **Container Security**: Scanning model files within OCI/Docker container layers
 - **Compression Attacks**: Detecting zip bombs and decompression attacks in archives and joblib files
-- **Weight Anomalies**: Statistical analysis to detect potential backdoors or trojans
+- **Weight Anomalies**: Statistical analysis to detect potential backdoors or trojans in neural networks
 - **Format Integrity**: Validating file format structure and preventing malformed file attacks
 
 ## Interpreting Results
