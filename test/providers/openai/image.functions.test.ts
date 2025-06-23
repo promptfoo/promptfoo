@@ -106,6 +106,31 @@ describe('OpenAI Image Provider Functions', () => {
       expect(typeof result).toBe('object');
       expect(result).toHaveProperty('error');
     });
+
+    it('should format GPT Image 1 output as markdown image', () => {
+      const mockData = {
+        data: [
+          {
+            b64_json:
+              'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+          },
+        ],
+      };
+      const result = formatOutput(mockData, 'test prompt', 'b64_json', 'gpt-image-1');
+      expect(typeof result).toBe('string');
+      expect(result).toBe(
+        '![test prompt](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==)',
+      );
+    });
+
+    it('should detect JPEG format for GPT Image 1', () => {
+      const mockData = {
+        data: [{ b64_json: '/9j/4AAQSkZJRgABAQEASABIAAD' }],
+      };
+      const result = formatOutput(mockData, 'jpeg test', 'b64_json', 'gpt-image-1');
+      expect(typeof result).toBe('string');
+      expect(result).toBe('![jpeg test](data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD)');
+    });
   });
 
   describe('prepareRequestBody', () => {

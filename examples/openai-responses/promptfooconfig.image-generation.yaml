@@ -1,16 +1,21 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Responses API image generation
+description: OpenAI image generation comparison
 
 prompts:
   - 'Generate an image showing {{image_prompt}}'
 
 providers:
-  - id: openai:responses:gpt-4.1-mini
+  - id: openai:image:gpt-image-1
+    label: 'GPT Image 1'
     config:
-      tools:
-        - type: image_generation
-          quality: 'medium'
-          size: '1024x1024'
+      quality: 'medium'
+      size: '1024x1024'
+      output_format: 'png'
+  - id: openai:image:dall-e-3
+    label: 'DALL-E 3'
+    config:
+      quality: 'standard'
+      size: '1024x1024'
 
 tests:
   - vars:

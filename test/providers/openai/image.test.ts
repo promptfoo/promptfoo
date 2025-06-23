@@ -456,6 +456,8 @@ describe('OpenAiImageProvider', () => {
       // Mock a GPT Image 1 response (always base64)
       jest.mocked(fetchWithCache).mockResolvedValue({
         data: {
+          created: 1640995200,
+          background: 'opaque',
           data: [{ b64_json: 'base64EncodedImageData' }],
         },
         cached: false,
@@ -466,13 +468,15 @@ describe('OpenAiImageProvider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result).toEqual({
-        output: JSON.stringify({
-          data: [{ b64_json: 'base64EncodedImageData' }],
-        }),
+        output: '![test prompt](data:image/png;base64,base64EncodedImageData)',
         cached: false,
         isBase64: true,
         format: 'json',
         cost: expect.any(Number),
+        metadata: {
+          created: 1640995200,
+          background: 'opaque',
+        },
       });
 
       // Verify that response_format was not included in the request

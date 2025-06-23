@@ -116,6 +116,29 @@ export function validateSizeForModel(
   return { valid: true };
 }
 
+function detectImageFormat(base64Data: string): string {
+  // Check magic bytes at the start of base64 data
+  const header = base64Data.substring(0, 10);
+
+  // PNG starts with iVBORw0KGgo
+  if (header.startsWith('iVBORw0KGgo')) {
+    return 'png';
+  }
+
+  // JPEG starts with /9j/
+  if (header.startsWith('/9j/')) {
+    return 'jpeg';
+  }
+
+  // WebP has various signatures, but typically starts with UklGR
+  if (header.includes('UklGR')) {
+    return 'webp';
+  }
+
+  // Default to png if we can't detect
+  return 'png';
+}
+
 export function formatOutput(
   data: any,
   prompt: string,
@@ -124,12 +147,25 @@ export function formatOutput(
 ): string | { error: string } {
   // GPT Image 1 always returns base64 data regardless of responseFormat
   if (model === 'gpt-image-1' || responseFormat === 'b64_json') {
-    const b64Json = data.data[0].b64_json;
-    if (!b64Json) {
+    const imageData = data.data?.[0];
+    if (!imageData?.b64_json) {
       return { error: `No base64 image data found in response: ${JSON.stringify(data)}` };
     }
 
-    return JSON.stringify(data);
+    const sanitizedPrompt = prompt
+      .replace(/\r?\n|\r/g, ' ')
+      .replace(/\[/g, '(')
+      .replace(/\]/g, ')');
+    const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
+
+    // For GPT Image 1, format as markdown image with data URL
+    if (model === 'gpt-image-1') {
+      const imageFormat = detectImageFormat(imageData.b64_json);
+      return `![${ellipsizedPrompt}](data:image/${imageFormat};base64,${imageData.b64_json})`;
+    } else {
+      // For DALL-E with b64_json format, return the original JSON
+      return JSON.stringify(data);
+    }
   } else {
     const url = data.data[0].url;
     if (!url) {
@@ -294,10 +330,31 @@ export async function processApiResponse(
     // GPT Image 1 always returns base64 data
     const isBase64Response = model === 'gpt-image-1' || responseFormat === 'b64_json';
 
+    // Extract metadata for GPT Image 1 to make response cleaner
+    const metadata: Record<string, any> = {};
+    if (model === 'gpt-image-1' && data) {
+      if (data.created) {
+        metadata.created = data.created;
+      }
+      if (data.background) {
+        metadata.background = data.background;
+      }
+      if (data.usage) {
+        metadata.usage = data.usage;
+      }
+      // Add any other top-level metadata fields that aren't the image data
+      Object.keys(data).forEach((key) => {
+        if (key !== 'data' && key !== 'created' && key !== 'background' && key !== 'usage') {
+          metadata[key] = data[key];
+        }
+      });
+    }
+
     return {
       output: formattedOutput,
       cached,
       cost,
+      ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
       ...(isBase64Response ? { isBase64: true, format: 'json' } : {}),
     };
   } catch (err) {

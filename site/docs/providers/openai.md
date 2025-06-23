@@ -361,24 +361,6 @@ providers:
 | `n`                  | 1-10                        | 1                               | 1-10                                  | Number of images              |
 | `response_format`    | url, b64_json               | url, b64_json                   | url, b64_json                         | Response format               |
 
-#### Responses API Integration
-
-GPT Image 1 can also be used through the Responses API for multi-turn image generation:
-
-```yaml title="promptfooconfig.yaml"
-providers:
-  - id: openai:responses:gpt-4.1-mini
-    config:
-      tools:
-        - type: image_generation
-          quality: 'medium'
-          size: '1024x1024'
-
-tests:
-  - vars:
-      prompt: 'Generate an image of a cat wearing a hat, then make it more cartoonish'
-```
-
 #### Pricing
 
 - **DALL-E 2/3**: Fixed per-image pricing

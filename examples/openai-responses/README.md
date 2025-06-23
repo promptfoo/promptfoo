@@ -16,7 +16,7 @@ Basic example showing how to use the Responses API with different models and con
 
 ### Image Generation (`promptfooconfig.image-generation.yaml`)
 
-Example demonstrating image generation using the Responses API with image generation tools.
+Example demonstrating image generation comparison between GPT Image 1 and DALL-E 3 models.
 
 ### External Response Format (`promptfooconfig.external-format.yaml`)
 
