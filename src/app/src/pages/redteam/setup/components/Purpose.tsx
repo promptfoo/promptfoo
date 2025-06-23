@@ -382,6 +382,7 @@ export default function Purpose({ onNext }: PromptsProps) {
                   }
                   onClick={handleTargetPurposeDiscovery}
                   loading={isDiscovering}
+                  sx={{ width: '150px' }}
                 >
                   {isDiscovering ? 'Discovering...' : 'Discover'}
                 </Button>
