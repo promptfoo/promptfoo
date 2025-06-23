@@ -68,8 +68,6 @@ The command will guide you through an interactive setup process to create your c
 
 ## Configuration
 
-Next, we can review the example configuration file and make changes to it.
-
 1. **Set up your prompts**: Open `promptfooconfig.yaml` and add prompts that you want to test. Use double curly braces as placeholders for variables: `{{variable_name}}`. For example:
 
    ```yaml
