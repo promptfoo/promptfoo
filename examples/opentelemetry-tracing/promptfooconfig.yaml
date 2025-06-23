@@ -1,5 +1,7 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 # Example configuration for OpenTelemetry tracing with Promptfoo
 
+# (rest of the configuration remains unchanged)
 # Enable tracing
 tracing:
   enabled: true
