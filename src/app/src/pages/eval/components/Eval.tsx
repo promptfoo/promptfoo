@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import EnterpriseBanner from '@app/components/EnterpriseBanner';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
@@ -49,13 +49,13 @@ export default function Eval({
   // State
   // ================================
 
-  const [loaded, setLoaded] = React.useState(false);
-  const [failed, setFailed] = React.useState(false);
-  const [recentEvals, setRecentEvals] = React.useState<ResultLightweightWithLabel[]>(
+  const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [recentEvals, setRecentEvals] = useState<ResultLightweightWithLabel[]>(
     recentEvalsProp || [],
   );
 
-  const [defaultEvalId, setDefaultEvalId] = React.useState<string>(
+  const [defaultEvalId, setDefaultEvalId] = useState<string>(
     defaultEvalIdProp || recentEvals[0]?.evalId,
   );
 
@@ -79,7 +79,7 @@ export default function Eval({
    *
    * @returns {Boolean} Whether the eval was loaded successfully.
    */
-  const loadEvalById = React.useCallback(
+  const loadEvalById = useCallback(
     async (id: string) => {
       try {
         setEvalId(id);
@@ -117,7 +117,7 @@ export default function Eval({
   // Effects
   // ================================
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (fetchId) {
       console.log('Eval init: Fetching eval by id', { fetchId });
       const run = async () => {
@@ -214,7 +214,7 @@ export default function Eval({
   /**
    * Set the document title to the eval description or eval id.
    */
-  React.useEffect(() => {
+  useEffect(() => {
     document.title = `${config?.description || evalId || 'Eval'} | promptfoo`;
   }, [config, evalId]);
 
