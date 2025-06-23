@@ -56,14 +56,24 @@ const mockLLM = {
 };
 
 // Provider implementation with tracing
-module.exports = {
+class RagProviderWithTracing {
+  constructor(options) {
+    // The caller may override Provider ID (e.g. when using multiple instances of the same provider)
+    this.providerId = options.id || 'rag-provider-with-tracing';
+
+    // The config object contains any options passed to the provider in the config file.
+    this.config = options.config;
+  }
+
   // Provider identifier
-  id: () => 'rag-provider-with-tracing',
+  id() {
+    return this.providerId;
+  }
 
   // Main API call function
   async callApi(prompt, context) {
     // Check if we have trace context from Promptfoo
-    if (context.traceparent) {
+    if (context?.traceparent) {
       // Parse the W3C trace context
       const matches = context.traceparent.match(/^(\d{2})-([a-f0-9]{32})-([a-f0-9]{16})-(\d{2})$/);
 
@@ -85,7 +95,7 @@ module.exports = {
 
     // No trace context - run without tracing
     return this._untracedCallApi(prompt, context);
-  },
+  }
 
   // Traced implementation
   async _tracedCallApi(prompt, context) {
@@ -213,7 +223,7 @@ module.exports = {
       // Always end the main span
       span.end();
     }
-  },
+  }
 
   // Untraced implementation (fallback)
   async _untracedCallApi(prompt, context) {
@@ -237,5 +247,7 @@ module.exports = {
         error: error.message,
       };
     }
-  },
-};
+  }
+}
+
+module.exports = RagProviderWithTracing;

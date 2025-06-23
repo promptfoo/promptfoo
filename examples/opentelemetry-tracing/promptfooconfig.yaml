@@ -31,13 +31,11 @@ tracing:
 # Providers that support tracing
 providers:
   - id: file://./provider-with-tracing.js
-  - id: file://./provider-simple.ts
+  #- id: file://./provider-simple.ts
 
 # Example prompts
 prompts:
-  - 'What are the key principles of AI safety?'
-  - 'Explain machine learning in simple terms'
-  - 'How do neural networks learn?'
+  - 'Tell me about {{topic}}'
 
 # Test cases
 tests:
@@ -59,6 +57,3 @@ tests:
       - type: javascript
         value: |
           output.length > 100
-
-# Output configuration
-outputPath: results.json
