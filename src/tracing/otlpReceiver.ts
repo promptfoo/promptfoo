@@ -52,6 +52,7 @@ export class OTLPReceiver {
   private app: express.Application;
   private traceStore = getTraceStore();
   private port?: number;
+  private server?: any; // http.Server type
 
   constructor() {
     this.app = express();
@@ -282,16 +283,32 @@ export class OTLPReceiver {
     logger.debug(`[OtlpReceiver] Starting receiver on ${host}:${port}`);
 
     return new Promise((resolve, reject) => {
-      const server = this.app.listen(port, host, () => {
+      this.server = this.app.listen(port, host, () => {
         logger.info(`[OtlpReceiver] Listening on http://${host}:${port}`);
         logger.debug('[OtlpReceiver] Receiver fully initialized and ready to accept traces');
         resolve();
       });
 
-      server.on('error', (error) => {
+      this.server.on('error', (error: Error) => {
         logger.error(`[OtlpReceiver] Failed to start: ${error}`);
         reject(error);
       });
+    });
+  }
+
+  stop(): Promise<void> {
+    logger.debug('[OtlpReceiver] Stopping receiver');
+    return new Promise((resolve) => {
+      if (this.server) {
+        this.server.close(() => {
+          logger.info('[OtlpReceiver] Server stopped');
+          this.server = undefined;
+          resolve();
+        });
+      } else {
+        logger.debug('[OtlpReceiver] No server to stop');
+        resolve();
+      }
     });
   }
 
@@ -314,4 +331,12 @@ export async function startOTLPReceiver(port?: number, host?: string): Promise<v
   logger.debug('[OtlpReceiver] Starting receiver through startOTLPReceiver function');
   const receiver = getOTLPReceiver();
   await receiver.listen(port, host);
+}
+
+export async function stopOTLPReceiver(): Promise<void> {
+  logger.debug('[OtlpReceiver] Stopping receiver through stopOTLPReceiver function');
+  if (otlpReceiver) {
+    await otlpReceiver.stop();
+    otlpReceiver = null;
+  }
 }
