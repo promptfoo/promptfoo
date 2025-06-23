@@ -43,12 +43,13 @@ const getSpanStatus = (statusCode?: number | null): { color: string; label: stri
 };
 
 const formatDuration = (microseconds: number): string => {
-  if (microseconds < 1000) {
-    return `${microseconds.toFixed(0)}μs`;
-  } else if (microseconds < 1000000) {
-    return `${(microseconds / 1000).toFixed(2)}ms`;
+  const milliseconds = microseconds / 1000;
+  if (milliseconds < 1) {
+    return `${milliseconds.toFixed(2)}ms`;
+  } else if (milliseconds < 1000) {
+    return `${milliseconds.toFixed(1)}ms`;
   } else {
-    return `${(microseconds / 1000000).toFixed(2)}s`;
+    return `${(milliseconds / 1000).toFixed(2)}s`;
   }
 };
 
@@ -144,10 +145,7 @@ export default function TraceTimeline({ trace }: TraceTimelineProps) {
   const { spans, totalDuration } = processedSpans;
 
   return (
-    <Box sx={{ p: 2 }}>
-      <Typography variant="h6" sx={{ mb: 2 }}>
-        Trace Timeline
-      </Typography>
+    <Box pt={2}>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         Trace ID: {trace.traceId}
       </Typography>

@@ -391,9 +391,19 @@ export default function EvalOutputPromptDialog({
             showCopyButton={hoveredElement === 'output' || copiedFields['output']}
           />
         )}
-        {citationsData && <Citations citations={citationsData} />}
         <AssertionResults gradingResults={gradingResults} />
         {parsedMessages && parsedMessages.length > 0 && <ChatMessages messages={parsedMessages} />}
+        {evaluationId && (
+          <Box mt={2}>
+            <Typography variant="subtitle1" sx={subtitleTypographySx}>
+              Trace Timeline
+            </Typography>
+            <ErrorBoundary fallback={<Alert severity="error">Error loading traces</Alert>}>
+              <TraceView evaluationId={evaluationId} testCaseId={testCaseId} />
+            </ErrorBoundary>
+          </Box>
+        )}
+        {citationsData && <Citations citations={citationsData} />}
         {metadata && Object.keys(metadata).filter((key) => key !== 'citations').length > 0 && (
           <Box my={2}>
             <Typography variant="subtitle1" sx={subtitleTypographySx}>
@@ -468,16 +478,6 @@ export default function EvalOutputPromptDialog({
                 </TableBody>
               </Table>
             </TableContainer>
-          </Box>
-        )}
-        {evaluationId && (
-          <Box mt={2}>
-            <Typography variant="subtitle1" sx={subtitleTypographySx}>
-              Trace Timeline
-            </Typography>
-            <ErrorBoundary fallback={<Alert severity="error">Error loading traces</Alert>}>
-              <TraceView evaluationId={evaluationId} testCaseId={testCaseId} />
-            </ErrorBoundary>
           </Box>
         )}
         {(metadata?.redteamHistory || metadata?.redteamTreeHistory) && (
