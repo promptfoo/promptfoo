@@ -120,7 +120,8 @@ export class CrescendoProvider implements ApiProvider {
   }> = [];
 
   constructor(config: CrescendoConfig) {
-    this.config = config;
+    // Create a copy of config to avoid mutating the original
+    this.config = { ...config };
     this.maxTurns = config.maxTurns || DEFAULT_MAX_TURNS;
     this.maxBacktracks = config.maxBacktracks || DEFAULT_MAX_BACKTRACKS;
     this.nunjucks = getNunjucksEngine();
@@ -523,6 +524,7 @@ export class CrescendoProvider implements ApiProvider {
     const hasSuccessfulAttacks = this.successfulAttacks.length > 0;
     if (hasSuccessfulAttacks) {
       evalFlag = true;
+      // exitReason is already properly set - either from early break or 'Max rounds reached'
     }
 
     const messages = this.memory.getConversation(this.targetConversationId);

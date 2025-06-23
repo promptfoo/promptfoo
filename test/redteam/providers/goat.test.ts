@@ -17,6 +17,33 @@ jest.mock('../../../src/redteam/graders', () => ({
 describe('RedteamGoatProvider', () => {
   let mockFetch: jest.Mock;
 
+  // Helper function to create a mock target provider
+  const createMockTargetProvider = (outputValue: any = 'target response', tokenUsage: any = {}) => {
+    const targetProvider: ApiProvider = {
+      id: () => 'test-provider',
+      callApi: jest.fn() as any,
+    };
+
+    (targetProvider.callApi as any).mockResolvedValue({
+      output: outputValue,
+      tokenUsage,
+    });
+
+    return targetProvider;
+  };
+
+  // Helper function to create a mock context
+  const createMockContext = (
+    targetProvider: ApiProvider,
+    vars: Record<string, any> = { goal: 'test goal' },
+    testConfig?: any,
+  ): CallApiContextParams => ({
+    originalProvider: targetProvider,
+    vars,
+    prompt: { raw: 'test prompt', label: 'test' },
+    test: testConfig,
+  });
+
   beforeEach(() => {
     mockFetch = jest.fn().mockImplementation(async () => ({
       json: async () => ({
@@ -81,21 +108,8 @@ describe('RedteamGoatProvider', () => {
       stateful: true,
     });
 
-    const targetProvider: ApiProvider = {
-      id: () => 'test-provider',
-      callApi: jest.fn() as any,
-    };
-
-    (targetProvider.callApi as any).mockResolvedValue({
-      output: 'target response',
-      tokenUsage: {},
-    });
-
-    const context: CallApiContextParams = {
-      originalProvider: targetProvider,
-      vars: { goal: 'test goal' },
-      prompt: { raw: 'test prompt', label: 'test' },
-    };
+    const targetProvider = createMockTargetProvider();
+    const context = createMockContext(targetProvider);
 
     await provider.callApi('test prompt', context);
 
@@ -110,21 +124,8 @@ describe('RedteamGoatProvider', () => {
       excludeTargetOutputFromAgenticAttackGeneration: true,
     });
 
-    const targetProvider: ApiProvider = {
-      id: () => 'test-provider',
-      callApi: jest.fn() as any,
-    };
-
-    (targetProvider.callApi as any).mockResolvedValue({
-      output: 'target response',
-      tokenUsage: {},
-    });
-
-    const context: CallApiContextParams = {
-      originalProvider: targetProvider,
-      vars: { goal: 'test goal' },
-      prompt: { raw: 'test prompt', label: 'test' },
-    };
+    const targetProvider = createMockTargetProvider();
+    const context = createMockContext(targetProvider);
 
     await provider.callApi('test prompt', context);
 
@@ -183,14 +184,10 @@ describe('RedteamGoatProvider', () => {
       maxTurns: 3,
     });
 
-    const targetProvider: ApiProvider = {
-      id: () => 'test-provider',
-      callApi: jest.fn() as any,
-    };
-
-    (targetProvider.callApi as any).mockResolvedValue({
-      output: 'target response',
-      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    const targetProvider = createMockTargetProvider('target response', {
+      total: 10,
+      prompt: 5,
+      completion: 5,
     });
 
     // Mock grader to fail (indicating success)
@@ -201,20 +198,17 @@ describe('RedteamGoatProvider', () => {
       },
     });
 
-    const context: CallApiContextParams = {
-      originalProvider: targetProvider,
-      vars: { goal: 'test goal' },
-      prompt: { raw: 'test prompt', label: 'test' },
-      test: {
-        vars: {},
-        assert: [
-          {
-            type: 'contains',
-            value: 'expected content',
-          },
-        ],
-      } as AtomicTestCase,
-    };
+    const testConfig = {
+      vars: {},
+      assert: [
+        {
+          type: 'contains',
+          value: 'expected content',
+        },
+      ],
+    } as AtomicTestCase;
+
+    const context = createMockContext(targetProvider, { goal: 'test goal' }, testConfig);
 
     const result = await provider.callApi('test prompt', context);
     expect(result.metadata?.stopReason).toBe('Grader failed');
@@ -332,14 +326,10 @@ describe('RedteamGoatProvider', () => {
         continueAfterSuccess: false,
       });
 
-      const targetProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: jest.fn() as any,
-      };
-
-      (targetProvider.callApi as any).mockResolvedValue({
-        output: 'harmful response',
-        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      const targetProvider = createMockTargetProvider('harmful response', {
+        total: 10,
+        prompt: 5,
+        completion: 5,
       });
 
       // Mock grader to fail on first attempt (indicating success)
@@ -350,15 +340,12 @@ describe('RedteamGoatProvider', () => {
         },
       });
 
-      const context: CallApiContextParams = {
-        originalProvider: targetProvider,
-        vars: { goal: 'test goal' },
-        prompt: { raw: 'test prompt', label: 'test' },
-        test: {
-          vars: {},
-          assert: [{ type: 'contains', value: 'harmful' }],
-        } as AtomicTestCase,
-      };
+      const testConfig = {
+        vars: {},
+        assert: [{ type: 'contains', value: 'harmful' }],
+      } as AtomicTestCase;
+
+      const context = createMockContext(targetProvider, { goal: 'test goal' }, testConfig);
 
       const result = await provider.callApi('test prompt', context);
 
