@@ -255,8 +255,6 @@ export default function Purpose({ onNext }: PromptsProps) {
 
   const hasTargetConfigured = JSON.stringify(config.target) !== JSON.stringify(DEFAULT_HTTP_TARGET);
 
-  const isApiHealthy = apiHealthStatus === 'connected';
-
   const toolsAsJSDocs = React.useMemo(
     () => formatToolsAsJSDocs(discoveryResult?.tools),
     [discoveryResult],
@@ -377,7 +375,10 @@ export default function Purpose({ onNext }: PromptsProps) {
                 <Button
                   variant="contained"
                   disabled={
-                    !hasTargetConfigured || !isApiHealthy || !!discoveryError || !!discoveryResult
+                    !hasTargetConfigured ||
+                    apiHealthStatus !== 'connected' ||
+                    !!discoveryError ||
+                    !!discoveryResult
                   }
                   onClick={handleTargetPurposeDiscovery}
                   loading={isDiscovering}
@@ -394,7 +395,7 @@ export default function Purpose({ onNext }: PromptsProps) {
                     You must configure a target to run auto-discovery.
                   </Alert>
                 )}
-                {hasTargetConfigured && !isApiHealthy && (
+                {hasTargetConfigured && ['blocked', 'disabled'].includes(apiHealthStatus) && (
                   <Alert severity="error" sx={{ border: 0 }}>
                     Cannot connect to Promptfoo API. Auto-discovery requires a healthy API
                     connection.
