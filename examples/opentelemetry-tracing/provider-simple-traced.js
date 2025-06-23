@@ -1,10 +1,10 @@
 // provider-simple-traced.js
-// Simple provider that assumes OTLP receiver is ready
+// RAG/Agent provider with intricate OpenTelemetry tracing
 
 const { trace, context, SpanStatusCode } = require('@opentelemetry/api');
 const { NodeTracerProvider } = require('@opentelemetry/sdk-trace-node');
 const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
-const { SimpleSpanProcessor } = require('@opentelemetry/sdk-trace-base');
+const { BatchSpanProcessor } = require('@opentelemetry/sdk-trace-base'); // Use BatchSpanProcessor
 const { Resource } = require('@opentelemetry/resources');
 const { SemanticResourceAttributes } = require('@opentelemetry/semantic-conventions');
 
@@ -23,18 +23,57 @@ const exporter = new OTLPTraceExporter({
   url: exporterUrl,
 });
 
-// Use SimpleSpanProcessor for immediate export
-const spanProcessor = new SimpleSpanProcessor(exporter);
+// Use BatchSpanProcessor for better timing handling
+const spanProcessor = new BatchSpanProcessor(exporter, {
+  maxQueueSize: 100,
+  maxExportBatchSize: 10,
+  scheduledDelayMillis: 500, // Wait 500ms before exporting
+  exportTimeoutMillis: 30000,
+});
 provider.addSpanProcessor(spanProcessor);
 provider.register();
 
 // Get a tracer
 const tracer = trace.getTracer('simple-traced-provider', '1.0.0');
 
-// Helper function to run code within a span context
-async function runInSpan(span, fn) {
+// Fixed helper function that properly manages span lifecycle
+async function runInSpan(spanOrName, attributesOrFn, maybeFn) {
+  let span;
+  let fn;
+  let attributes = {};
+  
+  // Handle overloaded parameters
+  if (typeof spanOrName === 'string') {
+    // Called with (name, attributes, fn) or (name, fn)
+    if (typeof attributesOrFn === 'function') {
+      fn = attributesOrFn;
+    } else {
+      attributes = attributesOrFn || {};
+      fn = maybeFn;
+    }
+    span = tracer.startSpan(spanOrName, { attributes });
+  } else {
+    // Called with (span, fn) - original pattern
+    span = spanOrName;
+    fn = attributesOrFn;
+  }
+  
   const ctx = trace.setSpan(context.active(), span);
-  return context.with(ctx, fn);
+  
+  try {
+    const result = await context.with(ctx, fn);
+    span.setStatus({ code: SpanStatusCode.OK });
+    return result;
+  } catch (error) {
+    span.recordException(error);
+    span.setStatus({
+      code: SpanStatusCode.ERROR,
+      message: error.message,
+    });
+    throw error;
+  } finally {
+    span.end();
+  }
 }
 
 // Provider implementation
@@ -79,9 +118,10 @@ class SimpleTracedProvider {
   }
 
   async _tracedCallApi(prompt, promptfooContext) {
-    // Create main span for the entire RAG/Agent workflow
-    const mainSpan = tracer.startSpan('rag_agent_workflow', {
-      attributes: {
+    // Use the improved runInSpan for the main workflow
+    return runInSpan(
+      'rag_agent_workflow',
+      {
         'promptfoo.evaluation_id': promptfooContext.evaluationId,
         'promptfoo.test_case_id': promptfooContext.testCaseId,
         'prompt.text': prompt,
@@ -89,11 +129,8 @@ class SimpleTracedProvider {
         'agent.type': 'rag_assistant',
         'agent.version': '2.0',
       },
-    });
-    console.log('[Provider] Main workflow span created with ID:', mainSpan.spanContext().spanId);
-
-    try {
-      const result = await runInSpan(mainSpan, async () => {
+      async () => {
+        const span = trace.getSpan(context.active());
         const startTime = Date.now();
         let totalTokens = 0;
         let userIntent;
@@ -101,16 +138,16 @@ class SimpleTracedProvider {
 
         // Step 1: Query Analysis
         await runInSpan(
-          tracer.startSpan('query_analysis', {
-            attributes: {
-              'step.type': 'preprocessing',
-              'model.name': 'gpt-3.5-turbo',
-            },
-          }),
+          'query_analysis',
+          {
+            'step.type': 'preprocessing',
+            'model.name': 'gpt-3.5-turbo',
+          },
           async () => {
             const span = trace.getSpan(context.active());
             span.addEvent('analyzing_user_intent');
-            await new Promise((resolve) => setTimeout(resolve, 50));
+            const analysisDelay = 250 + Math.random() * 100;
+            await new Promise((resolve) => setTimeout(resolve, analysisDelay));
 
             userIntent = {
               type: prompt.toLowerCase().includes('compare')
@@ -129,33 +166,31 @@ class SimpleTracedProvider {
               'tokens.used': 120,
             });
             totalTokens += 120;
-            span.end();
           },
         );
 
         // Step 2: Document Retrieval
         await runInSpan(
-          tracer.startSpan('document_retrieval', {
-            attributes: {
-              'retrieval.method': 'vector_similarity',
-              'retrieval.index': 'technical_docs',
-            },
-          }),
+          'document_retrieval',
+          {
+            'retrieval.method': 'vector_similarity',
+            'retrieval.index': 'technical_docs',
+          },
           async () => {
             const retrievalSpan = trace.getSpan(context.active());
 
             // Simulate multiple retrieval attempts
             for (let i = 0; i < 3; i++) {
               await runInSpan(
-                tracer.startSpan(`retrieve_document_${i}`, {
-                  attributes: {
-                    'document.index': i,
-                    'search.query': userIntent.entities.join(' '),
-                  },
-                }),
+                `retrieve_document_${i}`,
+                {
+                  'document.index': i,
+                  'search.query': userIntent.entities.join(' '),
+                },
                 async () => {
                   const docSpan = trace.getSpan(context.active());
-                  await new Promise((resolve) => setTimeout(resolve, 30));
+                  const retrievalDelay = 150 + i * 50 + Math.random() * 50;
+                  await new Promise((resolve) => setTimeout(resolve, retrievalDelay));
 
                   const doc = {
                     id: `doc_${i + 1}`,
@@ -174,11 +209,10 @@ class SimpleTracedProvider {
 
                   docSpan.addEvent('document_retrieved', {
                     chunk_count: doc.chunk_count,
-                    processing_time_ms: 30,
+                    processing_time_ms: retrievalDelay,
                   });
 
                   documents.push(doc);
-                  docSpan.end();
                 },
               );
             }
@@ -187,20 +221,19 @@ class SimpleTracedProvider {
               'retrieval.document_count': documents.length,
               'retrieval.top_score': Math.max(...documents.map((d) => d.relevance_score)),
             });
-            retrievalSpan.end();
           },
         );
 
         // Step 3: Context Augmentation
         await runInSpan(
-          tracer.startSpan('context_augmentation', {
-            attributes: {
-              'augmentation.strategy': 'rerank_and_merge',
-            },
-          }),
+          'context_augmentation',
+          {
+            'augmentation.strategy': 'rerank_and_merge',
+          },
           async () => {
             const span = trace.getSpan(context.active());
-            await new Promise((resolve) => setTimeout(resolve, 40));
+            const augmentationDelay = 180 + Math.random() * 70;
+            await new Promise((resolve) => setTimeout(resolve, augmentationDelay));
 
             span.addEvent('reranking_documents', {
               original_count: documents.length,
@@ -218,30 +251,28 @@ class SimpleTracedProvider {
               'tokens.used': 250,
             });
             totalTokens += 250;
-            span.end();
           },
         );
 
         // Step 4: Reasoning Chain
         await runInSpan(
-          tracer.startSpan('reasoning_chain', {
-            attributes: {
-              'reasoning.type': 'chain_of_thought',
-              'model.name': 'gpt-4',
-            },
-          }),
+          'reasoning_chain',
+          {
+            'reasoning.type': 'chain_of_thought',
+            'model.name': 'gpt-4',
+          },
           async () => {
             const reasoningSpan = trace.getSpan(context.active());
 
             // Simulate multiple reasoning steps
             const reasoningSteps = [
-              { step: 'identify_key_concepts', duration: 60, tokens: 180 },
-              { step: 'analyze_relationships', duration: 80, tokens: 220 },
-              { step: 'synthesize_answer', duration: 100, tokens: 350 },
+              { step: 'identify_key_concepts', duration: 320, tokens: 180 },
+              { step: 'analyze_relationships', duration: 450, tokens: 220 },
+              { step: 'synthesize_answer', duration: 580, tokens: 350 },
             ];
 
             for (const step of reasoningSteps) {
-              await runInSpan(tracer.startSpan(`reasoning_${step.step}`), async () => {
+              await runInSpan(`reasoning_${step.step}`, async () => {
                 const stepSpan = trace.getSpan(context.active());
                 await new Promise((resolve) => setTimeout(resolve, step.duration));
 
@@ -257,7 +288,6 @@ class SimpleTracedProvider {
                 });
 
                 totalTokens += step.tokens;
-                stepSpan.end();
               });
             }
 
@@ -265,22 +295,21 @@ class SimpleTracedProvider {
               'reasoning.total_steps': reasoningSteps.length,
               'reasoning.total_tokens': reasoningSteps.reduce((sum, s) => sum + s.tokens, 0),
             });
-            reasoningSpan.end();
           },
         );
 
         // Step 5: Response Generation
         let response;
         await runInSpan(
-          tracer.startSpan('response_generation', {
-            attributes: {
-              'generation.type': 'augmented_response',
-              'model.name': 'gpt-4',
-            },
-          }),
+          'response_generation',
+          {
+            'generation.type': 'augmented_response',
+            'model.name': 'gpt-4',
+          },
           async () => {
             const span = trace.getSpan(context.active());
-            await new Promise((resolve) => setTimeout(resolve, 120));
+            const generationDelay = 750 + Math.random() * 200;
+            await new Promise((resolve) => setTimeout(resolve, generationDelay));
 
             response = {
               text:
@@ -312,12 +341,11 @@ class SimpleTracedProvider {
             });
 
             totalTokens += 450;
-            span.end();
           },
         );
 
         // Add final span attributes
-        mainSpan.setAttributes({
+        span.setAttributes({
           'workflow.total_duration_ms': Date.now() - startTime,
           'workflow.total_steps': 5,
           'workflow.total_tokens': totalTokens,
@@ -325,11 +353,20 @@ class SimpleTracedProvider {
           'response.confidence': response.confidence,
         });
 
-        mainSpan.addEvent('workflow_completed', {
+        span.addEvent('workflow_completed', {
           total_processing_time_ms: Date.now() - startTime,
           documents_used: documents.length,
           reasoning_steps: 3,
         });
+
+        // Force flush to ensure spans are sent
+        try {
+          console.log('[Provider] Flushing spans...');
+          await spanProcessor.forceFlush();
+          console.log('[Provider] Spans exported successfully');
+        } catch (error) {
+          console.error('[Provider] Failed to flush spans:', error.message);
+        }
 
         return {
           output: response.text,
@@ -344,40 +381,8 @@ class SimpleTracedProvider {
             workflow_duration_ms: Date.now() - startTime,
           },
         };
-      });
-
-      // Mark span as successful
-      mainSpan.setStatus({ code: SpanStatusCode.OK });
-      return result;
-    } catch (error) {
-      // Record error
-      mainSpan.recordException(error);
-      mainSpan.setStatus({
-        code: SpanStatusCode.ERROR,
-        message: error.message,
-      });
-      mainSpan.addEvent('workflow_failed', {
-        error_type: error.name,
-        error_message: error.message,
-      });
-      throw error;
-    } finally {
-      // Always end the span
-      mainSpan.end();
-
-      // Force flush to ensure span is sent
-      try {
-        console.log(
-          '[Provider] Attempting to flush spans to:',
-          process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4318/v1/traces',
-        );
-        await spanProcessor.forceFlush();
-        console.log('[Provider] Spans exported successfully');
-      } catch (error) {
-        console.error('[Provider] Failed to flush spans:', error.message);
-        console.error('[Provider] Full error:', error);
-      }
-    }
+      },
+    );
   }
 
   async _untracedCallApi(prompt, promptfooContext) {
