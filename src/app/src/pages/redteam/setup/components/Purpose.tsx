@@ -1040,7 +1040,7 @@ export default function Purpose({ onNext }: PromptsProps) {
             {/* Test Generation Instructions - Standalone Section */}
             <Box sx={{ mt: 4 }}>
               <Typography variant="h6" sx={{ fontWeight: 'medium', mb: 2 }}>
-                Add commentMore actions Test Generation Instructions
+                Test Generation Instructions
               </Typography>
               <Box>
                 <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
