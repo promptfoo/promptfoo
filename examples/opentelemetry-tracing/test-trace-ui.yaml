@@ -26,3 +26,4 @@ tracing:
     http:
       enabled: true
       port: 4318
+      acceptFormats: ['json']

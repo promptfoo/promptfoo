@@ -636,6 +636,8 @@ class Evaluator {
 
     // Start OTLP receiver if tracing is enabled
     logger.debug(`[Evaluator] Checking tracing config: ${JSON.stringify(testSuite.tracing)}`);
+    logger.debug(`[Evaluator] testSuite keys: ${Object.keys(testSuite)}`);
+    logger.debug(`[Evaluator] Full testSuite.tracing: ${JSON.stringify(testSuite.tracing, null, 2)}`);
     if (
       testSuite.tracing?.enabled &&
       testSuite.tracing?.otlp?.http?.enabled &&
