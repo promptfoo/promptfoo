@@ -41,15 +41,15 @@ export const GPT_IMAGE_1_TOKEN_COSTS = {
 
 // GPT Image 1 token requirements by quality and size
 export const GPT_IMAGE_1_TOKENS: Record<string, number> = {
-  'low_1024x1024': 272,
-  'low_1024x1536': 408,
-  'low_1536x1024': 400,
-  'medium_1024x1024': 1056,
-  'medium_1024x1536': 1584,
-  'medium_1536x1024': 1568,
-  'high_1024x1024': 4160,
-  'high_1024x1536': 6240,
-  'high_1536x1024': 6208,
+  low_1024x1024: 272,
+  low_1024x1536: 408,
+  low_1536x1024: 400,
+  medium_1024x1024: 1056,
+  medium_1024x1536: 1584,
+  medium_1536x1024: 1568,
+  high_1024x1024: 4160,
+  high_1024x1536: 6240,
+  high_1536x1024: 6208,
 };
 
 type CommonImageOptions = {
@@ -222,15 +222,15 @@ export function calculateImageCost(
     // Token-based pricing for gpt-image-1
     const imageQuality = quality || 'auto';
     const imageSize = size || '1024x1024';
-    
+
     // For auto quality/size, use medium 1024x1024 as default estimate
     let tokens = GPT_IMAGE_1_TOKENS['medium_1024x1024'];
-    
+
     if (imageQuality !== 'auto' && imageSize !== 'auto') {
       const tokenKey = `${imageQuality}_${imageSize}`;
       tokens = GPT_IMAGE_1_TOKENS[tokenKey] || tokens;
     }
-    
+
     const costPerImage = tokens * GPT_IMAGE_1_TOKEN_COSTS.output_image;
     return costPerImage * n;
   }
@@ -332,7 +332,7 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
     }
 
     const endpoint = '/images/generations';
-    
+
     // Set appropriate defaults based on model
     let size = config.size || DEFAULT_SIZE;
     if (model === 'gpt-image-1') {

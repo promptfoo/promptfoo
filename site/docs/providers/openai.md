@@ -329,7 +329,7 @@ providers:
       quality: 'high'
       background: 'transparent'
       output_format: 'png'
-  
+
   # Compressed JPEG for faster generation
   - id: openai:image:gpt-image-1
     label: 'Fast Generation'
@@ -338,7 +338,7 @@ providers:
       quality: 'medium'
       output_format: 'jpeg'
       output_compression: 75
-  
+
   # Auto quality and size
   - id: openai:image:gpt-image-1
     label: 'Auto Settings'
@@ -383,7 +383,7 @@ tests:
 - **DALL-E 2/3**: Fixed per-image pricing
 - **GPT Image 1**: Token-based pricing that varies by quality and size:
   - Low quality: 272-408 tokens
-  - Medium quality: 1,056-1,584 tokens  
+  - Medium quality: 1,056-1,584 tokens
   - High quality: 4,160-6,240 tokens
 
 To display images in the web viewer, wrap vars or outputs in markdown image tags like so:

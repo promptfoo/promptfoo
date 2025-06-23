@@ -13,14 +13,14 @@ providers:
     config:
       temperature: 0.7
       max_output_tokens: 1000
-  
+
   - id: openai:responses:o3-mini
     label: 'O3-Mini Reasoning'
     config:
       reasoning:
         effort: 'medium'
       max_output_tokens: 2000
-  
+
   # Image generation through Responses API
   - id: openai:responses:gpt-4.1-mini
     label: 'GPT-4.1-Mini with Image Generation'
@@ -30,7 +30,7 @@ providers:
           quality: 'medium'
           size: '1024x1024'
           output_format: 'png'
-  
+
   - id: openai:responses:gpt-4.1
     label: 'GPT-4.1 High Quality Images'
     config:
@@ -40,7 +40,7 @@ providers:
           size: '1024x1536'
           background: 'transparent'
           output_format: 'png'
-  
+
   # Multi-turn with previous_response_id
   - id: openai:responses:gpt-4.1-mini
     label: 'GPT-4.1-Mini Multi-turn'

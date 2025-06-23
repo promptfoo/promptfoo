@@ -214,26 +214,62 @@ describe('OpenAI Image Provider Functions', () => {
 
     it('should calculate GPT Image 1 costs correctly', () => {
       // Low quality costs
-      expect(calculateImageCost('gpt-image-1', '1024x1024', 'low', 1)).toBeCloseTo(272 * 40.0 / 1e6, 6);
-      expect(calculateImageCost('gpt-image-1', '1024x1536', 'low', 1)).toBeCloseTo(408 * 40.0 / 1e6, 6);
-      expect(calculateImageCost('gpt-image-1', '1536x1024', 'low', 1)).toBeCloseTo(400 * 40.0 / 1e6, 6);
+      expect(calculateImageCost('gpt-image-1', '1024x1024', 'low', 1)).toBeCloseTo(
+        (272 * 40.0) / 1e6,
+        6,
+      );
+      expect(calculateImageCost('gpt-image-1', '1024x1536', 'low', 1)).toBeCloseTo(
+        (408 * 40.0) / 1e6,
+        6,
+      );
+      expect(calculateImageCost('gpt-image-1', '1536x1024', 'low', 1)).toBeCloseTo(
+        (400 * 40.0) / 1e6,
+        6,
+      );
 
       // Medium quality costs
-      expect(calculateImageCost('gpt-image-1', '1024x1024', 'medium', 1)).toBeCloseTo(1056 * 40.0 / 1e6, 6);
-      expect(calculateImageCost('gpt-image-1', '1024x1536', 'medium', 1)).toBeCloseTo(1584 * 40.0 / 1e6, 6);
-      expect(calculateImageCost('gpt-image-1', '1536x1024', 'medium', 1)).toBeCloseTo(1568 * 40.0 / 1e6, 6);
+      expect(calculateImageCost('gpt-image-1', '1024x1024', 'medium', 1)).toBeCloseTo(
+        (1056 * 40.0) / 1e6,
+        6,
+      );
+      expect(calculateImageCost('gpt-image-1', '1024x1536', 'medium', 1)).toBeCloseTo(
+        (1584 * 40.0) / 1e6,
+        6,
+      );
+      expect(calculateImageCost('gpt-image-1', '1536x1024', 'medium', 1)).toBeCloseTo(
+        (1568 * 40.0) / 1e6,
+        6,
+      );
 
       // High quality costs
-      expect(calculateImageCost('gpt-image-1', '1024x1024', 'high', 1)).toBeCloseTo(4160 * 40.0 / 1e6, 6);
-      expect(calculateImageCost('gpt-image-1', '1024x1536', 'high', 1)).toBeCloseTo(6240 * 40.0 / 1e6, 6);
-      expect(calculateImageCost('gpt-image-1', '1536x1024', 'high', 1)).toBeCloseTo(6208 * 40.0 / 1e6, 6);
+      expect(calculateImageCost('gpt-image-1', '1024x1024', 'high', 1)).toBeCloseTo(
+        (4160 * 40.0) / 1e6,
+        6,
+      );
+      expect(calculateImageCost('gpt-image-1', '1024x1536', 'high', 1)).toBeCloseTo(
+        (6240 * 40.0) / 1e6,
+        6,
+      );
+      expect(calculateImageCost('gpt-image-1', '1536x1024', 'high', 1)).toBeCloseTo(
+        (6208 * 40.0) / 1e6,
+        6,
+      );
 
       // Multiple images
-      expect(calculateImageCost('gpt-image-1', '1024x1024', 'medium', 3)).toBeCloseTo(1056 * 40.0 / 1e6 * 3, 6);
+      expect(calculateImageCost('gpt-image-1', '1024x1024', 'medium', 3)).toBeCloseTo(
+        ((1056 * 40.0) / 1e6) * 3,
+        6,
+      );
 
       // Auto quality should use medium 1024x1024 as default
-      expect(calculateImageCost('gpt-image-1', '1024x1024', 'auto', 1)).toBeCloseTo(1056 * 40.0 / 1e6, 6);
-      expect(calculateImageCost('gpt-image-1', 'auto', 'auto', 1)).toBeCloseTo(1056 * 40.0 / 1e6, 6);
+      expect(calculateImageCost('gpt-image-1', '1024x1024', 'auto', 1)).toBeCloseTo(
+        (1056 * 40.0) / 1e6,
+        6,
+      );
+      expect(calculateImageCost('gpt-image-1', 'auto', 'auto', 1)).toBeCloseTo(
+        (1056 * 40.0) / 1e6,
+        6,
+      );
     });
 
     it('should handle unknown models with default cost', () => {
