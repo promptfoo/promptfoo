@@ -166,7 +166,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     const body = {
       // Only include model if not using a prompt parameter
       ...(this.modelName && !promptParam ? { model: this.modelName } : {}),
-      ...(input !== undefined ? { input } : {}),
+      ...(input === undefined ? {} : { input }),
       ...(promptParam ? { prompt: promptParam } : {}),
       ...(promptVariables ? { prompt_variables: promptVariables } : {}),
       ...(maxOutputTokens ? { max_output_tokens: maxOutputTokens } : {}),

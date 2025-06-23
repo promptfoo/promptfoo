@@ -423,6 +423,64 @@ describe('OpenAiImageProvider', () => {
       expect(body.size).toBeUndefined();
     });
 
+    it('should handle GPT Image 1 moderation parameter', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-1', {
+        config: {
+          apiKey: 'test-key',
+          moderation: 'low',
+          quality: 'medium',
+          size: '1024x1024',
+        },
+      });
+
+      await provider.callApi('test prompt');
+
+      const callArgs = jest.mocked(fetchWithCache).mock.calls[0];
+      const body = JSON.parse((callArgs[1] as any).body);
+
+      expect(body.moderation).toBe('low');
+      expect(body.quality).toBe('medium');
+      expect(body.size).toBe('1024x1024');
+      // response_format should not be included for GPT Image 1
+      expect(body.response_format).toBeUndefined();
+    });
+
+    it('should handle GPT Image 1 base64 response correctly', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-1', {
+        config: {
+          apiKey: 'test-key',
+          response_format: 'url', // This should be ignored for GPT Image 1
+        },
+      });
+
+      // Mock a GPT Image 1 response (always base64)
+      jest.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          data: [{ b64_json: 'base64EncodedImageData' }],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toEqual({
+        output: JSON.stringify({
+          data: [{ b64_json: 'base64EncodedImageData' }],
+        }),
+        cached: false,
+        isBase64: true,
+        format: 'json',
+        cost: expect.any(Number),
+      });
+
+      // Verify that response_format was not included in the request
+      const callArgs = jest.mocked(fetchWithCache).mock.calls[0];
+      const body = JSON.parse((callArgs[1] as any).body);
+      expect(body.response_format).toBeUndefined();
+    });
+
     it('should include organization ID in headers when provided', async () => {
       const provider = new OpenAiImageProvider('dall-e-3', {
         config: {

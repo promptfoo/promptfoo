@@ -44,6 +44,19 @@ describe('OpenAI Image Provider Functions', () => {
       expect(result.message).toContain('Invalid size "1792x1024" for DALL-E 2');
     });
 
+    it('should validate valid GPT Image 1 sizes', () => {
+      expect(validateSizeForModel('1024x1024', 'gpt-image-1')).toEqual({ valid: true });
+      expect(validateSizeForModel('1024x1536', 'gpt-image-1')).toEqual({ valid: true });
+      expect(validateSizeForModel('1536x1024', 'gpt-image-1')).toEqual({ valid: true });
+      expect(validateSizeForModel('auto', 'gpt-image-1')).toEqual({ valid: true });
+    });
+
+    it('should invalidate incorrect GPT Image 1 sizes', () => {
+      const result = validateSizeForModel('512x512', 'gpt-image-1');
+      expect(result.valid).toBe(false);
+      expect(result.message).toContain('Invalid size "512x512" for GPT Image 1');
+    });
+
     it('should validate any size for unknown models', () => {
       expect(validateSizeForModel('any-size', 'unknown-model')).toEqual({ valid: true });
     });
@@ -147,6 +160,43 @@ describe('OpenAI Image Provider Functions', () => {
 
       expect(body).not.toHaveProperty('quality');
       expect(body).not.toHaveProperty('style');
+    });
+
+    it('should include GPT Image 1 specific parameters', () => {
+      const config = {
+        quality: 'high',
+        output_format: 'jpeg',
+        output_compression: 85,
+        background: 'transparent',
+        moderation: 'low',
+        size: '1024x1536',
+      };
+      const body = prepareRequestBody('gpt-image-1', 'prompt', '1024x1024', 'url', config);
+
+      expect(body).toEqual({
+        model: 'gpt-image-1',
+        prompt: 'prompt',
+        n: 1,
+        size: '1024x1536', // Should use config.size
+        quality: 'high',
+        output_format: 'jpeg',
+        output_compression: 85,
+        background: 'transparent',
+        moderation: 'low',
+      });
+      // response_format should not be included for GPT Image 1
+      expect(body).not.toHaveProperty('response_format');
+    });
+
+    it('should not include response_format for GPT Image 1', () => {
+      const config = {};
+      const body = prepareRequestBody('gpt-image-1', 'prompt', 'auto', 'b64_json', config);
+
+      expect(body.model).toBe('gpt-image-1');
+      expect(body.prompt).toBe('prompt');
+      expect(body.n).toBe(1);
+      expect(body).not.toHaveProperty('response_format');
+      expect(body).not.toHaveProperty('size'); // auto size should not be included
     });
   });
 

@@ -77,6 +77,7 @@ type GptImage1Options = CommonImageOptions & {
   output_compression?: number; // 0-100% compression level
   output_format?: 'png' | 'jpeg' | 'webp'; // Output format
   background?: 'transparent' | 'opaque' | 'auto'; // Background transparency
+  moderation?: 'low' | 'auto'; // Content moderation level
 };
 
 type OpenAiImageOptions = OpenAiSharedOptions & {
@@ -119,8 +120,10 @@ export function formatOutput(
   data: any,
   prompt: string,
   responseFormat?: string,
+  model?: string,
 ): string | { error: string } {
-  if (responseFormat === 'b64_json') {
+  // GPT Image 1 always returns base64 data regardless of responseFormat
+  if (model === 'gpt-image-1' || responseFormat === 'b64_json') {
     const b64Json = data.data[0].b64_json;
     if (!b64Json) {
       return { error: `No base64 image data found in response: ${JSON.stringify(data)}` };
@@ -154,8 +157,12 @@ export function prepareRequestBody(
     model,
     prompt,
     n: config.n || 1,
-    response_format: responseFormat,
   };
+
+  // GPT Image 1 always returns base64-encoded images and doesn't support response_format
+  if (model !== 'gpt-image-1') {
+    body.response_format = responseFormat;
+  }
 
   // Add size for DALL-E models only
   if (model === 'dall-e-2' || model === 'dall-e-3') {
@@ -194,6 +201,10 @@ export function prepareRequestBody(
 
     if ('background' in config && config.background) {
       body.background = config.background;
+    }
+
+    if ('moderation' in config && config.moderation) {
+      body.moderation = config.moderation;
     }
   }
 
@@ -273,18 +284,21 @@ export async function processApiResponse(
   }
 
   try {
-    const formattedOutput = formatOutput(data, prompt, responseFormat);
+    const formattedOutput = formatOutput(data, prompt, responseFormat, model);
     if (typeof formattedOutput === 'object') {
       return formattedOutput;
     }
 
     const cost = cached ? 0 : calculateImageCost(model, size, quality, n);
 
+    // GPT Image 1 always returns base64 data
+    const isBase64Response = model === 'gpt-image-1' || responseFormat === 'b64_json';
+
     return {
       output: formattedOutput,
       cached,
       cost,
-      ...(responseFormat === 'b64_json' ? { isBase64: true, format: 'json' } : {}),
+      ...(isBase64Response ? { isBase64: true, format: 'json' } : {}),
     };
   } catch (err) {
     await data?.deleteFromCache?.();
@@ -325,6 +339,9 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
     const operation = ('operation' in config && config.operation) || 'generation';
     const responseFormat = config.response_format || 'url';
 
+    // GPT Image 1 always returns base64 data, so we need to handle it as such internally
+    const effectiveResponseFormat = model === 'gpt-image-1' ? 'b64_json' : responseFormat;
+
     if (operation !== 'generation') {
       return {
         error: `Only 'generation' operations are currently supported. '${operation}' operations are not implemented.`,
@@ -346,7 +363,7 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
       return { error: sizeValidation.message };
     }
 
-    const body = prepareRequestBody(model, prompt, size as string, responseFormat, config);
+    const body = prepareRequestBody(model, prompt, size as string, effectiveResponseFormat, config);
 
     logger.debug(`Calling OpenAI Image API: ${JSON.stringify(body)}`);
 
@@ -385,7 +402,7 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
     return processApiResponse(
       data,
       prompt,
-      responseFormat,
+      effectiveResponseFormat,
       cached,
       model,
       size,

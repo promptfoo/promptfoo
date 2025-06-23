@@ -357,6 +357,7 @@ providers:
 | `output_format`      | N/A                         | N/A                             | png, jpeg, webp                       | Output file format            |
 | `output_compression` | N/A                         | N/A                             | 0-100                                 | Compression level (JPEG/WebP) |
 | `background`         | N/A                         | N/A                             | transparent, opaque, auto             | Background transparency       |
+| `moderation`         | N/A                         | N/A                             | low, auto                             | Content moderation level      |
 | `n`                  | 1-10                        | 1                               | 1-10                                  | Number of images              |
 | `response_format`    | url, b64_json               | url, b64_json                   | url, b64_json                         | Response format               |
 
@@ -385,6 +386,8 @@ tests:
   - Low quality: 272-408 tokens
   - Medium quality: 1,056-1,584 tokens
   - High quality: 4,160-6,240 tokens
+
+**Important Note**: GPT Image 1 always returns base64-encoded images regardless of the `response_format` setting. The `response_format` parameter is ignored for this model.
 
 To display images in the web viewer, wrap vars or outputs in markdown image tags like so:
 
