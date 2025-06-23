@@ -1293,7 +1293,7 @@ class Evaluator {
 
       // Then run concurrent evaluations
       logger.info(
-        `Running ${concurrentRunEvalOptions.length} test cases (${concurrency} at a time)...`,
+        `Running ${concurrentRunEvalOptions.length} test cases (up to ${concurrency} at a time)...`,
       );
       await async.forEachOfLimit(concurrentRunEvalOptions, concurrency, async (evalStep) => {
         checkAbort();
