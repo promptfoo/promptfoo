@@ -124,7 +124,10 @@ export default function Eval({ fetchId }: EvalOptions) {
 
       const socket = SocketIOClient(apiBaseUrl || '');
 
-      async function onSocketEvent(data: ResultsFile) {
+      /**
+       * Populates the table store with the most recent eval result.
+       */
+      async function handleResultsFile(data: ResultsFile) {
         // NOTE: Constructing the table is a time-expensive operation; therefore `setLoaded(true)` is not called
         // until after the table is constructed. Otherwise, `loaded` will be true before the table is defined resulting
         // in a race condition.
@@ -143,11 +146,15 @@ export default function Eval({ fetchId }: EvalOptions) {
       socket
         .on('init', async (data) => {
           console.log('Initialized socket connection', data);
-          await onSocketEvent(data);
+          await handleResultsFile(data);
         })
+        /**
+         * The user has run `promptfoo eval` and a new latest eval
+         * result has been received.
+         */
         .on('update', async (data) => {
           console.log('Received data update', data);
-          await onSocketEvent(data);
+          await handleResultsFile(data);
         });
 
       return () => {
