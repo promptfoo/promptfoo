@@ -129,29 +129,15 @@ export default function Eval({ fetchId }: EvalOptions) {
         // until after the table is constructed. Otherwise, `loaded` will be true before the table is defined resulting
         // in a race condition.
         setTableFromResultsFile(data);
-        setConfig(data?.config);
-        setAuthor(data?.author || null);
-        fetchRecentFileEvals().then((newRecentEvals) => {
-          if (newRecentEvals && newRecentEvals.length > 0) {
-            setDefaultEvalId(newRecentEvals[0]?.evalId);
-            setEvalId(newRecentEvals[0]?.evalId);
-            loadEvalById(newRecentEvals[0]?.evalId);
-          }
-        });
-      });
-
-      socket.on('update', (data) => {
-        console.log('Received data update', data);
-        setTableFromResultsFile(data);
         setConfig(data.config);
         setAuthor(data.author ?? null);
         const newRecentEvals = await fetchRecentFileEvals();
-          if (newRecentEvals && newRecentEvals.length > 0) {
-            const newId = newRecentEvals[0].evalId;
-            setDefaultEvalId(newId);
-            setEvalId(newId);
-            loadEvalById(newId);
-          }
+        if (newRecentEvals && newRecentEvals.length > 0) {
+          const newId = newRecentEvals[0].evalId;
+          setDefaultEvalId(newId);
+          setEvalId(newId);
+          loadEvalById(newId);
+        }
       }
 
       socket
@@ -162,7 +148,7 @@ export default function Eval({ fetchId }: EvalOptions) {
         .on('update', async (data) => {
           console.log('Received data update', data);
           await onSocketEvent(data);
-      });
+        });
 
       return () => {
         socket.disconnect();
@@ -229,10 +215,6 @@ export default function Eval({ fetchId }: EvalOptions) {
     return <div className="notice">404 Eval not found</div>;
   }
 
-  if (loaded && !table) {
-    return <EmptyState />;
-  }
-
   if (!loaded || !table) {
     return (
       <div className="notice">
@@ -242,6 +224,10 @@ export default function Eval({ fetchId }: EvalOptions) {
         <div>Waiting for eval data</div>
       </div>
     );
+  }
+
+  if (loaded && !table) {
+    return <EmptyState />;
   }
 
   // Check if this is a redteam eval
