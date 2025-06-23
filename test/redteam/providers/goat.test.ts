@@ -41,6 +41,86 @@ describe('RedteamGoatProvider', () => {
     }).toThrow('Expected injectVar to be set');
   });
 
+  it('should initialize with all config options', () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 3,
+      stateful: true,
+      excludeTargetOutputFromAgenticAttackGeneration: true,
+    });
+
+    expect(provider.config).toEqual({
+      injectVar: 'goal',
+      maxTurns: 3,
+      stateful: true,
+      excludeTargetOutputFromAgenticAttackGeneration: true,
+    });
+  });
+
+  it('should default stateful to false when not specified', () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+    });
+
+    expect(provider.config.stateful).toBe(false);
+  });
+
+  it('should handle stateful behavior when set to true', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 2,
+      stateful: true,
+    });
+
+    const targetProvider: ApiProvider = {
+      id: () => 'test-provider',
+      callApi: async () =>
+        Promise.resolve({
+          output: 'target response',
+          tokenUsage: {},
+        }) as ProviderResponse,
+    };
+
+    const context: CallApiContextParams = {
+      originalProvider: targetProvider,
+      vars: { goal: 'test goal' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    };
+
+    await provider.callApi('test prompt', context);
+
+    const lastCallBody = JSON.parse((mockFetch.mock.calls[0][1] as { body: string }).body);
+    expect(lastCallBody.messages).toBeDefined();
+  });
+
+  it('should pass excludeTargetOutputFromAgenticAttackGeneration through config', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 2,
+      excludeTargetOutputFromAgenticAttackGeneration: true,
+    });
+
+    const targetProvider: ApiProvider = {
+      id: () => 'test-provider',
+      callApi: async () =>
+        Promise.resolve({
+          output: 'target response',
+          tokenUsage: {},
+        }) as ProviderResponse,
+    };
+
+    const context: CallApiContextParams = {
+      originalProvider: targetProvider,
+      vars: { goal: 'test goal' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    };
+
+    await provider.callApi('test prompt', context);
+
+    const lastCallBody = JSON.parse((mockFetch.mock.calls[0][1] as { body: string }).body);
+    expect(lastCallBody.excludeTargetOutputFromAgenticAttackGeneration).toBe(true);
+  });
+
   it('should make correct API calls with message history', async () => {
     const provider = new RedteamGoatProvider({
       injectVar: 'goal',
@@ -80,6 +160,9 @@ describe('RedteamGoatProvider', () => {
         body: expect.any(String),
       }),
     );
+
+    const bodyObj = JSON.parse((mockFetch.mock.calls[0][1] as { body: string }).body);
+    expect(bodyObj.purpose).toBeUndefined();
   });
 
   it('should handle grader integration and stop early on failure', async () => {
@@ -158,5 +241,68 @@ describe('RedteamGoatProvider', () => {
     const result = await provider.callApi('test prompt', context);
     const messages = result.metadata?.messages;
     expect(messages[messages.length - 1].content).toBe(JSON.stringify(objectResponse));
+  });
+
+  it('should include purpose in API call when provided in test metadata', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+    });
+
+    const targetProvider: ApiProvider = {
+      id: () => 'test-provider',
+      callApi: async () =>
+        Promise.resolve({
+          output: 'target response',
+          tokenUsage: {},
+        }) as ProviderResponse,
+    };
+
+    const context: CallApiContextParams = {
+      originalProvider: targetProvider,
+      vars: { goal: 'test goal' },
+      prompt: { raw: 'test prompt', label: 'test' },
+      test: {
+        vars: {},
+        metadata: {
+          purpose: 'test purpose',
+        },
+      } as AtomicTestCase,
+    };
+
+    await provider.callApi('test prompt', context);
+
+    const lastCallBody = JSON.parse((mockFetch.mock.calls[0][1] as { body: string }).body);
+    expect(lastCallBody.purpose).toBe('test purpose');
+  });
+
+  it('should handle undefined purpose in test metadata', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+    });
+
+    const targetProvider: ApiProvider = {
+      id: () => 'test-provider',
+      callApi: async () =>
+        Promise.resolve({
+          output: 'target response',
+          tokenUsage: {},
+        }) as ProviderResponse,
+    };
+
+    const context: CallApiContextParams = {
+      originalProvider: targetProvider,
+      vars: { goal: 'test goal' },
+      prompt: { raw: 'test prompt', label: 'test' },
+      test: {
+        vars: {},
+      } as AtomicTestCase,
+    };
+
+    await provider.callApi('test prompt', context);
+
+    const lastCallBody = JSON.parse((mockFetch.mock.calls[0][1] as { body: string }).body);
+    expect(lastCallBody.purpose).toBeUndefined();
   });
 });

@@ -1,3 +1,7 @@
+---
+sidebar_label: Adaline Gateway
+---
+
 # Adaline Gateway
 
 Adaline Gateway is a fully local production-grade Super SDK that provides a simple, unified, and powerful interface for calling more than 200+ LLMs.
@@ -48,7 +52,7 @@ Note: In case of `azureopenai` the `<model_name>` is the name of your Azure Open
 
 Examples:
 
-- `adaline:openai:chat:gpt-4o-mini`
+- `adaline:openai:chat:gpt-4.1-mini`
 - `adaline:azureopenai:chat:my-gpt-4o-deployment`
 - `adaline:google:chat:gemini-1.5-flash`
 - `adaline:togetherai:chat:meta-llama/Meta-Llama-3-8B-Instruct-Turbo`
@@ -64,9 +68,9 @@ Apart from being able to use Adaline Gateway's types, the adaline provider also 
 
 adaline provider uses API keys set using standard Promptfoo env variables such as `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, etc. The API key can also be set from within the config, example:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 providers:
-  - id: adaline:openai:chat:gpt-4o-mini
+  - id: adaline:openai:chat:gpt-4.1-mini
     config:
       apiKey: sk-random-openai-api-key
 ```
@@ -77,9 +81,9 @@ Env variables for each of the Promptfoo supported providers are supported by ada
 
 LLM parameters can be set in `config`, example:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 providers:
-  - id: adaline:openai:chat:gpt-4o-mini
+  - id: adaline:openai:chat:gpt-4.1-mini
     config:
       temperature: 0.8
       maxTokens: 300
@@ -355,7 +359,7 @@ prompts:
   - 'What is the weather like in {{city}}?'
 
 providers:
-  - id: adaline:openai:chat:gpt-4o-mini
+  - id: adaline:openai:chat:gpt-4.1-mini
     config:
       tools:
         [
@@ -492,7 +496,7 @@ tests:
 prompts:
   - file://prompt.json
 providers:
-  - id: adaline:openai:chat:gpt-4o
+  - id: adaline:openai:chat:gpt-4.1
   - id: adaline:anthropic:chat:claude-3-opus-20240229
   - id: adaline:google:chat:gemini-1.5-pro
 
@@ -540,7 +544,7 @@ prompts:
   - 'Analyze the following customer support query: "{{query}}"'
 
 providers:
-  - id: adaline:openai:chat:gpt-4o-mini
+  - id: adaline:openai:chat:gpt-4.1-mini
     config:
       seed: 322431
       responseFormat: json_schema
@@ -702,7 +706,7 @@ derivedMetrics:
 prompts:
   - file://prompt.json
 providers:
-  - id: adaline:openai:chat:gpt-4o
+  - id: adaline:openai:chat:gpt-4.1
 
 tests:
   - vars:

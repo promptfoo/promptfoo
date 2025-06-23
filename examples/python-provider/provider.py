@@ -19,7 +19,7 @@ def call_api(prompt, options, context):
                 "content": prompt,
             },
         ],
-        model="gpt-4o-mini",
+        model="gpt-4.1-mini",
     )
 
     # Extract token usage information from the response

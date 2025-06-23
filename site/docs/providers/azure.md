@@ -189,7 +189,7 @@ npm i @azure/identity
 
 The easiest way to do this for _all_ your test cases is to add the [`defaultTest`](/docs/configuration/guide/#default-test-cases) property to your config:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 defaultTest:
   options:
     provider:

@@ -1,0 +1,108 @@
+.buttonContainer {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 100;
+}
+
+.copyButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(12px);
+  padding: 8px;
+  cursor: pointer;
+  border-radius: 6px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+  transition: all 0.2s ease-in-out;
+  min-width: 34px;
+  min-height: 34px;
+}
+
+.copyButton:hover {
+  background-color: rgba(255, 255, 255, 1);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  transform: translateY(-1px);
+}
+
+.iconContainer {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+}
+
+.copyIcon {
+  font-size: 14px !important;
+  opacity: 1;
+  position: absolute;
+  transition: all 0.2s ease-in-out;
+  width: 14px !important;
+  height: 14px !important;
+}
+
+.checkIcon {
+  font-size: 14px !important;
+  opacity: 0;
+  position: absolute;
+  color: #22c55e;
+  transition: all 0.2s ease-in-out;
+  width: 14px !important;
+  height: 14px !important;
+}
+
+.copied .copyIcon {
+  opacity: 0;
+}
+
+.copied .checkIcon {
+  opacity: 1;
+}
+
+/* Dark theme styles */
+[data-theme='dark'] .copyButton {
+  background: rgba(30, 30, 30, 0.98);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #e6e6e6;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme='dark'] .copyButton:hover {
+  background-color: rgba(30, 30, 30, 1);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme='dark'] .copyIcon {
+  color: #e6e6e6;
+}
+
+/* Responsive positioning adjustments */
+@media (max-width: 768px) {
+  .buttonContainer {
+    top: 12px;
+    right: 12px;
+  }
+
+  .copyButton {
+    padding: 6px;
+    min-width: 30px;
+    min-height: 30px;
+  }
+}
+
+@media (max-width: 480px) {
+  .buttonContainer {
+    top: 8px;
+    right: 8px;
+  }
+
+  .copyButton {
+    padding: 4px;
+    min-width: 28px;
+    min-height: 28px;
+  }
+}

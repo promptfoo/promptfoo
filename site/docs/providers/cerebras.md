@@ -1,3 +1,7 @@
+---
+sidebar_label: Cerebras
+---
+
 # Cerebras
 
 This provider enables you to use Cerebras models through their [Inference API](https://docs.cerebras.ai).

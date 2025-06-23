@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { desc, eq, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
 import { getDb } from '../database';
+import { updateSignalFile } from '../database/signal';
 import {
   datasetsTable,
   evalsTable,
@@ -16,23 +17,34 @@ import { getEnvBool } from '../envars';
 import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
-import type {
-  CompletedPrompt,
-  EvaluateResult,
-  EvaluateStats,
-  EvaluateSummaryV3,
-  EvaluateSummaryV2,
-  EvaluateTable,
-  Prompt,
-  ResultsFile,
-  UnifiedConfig,
-  EvalSummary,
+import {
+  type CompletedPrompt,
+  type EvaluateResult,
+  type EvaluateStats,
+  type EvaluateSummaryV3,
+  type EvaluateSummaryV2,
+  type EvaluateTable,
+  ResultFailureReason,
+  type Prompt,
+  type ResultsFile,
+  type UnifiedConfig,
+  type EvalSummary,
+  type EvaluateTableRow,
 } from '../types';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
+import { convertTestResultsToTableRow } from '../util/exportToFile';
 import invariant from '../util/invariant';
 import { getCurrentTimestamp } from '../util/time';
 import EvalResult from './evalResult';
+
+interface FilteredCountRow {
+  count: number | null;
+}
+
+interface TestIndexRow {
+  test_idx: number;
+}
 
 export function createEvalId(createdAt: Date = new Date()) {
   return `eval-${randomSequence(3)}-${createdAt.toISOString().slice(0, 19)}`;
@@ -54,6 +66,28 @@ FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')}))
     }, {});
     return vars;
   }
+
+  static async getVarsFromEval(evalId: string) {
+    const db = getDb();
+    const query = sql.raw(
+      `SELECT DISTINCT j.key from (SELECT json_extract(eval_results.test_case, '$.vars') as vars
+    FROM eval_results where eval_results.eval_id = '${evalId}') t, json_each(t.vars) j;`,
+    );
+    // @ts-ignore
+    const results: { key: string }[] = await db.all(query);
+    const vars = results.map((r) => r.key);
+
+    return vars;
+  }
+
+  static async setVars(evalId: string, vars: string[]) {
+    const db = getDb();
+    try {
+      await db.update(evalsTable).set({ vars }).where(eq(evalsTable.id, evalId)).run();
+    } catch (e) {
+      logger.error(`Error setting vars: ${vars} for eval ${evalId}: ${e}`);
+    }
+  }
 }
 
 export default class Eval {
@@ -64,11 +98,12 @@ export default class Eval {
   config: Partial<UnifiedConfig>;
   // If these are empty, you need to call loadResults(). We don't load them by default to save memory.
   results: EvalResult[];
-  resultsCount: number; // Fast way to get the number of results
   datasetId?: string;
   prompts: CompletedPrompt[];
   oldResults?: EvaluateSummaryV2;
   persisted: boolean;
+  vars: string[];
+  _resultsLoaded: boolean = false;
 
   static async latest() {
     const db = getDb();
@@ -116,9 +151,17 @@ export default class Eval {
       prompts: eval_.prompts || [],
       datasetId,
       persisted: true,
+      vars: eval_.vars || [],
     });
     if (eval_.results && 'table' in eval_.results) {
       evalInstance.oldResults = eval_.results as EvaluateSummaryV2;
+    }
+
+    // backfill vars
+    if (!eval_.vars) {
+      const vars = await EvalQueries.getVarsFromEval(id);
+      evalInstance.setVars(vars);
+      await EvalQueries.setVars(id, vars);
     }
 
     return evalInstance;
@@ -263,6 +306,7 @@ export default class Eval {
       prompts?: CompletedPrompt[];
       datasetId?: string;
       persisted?: boolean;
+      vars?: string[];
     },
   ) {
     const createdAt = opts?.createdAt || new Date();
@@ -271,10 +315,11 @@ export default class Eval {
     this.author = opts?.author;
     this.config = config;
     this.results = [];
-    this.resultsCount = 0;
     this.prompts = opts?.prompts || [];
     this.datasetId = opts?.datasetId;
     this.persisted = opts?.persisted || false;
+    this._resultsLoaded = false;
+    this.vars = opts?.vars || [];
   }
 
   version() {
@@ -303,6 +348,7 @@ export default class Eval {
       description: this.config.description,
       author: this.author,
       updatedAt: getCurrentTimestamp(),
+      vars: Array.from(this.vars),
     };
 
     if (this.useOldResults()) {
@@ -313,18 +359,12 @@ export default class Eval {
     this.persisted = true;
   }
 
-  async getVars() {
-    if (this.useOldResults()) {
-      invariant(this.oldResults, 'Old results not found');
-      return this.oldResults.table?.head.vars || [];
-    }
-    const db = getDb();
-    const query = sql`SELECT DISTINCT j.key from (SELECT json_extract(test_case_results.test_case, '$.vars') as vars
-    FROM test_case_results where test_case_results.eval_id = ${this.id}) t, json_each(t.vars) j;`;
-    // @ts-ignore
-    const results: { key: string }[] = await db.all(query);
+  setVars(vars: string[]) {
+    this.vars = vars;
+  }
 
-    return results.map((r) => r.key) || [];
+  addVar(varName: string) {
+    this.vars.push(varName);
   }
 
   getPrompts() {
@@ -351,7 +391,10 @@ export default class Eval {
       // This is to avoid memory issues when running large evaluations
       this.results.push(newResult);
     }
-    this.resultsCount++;
+    if (this.persisted) {
+      // Notify watchers that new results are available
+      updateSignalFile();
+    }
   }
 
   async *fetchResultsBatched(batchSize: number = 100) {
@@ -360,8 +403,187 @@ export default class Eval {
     }
   }
 
+  async getResultsCount(): Promise<number> {
+    const db = getDb();
+    const result = db
+      .select({ count: sql<number>`count(*)` })
+      .from(evalResultsTable)
+      .where(eq(evalResultsTable.evalId, this.id))
+      .all();
+    const count = result[0]?.count ?? 0;
+    return Number(count);
+  }
+
   async fetchResultsByTestIdx(testIdx: number) {
     return await EvalResult.findManyByEvalId(this.id, { testIdx });
+  }
+
+  /**
+   * Private helper method to build filter conditions and query for test indices
+   */
+  private async queryTestIndices(opts: {
+    offset?: number;
+    limit?: number;
+    filterMode?: string;
+    searchQuery?: string;
+    metricFilter?: string;
+  }): Promise<{ testIndices: number[]; filteredCount: number }> {
+    const db = getDb();
+    const offset = opts.offset ?? 0;
+    const limit = opts.limit ?? 50;
+    const filter = opts.filterMode ?? 'all';
+
+    // Build filter conditions
+    const conditions = [`eval_id = '${this.id}'`];
+    if (filter === 'errors') {
+      conditions.push(`failure_reason = ${ResultFailureReason.ERROR}`);
+    } else if (filter === 'failures') {
+      conditions.push(`success = 0 AND failure_reason != ${ResultFailureReason.ERROR}`);
+    } else if (filter === 'passes') {
+      conditions.push(`success = 1`);
+    }
+
+    // Add specific metric filter if provided
+    if (opts.metricFilter && opts.metricFilter.trim() !== '') {
+      const sanitizedMetric = opts.metricFilter.replace(/'/g, "''");
+      conditions.push(`json_extract(named_scores, '$.${sanitizedMetric}') IS NOT NULL`);
+    }
+
+    // Add search condition if searchQuery is provided
+    if (opts.searchQuery && opts.searchQuery.trim() !== '') {
+      const sanitizedSearch = opts.searchQuery.replace(/'/g, "''");
+      const searchConditions = [
+        // Search in response text
+        `response LIKE '%${sanitizedSearch}%'`,
+        // Search in grading result reason
+        `json_extract(grading_result, '$.reason') LIKE '%${sanitizedSearch}%'`,
+        // Search in grading result comment
+        `json_extract(grading_result, '$.comment') LIKE '%${sanitizedSearch}%'`,
+        // Search in named scores
+        `json_extract(named_scores, '$') LIKE '%${sanitizedSearch}%'`,
+        // Search in metadata
+        `json_extract(metadata, '$') LIKE '%${sanitizedSearch}%'`,
+        // Search in test case vars
+        `json_extract(test_case, '$.vars') LIKE '%${sanitizedSearch}%'`,
+        // Search in test case metadata
+        `json_extract(test_case, '$.metadata') LIKE '%${sanitizedSearch}%'`,
+      ];
+      conditions.push(`(${searchConditions.join(' OR ')})`);
+    }
+
+    const whereSql = conditions.join(' AND ');
+
+    // Get filtered count
+    const filteredCountQuery = sql.raw(
+      `SELECT COUNT(DISTINCT test_idx) as count FROM eval_results WHERE ${whereSql}`,
+    );
+    const countStart = Date.now();
+    const countResult = await db.get<FilteredCountRow>(filteredCountQuery);
+    const countEnd = Date.now();
+    logger.debug(`Count query took ${countEnd - countStart}ms`);
+    const filteredCount = countResult?.count || 0;
+
+    // Query for test indices based on filters
+    const idxQuery = sql.raw(
+      `SELECT DISTINCT test_idx FROM eval_results WHERE ${whereSql} ORDER BY test_idx LIMIT ${limit} OFFSET ${offset}`,
+    );
+    const idxStart = Date.now();
+    const rows = await db.all<TestIndexRow>(idxQuery);
+    const idxEnd = Date.now();
+    logger.debug(`Index query took ${idxEnd - idxStart}ms`);
+
+    // Get all test indices from the rows
+    const testIndices = rows.map((row) => row.test_idx);
+
+    return { testIndices, filteredCount };
+  }
+
+  async getTablePage(opts: {
+    offset?: number;
+    limit?: number;
+    filterMode?: string;
+    testIndices?: number[];
+    searchQuery?: string;
+    metricFilter?: string;
+  }): Promise<{
+    head: { prompts: Prompt[]; vars: string[] };
+    body: EvaluateTableRow[];
+    totalCount: number;
+    filteredCount: number;
+    id: string;
+  }> {
+    // Get total count of tests for this eval
+    const totalCount = await this.getResultsCount();
+
+    // Determine test indices to use
+    let testIndices: number[];
+    let filteredCount: number;
+
+    if (opts.testIndices && opts.testIndices.length > 0) {
+      // Use the provided test indices directly
+      testIndices = opts.testIndices;
+      filteredCount = testIndices.length;
+    } else {
+      // Query for test indices based on filters
+      const queryResult = await this.queryTestIndices({
+        offset: opts.offset,
+        limit: opts.limit,
+        filterMode: opts.filterMode,
+        searchQuery: opts.searchQuery,
+        metricFilter: opts.metricFilter,
+      });
+
+      testIndices = queryResult.testIndices;
+      filteredCount = queryResult.filteredCount;
+    }
+
+    // Get vars for this eval
+    const varsStart = Date.now();
+    const vars = Array.from(this.vars);
+    const varsEnd = Date.now();
+    logger.debug(`Vars query took ${varsEnd - varsStart}ms`);
+
+    // Initialize the body array that will hold table rows
+    const body: EvaluateTableRow[] = [];
+    const bodyStart = Date.now();
+
+    // Early return if no test indices found
+    if (testIndices.length === 0) {
+      const bodyEnd = Date.now();
+      logger.debug(`Body query took ${bodyEnd - bodyStart}ms`);
+      return {
+        head: { prompts: this.prompts, vars },
+        body,
+        totalCount,
+        filteredCount,
+        id: this.id,
+      };
+    }
+
+    // Fetch all results for these test indices in a single query
+    const allResults = await EvalResult.findManyByEvalIdAndTestIndices(this.id, testIndices);
+
+    // Group results by test index
+    const resultsByTestIdx = new Map<number, EvalResult[]>();
+    for (const result of allResults) {
+      if (!resultsByTestIdx.has(result.testIdx)) {
+        resultsByTestIdx.set(result.testIdx, []);
+      }
+      resultsByTestIdx.get(result.testIdx)!.push(result);
+    }
+
+    // Create table rows in the same order as the original query
+    for (const testIdx of testIndices) {
+      const results = resultsByTestIdx.get(testIdx) || [];
+      if (results.length > 0) {
+        body.push(convertTestResultsToTableRow(results, vars));
+      }
+    }
+
+    const bodyEnd = Date.now();
+    logger.debug(`Body query took ${bodyEnd - bodyStart}ms`);
+
+    return { head: { prompts: this.prompts, vars }, body, totalCount, filteredCount, id: this.id };
   }
 
   async addPrompts(prompts: CompletedPrompt[]) {
@@ -374,16 +596,16 @@ export default class Eval {
 
   async setResults(results: EvalResult[]) {
     this.results = results;
-    this.resultsCount = results.length;
     if (this.persisted) {
       const db = getDb();
       await db.insert(evalResultsTable).values(results.map((r) => ({ ...r, evalId: this.id })));
     }
+    this._resultsLoaded = true;
   }
 
   async loadResults() {
     this.results = await EvalResult.findManyByEvalId(this.id);
-    this.resultsCount = this.results.length;
+    this._resultsLoaded = true;
   }
 
   async getResults(): Promise<EvaluateResult[] | EvalResult[]> {
@@ -392,7 +614,13 @@ export default class Eval {
       return this.oldResults.results;
     }
     await this.loadResults();
+    this._resultsLoaded = true;
     return this.results;
+  }
+
+  clearResults() {
+    this.results = [];
+    this._resultsLoaded = false;
   }
 
   getStats(): EvaluateStats {
@@ -430,20 +658,36 @@ export default class Eval {
       stats.tokenUsage.total += prompt.metrics?.tokenUsage.total || 0;
       stats.tokenUsage.numRequests += prompt.metrics?.tokenUsage.numRequests || 0;
 
-      stats.tokenUsage.completionDetails.reasoning! +=
-        prompt.metrics?.tokenUsage.completionDetails?.reasoning || 0;
-      stats.tokenUsage.completionDetails.acceptedPrediction! +=
-        prompt.metrics?.tokenUsage.completionDetails?.acceptedPrediction || 0;
-      stats.tokenUsage.completionDetails.rejectedPrediction! +=
-        prompt.metrics?.tokenUsage.completionDetails?.rejectedPrediction || 0;
+      if (prompt.metrics?.tokenUsage.completionDetails && stats.tokenUsage.completionDetails) {
+        if (stats.tokenUsage.completionDetails.reasoning !== undefined) {
+          stats.tokenUsage.completionDetails.reasoning +=
+            prompt.metrics?.tokenUsage.completionDetails?.reasoning || 0;
+        }
+        if (stats.tokenUsage.completionDetails.acceptedPrediction !== undefined) {
+          stats.tokenUsage.completionDetails.acceptedPrediction +=
+            prompt.metrics?.tokenUsage.completionDetails?.acceptedPrediction || 0;
+        }
+        if (stats.tokenUsage.completionDetails.rejectedPrediction !== undefined) {
+          stats.tokenUsage.completionDetails.rejectedPrediction +=
+            prompt.metrics?.tokenUsage.completionDetails?.rejectedPrediction || 0;
+        }
+      }
 
       // Add assertion token usage from prompt metrics
-      if (prompt.metrics?.tokenUsage.assertions) {
-        stats.tokenUsage.assertions.total! += prompt.metrics.tokenUsage.assertions.total || 0;
-        stats.tokenUsage.assertions.prompt! += prompt.metrics.tokenUsage.assertions.prompt || 0;
-        stats.tokenUsage.assertions.completion! +=
-          prompt.metrics.tokenUsage.assertions.completion || 0;
-        stats.tokenUsage.assertions.cached! += prompt.metrics.tokenUsage.assertions.cached || 0;
+      if (prompt.metrics?.tokenUsage.assertions && stats.tokenUsage.assertions) {
+        if (stats.tokenUsage.assertions.total !== undefined) {
+          stats.tokenUsage.assertions.total += prompt.metrics.tokenUsage.assertions.total || 0;
+        }
+        if (stats.tokenUsage.assertions.prompt !== undefined) {
+          stats.tokenUsage.assertions.prompt += prompt.metrics.tokenUsage.assertions.prompt || 0;
+        }
+        if (stats.tokenUsage.assertions.completion !== undefined) {
+          stats.tokenUsage.assertions.completion +=
+            prompt.metrics.tokenUsage.assertions.completion || 0;
+        }
+        if (stats.tokenUsage.assertions.cached !== undefined) {
+          stats.tokenUsage.assertions.cached += prompt.metrics.tokenUsage.assertions.cached || 0;
+        }
       }
     }
 
@@ -543,9 +787,7 @@ export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[
   return results.map((result) => {
     const passCount =
       result.prompts?.reduce((memo, prompt) => {
-        // TODO(will): Verify whether prompt.metrics *should* be required.
-        invariant(!!prompt.metrics, 'Prompt metrics are required');
-        return memo + prompt.metrics!.testPassCount;
+        return memo + (prompt.metrics?.testPassCount ?? 0);
       }, 0) ?? 0;
 
     // All prompts should have the same number of test cases:
@@ -556,11 +798,6 @@ export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[
         (p.metrics?.testErrorCount ?? 0)
       );
     }) ?? [0];
-
-    invariant(
-      testCounts.every((t) => t === testCounts[0]),
-      'All prompts must have the same number of test cases',
-    );
 
     // Derive the number of tests from the first prompt.
     const testCount = testCounts.length > 0 ? testCounts[0] : 0;

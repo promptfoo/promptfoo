@@ -2,14 +2,14 @@
 description: 'Claude vs GPT Image Analysis'
 
 prompts:
-  - ./prompt.py:format_image_prompt
-  - ./prompt.js:formatImagePrompt
+  - file://prompt.py:format_image_prompt
+  - file://prompt.js:formatImagePrompt
 
 providers:
   - id: bedrock:anthropic.claude-3-sonnet-20240229-v1:0
   - id: anthropic:claude-3-5-sonnet-20241022
-  - id: openai:gpt-4o
-    label: custom label for gpt-4o
+  - id: openai:gpt-4.1
+    label: custom label for gpt-4.1
 
 tests:
   - vars:
@@ -17,6 +17,22 @@ tests:
       label: Great Wave off Kanagawa
 
 defaultTest:
+  options:
+    provider: openai:gpt-4.1
+    rubricPrompt: |
+      [
+        {
+          "role": "system",
+          "content": "You are a meticulous grader. Evaluate how accurately the answer describes the provided image. Respond in JSON {reason:string, pass:boolean, score:number}"
+        },
+        {
+          "role": "user",
+          "content": [
+            {"type": "image_url", "image_url": {"url": "{{image_url}}"}},
+            {"type": "text", "text": "Answer: {{ output }}\nCriteria: {{ rubric }}"}
+          ]
+        }
+      ]
   assert:
     - type: llm-rubric
       value: Is a detailed description of the image '{{label}}'

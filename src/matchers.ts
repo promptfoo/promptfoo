@@ -1,7 +1,7 @@
 import path from 'path';
 import { loadFromJavaScriptFile } from './assertions/utils';
 import cliState from './cliState';
-import { getEnvString } from './envars';
+import { getEnvString, getEnvBool } from './envars';
 import logger from './logger';
 import {
   ANSWER_RELEVANCY_GENERATE,
@@ -165,8 +165,8 @@ export async function getAndCheckProvider(
 function fail(reason: string, tokensUsed?: Partial<TokenUsage>): Omit<GradingResult, 'assertion'> {
   return {
     pass: false,
-    score: 0,
     reason,
+    score: 0,
     tokensUsed: {
       total: tokensUsed?.total || 0,
       prompt: tokensUsed?.prompt || 0,
@@ -206,7 +206,7 @@ export async function matchesSimilarity(
   )) as ApiEmbeddingProvider | ApiSimilarityProvider;
 
   let similarity: number;
-  let tokensUsed: TokenUsage = {
+  const tokensUsed: Partial<TokenUsage> = {
     total: 0,
     prompt: 0,
     completion: 0,
@@ -220,10 +220,11 @@ export async function matchesSimilarity(
 
   if ('callSimilarityApi' in finalProvider) {
     const similarityResp = await finalProvider.callSimilarityApi(expected, output);
-    tokensUsed = {
-      ...tokensUsed,
-      ...similarityResp.tokenUsage,
-    };
+    tokensUsed.total = similarityResp.tokenUsage?.total || 0;
+    tokensUsed.prompt = similarityResp.tokenUsage?.prompt || 0;
+    tokensUsed.completion = similarityResp.tokenUsage?.completion || 0;
+    tokensUsed.cached = similarityResp.tokenUsage?.cached || 0;
+    tokensUsed.completionDetails = similarityResp.tokenUsage?.completionDetails;
     if (similarityResp.error) {
       return fail(similarityResp.error, tokensUsed);
     }
@@ -235,26 +236,25 @@ export async function matchesSimilarity(
     const expectedEmbedding = await finalProvider.callEmbeddingApi(expected);
     const outputEmbedding = await finalProvider.callEmbeddingApi(output);
 
-    tokensUsed = {
-      total: (expectedEmbedding.tokenUsage?.total || 0) + (outputEmbedding.tokenUsage?.total || 0),
-      prompt:
-        (expectedEmbedding.tokenUsage?.prompt || 0) + (outputEmbedding.tokenUsage?.prompt || 0),
-      completion:
-        (expectedEmbedding.tokenUsage?.completion || 0) +
-        (outputEmbedding.tokenUsage?.completion || 0),
-      cached:
-        (expectedEmbedding.tokenUsage?.cached || 0) + (outputEmbedding.tokenUsage?.cached || 0),
-      completionDetails: {
-        reasoning:
-          (expectedEmbedding.tokenUsage?.completionDetails?.reasoning || 0) +
-          (outputEmbedding.tokenUsage?.completionDetails?.reasoning || 0),
-        acceptedPrediction:
-          (expectedEmbedding.tokenUsage?.completionDetails?.acceptedPrediction || 0) +
-          (outputEmbedding.tokenUsage?.completionDetails?.acceptedPrediction || 0),
-        rejectedPrediction:
-          (expectedEmbedding.tokenUsage?.completionDetails?.rejectedPrediction || 0) +
-          (outputEmbedding.tokenUsage?.completionDetails?.rejectedPrediction || 0),
-      },
+    tokensUsed.total =
+      (expectedEmbedding.tokenUsage?.total || 0) + (outputEmbedding.tokenUsage?.total || 0);
+    tokensUsed.prompt =
+      (expectedEmbedding.tokenUsage?.prompt || 0) + (outputEmbedding.tokenUsage?.prompt || 0);
+    tokensUsed.completion =
+      (expectedEmbedding.tokenUsage?.completion || 0) +
+      (outputEmbedding.tokenUsage?.completion || 0);
+    tokensUsed.cached =
+      (expectedEmbedding.tokenUsage?.cached || 0) + (outputEmbedding.tokenUsage?.cached || 0);
+    tokensUsed.completionDetails = {
+      reasoning:
+        (expectedEmbedding.tokenUsage?.completionDetails?.reasoning || 0) +
+        (outputEmbedding.tokenUsage?.completionDetails?.reasoning || 0),
+      acceptedPrediction:
+        (expectedEmbedding.tokenUsage?.completionDetails?.acceptedPrediction || 0) +
+        (outputEmbedding.tokenUsage?.completionDetails?.acceptedPrediction || 0),
+      rejectedPrediction:
+        (expectedEmbedding.tokenUsage?.completionDetails?.rejectedPrediction || 0) +
+        (outputEmbedding.tokenUsage?.completionDetails?.rejectedPrediction || 0),
     };
 
     if (expectedEmbedding.error || outputEmbedding.error) {
@@ -381,11 +381,7 @@ async function loadRubricPrompt(
   return rubricPrompt;
 }
 
-function tryParse(content: string | object) {
-  if (typeof content === 'object') {
-    return content;
-  }
-
+function tryParse(content: string) {
   try {
     return JSON.parse(content);
   } catch {}
@@ -396,27 +392,36 @@ function splitIntoSentences(text: string) {
   return text.split('\n').filter((sentence) => sentence.trim() !== '');
 }
 
-export async function renderLlmRubricPrompt(
-  rubricPrompt: string,
+function processContextForTemplating(
   context: Record<string, string | object>,
-) {
-  // Process the context to ensure objects are properly stringified for nunjucks
-  const processedContext = Object.fromEntries(
+  enableObjectAccess: boolean,
+): Record<string, string | object> {
+  if (enableObjectAccess) {
+    return context;
+  }
+
+  return Object.fromEntries(
     Object.entries(context).map(([key, value]) => {
       if (value && typeof value === 'object') {
-        // For arrays, stringify individual elements
         if (Array.isArray(value)) {
           return [
             key,
-            value.map((item) => (typeof item === 'object' ? JSON.stringify(item) : item)),
+            value.map((item) => (item && typeof item === 'object' ? JSON.stringify(item) : item)),
           ];
         }
-        // For objects, stringify the entire object
         return [key, JSON.stringify(value)];
       }
       return [key, value];
     }),
   );
+}
+
+export async function renderLlmRubricPrompt(
+  rubricPrompt: string,
+  context: Record<string, string | object>,
+) {
+  const enableObjectAccess = getEnvBool('PROMPTFOO_DISABLE_OBJECT_STRINGIFY', false);
+  const processedContext = processContextForTemplating(context, enableObjectAccess);
 
   try {
     // Render every string scalar within the JSON
@@ -435,7 +440,7 @@ export async function renderLlmRubricPrompt(
 }
 
 export async function matchesLlmRubric(
-  rubric: string,
+  rubric: string | object,
   llmOutput: string,
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
@@ -878,7 +883,7 @@ export async function matchesAnswerRelevance(
     'answer relevancy check',
   );
 
-  const tokensUsed = {
+  const tokensUsed: Partial<TokenUsage> = {
     total: 0,
     prompt: 0,
     completion: 0,
@@ -897,22 +902,30 @@ export async function matchesAnswerRelevance(
     const promptText = await renderLlmRubricPrompt(rubricPrompt, { answer: tryParse(output) });
     const resp = await textProvider.callApi(promptText);
     if (resp.error || !resp.output) {
-      tokensUsed.total += resp.tokenUsage?.total || 0;
-      tokensUsed.prompt += resp.tokenUsage?.prompt || 0;
-      tokensUsed.completion += resp.tokenUsage?.completion || 0;
-      tokensUsed.cached += resp.tokenUsage?.cached || 0;
-      tokensUsed.completionDetails = {
+      // Initialize a new object to avoid mutating the original
+      const updatedTokensUsed = { ...tokensUsed };
+
+      // Update with safe assignments
+      updatedTokensUsed.total = (updatedTokensUsed.total || 0) + (resp.tokenUsage?.total || 0);
+      updatedTokensUsed.prompt = (updatedTokensUsed.prompt || 0) + (resp.tokenUsage?.prompt || 0);
+      updatedTokensUsed.completion =
+        (updatedTokensUsed.completion || 0) + (resp.tokenUsage?.completion || 0);
+      updatedTokensUsed.cached = (updatedTokensUsed.cached || 0) + (resp.tokenUsage?.cached || 0);
+
+      // Create a new completionDetails object
+      updatedTokensUsed.completionDetails = {
         reasoning:
-          (tokensUsed.completionDetails?.reasoning || 0) +
+          (updatedTokensUsed.completionDetails?.reasoning || 0) +
           (resp.tokenUsage?.completionDetails?.reasoning || 0),
         acceptedPrediction:
-          (tokensUsed.completionDetails?.acceptedPrediction || 0) +
+          (updatedTokensUsed.completionDetails?.acceptedPrediction || 0) +
           (resp.tokenUsage?.completionDetails?.acceptedPrediction || 0),
         rejectedPrediction:
-          (tokensUsed.completionDetails?.rejectedPrediction || 0) +
+          (updatedTokensUsed.completionDetails?.rejectedPrediction || 0) +
           (resp.tokenUsage?.completionDetails?.rejectedPrediction || 0),
       };
-      return fail(resp.error || 'No output', tokensUsed);
+
+      return fail(resp.error || 'No output', updatedTokensUsed);
     }
 
     invariant(
@@ -929,21 +942,22 @@ export async function matchesAnswerRelevance(
 
   const inputEmbeddingResp = await embeddingProvider.callEmbeddingApi(input);
   if (inputEmbeddingResp.error || !inputEmbeddingResp.embedding) {
-    tokensUsed.total += inputEmbeddingResp.tokenUsage?.total || 0;
-    tokensUsed.prompt += inputEmbeddingResp.tokenUsage?.prompt || 0;
-    tokensUsed.completion += inputEmbeddingResp.tokenUsage?.completion || 0;
-    tokensUsed.cached += inputEmbeddingResp.tokenUsage?.cached || 0;
-    tokensUsed.completionDetails = {
-      reasoning:
-        (tokensUsed.completionDetails?.reasoning || 0) +
-        (inputEmbeddingResp.tokenUsage?.completionDetails?.reasoning || 0),
-      acceptedPrediction:
-        (tokensUsed.completionDetails?.acceptedPrediction || 0) +
-        (inputEmbeddingResp.tokenUsage?.completionDetails?.acceptedPrediction || 0),
-      rejectedPrediction:
-        (tokensUsed.completionDetails?.rejectedPrediction || 0) +
-        (inputEmbeddingResp.tokenUsage?.completionDetails?.rejectedPrediction || 0),
-    };
+    tokensUsed.total = (tokensUsed.total || 0) + (inputEmbeddingResp.tokenUsage?.total || 0);
+    tokensUsed.prompt = (tokensUsed.prompt || 0) + (inputEmbeddingResp.tokenUsage?.prompt || 0);
+    tokensUsed.completion =
+      (tokensUsed.completion || 0) + (inputEmbeddingResp.tokenUsage?.completion || 0);
+    tokensUsed.cached = (tokensUsed.cached || 0) + (inputEmbeddingResp.tokenUsage?.cached || 0);
+    if (tokensUsed.completionDetails && inputEmbeddingResp.tokenUsage?.completionDetails) {
+      tokensUsed.completionDetails.reasoning =
+        (tokensUsed.completionDetails.reasoning || 0) +
+        (inputEmbeddingResp.tokenUsage.completionDetails.reasoning || 0);
+      tokensUsed.completionDetails.acceptedPrediction =
+        (tokensUsed.completionDetails.acceptedPrediction || 0) +
+        (inputEmbeddingResp.tokenUsage.completionDetails.acceptedPrediction || 0);
+      tokensUsed.completionDetails.rejectedPrediction =
+        (tokensUsed.completionDetails.rejectedPrediction || 0) +
+        (inputEmbeddingResp.tokenUsage.completionDetails.rejectedPrediction || 0);
+    }
     return fail(inputEmbeddingResp.error || 'No embedding', tokensUsed);
   }
   const inputEmbedding = inputEmbeddingResp.embedding;
@@ -951,22 +965,22 @@ export async function matchesAnswerRelevance(
   const similarities: number[] = [];
   for (const question of candidateQuestions) {
     const resp = await embeddingProvider.callEmbeddingApi(question);
-    tokensUsed.total += resp.tokenUsage?.total || 0;
-    tokensUsed.prompt += resp.tokenUsage?.prompt || 0;
-    tokensUsed.completion += resp.tokenUsage?.completion || 0;
-    tokensUsed.cached += resp.tokenUsage?.cached || 0;
-    tokensUsed.completionDetails = {
-      reasoning:
-        (tokensUsed.completionDetails?.reasoning || 0) +
-        (resp.tokenUsage?.completionDetails?.reasoning || 0),
-      acceptedPrediction:
-        (tokensUsed.completionDetails?.acceptedPrediction || 0) +
-        (resp.tokenUsage?.completionDetails?.acceptedPrediction || 0),
-      rejectedPrediction:
-        (tokensUsed.completionDetails?.rejectedPrediction || 0) +
-        (resp.tokenUsage?.completionDetails?.rejectedPrediction || 0),
-    };
     if (resp.error || !resp.embedding) {
+      tokensUsed.total = (tokensUsed.total || 0) + (resp.tokenUsage?.total || 0);
+      tokensUsed.prompt = (tokensUsed.prompt || 0) + (resp.tokenUsage?.prompt || 0);
+      tokensUsed.completion = (tokensUsed.completion || 0) + (resp.tokenUsage?.completion || 0);
+      tokensUsed.cached = (tokensUsed.cached || 0) + (resp.tokenUsage?.cached || 0);
+      if (tokensUsed.completionDetails && resp.tokenUsage?.completionDetails) {
+        tokensUsed.completionDetails.reasoning =
+          (tokensUsed.completionDetails.reasoning || 0) +
+          (resp.tokenUsage.completionDetails.reasoning || 0);
+        tokensUsed.completionDetails.acceptedPrediction =
+          (tokensUsed.completionDetails.acceptedPrediction || 0) +
+          (resp.tokenUsage.completionDetails.acceptedPrediction || 0);
+        tokensUsed.completionDetails.rejectedPrediction =
+          (tokensUsed.completionDetails.rejectedPrediction || 0) +
+          (resp.tokenUsage.completionDetails.rejectedPrediction || 0);
+      }
       return fail(resp.error || 'No embedding', tokensUsed);
     }
     similarities.push(cosineSimilarity(inputEmbedding, resp.embedding));

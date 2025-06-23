@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useState, useRef, forwardRef } from 'react';
+import React, { useMemo, useEffect, useState, useRef, forwardRef } from 'react';
 import { callApi } from '@app/utils/api';
 import { Box, Typography, Paper, CircularProgress, useTheme, Link } from '@mui/material';
 import {
@@ -159,8 +159,6 @@ export default function EvalsDataGrid({
       const focusedEval = rows_.find(({ evalId }: Eval) => evalId === focusedEvalId);
       invariant(focusedEval, 'focusedEvalId is not a valid eval ID');
 
-      rows_ = rows_.filter(({ evalId }: Eval) => evalId !== focusedEvalId);
-
       // Filter by dataset ID if enabled
       if (filterByDatasetId) {
         rows_ = rows_.filter(({ datasetId }: Eval) => datasetId === focusedEval.datasetId);
@@ -179,22 +177,25 @@ export default function EvalsDataGrid({
           field: 'evalId',
           headerName: 'ID',
           flex: 1,
-          renderCell: (params: GridRenderCellParams<Eval>) => (
-            <Link
-              href={`/eval/${params.row.evalId}`}
-              /**
-               * Prevent the default behavior of the link, which is to navigate to the href.
-               * Instead, we want to call the onEvalSelected callback which may or may not navigate.
-               */
-              onClick={(e) => {
-                e.preventDefault();
-                onEvalSelected(params.row.evalId);
-                return false;
-              }}
-            >
-              {params.row.evalId}
-            </Link>
-          ),
+          renderCell: (params: GridRenderCellParams<Eval>) =>
+            params.row.evalId === focusedEvalId ? (
+              params.row.evalId
+            ) : (
+              <Link
+                href={`/eval/${params.row.evalId}`}
+                /**
+                 * Prevent the default behavior of the link, which is to navigate to the href.
+                 * Instead, we want to call the onEvalSelected callback which may or may not navigate.
+                 */
+                onClick={(e) => {
+                  e.preventDefault();
+                  onEvalSelected(params.row.evalId);
+                  return false;
+                }}
+              >
+                {params.row.evalId}
+              </Link>
+            ),
         },
         {
           field: 'createdAt',
@@ -316,7 +317,12 @@ export default function EvalsDataGrid({
             focusQuickFilterOnMount,
           },
         }}
-        onCellClick={handleCellClick}
+        onCellClick={(params) => {
+          if (params.id !== focusedEvalId) {
+            handleCellClick(params);
+          }
+        }}
+        getRowClassName={(params) => (params.id === focusedEvalId ? 'focused-row' : '')}
         sx={{
           border: 'none',
           '& .MuiDataGrid-row': {
@@ -324,6 +330,18 @@ export default function EvalsDataGrid({
             transition: 'background-color 0.2s ease',
             '&:hover': {
               backgroundColor: 'action.hover',
+            },
+          },
+          '& .MuiDataGrid-row--disabled': {
+            cursor: 'default',
+            opacity: 0.7,
+            pointerEvents: 'none',
+          },
+          '& .focused-row': {
+            backgroundColor: 'action.selected',
+            cursor: 'default',
+            '&:hover': {
+              backgroundColor: 'action.selected',
             },
           },
           '& .MuiDataGrid-cell': {
@@ -349,6 +367,7 @@ export default function EvalsDataGrid({
           },
         }}
         pageSizeOptions={[10, 25, 50, 100]}
+        isRowSelectable={(params) => params.id !== focusedEvalId}
       />
     </Paper>
   );

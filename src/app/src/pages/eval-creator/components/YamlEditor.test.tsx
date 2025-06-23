@@ -1,7 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import React from 'react';
 import yaml from 'js-yaml';
-import { vi, expect, describe, it, beforeEach } from 'vitest';
+import { vi, expect, describe, it, beforeEach, afterEach } from 'vitest';
 import YamlEditorComponent from './YamlEditor';
 
 vi.mock('react-router-dom', () => ({
@@ -10,21 +10,19 @@ vi.mock('react-router-dom', () => ({
   ),
 }));
 
-vi.mock('@app/stores/evalConfig', () => {
-  const mockGetTestSuite = vi.fn().mockReturnValue({
-    description: 'Test suite',
-    providers: [{ id: 'test-provider' }],
-    prompts: ['test prompt'],
-    tests: [{ description: 'test case' }],
-  });
-
-  return {
-    useStore: vi.fn(() => ({
-      getTestSuite: mockGetTestSuite,
-      setState: vi.fn(),
-    })),
-  };
+const mockGetTestSuite = vi.fn().mockReturnValue({
+  description: 'Test suite',
+  providers: [{ id: 'test-provider' }],
+  prompts: ['test prompt'],
+  tests: [{ description: 'test case' }],
 });
+
+vi.mock('@app/stores/evalConfig', () => ({
+  useStore: vi.fn(() => ({
+    getTestSuite: mockGetTestSuite,
+    setState: vi.fn(),
+  })),
+}));
 
 Object.defineProperty(navigator, 'clipboard', {
   value: {
@@ -64,6 +62,10 @@ vi.mock('@mui/icons-material/Upload', () => ({
 describe('YamlEditor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('renders in read-only mode by default', () => {
@@ -161,6 +163,47 @@ describe('YamlEditor', () => {
     render(<YamlEditorComponent initialConfig={initialConfig} />);
 
     expect(dumpSpy).toHaveBeenCalledWith(initialConfig);
+  });
+
+  it('includes evaluateOptions from store in YAML', () => {
+    mockGetTestSuite.mockReturnValueOnce({
+      description: 'Test suite',
+      providers: [{ id: 'test-provider' }],
+      prompts: ['test prompt'],
+      tests: [{ description: 'test case' }],
+      evaluateOptions: { repeat: 3 },
+    });
+
+    render(<YamlEditorComponent />);
+
+    const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;
+    expect(editor.value).toContain('evaluateOptions');
+    expect(editor.value).toContain('repeat: 3');
+  });
+
+  it('includes defaultTest from store in YAML', () => {
+    mockGetTestSuite.mockReturnValueOnce({
+      description: 'Test suite',
+      providers: [{ id: 'test-provider' }],
+      prompts: ['test prompt'],
+      tests: [{ description: 'test case' }],
+      defaultTest: {
+        assert: [
+          {
+            type: 'llm-rubric',
+            value: 'does not describe self as an AI, model, or chatbot',
+          },
+        ],
+      },
+    });
+
+    render(<YamlEditorComponent />);
+
+    const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;
+    expect(editor.value).toContain('defaultTest');
+    expect(editor.value).toContain('assert:');
+    expect(editor.value).toContain('type: llm-rubric');
+    expect(editor.value).toContain('does not describe self as an AI, model, or chatbot');
   });
 
   it('respects readOnly prop', () => {

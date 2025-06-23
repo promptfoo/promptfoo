@@ -18,9 +18,11 @@ import { mcpCommand } from './commands/mcp';
 import { modelScanCommand } from './commands/modelScan';
 import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
+import { validateCommand } from './commands/validate';
 import { viewCommand } from './commands/view';
 import logger, { setLogLevel } from './logger';
 import { runDbMigrations } from './migrate';
+import { discoverCommand as redteamDiscoverCommand } from './redteam/commands/discover';
 import { redteamGenerateCommand } from './redteam/commands/generate';
 import { initCommand as redteamInitCommand } from './redteam/commands/init';
 import { pluginsCommand as redteamPluginsCommand } from './redteam/commands/plugins';
@@ -104,6 +106,7 @@ async function main() {
   importCommand(program);
   listCommand(program);
   modelScanCommand(program);
+  validateCommand(program, defaultConfig, defaultConfigPath);
   showCommand(program);
 
   generateDatasetCommand(generateCommand, defaultConfig, defaultConfigPath);
@@ -118,6 +121,7 @@ async function main() {
     redteamConfig ?? defaultConfig,
     redteamConfigPath ?? defaultConfigPath,
   );
+  redteamDiscoverCommand(redteamBaseCommand, defaultConfig, defaultConfigPath);
   redteamGenerateCommand(redteamBaseCommand, 'generate', defaultConfig, defaultConfigPath);
   redteamRunCommand(redteamBaseCommand);
   redteamReportCommand(redteamBaseCommand);

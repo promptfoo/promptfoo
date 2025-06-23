@@ -1,6 +1,20 @@
 ---
-date: 2025-01-28
+title: '1,156 Questions Censored by DeepSeek'
+description: 'We tested DeepSeek-R1 with 1,156 politically sensitive prompts. The results reveal extensive CCP censorship and how to detect political bias in Chinese AI models.'
 image: /img/blog/deepseek/deepseek_panda.png
+keywords:
+  [
+    DeepSeek censorship,
+    Chinese AI models,
+    CCP censorship,
+    AI political bias,
+    DeepSeek jailbreak,
+    AI censorship detection,
+    LLM bias,
+    political AI filtering,
+  ]
+date: 2025-01-28
+authors: [vanessa]
 ---
 
 # 1,156 Questions Censored by DeepSeek
@@ -9,7 +23,7 @@ DeepSeek-R1 is a blockbuster open-source model that is now at the top of the [U.
 
 As a Chinese company, DeepSeek is beholden to CCP policy. This is reflected even in the open-source model, prompting [concerns](https://www.nbcnews.com/tech/tech-news/china-ai-assistant-deepseek-rcna189385) about censorship and other influence.
 
-Today we’re publishing a [dataset of prompts](https://huggingface.co/datasets/promptfoo/CCP-sensitive-prompts) covering sensitive topics that are likely to be censored by the CCP. These topics include perennial issues like Taiwanese independence, historical narratives around the Cultural Revolution, and questions about Xi Jinping.
+Today we're publishing a [dataset of prompts](https://huggingface.co/datasets/promptfoo/CCP-sensitive-prompts) covering sensitive topics that are likely to be censored by the CCP. These topics include perennial issues like Taiwanese independence, historical narratives around the Cultural Revolution, and questions about Xi Jinping.
 
 In this post, we'll
 
@@ -36,7 +50,7 @@ description: 'DeepSeek Sensitive Prompts'
 providers:
   - 'openrouter:deepseek/deepseek-r1'
 
-tests: tests.csv
+tests: file://tests.csv
 ```
 
 We'll encounter refusals very quickly, as the first topic in the dataset is Taiwanese independence.
@@ -72,7 +86,7 @@ providers:
       passthrough:
         include_reasoning: true
 
-tests: tests.csv
+tests: file://tests.csv
 ```
 
 Running it via Promptfoo eval shows that **about 85% of this dataset is censored by DeepSeek**:

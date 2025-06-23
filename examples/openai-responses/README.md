@@ -1,63 +1,93 @@
 # openai-responses (OpenAI Responses API Examples)
 
-This example demonstrates how to use OpenAI's Responses API to generate model outputs with advanced capabilities including image understanding, web search, function calling, and reasoning.
-
-## Features Demonstrated
-
-- Text generation with the OpenAI Responses API
-- Structured JSON output using schemas
-- Image input processing
-- Web search integration
-- Function/tool calling
-- Mathematical reasoning with o-series models (o1, o3, o4-mini)
-
-## Environment Variables
-
-This example requires the following environment variables:
-
-- `OPENAI_API_KEY` - Your OpenAI API key
-
-You can set this in a `.env` file or directly in your environment.
-
-## Running the Example
+This directory contains examples for testing OpenAI's Responses API with promptfoo.
 
 You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example openai-responses
-# and then
-cd openai-responses
+```
 
-# Run specific configs
+## Examples
+
+### Basic Responses API (`promptfooconfig.yaml`)
+
+Basic example showing how to use the Responses API with different models and configurations.
+
+### External Response Format (`promptfooconfig.external-format.yaml`)
+
+Example demonstrating how to load `response_format` configuration from external files. This is useful for:
+
+- Reusing complex JSON schemas across multiple configurations
+- Managing large schemas in separate files for better organization
+- Version controlling schemas independently
+
+This example compares inline vs. external file approach:
+
+- **Inline**: JSON schema defined directly in the config
+- **External**: JSON schema loaded from `response_format.json` using `file://` syntax
+
+### Function Calling (`promptfooconfig.function-call.yaml`)
+
+Example demonstrating function calling capabilities with the Responses API.
+
+### Reasoning Models (`promptfooconfig.reasoning.yaml`)
+
+Example showing how to use reasoning models (o1, o3, etc.) with specific configurations.
+
+### Image Processing (`promptfooconfig.image.yaml`)
+
+Example demonstrating image input capabilities with vision models.
+
+### Web Search (`promptfooconfig.web-search.yaml`)
+
+Example showing web search capabilities.
+
+### Codex Models (`promptfooconfig.codex.yaml`)
+
+Example using Codex models for code generation tasks.
+
+### MCP (Model Context Protocol) (`promptfooconfig.mcp.yaml`)
+
+Example demonstrating OpenAI's MCP integration with remote MCP servers. This example uses the DeepWiki MCP server to query GitHub repositories.
+
+#### MCP Features Demonstrated:
+
+- Remote MCP server integration
+- Tool filtering with `allowed_tools`
+- Approval settings configuration
+- Authentication headers (when needed)
+
+## Running the Examples
+
+To run any of these examples:
+
+```bash
+# Basic Responses API example
 npx promptfoo eval -c promptfooconfig.yaml
-npx promptfoo eval -c promptfooconfig.image.yaml
-npx promptfoo eval -c promptfooconfig.web-search.yaml
+
+# External response format example
+npx promptfoo eval -c promptfooconfig.external-format.yaml
+
+# MCP example
+npx promptfoo eval -c promptfooconfig.mcp.yaml
+
+# Function calling example
 npx promptfoo eval -c promptfooconfig.function-call.yaml
+
+# Reasoning models example
 npx promptfoo eval -c promptfooconfig.reasoning.yaml
 ```
 
-## Configuration Files
+## Prerequisites
 
-This example includes several configuration files, each demonstrating a different capability:
+- OpenAI API key set in `OPENAI_API_KEY` environment variable
+- For MCP examples: Access to remote MCP servers (some may require authentication)
 
-1. **Structured JSON Output** (`promptfooconfig.yaml`): Generates a structured story in JSON format with a schema
-2. **Image Input** (`promptfooconfig.image.yaml`): Processes images with structured JSON input
-3. **Web Search** (`promptfooconfig.web-search.yaml`): Retrieves recent information from the web using `gpt-4o`
-4. **Function Calling** (`promptfooconfig.function-call.yaml`): Calls a weather function with parameters using various reasoning models (o1-pro, o3, o4-mini)
-5. **Mathematical Reasoning** (`promptfooconfig.reasoning.yaml`): Solves math problems step-by-step using OpenAI's reasoning models (o3-mini, o3, o4-mini)
+## Notes
 
-## Key Differences from Chat Completions API
-
-- Can accept simple strings or structured message arrays as input
-- Returns an array of output items with explicit types
-- Function calls appear directly in the output array
-- Built-in tools like web search are natively supported
-- Supports o-series models with configurable reasoning effort
-- Structured output using JSON schema with a different format structure
-
-## Supported Models
-
-- `openai:responses:gpt-4o` - Vision-capable model
-- `openai:responses:o1-mini`, `openai:responses:o1`, `openai:responses:o1-pro` - Reasoning models
-- `openai:responses:o3-mini`, `openai:responses:o3` - High-performance reasoning models
-- `openai:responses:o4-mini` - Latest fast, cost-effective reasoning model
+- The MCP example uses the public DeepWiki MCP server which doesn't require authentication
+- For production use with MCP, carefully review the data being shared with third-party servers
+- Some MCP servers may require API keys or authentication tokens in the `headers` configuration
+- External file references support both JSON and YAML formats
+- External files are resolved relative to the config file location

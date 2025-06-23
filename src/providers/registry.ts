@@ -11,7 +11,6 @@ import RedteamIterativeProvider from '../redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from '../redteam/providers/iterativeTree';
 import RedteamPandamoniumProvider from '../redteam/providers/pandamonium';
-import { ServerToolDiscoveryMultiProvider } from '../redteam/providers/toolDiscoveryMulti';
 import type { LoadApiProviderContext } from '../types';
 import type { ApiProvider, ProviderOptions } from '../types/providers';
 import { isJavascriptFile } from '../util/fileExtensions';
@@ -26,7 +25,7 @@ import { AzureCompletionProvider } from './azure/completion';
 import { AzureEmbeddingProvider } from './azure/embedding';
 import { AzureModerationProvider } from './azure/moderation';
 import { BAMProvider } from './bam';
-import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './bedrock';
+import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './bedrock/index';
 import { BrowserProvider } from './browser';
 import { createCerebrasProvider } from './cerebras';
 import { ClouderaAiChatCompletionProvider } from './cloudera';
@@ -87,7 +86,8 @@ import { VoyageEmbeddingProvider } from './voyage';
 import { WatsonXProvider } from './watsonx';
 import { WebhookProvider } from './webhook';
 import { WebSocketProvider } from './websocket';
-import { createXAIProvider } from './xai';
+import { createXAIProvider } from './xai/chat';
+import { createXAIImageProvider } from './xai/image';
 
 interface ProviderFactory {
   test: (providerPath: string) => boolean;
@@ -292,7 +292,7 @@ export const providerMap: ProviderFactory[] = [
         return new AwsBedrockEmbeddingProvider(modelName, providerOptions);
       }
       if (modelType === 'kb' || modelType === 'knowledge-base') {
-        const { AwsBedrockKnowledgeBaseProvider } = await import('./bedrockKnowledgeBase');
+        const { AwsBedrockKnowledgeBaseProvider } = await import('./bedrock/knowledgeBase');
         return new AwsBedrockKnowledgeBaseProvider(modelName, providerOptions);
       }
       return new AwsBedrockCompletionProvider(
@@ -671,7 +671,7 @@ export const providerMap: ProviderFactory[] = [
       const modelName = splits.slice(2).join(':');
 
       if (modelType === 'chat') {
-        return new OpenAiChatCompletionProvider(modelName || 'gpt-4o-mini', providerOptions);
+        return new OpenAiChatCompletionProvider(modelName || 'gpt-4.1-2025-04-14', providerOptions);
       }
       if (modelType === 'embedding' || modelType === 'embeddings') {
         return new OpenAiEmbeddingProvider(modelName || 'text-embedding-3-large', providerOptions);
@@ -689,7 +689,7 @@ export const providerMap: ProviderFactory[] = [
         );
       }
       if (modelType === 'responses') {
-        return new OpenAiResponsesProvider(modelName || 'gpt-4o', providerOptions);
+        return new OpenAiResponsesProvider(modelName || 'gpt-4.1-2025-04-14', providerOptions);
       }
       if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType)) {
         return new OpenAiChatCompletionProvider(modelType, providerOptions);
@@ -740,9 +740,7 @@ export const providerMap: ProviderFactory[] = [
             ...(providerOptions.config.models && { models: providerOptions.config.models }),
             ...(providerOptions.config.route && { route: providerOptions.config.route }),
             ...(providerOptions.config.provider && { provider: providerOptions.config.provider }),
-            ...(providerOptions.config.passthrough && {
-              passthrough: providerOptions.config.passthrough,
-            }),
+            ...(providerOptions.config.passthrough || {}),
           },
         },
       });
@@ -878,6 +876,18 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
+      const splits = providerPath.split(':');
+      const modelType = splits[1];
+
+      // Handle xai:image:<model> format
+      if (modelType === 'image') {
+        return createXAIImageProvider(providerPath, {
+          ...providerOptions,
+          env: context.env,
+        });
+      }
+
+      // Handle regular xai:<model> format
       return createXAIProvider(providerPath, {
         config: providerOptions,
         env: context.env,
@@ -1138,16 +1148,6 @@ export const providerMap: ProviderFactory[] = [
       throw new Error(
         `Invalid Huggingface provider path: ${providerPath}. Use one of the following providers: huggingface:feature-extraction:<model name>, huggingface:text-generation:<model name>, huggingface:text-classification:<model name>, huggingface:token-classification:<model name>`,
       );
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath === 'promptfoo:redteam:tool-discovery:multi-turn',
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return new ServerToolDiscoveryMultiProvider(providerOptions.config);
     },
   },
   {

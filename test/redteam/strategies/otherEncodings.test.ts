@@ -3,6 +3,8 @@ import {
   EncodingType,
   toMorseCode,
   toPigLatin,
+  toCamelCase,
+  toEmojiEncoding,
 } from '../../../src/redteam/strategies/otherEncodings';
 import type { TestCase } from '../../../src/types';
 
@@ -35,8 +37,9 @@ describe('other encodings strategy', () => {
       expect(result[0].vars!.expected).toBe('normal value');
 
       // Check that metadata and assertion are updated correctly
-      expect(result[0].metadata?.strategyId).toBe('other-encodings');
+      expect(result[0].metadata?.strategyId).toBe('morse');
       expect(result[0].metadata?.encodingType).toBe(EncodingType.MORSE);
+      expect(result[0].metadata?.originalText).toBe('Hello World! 123');
     });
 
     it('should handle empty string', () => {
@@ -72,8 +75,9 @@ describe('other encodings strategy', () => {
       expect(result[0].vars!.expected).toBe('normal value');
 
       // Check that metadata and assertion are updated correctly
-      expect(result[0].metadata?.strategyId).toBe('other-encodings');
+      expect(result[0].metadata?.strategyId).toBe('piglatin');
       expect(result[0].metadata?.encodingType).toBe(EncodingType.PIG_LATIN);
+      expect(result[0].metadata?.originalText).toBe('Hello World! 123');
     });
 
     it('should handle words with no vowels', () => {
@@ -132,6 +136,47 @@ describe('other encodings strategy', () => {
     });
   });
 
+  describe('camelCase', () => {
+    it('should convert text to camelCase', () => {
+      const result = addOtherEncodings(testCases, 'prompt', EncodingType.CAMEL_CASE);
+      expect(result[0].vars!.prompt).toBe('helloWorld!123');
+      expect(result[0].assert?.[0].metric).toBe('original-metric/CamelCase');
+
+      expect(result[0].metadata?.strategyId).toBe('camelcase');
+      expect(result[0].metadata?.encodingType).toBe(EncodingType.CAMEL_CASE);
+      expect(result[0].metadata?.originalText).toBe('Hello World! 123');
+    });
+  });
+
+  describe('emoji encoding', () => {
+    it('should encode text using variation selectors', () => {
+      const result = addOtherEncodings(testCases, 'prompt', EncodingType.EMOJI);
+      const encoded = result[0].vars!.prompt as string;
+      const chars = Array.from(encoded);
+      expect(chars[0]).toBe('😊');
+      for (const ch of chars.slice(1)) {
+        const code = ch.codePointAt(0)!;
+        const valid = (code >= 0xfe00 && code <= 0xfe0f) || (code >= 0xe0100 && code <= 0xe01ef);
+        expect(valid).toBe(true);
+      }
+      // decode and verify round trip
+      const decodedBytes: number[] = [];
+      for (const ch of chars.slice(1)) {
+        const code = ch.codePointAt(0)!;
+        if (code >= 0xfe00 && code <= 0xfe0f) {
+          decodedBytes.push(code - 0xfe00);
+        } else if (code >= 0xe0100 && code <= 0xe01ef) {
+          decodedBytes.push(code - 0xe0100 + 16);
+        }
+      }
+      const decoded = Buffer.from(decodedBytes).toString('utf8');
+      expect(decoded).toBe(testCases[0].vars!.prompt);
+
+      expect(result[0].metadata?.strategyId).toBe('emoji');
+      expect(result[0].metadata?.encodingType).toBe(EncodingType.EMOJI);
+    });
+  });
+
   describe('encoding type handling', () => {
     it('should use Morse code as default encoding', () => {
       const result = addOtherEncodings(testCases, 'prompt');
@@ -139,12 +184,14 @@ describe('other encodings strategy', () => {
         '.... . .-.. .-.. --- / .-- --- .-. .-.. -.. -.-.-- / .---- ..--- ...--',
       );
       expect(result[0].metadata?.encodingType).toBe(EncodingType.MORSE);
+      expect(result[0].metadata?.originalText).toBe('Hello World! 123');
     });
 
     it('should preserve other test case properties', () => {
       const result = addOtherEncodings(testCases, 'prompt', EncodingType.MORSE);
       expect(result[0].vars!.expected).toBe('normal value');
-      expect(result[0].metadata?.strategyId).toBe('other-encodings');
+      expect(result[0].metadata?.strategyId).toBe('morse');
+      expect(result[0].metadata?.originalText).toBe('Hello World! 123');
     });
 
     it('should handle invalid encoding type by defaulting to Morse', () => {
@@ -152,6 +199,7 @@ describe('other encodings strategy', () => {
       expect(result[0].vars!.prompt).toBe(
         '.... . .-.. .-.. --- / .-- --- .-. .-.. -.. -.-.-- / .---- ..--- ...--',
       );
+      expect(result[0].metadata?.originalText).toBe('Hello World! 123');
     });
   });
 
@@ -169,6 +217,35 @@ describe('other encodings strategy', () => {
       expect(toPigLatin('latin')).toBe('atinlay');
       expect(toPigLatin('')).toBe('');
       expect(toPigLatin('123')).toBe('123');
+    });
+
+    it('should convert to camelCase directly', () => {
+      expect(toCamelCase('hello world')).toBe('helloWorld');
+      expect(toCamelCase('Hello-World!')).toBe('hello-World!');
+    });
+
+    it('should convert to emoji encoding directly', () => {
+      const encoded = toEmojiEncoding('abc');
+      const chars = Array.from(encoded);
+      expect(chars[0]).toBe('😊');
+      const bytes: number[] = [];
+      for (const ch of chars.slice(1)) {
+        const code = ch.codePointAt(0)!;
+        if (code >= 0xfe00 && code <= 0xfe0f) {
+          bytes.push(code - 0xfe00);
+        } else if (code >= 0xe0100 && code <= 0xe01ef) {
+          bytes.push(code - 0xe0100 + 16);
+        }
+      }
+      expect(Buffer.from(bytes).toString('utf8')).toBe('abc');
+    });
+
+    it('should handle leading, trailing, and multiple spaces in toCamelCase', () => {
+      expect(toCamelCase('  hello world')).toBe('helloWorld');
+      expect(toCamelCase('hello world   ')).toBe('helloWorld');
+      expect(toCamelCase('  hello   world  ')).toBe('helloWorld');
+      expect(toCamelCase('hello    world')).toBe('helloWorld');
+      expect(toCamelCase('   multiple   spaces   here   ')).toBe('multipleSpacesHere');
     });
   });
 });

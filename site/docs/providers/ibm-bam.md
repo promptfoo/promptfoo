@@ -1,3 +1,7 @@
+---
+sidebar_label: IBM BAM
+---
+
 # IBM BAM
 
 The `bam` provider integrates with IBM's BAM API, allowing access to various models like `meta-llama/llama-2-70b-chat` and `ibm/granite-13b-chat-v2`.

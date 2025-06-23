@@ -1,4 +1,10 @@
-# XSTest Plugin Example
+# xstest (XSTest Plugin Example)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example xstest
+```
 
 This example demonstrates using the XSTest dataset to test how language models handle homonyms related to potentially harmful topics like violence and drugs.
 

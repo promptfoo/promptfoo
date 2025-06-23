@@ -28,7 +28,7 @@ tests:
       location: 'Great Barrier Reef'
 ```
 
-Alternatively, you can specify your [prompts as CSV](/docs/configuration/parameters/#csv-prompts):
+Alternatively, you can specify your [prompts as CSV](/docs/configuration/prompts#csv-prompts):
 
 ```yaml
 prompts: file://travel-guide-prompts.csv
@@ -74,7 +74,7 @@ promptfoo generate dataset -w
 
 ### Loading from output files
 
-When using the `-o` flag, you will need to include the generated dataset within the [tests](/docs/configuration/parameters/#tests-and-vars) block of your configuration file.
+When using the `-o` flag, you will need to include the generated dataset within the [tests](/docs/configuration/test-cases) block of your configuration file.
 
 For example:
 
@@ -107,7 +107,7 @@ You can customize the dataset generation process by providing additional options
 | `-w, --write`              | Write the generated test cases directly to the configuration file.      |
 | `--numPersonas`            | Number of personas to generate for the dataset.                         |
 | `--numTestCasesPerPersona` | Number of test cases to generate per persona.                           |
-| `--provider`               | Provider to use for the dataset generation. Eg: openai:chat:gpt-4o      |
+| `--provider`               | Provider to use for the dataset generation. Eg: openai:chat:gpt-4.1     |
 
 For example:
 

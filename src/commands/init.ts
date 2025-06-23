@@ -218,5 +218,6 @@ export function initCommand(program: Command) {
           name: 'init',
         });
       }
+      await telemetry.send();
     });
 }

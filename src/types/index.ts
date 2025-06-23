@@ -186,6 +186,10 @@ const EvaluateOptionsSchema = z.object({
    * Timeout in milliseconds for each evaluation step. Default is 0 (no timeout).
    */
   timeoutMs: z.number().optional(),
+  /**
+   * Maximum runtime in milliseconds for the entire evaluation. Default is 0 (no limit).
+   */
+  maxEvalTimeMs: z.number().optional(),
 });
 export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & { abortSignal?: AbortSignal };
 
@@ -334,6 +338,16 @@ export interface EvaluateSummaryV2 {
   table: EvaluateTable;
   stats: EvaluateStats;
 }
+
+export type EvalTableDTO = {
+  table: EvaluateTable;
+  totalCount: number;
+  filteredCount: number;
+  config: Partial<UnifiedConfig>;
+  author: string | null;
+  version: number;
+  id: string;
+};
 
 export interface ResultSuggestion {
   type: string;
@@ -624,7 +638,7 @@ export const TestCaseSchema = z.object({
     .union([
       z
         .string()
-        .regex(new RegExp(`^file://.*\\.(${JAVASCRIPT_EXTENSIONS.join('|')}|py)(?::[\\w.]+)?$`)),
+        .regex(new RegExp(`^file://.*\\.(${JAVASCRIPT_EXTENSIONS?.join('|')}|py)(?::[\\w.]+)?$`)),
       z.custom<ScoringFunction>(),
     ])
     .optional(),
@@ -707,6 +721,52 @@ export const AtomicTestCaseSchema = TestCaseSchema.extend({
 export type AtomicTestCase<vars = Record<string, string | object>> = z.infer<
   typeof AtomicTestCaseSchema
 >;
+
+/**
+ * Configuration schema for test generators that accept parameters
+ *
+ * @example
+ * ```yaml
+ * tests:
+ *   - path: file://test_cases.py:generate_tests
+ *     config:
+ *       dataset: truthfulqa
+ *       split: validation
+ *       max_rows: 100
+ * ```
+ */
+export const TestGeneratorConfigSchema = z.object({
+  /** Path to the test generator function (e.g., file://path/to/tests.py:function_name) */
+  path: z.string(),
+  /**
+   * Configuration object passed to the generator function
+   * Common configuration options include:
+   * - dataset: string - Dataset identifier
+   * - split: string - Dataset split (train/validation/test)
+   * - max_rows: number - Maximum number of test cases to generate
+   * - languages: string[] - Array of target languages
+   * - difficulty: string - Difficulty level (basic/intermediate/advanced)
+   * - categories: string[] - Array of test categories
+   * - data: object - Custom data configuration
+   *
+   * Values can reference external files using file:// paths
+   */
+  config: z
+    .record(
+      z.string(),
+      z.union([
+        z.string(),
+        z.number(),
+        z.boolean(),
+        z.array(z.union([z.string(), z.number(), z.boolean()])),
+        z.record(z.string(), z.any()),
+        z.any(), // Allow for complex nested structures and file:// references
+      ]),
+    )
+    .optional(),
+});
+
+export type TestGeneratorConfig = z.infer<typeof TestGeneratorConfigSchema>;
 
 export const DerivedMetricSchema = z.object({
   // The name of this metric
@@ -827,7 +887,13 @@ export const TestSuiteConfigSchema = z.object({
   ]),
 
   // Path to a test file, OR list of LLM prompt variations (aka "test case")
-  tests: z.union([z.string(), z.array(z.union([z.string(), TestCaseSchema]))]).optional(),
+  tests: z
+    .union([
+      z.string(),
+      z.array(z.union([z.string(), TestCaseSchema, TestGeneratorConfigSchema])),
+      TestGeneratorConfigSchema,
+    ])
+    .optional(),
 
   // Scenarios, groupings of data and tests to be evaluated
   scenarios: z.array(z.union([z.string(), ScenarioSchema])).optional(),
