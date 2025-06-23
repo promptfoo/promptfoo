@@ -196,6 +196,49 @@ describe('OpenAI Image Provider Functions', () => {
       expect(calculateImageCost('gpt-4', '1024x1024')).toBe(0.04);
       expect(calculateImageCost('', '1024x1024')).toBe(0.04);
     });
+
+    it('should calculate DALL-E 2 costs correctly', () => {
+      expect(calculateImageCost('dall-e-2', '256x256', undefined, 1)).toBe(0.016);
+      expect(calculateImageCost('dall-e-2', '512x512', undefined, 1)).toBe(0.018);
+      expect(calculateImageCost('dall-e-2', '1024x1024', undefined, 1)).toBe(0.02);
+      expect(calculateImageCost('dall-e-2', '1024x1024', undefined, 3)).toBe(0.06);
+    });
+
+    it('should calculate DALL-E 3 costs correctly', () => {
+      expect(calculateImageCost('dall-e-3', '1024x1024', 'standard', 1)).toBe(0.04);
+      expect(calculateImageCost('dall-e-3', '1024x1024', 'hd', 1)).toBe(0.08);
+      expect(calculateImageCost('dall-e-3', '1024x1792', 'standard', 1)).toBe(0.08);
+      expect(calculateImageCost('dall-e-3', '1024x1792', 'hd', 1)).toBe(0.12);
+      expect(calculateImageCost('dall-e-3', '1792x1024', 'hd', 2)).toBe(0.24);
+    });
+
+    it('should calculate GPT Image 1 costs correctly', () => {
+      // Low quality costs
+      expect(calculateImageCost('gpt-image-1', '1024x1024', 'low', 1)).toBeCloseTo(272 * 40.0 / 1e6, 6);
+      expect(calculateImageCost('gpt-image-1', '1024x1536', 'low', 1)).toBeCloseTo(408 * 40.0 / 1e6, 6);
+      expect(calculateImageCost('gpt-image-1', '1536x1024', 'low', 1)).toBeCloseTo(400 * 40.0 / 1e6, 6);
+
+      // Medium quality costs
+      expect(calculateImageCost('gpt-image-1', '1024x1024', 'medium', 1)).toBeCloseTo(1056 * 40.0 / 1e6, 6);
+      expect(calculateImageCost('gpt-image-1', '1024x1536', 'medium', 1)).toBeCloseTo(1584 * 40.0 / 1e6, 6);
+      expect(calculateImageCost('gpt-image-1', '1536x1024', 'medium', 1)).toBeCloseTo(1568 * 40.0 / 1e6, 6);
+
+      // High quality costs
+      expect(calculateImageCost('gpt-image-1', '1024x1024', 'high', 1)).toBeCloseTo(4160 * 40.0 / 1e6, 6);
+      expect(calculateImageCost('gpt-image-1', '1024x1536', 'high', 1)).toBeCloseTo(6240 * 40.0 / 1e6, 6);
+      expect(calculateImageCost('gpt-image-1', '1536x1024', 'high', 1)).toBeCloseTo(6208 * 40.0 / 1e6, 6);
+
+      // Multiple images
+      expect(calculateImageCost('gpt-image-1', '1024x1024', 'medium', 3)).toBeCloseTo(1056 * 40.0 / 1e6 * 3, 6);
+
+      // Auto quality should use medium 1024x1024 as default
+      expect(calculateImageCost('gpt-image-1', '1024x1024', 'auto', 1)).toBeCloseTo(1056 * 40.0 / 1e6, 6);
+      expect(calculateImageCost('gpt-image-1', 'auto', 'auto', 1)).toBeCloseTo(1056 * 40.0 / 1e6, 6);
+    });
+
+    it('should handle unknown models with default cost', () => {
+      expect(calculateImageCost('unknown-model', '1024x1024', undefined, 1)).toBe(0.04);
+    });
   });
 
   describe('callOpenAiImageApi', () => {

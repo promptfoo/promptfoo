@@ -56,6 +56,27 @@ export interface OpenAiMCPTool {
   headers?: Record<string, string>;
 }
 
+/**
+ * Reference to a prompt template and its variables.
+ * Used with the Responses API for reusable prompts.
+ */
+export interface ResponsePrompt {
+  /**
+   * The unique identifier of the prompt template to use.
+   */
+  id: string;
+
+  /**
+   * Optional map of values to substitute in for variables in your prompt.
+   */
+  variables?: Record<string, any> | null;
+
+  /**
+   * Optional version of the prompt template.
+   */
+  version?: string | null;
+}
+
 export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   temperature?: number;
   max_completion_tokens?: number;
@@ -92,7 +113,7 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   passthrough?: object;
   reasoning_effort?: ReasoningEffort;
   reasoning?: Reasoning;
-  service_tier?: ('auto' | 'default' | 'premium') | null;
+  service_tier?: 'auto' | 'default' | 'flex' | 'scale' | null;
   modalities?: string[];
   audio?: {
     bitrate?: string;
@@ -107,6 +128,7 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   metadata?: Record<string, string>;
   parallel_tool_calls?: boolean;
   previous_response_id?: string;
+  prompt?: ResponsePrompt;
   store?: boolean;
   stream?: boolean;
   truncation?: 'auto' | 'disabled';

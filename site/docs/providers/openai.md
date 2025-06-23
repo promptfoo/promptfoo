@@ -76,11 +76,15 @@ Supported parameters include:
 | `max_tokens`            | Controls the maximum length of the output in tokens. Not valid for reasoning models (o1, o3, o3-pro, o3-mini, o4-mini).                                                                                                                                                                           |
 | `metadata`              | Key-value pairs for request tagging and organization.                                                                                                                                                                                                                                             |
 | `organization`          | Your OpenAI organization key.                                                                                                                                                                                                                                                                     |
+| `output_compression`    | The compression level (0-100%) for generated images. Only supported for `gpt-image-1` model with `webp` or `jpeg` output formats.                                                                                                                                                                 |
+| `output_format`         | The format for generated images ('png', 'jpeg', 'webp'). Only supported for `gpt-image-1` model.                                                                                                                                                                                                  |
 | `passthrough`           | A flexible object that allows passing arbitrary parameters directly to the OpenAI API request body. Useful for experimental, new, or provider-specific parameters not yet explicitly supported in promptfoo. This parameter is merged into the final API request and can override other settings. |
 | `presence_penalty`      | Applies a penalty to new tokens (tokens that haven't appeared in the input), making them less likely to appear in the output.                                                                                                                                                                     |
+| `prompt`                | Reference to a prompt template and its variables for reusable prompts (Responses API only).                                                                                                                                                                                                       |
 | `reasoning`             | Enhanced reasoning configuration for o-series models. Object with `effort` ('low', 'medium', 'high') and optional `summary` ('auto', 'concise', 'detailed') fields.                                                                                                                               |
 | `response_format`       | Specifies the desired output format, including `json_object` and `json_schema`. Can also be specified in the prompt config. If specified in both, the prompt config takes precedence.                                                                                                             |
 | `seed`                  | Seed used for deterministic output.                                                                                                                                                                                                                                                               |
+| `service_tier`          | Controls which service tier is used for processing the request. Can be 'auto', 'default', 'flex', or 'scale'.                                                                                                                                                                                     |
 | `stop`                  | Defines a list of tokens that signal the end of the output.                                                                                                                                                                                                                                       |
 | `store`                 | Whether to store the conversation for future retrieval (boolean).                                                                                                                                                                                                                                 |
 | `temperature`           | Controls the randomness of the AI's output. Higher values (close to 1) make the output more random, while lower values (close to 0) make it more deterministic.                                                                                                                                   |
@@ -116,7 +120,15 @@ interface OpenAiConfig {
   user?: string;
   metadata?: Record<string, string>;
   store?: boolean;
+  service_tier?: 'auto' | 'default' | 'flex' | 'scale' | null;
   passthrough?: object;
+
+  // Image generation parameters (gpt-image-1 only)
+  output_compression?: number; // 0-100% compression level
+  output_format?: 'png' | 'jpeg' | 'webp';
+
+  // Responses API parameters
+  prompt?: ResponsePrompt;
 
   // Function tool callbacks
   functionToolCallbacks?: Record<
@@ -131,6 +143,12 @@ interface OpenAiConfig {
   apiBaseUrl?: string;
   organization?: string;
   headers?: { [key: string]: string };
+}
+
+interface ResponsePrompt {
+  id: string; // The unique identifier of the prompt template
+  variables?: Record<string, any> | null; // Optional map of values to substitute
+  version?: string | null; // Optional version of the prompt template
 }
 ```
 
@@ -270,7 +288,15 @@ See the [OpenAI vision example](https://github.com/promptfoo/promptfoo/tree/main
 
 ### Generating images
 
-OpenAI supports Dall-E generations via `openai:image:dall-e-3`. See the [OpenAI Dall-E example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-dalle-images).
+OpenAI supports image generation via multiple models:
+
+- **DALL-E 2**: `openai:image:dall-e-2` - Lower cost, supports variations and edits
+- **DALL-E 3**: `openai:image:dall-e-3` - Higher quality than DALL-E 2
+- **GPT Image 1**: `openai:image:gpt-image-1` - State-of-the-art multimodal model with advanced features
+
+See the [OpenAI image generation example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-dalle-images).
+
+#### Basic Example
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -280,6 +306,7 @@ prompts:
 
 providers:
   - openai:image:dall-e-3
+  - openai:image:gpt-image-1
 
 tests:
   - vars:
@@ -287,6 +314,77 @@ tests:
   - vars:
       subject: new york city
 ```
+
+#### GPT Image 1 Advanced Features
+
+GPT Image 1 supports advanced features not available in DALL-E models:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  # High quality with transparency
+  - id: openai:image:gpt-image-1
+    label: 'High Quality Transparent'
+    config:
+      size: '1024x1024'
+      quality: 'high'
+      background: 'transparent'
+      output_format: 'png'
+  
+  # Compressed JPEG for faster generation
+  - id: openai:image:gpt-image-1
+    label: 'Fast Generation'
+    config:
+      size: '1024x1536'
+      quality: 'medium'
+      output_format: 'jpeg'
+      output_compression: 75
+  
+  # Auto quality and size
+  - id: openai:image:gpt-image-1
+    label: 'Auto Settings'
+    config:
+      quality: 'auto'
+      size: 'auto'
+```
+
+#### Configuration Options
+
+| Parameter            | DALL-E 2                    | DALL-E 3                        | GPT Image 1                           | Description                   |
+| -------------------- | --------------------------- | ------------------------------- | ------------------------------------- | ----------------------------- |
+| `size`               | 256x256, 512x512, 1024x1024 | 1024x1024, 1792x1024, 1024x1792 | 1024x1024, 1024x1536, 1536x1024, auto | Image dimensions              |
+| `quality`            | N/A                         | standard, hd                    | low, medium, high, auto               | Rendering quality             |
+| `style`              | N/A                         | natural, vivid                  | N/A                                   | Art style (DALL-E 3 only)     |
+| `output_format`      | N/A                         | N/A                             | png, jpeg, webp                       | Output file format            |
+| `output_compression` | N/A                         | N/A                             | 0-100                                 | Compression level (JPEG/WebP) |
+| `background`         | N/A                         | N/A                             | transparent, opaque, auto             | Background transparency       |
+| `n`                  | 1-10                        | 1                               | 1-10                                  | Number of images              |
+| `response_format`    | url, b64_json               | url, b64_json                   | url, b64_json                         | Response format               |
+
+#### Responses API Integration
+
+GPT Image 1 can also be used through the Responses API for multi-turn image generation:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:gpt-4.1-mini
+    config:
+      tools:
+        - type: image_generation
+          quality: 'medium'
+          size: '1024x1024'
+
+tests:
+  - vars:
+      prompt: 'Generate an image of a cat wearing a hat, then make it more cartoonish'
+```
+
+#### Pricing
+
+- **DALL-E 2/3**: Fixed per-image pricing
+- **GPT Image 1**: Token-based pricing that varies by quality and size:
+  - Low quality: 272-408 tokens
+  - Medium quality: 1,056-1,584 tokens  
+  - High quality: 4,160-6,240 tokens
 
 To display images in the web viewer, wrap vars or outputs in markdown image tags like so:
 

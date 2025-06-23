@@ -102,7 +102,7 @@ describe('Groq', () => {
           systemPrompt: 'You are a helpful assistant',
           parallel_tool_calls: true,
           reasoning_format: 'markdown',
-          service_tier: 'premium',
+          service_tier: 'flex',
           user: 'test-user',
         },
       });
@@ -111,7 +111,7 @@ describe('Groq', () => {
         systemPrompt: 'You are a helpful assistant',
         parallel_tool_calls: true,
         reasoning_format: 'markdown',
-        service_tier: 'premium',
+        service_tier: 'flex',
         user: 'test-user',
       });
     });

@@ -1405,13 +1405,13 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const o4Provider = new OpenAiChatCompletionProvider('o4-mini', {
         config: {
           reasoning_effort: 'medium',
-          service_tier: 'premium',
+          service_tier: 'flex',
         } as any,
       });
 
       const { body: o4Body } = o4Provider.getOpenAiBody('Test prompt');
       expect(o4Body.reasoning_effort).toBe('medium');
-      expect(o4Body.service_tier).toBe('premium');
+      expect(o4Body.service_tier).toBe('flex');
     });
 
     it('should handle user, metadata, and store parameters', async () => {

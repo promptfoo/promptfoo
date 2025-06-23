@@ -2,31 +2,44 @@
 description: Comparing DALL-E 2 and 3 image generation capabilities
 
 prompts:
-  - 'In the style of {{artist}}: {{subject}}'
+  - 'In the style of Van Gogh: {{subject}}'
+  - 'In the style of Dali: {{subject}}'
+  - 'Photorealistic image of {{subject}}'
 
 providers:
   - id: openai:image:dall-e-3
     config:
-      size: 1024x1024 # Valid sizes for DALL-E 3: 1024x1024, 1792x1024, 1024x1792
-
+      size: '1024x1024'
+      quality: 'hd'
   - id: openai:image:dall-e-2
     config:
-      size: 512x512 # Valid sizes for DALL-E 2: 256x256, 512x512, 1024x1024
-      # response_format: b64_json # Returns the raw JSON response with base64-encoded image data
+      size: '1024x1024'
+  - id: openai:image:gpt-image-1
+    config:
+      size: '1024x1024'
+      quality: 'medium'
+      output_format: 'png'
+  - id: openai:image:gpt-image-1
+    label: 'GPT Image 1 (High Quality)'
+    config:
+      size: '1024x1536'
+      quality: 'high'
+      output_format: 'jpeg'
+      output_compression: 85
+  - id: openai:image:gpt-image-1
+    label: 'GPT Image 1 (Transparent)'
+    config:
+      size: '1024x1024'
+      quality: 'high'
+      background: 'transparent'
+      output_format: 'png'
 
 tests:
   - vars:
-      artist: Van Gogh
-      subject: sunset over mountains
+      subject: bananas
   - vars:
-      artist: Dali
-      subject: melting clocks
+      subject: new york city
   - vars:
-      artist: Picasso
-      subject: abstract faces
+      subject: robot playing chess
   - vars:
-      artist: Monet
-      subject: water lilies
-  - vars:
-      artist: Warhol
-      subject: colorful soup cans
+      subject: mountain landscape at sunset

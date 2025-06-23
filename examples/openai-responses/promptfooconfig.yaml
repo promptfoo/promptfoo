@@ -1,54 +1,99 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: OpenAI Responses API with Different Response Formats
+description: 'OpenAI Responses API Examples - Text, Images, and Multi-turn Conversations'
+
 prompts:
-  - 'Extract information about the event: {{event}}'
+  - file://text-prompt.txt
+  - file://image-generation-prompt.txt
+  - file://multi-turn-prompt.txt
 
 providers:
-  - id: openai:responses:gpt-4.5-preview
-    label: text-format
+  # Text generation with reasoning models
+  - id: openai:responses:gpt-4.1
+    label: 'GPT-4.1 Text'
     config:
       temperature: 0.7
-      instructions: 'You are a helpful AI assistant. Extract key details about the event.'
-
-  - id: openai:responses:gpt-4.5-preview
-    label: json-object
+      max_output_tokens: 1000
+  
+  - id: openai:responses:o3-mini
+    label: 'O3-Mini Reasoning'
     config:
-      temperature: 0.7
-      instructions: 'You are a helpful AI assistant. Extract key details about the event.'
-      response_format:
-        type: 'json_object'
+      reasoning:
+        effort: 'medium'
+      max_output_tokens: 2000
+  
+  # Image generation through Responses API
+  - id: openai:responses:gpt-4.1-mini
+    label: 'GPT-4.1-Mini with Image Generation'
+    config:
+      tools:
+        - type: image_generation
+          quality: 'medium'
+          size: '1024x1024'
+          output_format: 'png'
+  
+  - id: openai:responses:gpt-4.1
+    label: 'GPT-4.1 High Quality Images'
+    config:
+      tools:
+        - type: image_generation
+          quality: 'high'
+          size: '1024x1536'
+          background: 'transparent'
+          output_format: 'png'
+  
+  # Multi-turn with previous_response_id
+  - id: openai:responses:gpt-4.1-mini
+    label: 'GPT-4.1-Mini Multi-turn'
+    config:
       store: true
-
-  - id: openai:responses:gpt-4.5-preview
-    label: json-schema
-    config:
-      temperature: 0.7
-      instructions: 'You are a helpful AI assistant. Extract key details about the event.'
-      response_format:
-        type: 'json_schema'
-        name: 'event_information'
-        schema:
-          type: 'object'
-          properties:
-            event_name:
-              type: 'string'
-              description: 'The name of the event'
-            date:
-              type: 'string'
-              description: 'When the event takes place'
-            location:
-              type: 'string'
-              description: 'Where the event takes place'
-            participants:
-              type: 'array'
-              items:
-                type: 'string'
-              description: 'People attending the event'
-          required: ['event_name', 'date', 'location', 'participants']
-          additionalProperties: false
+      tools:
+        - type: image_generation
+          quality: 'medium'
 
 tests:
-  - vars:
-      event: 'Alice and Bob are attending a JSON schema conference in New York on September 15th, 2025.'
-  - vars:
-      event: 'The annual music festival will take place in Central Park this weekend, featuring local artists and food vendors.'
+  # Text generation tests
+  - description: 'Simple text completion'
+    vars:
+      task: 'Write a haiku about artificial intelligence'
+    assert:
+      - type: contains
+        value: 'AI'
+      - type: javascript
+        value: 'output.split("\\n").length >= 3'
+
+  - description: 'Complex reasoning task'
+    vars:
+      task: 'Explain the butterfly effect in chaos theory with a practical example'
+    assert:
+      - type: contains
+        value: 'butterfly'
+      - type: llm-rubric
+        value: 'Explains the concept clearly with a relevant example'
+
+  # Image generation tests
+  - description: 'Basic image generation'
+    vars:
+      image_prompt: 'A serene mountain lake at sunset with reflection'
+    assert:
+      - type: contains
+        value: 'image_generation_call'
+      - type: javascript
+        value: 'typeof output === "string" && output.length > 0'
+
+  - description: 'Detailed image with specific style'
+    vars:
+      image_prompt: 'A cyberpunk cityscape with neon lights, flying cars, and holographic advertisements in the style of Blade Runner'
+    assert:
+      - type: contains
+        value: 'image_generation_call'
+      - type: javascript
+        value: 'output.includes("revised_prompt")'
+
+  # Multi-turn conversation test
+  - description: 'Multi-turn image refinement'
+    vars:
+      initial_prompt: 'Generate an image of a cozy coffee shop'
+      followup_prompt: 'Make it more modern and add plants'
+    assert:
+      - type: javascript
+        value: 'Array.isArray(output) || typeof output === "string"'

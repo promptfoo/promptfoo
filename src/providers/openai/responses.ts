@@ -149,8 +149,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     }
 
     const body = {
-      model: this.modelName,
-      input,
+      ...(this.modelName ? { model: this.modelName } : {}),
+      ...(input ? { input } : {}),
       ...(maxOutputTokens ? { max_output_tokens: maxOutputTokens } : {}),
       ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
       ...(temperature ? { temperature } : {}),
@@ -163,6 +163,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.previous_response_id ? { previous_response_id: config.previous_response_id } : {}),
+      ...(config.prompt ? { prompt: config.prompt } : {}),
+      ...(config.service_tier ? { service_tier: config.service_tier } : {}),
       text: textFormat,
       ...(config.truncation ? { truncation: config.truncation } : {}),
       ...(config.metadata ? { metadata: config.metadata } : {}),

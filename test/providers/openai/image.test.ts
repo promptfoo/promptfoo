@@ -380,6 +380,49 @@ describe('OpenAiImageProvider', () => {
       );
     });
 
+    it('should handle GPT Image 1 specific options', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-1', {
+        config: {
+          apiKey: 'test-key',
+          quality: 'high',
+          output_format: 'jpeg',
+          output_compression: 85,
+          background: 'transparent',
+          size: '1024x1536',
+        },
+      });
+
+      await provider.callApi('test prompt');
+
+      const callArgs = jest.mocked(fetchWithCache).mock.calls[0];
+      const body = JSON.parse((callArgs[1] as any).body);
+
+      expect(body.quality).toBe('high');
+      expect(body.output_format).toBe('jpeg');
+      expect(body.output_compression).toBe(85);
+      expect(body.background).toBe('transparent');
+      expect(body.size).toBe('1024x1536');
+    });
+
+    it('should handle GPT Image 1 auto quality and size', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-1', {
+        config: {
+          apiKey: 'test-key',
+          quality: 'auto',
+          size: 'auto',
+        },
+      });
+
+      await provider.callApi('test prompt');
+
+      const callArgs = jest.mocked(fetchWithCache).mock.calls[0];
+      const body = JSON.parse((callArgs[1] as any).body);
+
+      expect(body.quality).toBe('auto');
+      // Size should not be included when set to 'auto'
+      expect(body.size).toBeUndefined();
+    });
+
     it('should include organization ID in headers when provided', async () => {
       const provider = new OpenAiImageProvider('dall-e-3', {
         config: {
