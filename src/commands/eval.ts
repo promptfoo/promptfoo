@@ -467,7 +467,7 @@ export async function doEval(
       // Provider breakdown
       const tracker = TokenUsageTracker.getInstance();
       const providerIds = tracker.getProviderIds();
-      if (providerIds.length > 0) {
+      if (providerIds.length > 1) {
         logger.info(`\n  ${chalk.cyan.bold('Provider Breakdown:')}`);
 
         // Sort providers by total token usage (descending)
