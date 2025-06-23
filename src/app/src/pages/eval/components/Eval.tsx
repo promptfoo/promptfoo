@@ -19,15 +19,9 @@ interface EvalOptions {
    * ID of a specific eval to load.
    */
   fetchId: string | null;
-  recentEvals?: ResultLightweightWithLabel[];
-  defaultEvalId?: string;
 }
 
-export default function Eval({
-  fetchId,
-  recentEvals: recentEvalsProp,
-  defaultEvalId: defaultEvalIdProp,
-}: EvalOptions) {
+export default function Eval({ fetchId }: EvalOptions) {
   const navigate = useNavigate();
   const { apiBaseUrl } = useApiConfig();
   const [searchParams] = useSearchParams();
@@ -51,13 +45,8 @@ export default function Eval({
 
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
-  const [recentEvals, setRecentEvals] = useState<ResultLightweightWithLabel[]>(
-    recentEvalsProp || [],
-  );
-
-  const [defaultEvalId, setDefaultEvalId] = useState<string>(
-    defaultEvalIdProp || recentEvals[0]?.evalId,
-  );
+  const [recentEvals, setRecentEvals] = useState<ResultLightweightWithLabel[]>([]);
+  const [defaultEvalId, setDefaultEvalId] = useState<string | undefined>(undefined);
 
   // ================================
   // Handlers
@@ -147,7 +136,6 @@ export default function Eval({
           if (newRecentEvals && newRecentEvals.length > 0) {
             setDefaultEvalId(newRecentEvals[0]?.evalId);
             setEvalId(newRecentEvals[0]?.evalId);
-            console.log('setting default eval id', newRecentEvals[0]?.evalId);
             loadEvalById(newRecentEvals[0]?.evalId);
           }
         });
@@ -160,12 +148,10 @@ export default function Eval({
         setAuthor(data.author || null);
         fetchRecentFileEvals().then((newRecentEvals) => {
           if (newRecentEvals && newRecentEvals.length > 0) {
-            const newId = newRecentEvals[0]?.evalId;
-            if (newId) {
-              setDefaultEvalId(newId);
-              setEvalId(newId);
-              loadEvalById(newId);
-            }
+            const newId = newRecentEvals[0].evalId;
+            setDefaultEvalId(newId);
+            setEvalId(newId);
+            loadEvalById(newId);
           }
         });
       });
