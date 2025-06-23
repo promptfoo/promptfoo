@@ -34,9 +34,10 @@ interface ProcessedSpan extends SpanData {
 }
 
 const getSpanStatus = (statusCode?: number | null): { color: string; label: string } => {
-  if (statusCode === 0) {
+  // From SpanStatusCode in @opentelemetry/api
+  if (statusCode === 1) {
     return { color: 'success', label: 'OK' };
-  } else if (statusCode === 1) {
+  } else if (statusCode === 2) {
     return { color: 'error', label: 'ERROR' };
   }
   return { color: 'default', label: 'UNSET' };
@@ -45,16 +46,16 @@ const getSpanStatus = (statusCode?: number | null): { color: string; label: stri
 const formatDuration = (microseconds: number): string => {
   const milliseconds = microseconds / 1000;
   if (milliseconds < 1) {
-    return `${milliseconds.toFixed(2)}ms`;
+    return `${Math.round(milliseconds)}ms`;
   } else if (milliseconds < 1000) {
-    return `${milliseconds.toFixed(1)}ms`;
+    return `${Math.round(milliseconds)}ms`;
   } else {
     return `${(milliseconds / 1000).toFixed(2)}s`;
   }
 };
 
-const formatTimestamp = (nanos: number): string => {
-  const date = new Date(nanos / 1000000); // Convert nanoseconds to milliseconds
+const formatTimestamp = (millis: number): string => {
+  const date = new Date(millis); // Timestamps are already in milliseconds
   return date.toISOString();
 };
 
@@ -150,7 +151,8 @@ export default function TraceTimeline({ trace }: TraceTimelineProps) {
         Trace ID: {trace.traceId}
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Total Duration: {formatDuration(totalDuration / 1000)} {/* Convert to microseconds */}
+        Total Duration: {formatDuration(totalDuration * 1000)}{' '}
+        {/* Convert milliseconds to microseconds */}
       </Typography>
 
       <Paper variant="outlined" sx={{ p: 2, overflow: 'auto' }}>
@@ -203,7 +205,7 @@ export default function TraceTimeline({ trace }: TraceTimelineProps) {
                   title={
                     <Box>
                       <Typography variant="caption">
-                        Duration: {formatDuration(span.duration / 1000)}
+                        Duration: {formatDuration(span.duration * 1000)}
                       </Typography>
                       <br />
                       <Typography variant="caption">
@@ -269,20 +271,10 @@ export default function TraceTimeline({ trace }: TraceTimelineProps) {
                         textOverflow: 'ellipsis',
                       }}
                     >
-                      {formatDuration(span.duration / 1000)}
+                      {formatDuration(span.duration * 1000)}
                     </Typography>
                   </Box>
                 </Tooltip>
-              </Box>
-
-              {/* Status chip */}
-              <Box sx={{ ml: 2, minWidth: 60 }}>
-                <Chip
-                  label={status.label}
-                  size="small"
-                  color={status.color as any}
-                  variant="outlined"
-                />
               </Box>
             </Box>
           );
