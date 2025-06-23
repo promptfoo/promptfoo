@@ -22,21 +22,23 @@ async function createMcpServer() {
 
   // Define tools for retrieving evaluations
   server.tool(
-    'listEvals', 
-    'List evaluation summaries, optionally filtered by dataset ID',
-    { datasetId: z.string().optional() },
+    'listEvals',
+    {
+      datasetId: z.string().optional().describe('Dataset ID to filter evaluations'),
+    },
     async ({ datasetId }) => {
       const evals = await getEvalSummaries(datasetId);
       return {
         content: [{ type: 'text', text: JSON.stringify(evals, null, 2) }],
       };
-    }
+    },
   );
 
   server.tool(
     'getEval',
-    'Get detailed evaluation results by ID',
-    { id: z.string() },
+    {
+      id: z.string().describe('Evaluation ID to retrieve'),
+    },
     async ({ id }) => {
       const result = await readResult(id);
       if (!result) {
@@ -48,38 +50,35 @@ async function createMcpServer() {
       return {
         content: [{ type: 'text', text: JSON.stringify(result.result, null, 2) }],
       };
-    }
+    },
   );
 
   server.tool(
     'getPrompts',
-    'Get prompts for a specific test case hash',
-    { sha256hash: z.string() },
+    {
+      sha256hash: z.string().describe('SHA256 hash of the test case'),
+    },
     async ({ sha256hash }) => {
       const prompts = await getPromptsForTestCasesHash(sha256hash);
       return {
         content: [{ type: 'text', text: JSON.stringify(prompts, null, 2) }],
       };
-    }
+    },
   );
 
-  server.tool(
-    'listDatasets',
-    'List available test datasets',
-    {},
-    async () => {
-      const datasets = await getTestCases();
-      return {
-        content: [{ type: 'text', text: JSON.stringify(datasets, null, 2) }],
-      };
-    }
-  );
+  server.tool('listDatasets', {}, async () => {
+    const datasets = await getTestCases();
+    return {
+      content: [{ type: 'text', text: JSON.stringify(datasets, null, 2) }],
+    };
+  });
 
   // Tool to get summary statistics for an evaluation
   server.tool(
     'getEvalStats',
-    'Get summary statistics for an evaluation by ID',
-    { id: z.string() },
+    {
+      id: z.string().describe('Evaluation ID to analyze'),
+    },
     async ({ id }) => {
       const result = await readResult(id);
       if (!result) {
@@ -120,28 +119,21 @@ async function createMcpServer() {
       return {
         content: [{ type: 'text', text: JSON.stringify(stats, null, 2) }],
       };
-    }
+    },
   );
 
   // Resources
-  server.resource(
-    'config',
-    'config://default',
-    {
-      description: 'Access the default promptfoo configuration'
-    },
-    async () => {
-      const { defaultConfig } = await loadDefaultConfig();
-      return {
-        contents: [
-          {
-            uri: 'config://default',
-            text: JSON.stringify(defaultConfig, null, 2),
-          },
-        ],
-      };
-    }
-  );
+  server.resource('config', 'config://default', async () => {
+    const { defaultConfig } = await loadDefaultConfig();
+    return {
+      contents: [
+        {
+          uri: 'config://default',
+          text: JSON.stringify(defaultConfig, null, 2),
+        },
+      ],
+    };
+  });
 
   return server;
 }
@@ -173,7 +165,7 @@ export async function startHttpMcpServer(port: number) {
   });
 
   // Health check
-  app.get('/health', (req, res) => {
+  app.get('/health', (_req, res) => {
     res.status(200).json({ status: 'OK', message: 'Promptfoo MCP server is running' });
   });
 
@@ -189,6 +181,14 @@ export async function startHttpMcpServer(port: number) {
  * Starts an MCP server with stdio transport
  */
 export async function startStdioMcpServer() {
+  // Disable all console logging in stdio mode to prevent pollution of JSON-RPC communication
+  logger.transports.forEach((transport) => {
+    // Winston Console transport constructor name check
+    if (transport.constructor.name === 'Console' || (transport as any).name === 'console') {
+      transport.silent = true;
+    }
+  });
+
   const server = await createMcpServer();
 
   // Set up stdio transport
@@ -197,7 +197,8 @@ export async function startStdioMcpServer() {
   // Connect the server to the stdio transport
   await server.connect(transport);
 
-  logger.info('Promptfoo MCP stdio server started');
+  // Don't log to stdout in stdio mode as it pollutes the JSON-RPC protocol
+  // logger.info('Promptfoo MCP stdio server started');
 }
 
 export function mcpCommand(program: Command) {

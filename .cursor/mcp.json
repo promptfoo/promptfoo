@@ -1,20 +1,13 @@
 {
   "mcpServers": {
-    "promptfoo": {
-      "command": "npm",
+    "promptfoo-stdio": {
+      "command": "node",
       "args": [
-        "run",
-        "local",
-        "--",
+        "/Users/guangshuozang/Dev-Promptfoo/subfolder/promptfoo-cloud/promptfoo/dist/src/main.js",
         "mcp",
         "--transport",
         "stdio"
-      ],
-      "description": "Promptfoo MCP server for LLM evaluation and testing context",
-      "env": {
-        "PROMPTFOO_LOG_LEVEL": "debug",
-        "PROMPTFOO_CONFIG_PATH": "${workspaceFolder}"
-      }
+      ]
     }
   }
 }
