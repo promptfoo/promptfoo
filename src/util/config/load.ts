@@ -254,7 +254,9 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     for (const globPath of globPaths) {
       const config = await readConfig(globPath);
       logger.debug(`[combineConfigs] Config from ${globPath}: ${JSON.stringify(config, null, 2)}`);
-      logger.debug(`[combineConfigs] Config.tracing from ${globPath}: ${JSON.stringify(config.tracing, null, 2)}`);
+      logger.debug(
+        `[combineConfigs] Config.tracing from ${globPath}: ${JSON.stringify(config.tracing, null, 2)}`,
+      );
       configs.push(config);
     }
   }
@@ -454,7 +456,9 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     tracing: configs.find((config) => config.tracing)?.tracing,
   };
 
-  logger.debug(`[combineConfigs] Final combinedConfig.tracing: ${JSON.stringify(combinedConfig.tracing, null, 2)}`);
+  logger.debug(
+    `[combineConfigs] Final combinedConfig.tracing: ${JSON.stringify(combinedConfig.tracing, null, 2)}`,
+  );
   return combinedConfig;
 }
 

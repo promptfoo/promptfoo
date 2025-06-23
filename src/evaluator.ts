@@ -278,10 +278,13 @@ export async function runEval({
         const { getTraceStore } = await import('./tracing/store');
         const traceStore = getTraceStore();
 
-        // Generate 16-byte trace ID
-        const traceId = randomBytes(16).toString('hex');
-        // Generate 8-byte span ID
-        const spanId = randomBytes(8).toString('hex');
+        // Generate 16-byte trace ID and 8-byte span ID
+        const traceIdBytes = randomBytes(16);
+        const spanIdBytes = randomBytes(8);
+
+        // Convert to hex for storage and W3C format
+        const traceId = traceIdBytes.toString('hex');
+        const spanId = spanIdBytes.toString('hex');
         // W3C Trace Context format: version-trace-id-parent-id-trace-flags
         const version = '00';
         const traceFlags = '01'; // sampled
@@ -637,7 +640,9 @@ class Evaluator {
     // Start OTLP receiver if tracing is enabled
     logger.debug(`[Evaluator] Checking tracing config: ${JSON.stringify(testSuite.tracing)}`);
     logger.debug(`[Evaluator] testSuite keys: ${Object.keys(testSuite)}`);
-    logger.debug(`[Evaluator] Full testSuite.tracing: ${JSON.stringify(testSuite.tracing, null, 2)}`);
+    logger.debug(
+      `[Evaluator] Full testSuite.tracing: ${JSON.stringify(testSuite.tracing, null, 2)}`,
+    );
     if (
       testSuite.tracing?.enabled &&
       testSuite.tracing?.otlp?.http?.enabled &&

@@ -156,10 +156,12 @@ export class OTLPReceiver {
 
       for (const scopeSpan of resourceSpan.scopeSpans) {
         for (const span of scopeSpan.spans) {
-          // Convert base64 IDs to hex
-          const traceId = this.base64ToHex(span.traceId);
-          const spanId = this.base64ToHex(span.spanId);
-          const parentSpanId = span.parentSpanId ? this.base64ToHex(span.parentSpanId) : undefined;
+          // Convert IDs - handle both hex strings and base64 encoded binary
+          const traceId = this.convertId(span.traceId, 32); // 32 hex chars = 16 bytes
+          const spanId = this.convertId(span.spanId, 16); // 16 hex chars = 8 bytes
+          const parentSpanId = span.parentSpanId
+            ? this.convertId(span.parentSpanId, 16)
+            : undefined;
           logger.debug(
             `[OtlpReceiver] Processing span: ${span.name} (${spanId}) in trace ${traceId}`,
           );
@@ -235,16 +237,43 @@ export class OTLPReceiver {
     return undefined;
   }
 
-  private base64ToHex(base64: string): string {
+  private convertId(id: string, expectedHexLength: number): string {
+    logger.debug(
+      `[OtlpReceiver] Converting ID: ${id} (length: ${id.length}, expected hex length: ${expectedHexLength})`,
+    );
+
+    // Check if it's already a hex string of the expected length
+    if (id.length === expectedHexLength && /^[0-9a-f]+$/i.test(id)) {
+      logger.debug(`[OtlpReceiver] ID is already hex format`);
+      return id.toLowerCase();
+    }
+
+    // Try base64 decoding
     try {
-      const hex = Buffer.from(base64, 'base64').toString('hex');
-      logger.debug(
-        `[OtlpReceiver] Converted base64 to hex: ${base64.substring(0, 8)}... -> ${hex.substring(0, 8)}...`,
+      const buffer = Buffer.from(id, 'base64');
+      const hex = buffer.toString('hex');
+      logger.debug(`[OtlpReceiver] Base64 decoded: ${id} -> ${hex} (${buffer.length} bytes)`);
+
+      // Check if the decoded value looks like it was originally a hex string encoded as UTF-8
+      const utf8String = buffer.toString('utf8');
+      if (utf8String.length === expectedHexLength && /^[0-9a-f]+$/i.test(utf8String)) {
+        logger.debug(`[OtlpReceiver] Detected hex string encoded as UTF-8: ${utf8String}`);
+        return utf8String.toLowerCase();
+      }
+
+      // If the resulting hex is the expected length, return it
+      if (hex.length === expectedHexLength) {
+        return hex;
+      }
+
+      // Otherwise, something's wrong
+      logger.warn(
+        `[OtlpReceiver] Unexpected ID format: ${id} -> ${hex} (expected ${expectedHexLength} hex chars)`,
       );
-      return hex;
+      return id.toLowerCase();
     } catch (error) {
-      logger.error(`[OtlpReceiver] Failed to convert base64 to hex: ${error}`);
-      return base64; // Return original if conversion fails
+      logger.error(`[OtlpReceiver] Failed to convert ID: ${error}`);
+      return id.toLowerCase();
     }
   }
 
