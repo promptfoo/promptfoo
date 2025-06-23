@@ -145,6 +145,26 @@ scanners:
     llm_vocab_threshold: 10000 # Vocabulary size to identify LLM models
     enable_llm_checks: false # Whether to scan large language models
 
+  pmml:
+    has_defusedxml: true # Whether defusedxml is available for secure XML parsing
+    max_file_size: 50000000 # 50MB max size for PMML files
+
+  numpy:
+    max_array_bytes: 1073741824 # 1GB max array size
+    max_dimensions: 32 # Maximum number of array dimensions
+    max_dimension_size: 100000000 # Maximum size per dimension
+    max_itemsize: 1024 # Maximum size per array element in bytes
+
+  joblib:
+    max_decompression_ratio: 100.0 # Maximum compression ratio before flagging as bomb
+    max_decompressed_size: 104857600 # 100MB max decompressed size
+    max_file_read_size: 104857600 # 100MB max file read size
+
+  flax_msgpack:
+    max_blob_bytes: 52428800 # 50MB max binary blob size
+    max_recursion_depth: 100 # Maximum nesting depth
+    max_items_per_container: 10000 # Maximum items per container
+
 # Global settings
 max_file_size: 1073741824 # 1GB
 timeout: 600 # 10 minutes
@@ -155,6 +175,57 @@ Use the configuration file with:
 ```bash
 modelaudit scan --config modelaudit-config.yaml path/to/models/
 ```
+
+## Advanced Security Features
+
+### File Type Validation
+
+ModelAudit performs comprehensive file type validation as a security measure:
+
+```bash
+# File type mismatches are flagged as potential security issues
+⚠ File type validation failed: extension indicates tensor_binary but magic bytes indicate pickle.
+   This could indicate file spoofing, corruption, or a security threat.
+```
+
+This helps detect:
+
+- **File spoofing attacks** where malicious files masquerade as legitimate model formats
+- **Corruption** that might indicate tampering
+- **Format confusion** that could lead to incorrect handling
+
+### Resource Exhaustion Protection
+
+Built-in protection against various resource exhaustion attacks:
+
+- **Zip bombs**: Detects suspicious compression ratios (>100x) in archives
+- **Decompression bombs**: Limits decompressed file sizes in joblib and other compressed formats
+- **Memory exhaustion**: Enforces limits on array sizes, tensor dimensions, and nested structures
+- **Infinite recursion**: Limits nesting depth in recursive file formats
+- **DoS prevention**: Enforces timeouts and maximum file sizes
+
+### Path Traversal Protection
+
+Automatic protection against path traversal attacks in archives:
+
+```bash
+🔴 Archive entry ../../etc/passwd attempted path traversal outside the archive
+```
+
+All archive scanners (ZIP, model archives, OCI) include path sanitization to prevent:
+
+- Directory traversal attacks (`../../../etc/passwd`)
+- Absolute path exploitation (`/etc/passwd`)
+- Windows path attacks (`C:\Windows\System32\`)
+
+### Executable Detection
+
+Sophisticated detection of embedded executables with validation:
+
+- **Windows PE files**: Detection including DOS stub signature validation
+- **Linux ELF files**: Magic byte verification and structure validation
+- **macOS Mach-O**: Multiple architecture support and validation
+- **Script detection**: Shell script shebangs and interpreter directives
 
 ## Integration with Development Workflows
 
@@ -169,9 +240,9 @@ repos:
     hooks:
       - id: modelaudit
         name: ModelAudit
-        entry: promptfoo scan-model
+        entry: modelaudit scan
         language: system
-        files: '\.(pkl|h5|pb|pt|pth|keras|hdf5|json|yaml|yml|zip|onnx|safetensors|bin|tflite|msgpack)$'
+        files: '\.(pkl|h5|pb|pt|pth|keras|hdf5|json|yaml|yml|zip|onnx|safetensors|bin|tflite|msgpack|pmml|joblib|npy|gguf|ggml)$'
         pass_filenames: true
 ```
 
@@ -422,4 +493,4 @@ results = scan_model_directory_or_file("path/to/custom_model.mymodel")
    Info: Detected safetensors format in .bin file
    ```
 
-   Note: ModelAudit automatically detects the actual format of `.bin` files and applies the appropriate scanner. Supported formats include pickle, SafeTensors, ONNX, and raw PyTorch tensors. The enhanced binary scanner also detects embedded executables with improved PE file detection.
+   Note: ModelAudit automatically detects the actual format of `.bin` files and applies the appropriate scanner. Supported formats include pickle, SafeTensors, ONNX, and raw tensor data. The binary scanner also detects embedded executables with PE file detection.
