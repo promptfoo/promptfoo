@@ -370,7 +370,14 @@ export default function Purpose({ onNext }: PromptsProps) {
                   Auto-Discovery
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Get started using 1-click discovery of your target's usage details.
+                  Get started using 1-click discovery of your target's usage details.{' '}
+                  <a
+                    href="https://promptfoo.dev/docs/red-team/discovery"
+                    target="_blank"
+                    style={{ color: 'inherit', textDecoration: 'underline' }}
+                  >
+                    Learn more
+                  </a>
                 </Typography>
                 <Button
                   variant="contained"
@@ -456,7 +463,15 @@ export default function Purpose({ onNext }: PromptsProps) {
                 The quality and specificity of your responses directly determines how targeted and
                 realistic the generated attacks will be. Detailed information leads to{' '}
                 <strong>significantly</strong> better security testing and{' '}
-                <strong>more accurate</strong> grading of attack effectiveness.
+                <strong>more accurate</strong> grading of attack effectiveness.{' '}
+                <a
+                  href="https://promptfoo.dev/docs/red-team/setup/#application-details"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: 'inherit', textDecoration: 'underline' }}
+                >
+                  View setup guide
+                </a>
               </Typography>
 
               <Box sx={{}}>
