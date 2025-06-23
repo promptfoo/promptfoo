@@ -12,7 +12,12 @@ npx promptfoo@latest init --example openai-responses
 
 ### Basic Responses API (`promptfooconfig.yaml`)
 
-Basic example showing how to use the Responses API with different models and configurations.
+Basic example showing how to use the Responses API with different capabilities:
+
+- **Structured Output**: Extract structured information using JSON schema
+- **Image Generation**: Generate images using image generation tools
+
+This example demonstrates two key features of the Responses API side by side.
 
 ### External Response Format (`promptfooconfig.external-format.yaml`)
 
