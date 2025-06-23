@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "promptfoo": {
-      "command": "/Users/guangshuozang/Dev-Promptfoo/subfolder/promptfoo-cloud/promptfoo/mcp-server.sh",
+      "command": "./mcp-server.sh",
       "args": ["mcp", "--transport", "stdio"],
       "description": "Promptfoo MCP server for LLM evaluation and testing"
     }

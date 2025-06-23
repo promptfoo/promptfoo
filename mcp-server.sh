@@ -5,4 +5,4 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Run the MCP server from the correct directory
 cd "$SCRIPT_DIR"
-exec node dist/src/main.js "$@"
+exec npx ts-node --transpileOnly src/main.ts "$@"
