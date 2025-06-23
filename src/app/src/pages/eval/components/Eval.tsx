@@ -7,7 +7,7 @@ import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
-import type { SharedResults, ResultLightweightWithLabel } from '@promptfoo/types';
+import type { ResultLightweightWithLabel } from '@promptfoo/types';
 import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
@@ -19,14 +19,12 @@ interface EvalOptions {
    * ID of a specific eval to load.
    */
   fetchId: string | null;
-  preloadedData?: SharedResults;
   recentEvals?: ResultLightweightWithLabel[];
   defaultEvalId?: string;
 }
 
 export default function Eval({
   fetchId,
-  preloadedData,
   recentEvals: recentEvalsProp,
   defaultEvalId: defaultEvalIdProp,
 }: EvalOptions) {
@@ -124,12 +122,6 @@ export default function Eval({
         }
       };
       run();
-    } else if (preloadedData) {
-      console.log('Eval init: Using preloaded data');
-      setTableFromResultsFile(preloadedData.data);
-      setConfig(preloadedData.data.config);
-      setAuthor(preloadedData.data.author || null);
-      setLoaded(true);
     } else if (IS_RUNNING_LOCALLY) {
       console.log('Eval init: Using local server websocket');
 
@@ -207,7 +199,6 @@ export default function Eval({
     setDefaultEvalId,
     setInComparisonMode,
     setComparisonEvalIds,
-    preloadedData,
   ]);
 
   /**
