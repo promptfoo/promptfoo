@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { callApi } from '@app/utils/api';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -18,16 +19,23 @@ export default function TraceView({ evaluationId, testCaseId }: TraceViewProps) 
   useEffect(() => {
     const fetchTraces = async () => {
       if (!evaluationId) {
+        console.log('[TraceView] No evaluation ID provided');
         setLoading(false);
         return;
       }
 
+      console.log('[TraceView] Fetching traces for evaluation:', evaluationId);
+
       try {
         setLoading(true);
         setError(null);
-        const response = await fetch(`/api/traces/evaluation/${evaluationId}`);
+        const response = await callApi(`/traces/evaluation/${evaluationId}`);
+        console.log('[TraceView] Response status:', response.status);
+        console.log('[TraceView] Response headers:', response.headers.get('content-type'));
 
         if (!response.ok) {
+          const text = await response.text();
+          console.error('[TraceView] Error response:', text);
           throw new Error(`Failed to fetch traces: ${response.statusText}`);
         }
 

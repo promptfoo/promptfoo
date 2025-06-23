@@ -46,6 +46,9 @@ import { transform, type TransformContext, TransformInputType } from './util/tra
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
 
+// Track whether OTLP receiver has been started
+let otlpReceiverStarted = false;
+
 /**
  * Update token usage metrics with assertion token usage
  */
@@ -266,6 +269,7 @@ export async function runEval({
 
       if (tracingEnabled) {
         logger.debug('[Evaluator] Tracing enabled for test case');
+        logger.debug(`[Evaluator] Test metadata: ${JSON.stringify(test.metadata)}`);
       }
 
       if (tracingEnabled) {
@@ -284,10 +288,15 @@ export async function runEval({
         traceparent = `${version}-${traceId}-${spanId}-${traceFlags}`;
         logger.debug(`[Evaluator] Generated trace context: traceId=${traceId}, spanId=${spanId}`);
 
-        // Get evaluation ID from test metadata or generate one
-        evaluationId =
-          test.metadata?.evaluationId || evaluateOptions?.eventSource || `eval-${Date.now()}`;
-        testCaseId = (test as any).id || `${testIdx}-${promptIdx}`;
+        // Get evaluation ID from test metadata (set by Evaluator class)
+        evaluationId = test.metadata?.evaluationId || evaluateOptions?.eventSource;
+        if (!evaluationId) {
+          logger.warn(
+            '[Evaluator] No evaluation ID found in test metadata or evaluateOptions, trace will not be linked to evaluation',
+          );
+          evaluationId = `eval-${Date.now()}`;
+        }
+        testCaseId = test.metadata?.testCaseId || (test as any).id || `${testIdx}-${promptIdx}`;
 
         // Store trace association in trace store
         try {
@@ -626,7 +635,12 @@ class Evaluator {
     const processedIndices = new Set<number>();
 
     // Start OTLP receiver if tracing is enabled
-    if (testSuite.tracing?.enabled && testSuite.tracing?.otlp?.http?.enabled) {
+    logger.debug(`[Evaluator] Checking tracing config: ${JSON.stringify(testSuite.tracing)}`);
+    if (
+      testSuite.tracing?.enabled &&
+      testSuite.tracing?.otlp?.http?.enabled &&
+      !otlpReceiverStarted
+    ) {
       try {
         logger.debug('[Evaluator] Tracing configuration detected, starting OTLP receiver');
         const { startOTLPReceiver } = await import('./tracing/otlpReceiver');
@@ -634,12 +648,21 @@ class Evaluator {
         const host = testSuite.tracing.otlp.http.host || '0.0.0.0';
         logger.debug(`[Evaluator] Starting OTLP receiver on ${host}:${port}`);
         startOTLPReceiver(port, host);
+        otlpReceiverStarted = true;
         logger.info(`[Evaluator] Started OTLP receiver on port ${port} for tracing`);
       } catch (error) {
         logger.error(`[Evaluator] Failed to start OTLP receiver: ${error}`);
       }
     } else {
-      logger.debug('[Evaluator] Tracing not enabled or OTLP HTTP receiver not configured');
+      if (otlpReceiverStarted) {
+        logger.debug('[Evaluator] OTLP receiver already started, skipping initialization');
+      } else {
+        logger.debug('[Evaluator] Tracing not enabled or OTLP HTTP receiver not configured');
+        logger.debug(`[Evaluator] tracing.enabled: ${testSuite.tracing?.enabled}`);
+        logger.debug(
+          `[Evaluator] tracing.otlp.http.enabled: ${testSuite.tracing?.otlp?.http?.enabled}`,
+        );
+      }
     }
 
     if (maxEvalTimeMs > 0) {
@@ -921,7 +944,8 @@ class Evaluator {
                   options: testCase.options,
                   metadata: {
                     ...testCase.metadata,
-                    tracingEnabled: testSuite.tracing?.enabled || false,
+                    tracingEnabled:
+                      testCase.metadata?.tracingEnabled ?? testSuite.tracing?.enabled ?? false,
                     evaluationId: this.evalRecord.id,
                   },
                 },

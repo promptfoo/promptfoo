@@ -100,7 +100,7 @@ export PROMPTFOO_TRACING_ENABLED=true
 
 ### JavaScript Provider with RAG Pipeline
 
-See `provider-with-tracing.js` for a complete example of a RAG provider with:
+See `provider-with-tracing-fixed.js` for a complete example of a RAG provider with:
 
 - Document retrieval tracing
 - Context preparation spans
@@ -160,6 +160,24 @@ Traces are stored in SQLite and linked to evaluations. The storage includes:
 5. **Keep span names consistent** across evaluations
 
 ## Troubleshooting
+
+### Context Naming Conflicts
+
+If you see errors like `context.active is not a function`, this is because the OpenTelemetry `context` API conflicts with Promptfoo's context parameter. To fix this:
+
+1. Import OpenTelemetry context with an alias:
+
+   ```javascript
+   const { context: otelContext } = require('@opentelemetry/api');
+   ```
+
+2. Use different parameter names for Promptfoo context:
+   ```javascript
+   async callApi(prompt, promptfooContext) {
+     // Use promptfooContext for Promptfoo's context
+     // Use otelContext for OpenTelemetry's context API
+   }
+   ```
 
 ### Traces Not Appearing
 

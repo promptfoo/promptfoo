@@ -1,7 +1,7 @@
 description: Test trace UI visualization
 
 providers:
-  - file://provider-with-tracing.js
+  - file://provider-with-tracing-fixed.js
 
 prompts:
   - 'Explain how {{topic}} works in simple terms'

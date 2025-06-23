@@ -71,17 +71,19 @@ class RagProviderWithTracing {
   }
 
   // Main API call function
-  async callApi(prompt, context) {
+  async callApi(prompt, promptfooContext) {
     // Check if we have trace context from Promptfoo
-    if (context?.traceparent) {
+    if (promptfooContext?.traceparent) {
       // Parse the W3C trace context
-      const matches = context.traceparent.match(/^(\d{2})-([a-f0-9]{32})-([a-f0-9]{16})-(\d{2})$/);
+      const matches = promptfooContext.traceparent.match(
+        /^(\d{2})-([a-f0-9]{32})-([a-f0-9]{16})-(\d{2})$/,
+      );
 
       if (matches) {
         const [, version, traceId, parentId, traceFlags] = matches;
 
         // Create parent context from Promptfoo's trace
-        const parentCtx = trace.setSpanContext(context.ROOT_CONTEXT || context.active(), {
+        const parentCtx = trace.setSpanContext(context.active(), {
           traceId: traceId,
           spanId: parentId,
           traceFlags: parseInt(traceFlags, 16),
@@ -89,21 +91,21 @@ class RagProviderWithTracing {
         });
 
         // Run our operations within the parent context
-        return context.with(parentCtx, () => this._tracedCallApi(prompt, context));
+        return context.with(parentCtx, () => this._tracedCallApi(prompt, promptfooContext));
       }
     }
 
     // No trace context - run without tracing
-    return this._untracedCallApi(prompt, context);
+    return this._untracedCallApi(prompt, promptfooContext);
   }
 
   // Traced implementation
-  async _tracedCallApi(prompt, context) {
+  async _tracedCallApi(prompt, promptfooContext) {
     // Create main span for the RAG pipeline
     const span = tracer.startSpan('rag_pipeline', {
       attributes: {
-        'promptfoo.evaluation_id': context.evaluationId,
-        'promptfoo.test_case_id': context.testCaseId,
+        'promptfoo.evaluation_id': promptfooContext.evaluationId,
+        'promptfoo.test_case_id': promptfooContext.testCaseId,
         'prompt.length': prompt.length,
         'prompt.preview': prompt.substring(0, 50),
       },
@@ -226,7 +228,7 @@ class RagProviderWithTracing {
   }
 
   // Untraced implementation (fallback)
-  async _untracedCallApi(prompt, context) {
+  async _untracedCallApi(prompt, promptfooContext) {
     try {
       const documents = await mockVectorStore.search(prompt);
       const contextText = documents.map((doc) => doc.content).join('\n\n');
