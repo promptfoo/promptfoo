@@ -27,6 +27,7 @@ This PR enhances the Perplexity API integration with comprehensive support for a
 ## Examples
 
 Added multiple example configurations showcasing different features:
+
 - Basic model comparison
 - Structured output with JSON schema and regex
 - Advanced search filters (date, location)
@@ -71,6 +72,7 @@ This PR adds a global `--env-file` (and its alias `--env-path`) option to all co
 ## Testing
 
 Added comprehensive tests in `test/main.test.ts` that verify:
+
 - The option is added to commands that don't have it
 - The option is not duplicated if it already exists
 - The option is added to all subcommands recursively
@@ -83,7 +85,7 @@ This PR adds support for the [Model Context Protocol (MCP)](https://modelcontext
 ## Features
 
 - **New CLI Command**: Added `promptfoo mcp` command to start an MCP server
-- **Dual Transport Support**: 
+- **Dual Transport Support**:
   - HTTP/SSE transport for remote access (default)
   - stdio transport for direct process communication (used by Cursor)
 - **Tools Implemented**:
@@ -117,12 +119,7 @@ Create a `.cursor/mcp.json` file with:
   "mcpServers": {
     "promptfoo": {
       "command": "npx",
-      "args": [
-        "promptfoo",
-        "mcp",
-        "--transport",
-        "stdio"
-      ],
+      "args": ["promptfoo", "mcp", "--transport", "stdio"],
       "description": "Promptfoo MCP server for LLM evaluation and testing context",
       "env": {
         "PROMPTFOO_LOG_LEVEL": "debug",
@@ -149,4 +146,5 @@ Create a `.cursor/mcp.json` file with:
 ## Related Issues
 
 <!-- Reference any related issues here -->
+
 Closes #issue-number-here

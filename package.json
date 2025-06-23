@@ -174,7 +174,7 @@
     "@anthropic-ai/sdk": "^0.54.0",
     "@apidevtools/json-schema-ref-parser": "^12.0.2",
     "@googleapis/sheets": "^9.8.0",
-    "@modelcontextprotocol/sdk": "^1.12.1",
+    "@modelcontextprotocol/sdk": "^1.13.0",
     "@types/ws": "^8.18.1",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
