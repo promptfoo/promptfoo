@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: OpenAI Image Generation Examples
+
+prompts:
+  - 'Create an image of {{scene}}'
+  - 'Generate a high-quality image showing {{scene}} with {{style}} style'
+
+providers:
+  - id: openai:image:dall-e-3
+    label: 'DALL-E 3'
+    config:
+      size: '1024x1024'
+      quality: 'standard'
+
+tests:
+  - description: 'Nature scene'
+    vars:
+      scene: 'a serene mountain lake at sunset'
+      style: 'photorealistic'
+
+  - description: 'Fantasy scene'
+    vars:
+      scene: 'a magical forest with glowing mushrooms'
+      style: 'fantasy art' 
