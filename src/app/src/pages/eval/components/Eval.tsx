@@ -7,7 +7,7 @@ import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
-import type { ResultLightweightWithLabel } from '@promptfoo/types';
+import type { ResultLightweightWithLabel, ResultsFile } from '@promptfoo/types';
 import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
@@ -124,8 +124,7 @@ export default function Eval({ fetchId }: EvalOptions) {
 
       const socket = SocketIOClient(apiBaseUrl || '');
 
-      socket.on('init', (data) => {
-        console.log('Initialized socket connection', data);
+      async function onSocketEvent(data: ResultsFile) {
         // NOTE: Constructing the table is a time-expensive operation; therefore `setLoaded(true)` is not called
         // until after the table is constructed. Otherwise, `loaded` will be true before the table is defined resulting
         // in a race condition.
@@ -145,15 +144,24 @@ export default function Eval({ fetchId }: EvalOptions) {
         console.log('Received data update', data);
         setTableFromResultsFile(data);
         setConfig(data.config);
-        setAuthor(data.author || null);
-        fetchRecentFileEvals().then((newRecentEvals) => {
+        setAuthor(data.author ?? null);
+        const newRecentEvals = await fetchRecentFileEvals();
           if (newRecentEvals && newRecentEvals.length > 0) {
             const newId = newRecentEvals[0].evalId;
             setDefaultEvalId(newId);
             setEvalId(newId);
             loadEvalById(newId);
           }
-        });
+      }
+
+      socket
+        .on('init', async (data) => {
+          console.log('Initialized socket connection', data);
+          await onSocketEvent(data);
+        })
+        .on('update', async (data) => {
+          console.log('Received data update', data);
+          await onSocketEvent(data);
       });
 
       return () => {
