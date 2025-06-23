@@ -1,7 +1,7 @@
 description: Test trace UI visualization
 
 providers:
-  - file://provider-with-tracing-fixed.js
+  - file://provider-simple-traced.js
 
 prompts:
   - 'Explain how {{topic}} works in simple terms'
@@ -19,10 +19,10 @@ tests:
       tracingEnabled: true
       testCaseId: 'test-case-2'
 
+# Tracing configuration
 tracing:
   enabled: true
   otlp:
     http:
       enabled: true
       port: 4318
-      host: 'localhost'

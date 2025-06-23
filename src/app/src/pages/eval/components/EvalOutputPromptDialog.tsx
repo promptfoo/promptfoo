@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { ErrorBoundary } from 'react-error-boundary';
 import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
@@ -473,7 +475,9 @@ export default function EvalOutputPromptDialog({
             <Typography variant="subtitle1" sx={subtitleTypographySx}>
               Trace Timeline
             </Typography>
-            <TraceView evaluationId={evaluationId} testCaseId={testCaseId} />
+            <ErrorBoundary fallback={<Alert severity="error">Error loading traces</Alert>}>
+              <TraceView evaluationId={evaluationId} testCaseId={testCaseId} />
+            </ErrorBoundary>
           </Box>
         )}
         {(metadata?.redteamHistory || metadata?.redteamTreeHistory) && (

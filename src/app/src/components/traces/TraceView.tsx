@@ -19,28 +19,15 @@ export default function TraceView({ evaluationId, testCaseId }: TraceViewProps) 
   useEffect(() => {
     const fetchTraces = async () => {
       if (!evaluationId) {
-        console.log('[TraceView] No evaluation ID provided');
         setLoading(false);
         return;
       }
 
-      console.log('[TraceView] Fetching traces for evaluation:', evaluationId);
-
       try {
         setLoading(true);
         setError(null);
-        const response = await callApi(`/traces/evaluation/${evaluationId}`);
-        console.log('[TraceView] Response status:', response.status);
-        console.log('[TraceView] Response headers:', response.headers.get('content-type'));
-
-        if (!response.ok) {
-          const text = await response.text();
-          console.error('[TraceView] Error response:', text);
-          throw new Error(`Failed to fetch traces: ${response.statusText}`);
-        }
-
-        const data = await response.json();
-        setTraces(data.traces || []);
+        const data = await callApi(`/traces/evaluation/${evaluationId}`);
+        setTraces((data as any).traces || []);
       } catch (err) {
         console.error('Error fetching traces:', err);
         setError(err instanceof Error ? err.message : 'Failed to fetch traces');
@@ -97,10 +84,31 @@ export default function TraceView({ evaluationId, testCaseId }: TraceViewProps) 
     );
   }
 
+  // If we have traces but no spans, show a helpful message
+  const hasAnySpans = filteredTraces.some((trace) => trace.spans && trace.spans.length > 0);
+
+  if (!hasAnySpans) {
+    return (
+      <Box sx={{ p: 2 }}>
+        <Alert severity="info">
+          Traces were created but no spans were received. Make sure your provider is:
+          <ul style={{ marginTop: 8 }}>
+            <li>Configured to send traces to the OTLP endpoint (http://localhost:4318)</li>
+            <li>Creating spans within the trace context</li>
+            <li>Properly exporting spans before the evaluation completes</li>
+          </ul>
+        </Alert>
+      </Box>
+    );
+  }
+
   return (
     <Box>
       {filteredTraces.map((trace, index) => (
-        <Box key={trace.traceId} sx={{ mb: index < filteredTraces.length - 1 ? 3 : 0 }}>
+        <Box
+          key={`trace-${trace.traceId}-${index}`}
+          sx={{ mb: index < filteredTraces.length - 1 ? 3 : 0 }}
+        >
           <TraceTimeline trace={trace} />
         </Box>
       ))}

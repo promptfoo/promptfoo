@@ -13,11 +13,12 @@ Promptfoo's OpenTelemetry integration allows you to:
 
 ## How It Works
 
-1. **Promptfoo generates a trace context** for each test case evaluation
-2. **The trace context is passed to providers** via the `traceparent` field
-3. **Providers create child spans** using standard OpenTelemetry SDKs
-4. **Traces are sent to Promptfoo's OTLP endpoint** or any other collector
-5. **Promptfoo correlates traces** with evaluations for analysis
+1. **OTLP receiver starts synchronously** - Promptfoo ensures the receiver is ready before evaluations begin
+2. **Promptfoo generates a trace context** for each test case evaluation
+3. **The trace context is passed to providers** via the `traceparent` field
+4. **Providers create child spans** using standard OpenTelemetry SDKs
+5. **Traces are sent to Promptfoo's OTLP endpoint** or any other collector
+6. **Promptfoo correlates traces** with evaluations for analysis
 
 ## Quick Start
 
@@ -98,23 +99,33 @@ export PROMPTFOO_TRACING_ENABLED=true
 
 ## Examples
 
-### JavaScript Provider with RAG Pipeline
+### JavaScript Provider Examples
 
-See `provider-with-tracing-fixed.js` for a complete example of a RAG provider with:
+#### Simple Traced Provider
+
+See `provider-simple-traced.js` for a clean example showing:
+
+- Basic span creation with proper parent context
+- Immediate span export using SimpleSpanProcessor
+- Error handling and status codes
+- Event logging and attributes
+
+#### Full RAG Provider
+
+See `provider-with-tracing.js` for a complete RAG pipeline example with:
 
 - Document retrieval tracing
 - Context preparation spans
 - LLM generation monitoring
-- Error handling and status codes
+- Hierarchical span structure
 
-### TypeScript Simple Provider
+### TypeScript Provider
 
-See `provider-simple.ts` for a minimal TypeScript example showing:
+See `provider-simple.ts` for a TypeScript example showing:
 
 - Type-safe integration
-- Basic span creation
-- Event logging
-- Attribute setting
+- Helper functions for trace context
+- Clean async/await patterns
 
 ## Viewing Traces
 

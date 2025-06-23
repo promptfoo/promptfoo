@@ -51,6 +51,7 @@ interface OTLPTraceRequest {
 export class OTLPReceiver {
   private app: express.Application;
   private traceStore = getTraceStore();
+  private port?: number;
 
   constructor() {
     this.app = express();
@@ -126,6 +127,16 @@ export class OTLPReceiver {
         service: 'promptfoo-otlp-receiver',
         version: '1.0.0',
         supported_formats: ['json'], // 'protobuf' will be added in phase 2
+      });
+    });
+
+    // Debug endpoint to check receiver status
+    this.app.get('/debug/status', async (req, res) => {
+      res.status(200).json({
+        status: 'running',
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString(),
+        port: this.port || 4318,
       });
     });
   }
@@ -237,11 +248,21 @@ export class OTLPReceiver {
     }
   }
 
-  listen(port: number = 4318, host: string = '0.0.0.0'): void {
+  listen(port: number = 4318, host: string = '0.0.0.0'): Promise<void> {
+    this.port = port;
     logger.debug(`[OtlpReceiver] Starting receiver on ${host}:${port}`);
-    this.app.listen(port, host, () => {
-      logger.info(`[OtlpReceiver] Listening on http://${host}:${port}`);
-      logger.debug('[OtlpReceiver] Receiver fully initialized and ready to accept traces');
+
+    return new Promise((resolve, reject) => {
+      const server = this.app.listen(port, host, () => {
+        logger.info(`[OtlpReceiver] Listening on http://${host}:${port}`);
+        logger.debug('[OtlpReceiver] Receiver fully initialized and ready to accept traces');
+        resolve();
+      });
+
+      server.on('error', (error) => {
+        logger.error(`[OtlpReceiver] Failed to start: ${error}`);
+        reject(error);
+      });
     });
   }
 
@@ -260,8 +281,8 @@ export function getOTLPReceiver(): OTLPReceiver {
   return otlpReceiver;
 }
 
-export function startOTLPReceiver(port?: number, host?: string): void {
+export async function startOTLPReceiver(port?: number, host?: string): Promise<void> {
   logger.debug('[OtlpReceiver] Starting receiver through startOTLPReceiver function');
   const receiver = getOTLPReceiver();
-  receiver.listen(port, host);
+  await receiver.listen(port, host);
 }

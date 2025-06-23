@@ -647,9 +647,9 @@ class Evaluator {
         const port = testSuite.tracing.otlp.http.port || 4318;
         const host = testSuite.tracing.otlp.http.host || '0.0.0.0';
         logger.debug(`[Evaluator] Starting OTLP receiver on ${host}:${port}`);
-        startOTLPReceiver(port, host);
+        await startOTLPReceiver(port, host);
         otlpReceiverStarted = true;
-        logger.info(`[Evaluator] Started OTLP receiver on port ${port} for tracing`);
+        logger.info(`[Evaluator] OTLP receiver successfully started on port ${port} for tracing`);
       } catch (error) {
         logger.error(`[Evaluator] Failed to start OTLP receiver: ${error}`);
       }
