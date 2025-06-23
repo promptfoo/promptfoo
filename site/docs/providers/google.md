@@ -102,12 +102,29 @@ Safety settings can be configured to control content filtering:
 
 ```yaml
 providers:
-  - id: google:gemini-1.5-pro
+  - id: google:gemini-2.5-pro
     config:
       safetySettings:
         - category: HARM_CATEGORY_DANGEROUS_CONTENT
           probability: BLOCK_ONLY_HIGH # or other thresholds
 ```
+
+### System Instructions
+
+Configure system-level instructions for the model:
+
+```yaml
+providers:
+  - id: google:gemini-2.5-pro
+    config:
+      # Direct text
+      systemInstruction: 'You are a helpful assistant'
+
+      # Or load from file
+      systemInstruction: file://system-instruction.txt
+```
+
+System instructions support Nunjucks templating and can be loaded from external files for better organization and reusability.
 
 For more details on capabilities and configuration options, see the [Gemini API documentation](https://ai.google.dev/docs).
 
@@ -256,6 +273,8 @@ providers:
         function_calling_config:
           mode: 'auto' # or 'none' to disable
 ```
+
+For practical examples of function calling with Google AI models, see the [google-vertex-tools example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-vertex-tools) which demonstrates both basic tool declarations and callback execution patterns that work with Google AI Studio models.
 
 ### Structured Output
 

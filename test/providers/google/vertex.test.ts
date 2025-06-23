@@ -1011,6 +1011,60 @@ describe('VertexChatProvider.callLlamaApi', () => {
     expect(response.error).toContain('API call error:');
     expect(response.error).toContain('Invalid request');
   });
+
+  it('should load system instructions from file', async () => {
+    const mockSystemInstruction = 'You are a helpful assistant from a file.';
+
+    // Mock file system operations
+    jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+    jest.spyOn(fs, 'readFileSync').mockReturnValue(mockSystemInstruction);
+
+    provider = new VertexChatProvider('gemini-1.5-flash', {
+      config: {
+        systemInstruction: 'file://system-instruction.txt',
+      },
+    });
+
+    const mockResponse = {
+      data: [
+        {
+          candidates: [{ content: { parts: [{ text: 'response text' }] } }],
+          usageMetadata: {
+            totalTokenCount: 10,
+            promptTokenCount: 5,
+            candidatesTokenCount: 5,
+          },
+        },
+      ],
+    };
+
+    const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+
+    jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: {
+        request: mockRequest,
+      } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+
+    await provider.callGeminiApi('test prompt');
+
+    expect(mockRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          systemInstruction: {
+            parts: [{ text: mockSystemInstruction }],
+          },
+        }),
+      }),
+    );
+
+    // Verify file was read
+    expect(fs.readFileSync).toHaveBeenCalledWith(
+      expect.stringContaining('system-instruction.txt'),
+      'utf8',
+    );
+  });
 });
 
 describe('VertexChatProvider.callClaudeApi parameter naming', () => {
