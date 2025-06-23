@@ -128,9 +128,6 @@ export default function Eval({ fetchId }: EvalOptions) {
        * Populates the table store with the most recent eval result.
        */
       async function handleResultsFile(data: ResultsFile) {
-        // NOTE: Constructing the table is a time-expensive operation; therefore `setLoaded(true)` is not called
-        // until after the table is constructed. Otherwise, `loaded` will be true before the table is defined resulting
-        // in a race condition.
         setTableFromResultsFile(data);
         setConfig(data.config);
         setAuthor(data.author ?? null);
@@ -206,7 +203,11 @@ export default function Eval({ fetchId }: EvalOptions) {
   }, [config, evalId]);
 
   /**
-   * If loading is waiting for the table to be populated, set loaded to true.
+   * If and when a table is available, set loaded to true.
+   *
+   * Constructing the table is a time-expensive operation; therefore `setLoaded(true)` is not called
+   * immediately after `setTableFromResultsFile` is called. Otherwise, `loaded` will be true before
+   * the table is defined resulting in a race condition.
    */
   useEffect(() => {
     if (table && !loaded) {
