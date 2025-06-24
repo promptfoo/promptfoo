@@ -84,9 +84,9 @@ class RagProviderWithTracing {
 
         // Create parent context from Promptfoo's trace
         const parentCtx = trace.setSpanContext(context.active(), {
-          traceId: traceId,
+          traceId,
           spanId: parentId,
-          traceFlags: parseInt(traceFlags, 16),
+          traceFlags: Number.parseInt(traceFlags, 16),
           isRemote: true,
         });
 
