@@ -104,7 +104,7 @@ class SimpleTracedProvider {
         const parentCtx = trace.setSpanContext(context.active(), {
           traceId,
           spanId: parentId,
-          traceFlags: parseInt(traceFlags, 16),
+          traceFlags: Number.parseInt(traceFlags, 16),
           isRemote: true,
         });
 

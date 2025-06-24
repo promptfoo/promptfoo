@@ -71,25 +71,29 @@ export class OTLPReceiver {
   private setupRoutes(): void {
     // OTLP HTTP endpoint for traces
     this.app.post('/v1/traces', async (req, res) => {
+      const contentType = req.headers['content-type'];
       logger.debug(
-        `[OtlpReceiver] Received trace request: ${req.headers['content-type']} with ${JSON.stringify(req.body).length} bytes`,
+        `[OtlpReceiver] Received trace request: ${contentType} with body length: ${req.body ? JSON.stringify(req.body).length : 0} bytes`,
       );
+
+      // Check content type first to avoid processing unsupported types
+      if (contentType === 'application/x-protobuf') {
+        // TODO: Implement protobuf parsing in phase 2
+        logger.warn('Protobuf format not yet supported, please use JSON');
+        res.status(415).json({ error: 'Protobuf format not yet supported' });
+        return;
+      } else if (contentType !== 'application/json') {
+        res.status(415).json({ error: 'Unsupported content type' });
+        return;
+      }
+
       try {
         let traces: ParsedTrace[] = [];
 
-        if (req.headers['content-type'] === 'application/json') {
-          logger.debug('[OtlpReceiver] Parsing OTLP JSON request');
-          traces = this.parseOTLPJSONRequest(req.body);
-          logger.debug(`[OtlpReceiver] Parsed ${traces.length} traces from request`);
-        } else if (req.headers['content-type'] === 'application/x-protobuf') {
-          // TODO: Implement protobuf parsing in phase 2
-          logger.warn('Protobuf format not yet supported, please use JSON');
-          res.status(415).json({ error: 'Protobuf format not yet supported' });
-          return;
-        } else {
-          res.status(415).json({ error: 'Unsupported content type' });
-          return;
-        }
+        // At this point we know it's application/json
+        logger.debug('[OtlpReceiver] Parsing OTLP JSON request');
+        traces = this.parseOTLPJSONRequest(req.body);
+        logger.debug(`[OtlpReceiver] Parsed ${traces.length} traces from request`);
 
         // Group spans by trace ID
         const spansByTrace = new Map<string, SpanData[]>();

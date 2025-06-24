@@ -1,19 +1,29 @@
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
-import { lt } from 'drizzle-orm';
-import { TraceStore } from '../../src/tracing/store';
 
-// Mock crypto before importing TraceStore
-const mockUUID = jest.fn(() => 'test-uuid');
-jest.mock('crypto', () => ({
+// Mock crypto module BEFORE importing TraceStore
+const mockRandomUUID = jest.fn(() => 'test-uuid');
+jest.doMock('crypto', () => ({
   ...(jest.requireActual('crypto') as any),
-  randomUUID: () => 'test-uuid',
+  randomUUID: mockRandomUUID,
 }));
 
+// Dynamic import after mocking
+let TraceStore: any;
+
 describe('TraceStore', () => {
-  let traceStore: TraceStore;
+  let traceStore: any;
   let mockDb: any;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    // Reset the UUID mock
+    mockRandomUUID.mockReturnValue('test-uuid');
+
+    // Dynamic import after mocking
+    if (!TraceStore) {
+      const module = await import('../../src/tracing/store');
+      TraceStore = module.TraceStore;
+    }
+
     // Create mock database methods that properly chain
     const mockInsertChain = {
       values: jest.fn(() => Promise.resolve(undefined)),
@@ -54,7 +64,7 @@ describe('TraceStore', () => {
 
       await traceStore.createTrace(traceData);
 
-      expect(mockDb.insert).toHaveBeenCalled();
+      expect(mockDb.insert).toHaveBeenCalledWith(expect.anything());
       expect(mockDb.insert().values).toHaveBeenCalledWith({
         id: 'test-uuid',
         traceId: 'test-trace-id',
@@ -108,11 +118,11 @@ describe('TraceStore', () => {
 
       await traceStore.addSpans('test-trace-id', spans);
 
-      expect(mockDb.select).toHaveBeenCalled();
-      expect(mockDb.select().from).toHaveBeenCalled();
-      expect(mockDb.select().from().where).toHaveBeenCalled();
+      expect(mockDb.select).toHaveBeenCalledWith();
+      expect(mockDb.select().from).toHaveBeenCalledWith(expect.anything());
+      expect(mockDb.select().from().where).toHaveBeenCalledWith(expect.anything());
 
-      expect(mockDb.insert).toHaveBeenCalled();
+      expect(mockDb.insert).toHaveBeenCalledWith(expect.anything());
       expect(mockDb.insert().values).toHaveBeenCalledWith([
         {
           id: 'test-uuid',
@@ -156,7 +166,7 @@ describe('TraceStore', () => {
       await traceStore.addSpans('non-existent-trace', spans);
 
       // Should check for trace existence
-      expect(mockDb.select).toHaveBeenCalled();
+      expect(mockDb.select).toHaveBeenCalledWith();
 
       // Should not insert spans
       expect(mockDb.insert).not.toHaveBeenCalled();
@@ -201,11 +211,13 @@ describe('TraceStore', () => {
         'trace-2': [{ id: '3', traceId: 'trace-2', spanId: 'span-2-1' }],
       };
 
-      // Mock trace query
-      mockDb.select().from().where.mockResolvedValueOnce(mockTraces);
+      // Set up the main traces query
+      const tracesSelectChain = {
+        from: jest.fn().mockReturnThis(),
+        where: jest.fn(() => Promise.resolve(mockTraces)),
+      };
 
-      // Mock span queries
-      // Reset and set up new select mock chains for spans
+      // Set up span queries for each trace
       const spanQuery1 = {
         from: jest.fn().mockReturnThis(),
         where: jest.fn(() => Promise.resolve(mockSpans['trace-1'])),
@@ -214,7 +226,14 @@ describe('TraceStore', () => {
         from: jest.fn().mockReturnThis(),
         where: jest.fn(() => Promise.resolve(mockSpans['trace-2'])),
       };
-      mockDb.select = jest.fn().mockReturnValueOnce(spanQuery1).mockReturnValueOnce(spanQuery2);
+
+      // Mock the select calls in sequence: first for traces, then for each trace's spans
+      jest
+        .spyOn(mockDb, 'select')
+        .mockImplementation(() => ({}))
+        .mockReturnValueOnce(tracesSelectChain)
+        .mockReturnValueOnce(spanQuery1)
+        .mockReturnValueOnce(spanQuery2);
 
       const result = await traceStore.getTracesByEvaluation('eval-1');
 
@@ -259,8 +278,9 @@ describe('TraceStore', () => {
         where: jest.fn(() => Promise.resolve(mockSpans)),
       };
 
-      mockDb.select = jest
-        .fn()
+      jest
+        .spyOn(mockDb, 'select')
+        .mockImplementation(() => ({}))
         .mockReturnValueOnce(traceSelectChain)
         .mockReturnValueOnce(spanQuery);
 
@@ -279,7 +299,7 @@ describe('TraceStore', () => {
         where: jest.fn().mockReturnThis(),
         limit: jest.fn(() => Promise.resolve([])),
       };
-      mockDb.select = jest.fn().mockReturnValue(traceSelectChain);
+      jest.spyOn(mockDb, 'select').mockImplementation(() => ({})).mockReturnValue(traceSelectChain);
 
       const result = await traceStore.getTrace('non-existent-trace');
 
@@ -293,8 +313,8 @@ describe('TraceStore', () => {
 
       await traceStore.deleteOldTraces(retentionDays);
 
-      expect(mockDb.delete).toHaveBeenCalled();
-      expect(mockDb.delete().where).toHaveBeenCalled();
+      expect(mockDb.delete).toHaveBeenCalledWith(expect.anything());
+      expect(mockDb.delete().where).toHaveBeenCalledWith(expect.anything());
     });
 
     it('should handle errors when deleting old traces', async () => {

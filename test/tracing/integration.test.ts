@@ -1,15 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
-import { evaluate } from '../../src/index';
-import type { EvaluateTestSuite, ProviderOptions, ApiProvider } from '../../src/types';
+import type { EvaluateTestSuite } from '../../src/types';
 
-// Mock traced provider
-class MockTracedProvider implements ApiProvider {
+// Define the mock provider class
+class MockTracedProviderInstance {
   id() {
     return 'mock-traced-provider';
   }
 
   async callApi(prompt: string, context: any) {
-    // Check for trace context
     if (context.traceparent) {
       return {
         output: `Traced response for: ${prompt}`,
@@ -20,49 +18,48 @@ class MockTracedProvider implements ApiProvider {
         },
       };
     }
-
     return {
       output: `Untraced response for: ${prompt}`,
     };
   }
 }
 
-// Mock loadApiProviders to return our mock provider
-jest.mock('../../src/providers/index', () => {
-  const actual = jest.requireActual('../../src/providers/index');
+const mockProvider = new MockTracedProviderInstance();
 
-  // Define the mock provider class inside the mock
-  class MockTracedProviderInstance {
-    id() {
-      return 'mock-traced-provider';
-    }
-
-    async callApi(prompt: string, context: any) {
-      if (context.traceparent) {
-        return {
-          output: `Traced response for: ${prompt}`,
-          metadata: {
-            traceparent: context.traceparent,
-            evaluationId: context.evaluationId,
-            testCaseId: context.testCaseId,
-          },
-        };
-      }
-      return {
-        output: `Untraced response for: ${prompt}`,
-      };
-    }
-  }
-
+// Mock providers using doMock
+jest.doMock('../../src/providers', () => {
+  const actual = jest.requireActual('../../src/providers');
   return {
     ...(actual as any),
-    loadApiProviders: jest.fn(async () => [new MockTracedProviderInstance()]),
+    loadApiProvider: jest.fn(async (providerPath: string) => {
+      if (providerPath === 'mock-traced-provider') {
+        return mockProvider;
+      }
+      // Fall back to original for other providers
+      return (actual as any).loadApiProvider(providerPath);
+    }),
+    loadApiProviders: jest.fn(async (providers: any) => {
+      if (Array.isArray(providers) && providers.includes('mock-traced-provider')) {
+        return [mockProvider];
+      }
+      if (providers === 'mock-traced-provider') {
+        return [mockProvider];
+      }
+      return [mockProvider]; // Default to mock for tests
+    }),
   };
 });
 
+// Dynamic import after mocking
+let evaluate: any;
+
 describe('OpenTelemetry Tracing Integration', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.clearAllMocks();
+    if (!evaluate) {
+      const module = await import('../../src/index');
+      evaluate = module.evaluate;
+    }
   });
 
   afterEach(() => {
@@ -160,9 +157,9 @@ describe('OpenTelemetry Tracing Integration', () => {
 
     // Collect all trace IDs
     const traceIds = results.results
-      .map((r) => r.response?.metadata?.traceparent)
+      .map((r: any) => r.response?.metadata?.traceparent)
       .filter(Boolean)
-      .map((tp) => tp!.split('-')[1]); // Extract trace ID from traceparent
+      .map((tp: string) => tp!.split('-')[1]); // Extract trace ID from traceparent
 
     // All trace IDs should be unique
     const uniqueTraceIds = new Set(traceIds);
