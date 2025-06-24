@@ -201,4 +201,13 @@ describe('extractGoalFromPrompt', () => {
       expect.any(Number),
     );
   });
+
+  it('should skip remote call when remote generation is disabled', async () => {
+    process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'true';
+
+    const result = await extractGoalFromPrompt('test prompt', 'test purpose');
+
+    expect(result).toBeNull();
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  });
 });
