@@ -53,7 +53,7 @@ describe('OTLPReceiver', () => {
 
     // Create receiver instance
     receiver = new OTLPReceiver();
-    
+
     // Manually override the traceStore property
     (receiver as any).traceStore = mockTraceStore;
   });

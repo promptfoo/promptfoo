@@ -299,7 +299,10 @@ describe('TraceStore', () => {
         where: jest.fn().mockReturnThis(),
         limit: jest.fn(() => Promise.resolve([])),
       };
-      jest.spyOn(mockDb, 'select').mockImplementation(() => ({})).mockReturnValue(traceSelectChain);
+      jest
+        .spyOn(mockDb, 'select')
+        .mockImplementation(() => ({}))
+        .mockReturnValue(traceSelectChain);
 
       const result = await traceStore.getTrace('non-existent-trace');
 

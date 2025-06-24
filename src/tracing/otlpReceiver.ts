@@ -64,7 +64,7 @@ export class OTLPReceiver {
 
   private setupMiddleware(): void {
     // Support both JSON and protobuf (for now, we'll focus on JSON)
-    this.app.use(express.json({ limit: '10mb' }));
+    this.app.use(express.json({ limit: '10mb', type: 'application/json' }));
     this.app.use(express.raw({ type: 'application/x-protobuf', limit: '10mb' }));
     logger.debug('[OtlpReceiver] Middleware configured for JSON and protobuf');
   }
@@ -81,7 +81,9 @@ export class OTLPReceiver {
 
         if (req.headers['content-type'] === 'application/json') {
           logger.debug('[OtlpReceiver] Parsing OTLP JSON request');
-          logger.debug(`[OtlpReceiver] Request body: ${JSON.stringify(req.body).substring(0, 500)}...`);
+          logger.debug(
+            `[OtlpReceiver] Request body: ${JSON.stringify(req.body).substring(0, 500)}...`,
+          );
           traces = this.parseOTLPJSONRequest(req.body);
           logger.debug(`[OtlpReceiver] Parsed ${traces.length} traces from request`);
         } else if (req.headers['content-type'] === 'application/x-protobuf') {
