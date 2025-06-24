@@ -324,7 +324,6 @@ export default class GoatProvider implements ApiProvider {
         logger.error(`Error in GOAT turn ${turn}: ${err}`);
       }
     }
-    delete context?.vars?.sessionId;
 
     return {
       output: getLastMessageContent(messages, 'assistant') || '',

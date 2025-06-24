@@ -518,7 +518,6 @@ export class CrescendoProvider implements ApiProvider {
 
     this.logChatHistory(this.targetConversationId);
     this.logChatHistory(this.redTeamingChatConversationId);
-    delete vars['sessionId'];
 
     // Determine final exit reason and result
     const hasSuccessfulAttacks = this.successfulAttacks.length > 0;
