@@ -4,7 +4,6 @@ import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider } from '../../types/providers';
-import { ellipsize } from '../../util/text';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 
 export type HyperbolicImageOptions = {
