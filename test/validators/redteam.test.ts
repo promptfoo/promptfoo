@@ -109,9 +109,7 @@ describe('RedteamConfigSchema', () => {
       plugins: ['invalid-plugin-name'],
     };
 
-    expect(() => RedteamConfigSchema.parse(config)).toThrow(
-      /Custom plugins must start with file:\/\//,
-    );
+    expect(() => RedteamConfigSchema.parse(config)).toThrow(/Invalid plugin id/);
   });
 
   it('should handle numTests override', () => {
