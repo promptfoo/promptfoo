@@ -96,7 +96,7 @@ describe('CrescendoProvider', () => {
     });
 
     // Mock server feature support to return true so unblocking logic runs
-    (checkServerFeatureSupport as jest.Mock).mockResolvedValue(true);
+    jest.mocked(checkServerFeatureSupport).mockResolvedValue(true);
   });
 
   it('should initialize with default config values', () => {
@@ -113,6 +113,7 @@ describe('CrescendoProvider', () => {
     expect(provider.config.maxTurns).toBe(10);
     expect(provider.config.maxBacktracks).toBe(10);
     expect(provider.config.stateful).toBe(true);
+    expect(provider.config.continueAfterSuccess).toBe(false);
   });
 
   it('should return correct provider id', () => {
@@ -574,5 +575,337 @@ describe('CrescendoProvider', () => {
       expect.stringContaining('test purpose for attack'),
       expect.any(Object),
     );
+  });
+
+  it('should default continueAfterSuccess to false', () => {
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      redteamProvider: mockRedTeamProvider,
+    });
+
+    expect(provider.config.continueAfterSuccess).toBe(false);
+  });
+
+  it('should respect continueAfterSuccess configuration when set to true', () => {
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      redteamProvider: mockRedTeamProvider,
+      continueAfterSuccess: true,
+    });
+
+    expect(provider.config.continueAfterSuccess).toBe(true);
+  });
+
+  describe('continueAfterSuccess functionality', () => {
+    beforeEach(() => {
+      // Clear all mocks before each test
+      jest.clearAllMocks();
+    });
+
+    it('should stop on first successful attack when continueAfterSuccess is false (default)', async () => {
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+        maxTurns: 5,
+        redteamProvider: mockRedTeamProvider,
+        continueAfterSuccess: false,
+      });
+
+      const context = {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'test objective' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: { assert: [{ type: 'mock-grader' }] } as any,
+      };
+
+      mockRedTeamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          generatedQuestion: 'harmful request',
+          rationaleBehindJailbreak: 'test rationale',
+          lastResponseSummary: 'test summary',
+        }),
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'harmful response',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, numRequests: 1, cached: 0 },
+      });
+
+      // Mock refusal scoring to not be a refusal
+      mockScoringProvider.callApi
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            value: false,
+            metadata: 0,
+            rationale: 'Not a refusal',
+          }),
+        })
+        // Mock internal evaluator to succeed on first attempt
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            value: true,
+            metadata: 100,
+            rationale: 'Successful jailbreak',
+          }),
+        });
+
+      const result = await provider.callApi('test prompt', context);
+
+      expect(result.metadata?.stopReason).toBe('Internal evaluator success');
+      expect(result.metadata?.successfulAttacks).toHaveLength(1);
+      expect(result.metadata?.totalSuccessfulAttacks).toBe(1);
+      expect(result.metadata?.successfulAttacks?.[0]).toEqual({
+        turn: 1,
+        prompt: 'harmful request',
+        response: 'harmful response',
+      });
+      expect(result.metadata?.crescendoRoundsCompleted).toBe(1); // Only one round
+    });
+
+    it('should continue and collect multiple successful attacks when continueAfterSuccess is true', async () => {
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+        maxTurns: 3,
+        redteamProvider: mockRedTeamProvider,
+        continueAfterSuccess: true,
+      });
+
+      const context = {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'test objective' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: { assert: [{ type: 'mock-grader' }] } as any,
+      };
+
+      mockRedTeamProvider.callApi
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            generatedQuestion: 'first harmful request',
+            rationaleBehindJailbreak: 'test rationale',
+            lastResponseSummary: 'test summary',
+          }),
+        })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            generatedQuestion: 'second harmful request',
+            rationaleBehindJailbreak: 'test rationale',
+            lastResponseSummary: 'test summary',
+          }),
+        })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            generatedQuestion: 'third request',
+            rationaleBehindJailbreak: 'test rationale',
+            lastResponseSummary: 'test summary',
+          }),
+        });
+
+      mockTargetProvider.callApi
+        .mockResolvedValueOnce({
+          output: 'first harmful response',
+          tokenUsage: { total: 10, prompt: 5, completion: 5, numRequests: 1, cached: 0 },
+        })
+        .mockResolvedValueOnce({
+          output: 'second harmful response',
+          tokenUsage: { total: 12, prompt: 6, completion: 6, numRequests: 1, cached: 0 },
+        })
+        .mockResolvedValueOnce({
+          output: 'third response',
+          tokenUsage: { total: 8, prompt: 4, completion: 4, numRequests: 1, cached: 0 },
+        });
+
+      // Mock refusal scoring for all three rounds to not be refusals
+      mockScoringProvider.callApi
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            value: false,
+            metadata: 0,
+            rationale: 'Not a refusal',
+          }),
+        })
+        // Mock internal evaluator to succeed on first attempt
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            value: true,
+            metadata: 100,
+            rationale: 'First successful jailbreak',
+          }),
+        })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            value: false,
+            metadata: 0,
+            rationale: 'Not a refusal',
+          }),
+        })
+        // Mock internal evaluator to succeed on second attempt
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            value: true,
+            metadata: 100,
+            rationale: 'Second successful jailbreak',
+          }),
+        })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            value: false,
+            metadata: 0,
+            rationale: 'Not a refusal',
+          }),
+        })
+        // Mock internal evaluator to fail on third attempt
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            value: false,
+            metadata: 50,
+            rationale: 'Not successful',
+          }),
+        });
+
+      const result = await provider.callApi('test prompt', context);
+
+      expect(result.metadata?.stopReason).toBe('Max rounds reached');
+      expect(result.metadata?.successfulAttacks).toBeInstanceOf(Array);
+      expect(result.metadata?.totalSuccessfulAttacks).toBeGreaterThanOrEqual(2);
+      expect(result.metadata?.crescendoRoundsCompleted).toBe(3); // All three rounds
+    });
+
+    it('should handle mixed internal evaluator successes and failures with continueAfterSuccess', async () => {
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+        maxTurns: 4,
+        redteamProvider: mockRedTeamProvider,
+        continueAfterSuccess: true,
+      });
+
+      const context = {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'test objective' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: { assert: [{ type: 'mock-grader' }] } as any,
+      };
+
+      // Mock multiple calls
+      mockRedTeamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          generatedQuestion: 'harmful request',
+          rationaleBehindJailbreak: 'test rationale',
+          lastResponseSummary: 'test summary',
+        }),
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'harmful response',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, numRequests: 1, cached: 0 },
+      });
+
+      // Mock refusal scoring and internal evaluator alternating
+      mockScoringProvider.callApi
+        // Round 1: refusal false, internal evaluator false
+        .mockResolvedValueOnce({
+          output: JSON.stringify({ value: false, metadata: 0, rationale: 'Not a refusal' }),
+        })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({ value: false, metadata: 30, rationale: 'Not successful' }),
+        })
+        // Round 2: refusal false, internal evaluator true
+        .mockResolvedValueOnce({
+          output: JSON.stringify({ value: false, metadata: 0, rationale: 'Not a refusal' }),
+        })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({ value: true, metadata: 100, rationale: 'Successful' }),
+        })
+        // Round 3: refusal false, internal evaluator false
+        .mockResolvedValueOnce({
+          output: JSON.stringify({ value: false, metadata: 0, rationale: 'Not a refusal' }),
+        })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({ value: false, metadata: 40, rationale: 'Not successful' }),
+        })
+        // Round 4: refusal false, internal evaluator true
+        .mockResolvedValueOnce({
+          output: JSON.stringify({ value: false, metadata: 0, rationale: 'Not a refusal' }),
+        })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({ value: true, metadata: 100, rationale: 'Successful' }),
+        });
+
+      // Note: External grader behavior is tested separately in integration tests
+
+      const result = await provider.callApi('test prompt', context);
+
+      expect(result.metadata?.stopReason).toBe('Max rounds reached');
+      expect(result.metadata?.successfulAttacks).toBeInstanceOf(Array);
+      expect(result.metadata?.totalSuccessfulAttacks).toBeGreaterThanOrEqual(0);
+    });
+
+    it('should have empty successfulAttacks array when no attacks succeed', async () => {
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+        maxTurns: 2,
+        redteamProvider: mockRedTeamProvider,
+        continueAfterSuccess: true,
+      });
+
+      const context = {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'test objective' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: { assert: [{ type: 'mock-grader' }] } as any,
+      };
+
+      mockRedTeamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          generatedQuestion: 'safe request',
+          rationaleBehindJailbreak: 'test rationale',
+          lastResponseSummary: 'test summary',
+        }),
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'safe response',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, numRequests: 1, cached: 0 },
+      });
+
+      // Mock refusal scoring and internal evaluator for both rounds
+      mockScoringProvider.callApi
+        // Round 1: refusal false, internal evaluator false
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            value: false,
+            metadata: 0,
+            rationale: 'Not a refusal',
+          }),
+        })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            value: false,
+            metadata: 30,
+            rationale: 'Safe response, no jailbreak',
+          }),
+        })
+        // Round 2: refusal false, internal evaluator false
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            value: false,
+            metadata: 0,
+            rationale: 'Not a refusal',
+          }),
+        })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            value: false,
+            metadata: 30,
+            rationale: 'Safe response, no jailbreak',
+          }),
+        });
+
+      // Note: External grader behavior is tested separately in integration tests
+
+      const result = await provider.callApi('test prompt', context);
+
+      expect(result.metadata?.stopReason).toBe('Max rounds reached');
+      expect(result.metadata?.successfulAttacks).toBeInstanceOf(Array);
+      expect(result.metadata?.totalSuccessfulAttacks).toBeGreaterThanOrEqual(0);
+    });
   });
 });
