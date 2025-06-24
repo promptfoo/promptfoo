@@ -1018,7 +1018,7 @@ function ResultsTable({
                   if (
                     typeof value === 'string' &&
                     (value.match(/^data:(image\/[a-z]+|application\/octet-stream);base64,/) ||
-                      value.match(/^\/[0-9A-Za-z+/]{4}.*/))
+                      value.match(/^[A-Za-z0-9+/]{20,}={0,2}$/))
                   ) {
                     const imgSrc = value.startsWith('data:')
                       ? value
