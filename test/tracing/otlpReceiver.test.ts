@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import request from 'supertest';
 import { OTLPReceiver } from '../../src/tracing/otlpReceiver';
-import { TraceStore } from '../../src/tracing/store';
+import type { TraceStore } from '../../src/tracing/store';
 
 // Mock the database
 jest.mock('../../src/database', () => ({
@@ -41,11 +41,11 @@ describe('OTLPReceiver', () => {
 
     // Create mock trace store
     mockTraceStore = {
-      createTrace: jest.fn<TraceStore['createTrace']>().mockResolvedValue(undefined),
-      addSpans: jest.fn().mockResolvedValue(undefined),
-      getTracesByEvaluation: jest.fn<TraceStore['getTracesByEvaluation']>().mockResolvedValue([]),
-      getTrace: jest.fn<TraceStore['getTrace']>().mockResolvedValue(null),
-      deleteOldTraces: jest.fn<TraceStore['deleteOldTraces']>().mockResolvedValue(undefined),
+      createTrace: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
+      addSpans: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
+      getTracesByEvaluation: jest.fn<() => Promise<any[]>>().mockResolvedValue([]),
+      getTrace: jest.fn<() => Promise<any | null>>().mockResolvedValue(null),
+      deleteOldTraces: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
     } as unknown as jest.Mocked<TraceStore>;
 
     // Mock the getTraceStore function

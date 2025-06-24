@@ -68,7 +68,9 @@ export class TraceStore {
       const db = this.getDatabase();
 
       // Only verify trace exists if not skipping the check (for OTLP scenarios)
-      if (!options?.skipTraceCheck) {
+      if (options?.skipTraceCheck) {
+        logger.debug(`[TraceStore] Skipping trace existence check for OTLP scenario`);
+      } else {
         logger.debug(`[TraceStore] Verifying trace ${traceId} exists`);
         const trace = await db
           .select()
@@ -81,8 +83,6 @@ export class TraceStore {
           return;
         }
         logger.debug(`[TraceStore] Trace ${traceId} found, proceeding with span insertion`);
-      } else {
-        logger.debug(`[TraceStore] Skipping trace existence check for OTLP scenario`);
       }
 
       // Insert spans
