@@ -39,8 +39,12 @@ jest.mock('fs', () => ({
 
 describe('util', () => {
   beforeEach(() => {
+    jest.clearAllMocks();
     jest.resetAllMocks();
+    // Clear the global cache
     (global as any).cachedAuth = undefined;
+    // Reset the GoogleAuth mock to default behavior
+    jest.mocked(GoogleAuth).mockClear();
   });
 
   describe('parseStringObject', () => {
@@ -725,6 +729,9 @@ describe('util', () => {
 
   describe('getGoogleClient', () => {
     it('should create and return Google client', async () => {
+      // Clear any cached state before this test
+      (global as any).cachedAuth = undefined;
+
       const mockClient = { name: 'mockClient' };
       const mockProjectId = 'test-project';
       const mockAuth = {
@@ -732,6 +739,8 @@ describe('util', () => {
         getProjectId: jest.fn().mockResolvedValue(mockProjectId),
       };
 
+      // Clear and reset the GoogleAuth mock specifically for this test
+      jest.mocked(GoogleAuth).mockClear();
       jest.mocked(GoogleAuth).mockImplementation(() => mockAuth as any);
 
       const result = await getGoogleClient();
@@ -742,6 +751,9 @@ describe('util', () => {
     });
 
     it('should reuse cached auth client', async () => {
+      // Clear any cached state before this test
+      (global as any).cachedAuth = undefined;
+
       const mockClient = { name: 'mockClient' };
       const mockProjectId = 'test-project';
       const mockAuth = {
@@ -749,6 +761,8 @@ describe('util', () => {
         getProjectId: jest.fn().mockResolvedValue(mockProjectId),
       };
 
+      // Clear and reset the GoogleAuth mock specifically for this test
+      jest.mocked(GoogleAuth).mockClear();
       jest.mocked(GoogleAuth).mockImplementation(() => mockAuth as any);
 
       await getGoogleClient();
@@ -761,11 +775,16 @@ describe('util', () => {
 
   describe('hasGoogleDefaultCredentials', () => {
     it('should return true when credentials are available', async () => {
+      // Clear any cached state before this test
+      (global as any).cachedAuth = undefined;
+
       const mockAuth = {
         getClient: jest.fn().mockResolvedValue({}),
         getProjectId: jest.fn().mockResolvedValue('test-project'),
       };
 
+      // Clear and reset the GoogleAuth mock specifically for this test
+      jest.mocked(GoogleAuth).mockClear();
       jest.mocked(GoogleAuth).mockImplementation(() => mockAuth as any);
 
       const result = await hasGoogleDefaultCredentials();

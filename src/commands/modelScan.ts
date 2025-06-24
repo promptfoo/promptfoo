@@ -7,7 +7,7 @@ import logger from '../logger';
 
 const execAsync = promisify(exec);
 
-async function checkModelAuditInstalled(): Promise<boolean> {
+export async function checkModelAuditInstalled(): Promise<boolean> {
   try {
     await execAsync('which modelaudit');
     return true;

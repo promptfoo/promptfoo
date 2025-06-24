@@ -10,8 +10,11 @@ The `vertex` provider enables integration with Google's [Vertex AI](https://clou
 
 ### Latest Gemini Models
 
-- `vertex:gemini-2.5-flash-preview-04-17` - Latest Flash model with thinking capabilities for enhanced reasoning
-- `vertex:gemini-2.5-pro-exp-03-25` - Latest thinking model for complex reasoning (2M context)
+- `vertex:gemini-2.5-pro` - Latest stable Gemini 2.5 Pro model with enhanced reasoning, coding, and multimodal understanding
+- `vertex:gemini-2.5-flash` - Latest stable Flash model with enhanced reasoning and thinking capabilities
+- `vertex:gemini-2.5-flash-lite` - Most cost-efficient and fastest 2.5 model yet, optimized for high-volume, latency-sensitive tasks
+- `vertex:gemini-2.5-flash-preview-04-17` - Previous Flash preview with thinking capabilities for enhanced reasoning
+- `vertex:gemini-2.5-pro-exp-03-25` - Previous thinking model for complex reasoning (2M context)
 - `vertex:gemini-2.0-flash-001` - Workhorse model for all daily tasks with strong overall performance and real-time streaming
 - `vertex:gemini-2.0-pro-exp-02-05` - Strongest model quality, especially for code & world knowledge with 2M context window
 - `vertex:gemini-2.0-flash-lite-preview-02-05` - Cost-effective offering for high throughput
@@ -192,7 +195,7 @@ Configure model behavior using the following options:
 ```yaml
 providers:
   # For Gemini models
-  - id: vertex:gemini-2.0-pro
+  - id: vertex:gemini-2.5-pro
     config:
       generationConfig:
         temperature: 0
@@ -285,24 +288,24 @@ defaultTest:
 
 ### Configuration Reference
 
-| Option                             | Description                        | Default                              |
-| ---------------------------------- | ---------------------------------- | ------------------------------------ |
-| `apiKey`                           | GCloud API token                   | None                                 |
-| `apiHost`                          | API host override                  | `{region}-aiplatform.googleapis.com` |
-| `apiVersion`                       | API version                        | `v1`                                 |
-| `projectId`                        | GCloud project ID                  | None                                 |
-| `region`                           | GCloud region                      | `us-central1`                        |
-| `publisher`                        | Model publisher                    | `google`                             |
-| `context`                          | Model context                      | None                                 |
-| `examples`                         | Few-shot examples                  | None                                 |
-| `safetySettings`                   | Content filtering                  | None                                 |
-| `generationConfig.temperature`     | Randomness control                 | None                                 |
-| `generationConfig.maxOutputTokens` | Max tokens to generate             | None                                 |
-| `generationConfig.topP`            | Nucleus sampling                   | None                                 |
-| `generationConfig.topK`            | Sampling diversity                 | None                                 |
-| `generationConfig.stopSequences`   | Generation stop triggers           | `[]`                                 |
-| `toolConfig`                       | Tool/function calling config       | None                                 |
-| `systemInstruction`                | System prompt (supports `{{var}}`) | None                                 |
+| Option                             | Description                                      | Default                              |
+| ---------------------------------- | ------------------------------------------------ | ------------------------------------ |
+| `apiKey`                           | GCloud API token                                 | None                                 |
+| `apiHost`                          | API host override                                | `{region}-aiplatform.googleapis.com` |
+| `apiVersion`                       | API version                                      | `v1`                                 |
+| `projectId`                        | GCloud project ID                                | None                                 |
+| `region`                           | GCloud region                                    | `us-central1`                        |
+| `publisher`                        | Model publisher                                  | `google`                             |
+| `context`                          | Model context                                    | None                                 |
+| `examples`                         | Few-shot examples                                | None                                 |
+| `safetySettings`                   | Content filtering                                | None                                 |
+| `generationConfig.temperature`     | Randomness control                               | None                                 |
+| `generationConfig.maxOutputTokens` | Max tokens to generate                           | None                                 |
+| `generationConfig.topP`            | Nucleus sampling                                 | None                                 |
+| `generationConfig.topK`            | Sampling diversity                               | None                                 |
+| `generationConfig.stopSequences`   | Generation stop triggers                         | `[]`                                 |
+| `toolConfig`                       | Tool/function calling config                     | None                                 |
+| `systemInstruction`                | System prompt (supports `{{var}}` and `file://`) | None                                 |
 
 :::note
 Not all models support all parameters. See [Google's documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/overview) for model-specific details.
@@ -369,7 +372,7 @@ Gemini and Claude models support function calling and tool use. Configure tools 
 
 ```yaml
 providers:
-  - id: vertex:gemini-2.0-pro
+  - id: vertex:gemini-2.5-pro
     config:
       toolConfig:
         functionCallingConfig:
@@ -392,10 +395,12 @@ Tools can also be loaded from external files:
 
 ```yaml
 providers:
-  - id: vertex:gemini-2.0-pro
+  - id: vertex:gemini-2.5-pro
     config:
       tools: 'file://tools.json' # Supports variable substitution
 ```
+
+For practical examples of function calling with Vertex AI models, see the [google-vertex-tools example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-vertex-tools) which demonstrates both basic tool declarations and callback execution.
 
 ### System Instructions
 
@@ -403,12 +408,16 @@ Configure system-level instructions for the model:
 
 ```yaml
 providers:
-  - id: vertex:gemini-2.0-pro
+  - id: vertex:gemini-2.5-pro
     config:
-      systemInstruction:
-        parts:
-          - text: 'You are a helpful assistant that {{role}}' # Supports Nunjucks templates
+      # Direct text
+      systemInstruction: 'You are a helpful assistant'
+
+      # Or load from file
+      systemInstruction: file://system-instruction.txt
 ```
+
+System instructions support Nunjucks templating and can be loaded from external files for better organization and reusability.
 
 ### Generation Configuration
 
@@ -416,7 +425,7 @@ Fine-tune model behavior with these parameters:
 
 ```yaml
 providers:
-  - id: vertex:gemini-2.0-pro
+  - id: vertex:gemini-2.5-pro
     config:
       generationConfig:
         temperature: 0.7 # Controls randomness (0.0 to 1.0)
@@ -432,7 +441,7 @@ Provide context and few-shot examples:
 
 ```yaml
 providers:
-  - id: vertex:gemini-2.0-pro
+  - id: vertex:gemini-2.5-pro
     config:
       context: 'You are an expert in machine learning'
       examples:
@@ -446,7 +455,7 @@ Configure content filtering with granular control:
 
 ```yaml
 providers:
-  - id: vertex:gemini-2.0-pro
+  - id: vertex:gemini-2.5-pro
     config:
       safetySettings:
         - category: 'HARM_CATEGORY_HARASSMENT'
@@ -495,7 +504,7 @@ Use the object format to enable Search grounding:
 
 ```yaml
 providers:
-  - id: vertex:gemini-2.0-pro
+  - id: vertex:gemini-2.5-pro
     config:
       tools:
         - googleSearch: {}

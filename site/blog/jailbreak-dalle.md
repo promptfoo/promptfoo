@@ -1,14 +1,28 @@
 ---
+title: 'Automated Jailbreaking Techniques with DALL-E: Complete Red Team Guide'
+description: 'We automated DALL-E jailbreaking and generated disturbing images that bypass safety filters. See the techniques and why image model security matters.'
 image: https://storage.googleapis.com/promptfoo-public-1/promptfoo.dev/blog/jailbreak-dalle/gallery-blurred.png
+keywords:
+  [
+    DALL-E jailbreak,
+    image model security,
+    AI image generation,
+    automated jailbreaking,
+    visual AI security,
+    image model red teaming,
+    AI safety,
+    prompt injection,
+  ]
 ian_comment: 'images here: https://console.cloud.google.com/storage/browser/promptfoo-public-1/promptfoo.dev/blog/jailbreak-dalle;tab=objects?project=promptfoo&prefix=&forceOnObjectsSortingFiltering=false'
 date: 2024-07-01
+authors: [ian]
 ---
 
 import ImageJailbreakPreview from '@site/src/components/ImageJailbreakPreview';
 
 # Automated jailbreaking techniques with Dall-E
 
-We all know that image models like OpenAI’s Dall-E can be jailbroken to generate violent, disturbing, and offensive images. It turns out this process can be fully automated.
+We all know that image models like OpenAI's Dall-E can be jailbroken to generate violent, disturbing, and offensive images. It turns out this process can be fully automated.
 
 This post shows how to automatically discover one-shot jailbreaks with open-source [LLM red teaming](/docs/red-team) and includes a collection of examples.
 

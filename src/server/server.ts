@@ -239,11 +239,11 @@ export function createApp() {
   // Configure proper MIME types for JavaScript files
   app.use(setJavaScriptMimeType);
 
-  app.use(express.static(staticDir));
+  app.use(express.static(staticDir, { dotfiles: 'allow' }));
 
   // Handle client routing, return all requests to the app
   app.get('/*splat', (req: Request, res: Response): void => {
-    res.sendFile(path.join(staticDir, 'index.html'));
+    res.sendFile('index.html', { root: staticDir, dotfiles: 'allow' });
   });
   return app;
 }

@@ -229,6 +229,22 @@ describe('util', () => {
       expect(fs.writeFileSync).toHaveBeenCalledTimes(2);
     });
 
+    it('writeOutput with HTML template escapes special characters', async () => {
+      // Use the real fs module to read the template
+      const realFs = jest.requireActual('fs') as typeof fs;
+      const templatePath = path.resolve(__dirname, '../../src/tableOutput.html');
+      const templateContent = realFs.readFileSync(templatePath, 'utf-8');
+
+      // Check that the template has escape filters on all user-provided content
+      expect(templateContent).toContain('{{ header | escape }}');
+      expect(templateContent).toContain('{{ cell | escape }}');
+
+      // Ensure both data-content attribute and cell content are escaped
+      const cellRegex =
+        /<td[^>]*data-content="\{\{ cell \| escape \}\}"[^>]*>\{\{ cell \| escape \}\}<\/td>/;
+      expect(templateContent).toMatch(cellRegex);
+    });
+
     it('writes output to Google Sheets', async () => {
       const outputPath = 'https://docs.google.com/spreadsheets/d/1234567890/edit#gid=0';
 

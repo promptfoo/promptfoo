@@ -1,8 +1,21 @@
 ---
 sidebar_label: Misinformation in LLMs—Causes and Prevention Strategies
-title: Misinformation in LLMs—Causes and Prevention Strategies
+title: 'Misinformation in LLMs: Causes and Prevention Strategies'
+description: 'LLMs can spread false information at scale. Discover why AI models hallucinate, how misinformation spreads, and practical strategies to detect and prevent it.'
 image: /img/blog/misinformation/misinformed_panda.png
+keywords:
+  [
+    LLM misinformation,
+    AI misinformation,
+    hallucination detection,
+    fact-checking AI,
+    LLM accuracy,
+    misinformation prevention,
+    AI reliability,
+    information quality,
+  ]
 date: 2025-03-19
+authors: [vanessa]
 ---
 
 # Misinformation in LLMs: Causes and Prevention Strategies

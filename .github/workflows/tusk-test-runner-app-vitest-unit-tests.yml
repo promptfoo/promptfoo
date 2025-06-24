@@ -96,7 +96,7 @@ jobs:
             npx tsc --project $TMP_TSCONFIG --skipLibCheck --noEmit
 
           # The script to run Vitest tests for individual files
-          testScript: 'npx vitest run {{file}}'
+          testScript: 'npx vitest run {{file}} --reporter=basic'
 
           # The runner may run tests in parallel.
           # Set this value to 1 if you know that your tests should not be run concurrently.
