@@ -593,6 +593,7 @@ export const VarsSchema = z.record(
     z.array(z.union([z.string(), z.number(), z.boolean()])),
     z.record(z.string(), z.any()),
     z.array(z.any()),
+    z.date(),
   ]),
 );
 
