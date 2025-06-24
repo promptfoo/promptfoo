@@ -532,7 +532,7 @@ tests:
 
 ### Accessing environment variables
 
-You can access environment variables in your templates using the `env` global:
+You can access environment variables in your templates using the `env` global. Variables defined in your config's `env:` block are always available. By default, values from your operating system's environment are also exposed. To restrict templates to only use variables from `env:`, set `PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS=true`.
 
 ```yaml
 tests:

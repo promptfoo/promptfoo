@@ -249,40 +249,34 @@ describe('getNunjucksEngine', () => {
       expect(engine.renderString('{{ env.TEST_VAR }}', {})).toBe('test_value');
     });
 
-    it('should not add environment variables when PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS is true', () => {
+    it('should disable process.env but allow config env variables when PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS is true', () => {
       process.env.TEST_VAR = 'test_value';
       process.env.PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS = 'true';
-      // Update cliState mock
-      jest.mock('../../src/cliState', () => ({
-        default: {
-          config: {
-            env: {
-              CONFIG_VAR: 'config_value',
-            },
-          },
+      const initialConfig = { ...cliState.config };
+      cliState.config = {
+        env: {
+          CONFIG_VAR: 'config_value',
         },
-      }));
+      } as any;
       const engine = getNunjucksEngine();
       expect(engine.renderString('{{ env.TEST_VAR }}', {})).toBe('');
-      expect(engine.renderString('{{ env.CONFIG_VAR }}', {})).toBe('');
+      expect(engine.renderString('{{ env.CONFIG_VAR }}', {})).toBe('config_value');
+      cliState.config = initialConfig;
     });
 
-    it('should not add environment variables when in self-hosted mode by default', () => {
+    it('should disable process.env but allow config env variables when PROMPTFOO_SELF_HOSTED is true', () => {
       process.env.TEST_VAR = 'test_value';
       process.env.PROMPTFOO_SELF_HOSTED = 'true';
-      // Update cliState mock
-      jest.mock('../../src/cliState', () => ({
-        default: {
-          config: {
-            env: {
-              CONFIG_VAR: 'config_value',
-            },
-          },
+      const initialConfig = { ...cliState.config };
+      cliState.config = {
+        env: {
+          CONFIG_VAR: 'config_value',
         },
-      }));
+      } as any;
       const engine = getNunjucksEngine();
       expect(engine.renderString('{{ env.TEST_VAR }}', {})).toBe('');
-      expect(engine.renderString('{{ env.CONFIG_VAR }}', {})).toBe('');
+      expect(engine.renderString('{{ env.CONFIG_VAR }}', {})).toBe('config_value');
+      cliState.config = initialConfig;
     });
   });
 });
