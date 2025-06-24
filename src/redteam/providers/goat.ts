@@ -319,11 +319,6 @@ export default class GoatProvider implements ApiProvider {
             finalResponse = unblockingResponse;
           }
 
-          if (unblockingResponse.sessionId) {
-            context = context ?? { vars: {}, prompt: { raw: '', label: 'target' } };
-            context.vars.sessionId = unblockingResponse.sessionId;
-          }
-
           if (unblockingResponse.error) {
             throw new Error(`[GOAT] Target returned an error: ${unblockingResponse.error}`);
           }
@@ -415,7 +410,7 @@ export default class GoatProvider implements ApiProvider {
       });
 
       if (response.error) {
-        logger.debug(`[GOAT] Unblocking provider error: ${response.error}`);
+        logger.error(`[GOAT] Unblocking provider error: ${response.error}`);
         return { success: false, tokenUsage: response.tokenUsage };
       }
 
@@ -432,15 +427,12 @@ export default class GoatProvider implements ApiProvider {
 
       return { success: false, tokenUsage: response.tokenUsage };
     } catch (error) {
-      logger.debug(`[GOAT] Error in unblocking: ${error}`);
+      logger.error(`[GOAT] Error in unblocking: ${error}`);
       return { success: false };
     }
   }
 
   private async checkServerSupportsUnblocking(): Promise<boolean> {
-    if (process.env.NODE_ENV === 'test') {
-      return false;
-    }
     try {
       const { checkServerFeatureSupport } = await import('../../util/server');
       return await checkServerFeatureSupport(

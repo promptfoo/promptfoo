@@ -9,6 +9,10 @@ import type {
   ProviderResponse,
 } from '../../../src/types';
 
+jest.mock('../../../src/util/server', () => ({
+  checkServerFeatureSupport: jest.fn(() => Promise.resolve(false)),
+}));
+
 describe('RedteamGoatProvider', () => {
   let mockFetch: jest.Mock;
 
