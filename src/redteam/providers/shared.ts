@@ -285,7 +285,7 @@ export async function tryUnblocking({
     });
 
     if (response.error) {
-      logger.debug(`[Unblocking] Unblocking provider error: ${response.error}`);
+      logger.error(`[Unblocking] Unblocking provider error: ${response.error}`);
       return { success: false, tokenUsage: response.tokenUsage };
     }
 
@@ -309,7 +309,7 @@ export async function tryUnblocking({
       };
     }
   } catch (error) {
-    logger.debug(`[Unblocking] Error in unblocking: ${error}`);
+    logger.error(`[Unblocking] Error in unblocking: ${error}`);
     return { success: false };
   }
 }
