@@ -9,7 +9,7 @@ import { getEvalSummaries } from '../models/eval';
 import telemetry from '../telemetry';
 import { setupEnv } from '../util';
 import { loadDefaultConfig } from '../util/config/default';
-import { readResult, getPromptsForTestCasesHash, getTestCases } from '../util/database';
+import { getPromptsForTestCasesHash, getTestCases, readResult } from '../util/database';
 
 /**
  * Creates an MCP server with tools for interacting with promptfoo
@@ -88,7 +88,7 @@ async function createMcpServer() {
         };
       }
 
-      const evalResults = result.result.results.results || [];
+      const evalResults = result.result.results?.results || [];
 
       // Calculate basic statistics
       const totalTests = evalResults.length;
@@ -142,6 +142,10 @@ async function createMcpServer() {
  * Starts an MCP server with HTTP transport
  */
 export async function startHttpMcpServer(port: number) {
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error(`Invalid port number: ${port}. Port must be an integer between 1 and 65535.`);
+  }
+
   const app = express();
   app.use(express.json());
 
@@ -217,6 +221,13 @@ export function mcpCommand(program: Command) {
         } & Command,
       ) => {
         setupEnv(cmdObj.envPath);
+
+        // Validate transport type
+        if (!['http', 'stdio'].includes(cmdObj.transport)) {
+          logger.error(`Invalid transport type: ${cmdObj.transport}. Must be "http" or "stdio".`);
+          process.exit(1);
+        }
+
         telemetry.record('command_used', {
           name: 'mcp',
           transport: cmdObj.transport,
@@ -225,7 +236,12 @@ export function mcpCommand(program: Command) {
         if (cmdObj.transport === 'stdio') {
           await startStdioMcpServer();
         } else {
-          await startHttpMcpServer(Number.parseInt(cmdObj.port, 10));
+          const port = Number.parseInt(cmdObj.port, 10);
+          if (Number.isNaN(port)) {
+            logger.error(`Invalid port number: ${cmdObj.port}`);
+            process.exit(1);
+          }
+          await startHttpMcpServer(port);
         }
       },
     );
