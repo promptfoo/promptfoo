@@ -340,40 +340,13 @@ export async function renderPrompt(
 // Extension Hooks
 // ================================
 
-// TODO(chore): Move the extension hooks logic into a separate file.
+type BeforeAllExtensionHookContext = {
+  suite: TestSuite;
+};
 
-const BeforeAllExtensionHookContextSchema = z.object({
-  suite: TestSuiteSchema,
-});
-
-const BeforeEachExtensionHookContextSchema = z.object({
-  test: TestCaseSchema,
-});
-
-/**
- * Defines the set of fields on BeforeAllExtensionHookContextSchema that may be mutated by the extension hook.
- */
-const MutableBeforeAllExtensionHookContextSchema = z.object({
-  suite: z.object({
-    prompts: TestSuiteSchema.shape.prompts,
-    providerPromptMap: TestSuiteSchema.shape.providerPromptMap,
-    tests: TestSuiteSchema.shape.tests,
-    scenarios: TestSuiteSchema.shape.scenarios,
-    defaultTest: TestSuiteSchema.shape.defaultTest,
-    nunjucksFilters: TestSuiteSchema.shape.nunjucksFilters,
-    derivedMetrics: TestSuiteSchema.shape.derivedMetrics,
-    redteam: TestSuiteSchema.shape.redteam,
-  }),
-});
-
-const MutableBeforeEachExtensionHookContextSchema = z
-  .object({
-    test: TestCaseSchema,
-  })
-  .strict();
-
-type BeforeAllExtensionHookContext = z.infer<typeof BeforeAllExtensionHookContextSchema>;
-type BeforeEachExtensionHookContext = z.infer<typeof BeforeEachExtensionHookContextSchema>;
+type BeforeEachExtensionHookContext = {
+  test: TestCase;
+};
 
 type AfterEachExtensionHookContext = {
   test: TestCase;
@@ -438,33 +411,26 @@ export async function runExtensionHook<HookName extends keyof HookContextMap>(
     if (extensionReturnValue) {
       switch (hookName) {
         case 'beforeAll': {
-          const parsed = MutableBeforeAllExtensionHookContextSchema.safeParse(extensionReturnValue);
-          if (parsed.success) {
-            (updatedContext as BeforeAllExtensionHookContext) = {
-              suite: {
-                ...(context as BeforeAllExtensionHookContext).suite,
-                ...parsed.data.suite,
-              },
-            };
-          } else {
-            logger.error(parsed.error.message);
-            throw new Error(
-              `[${extension}] Invalid context returned by beforeAll hook: ${parsed.error.message}`,
-            );
-          }
+          (updatedContext as BeforeAllExtensionHookContext) = {
+            suite: {
+              ...(context as BeforeAllExtensionHookContext).suite,
+              // Mutable properties:
+              prompts: extensionReturnValue.suite.prompts,
+              providerPromptMap: extensionReturnValue.suite.providerPromptMap,
+              tests: extensionReturnValue.suite.tests,
+              scenarios: extensionReturnValue.suite.scenarios,
+              defaultTest: extensionReturnValue.suite.defaultTest,
+              nunjucksFilters: extensionReturnValue.suite.nunjucksFilters,
+              derivedMetrics: extensionReturnValue.suite.derivedMetrics,
+              redteam: extensionReturnValue.suite.redteam,
+            },
+          };
           break;
         }
         case 'beforeEach': {
-          const parsed =
-            MutableBeforeEachExtensionHookContextSchema.safeParse(extensionReturnValue);
-          if (parsed.success) {
-            (updatedContext as BeforeEachExtensionHookContext) = { test: parsed.data.test };
-          } else {
-            logger.error(parsed.error.message);
-            throw new Error(
-              `[${extension}] Invalid context returned by beforeEach hook: ${parsed.error.message}`,
-            );
-          }
+          (updatedContext as BeforeEachExtensionHookContext) = {
+            test: extensionReturnValue.test,
+          };
           break;
         }
       }
