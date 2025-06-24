@@ -4,8 +4,7 @@ import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
-import type { Assertion, AssertionSet, AtomicTestCase, TokenUsage } from '../../types';
+import type { Assertion, AssertionSet, AtomicTestCase } from '../../types';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -19,7 +18,7 @@ import { sleep } from '../../util/time';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 import type { BaseRedteamMetadata } from '../types';
 import type { Message } from './shared';
-import { getLastMessageContent, messagesToRedteamHistory } from './shared';
+import { getLastMessageContent, messagesToRedteamHistory, tryUnblocking } from './shared';
 
 /**
  * Represents metadata for the GOAT conversation process.
@@ -57,11 +56,6 @@ interface GoatConfig {
 
 export default class GoatProvider implements ApiProvider {
   readonly config: GoatConfig;
-  private readonly unblockingProvider = new PromptfooChatCompletionProvider({
-    task: 'blocking-question-analysis',
-    jsonOnly: true,
-    preferSmallModel: false,
-  });
   private successfulAttacks: Array<{
     turn: number;
     prompt: string;
@@ -281,12 +275,12 @@ export default class GoatProvider implements ApiProvider {
           content: stringifiedOutput,
         });
 
-        const unblockingResult = await this.tryUnblocking(
+        const unblockingResult = await tryUnblocking({
           messages,
-          stringifiedOutput,
-          context?.test?.metadata?.goal || context?.vars[this.config.injectVar],
-          context?.test?.metadata?.purpose,
-        );
+          lastResponse: stringifiedOutput,
+          goal: context?.test?.metadata?.goal || context?.vars[this.config.injectVar],
+          purpose: context?.test?.metadata?.purpose,
+        });
         if (unblockingResult.tokenUsage) {
           totalTokenUsage.total += unblockingResult.tokenUsage.total || 0;
           totalTokenUsage.prompt += unblockingResult.tokenUsage.prompt || 0;
@@ -338,13 +332,7 @@ export default class GoatProvider implements ApiProvider {
           }
 
           if (unblockingResponse.error) {
-            throw new Error(`[GOAT] Target returned an error: ${unblockingResponse.error}`);
-          }
-
-          if (!unblockingOutput) {
-            logger.debug(
-              `[GOAT] Unblocking response output is not a string or JSON: ${safeJsonStringify(unblockingResponse)}`,
-            );
+            logger.error(`[GOAT] Target returned an error: ${unblockingResponse.error}`);
           }
         }
 
@@ -417,66 +405,5 @@ export default class GoatProvider implements ApiProvider {
       tokenUsage: totalTokenUsage,
       guardrails: lastTargetResponse?.guardrails,
     };
-  }
-
-  private async tryUnblocking(
-    messages: Message[],
-    lastResponse: string,
-    goal: string | undefined,
-    purpose?: string,
-  ): Promise<{ success: boolean; unblockingPrompt?: string; tokenUsage?: TokenUsage }> {
-    try {
-      const supportsUnblocking = await this.checkServerSupportsUnblocking();
-      if (!supportsUnblocking) {
-        logger.debug('[GOAT] Server does not support unblocking, skipping gracefully');
-        return { success: false };
-      }
-
-      const unblockingRequest = {
-        conversationObjective: goal || '',
-        recentHistory: messages.map((m) => ({ role: m.role, content: m.content })),
-        targetResponse: lastResponse,
-        purpose: purpose || '',
-      };
-
-      const response = await this.unblockingProvider.callApi(JSON.stringify(unblockingRequest), {
-        prompt: { raw: JSON.stringify(unblockingRequest), label: 'unblocking' },
-        vars: {},
-      });
-
-      if (response.error) {
-        logger.error(`[GOAT] Unblocking provider error: ${response.error}`);
-        return { success: false, tokenUsage: response.tokenUsage };
-      }
-
-      const parsed = response.output as any;
-      logger.debug(`[GOAT] Unblocking analysis: ${JSON.stringify(parsed)}`);
-
-      if (parsed.isBlocking && parsed.unblockingAnswer) {
-        return {
-          success: true,
-          unblockingPrompt: parsed.unblockingAnswer,
-          tokenUsage: response.tokenUsage,
-        };
-      }
-
-      return { success: false, tokenUsage: response.tokenUsage };
-    } catch (error) {
-      logger.error(`[GOAT] Error in unblocking: ${error}`);
-      return { success: false };
-    }
-  }
-
-  private async checkServerSupportsUnblocking(): Promise<boolean> {
-    try {
-      const { checkServerFeatureSupport } = await import('../../util/server');
-      return await checkServerFeatureSupport(
-        'blocking-question-analysis',
-        '2025-06-16T14:49:11-07:00',
-      );
-    } catch (error) {
-      logger.debug(`[GOAT] Feature check failed: ${error}`);
-      return false;
-    }
   }
 }
