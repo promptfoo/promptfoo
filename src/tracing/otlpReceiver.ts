@@ -1,6 +1,6 @@
 import express from 'express';
 import logger from '../logger';
-import { getTraceStore, type ParsedTrace, type SpanData } from './store';
+import { getTraceStore, type ParsedTrace, type SpanData, type TraceStore } from './store';
 
 interface OTLPAttribute {
   key: string;
@@ -50,12 +50,13 @@ interface OTLPTraceRequest {
 
 export class OTLPReceiver {
   private app: express.Application;
-  private traceStore = getTraceStore();
+  private traceStore: TraceStore;
   private port?: number;
   private server?: any; // http.Server type
 
   constructor() {
     this.app = express();
+    this.traceStore = getTraceStore();
     logger.debug('[OtlpReceiver] Initializing OTLP receiver');
     this.setupMiddleware();
     this.setupRoutes();
@@ -71,29 +72,27 @@ export class OTLPReceiver {
   private setupRoutes(): void {
     // OTLP HTTP endpoint for traces
     this.app.post('/v1/traces', async (req, res) => {
-      const contentType = req.headers['content-type'];
       logger.debug(
-        `[OtlpReceiver] Received trace request: ${contentType} with body length: ${req.body ? JSON.stringify(req.body).length : 0} bytes`,
+        `[OtlpReceiver] Received trace request: ${req.headers['content-type']} with ${JSON.stringify(req.body).length} bytes`,
       );
-
-      // Check content type first to avoid processing unsupported types
-      if (contentType === 'application/x-protobuf') {
-        // TODO: Implement protobuf parsing in phase 2
-        logger.warn('Protobuf format not yet supported, please use JSON');
-        res.status(415).json({ error: 'Protobuf format not yet supported' });
-        return;
-      } else if (contentType !== 'application/json') {
-        res.status(415).json({ error: 'Unsupported content type' });
-        return;
-      }
-
+      logger.debug('[OtlpReceiver] Starting to process traces');
       try {
         let traces: ParsedTrace[] = [];
 
-        // At this point we know it's application/json
-        logger.debug('[OtlpReceiver] Parsing OTLP JSON request');
-        traces = this.parseOTLPJSONRequest(req.body);
-        logger.debug(`[OtlpReceiver] Parsed ${traces.length} traces from request`);
+        if (req.headers['content-type'] === 'application/json') {
+          logger.debug('[OtlpReceiver] Parsing OTLP JSON request');
+          logger.debug(`[OtlpReceiver] Request body: ${JSON.stringify(req.body).substring(0, 500)}...`);
+          traces = this.parseOTLPJSONRequest(req.body);
+          logger.debug(`[OtlpReceiver] Parsed ${traces.length} traces from request`);
+        } else if (req.headers['content-type'] === 'application/x-protobuf') {
+          // TODO: Implement protobuf parsing in phase 2
+          logger.warn('Protobuf format not yet supported, please use JSON');
+          res.status(415).json({ error: 'Protobuf format not yet supported' });
+          return;
+        } else {
+          res.status(415).json({ error: 'Unsupported content type' });
+          return;
+        }
 
         // Group spans by trace ID
         const spansByTrace = new Map<string, SpanData[]>();
@@ -108,7 +107,7 @@ export class OTLPReceiver {
         // Store spans for each trace
         for (const [traceId, spans] of spansByTrace) {
           logger.debug(`[OtlpReceiver] Storing ${spans.length} spans for trace ${traceId}`);
-          await this.traceStore.addSpans(traceId, spans);
+          await this.traceStore.addSpans(traceId, spans, { skipTraceCheck: true });
         }
 
         // OTLP success response
@@ -116,6 +115,9 @@ export class OTLPReceiver {
         logger.debug('[OtlpReceiver] Successfully processed traces');
       } catch (error) {
         logger.error(`[OtlpReceiver] Failed to process OTLP traces: ${error}`);
+        logger.error(
+          `[OtlpReceiver] Error stack: ${error instanceof Error ? error.stack : 'No stack'}`,
+        );
         res.status(500).json({ error: 'Internal server error' });
       }
     });
@@ -143,6 +145,20 @@ export class OTLPReceiver {
         timestamp: new Date().toISOString(),
         port: this.port || 4318,
       });
+    });
+
+    // Global error handler
+    this.app.use((error: any, req: any, res: any, next: any) => {
+      logger.error(`[OtlpReceiver] Global error handler: ${error}`);
+      logger.error(`[OtlpReceiver] Error stack: ${error.stack}`);
+
+      // Handle JSON parsing errors
+      if (error instanceof SyntaxError && 'body' in error) {
+        res.status(400).json({ error: 'Invalid JSON' });
+        return;
+      }
+
+      res.status(500).json({ error: 'Internal server error' });
     });
   }
 

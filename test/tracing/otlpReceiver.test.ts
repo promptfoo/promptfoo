@@ -1,75 +1,61 @@
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import request from 'supertest';
+import { OTLPReceiver } from '../../src/tracing/otlpReceiver';
+import { TraceStore } from '../../src/tracing/store';
 
-// Mock the logger to avoid any issues
-jest.doMock('../../src/logger', () => ({
+// Mock the database
+jest.mock('../../src/database', () => ({
+  getDb: jest.fn(() => ({
+    insert: jest.fn(),
+    select: jest.fn(),
+    delete: jest.fn(),
+  })),
+}));
+
+// Mock the trace store
+jest.mock('../../src/tracing/store');
+
+// Mock the logger
+const mockLogger = {
   debug: jest.fn(),
   info: jest.fn(),
   warn: jest.fn(),
   error: jest.fn(),
+};
+jest.mock('../../src/logger', () => ({
+  default: mockLogger,
 }));
 
-// Use the existing mock from __mocks__/database.ts
-jest.doMock('../../src/database');
-
-// Create a spy for the TraceStore.addSpans method
-const addSpansSpy = jest.mocked(jest.fn());
-
-// Mock the TraceStore, but keep the logic simple
-jest.doMock('../../src/tracing/store', () => {
-  const actual = jest.requireActual('../../src/tracing/store') as any;
-
-  class MockTraceStore {
-    async createTrace() {
-      return Promise.resolve();
-    }
-
-    async addSpans(traceId: string, spans: any[]) {
-      // Call the spy so we can verify it was called
-      await addSpansSpy(traceId, spans);
-      return Promise.resolve();
-    }
-
-    async getTracesByEvaluation() {
-      return Promise.resolve([]);
-    }
-
-    async getTrace() {
-      return Promise.resolve(null);
-    }
-
-    async deleteOldTraces() {
-      return Promise.resolve();
-    }
-  }
-
-  return {
-    ...actual,
-    TraceStore: MockTraceStore,
-    getTraceStore: jest.fn(() => new MockTraceStore()),
-  };
-});
-
-// Dynamic import after mocking
-let OTLPReceiver: any;
+// Import the mocked module after mocking
+const mockedTraceStore = jest.requireMock('../../src/tracing/store') as {
+  getTraceStore: jest.MockedFunction<() => TraceStore>;
+};
 
 describe('OTLPReceiver', () => {
-  let receiver: any;
+  let receiver: OTLPReceiver;
+  let mockTraceStore: jest.Mocked<TraceStore>;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     // Reset mocks
     jest.clearAllMocks();
-    addSpansSpy.mockClear();
-    addSpansSpy.mockResolvedValue(undefined);
 
-    // Dynamic import after mocking
-    if (!OTLPReceiver) {
-      const module = await import('../../src/tracing/otlpReceiver');
-      OTLPReceiver = module.OTLPReceiver;
-    }
+    // Create mock trace store
+    mockTraceStore = {
+      createTrace: jest.fn<TraceStore['createTrace']>().mockResolvedValue(undefined),
+      addSpans: jest.fn().mockResolvedValue(undefined),
+      getTracesByEvaluation: jest.fn<TraceStore['getTracesByEvaluation']>().mockResolvedValue([]),
+      getTrace: jest.fn<TraceStore['getTrace']>().mockResolvedValue(null),
+      deleteOldTraces: jest.fn<TraceStore['deleteOldTraces']>().mockResolvedValue(undefined),
+    } as unknown as jest.Mocked<TraceStore>;
+
+    // Mock the getTraceStore function
+    mockedTraceStore.getTraceStore.mockReturnValue(mockTraceStore);
 
     // Create receiver instance
     receiver = new OTLPReceiver();
+    
+    // Manually override the traceStore property
+    (receiver as any).traceStore = mockTraceStore;
   });
 
   afterEach(() => {
@@ -98,17 +84,6 @@ describe('OTLPReceiver', () => {
 
   describe('Trace ingestion', () => {
     it('should accept valid OTLP JSON traces', async () => {
-      // Temporarily modify the error handling to catch the actual error
-      const originalConsoleError = console.error;
-      let capturedError: any = null;
-
-      console.error = (message: string, error?: any) => {
-        if (message.includes('[OtlpReceiver] Failed to process OTLP traces')) {
-          capturedError = error;
-        }
-        originalConsoleError(message, error);
-      };
-
       const otlpRequest = {
         resourceSpans: [
           {
@@ -155,20 +130,11 @@ describe('OTLPReceiver', () => {
         .set('Content-Type', 'application/json')
         .send(otlpRequest);
 
-      // Restore original console.error
-      console.error = originalConsoleError;
-
-      if (response.status !== 200) {
-        console.error('Error response:', response.status, response.body);
-        if (capturedError) {
-          console.error('Captured error:', capturedError);
-        }
-      }
       expect(response.status).toBe(200);
       expect(response.body).toEqual({ partialSuccess: {} });
 
       // Verify spans were stored
-      expect(addSpansSpy).toHaveBeenCalledWith(
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
         '12345678901234567890123456789012',
         expect.arrayContaining([
           expect.objectContaining({
@@ -188,10 +154,13 @@ describe('OTLPReceiver', () => {
             statusMessage: 'OK',
           }),
         ]),
+        { skipTraceCheck: true },
       );
     });
 
     it('should handle multiple spans in a single request', async () => {
+      // Manually override the traceStore property for this test too
+      (receiver as any).traceStore = mockTraceStore;
       const otlpRequest = {
         resourceSpans: [
           {
@@ -228,7 +197,7 @@ describe('OTLPReceiver', () => {
         .send(otlpRequest)
         .expect(200);
 
-      expect(addSpansSpy).toHaveBeenCalledWith(
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
         'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         expect.arrayContaining([
           expect.objectContaining({
@@ -241,10 +210,13 @@ describe('OTLPReceiver', () => {
             name: 'span-2',
           }),
         ]),
+        { skipTraceCheck: true },
       );
     });
 
     it('should parse different attribute types', async () => {
+      // Manually override the traceStore property for this test too
+      (receiver as any).traceStore = mockTraceStore;
       const otlpRequest = {
         resourceSpans: [
           {
@@ -286,7 +258,7 @@ describe('OTLPReceiver', () => {
         .send(otlpRequest)
         .expect(200);
 
-      expect(addSpansSpy).toHaveBeenCalledWith(
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
         'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
         expect.arrayContaining([
           expect.objectContaining({
@@ -299,6 +271,7 @@ describe('OTLPReceiver', () => {
             }),
           }),
         ]),
+        { skipTraceCheck: true },
       );
     });
 
@@ -333,7 +306,7 @@ describe('OTLPReceiver', () => {
     });
 
     it('should handle trace store errors gracefully', async () => {
-      addSpansSpy.mockRejectedValue(new Error('Database error'));
+      mockTraceStore.addSpans.mockRejectedValueOnce(new Error('Database error'));
 
       const otlpRequest = {
         resourceSpans: [
@@ -368,6 +341,8 @@ describe('OTLPReceiver', () => {
 
   describe('Base64 to hex conversion', () => {
     it('should correctly convert base64 trace IDs to hex', async () => {
+      // Manually override the traceStore property for this test too
+      (receiver as any).traceStore = mockTraceStore;
       const traceIdHex = 'deadbeefdeadbeefdeadbeefdeadbeef';
       const traceIdBase64 = Buffer.from(traceIdHex, 'hex').toString('base64');
 
@@ -396,7 +371,9 @@ describe('OTLPReceiver', () => {
         .send(otlpRequest)
         .expect(200);
 
-      expect(addSpansSpy).toHaveBeenCalledWith(traceIdHex, expect.any(Array));
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(traceIdHex, expect.any(Array), {
+        skipTraceCheck: true,
+      });
     });
   });
 });

@@ -58,24 +58,32 @@ export class TraceStore {
     }
   }
 
-  async addSpans(traceId: string, spans: SpanData[]): Promise<void> {
+  async addSpans(
+    traceId: string,
+    spans: SpanData[],
+    options?: { skipTraceCheck?: boolean },
+  ): Promise<void> {
     try {
       logger.debug(`[TraceStore] Adding ${spans.length} spans to trace ${traceId}`);
       const db = this.getDatabase();
 
-      // Verify trace exists
-      logger.debug(`[TraceStore] Verifying trace ${traceId} exists`);
-      const trace = await db
-        .select()
-        .from(tracesTable)
-        .where(eq(tracesTable.traceId, traceId))
-        .limit(1);
+      // Only verify trace exists if not skipping the check (for OTLP scenarios)
+      if (!options?.skipTraceCheck) {
+        logger.debug(`[TraceStore] Verifying trace ${traceId} exists`);
+        const trace = await db
+          .select()
+          .from(tracesTable)
+          .where(eq(tracesTable.traceId, traceId))
+          .limit(1);
 
-      if (trace.length === 0) {
-        logger.warn(`[TraceStore] Trace ${traceId} not found, skipping spans`);
-        return;
+        if (trace.length === 0) {
+          logger.warn(`[TraceStore] Trace ${traceId} not found, skipping spans`);
+          return;
+        }
+        logger.debug(`[TraceStore] Trace ${traceId} found, proceeding with span insertion`);
+      } else {
+        logger.debug(`[TraceStore] Skipping trace existence check for OTLP scenario`);
       }
-      logger.debug(`[TraceStore] Trace ${traceId} found, proceeding with span insertion`);
 
       // Insert spans
       const spanRecords = spans.map((span) => {
