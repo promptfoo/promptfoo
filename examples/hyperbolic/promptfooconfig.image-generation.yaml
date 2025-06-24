@@ -5,13 +5,13 @@ prompts:
   - '{{prompt}}'
 
 providers:
-  - id: hyperbolic:image:FLUX.1-dev
-    label: Flux.1 Dev
+  - id: hyperbolic:image:SDXL1.0-base
+    label: SDXL Base
     config:
       width: 1024
       height: 1024
       steps: 30
-      cfg_scale: 7.5
+      cfg_scale: 7.0
 
   # Note: These models may not be available with your current API key
   # - id: hyperbolic:image:SDXL1.0-base

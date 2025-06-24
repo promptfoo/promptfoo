@@ -14,6 +14,6 @@ providers:
 tests:
   - assert:
       - type: contains-any
-        value: ['hello', 'hi', 'greetings', 'Hello', 'hey']
+        value: ['hello', 'hi', 'greetings', 'Hello', 'hey', 'GREETINGS', 'HELLO']
       - type: llm-rubric
         value: 'The response is a friendly greeting with a robotic or AI personality'

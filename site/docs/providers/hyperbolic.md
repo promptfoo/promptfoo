@@ -77,8 +77,7 @@ hyperbolic:audio:<model_name>
 
 ### Image Generation Models
 
-- `hyperbolic:image:Flux.1-dev` - New SOTA image generation model
-- `hyperbolic:image:SDXL1.0-base` - High-resolution master
+- `hyperbolic:image:SDXL1.0-base` - High-resolution master (recommended)
 - `hyperbolic:image:SD1.5` - Reliable classic Stable Diffusion
 - `hyperbolic:image:SD2` - Enhanced Stable Diffusion v2
 - `hyperbolic:image:SSD` - Segmind SD-1B for domain-specific tasks
@@ -177,12 +176,12 @@ tests:
 prompts:
   - 'A futuristic city skyline at sunset with flying cars'
 providers:
-  - id: hyperbolic:image:Flux.1-dev
+  - id: hyperbolic:image:SDXL1.0-base
     config:
-      width: 1920
-      height: 1080
-      cfg_scale: 7.5
-      steps: 50
+      width: 1024
+      height: 1024
+      cfg_scale: 7.0
+      steps: 30
       negative_prompt: 'blurry, low quality'
 
 tests:
@@ -269,11 +268,20 @@ Hyperbolic offers competitive pricing across all model types (rates as of Januar
 
 - **Melo-TTS**: $5.00 per 1M characters
 
+## Getting Started
+
+Test your setup with working examples:
+
+```bash
+npx promptfoo@latest init --example hyperbolic
+```
+
+This includes tested configurations for text generation, image creation, audio synthesis, and vision tasks.
+
 ## Notes
 
-- Reasoning models (DeepSeek-R1, QwQ) support reasoning tokens tracking
-- Image generation supports advanced features like ControlNet and LoRA
-- All endpoints use the OpenAI-compatible format for easy integration
+- **Model availability varies** - Some models require Pro tier access ($5+ deposit)
+- **Rate limits**: Basic tier: 60 requests/minute (free), Pro tier: 600 requests/minute
+- **Recommended models**: Use `meta-llama/Llama-3.3-70B-Instruct` for text, `SDXL1.0-base` for images
+- All endpoints use OpenAI-compatible format for easy integration
 - VLM models support multimodal inputs (text + images)
-- Basic tier: 60 requests/minute (free), Pro tier: 600 requests/minute ($5+ deposit)
-- Some models may require Pro tier access
