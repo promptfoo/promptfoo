@@ -118,6 +118,51 @@ describe('evaluator', () => {
     });
   });
 
+  describe('findById', () => {
+    it('should handle empty vars array', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+      const persistedEval = await Eval.findById(eval1.id);
+      expect(persistedEval?.vars).toEqual([]);
+    });
+
+    it('should backfill vars from eval results when vars array is empty', async () => {
+      // This will create eval results with vars in test_case
+      const eval1 = await EvalFactory.create({
+        numResults: 2,
+        // @ts-expect-error: injectVarsInResults is for test factory only
+        injectVarsInResults: true,
+      });
+
+      // Remove vars from the evals table to trigger backfill
+      const db = getDb();
+      // Drizzle's .run() does not support ? params for this case, so interpolate directly
+      await db.run(`UPDATE evals SET vars = json('[]') WHERE id = '${eval1.id}'`);
+
+      const persistedEval = await Eval.findById(eval1.id);
+      expect(persistedEval?.vars.length).toBeGreaterThan(0);
+    });
+
+    it('should store backfilled vars in database', async () => {
+      const eval1 = await EvalFactory.create({
+        numResults: 2,
+        // @ts-expect-error: injectVarsInResults is for test factory only
+        injectVarsInResults: true,
+      });
+
+      // Remove vars from the evals table to trigger backfill
+      const db = getDb();
+      await db.run(`UPDATE evals SET vars = json('[]') WHERE id = '${eval1.id}'`);
+
+      const persistedEval1 = await Eval.findById(eval1.id);
+      const vars = persistedEval1?.vars || [];
+      expect(vars.length).toBeGreaterThan(0);
+
+      // Now, after backfilling, the next load should get the same vars from db
+      const persistedEval2 = await Eval.findById(eval1.id);
+      expect(persistedEval2?.vars).toEqual(vars);
+    });
+  });
+
   describe('getStats', () => {
     it('should accumulate assertion token usage correctly', () => {
       const eval1 = new Eval({});
