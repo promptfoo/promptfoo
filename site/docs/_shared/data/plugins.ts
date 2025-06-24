@@ -60,6 +60,7 @@ export type VulnerabilityType =
   | 'criminal'
   | 'custom'
   | 'harmful'
+  | 'medical'
   | 'misinformation and misuse'
   | 'privacy'
   | 'security';
@@ -252,6 +253,34 @@ export const PLUGINS = [
     vulnerabilityType: 'security',
   },
   {
+    category: 'Dataset',
+    description: 'Tests prompt injection attacks using the Harmbench dataset',
+    label: 'technical',
+    link: '/docs/red-team/plugins/harmbench/',
+    name: 'Harmbench',
+    pluginId: 'harmbench',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'security',
+  },
+  {
+    category: 'Dataset',
+    description: 'Evaluates model safety responses using the NVIDIA Aegis dataset',
+    label: 'harmful',
+    link: '/docs/red-team/plugins/aegis/',
+    name: 'Aegis',
+    pluginId: 'aegis',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'harmful',
+  },
+  {
     category: 'Security and Access Control',
     description: 'Attempts to access or use debugging commands',
     label: 'technical',
@@ -321,20 +350,6 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'misinformation and misuse',
-  },
-  {
-    category: 'Dataset',
-    description: 'Tests prompt injection attacks using the Harmbench dataset',
-    label: 'technical',
-    link: '/docs/red-team/plugins/harmbench/',
-    name: 'Harmbench',
-    pluginId: 'harmbench',
-    applicationTypes: {
-      rag: true,
-      agent: true,
-      chat: true,
-    },
-    vulnerabilityType: 'security',
   },
   {
     category: 'Compliance and Legal',
@@ -800,6 +815,81 @@ export const PLUGINS = [
     isRemote: true,
   },
   {
+    category: 'Trust and Safety',
+    description: 'Tests for medical anchoring bias where AI fixates on irrelevant information',
+    label: 'technical',
+    link: '/docs/red-team/plugins/medical/#medical-anchoring-bias',
+    name: 'Medical Anchoring Bias',
+    pluginId: 'medical:anchoring-bias',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'medical',
+    isRemote: true,
+  },
+  {
+    category: 'Trust and Safety',
+    description: 'Tests for fabricated medical facts, studies, or drug interactions',
+    label: 'technical',
+    link: '/docs/red-team/plugins/medical/#medical-hallucination',
+    name: 'Medical Hallucination',
+    pluginId: 'medical:hallucination',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'medical',
+    isRemote: true,
+  },
+  {
+    category: 'Trust and Safety',
+    description: 'Tests for factually wrong medical information that could cause harm',
+    label: 'technical',
+    link: '/docs/red-team/plugins/medical/#medical-incorrect-knowledge',
+    name: 'Medical Incorrect Knowledge',
+    pluginId: 'medical:incorrect-knowledge',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'medical',
+    isRemote: true,
+  },
+  {
+    category: 'Trust and Safety',
+    description: 'Tests for poor medical prioritization and triage decisions',
+    label: 'technical',
+    link: '/docs/red-team/plugins/medical/#medical-prioritization-error',
+    name: 'Medical Prioritization Error',
+    pluginId: 'medical:prioritization-error',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'medical',
+    isRemote: true,
+  },
+  {
+    category: 'Trust and Safety',
+    description: 'Tests for agreeing with incorrect medical assumptions to be helpful',
+    label: 'technical',
+    link: '/docs/red-team/plugins/medical/#medical-sycophancy',
+    name: 'Medical Sycophancy',
+    pluginId: 'medical:sycophancy',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'medical',
+    isRemote: true,
+  },
+  {
     category: 'Brand',
     description:
       'Tests whether AI systems can be manipulated to go off-topic from their intended purpose',
@@ -1089,21 +1179,6 @@ export const PLUGINS = [
     link: '/docs/red-team/plugins/tool-discovery/',
     name: 'Tool Discovery',
     pluginId: 'tool-discovery',
-    vulnerabilityType: 'security',
-  },
-  {
-    applicationTypes: {
-      agent: true,
-      chat: true,
-      rag: true,
-    },
-    category: 'Security and Access Control',
-    description:
-      'Uses conversational approach to discover available tools, functions, and capabilities through multi-step interactions',
-    label: 'technical',
-    link: '/docs/red-team/plugins/tool-discovery-multi-turn',
-    name: 'Multi-turn Tool Discovery',
-    pluginId: 'tool-discovery:multi-turn',
     vulnerabilityType: 'security',
   },
   {

@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Google Live Simple Audio Test
+
+prompts:
+  - file://prompt.yaml
+
+providers:
+  - id: 'google:live:gemini-2.0-flash-live-001'
+    config:
+      generationConfig:
+        response_modalities: ['audio']
+        outputAudioTranscription: {}
+      speechConfig:
+        voiceConfig:
+          prebuiltVoiceConfig:
+            voiceName: 'Charon'
+      timeoutMs: 30000
+
+tests:
+  - vars:
+      question: "How you doin'?"
+    assert:
+      - type: contains
+        value: well
+        # Check that audio transcript was generated with JavaScript
+      - type: javascript
+        value: |
+          return Boolean(
+            context.providerResponse?.audio?.data &&
+            context.providerResponse?.audio?.transcript?.length > 0
+          );
+
+  - vars:
+      question: 'Why is Gemini model named Gemini?'
+    assert:
+      - type: llm-rubric
+        value: Explains the reason why the model is named Gemini

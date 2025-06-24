@@ -86,7 +86,6 @@ export class GolangProvider implements ApiProvider {
     } else {
       if (context) {
         // These are not useful in Golang
-        delete context.fetchWithCache;
         delete context.getCache;
         delete context.logger;
       }

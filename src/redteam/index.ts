@@ -58,6 +58,9 @@ function getPluginSeverity(pluginId: string, pluginConfig?: Record<string, any>)
  * @returns A colored string indicating the status.
  */
 function getStatus(requested: number, generated: number): string {
+  if (requested === 0 && generated === 0) {
+    return chalk.gray('Skipped');
+  }
   if (generated === 0) {
     return chalk.red('Failed');
   }
@@ -158,12 +161,24 @@ const formatTestCount = (numTests: number, strategy: boolean): string =>
     : `${numTests} ${strategy ? 'additional' : ''} tests`;
 
 /**
- * Checks if a plugin matches any of the strategy's target plugins
- * @param pluginId - The ID of the plugin to check
- * @param targetPlugins - Optional array of plugin IDs to match against
+ * Determines whether a strategy should be applied to a test case based on plugin targeting rules.
+ *
+ * This function evaluates multiple criteria to decide if a strategy matches a test case:
+ * - Excludes strategy-exempt plugins (defined in STRATEGY_EXEMPT_PLUGINS)
+ * - Excludes sequence providers (which are verbatim and don't support strategies)
+ * - Respects plugin-level strategy exclusions via excludeStrategies config
+ * - Matches against target plugins through direct ID match or category prefixes
+ *
+ * @param testCase - The test case containing plugin metadata to evaluate
+ * @param strategyId - The ID of the strategy being considered for application
+ * @param targetPlugins - Optional array of plugin IDs or categories that the strategy targets.
+ *                       If undefined or empty, strategy applies to all non-exempt plugins.
+ *                       Supports both exact matches and category prefixes (e.g., 'harmful' matches 'harmful:hate')
+ * @returns True if the strategy should be applied to this test case, false otherwise
  */
 function pluginMatchesStrategyTargets(
   testCase: TestCaseWithPlugin,
+  strategyId: string,
   targetPlugins?: NonNullable<RedteamStrategyObject['config']>['plugins'],
 ): boolean {
   const pluginId = testCase.metadata?.pluginId;
@@ -172,6 +187,14 @@ function pluginMatchesStrategyTargets(
   }
   if (isProviderOptions(testCase.provider) && testCase.provider?.id === 'sequence') {
     // Sequence providers are verbatim and strategies don't apply
+    return false;
+  }
+
+  // Check if this strategy is excluded for this plugin
+  const excludedStrategies = testCase.metadata?.pluginConfig?.excludeStrategies as
+    | string[]
+    | undefined;
+  if (Array.isArray(excludedStrategies) && excludedStrategies.includes(strategyId)) {
     return false;
   }
 
@@ -249,7 +272,7 @@ async function applyStrategies(
 
     const targetPlugins = strategy.config?.plugins;
     const applicableTestCases = testCases.filter((t) =>
-      pluginMatchesStrategyTargets(t, targetPlugins),
+      pluginMatchesStrategyTargets(t, strategy.id, targetPlugins),
     );
 
     const strategyTestCases: TestCase[] = await strategyAction(applicableTestCases, injectVar, {
@@ -431,6 +454,7 @@ export async function synthesize({
   targetLabels,
   showProgressBar: showProgressBarOverride,
   excludeTargetOutputFromAgenticAttackGeneration,
+  testGenerationInstructions,
 }: SynthesizeOptions): Promise<{
   purpose: string;
   entities: string[];
@@ -613,6 +637,10 @@ export async function synthesize({
       try {
         registeredPlugin.validate({
           language,
+          modifiers: {
+            testGenerationInstructions,
+            ...(plugin.config?.modifiers || {}),
+          },
           ...resolvePluginConfig(plugin.config),
         });
       } catch (error) {
@@ -657,6 +685,7 @@ export async function synthesize({
     progressBar = new cliProgress.SingleBar(
       {
         format: 'Generating | {bar} | {percentage}% | {value}/{total} | {task}',
+        gracefulExit: true,
       },
       cliProgress.Presets.shades_classic,
     );
@@ -705,6 +734,10 @@ export async function synthesize({
         delayMs: delay || 0,
         config: {
           language,
+          modifiers: {
+            testGenerationInstructions,
+            ...(plugin.config?.modifiers || {}),
+          },
           ...resolvePluginConfig(plugin.config),
         },
       });
@@ -719,7 +752,8 @@ export async function synthesize({
           metadata: {
             pluginId: plugin.id,
             pluginConfig: resolvePluginConfig(plugin.config),
-            severity: getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
+            severity:
+              plugin.severity ?? getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
             ...(t?.metadata || {}),
           },
         }));
@@ -733,7 +767,7 @@ export async function synthesize({
           const promptVar = testCase.vars?.[injectVar];
           const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
 
-          const extractedGoal = await extractGoalFromPrompt(prompt, purpose);
+          const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id);
 
           (testCase.metadata as any).goal = extractedGoal;
         }
@@ -764,7 +798,8 @@ export async function synthesize({
           metadata: {
             pluginId: plugin.id,
             pluginConfig: resolvePluginConfig(plugin.config),
-            severity: getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
+            severity:
+              plugin.severity || getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
             ...(t.metadata || {}),
           },
         }));
@@ -778,7 +813,7 @@ export async function synthesize({
           const promptVar = testCase.vars?.[injectVar];
           const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
 
-          const extractedGoal = await extractGoalFromPrompt(prompt, purpose);
+          const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id);
 
           (testCase.metadata as any).goal = extractedGoal;
         }

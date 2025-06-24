@@ -15,6 +15,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   static OPENAI_RESPONSES_MODEL_NAMES = [
     'gpt-4o',
     'gpt-4o-2024-08-06',
+    'gpt-4o-2024-11-20',
+    'gpt-4o-2024-05-13',
     'gpt-4.1',
     'gpt-4.1-2025-04-14',
     'gpt-4.1-mini',
@@ -22,14 +24,21 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-4.1-nano',
     'gpt-4.1-nano-2025-04-14',
     'o1',
+    'o1-2024-12-17',
     'o1-preview',
+    'o1-preview-2024-09-12',
     'o1-mini',
+    'o1-mini-2024-09-12',
     'o1-pro',
+    'o1-pro-2025-03-19',
+    'o3-pro',
+    'o3-pro-2025-06-10',
     'o3',
     'o3-2025-04-16',
     'o4-mini',
     'o4-mini-2025-04-16',
     'o3-mini',
+    'o3-mini-2025-01-31',
     'gpt-4.5-preview',
     'gpt-4.5-preview-2025-02-27',
     'codex-mini-latest',
@@ -166,6 +175,25 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...(config.passthrough || {}),
     };
 
+    // Handle reasoning_effort and reasoning parameters for o-series models
+    if (
+      config.reasoning_effort &&
+      (this.modelName.startsWith('o1') ||
+        this.modelName.startsWith('o3') ||
+        this.modelName.startsWith('o4'))
+    ) {
+      body.reasoning_effort = config.reasoning_effort;
+    }
+
+    if (
+      config.reasoning &&
+      (this.modelName.startsWith('o1') ||
+        this.modelName.startsWith('o3') ||
+        this.modelName.startsWith('o4'))
+    ) {
+      body.reasoning = config.reasoning;
+    }
+
     return { body, config: { ...config, response_format: responseFormat } };
   }
 
@@ -199,6 +227,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
+        'json',
+        context?.bustCache ?? context?.debug,
       ));
 
       if (status < 200 || status >= 300) {
