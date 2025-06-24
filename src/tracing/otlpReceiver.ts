@@ -73,7 +73,10 @@ export class OTLPReceiver {
     // OTLP HTTP endpoint for traces
     this.app.post('/v1/traces', async (req, res) => {
       const contentType = req.headers['content-type'] || 'unknown';
-      logger.debug(`[OtlpReceiver] Received trace request: ${contentType}`);
+      const bodySize = req.body ? JSON.stringify(req.body).length : 0;
+      logger.debug(
+        `[OtlpReceiver] Received trace request: ${req.headers['content-type']} with ${bodySize} bytes`,
+      );
       logger.debug('[OtlpReceiver] Starting to process traces');
 
       // Check content type first before processing

@@ -8,6 +8,8 @@ Promptfoo supports OpenTelemetry (OTLP) tracing to help you understand the inter
 
 This feature allows you to collect detailed performance metrics and debug complex provider implementations.
 
+![traces in promptfoo](/img/docs/trace.png)
+
 ## Overview
 
 Promptfoo acts as an **OpenTelemetry receiver**, collecting traces from your providers and displaying them in the web UI. This eliminates the need for external observability infrastructure during development and testing.
