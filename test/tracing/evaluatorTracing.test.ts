@@ -36,7 +36,7 @@ describe('evaluatorTracing', () => {
     it('should generate a 32-character hex string', () => {
       const traceId = generateTraceId();
       expect(traceId).toMatch(/^[a-f0-9]{32}$/);
-      expect(traceId.length).toBe(32);
+      expect(traceId).toHaveLength(32);
     });
 
     it('should generate unique IDs', () => {
@@ -50,7 +50,7 @@ describe('evaluatorTracing', () => {
     it('should generate a 16-character hex string', () => {
       const spanId = generateSpanId();
       expect(spanId).toMatch(/^[a-f0-9]{16}$/);
-      expect(spanId.length).toBe(16);
+      expect(spanId).toHaveLength(16);
     });
 
     it('should generate unique IDs', () => {
