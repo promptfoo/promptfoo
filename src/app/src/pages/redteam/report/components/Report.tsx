@@ -107,7 +107,7 @@ const App: React.FC = () => {
       if (
         prompts.length > 1 &&
         selectedPrompt &&
-        result.prompt.provider !== selectedPrompt.provider
+        result.provider.id !== selectedPrompt.provider
       ) {
         return;
       }
@@ -157,7 +157,7 @@ const App: React.FC = () => {
       if (
         prompts.length > 1 &&
         selectedPrompt &&
-        result.prompt.provider !== selectedPrompt.provider
+        result.provider.id !== selectedPrompt.provider
       ) {
         return;
       }
@@ -201,7 +201,7 @@ const App: React.FC = () => {
         if (
           prompts.length > 1 &&
           selectedPrompt &&
-          row.prompt.provider !== selectedPrompt.provider
+          row.provider.id !== selectedPrompt.provider
         ) {
           return acc;
         }
