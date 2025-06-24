@@ -44,9 +44,11 @@ export function isOtlpReceiverStarted(): boolean {
  * Start the OTLP receiver if tracing is enabled and it hasn't been started yet
  */
 export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<void> {
-  logger.debug(`[Evaluator] Checking tracing config: ${JSON.stringify(testSuite.tracing)}`);
-  logger.debug(`[Evaluator] testSuite keys: ${Object.keys(testSuite)}`);
-  logger.debug(`[Evaluator] Full testSuite.tracing: ${JSON.stringify(testSuite.tracing, null, 2)}`);
+  logger.debug(`[EvaluatorTracing] Checking tracing config: ${JSON.stringify(testSuite.tracing)}`);
+  logger.debug(`[EvaluatorTracing] testSuite keys: ${Object.keys(testSuite)}`);
+  logger.debug(
+    `[EvaluatorTracing] Full testSuite.tracing: ${JSON.stringify(testSuite.tracing, null, 2)}`,
+  );
 
   if (
     testSuite.tracing?.enabled &&
@@ -54,25 +56,27 @@ export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<v
     !otlpReceiverStarted
   ) {
     try {
-      logger.debug('[Evaluator] Tracing configuration detected, starting OTLP receiver');
+      logger.debug('[EvaluatorTracing] Tracing configuration detected, starting OTLP receiver');
       const { startOTLPReceiver } = await import('./otlpReceiver');
       const port = testSuite.tracing.otlp.http.port || 4318;
       const host = testSuite.tracing.otlp.http.host || '0.0.0.0';
-      logger.debug(`[Evaluator] Starting OTLP receiver on ${host}:${port}`);
+      logger.debug(`[EvaluatorTracing] Starting OTLP receiver on ${host}:${port}`);
       await startOTLPReceiver(port, host);
       otlpReceiverStarted = true;
-      logger.info(`[Evaluator] OTLP receiver successfully started on port ${port} for tracing`);
+      logger.info(
+        `[EvaluatorTracing] OTLP receiver successfully started on port ${port} for tracing`,
+      );
     } catch (error) {
-      logger.error(`[Evaluator] Failed to start OTLP receiver: ${error}`);
+      logger.error(`[EvaluatorTracing] Failed to start OTLP receiver: ${error}`);
     }
   } else {
     if (otlpReceiverStarted) {
-      logger.debug('[Evaluator] OTLP receiver already started, skipping initialization');
+      logger.debug('[EvaluatorTracing] OTLP receiver already started, skipping initialization');
     } else {
-      logger.debug('[Evaluator] Tracing not enabled or OTLP HTTP receiver not configured');
-      logger.debug(`[Evaluator] tracing.enabled: ${testSuite.tracing?.enabled}`);
+      logger.debug('[EvaluatorTracing] Tracing not enabled or OTLP HTTP receiver not configured');
+      logger.debug(`[EvaluatorTracing] tracing.enabled: ${testSuite.tracing?.enabled}`);
       logger.debug(
-        `[Evaluator] tracing.otlp.http.enabled: ${testSuite.tracing?.otlp?.http?.enabled}`,
+        `[EvaluatorTracing] tracing.otlp.http.enabled: ${testSuite.tracing?.otlp?.http?.enabled}`,
       );
     }
   }
@@ -84,13 +88,13 @@ export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<v
 export async function stopOtlpReceiverIfNeeded(): Promise<void> {
   if (otlpReceiverStarted) {
     try {
-      logger.debug('[Evaluator] Stopping OTLP receiver');
+      logger.debug('[EvaluatorTracing] Stopping OTLP receiver');
       const { stopOTLPReceiver } = await import('./otlpReceiver');
       await stopOTLPReceiver();
       otlpReceiverStarted = false;
-      logger.info('[Evaluator] OTLP receiver stopped successfully');
+      logger.info('[EvaluatorTracing] OTLP receiver stopped successfully');
     } catch (error) {
-      logger.error(`[Evaluator] Failed to stop OTLP receiver: ${error}`);
+      logger.error(`[EvaluatorTracing] Failed to stop OTLP receiver: ${error}`);
     }
   }
 }
@@ -118,8 +122,8 @@ export async function generateTraceContextIfNeeded(
   const tracingEnabled = isTracingEnabled(test);
 
   if (tracingEnabled) {
-    logger.debug('[Evaluator] Tracing enabled for test case');
-    logger.debug(`[Evaluator] Test metadata: ${JSON.stringify(test.metadata)}`);
+    logger.debug('[EvaluatorTracing] Tracing enabled for test case');
+    logger.debug(`[EvaluatorTracing] Test metadata: ${JSON.stringify(test.metadata)}`);
   }
 
   if (!tracingEnabled) {
@@ -127,7 +131,7 @@ export async function generateTraceContextIfNeeded(
   }
 
   // Import trace store dynamically to avoid circular dependencies
-  logger.debug('[Evaluator] Importing trace store');
+  logger.debug('[EvaluatorTracing] Importing trace store');
   const { getTraceStore } = await import('./store');
   const traceStore = getTraceStore();
 
@@ -135,13 +139,13 @@ export async function generateTraceContextIfNeeded(
   const traceId = generateTraceId();
   const spanId = generateSpanId();
   const traceparent = generateTraceparent(traceId, spanId);
-  logger.debug(`[Evaluator] Generated trace context: traceId=${traceId}, spanId=${spanId}`);
+  logger.debug(`[EvaluatorTracing] Generated trace context: traceId=${traceId}, spanId=${spanId}`);
 
   // Get evaluation ID from test metadata (set by Evaluator class)
   let evaluationId = test.metadata?.evaluationId || evaluateOptions?.eventSource;
   if (!evaluationId) {
     logger.warn(
-      '[Evaluator] No evaluation ID found in test metadata or evaluateOptions, trace will not be linked to evaluation',
+      '[EvaluatorTracing] No evaluation ID found in test metadata or evaluateOptions, trace will not be linked to evaluation',
     );
     evaluationId = `eval-${Date.now()}`;
   }
@@ -149,7 +153,7 @@ export async function generateTraceContextIfNeeded(
 
   // Store trace association in trace store
   try {
-    logger.debug(`[Evaluator] Creating trace record for traceId=${traceId}`);
+    logger.debug(`[EvaluatorTracing] Creating trace record for traceId=${traceId}`);
     await traceStore.createTrace({
       traceId,
       evaluationId: evaluationId || '',
@@ -160,12 +164,14 @@ export async function generateTraceContextIfNeeded(
         vars: test.vars,
       },
     });
-    logger.debug('[Evaluator] Trace record created successfully');
+    logger.debug('[EvaluatorTracing] Trace record created successfully');
   } catch (error) {
-    logger.error(`[Evaluator] Failed to create trace: ${error}`);
+    logger.error(`[EvaluatorTracing] Failed to create trace: ${error}`);
   }
 
-  logger.debug(`[Evaluator] Trace context ready: ${traceparent} for test case ${testCaseId}`);
+  logger.debug(
+    `[EvaluatorTracing] Trace context ready: ${traceparent} for test case ${testCaseId}`,
+  );
 
   return {
     traceparent,
