@@ -171,6 +171,9 @@
                             "HF_TOKEN": {
                               "type": "string"
                             },
+                            "HYPERBOLIC_API_KEY": {
+                              "type": "string"
+                            },
                             "HUGGING_FACE_HUB_TOKEN": {
                               "type": "string"
                             },
