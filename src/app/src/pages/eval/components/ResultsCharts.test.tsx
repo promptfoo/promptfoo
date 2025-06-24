@@ -8,8 +8,10 @@ vi.mock('chart.js', () => {
   const ChartMock = vi.fn().mockImplementation(() => ({
     destroy: vi.fn(),
   }));
-  ChartMock.register = vi.fn();
-  ChartMock.defaults = {
+
+  // Add static properties to the mock constructor
+  (ChartMock as any).register = vi.fn();
+  (ChartMock as any).defaults = {
     color: '#666',
   };
 
