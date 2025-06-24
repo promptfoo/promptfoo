@@ -49,6 +49,9 @@ npx promptfoo eval -c promptfooconfig.audio-generation.yaml
 
 # Vision-language tasks
 npx promptfoo eval -c promptfooconfig.multimodal.yaml
+
+# View results in web UI
+npx promptfoo view
 ```
 
 ## Prerequisites
