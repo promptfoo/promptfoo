@@ -50,6 +50,9 @@ jobs:
         uses: Use-Tusk/test-runner@v1
         # See https://github.com/Use-Tusk/test-runner for full details and examples.
         with:
+          # Required to use parallelization
+          runnerIndex: ${{ matrix.runnerIndex }}
+
           # Required for the test runner, do not remove this input
           runId: ${{ github.event.inputs.runId }}
 
