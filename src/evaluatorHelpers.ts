@@ -1,7 +1,6 @@
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import * as path from 'path';
-import { z } from 'zod';
 import cliState from './cliState';
 import { getEnvBool } from './envars';
 import { importModule } from './esm';
@@ -17,11 +16,9 @@ import {
   type ApiProvider,
   type NunjucksFilterMap,
   type Prompt,
-  TestCaseSchema,
   type TestSuite,
   type CompletedPrompt,
   type EvaluateResult,
-  TestSuiteSchema,
   type TestCase,
 } from './types';
 import { renderVarsInObject } from './util';
