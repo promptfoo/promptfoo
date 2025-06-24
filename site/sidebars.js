@@ -51,6 +51,10 @@ const sidebars = {
       ],
     },
     {
+      type: 'doc',
+      id: 'tracing',
+    },
+    {
       type: 'category',
       label: 'Usage',
       collapsed: true,

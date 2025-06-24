@@ -4,9 +4,13 @@ sidebar_position: 55
 
 # Tracing
 
-Promptfoo supports OpenTelemetry (OTLP) tracing to help you understand the internal operations of your LLM providers during evaluations. This feature allows you to collect detailed performance metrics and debug complex provider implementations.
+Promptfoo supports OpenTelemetry (OTLP) tracing to help you understand the internal operations of your LLM providers during evaluations.
+
+This feature allows you to collect detailed performance metrics and debug complex provider implementations.
 
 ## Overview
+
+Promptfoo acts as an **OpenTelemetry receiver**, collecting traces from your providers and displaying them in the web UI. This eliminates the need for external observability infrastructure during development and testing.
 
 Tracing provides visibility into:
 
@@ -31,11 +35,10 @@ Add tracing configuration to your `promptfooconfig.yaml`:
 
 ```yaml
 tracing:
-  enabled: true
+  enabled: true # Required to send OTLP telemetry
   otlp:
     http:
-      enabled: true
-      port: 4318 # Default OTLP HTTP port
+      enabled: true # Required to start the built-in OTLP receiver
 ```
 
 ### 2. Instrument Your Provider
@@ -124,10 +127,9 @@ tracing:
   enabled: true # Enable/disable tracing
   otlp:
     http:
-      enabled: true
-      port: 4318 # OTLP receiver port
-      host: '0.0.0.0' # Bind address
-      acceptFormats: ['json'] # Currently only JSON is supported
+      enabled: true # Required to start the OTLP receiver
+      # port: 4318   # Optional - defaults to 4318 (standard OTLP HTTP port)
+      # host: '0.0.0.0'  # Optional - defaults to '0.0.0.0'
 ```
 
 ### Environment Variables
@@ -169,7 +171,7 @@ tracing:
 
 ### JavaScript/TypeScript
 
-For detailed examples, see the [OpenTelemetry tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/opentelemetry-tracing).
+For complete provider implementation details, see the [JavaScript Provider documentation](/docs/providers/custom-api/). For tracing-specific examples, see the [OpenTelemetry tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/opentelemetry-tracing).
 
 Key points:
 
@@ -179,6 +181,8 @@ Key points:
 - Set appropriate span attributes and status
 
 ### Python
+
+For complete provider implementation details, see the [Python Provider documentation](/docs/providers/python/).
 
 ```python
 from opentelemetry import trace
@@ -209,6 +213,8 @@ def call_api(prompt, context):
 ```
 
 ## Trace Visualization
+
+Promptfoo includes a built-in trace viewer that displays all collected telemetry data. Since Promptfoo functions as an OTLP receiver, you can view traces directly without configuring external tools like Jaeger or Grafana Tempo.
 
 The web UI displays traces as a hierarchical timeline showing:
 
@@ -366,22 +372,6 @@ DEBUG=promptfoo:* promptfoo eval
 
 # OpenTelemetry debug logs
 OTEL_LOG_LEVEL=debug promptfoo eval
-```
-
-## Storage and Retention
-
-Traces are stored in the Promptfoo SQLite database with:
-
-- Automatic cleanup of old traces (configurable retention)
-- Indexed by evaluation ID for fast retrieval
-- Compressed storage for efficient disk usage
-
-Configure retention (coming soon):
-
-```yaml
-tracing:
-  retention:
-    days: 30 # Keep traces for 30 days
 ```
 
 ## Integration Examples
