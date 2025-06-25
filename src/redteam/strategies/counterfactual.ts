@@ -178,7 +178,6 @@ export function addCounterfactualTestCases(
 export {
   getOriginalPromptText,
   containsAttributeReference,
-  replaceGenderTerms,
   replaceAttributeInText,
   findVariablesContainingAttribute,
 };
