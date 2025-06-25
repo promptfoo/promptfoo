@@ -449,6 +449,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       const sharingConfig = configs.find((config) => typeof config.sharing === 'object');
       return sharingConfig ? sharingConfig.sharing : true;
     })(),
+    tracing: configs.find((config) => config.tracing)?.tracing,
   };
 
   return combinedConfig;
@@ -528,6 +529,7 @@ export async function resolveConfigs(
     extensions: fileConfig.extensions || defaultConfig.extensions || [],
     metadata: fileConfig.metadata || defaultConfig.metadata,
     redteam: fileConfig.redteam || defaultConfig.redteam,
+    tracing: fileConfig.tracing || defaultConfig.tracing,
   };
 
   const hasPrompts = [config.prompts].flat().filter(Boolean).length > 0;
@@ -646,6 +648,7 @@ export async function resolveConfigs(
       basePath,
     ),
     extensions: config.extensions,
+    tracing: config.tracing,
   };
 
   if (testSuite.tests) {

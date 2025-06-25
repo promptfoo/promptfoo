@@ -35,6 +35,7 @@ import { evalRouter } from './routes/eval';
 import { modelAuditRouter } from './routes/modelAudit';
 import { providersRouter } from './routes/providers';
 import { redteamRouter } from './routes/redteam';
+import { tracesRouter } from './routes/traces';
 import { userRouter } from './routes/user';
 
 // Prompts cache
@@ -213,6 +214,7 @@ export function createApp() {
   app.use('/api/user', userRouter);
   app.use('/api/configs', configsRouter);
   app.use('/api/model-audit', modelAuditRouter);
+  app.use('/api/traces', tracesRouter);
 
   app.post('/api/telemetry', async (req: Request, res: Response): Promise<void> => {
     try {
