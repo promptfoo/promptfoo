@@ -483,15 +483,18 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
         break;
 
       case 'llama':
+        // TODO(Will): Can these be consolidated?
         try {
           const messages = JSON.parse(prompt);
           if (Array.isArray(messages)) {
             payload = {
-              messages,
-              max_tokens: maxTokens,
-              temperature,
-              top_p: topP,
-              stop: stopSequences.length > 0 ? stopSequences : undefined,
+              inputs: messages,
+              parameters: {
+                max_new_tokens: maxTokens,
+                temperature,
+                top_p: topP,
+                stop: stopSequences.length > 0 ? stopSequences : undefined,
+              },
             };
           } else {
             throw new Error('Not valid messages format');
@@ -499,11 +502,13 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
         } catch {
           // Simple text completion for Llama
           payload = {
-            prompt,
-            max_tokens: maxTokens,
-            temperature,
-            top_p: topP,
-            stop: stopSequences.length > 0 ? stopSequences : undefined,
+            inputs: prompt,
+            parameters: {
+              max_new_tokens: maxTokens,
+              temperature,
+              top_p: topP,
+              stop: stopSequences.length > 0 ? stopSequences : undefined,
+            },
           };
         }
         break;
@@ -749,6 +754,8 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
         Accept: this.getAcceptType(),
         Body: payload,
       });
+
+      logger.info({ payload });
 
       const startTime = Date.now();
       const response = await runtime.send(command);
