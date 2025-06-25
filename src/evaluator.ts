@@ -1559,7 +1559,14 @@ class Evaluator {
     const totalTokens = this.stats.tokenUsage.total;
     const cachedTokens = this.stats.tokenUsage.cached;
     const cacheHitRate = totalTokens > 0 ? cachedTokens / totalTokens : 0;
-    const avgLatencyMs = totalRequests > 0 ? totalEvalTimeMs / totalRequests : 0;
+
+    // Calculate correct average latency by summing individual request latencies
+    const totalLatencyMs = this.evalRecord.results.reduce(
+      (sum, result) => sum + (result.latencyMs || 0),
+      0,
+    );
+    const avgLatencyMs =
+      this.evalRecord.results.length > 0 ? totalLatencyMs / this.evalRecord.results.length : 0;
 
     // Detect key feature usage patterns
     const usesConversationVar = prompts.some((p) => p.raw.includes('_conversation'));
