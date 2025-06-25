@@ -10,6 +10,11 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import { REDTEAM_SIMULATED_USER_STRATEGY_ID } from '@promptfoo/redteam/constants';
+import {
+  MULTI_TURN_STRATEGIES,
+  type MultiTurnStrategy,
+} from '@promptfoo/redteam/constants/strategies';
 import type { StrategyCardData } from './strategies/types';
 
 const DEFAULT_LANGUAGES: Record<string, string> = {
@@ -88,7 +93,8 @@ export default function StrategyConfigDialog({
       strategy === 'crescendo' ||
       strategy === 'pandamonium' ||
       strategy === 'gcg' ||
-      strategy === 'citation'
+      strategy === 'citation' ||
+      strategy === REDTEAM_SIMULATED_USER_STRATEGY_ID
     ) {
       onSave(strategy, localConfig);
     } else if (strategy === 'multilingual') {
@@ -277,12 +283,11 @@ export default function StrategyConfigDialog({
           />
         </Box>
       );
-    } else if (strategy === 'goat' || strategy === 'crescendo') {
+    } else if (strategy && MULTI_TURN_STRATEGIES.includes(strategy as MultiTurnStrategy)) {
       return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Typography variant="body2" color="text.secondary">
-            Configure the {strategy === 'goat' ? 'GOAT' : 'Crescendo'} multi-turn strategy
-            parameters.
+            Configure the multi-turn strategy parameters.
           </Typography>
 
           <TextField

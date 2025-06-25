@@ -87,3 +87,18 @@ const _ALL_STRATEGIES = [
 ] as const;
 export const ALL_STRATEGIES = Array.from(new Set(_ALL_STRATEGIES)).sort();
 export type Strategy = (typeof ALL_STRATEGIES)[number];
+
+export const CONFIGURABLE_STRATEGIES = [
+  'multilingual',
+  'best-of-n',
+  'goat',
+  'crescendo',
+  'pandamonium',
+  'jailbreak',
+  'jailbreak:tree',
+  'gcg',
+  'citation',
+  REDTEAM_SIMULATED_USER_STRATEGY_ID,
+] as const;
+
+export type ConfigurableStrategy = (typeof CONFIGURABLE_STRATEGIES)[number];
