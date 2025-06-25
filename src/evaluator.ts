@@ -13,6 +13,7 @@ import { FILE_METADATA_KEY } from './constants';
 import { updateSignalFile } from './database/signal';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
+import { readGlobalConfig } from './globalConfig/globalConfig';
 import logger from './logger';
 import type Eval from './models/eval';
 import { generateIdFromPrompt } from './models/prompt';
@@ -1477,7 +1478,55 @@ class Evaluator {
       suite: testSuite,
     });
 
+    // Calculate additional metrics for telemetry
+    const endTime = Date.now();
+    const totalEvalTimeMs = endTime - startTime;
+
+    // Calculate aggregated metrics
+    const totalCost = prompts.reduce((acc, p) => acc + (p.metrics?.cost || 0), 0);
+
+    // Calculate token usage efficiency
+    const totalTokens = this.stats.tokenUsage.total;
+    const cachedTokens = this.stats.tokenUsage.cached;
+
+    // Detect key feature usage patterns
+    const usesConversationVar = prompts.some((p) => p.raw.includes('_conversation'));
+    const usesTransforms = Boolean(
+      tests.some((t) => t.options?.transform || t.options?.postprocess) ||
+        testSuite.providers.some((p) => Boolean(p.transform)),
+    );
+    const usesScenarios = Boolean(testSuite.scenarios && testSuite.scenarios.length > 0);
+
+    // Detect if using example provider from redteam setup UI
+    const usesExampleProvider = testSuite.providers.some((provider) => {
+      if (provider.config && typeof provider.config.url === 'string') {
+        return (
+          provider.config.url.includes('redpanda-internal-rag-example.promptfoo.app') ||
+          provider.label === 'internal-rag-example'
+        );
+      }
+      return false;
+    });
+
+    // Calculate assertion metrics
+    const totalAssertions = prompts.reduce(
+      (acc, p) => acc + (p.metrics?.assertPassCount || 0) + (p.metrics?.assertFailCount || 0),
+      0,
+    );
+    const passedAssertions = prompts.reduce((acc, p) => acc + (p.metrics?.assertPassCount || 0), 0);
+
+    // Detect timeout occurrences
+    const timeoutOccurred =
+      evalTimedOut || this.evalRecord.results.some((r) => r.error && r.error.includes('timed out'));
+
+    // Get redteam state from global config
+    const globalConfig = readGlobalConfig();
+    const isRedteam = Boolean(
+      (globalConfig && globalConfig.hasHarmfulRedteamConsent) || testSuite.redteam,
+    );
+
     telemetry.record('eval_ran', {
+      // Basic metrics
       numPrompts: prompts.length,
       numTests: prompts.reduce(
         (acc, p) =>
@@ -1504,8 +1553,33 @@ class Evaluator {
       hasAnyPass: this.evalRecord.prompts.some(
         (p) => p.metrics?.testPassCount && p.metrics.testPassCount > 0,
       ),
-      // FIXME(ian): Does this work?  I think redteam is only on the config, not testSuite.
-      // isRedteam: Boolean(testSuite.redteam),
+
+      // Raw counts (PostHog can calculate rates)
+      numSuccesses: this.stats.successes,
+      numFailures: this.stats.failures,
+      numErrors: this.stats.errors,
+
+      // Performance metrics
+      totalEvalTimeMs,
+      concurrencyUsed: concurrency,
+      timeoutOccurred,
+
+      // Raw token and cost data (PostHog can calculate rates/averages)
+      totalTokens,
+      cachedTokens,
+      totalCost: Math.round(totalCost * 10000) / 10000,
+      totalRequests: this.stats.tokenUsage.numRequests,
+
+      // Raw assertion data (PostHog can calculate pass rate)
+      numAssertions: totalAssertions,
+      passedAssertions,
+
+      // Feature usage flags
+      usesConversationVar,
+      usesTransforms,
+      usesScenarios,
+      usesExampleProvider,
+      isRedteam,
     });
 
     // Update database signal file after all results are written
