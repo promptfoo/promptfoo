@@ -48,6 +48,10 @@ const sidebars = {
         { type: 'doc', id: 'configuration/scenarios' },
         { type: 'doc', id: 'configuration/caching' },
         { type: 'doc', id: 'configuration/telemetry' },
+        {
+          type: 'doc',
+          id: 'tracing',
+        },
       ],
     },
     {
@@ -124,6 +128,7 @@ const sidebars = {
         { type: 'doc', id: 'enterprise/red-teams' },
         { type: 'doc', id: 'enterprise/findings' },
         { type: 'doc', id: 'enterprise/webhooks' },
+        { type: 'doc', id: 'enterprise/audit-logging' },
         {
           type: 'link',
           label: 'API Reference',
@@ -152,6 +157,7 @@ const sidebars = {
     { type: 'doc', id: 'enterprise/red-teams' },
     { type: 'doc', id: 'enterprise/findings' },
     { type: 'doc', id: 'enterprise/webhooks' },
+    { type: 'doc', id: 'enterprise/audit-logging' },
     {
       type: 'link',
       label: 'API Reference',

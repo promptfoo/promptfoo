@@ -94,6 +94,23 @@ export abstract class RedteamPluginBase {
     protected config: PluginConfig = {},
   ) {
     logger.debug(`RedteamPluginBase initialized with purpose: ${purpose}, injectVar: ${injectVar}`);
+
+    // Merge default excluded strategies with user-provided ones
+    const defaultExcludedStrategies = this.getDefaultExcludedStrategies();
+    if (defaultExcludedStrategies.length > 0 || config.excludeStrategies) {
+      this.config.excludeStrategies = Array.from(
+        new Set([...defaultExcludedStrategies, ...(config.excludeStrategies || [])]),
+      );
+    }
+  }
+
+  /**
+   * Returns an array of strategy IDs that should be excluded by default for this plugin.
+   * Override this method in subclasses to specify plugin-specific strategy exclusions.
+   * @returns An array of strategy IDs to exclude.
+   */
+  protected getDefaultExcludedStrategies(): string[] {
+    return [];
   }
 
   /**
@@ -188,6 +205,12 @@ export abstract class RedteamPluginBase {
       assert: this.getAssertions(prompt.prompt),
       metadata: {
         pluginId: getShortPluginId(this.id),
+        pluginConfig: {
+          ...(this.config.excludeStrategies &&
+            this.config.excludeStrategies.length > 0 && {
+              excludeStrategies: this.config.excludeStrategies,
+            }),
+        },
       },
     }));
   }

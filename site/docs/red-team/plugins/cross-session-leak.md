@@ -27,6 +27,11 @@ redteam:
     - cross-session-leak
 ```
 
+:::note Strategy exclusions
+The Crescendo and GOAT multi-turn strategies are incompatible with this plugin.
+They are automatically skipped when generating tests.
+:::
+
 ## Example Test Cases
 
 Here are some example test cases:

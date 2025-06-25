@@ -158,7 +158,7 @@ export default class Eval {
     }
 
     // backfill vars
-    if (!eval_.vars) {
+    if (!eval_.vars || eval_.vars.length === 0) {
       const vars = await EvalQueries.getVarsFromEval(id);
       evalInstance.setVars(vars);
       await EvalQueries.setVars(id, vars);
@@ -197,6 +197,7 @@ export default class Eval {
       author?: string;
       // Be wary, this is EvalResult[] and not EvaluateResult[]
       results?: EvalResult[];
+      vars?: string[];
     },
   ): Promise<Eval> {
     const createdAt = opts?.createdAt || new Date();
@@ -215,6 +216,7 @@ export default class Eval {
           description: config.description,
           config,
           results: {},
+          vars: opts?.vars || [],
         })
         .run();
 
