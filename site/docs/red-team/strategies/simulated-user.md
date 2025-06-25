@@ -18,6 +18,7 @@ redteam:
     - id: simulated-user
       config:
         maxTurns: 5
+        stateful: false # Sends the entire conversation history with each turn (Default)
 ```
 
 The strategy sends user instructions stored in the variable specified by `injectVar` to your target model over multiple turns. The conversation stops when the maximum number of turns is reached or the agent responds with `###STOP###`.

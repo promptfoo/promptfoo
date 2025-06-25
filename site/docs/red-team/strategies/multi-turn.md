@@ -33,6 +33,7 @@ strategies:
   - id: simulated-user
     config:
       maxTurns: 5
+      stateful: false # Sends the entire conversation history with each turn (Default)
 ```
 
 Increasing the number of turns and backtracks will make the strategy more aggressive, but it will also take longer to complete and cost more.

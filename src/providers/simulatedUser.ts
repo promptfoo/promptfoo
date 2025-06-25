@@ -21,6 +21,7 @@ export type AgentProviderOptions = ProviderOptions & {
     userProvider?: ProviderOptions;
     instructions?: string;
     maxTurns?: number;
+    stateful?: boolean;
   };
 };
 
@@ -29,10 +30,26 @@ export class SimulatedUser implements ApiProvider {
   private readonly maxTurns: number;
   private readonly rawInstructions: string;
 
+  private targetConfig: {
+    /**
+     * Whether the target provider is stateful.
+     */
+    stateful: boolean;
+    /**
+     * If the target is stateful, a session id returned by the target during the first call to it.
+     */
+    sessionId: string | null;
+  };
+
   constructor({ id, label, config }: AgentProviderOptions) {
     this.identifier = id ?? label ?? 'agent-provider';
     this.maxTurns = config.maxTurns ?? 10;
     this.rawInstructions = config.instructions || '{{instructions}}';
+
+    this.targetConfig = {
+      stateful: config.stateful ?? false,
+      sessionId: null,
+    };
   }
 
   id() {
@@ -43,6 +60,8 @@ export class SimulatedUser implements ApiProvider {
     messages: Message[],
     userProvider: PromptfooSimulatedUserProvider,
   ): Promise<Message[]> {
+    logger.debug('[SimulatedUser] Sending message to simulated user (tau) provider');
+
     const flippedMessages = messages.map((message) => {
       return {
         role: message.role === 'user' ? 'assistant' : 'user',
@@ -60,14 +79,32 @@ export class SimulatedUser implements ApiProvider {
     targetProvider: ApiProvider,
     prompt: string,
   ): Promise<Message[]> {
+    logger.debug('[SimulatedUser] Sending message to target provider');
+
+    const payload = this.targetConfig.stateful
+      ? JSON.stringify([{ role: 'system', content: prompt }])
+      : JSON.stringify([{ role: 'system', content: prompt }, ...messages]);
+
     const response = await targetProvider.callApi(
-      JSON.stringify([{ role: 'system', content: prompt }, ...messages]),
+      payload,
+      this.targetConfig.sessionId
+        ? {
+            vars: { sessionId: this.targetConfig.sessionId },
+            prompt: { raw: '', label: 'target' },
+          }
+        : undefined,
     );
+
+    if (this.targetConfig.stateful && response.sessionId) {
+      this.targetConfig.sessionId = response.sessionId;
+    }
+
     if (targetProvider.delay) {
       logger.debug(`[SimulatedUser] Sleeping for ${targetProvider.delay}ms`);
       await sleep(targetProvider.delay);
     }
-    logger.debug(`Agent: ${response.output}`);
+
+    logger.debug(`[SimulatedUser] Agent: ${response.output}`);
     return [...messages, { role: 'assistant', content: String(response.output || '') }];
   }
 
@@ -88,6 +125,8 @@ export class SimulatedUser implements ApiProvider {
     const maxTurns = this.maxTurns;
     let numRequests = 0;
     for (let i = 0; i < maxTurns; i++) {
+      logger.debug(`[SimulatedUser] Turn ${i + 1} of ${maxTurns}`);
+
       const messagesToUser = await this.sendMessageToUser(messages, userProvider);
       const lastMessage = messagesToUser[messagesToUser.length - 1];
       if (
