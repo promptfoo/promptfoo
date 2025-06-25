@@ -2,7 +2,7 @@
 title: 'Next Generation of Red Teaming for LLM Agents'
 description: Promptfoo is introducing our revolutionary, next-generation red teaming agent designed for enterprise-grade LLM agents.
 image: /img/blog/summer-2025-new-redteam-agent/title.jpg
-keywords: [promptfoo, AI security, red teaming, LLM evaluation, prompt engineering, AI agents]
+keywords: [promptfoo, AI security, red teaming, LLM eval, prompt engineering, AI agents]
 date: 2025-06-15
 authors: [steve]
 ---
@@ -23,11 +23,11 @@ Early red teaming tools and research began with jailbreaks like "Ignore all prev
 
 First-generation systems were simple Q&A chatbots, perhaps with only a vector database. However, we've rapidly moved past these; the systems being developed are far more complex.
 
-**What a public facing Customer Service Agent might look like in 2025:**
+**What a public-facing Customer Service Agent might look like in 2025:**
 
 ![Complex Agent Architecture](/img/blog/summer-2025-new-redteam-agent/customer_service_agent.jpg)
 
-Engineers are used to building secure distributed systems, leveraging well-known and solid security principles. Just because there's an LLM involved does not mean everything we've learned goes out the window. Enterprise developers are not allowing public-facing agents to write their own SQL queries or handle authentication (although, we can help you confirm that).
+Engineers are used to building secure distributed systems, leveraging well-known and solid security principles. Just because there's an LLM involved does not mean everything we've learned goes out the window. Enterprise developers are not allowing public-facing agents to write their own SQL queries or handle authentication (although we can help you confirm that).
 
 In the systems we've worked with, authentication and session management are properly handled outside the LLM by mechanisms already in place on the website. SQL queries are parameterized within the code, not handled freely by LLMs.
 
@@ -98,7 +98,7 @@ We needed to apply traditional penetration testing techniques to these systems. 
 
 ## The Next Evolution
 
-Our new system is built from the ground up to emulate a human red teamer's intelligence, creativity, and adaptability.
+We built our new system from the ground up to emulate a human red teamer's intelligence, creativity, and adaptability.
 
 ### 1. Deep Reconnaissance
 
@@ -244,4 +244,4 @@ I began my career as a penetration tester and security consultant at Pricewaterh
 
 ## What is Promptfoo?
 
-Promptfoo is the world leader in LLM evals and red teaming. We are powered by an open source project with over [100k users](https://www.promptfoo.dev/blog/100k-users/) - trusted by foundation labs and the fortune 500.
+Promptfoo is the world leader in LLM evals and red teaming. We are powered by an open source project with over [100k users](https://www.promptfoo.dev/blog/100k-users/) - trusted by foundation labs and the Fortune 500.
