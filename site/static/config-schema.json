@@ -171,6 +171,9 @@
                             "HF_TOKEN": {
                               "type": "string"
                             },
+                            "HYPERBOLIC_API_KEY": {
+                              "type": "string"
+                            },
                             "HUGGING_FACE_HUB_TOKEN": {
                               "type": "string"
                             },
@@ -1543,6 +1546,106 @@
         },
         "writeLatestResults": {
           "type": "boolean"
+        },
+        "tracing": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "otlp": {
+              "type": "object",
+              "properties": {
+                "http": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "default": true
+                    },
+                    "port": {
+                      "type": "number",
+                      "default": 4318
+                    },
+                    "host": {
+                      "type": "string",
+                      "default": "0.0.0.0"
+                    },
+                    "acceptFormats": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "protobuf",
+                          "json"
+                        ]
+                      },
+                      "default": [
+                        "json"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "grpc": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "default": false
+                    },
+                    "port": {
+                      "type": "number",
+                      "default": 4317
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "storage": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "sqlite"
+                  ],
+                  "default": "sqlite"
+                },
+                "retentionDays": {
+                  "type": "number",
+                  "default": 30
+                }
+              },
+              "additionalProperties": false
+            },
+            "forwarding": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "endpoint": {
+                  "type": "string"
+                },
+                "headers": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "endpoint"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
         },
         "evaluateOptions": {
           "type": "object",
