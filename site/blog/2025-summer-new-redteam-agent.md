@@ -4,7 +4,7 @@ description: Promptfoo is introducing our revolutionary, next-generation red tea
 image: /img/blog/summer-2025-new-redteam-agent/title.jpg
 keywords: [promptfoo, AI security, red teaming, LLM evaluation, prompt engineering, AI agents]
 date: 2025-06-15
-author: 'Steven Klein, Principal Engineer at Promptfoo'
+authors: [steve]
 ---
 
 # The Next Generation of Red Teaming for LLM Agents
@@ -12,6 +12,8 @@ author: 'Steven Klein, Principal Engineer at Promptfoo'
 ## The Evolution of Red Teaming
 
 Early red teaming tools and research started with jailbreaks like "Ignore all previous instructions", and static lists of harmful prompts. At Promptfoo we took those ideas a step forward by dynamically generating attacks based on the context of the target application.
+
+<!-- truncate -->
 
 **Existing attack architecture**
 

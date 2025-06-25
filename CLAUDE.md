@@ -2,6 +2,20 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Frontend API Calls
+
+When making API calls from the React app (`src/app`), always use the `callApi` function from `@app/utils/api` instead of direct `fetch()` calls. This ensures proper API base URL handling.
+
+```typescript
+import { callApi } from '@app/utils/api';
+
+// Correct
+const response = await callApi('/traces/evaluation/123');
+
+// Incorrect - will fail in development
+const response = await fetch('/api/traces/evaluation/123');
+```
+
 ## Build Commands
 
 - `npm run build` - Build the project

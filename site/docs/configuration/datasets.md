@@ -28,7 +28,7 @@ tests:
       location: 'Great Barrier Reef'
 ```
 
-Alternatively, you can specify your [prompts as CSV](/docs/configuration/parameters/#csv-prompts):
+Alternatively, you can specify your [prompts as CSV](/docs/configuration/prompts#csv-prompts):
 
 ```yaml
 prompts: file://travel-guide-prompts.csv
@@ -74,7 +74,7 @@ promptfoo generate dataset -w
 
 ### Loading from output files
 
-When using the `-o` flag, you will need to include the generated dataset within the [tests](/docs/configuration/parameters/#tests-and-vars) block of your configuration file.
+When using the `-o` flag, you will need to include the generated dataset within the [tests](/docs/configuration/test-cases) block of your configuration file.
 
 For example:
 

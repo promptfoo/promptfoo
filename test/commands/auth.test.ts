@@ -46,6 +46,7 @@ describe('auth command', () => {
     jest.clearAllMocks();
     jest.resetAllMocks();
     program = new Command();
+    process.exitCode = undefined;
     authCommand(program);
 
     // Set up a basic mock that just returns the expected data

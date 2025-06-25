@@ -25,7 +25,6 @@ export type EnvVars = {
   PROMPTFOO_DISABLE_PDF_AS_TEXT?: boolean;
   PROMPTFOO_DISABLE_REDTEAM_MODERATION?: boolean;
   PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION?: boolean;
-  PROMPTFOO_DISABLE_REDTEAM_TARGET_DISCOVERY_AGENT?: boolean;
   PROMPTFOO_DISABLE_REF_PARSER?: boolean;
   PROMPTFOO_DISABLE_SHARE_EMAIL_REQUEST?: boolean;
   PROMPTFOO_DISABLE_SHARE_WARNING?: boolean;
@@ -217,6 +216,9 @@ export type EnvVars = {
   /** @deprecated Use HF_TOKEN instead */
   HF_API_TOKEN?: string;
   HF_TOKEN?: string;
+
+  // Hyperbolic
+  HYPERBOLIC_API_KEY?: string;
 
   // Langfuse
   LANGFUSE_HOST?: string;
