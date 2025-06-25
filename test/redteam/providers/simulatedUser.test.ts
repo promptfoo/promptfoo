@@ -101,4 +101,129 @@ describe('RedteamSimulatedUserProvider', () => {
       },
     });
   });
+
+  it('should set stateful to true when configured', async () => {
+    const mockCallApi = jest.fn().mockResolvedValue({ output: 'test response' });
+    jest.mocked(SimulatedUser).mockImplementation(function (this: any) {
+      this.id = () => 'test-id';
+      this.callApi = mockCallApi;
+      this.identifier = 'test-id';
+      this.maxTurns = 3;
+      this.rawInstructions = 'test instructions';
+      jest.spyOn(this, 'sendMessageToUser').mockImplementation();
+      jest.spyOn(this, 'sendMessageToAgent').mockImplementation();
+      return this;
+    });
+
+    const provider = new RedteamSimulatedUserProvider({
+      injectVar: 'test_var',
+      maxTurns: 3,
+      stateful: true,
+    });
+
+    const prompt: Prompt = { raw: 'test prompt', display: 'test prompt', label: 'test' };
+    const context: CallApiContextParams = {
+      prompt,
+      vars: { test: 'value' },
+      originalProvider: {
+        id: () => 'test',
+        callApi: async () => ({ output: 'test' }),
+      },
+    };
+    const options: CallApiOptionsParams = {};
+
+    await provider.callApi('test prompt', context, options);
+
+    expect(SimulatedUser).toHaveBeenCalledWith({
+      id: `promptfoo:redteam:${REDTEAM_SIMULATED_USER_STRATEGY_ID}`,
+      config: {
+        instructions: '{{test_var}}',
+        maxTurns: 3,
+        stateful: true,
+      },
+    });
+  });
+
+  it('should set stateful to false when explicitly configured', async () => {
+    const mockCallApi = jest.fn().mockResolvedValue({ output: 'test response' });
+    jest.mocked(SimulatedUser).mockImplementation(function (this: any) {
+      this.id = () => 'test-id';
+      this.callApi = mockCallApi;
+      this.identifier = 'test-id';
+      this.maxTurns = 2;
+      this.rawInstructions = 'test instructions';
+      jest.spyOn(this, 'sendMessageToUser').mockImplementation();
+      jest.spyOn(this, 'sendMessageToAgent').mockImplementation();
+      return this;
+    });
+
+    const provider = new RedteamSimulatedUserProvider({
+      injectVar: 'test_var',
+      maxTurns: 2,
+      stateful: false,
+    });
+
+    const prompt: Prompt = { raw: 'test prompt', display: 'test prompt', label: 'test' };
+    const context: CallApiContextParams = {
+      prompt,
+      vars: { test: 'value' },
+      originalProvider: {
+        id: () => 'test',
+        callApi: async () => ({ output: 'test' }),
+      },
+    };
+    const options: CallApiOptionsParams = {};
+
+    await provider.callApi('test prompt', context, options);
+
+    expect(SimulatedUser).toHaveBeenCalledWith({
+      id: `promptfoo:redteam:${REDTEAM_SIMULATED_USER_STRATEGY_ID}`,
+      config: {
+        instructions: '{{test_var}}',
+        maxTurns: 2,
+        stateful: false,
+      },
+    });
+  });
+
+  it('should default stateful to false when not specified', async () => {
+    const mockCallApi = jest.fn().mockResolvedValue({ output: 'test response' });
+    jest.mocked(SimulatedUser).mockImplementation(function (this: any) {
+      this.id = () => 'test-id';
+      this.callApi = mockCallApi;
+      this.identifier = 'test-id';
+      this.maxTurns = 5;
+      this.rawInstructions = 'test instructions';
+      jest.spyOn(this, 'sendMessageToUser').mockImplementation();
+      jest.spyOn(this, 'sendMessageToAgent').mockImplementation();
+      return this;
+    });
+
+    const provider = new RedteamSimulatedUserProvider({
+      injectVar: 'test_var',
+      maxTurns: 4,
+    });
+
+    const prompt: Prompt = { raw: 'test prompt', display: 'test prompt', label: 'test' };
+    const context: CallApiContextParams = {
+      prompt,
+      vars: { test: 'value' },
+      originalProvider: {
+        id: () => 'test',
+        callApi: async () => ({ output: 'test' }),
+      },
+    };
+    const options: CallApiOptionsParams = {};
+
+    await provider.callApi('test prompt', context, options);
+
+    expect(SimulatedUser).toHaveBeenCalledWith({
+      id: `promptfoo:redteam:${REDTEAM_SIMULATED_USER_STRATEGY_ID}`,
+      config: {
+        instructions: '{{test_var}}',
+        maxTurns: 4,
+        stateful: false,
+      },
+    });
+  });
 });
