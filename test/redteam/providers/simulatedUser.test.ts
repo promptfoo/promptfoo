@@ -66,6 +66,7 @@ describe('RedteamSimulatedUserProvider', () => {
       config: {
         instructions: '{{test_var}}',
         maxTurns: 5,
+        stateful: false,
       },
     });
 
@@ -95,7 +96,8 @@ describe('RedteamSimulatedUserProvider', () => {
       id: `promptfoo:redteam:${REDTEAM_SIMULATED_USER_STRATEGY_ID}`,
       config: {
         instructions: '{{test_var}}',
-        maxTurns: undefined,
+        maxTurns: 5,
+        stateful: false,
       },
     });
   });

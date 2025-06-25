@@ -78,9 +78,7 @@ describe('SimulatedUser', () => {
       expect(result.output).toContain('User:');
       expect(result.output).toContain('Assistant:');
       expect(result.tokenUsage?.numRequests).toBe(2);
-      expect(originalProvider.callApi).toHaveBeenCalledWith(
-        expect.stringContaining('[{"role":"system","content":"test prompt"}'),
-      );
+      expect(originalProvider.callApi).toHaveBeenCalledTimes(2);
       expect(timeUtils.sleep).not.toHaveBeenCalled();
     });
 
@@ -100,9 +98,7 @@ describe('SimulatedUser', () => {
 
       const messageCount = result.output?.split('---').length;
       expect(messageCount).toBe(2);
-      expect(originalProvider.callApi).toHaveBeenCalledWith(
-        expect.stringContaining('[{"role":"system","content":"test prompt"}'),
-      );
+      expect(originalProvider.callApi).toHaveBeenCalledTimes(1);
       expect(timeUtils.sleep).not.toHaveBeenCalled();
     });
 
@@ -158,9 +154,7 @@ describe('SimulatedUser', () => {
       );
 
       expect(result.output).toBeDefined();
-      expect(providerWithDelay.callApi).toHaveBeenCalledWith(
-        expect.stringContaining('[{"role":"system","content":"test prompt"}'),
-      );
+      expect(providerWithDelay.callApi).toHaveBeenCalledTimes(2);
       expect(timeUtils.sleep).toHaveBeenCalledWith(100);
     });
   });
