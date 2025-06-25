@@ -2796,5 +2796,3 @@ describe('calculateThreadsPerBar', () => {
     expect(calculateThreadsPerBar(101, 20, 19)).toBe(5); // Last bar gets no extra
   });
 });
-
-
