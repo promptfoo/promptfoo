@@ -259,7 +259,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         (filter: any) => filter.filtered,
       );
 
-      if (flaggedOutput && this.deploymentName.startsWith('gpt-4.1')) {
+      if (flaggedOutput) {
         logger.warn(
           `Azure model ${this.deploymentName} output was flagged by content filter: ${JSON.stringify(
             contentFilterResults,
