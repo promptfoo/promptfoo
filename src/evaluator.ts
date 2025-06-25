@@ -1553,10 +1553,13 @@ class Evaluator {
 
     // Calculate aggregated metrics
     const totalCost = prompts.reduce((acc, p) => acc + (p.metrics?.cost || 0), 0);
+    const totalRequests = this.stats.tokenUsage.numRequests;
 
-    // Calculate token usage efficiency
+    // Calculate efficiency metrics
     const totalTokens = this.stats.tokenUsage.total;
     const cachedTokens = this.stats.tokenUsage.cached;
+    const cacheHitRate = totalTokens > 0 ? cachedTokens / totalTokens : 0;
+    const avgLatencyMs = totalRequests > 0 ? totalEvalTimeMs / totalRequests : 0;
 
     // Detect key feature usage patterns
     const usesConversationVar = prompts.some((p) => p.raw.includes('_conversation'));
@@ -1566,15 +1569,11 @@ class Evaluator {
     );
     const usesScenarios = Boolean(testSuite.scenarios && testSuite.scenarios.length > 0);
 
-    // Detect if using example provider from redteam setup UI
+    // Detect if using any promptfoo.app example provider
     const usesExampleProvider = testSuite.providers.some((provider) => {
-      if (provider.config && typeof provider.config.url === 'string') {
-        return (
-          provider.config.url.includes('redpanda-internal-rag-example.promptfoo.app') ||
-          provider.label === 'internal-rag-example'
-        );
-      }
-      return false;
+      const url = typeof provider.config?.url === 'string' ? provider.config.url : '';
+      const label = provider.label || '';
+      return url.includes('promptfoo.app') || label.toLowerCase().includes('example');
     });
 
     // Calculate assertion metrics
@@ -1584,9 +1583,27 @@ class Evaluator {
     );
     const passedAssertions = prompts.reduce((acc, p) => acc + (p.metrics?.assertPassCount || 0), 0);
 
-    // Detect timeout occurrences
+    // Count model-graded vs other assertion types
+    const modelGradedCount = Array.from(assertionTypes).filter((type) =>
+      MODEL_GRADED_ASSERTION_TYPES.has(type as AssertionType),
+    ).length;
+
+    // Calculate provider distribution (maintain exact compatibility)
+    const providerPrefixes = Array.from(
+      new Set(
+        testSuite.providers.map((p) => {
+          const idParts = p.id().split(':');
+          return idParts.length > 1 ? idParts[0] : 'unknown';
+        }),
+      ),
+    );
+
+    // Detect timeout occurrences (more robust than string matching)
     const timeoutOccurred =
-      evalTimedOut || this.evalRecord.results.some((r) => r.error && r.error.includes('timed out'));
+      evalTimedOut ||
+      this.evalRecord.results.some(
+        (r) => r.failureReason === ResultFailureReason.ERROR && r.error?.includes('timed out'),
+      );
 
     // Get redteam state from global config
     const globalConfig = readGlobalConfig();
@@ -1608,14 +1625,7 @@ class Evaluator {
       numVars: varNames.size,
       numProviders: testSuite.providers.length,
       numRepeat: options.repeat || 1,
-      providerPrefixes: Array.from(
-        new Set(
-          testSuite.providers.map((p) => {
-            const idParts = p.id().split(':');
-            return idParts.length > 1 ? idParts[0] : 'unknown';
-          }),
-        ),
-      ).sort(),
+      providerPrefixes: providerPrefixes.sort(),
       assertionTypes: Array.from(assertionTypes).sort(),
       eventSource: options.eventSource || 'default',
       ci: isCI(),
@@ -1630,18 +1640,23 @@ class Evaluator {
 
       // Performance metrics
       totalEvalTimeMs,
+      avgLatencyMs: Math.round(avgLatencyMs),
       concurrencyUsed: concurrency,
       timeoutOccurred,
 
-      // Raw token and cost data (PostHog can calculate rates/averages)
+      // Token and cost efficiency metrics
       totalTokens,
       cachedTokens,
+      cacheHitRate: Math.round(cacheHitRate * 1000) / 1000, // 3 decimal places
       totalCost: Math.round(totalCost * 10000) / 10000,
-      totalRequests: this.stats.tokenUsage.numRequests,
+      totalRequests,
 
-      // Raw assertion data (PostHog can calculate pass rate)
+      // Assertion metrics
       numAssertions: totalAssertions,
       passedAssertions,
+      modelGradedAssertions: modelGradedCount,
+      assertionPassRate:
+        totalAssertions > 0 ? Math.round((passedAssertions / totalAssertions) * 1000) / 1000 : 0,
 
       // Feature usage flags
       usesConversationVar,
