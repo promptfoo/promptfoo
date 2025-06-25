@@ -10,6 +10,7 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import type { StrategyCardData } from './strategies/types';
 
 const DEFAULT_LANGUAGES: Record<string, string> = {
   bn: 'Bengali',
@@ -23,6 +24,7 @@ interface StrategyConfigDialogProps {
   config: Record<string, any>;
   onClose: () => void;
   onSave: (strategy: string, config: Record<string, any>) => void;
+  strategyData: StrategyCardData | null;
 }
 
 export default function StrategyConfigDialog({
@@ -31,6 +33,7 @@ export default function StrategyConfigDialog({
   config,
   onClose,
   onSave,
+  strategyData,
 }: StrategyConfigDialogProps) {
   const [localConfig, setLocalConfig] = React.useState<Record<string, any>>(config || {});
   const [languages, setLanguages] = React.useState<string[]>(
@@ -542,7 +545,7 @@ export default function StrategyConfigDialog({
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Configure {strategy}</DialogTitle>
+      <DialogTitle>Configure {strategyData?.name ?? strategy}</DialogTitle>
       <DialogContent>{renderStrategyConfig()}</DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>

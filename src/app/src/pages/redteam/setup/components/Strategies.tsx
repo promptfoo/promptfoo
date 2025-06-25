@@ -444,6 +444,9 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
           })
         }
         onSave={updateStrategyConfig}
+        strategyData={
+          availableStrategies.find((s) => s.id === configDialog.selectedStrategy) ?? null
+        }
       />
     </Box>
   );
