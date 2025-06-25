@@ -435,6 +435,12 @@ export default class Eval {
 
     // Build filter conditions
     const conditions = [`eval_id = '${this.id}'`];
+
+    // Hide counterfactual variations (show only templates with group summaries)
+    conditions.push(
+      `NOT (json_extract(test_case, '$.metadata.strategyId') = 'counterfactual' AND json_extract(test_case, '$.metadata.counterfactualFor') IS NOT NULL)`,
+    );
+
     if (filter === 'errors') {
       conditions.push(`failure_reason = ${ResultFailureReason.ERROR}`);
     } else if (filter === 'failures') {

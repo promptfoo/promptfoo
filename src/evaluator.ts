@@ -507,6 +507,68 @@ export function generateVarCombinations(
   return combinations;
 }
 
+/**
+ * Aggregate variation results into a group summary for template results
+ */
+function aggregateGroupResults(variations: any[]): any {
+  if (variations.length === 0) {
+    return {
+      pass: true,
+      score: 1,
+      reason: 'No variations to compare',
+      assertion: { type: 'counterfactual-equality' },
+    };
+  }
+
+  // Get the overall group result from the first variation (they should all have the same group result)
+  const firstVariation = variations[0];
+  if (firstVariation.gradingResult?.componentResults?.length > 0) {
+    // Find the counterfactual component result
+    const counterfactualResult = firstVariation.gradingResult.componentResults.find(
+      (result: any) => result.assertion?.type === 'counterfactual-equality',
+    );
+
+    if (counterfactualResult) {
+      // Extract group information from metadata
+      const metadata = counterfactualResult.metadata;
+      const groupSize = metadata?.groupSize || variations.length;
+      const protectedAttribute = metadata?.protectedAttribute || 'unknown';
+      const allDecisions = metadata?.allDecisions || [];
+
+      return {
+        pass: counterfactualResult.pass,
+        score: counterfactualResult.score,
+        reason: `Group result (${groupSize} variations): ${counterfactualResult.reason}`,
+        assertion: { type: 'counterfactual-equality' },
+        metadata: {
+          isGroupSummary: true,
+          protectedAttribute,
+          groupSize,
+          allDecisions,
+          variationCount: variations.length,
+        },
+      };
+    }
+  }
+
+  // Fallback: calculate basic group summary
+  const passCount = variations.filter((v) => v.success).length;
+  const averageScore = variations.reduce((sum, v) => sum + (v.score || 0), 0) / variations.length;
+  const allPassed = passCount === variations.length;
+
+  return {
+    pass: allPassed,
+    score: averageScore,
+    reason: `Group result: ${passCount}/${variations.length} variations passed (avg score: ${averageScore.toFixed(2)})`,
+    assertion: { type: 'counterfactual-equality' },
+    metadata: {
+      isGroupSummary: true,
+      variationCount: variations.length,
+      passCount,
+    },
+  };
+}
+
 class Evaluator {
   evalRecord: Eval;
   testSuite: TestSuite;
@@ -1421,11 +1483,48 @@ class Evaluator {
     }
 
     // Do we have to run counterfactual comparisons?
-    const counterfactualRowsCount = rowsWithCounterfactualAssertion.size;
+    // Group counterfactual results by their counterfactualFor metadata
+    const counterfactualGroups = new Map<string, any[]>();
+
+    // Get all results with counterfactual assertions
+    const allCounterfactualResults = this.evalRecord.persisted
+      ? await Promise.all(
+          Array.from(rowsWithCounterfactualAssertion).map((testIdx) =>
+            this.evalRecord.fetchResultsByTestIdx(testIdx),
+          ),
+        ).then((results) => results.flat())
+      : this.evalRecord.results.filter((r) =>
+          r.testCase.assert?.some((a: any) => a.type === 'counterfactual-equality'),
+        );
+
+    // Group results by counterfactualFor metadata
+    for (const result of allCounterfactualResults) {
+      const metadata = result.testCase.metadata;
+      if (metadata?.strategyId === 'counterfactual' && metadata?.counterfactualFor) {
+        const groupKey = metadata.counterfactualFor;
+        if (!counterfactualGroups.has(groupKey)) {
+          counterfactualGroups.set(groupKey, []);
+          logger.debug(`Created new counterfactual group: "${groupKey}"`);
+        }
+        counterfactualGroups.get(groupKey)!.push(result);
+        logger.debug(
+          `Added test case to group "${groupKey}": ${metadata.flippedAttribute}=${metadata.flippedValue}`,
+        );
+      }
+    }
+
+    const counterfactualGroupsCount = counterfactualGroups.size;
+    logger.debug(`Found ${counterfactualGroupsCount} counterfactual groups to evaluate`);
+
+    // Log group details
+    for (const [groupKey, results] of counterfactualGroups) {
+      const variants = results.map((r: any) => r.testCase.metadata?.flippedValue || 'unknown');
+      logger.debug(`Group "${groupKey}" has ${results.length} variants: [${variants.join(', ')}]`);
+    }
 
     let counterfactualProgressBar;
-    if (counterfactualRowsCount > 0 && multibar && !isWebUI) {
-      counterfactualProgressBar = multibar.create(counterfactualRowsCount, 0, {
+    if (counterfactualGroupsCount > 0 && multibar && !isWebUI) {
+      counterfactualProgressBar = multibar.create(counterfactualGroupsCount, 0, {
         provider: 'Running counterfactual bias checks',
         prompt: '',
         vars: '',
@@ -1433,37 +1532,61 @@ class Evaluator {
     }
 
     let counterfactualCount = 0;
-    for (const testIdx of rowsWithCounterfactualAssertion) {
+    for (const [groupKey, resultsToCompare] of counterfactualGroups) {
       counterfactualCount++;
+
+      logger.debug(
+        `Starting counterfactual comparison ${counterfactualCount}/${counterfactualGroupsCount} for group: "${groupKey}"`,
+      );
+      logger.debug(`Group has ${resultsToCompare.length} test cases to compare`);
 
       if (isWebUI) {
         logger.info(
-          `Running counterfactual comparison ${counterfactualCount} of ${counterfactualRowsCount}...`,
+          `Running counterfactual comparison ${counterfactualCount} of ${counterfactualGroupsCount}...`,
         );
       }
 
-      const resultsToCompare = this.evalRecord.persisted
-        ? await this.evalRecord.fetchResultsByTestIdx(testIdx)
-        : this.evalRecord.results.filter((r) => r.testIdx === testIdx);
       if (resultsToCompare.length === 0) {
-        logger.warn(`Expected results to be found for test index ${testIdx}`);
+        logger.warn(`Expected results to be found for counterfactual group: ${groupKey}`);
         continue;
       }
 
+      // Log the outputs being compared
+      const outputs = resultsToCompare.map((r: any) => r.response?.output || '');
+      logger.debug(`Comparing outputs for group "${groupKey}":`);
+      outputs.forEach((output: string, idx: number) => {
+        const variant = resultsToCompare[idx].testCase.metadata?.flippedValue || 'unknown';
+        logger.debug(
+          `  ${variant}: "${output.substring(0, 100)}${output.length > 100 ? '...' : ''}"`,
+        );
+      });
+
       const counterfactualAssertion = resultsToCompare[0].testCase.assert?.find(
-        (a) => a.type === 'counterfactual-equality',
+        (a: any) => a.type === 'counterfactual-equality',
       ) as Assertion;
 
       if (counterfactualAssertion) {
         const { runCounterfactualAssertion } = await import('./assertions');
-        const outputs = resultsToCompare.map((r) => r.response?.output || '');
-        const testCases = resultsToCompare.map((r) => r.testCase);
+        const outputs = resultsToCompare.map((r: any) => r.response?.output || '');
+        const testCases = resultsToCompare.map((r: any) => r.testCase);
 
+        logger.debug(
+          `Running counterfactual assertion for group "${groupKey}" with ${testCases.length} test cases`,
+        );
         const gradingResults = await runCounterfactualAssertion(
           testCases,
           counterfactualAssertion,
           outputs,
         );
+
+        // Log the grading results
+        logger.debug(`Counterfactual grading results for group "${groupKey}":`);
+        gradingResults.forEach((result: any, idx: number) => {
+          const variant = testCases[idx].metadata?.flippedValue || 'unknown';
+          logger.debug(
+            `  ${variant}: ${result.pass ? 'PASS' : 'FAIL'} (score: ${result.score}) - ${result.reason}`,
+          );
+        });
 
         for (let index = 0; index < resultsToCompare.length; index++) {
           const result = resultsToCompare[index];
@@ -1496,11 +1619,115 @@ class Evaluator {
           });
         } else if (!isWebUI) {
           logger.debug(
-            `Counterfactual comparison #${counterfactualCount} of ${counterfactualRowsCount} complete`,
+            `Counterfactual comparison #${counterfactualCount} of ${counterfactualGroupsCount} complete`,
           );
         }
       }
     }
+
+    // NEW: Replace original template results with group summaries
+    logger.debug('Starting template result replacement with group summaries');
+
+    const originalTemplateResults = new Map<string, any>();
+    const variationGroups = new Map<string, any[]>();
+
+    // Group results by original template prompt and variations
+    const allResults = this.evalRecord.persisted
+      ? await this.evalRecord.getResults()
+      : this.evalRecord.results;
+
+    for (const result of allResults) {
+      if (
+        result.testCase.metadata?.strategyId === 'counterfactual' &&
+        result.testCase.metadata?.counterfactualFor
+      ) {
+        // This is a variation - group it by its original template
+        const originalPrompt = result.testCase.metadata.counterfactualFor;
+        if (!variationGroups.has(originalPrompt)) {
+          variationGroups.set(originalPrompt, []);
+        }
+        variationGroups.get(originalPrompt)!.push(result);
+        logger.debug(
+          `Found variation for original template: ${originalPrompt.substring(0, 50)}...`,
+        );
+      } else if (
+        result.testCase.vars &&
+        typeof result.testCase.vars[cliState.config?.redteam?.injectVar || 'prompt'] === 'string'
+      ) {
+        // Check if this is an original template (contains {{}} variables)
+        const promptValue = result.testCase.vars[cliState.config?.redteam?.injectVar || 'prompt'];
+        if (
+          typeof promptValue === 'string' &&
+          promptValue.includes('{{') &&
+          promptValue.includes('}}')
+        ) {
+          // This looks like an original template
+          originalTemplateResults.set(promptValue, result);
+          logger.debug(`Found original template result: ${promptValue.substring(0, 50)}...`);
+        }
+      }
+    }
+
+    // Replace original template results with group summaries
+    let templatesProcessed = 0;
+    for (const [templatePrompt, templateResult] of originalTemplateResults) {
+      const variations = variationGroups.get(templatePrompt);
+      if (variations && variations.length > 0) {
+        const groupSummary = aggregateGroupResults(variations);
+
+        logger.debug(`🔍 BEFORE REPLACEMENT for template "${templatePrompt.substring(0, 50)}..."`);
+        logger.debug(`  Original result success: ${templateResult.success}`);
+        logger.debug(`  Original result score: ${templateResult.score}`);
+        logger.debug(`  Original result response type: ${typeof templateResult.response}`);
+        logger.debug(
+          `  Original result response: ${typeof templateResult.response === 'string' ? templateResult.response.substring(0, 100) : JSON.stringify(templateResult.response)}`,
+        );
+        logger.debug(`  Original gradingResult: ${JSON.stringify(templateResult.gradingResult)}`);
+
+        // Replace the template result with group summary
+        templateResult.gradingResult = groupSummary;
+        templateResult.score = groupSummary.score;
+        templateResult.success = groupSummary.pass;
+
+        // Update the response object to show group summary in the output
+        const groupSummaryText = `${groupSummary.pass ? 'PASS' : 'FAIL'} - ${groupSummary.reason}`;
+        if (typeof templateResult.response === 'object' && templateResult.response !== null) {
+          // Keep the response structure but update the output
+          templateResult.response = {
+            ...templateResult.response,
+            output: groupSummaryText,
+          };
+        } else {
+          // Fallback to string replacement
+          templateResult.response = groupSummaryText;
+        }
+
+        logger.debug(`🔄 AFTER REPLACEMENT:`);
+        logger.debug(`  New result success: ${templateResult.success}`);
+        logger.debug(`  New result score: ${templateResult.score}`);
+        logger.debug(`  New result response: ${templateResult.response}`);
+        logger.debug(`  New gradingResult: ${JSON.stringify(templateResult.gradingResult)}`);
+
+        if (this.evalRecord.persisted) {
+          logger.debug(`💾 Saving persisted result for template`);
+          await templateResult.save();
+          logger.debug(`✅ Save completed`);
+        } else {
+          logger.debug(`📝 Result is in-memory, no save needed`);
+        }
+
+        templatesProcessed++;
+        logger.debug(
+          `✅ Replaced original template "${templatePrompt.substring(0, 50)}..." result with group summary: ${groupSummary.pass ? 'PASS' : 'FAIL'} (${variations.length} variations)`,
+        );
+      } else {
+        logger.debug(`❌ No variations found for template "${templatePrompt.substring(0, 50)}..."`);
+      }
+    }
+
+    logger.debug(
+      `Completed template result replacement: ${templatesProcessed} templates processed`,
+    );
 
     await this.evalRecord.addPrompts(prompts);
 

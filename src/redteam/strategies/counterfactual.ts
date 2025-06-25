@@ -25,69 +25,7 @@ function containsAttributeReference(text: string, attribute: string): boolean {
   const lowerAttribute = attribute.toLowerCase();
 
   // Direct match
-  if (lowerText.includes(lowerAttribute)) {
-    return true;
-  }
-
-  // Common attribute-related terms
-  const attributeTerms: Record<string, string[]> = {
-    gender: ['male', 'female', 'woman', 'man', 'boy', 'girl', 'he', 'she', 'his', 'her', 'him'],
-    race: ['white', 'black', 'asian', 'hispanic', 'latino', 'african', 'caucasian'],
-    age: ['young', 'old', 'elderly', 'senior', 'teenager', 'adult', 'child'],
-    religion: ['christian', 'muslim', 'jewish', 'hindu', 'buddhist', 'atheist'],
-  };
-
-  const terms = attributeTerms[lowerAttribute] || [];
-  return terms.some((term) => lowerText.includes(term));
-}
-
-/**
- * Handle gender-specific term replacements
- */
-function replaceGenderTerms(text: string, targetGender: string): string {
-  const genderMappings: Record<string, Record<string, string>> = {
-    male: {
-      female: 'male',
-      woman: 'man',
-      women: 'men',
-      girl: 'boy',
-      girls: 'boys',
-      she: 'he',
-      her: 'his',
-      hers: 'his',
-      herself: 'himself',
-    },
-    female: {
-      male: 'female',
-      man: 'woman',
-      men: 'women',
-      boy: 'girl',
-      boys: 'girls',
-      he: 'she',
-      his: 'her',
-      him: 'her',
-      himself: 'herself',
-    },
-  };
-
-  const mappings = genderMappings[targetGender.toLowerCase()];
-  if (!mappings) {
-    return text;
-  }
-
-  let result = text;
-  for (const [from, to] of Object.entries(mappings)) {
-    // Handle capitalization
-    const regex = new RegExp(`\\b${from}\\b`, 'gi');
-    result = result.replace(regex, (match) => {
-      if (match[0] === match[0].toUpperCase()) {
-        return to.charAt(0).toUpperCase() + to.slice(1);
-      }
-      return to;
-    });
-  }
-
-  return result;
+  return lowerText.includes(lowerAttribute);
 }
 
 /**
@@ -114,12 +52,7 @@ function replaceAttributeInText(text: string, attribute: string, newValue: strin
     return newValue;
   }
 
-  // For gender specifically, handle common replacements
-  if (attribute.toLowerCase() === 'gender') {
-    return replaceGenderTerms(text, newValue);
-  }
-
-  // For other attributes, do simple word replacement
+  // For any attribute, do simple word replacement
   const words = text.split(/\b/);
   return words
     .map((word) => {
@@ -170,7 +103,7 @@ function findVariablesContainingAttribute(
  * @param testCases - The original test cases from plugins
  * @param injectVar - The variable being injected (usually 'prompt' or similar)
  * @param config - Configuration containing protectedAttribute and values to flip
- * @returns Array of new test cases with flipped attributes
+ * @returns Array of new test cases with flipped attributes AND marked templates
  */
 export function addCounterfactualTestCases(
   testCases: TestCaseWithPlugin[],
@@ -200,7 +133,13 @@ export function addCounterfactualTestCases(
       // Skip this test case - no variables contain the protected attribute
       continue;
     } else {
-      // Create counterfactual versions by flipping the protected attribute in relevant variables
+      // Mark the original test case as a template since it will generate variations
+      const originalPromptText = getOriginalPromptText(originalTestCase, injectVar);
+
+      // Mark the ORIGINAL test case as a template (modify it in place)
+      // We'll update this during result processing instead of creating a new one
+
+      // Create counterfactual variations by flipping the protected attribute in relevant variables
       for (const value of values) {
         const newVars = { ...originalTestCase.vars };
 
@@ -221,10 +160,11 @@ export function addCounterfactualTestCases(
           metadata: {
             ...originalTestCase.metadata,
             strategyId: 'counterfactual',
-            counterfactualFor: getOriginalPromptText(originalTestCase, injectVar),
+            counterfactualFor: originalPromptText,
             flippedAttribute: protectedAttribute,
             flippedValue: value,
             strategyConfig: config,
+            originalTemplatePrompt: originalPromptText, // Link back to original template prompt
           },
         };
         newTestCases.push(newTestCase);
