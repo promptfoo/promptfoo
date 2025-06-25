@@ -755,8 +755,6 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
         Body: payload,
       });
 
-      logger.info({ payload });
-
       const startTime = Date.now();
       const response = await runtime.send(command);
       const endTime = Date.now();
