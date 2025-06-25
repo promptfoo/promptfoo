@@ -1573,6 +1573,18 @@ class Evaluator {
       hasAnyPass: this.evalRecord.prompts.some(
         (p) => p.metrics?.testPassCount && p.metrics.testPassCount > 0,
       ),
+      numPasses: this.evalRecord.prompts.reduce(
+        (acc, p) => acc + (p.metrics?.testPassCount || 0),
+        0,
+      ),
+      numFails: this.evalRecord.prompts.reduce(
+        (acc, p) => acc + (p.metrics?.testFailCount || 0),
+        0,
+      ),
+      numErrors: this.evalRecord.prompts.reduce(
+        (acc, p) => acc + (p.metrics?.testErrorCount || 0),
+        0,
+      ),
       // FIXME(ian): Does this work?  I think redteam is only on the config, not testSuite.
       // isRedteam: Boolean(testSuite.redteam),
     });
