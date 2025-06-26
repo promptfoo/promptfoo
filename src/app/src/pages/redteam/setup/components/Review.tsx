@@ -67,7 +67,9 @@ export default function Review() {
   const { showToast } = useToast();
   const [forceRegeneration /*, setForceRegeneration*/] = React.useState(true);
   const [debugMode, setDebugMode] = React.useState(false);
-  const [maxConcurrency, setMaxConcurrency] = React.useState(String(config.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY));
+  const [maxConcurrency, setMaxConcurrency] = React.useState(
+    String(config.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY),
+  );
   const [delayMs, setDelayMs] = React.useState('0');
   const [isJobStatusDialogOpen, setIsJobStatusDialogOpen] = useState(false);
   const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
