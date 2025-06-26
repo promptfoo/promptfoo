@@ -60,6 +60,8 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
     return;
   }
 
+  const sessionId = loadedProvider.getSessionId?.() ?? vars.sessionId ?? undefined;
+
   const HOST = getEnvString('PROMPTFOO_CLOUD_API_URL', 'https://api.promptfoo.app');
   try {
     // Call the the agent helper to evaluate the results of the provider
@@ -82,7 +84,10 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
           error:
             'Error evaluating the results of your configuration. Manually review the provider results below.',
         },
-        providerResponse: result,
+        providerResponse: {
+          ...result,
+          sessionId,
+        },
       } as ProviderTestResponse);
       return;
     }
@@ -92,7 +97,10 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
     res
       .json({
         testResult: testAnalyzerResponseObj,
-        providerResponse: result,
+        providerResponse: {
+          ...result,
+          sessionId,
+        },
       } as ProviderTestResponse)
       .status(200);
   } catch (e) {
