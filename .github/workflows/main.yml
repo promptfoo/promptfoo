@@ -83,10 +83,10 @@ jobs:
 
       - name: Check Telemetry
         run: |
-          if ! grep -q "exports\.POSTHOG_KEY = 'phc_" dist/src/telemetry.js; then
-            echo "Error: PostHog key not properly replaced in telemetry.js"
-            echo "Content of telemetry.js:"
-            cat dist/src/telemetry.js
+          if ! grep -q "exports\.POSTHOG_KEY = 'phc_" dist/src/generated-constants.js; then
+            echo "Error: PostHog key not properly replaced in generated-constants.js"
+            echo "Content of generated-constants.js:"
+            cat dist/src/generated-constants.js
             exit 1
           fi
           echo "PostHog key replacement verified successfully"

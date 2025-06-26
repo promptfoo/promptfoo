@@ -54,9 +54,11 @@ export class Telemetry {
   }
 
   identify() {
-    if (this.disabled) {
+    // Do not use getEnvBool here - it will be mocked in tests
+    if (this.disabled || process.env.IS_TESTING) {
       return;
     }
+
     if (posthogClient) {
       posthogClient.identify({
         distinctId: this.id,
@@ -65,13 +67,17 @@ export class Telemetry {
       posthogClient.flush();
     }
 
-    fetch(KA_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+    fetchWithTimeout(
+      KA_ENDPOINT,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ profile_id: this.id, email: this.email }),
       },
-      body: JSON.stringify({ profile_id: this.id, email: this.email }),
-    }).catch(() => {
+      TELEMETRY_TIMEOUT_MS,
+    ).catch(() => {
       // pass
     });
   }
@@ -102,7 +108,8 @@ export class Telemetry {
       isRunningInCi: isCI(),
     };
 
-    if (posthogClient && !getEnvBool('IS_TESTING')) {
+    // Do not use getEnvBool here - it will be mocked in tests
+    if (posthogClient && !process.env.IS_TESTING) {
       posthogClient.capture({
         distinctId: this.id,
         event: eventName,

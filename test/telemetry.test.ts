@@ -2,7 +2,7 @@ import { fetchWithTimeout } from '../src/fetch';
 import { Telemetry } from '../src/telemetry';
 
 jest.mock('../src/fetch', () => ({
-  fetchWithTimeout: jest.fn(),
+  fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
 }));
 
 jest.mock('crypto', () => ({
@@ -68,15 +68,12 @@ describe('Telemetry', () => {
       .mockImplementation(() => Promise.resolve({ ok: true } as Response));
 
     sendEventSpy = jest.spyOn(Telemetry.prototype, 'sendEvent' as any);
-
-    jest.clearAllMocks();
   });
 
   afterEach(() => {
     process.env = originalEnv;
-    jest.resetAllMocks();
-    fetchSpy.mockRestore();
-    sendEventSpy.mockRestore();
+    jest.clearAllMocks();
+    jest.restoreAllMocks();
   });
 
   it('should not track events with PostHog when telemetry is disabled', () => {
