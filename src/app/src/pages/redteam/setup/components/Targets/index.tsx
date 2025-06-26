@@ -300,7 +300,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
 
       clearTimeout(timeoutId);
 
-      // Handle PF Cloud Server Errors:
+      // Handle PF Server Errors:
       if (!response.ok) {
         let errorMessage = 'Network response was not ok';
         try {
