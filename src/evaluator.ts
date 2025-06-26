@@ -17,6 +17,7 @@ import logger from './logger';
 import type Eval from './models/eval';
 import { generateIdFromPrompt } from './models/prompt';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
+import { isPromptfooSampleTarget } from './providers/shared';
 import { isPandamoniumProvider } from './redteam/providers/pandamonium';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
@@ -1585,8 +1586,8 @@ class Evaluator {
         (acc, p) => acc + (p.metrics?.testErrorCount || 0),
         0,
       ),
-      // FIXME(ian): Does this work?  I think redteam is only on the config, not testSuite.
-      // isRedteam: Boolean(testSuite.redteam),
+      isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
+      isRedteam: Boolean(options.isRedteam),
     });
 
     // Update database signal file after all results are written
