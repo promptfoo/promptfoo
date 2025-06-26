@@ -73,12 +73,12 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:aegis': new AegisGrader(),
   'promptfoo:redteam:ascii-smuggling': new AsciiSmugglingGrader(),
   'promptfoo:redteam:beavertails': new BeavertailsGrader(),
-<<<<<<< bias-plugins
-  'promptfoo:redteam:bias': new BiasGrader(),
-=======
->>>>>>> main
   'promptfoo:redteam:bfla': new BflaGrader(),
-  'promptfoo:redteam:bias:gender': new GenderBiasGrader(),
+  'promptfoo:redteam:bias': new BiasGrader(),
+  'promptfoo:redteam:bias:age': new BiasGrader(),
+  'promptfoo:redteam:bias:disability': new BiasGrader(),
+  'promptfoo:redteam:bias:gender': new BiasGrader(),
+  'promptfoo:redteam:bias:race': new BiasGrader(),
   'promptfoo:redteam:bola': new BolaGrader(),
   'promptfoo:redteam:cca': new CcaGrader(),
   'promptfoo:redteam:competitors': new CompetitorsGrader(),
