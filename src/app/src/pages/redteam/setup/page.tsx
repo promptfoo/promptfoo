@@ -30,6 +30,7 @@ import Typography from '@mui/material/Typography';
 import { styled } from '@mui/material/styles';
 import type { RedteamStrategy } from '@promptfoo/types';
 import { ProviderOptionsSchema } from '@promptfoo/validators/providers';
+import { REDTEAM_DEFAULTS } from '@promptfoo/constants';
 import yaml from 'js-yaml';
 import Plugins from './components/Plugins';
 import Purpose from './components/Purpose';
@@ -472,8 +473,8 @@ export default function RedTeamSetupPage() {
         strategies,
         purpose: yamlConfig.redteam?.purpose || '',
         entities: yamlConfig.redteam?.entities || [],
-        numTests: yamlConfig.redteam?.numTests || 10,
-        maxConcurrency: yamlConfig.redteam?.maxConcurrency || 4,
+        numTests: yamlConfig.redteam?.numTests || REDTEAM_DEFAULTS.NUM_TESTS,
+        maxConcurrency: yamlConfig.redteam?.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY,
         applicationDefinition: {
           purpose: yamlConfig.redteam?.purpose || '',
           // We could potentially parse these from redteam.purpose if it follows a specific format.
