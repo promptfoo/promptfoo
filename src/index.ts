@@ -12,8 +12,7 @@ import { GRADERS } from './redteam/graders';
 import { Plugins } from './redteam/plugins';
 import { RedteamPluginBase, RedteamGraderBase } from './redteam/plugins/base';
 import { Strategies } from './redteam/strategies';
-import telemetry from './telemetry';
-import type { EvaluateOptions, TestSuite, EvaluateTestSuite, Scenario } from './types';
+import type { EvaluateOptions, EvaluateTestSuite, Scenario, TestSuite } from './types';
 import type { ApiProvider } from './types/providers';
 import { readFilters, writeMultipleOutputs, writeOutput } from './util';
 import { readTests } from './util/testCaseReader';
@@ -112,7 +111,6 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     }
   }
 
-  await telemetry.send();
   return ret;
 }
 

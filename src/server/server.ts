@@ -227,7 +227,7 @@ export function createApp() {
         return;
       }
       const { event, properties } = result.data;
-      await telemetry.recordAndSend(event, properties);
+      await telemetry.record(event, properties);
       res.status(200).json({ success: true });
     } catch (error) {
       logger.error(`Error processing telemetry request: ${error}`);

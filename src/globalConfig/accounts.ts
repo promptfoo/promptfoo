@@ -1,13 +1,23 @@
 import input from '@inquirer/input';
 import chalk from 'chalk';
+import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import type { GlobalConfig } from '../configTypes';
 import { TERMINAL_MAX_WIDTH } from '../constants';
 import { getEnvString, isCI } from '../envars';
 import { fetchWithTimeout } from '../fetch';
 import logger from '../logger';
-import telemetry from '../telemetry';
-import { readGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
+import { readGlobalConfig, writeGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
+
+export function getUserId(): string {
+  const globalConfig = readGlobalConfig();
+  if (!globalConfig?.id) {
+    globalConfig.id = randomUUID();
+    writeGlobalConfig(globalConfig);
+  }
+
+  return globalConfig.id;
+}
 
 export function getUserEmail(): string | null {
   const globalConfig = readGlobalConfig();
@@ -81,6 +91,7 @@ export async function checkEmailStatus(): Promise<EmailStatusResult> {
 }
 
 export async function promptForEmailUnverified() {
+  const { default: telemetry } = await import('../telemetry');
   let email = isCI() ? 'ci-placeholder@promptfoo.dev' : getUserEmail();
   if (!email) {
     await telemetry.record('feature_used', {
