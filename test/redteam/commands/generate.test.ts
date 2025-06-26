@@ -1,6 +1,11 @@
+import * as fs from 'fs';
 import { isPromptfooSampleTarget } from '../../../src/providers/shared';
 import { synthesize } from '../../../src/redteam';
-import { doGenerateRedteam } from '../../../src/redteam/commands/generate';
+import {
+  doGenerateRedteam,
+  getConfigHash,
+  createHeaderComments,
+} from '../../../src/redteam/commands/generate';
 import type { RedteamCliGenerateOptions } from '../../../src/redteam/types';
 import telemetry from '../../../src/telemetry';
 import type { ApiProvider } from '../../../src/types';
@@ -265,5 +270,137 @@ describe('doGenerateRedteam', () => {
         isPromptfooSampleTarget: false,
       }),
     );
+  });
+});
+
+describe('getConfigHash', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should generate consistent hash for same content', () => {
+    const configPath = 'test.yaml';
+    const content = 'test content';
+    jest.mocked(fs.readFileSync).mockReturnValue(content);
+
+    const hash1 = getConfigHash(configPath);
+    const hash2 = getConfigHash(configPath);
+
+    expect(hash1).toBe(hash2);
+    expect(fs.readFileSync).toHaveBeenCalledWith(configPath, 'utf8');
+  });
+
+  it('should generate different hashes for different content', () => {
+    const configPath = 'test.yaml';
+    jest.mocked(fs.readFileSync).mockReturnValueOnce('content1').mockReturnValueOnce('content2');
+
+    const hash1 = getConfigHash(configPath);
+    const hash2 = getConfigHash(configPath);
+
+    expect(hash1).not.toBe(hash2);
+    expect(fs.readFileSync).toHaveBeenCalledTimes(2);
+  });
+
+  it('should handle empty content', () => {
+    const configPath = 'test.yaml';
+    jest.mocked(fs.readFileSync).mockReturnValue('');
+
+    const hash = getConfigHash(configPath);
+    expect(hash).toBeTruthy();
+    expect(typeof hash).toBe('string');
+  });
+});
+
+describe('createHeaderComments', () => {
+  beforeEach(() => {
+    jest.useFakeTimers().setSystemTime(new Date('2025-06-26T15:38:02.112Z'));
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('should generate header comments with all fields', () => {
+    const input = {
+      title: 'Test Title',
+      timestampLabel: 'Generated:',
+      author: 'Test Author',
+      cloudHost: 'test.cloud.host',
+      testCasesCount: 42,
+      plugins: [{ id: 'plugin1' }, { id: 'plugin2' }],
+      strategies: [{ id: 'strategy1' }, { id: 'strategy2' }],
+    };
+
+    const result = createHeaderComments(input);
+
+    expect(result).toEqual([
+      '===================================================================',
+      'Test Title',
+      '===================================================================',
+      'Generated: 2025-06-26T15:38:02.112Z',
+      'Author:    Test Author',
+      'Cloud:     test.cloud.host',
+      'Test Configuration:',
+      '  Total cases: 42',
+      '  Plugins:     plugin1, plugin2',
+      '  Strategies:  strategy1, strategy2',
+      '===================================================================',
+    ]);
+  });
+
+  it('should handle missing optional fields', () => {
+    const input = {
+      title: 'Test Title',
+      timestampLabel: 'Generated:',
+      author: null,
+      cloudHost: null,
+      testCasesCount: 0,
+      plugins: [],
+      strategies: [],
+    };
+
+    const result = createHeaderComments(input);
+
+    expect(result).toEqual([
+      '===================================================================',
+      'Test Title',
+      '===================================================================',
+      'Generated: 2025-06-26T15:38:02.112Z',
+      'Cloud:     Not logged in',
+      'Test Configuration:',
+      '  Total cases: 0',
+      '  Plugins:     ',
+      '  Strategies:  ',
+      '===================================================================',
+    ]);
+  });
+
+  it('should handle update mode', () => {
+    const input = {
+      title: 'Test Title',
+      timestampLabel: 'Updated:',
+      author: 'Test Author',
+      cloudHost: 'test.cloud.host',
+      testCasesCount: 5,
+      plugins: [{ id: 'plugin1' }],
+      strategies: [{ id: 'strategy1' }],
+      isUpdate: true,
+    };
+
+    const result = createHeaderComments(input);
+
+    expect(result).toEqual([
+      '===================================================================',
+      'Test Title',
+      '===================================================================',
+      'Updated: 2025-06-26T15:38:02.112Z',
+      'Author:    Test Author',
+      'Cloud:     test.cloud.host',
+      'Changes:',
+      '  Added 5 new test cases',
+      '  Plugins:     plugin1',
+      '  Strategies:  strategy1',
+      '===================================================================',
+    ]);
   });
 });
