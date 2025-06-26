@@ -153,8 +153,8 @@ defaultTest:
 
 tests:
   - vars:
-      workflow_id: "wf-123"
-      session_id: "sess-456"
+      workflow_id: 'wf-123'
+      session_id: 'sess-456'
       instructions: |
         You are booking a flight. Ask for the workflow ID to track your request.
 ```
@@ -166,13 +166,14 @@ def call_api(prompt, options, context):
     # Access vars from the simulated conversation
     workflow_id = context['vars']['workflow_id']  # "wf-123"
     session_id = context['vars']['session_id']    # "sess-456"
-    
+
     # Use them in your logic
     response = f"I'll track this as workflow {workflow_id}..."
     return {"output": response}
 ```
 
 This enables sophisticated testing scenarios where your custom provider can:
+
 - Route requests based on context variables
 - Maintain conversation state using session IDs
 - Access user-specific data for personalized responses

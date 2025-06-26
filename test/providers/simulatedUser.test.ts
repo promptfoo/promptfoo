@@ -82,9 +82,9 @@ describe('SimulatedUser', () => {
         expect.stringContaining('[{"role":"system","content":"test prompt"}'),
         expect.objectContaining({
           vars: expect.objectContaining({
-            instructions: 'test instructions'
-          })
-        })
+            instructions: 'test instructions',
+          }),
+        }),
       );
       expect(timeUtils.sleep).not.toHaveBeenCalled();
     });
@@ -109,9 +109,9 @@ describe('SimulatedUser', () => {
         expect.stringContaining('[{"role":"system","content":"test prompt"}'),
         expect.objectContaining({
           vars: expect.objectContaining({
-            instructions: 'test instructions'
-          })
-        })
+            instructions: 'test instructions',
+          }),
+        }),
       );
       expect(timeUtils.sleep).not.toHaveBeenCalled();
     });
@@ -154,10 +154,10 @@ describe('SimulatedUser', () => {
     it('should pass context with vars to the target provider', async () => {
       const testContext = {
         originalProvider,
-        vars: { 
+        vars: {
           workflow_id: '123-workflow',
           session_id: '123-session',
-          instructions: 'test instructions' 
+          instructions: 'test instructions',
         },
         prompt: { raw: 'test', display: 'test', label: 'test' },
       };
@@ -171,9 +171,9 @@ describe('SimulatedUser', () => {
           vars: expect.objectContaining({
             workflow_id: '123-workflow',
             session_id: '123-session',
-            instructions: 'test instructions'
-          })
-        })
+            instructions: 'test instructions',
+          }),
+        }),
       );
     });
 
@@ -198,9 +198,9 @@ describe('SimulatedUser', () => {
         expect.stringContaining('[{"role":"system","content":"test prompt"}'),
         expect.objectContaining({
           vars: expect.objectContaining({
-            instructions: 'test instructions'
-          })
-        })
+            instructions: 'test instructions',
+          }),
+        }),
       );
       expect(timeUtils.sleep).toHaveBeenCalledWith(100);
     });
