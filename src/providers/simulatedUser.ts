@@ -29,27 +29,13 @@ export class SimulatedUser implements ApiProvider {
   private readonly identifier: string;
   private readonly maxTurns: number;
   private readonly rawInstructions: string;
-
-  private targetConfig: {
-    /**
-     * Whether the target provider is stateful.
-     */
-    stateful: boolean;
-    /**
-     * If the target is stateful, a session id returned by the target during the first call to it.
-     */
-    sessionId: string | null;
-  };
+  private readonly stateful: boolean;
 
   constructor({ id, label, config }: AgentProviderOptions) {
     this.identifier = id ?? label ?? 'agent-provider';
     this.maxTurns = config.maxTurns ?? 10;
     this.rawInstructions = config.instructions || '{{instructions}}';
-
-    this.targetConfig = {
-      stateful: config.stateful ?? false,
-      sessionId: null,
-    };
+    this.stateful = config.stateful ?? false;
   }
 
   id() {
@@ -78,25 +64,19 @@ export class SimulatedUser implements ApiProvider {
     messages: Message[],
     targetProvider: ApiProvider,
     prompt: string,
+    context?: CallApiContextParams,
   ): Promise<Message[]> {
     logger.debug('[SimulatedUser] Sending message to target provider');
 
-    const payload = this.targetConfig.stateful
+    const payload = this.stateful
       ? JSON.stringify([{ role: 'system', content: prompt }])
       : JSON.stringify([{ role: 'system', content: prompt }, ...messages]);
 
-    const response = await targetProvider.callApi(
-      payload,
-      this.targetConfig.sessionId
-        ? {
-            vars: { sessionId: this.targetConfig.sessionId },
-            prompt: { raw: '', label: 'target' },
-          }
-        : undefined,
-    );
+    const response = await targetProvider.callApi(payload, context);
 
-    if (this.targetConfig.stateful && response.sessionId) {
-      this.targetConfig.sessionId = response.sessionId;
+    if (response.sessionId) {
+      context = context ?? { vars: {}, prompt: { raw: '', label: 'target' } };
+      context.vars.sessionId = response.sessionId;
     }
 
     if (targetProvider.delay) {
@@ -141,6 +121,7 @@ export class SimulatedUser implements ApiProvider {
         messagesToUser,
         context.originalProvider,
         prompt,
+        context,
       );
       messages = messagesToAgent;
       numRequests += 1; // Only count the request to the agent.
