@@ -17,7 +17,6 @@ import StrategyConfigDialog from './StrategyConfigDialog';
 import { PresetSelector } from './strategies/PresetSelector';
 import { RecommendedOptions } from './strategies/RecommendedOptions';
 import { StrategySection } from './strategies/StrategySection';
-import { SystemConfiguration } from './strategies/SystemConfiguration';
 import {
   STRATEGY_PRESETS,
   PRESET_IDS,
@@ -315,10 +314,6 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     [config.strategies],
   );
 
-  const showSystemConfig = config.strategies.some((s) =>
-    ['goat', 'crescendo'].includes(getStrategyId(s)),
-  );
-
   const hasSessionParser = Boolean(
     config.target.config?.sessionParser || config.target.config?.sessionSource === 'client',
   );
@@ -372,6 +367,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
           isStatefulValue={isStatefulValue}
           onMultiTurnChange={handleMultiTurnChange}
           onStatefulChange={handleStatefulChange}
+          hasSessionParser={hasSessionParser}
         />
       )}
 
@@ -394,15 +390,6 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         onConfigClick={handleConfigClick}
         onSelectNone={handleSelectNoneInSection}
       />
-
-      {/* Additional system config section, if needed */}
-      {showSystemConfig && (
-        <SystemConfiguration
-          isStatefulValue={isStatefulValue}
-          onStatefulChange={handleStatefulChange}
-          hasSessionParser={hasSessionParser}
-        />
-      )}
 
       {/* Footer Buttons */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
