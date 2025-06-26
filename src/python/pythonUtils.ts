@@ -8,9 +8,13 @@ import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
 import { execAsync } from './execAsync';
 
-export const state: { cachedPythonPath: string | null } = { cachedPythonPath: null };
-
-let validationPromise: Promise<string> | null = null;
+export const state: {
+  cachedPythonPath: string | null;
+  validationPromise: Promise<string> | null;
+} = {
+  cachedPythonPath: null,
+  validationPromise: null,
+};
 
 /**
  * Attempts to validate a Python executable path.
@@ -61,12 +65,12 @@ export async function validatePythonPath(pythonPath: string, isExplicit: boolean
   }
 
   // If validation is already in progress, wait for it to complete
-  if (validationPromise) {
-    return validationPromise;
+  if (state.validationPromise) {
+    return state.validationPromise;
   }
 
   // Start new validation and store the promise to prevent concurrent validations
-  validationPromise = (async () => {
+  state.validationPromise = (async () => {
     try {
       const primaryPath = await tryPath(pythonPath);
       if (primaryPath) {
@@ -96,11 +100,11 @@ export async function validatePythonPath(pythonPath: string, isExplicit: boolean
       );
     } finally {
       // Clear the promise when validation completes (success or failure)
-      validationPromise = null;
+      state.validationPromise = null;
     }
   })();
 
-  return validationPromise;
+  return state.validationPromise;
 }
 
 /**

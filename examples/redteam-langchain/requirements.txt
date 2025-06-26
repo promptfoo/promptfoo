@@ -46,5 +46,5 @@ tiktoken==0.8.0
 tqdm==4.67.1
 typing-inspect==0.9.0
 typing_extensions==4.12.2
-urllib3==2.3.0
+urllib3==2.5.0
 yarl==1.18.3

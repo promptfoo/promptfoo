@@ -38,6 +38,8 @@ export type PluginConfig = {
   intent?: Intent | Intent[];
   policy?: string;
   systemPrompt?: string;
+  // Strategy exclusions - allows plugins to exclude incompatible strategies
+  excludeStrategies?: string[];
 };
 export type StrategyConfig = RedteamObjectConfig;
 
@@ -181,6 +183,7 @@ export interface SavedRedteamConfig {
   purpose?: string;
   extensions?: string[];
   numTests?: number;
+  maxConcurrency?: number;
   applicationDefinition: {
     purpose?: string;
     features?: string;

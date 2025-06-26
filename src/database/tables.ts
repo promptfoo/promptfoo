@@ -324,3 +324,64 @@ export const llmOutputsRelations = relations(llmOutputs, ({ one }) => ({
   }),
 }));
 */
+
+// ------------ Traces ------------
+
+export const tracesTable = sqliteTable(
+  'traces',
+  {
+    id: text('id').primaryKey(),
+    traceId: text('trace_id').notNull().unique(),
+    evaluationId: text('evaluation_id')
+      .notNull()
+      .references(() => evalsTable.id),
+    testCaseId: text('test_case_id').notNull(),
+    createdAt: integer('created_at')
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+    metadata: text('metadata', { mode: 'json' }).$type<Record<string, any>>(),
+  },
+  (table) => ({
+    evaluationIdx: index('traces_evaluation_idx').on(table.evaluationId),
+    traceIdIdx: index('traces_trace_id_idx').on(table.traceId),
+  }),
+);
+
+export const spansTable = sqliteTable(
+  'spans',
+  {
+    id: text('id').primaryKey(),
+    traceId: text('trace_id')
+      .notNull()
+      .references(() => tracesTable.traceId),
+    spanId: text('span_id').notNull(),
+    parentSpanId: text('parent_span_id'),
+    name: text('name').notNull(),
+    startTime: integer('start_time').notNull(),
+    endTime: integer('end_time'),
+    attributes: text('attributes', { mode: 'json' }).$type<Record<string, any>>(),
+    statusCode: integer('status_code'),
+    statusMessage: text('status_message'),
+  },
+  (table) => ({
+    traceIdIdx: index('spans_trace_id_idx').on(table.traceId),
+    spanIdIdx: index('spans_span_id_idx').on(table.spanId),
+  }),
+);
+
+// ------------ Trace Relations ------------
+
+export const tracesRelations = relations(tracesTable, ({ one, many }) => ({
+  eval: one(evalsTable, {
+    fields: [tracesTable.evaluationId],
+    references: [evalsTable.id],
+  }),
+  spans: many(spansTable),
+}));
+
+export const spansRelations = relations(spansTable, ({ one }) => ({
+  trace: one(tracesTable, {
+    fields: [spansTable.traceId],
+    references: [tracesTable.traceId],
+  }),
+}));

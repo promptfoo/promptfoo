@@ -472,6 +472,8 @@ export default function RedTeamSetupPage() {
         strategies,
         purpose: yamlConfig.redteam?.purpose || '',
         entities: yamlConfig.redteam?.entities || [],
+        numTests: yamlConfig.redteam?.numTests || 10,
+        maxConcurrency: yamlConfig.redteam?.maxConcurrency || 4,
         applicationDefinition: {
           purpose: yamlConfig.redteam?.purpose || '',
           // We could potentially parse these from redteam.purpose if it follows a specific format.
