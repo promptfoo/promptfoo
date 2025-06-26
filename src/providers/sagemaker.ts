@@ -410,8 +410,14 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
   formatPayload(prompt: string): string {
     const modelType = this.config.modelType || 'custom';
     const maxTokens = this.config.maxTokens || getEnvInt('AWS_SAGEMAKER_MAX_TOKENS') || 1024;
-    const temperature = this.config.temperature || getEnvFloat('AWS_SAGEMAKER_TEMPERATURE') || 0.7;
-    const topP = this.config.topP || getEnvFloat('AWS_SAGEMAKER_TOP_P') || 1.0;
+    const temperature =
+      typeof this.config.temperature === 'number'
+        ? this.config.temperature
+        : (getEnvFloat('AWS_SAGEMAKER_TEMPERATURE') ?? 0.7);
+    const topP =
+      typeof this.config.topP === 'number'
+        ? this.config.topP
+        : (getEnvFloat('AWS_SAGEMAKER_TOP_P') ?? 1.0);
     const stopSequences = this.config.stopSequences || [];
 
     let payload: any;
