@@ -1,0 +1,72 @@
+description: "Variable Optimizer - Creative Writing Multi-Constraint Testing"
+
+prompts:
+  - "Write a creative story based on this prompt: {{story_prompt}}\n\nAdditional requirements: {{requirements}}"
+
+providers:
+  - openai:gpt-4.1  # Base model for actual story generation
+
+defaultTest:
+  provider:
+    id: promptfoo:anthropic:prompt-improver
+    config:
+      maxTurns: 10
+      numCandidates: 4
+      stallIterations: 6
+
+tests:
+  - description: "Dragon story with fairy tale structure"
+    vars:
+      story_prompt: "A dragon who has lost their fire"
+      requirements: "Make it engaging and creative"
+    assert:
+      - type: icontains
+        value: "Once upon a time"
+      - type: javascript
+        value: "output.length >= 200 && output.length <= 500"
+      - type: icontains
+        value: "dragon"
+      - type: llm-rubric
+        value: "Story should have a clear beginning, middle, and end with character development"
+
+  - description: "Sci-fi story with dialogue and suspense"
+    vars:
+      story_prompt: "A space station crew discovers something unexpected in deep space"
+      requirements: "Make it thrilling and mysterious"
+    assert:
+      - type: regex
+        value: '["''"][^"'']*["'']'  # Contains dialogue in quotes
+      - type: icontains
+        value: "space"
+      - type: javascript
+        value: "output.toLowerCase().includes('discovered') || output.toLowerCase().includes('found')"
+      - type: llm-rubric
+        value: "Story should build suspense and end with an unexpected twist"
+
+  - description: "Historical fiction with authentic details"
+    vars:
+      story_prompt: "A young apprentice in medieval times discovers an ancient secret"
+      requirements: "Include historical accuracy and vivid descriptions"
+    assert:
+      - type: icontains
+        value: "medieval"
+      - type: javascript
+        value: "output.split(' ').length >= 150"  # At least 150 words
+      - type: llm-rubric
+        value: "Story should include authentic historical details and rich sensory descriptions"
+      - type: icontains
+        value: "apprentice"
+
+  - description: "Mystery story with clues and red herrings"
+    vars:
+      story_prompt: "A detective investigating a crime in a small town"
+      requirements: "Include compelling mystery elements"
+    assert:
+      - type: icontains
+        value: "detective"
+      - type: javascript
+        value: "output.toLowerCase().includes('clue') || output.toLowerCase().includes('evidence')"
+      - type: llm-rubric
+        value: "Story must include a misleading clue (red herring) and logical deduction"
+      - type: javascript
+        value: "output.length >= 300"  # Longer for mystery complexity 

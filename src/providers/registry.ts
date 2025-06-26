@@ -1091,6 +1091,17 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath === 'promptfoo:anthropic:prompt-improver',
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { AnthropicPromptImproverProvider } = await import('./anthropic/promptImprover');
+      return new AnthropicPromptImproverProvider(providerOptions);
+    },
+  },
+  {
     test: (providerPath: string) => providerPath.startsWith('promptfoo:model:'),
     create: async (
       providerPath: string,

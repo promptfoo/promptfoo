@@ -189,6 +189,29 @@ describe('Provider Registry', () => {
       }
     });
 
+    it('should handle anthropic prompt improver provider correctly', async () => {
+      const factory = providerMap.find((f) => f.test('promptfoo:anthropic:prompt-improver'));
+      expect(factory).toBeDefined();
+
+      const provider = await factory!.create(
+        'promptfoo:anthropic:prompt-improver',
+        {
+          ...mockProviderOptions,
+          config: {
+            ...mockProviderOptions.config,
+            targetVariable: 'requirements',
+            maxTurns: 5,
+            numCandidates: 3,
+          },
+        },
+        mockContext,
+      );
+
+      expect(provider).toBeDefined();
+      expect(provider.id()).toBe('promptfoo:anthropic:prompt-improver');
+      expect(provider.toString()).toBe('[Anthropic Prompt Improver Provider]');
+    });
+
     it('should handle anthropic providers correctly', async () => {
       const factory = providerMap.find((f) => f.test('anthropic:messages:claude-3'));
       expect(factory).toBeDefined();
