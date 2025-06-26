@@ -63,16 +63,15 @@ export class SimulatedUser implements ApiProvider {
   private async sendMessageToAgent(
     messages: Message[],
     targetProvider: ApiProvider,
-    prompt: string,
-    context?: CallApiContextParams,
+    context: CallApiContextParams,
   ): Promise<Message[]> {
-    logger.debug('[SimulatedUser] Sending message to target provider');
+    const targetPrompt = this.stateful
+      ? messages[messages.length - 1].content
+      : JSON.stringify(messages);
 
-    const payload = this.stateful
-      ? JSON.stringify([{ role: 'system', content: prompt }])
-      : JSON.stringify([{ role: 'system', content: prompt }, ...messages]);
+    logger.debug(`[SimulatedUser] Sending message to target provider: ${targetPrompt}`);
 
-    const response = await targetProvider.callApi(payload, context);
+    const response = await targetProvider.callApi(targetPrompt, context);
 
     if (response.sessionId) {
       context = context ?? { vars: {}, prompt: { raw: '', label: 'target' } };
@@ -120,7 +119,6 @@ export class SimulatedUser implements ApiProvider {
       const messagesToAgent = await this.sendMessageToAgent(
         messagesToUser,
         context.originalProvider,
-        prompt,
         context,
       );
       messages = messagesToAgent;
