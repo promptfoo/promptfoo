@@ -295,7 +295,16 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
       });
 
       if (!response.ok) {
-        throw new Error('Network response was not ok');
+        let errorMessage = 'Network response was not ok';
+        try {
+          const errorData = (await response.json()) as { error?: string };
+          if (errorData.error) {
+            errorMessage = errorData.error;
+          }
+        } catch {
+          // ignore json parsing errors
+        }
+        throw new Error(errorMessage);
       }
 
       const data = (await response.json()) as ProviderTestResponse;
@@ -321,9 +330,10 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
       }
     } catch (error) {
       console.error('Error testing target:', error);
+      const message = error instanceof Error ? error.message : String(error);
       setTestResult({
         success: false,
-        message: 'An error occurred while testing the target.',
+        message,
       });
     } finally {
       setTestingTarget(false);
