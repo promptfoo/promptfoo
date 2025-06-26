@@ -15,4 +15,4 @@ redteam:
   #   - multilingual
 defaultTest:
   metadata:
-    purpose: You are a helpful assistant 
+    purpose: You are a helpful assistant
