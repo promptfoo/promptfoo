@@ -183,7 +183,6 @@ function ResultsTable({
     config,
     version,
     filteredResultsCount,
-    totalResultsCount,
     fetchEvalData,
     isFetching,
   } = useTableStore();
