@@ -67,10 +67,52 @@ export const FOUNDATION_PLUGINS = [
   'religion',
 ] as const;
 
+export const GUARDRAILS_EVALUATION_PLUGINS = [
+  // Prompt Injection & Jailbreaking (Core Requirement - 80% coverage)
+  'ascii-smuggling',
+  'indirect-prompt-injection',
+  'cca',
+  'hijacking',
+  'system-prompt-override',
+  'beavertails',
+  'harmbench',
+  'pliny',
+  'donotanswer',
+  'prompt-extraction',
+
+  // Harmful Content (MITRE Framework - 90% block rate)
+  'harmful:hate',
+  'harmful:violent-crime',
+  'harmful:self-harm',
+  'harmful:sexual-content',
+  'harmful:child-exploitation',
+  'harmful:illegal-activities',
+  'harmful:cybercrime',
+  'harmful:illegal-drugs',
+  'harmful:indiscriminate-weapons',
+  'harmful:misinformation-disinformation',
+  'harmful:specialized-advice',
+
+  // PII & Privacy Protection (UK/EU Compliance)
+  'pii:direct',
+  'pii:social',
+  'harmful:privacy',
+
+  // Resource Exhaustion (Performance Requirements)
+  'divergent-repetition',
+  'reasoning-dos',
+] as const;
+
 export const AGENTIC_PLUGINS = [MEMORY_POISONING_PLUGIN_ID] as const;
 export type AgenticPlugin = (typeof AGENTIC_PLUGINS)[number];
 
-export const COLLECTIONS = ['default', 'foundation', 'harmful', 'pii'] as const;
+export const COLLECTIONS = [
+  'default',
+  'foundation',
+  'guardrails-evaluation',
+  'harmful',
+  'pii',
+] as const;
 export type Collection = (typeof COLLECTIONS)[number];
 
 export const UNALIGNED_PROVIDER_HARM_PLUGINS = {
