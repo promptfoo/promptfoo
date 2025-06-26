@@ -3,6 +3,7 @@ import cliState from './cliState';
 import { VERSION } from './constants';
 import { getEnvBool, isCI } from './envars';
 import { fetchWithTimeout } from './fetch';
+import { getUserEmail } from './globalConfig/accounts';
 import logger from './logger';
 
 export const TelemetryEventSchema = z.object({
