@@ -59,9 +59,11 @@ export class SimulatedUser implements ApiProvider {
     messages: Message[],
     targetProvider: ApiProvider,
     prompt: string,
+    context?: CallApiContextParams,
   ): Promise<Message[]> {
     const response = await targetProvider.callApi(
       JSON.stringify([{ role: 'system', content: prompt }, ...messages]),
+      context,
     );
     if (targetProvider.delay) {
       logger.debug(`[SimulatedUser] Sleeping for ${targetProvider.delay}ms`);
@@ -102,6 +104,7 @@ export class SimulatedUser implements ApiProvider {
         messagesToUser,
         context.originalProvider,
         prompt,
+        context,
       );
       messages = messagesToAgent;
       numRequests += 1; // Only count the request to the agent.

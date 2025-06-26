@@ -269,6 +269,7 @@ export async function doEval(
       ...options,
       eventSource: 'cli',
       abortSignal: evaluateOptions.abortSignal,
+      isRedteam: Boolean(config.redteam),
     });
 
     // Clear results from memory to avoid memory issues

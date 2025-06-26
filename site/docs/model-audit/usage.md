@@ -69,8 +69,69 @@ ModelAudit has different dependencies depending on which model formats you want 
 | YAML manifests        | `pyyaml`                                                   |
 | ZIP archives          | Built-in (no additional dependencies)                      |
 | Weight Distribution   | `numpy`, `scipy`, format-specific libs (torch, h5py, etc.) |
+| HuggingFace URLs      | `huggingface-hub`                                          |
 
 ## Advanced Usage
+
+### HuggingFace URL Scanning
+
+ModelAudit can scan models directly from HuggingFace without requiring manual downloads. This feature automatically handles model downloading, scanning, and cleanup.
+
+#### Supported URL Formats
+
+```bash
+# Standard HuggingFace URL
+modelaudit scan https://huggingface.co/bert-base-uncased
+
+# Short HuggingFace URL
+modelaudit scan https://hf.co/gpt2
+
+# HuggingFace protocol
+modelaudit scan hf://microsoft/resnet-50
+
+# Organization/model format
+modelaudit scan https://huggingface.co/facebook/bart-large
+
+# Single-component models (no organization)
+modelaudit scan https://huggingface.co/bert-base-uncased
+```
+
+#### How It Works
+
+1. **Automatic Download**: ModelAudit uses the `huggingface-hub` library to download the model to a temporary directory
+2. **Security Scanning**: All model files are scanned with the appropriate scanners based on their format
+3. **Automatic Cleanup**: Downloaded files are automatically removed after scanning completes
+4. **Multi-file Support**: Scans all files in the model repository (config.json, pytorch_model.bin, model.safetensors, etc.)
+
+#### Examples
+
+```bash
+# Scan a BERT model
+promptfoo scan-model https://huggingface.co/bert-base-uncased
+
+# Scan multiple models including HuggingFace URLs
+promptfoo scan-model local_model.pkl https://hf.co/gpt2 ./models/
+
+# Export results to JSON
+promptfoo scan-model hf://microsoft/resnet-50 --format json --output results.json
+
+# Scan with custom timeout (useful for large models)
+promptfoo scan-model https://huggingface.co/meta-llama/Llama-2-7b --timeout 600
+```
+
+#### Requirements
+
+To use HuggingFace URL scanning, install the required dependency:
+
+```bash
+pip install huggingface-hub
+```
+
+Or with ModelAudit's all dependencies:
+
+```bash
+pip install modelaudit[all]
+```
 
 ### Command Line Interface
 
@@ -344,6 +405,9 @@ from modelaudit.core import scan_model_directory_or_file
 # Scan a single model
 results = scan_model_directory_or_file("path/to/model.pkl")
 
+# Scan a HuggingFace model URL
+results = scan_model_directory_or_file("https://huggingface.co/bert-base-uncased")
+
 # Check for issues
 if results["issues"]:
     print(f"Found {len(results['issues'])} issues:")
@@ -360,6 +424,18 @@ config = {
 }
 
 results = scan_model_directory_or_file("path/to/models/", **config)
+
+# Scan multiple sources including HuggingFace URLs
+sources = [
+    "local_model.pkl",
+    "https://hf.co/gpt2",
+    "hf://microsoft/resnet-50",
+    "./models/"
+]
+
+for source in sources:
+    results = scan_model_directory_or_file(source)
+    print(f"Scanning {source}: {len(results['issues'])} issues found")
 
 # Scan a ZIP archive with custom settings
 zip_config = {
