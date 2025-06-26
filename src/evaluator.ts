@@ -13,7 +13,6 @@ import { FILE_METADATA_KEY } from './constants';
 import { updateSignalFile } from './database/signal';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
-import { readGlobalConfig } from './globalConfig/globalConfig';
 import logger from './logger';
 import type Eval from './models/eval';
 import { generateIdFromPrompt } from './models/prompt';
@@ -1558,7 +1557,6 @@ class Evaluator {
     // Calculate efficiency metrics
     const totalTokens = this.stats.tokenUsage.total;
     const cachedTokens = this.stats.tokenUsage.cached;
-    const cacheHitRate = totalTokens > 0 ? cachedTokens / totalTokens : 0;
 
     // Calculate correct average latency by summing individual request latencies
     const totalLatencyMs = this.evalRecord.results.reduce(
@@ -1612,35 +1610,22 @@ class Evaluator {
         (r) => r.failureReason === ResultFailureReason.ERROR && r.error?.includes('timed out'),
       );
 
-    // Get redteam state from global config
-    const globalConfig = readGlobalConfig();
-    const isRedteam = Boolean(
-      (globalConfig && globalConfig.hasHarmfulRedteamConsent) || testSuite.redteam,
-    );
+    // Get redteam state from CLI state
+    const isRedteam = Boolean(cliState.config?.redteam);
 
     telemetry.record('eval_ran', {
       // Basic metrics
       numPrompts: prompts.length,
-      numTests: prompts.reduce(
-        (acc, p) =>
-          acc +
-          (p.metrics?.testPassCount || 0) +
-          (p.metrics?.testFailCount || 0) +
-          (p.metrics?.testErrorCount || 0),
-        0,
-      ),
+      numTests: this.stats.successes + this.stats.failures + this.stats.errors,
       numVars: varNames.size,
       numProviders: testSuite.providers.length,
-      numRepeat: options.repeat || 1,
       providerPrefixes: providerPrefixes.sort(),
       assertionTypes: Array.from(assertionTypes).sort(),
       eventSource: options.eventSource || 'default',
       ci: isCI(),
-      hasAnyPass: this.evalRecord.prompts.some(
-        (p) => p.metrics?.testPassCount && p.metrics.testPassCount > 0,
-      ),
+      hasAnyPass: this.stats.successes > 0,
 
-      // Raw counts (PostHog can calculate rates)
+      // Result counts
       numSuccesses: this.stats.successes,
       numFailures: this.stats.failures,
       numErrors: this.stats.errors,
@@ -1651,21 +1636,19 @@ class Evaluator {
       concurrencyUsed: concurrency,
       timeoutOccurred,
 
-      // Token and cost efficiency metrics
+      // Token and cost metrics
       totalTokens,
       cachedTokens,
-      cacheHitRate: Math.round(cacheHitRate * 1000) / 1000, // 3 decimal places
-      totalCost: Math.round(totalCost * 10000) / 10000,
+      totalCost,
       totalRequests,
 
       // Assertion metrics
       numAssertions: totalAssertions,
       passedAssertions,
       modelGradedAssertions: modelGradedCount,
-      assertionPassRate:
-        totalAssertions > 0 ? Math.round((passedAssertions / totalAssertions) * 1000) / 1000 : 0,
+      assertionPassRate: totalAssertions > 0 ? passedAssertions / totalAssertions : 0,
 
-      // Feature usage flags
+      // Feature usage
       usesConversationVar,
       usesTransforms,
       usesScenarios,
