@@ -100,6 +100,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     evalRecord,
     {
       eventSource: 'library',
+      isRedteam: Boolean(testSuite.redteam),
       ...options,
     },
   );

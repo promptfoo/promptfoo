@@ -190,6 +190,7 @@ const EvaluateOptionsSchema = z.object({
    * Maximum runtime in milliseconds for the entire evaluation. Default is 0 (no limit).
    */
   maxEvalTimeMs: z.number().optional(),
+  isRedteam: z.boolean().optional(),
 });
 export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & { abortSignal?: AbortSignal };
 
