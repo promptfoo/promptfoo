@@ -185,7 +185,6 @@ export async function doGenerateRedteam(
     strategies: redteamConfig?.strategies?.map((s) => (typeof s === 'string' ? s : s.id)) || [],
     isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
   });
-  await telemetry.send();
 
   let plugins;
 
@@ -494,7 +493,7 @@ export async function doGenerateRedteam(
     strategies: strategies.map((s) => (typeof s === 'string' ? s : s.id)),
     isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
   });
-  await telemetry.send();
+
   return ret;
 }
 

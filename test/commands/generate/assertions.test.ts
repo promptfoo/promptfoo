@@ -70,7 +70,7 @@ describe('assertion generation', () => {
       jest.mocked(fs.existsSync).mockReturnValue(true);
       jest.mocked(fs.writeFileSync).mockImplementation(() => undefined);
       jest.mocked(disableCache).mockImplementation(() => undefined);
-      jest.mocked(telemetry.send).mockResolvedValue(undefined);
+      jest.mocked(telemetry.record).mockImplementation(() => undefined);
 
       jest.mocked(resolveConfigs).mockResolvedValue({
         testSuite: mockTestSuite,

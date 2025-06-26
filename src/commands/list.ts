@@ -22,7 +22,6 @@ export function listCommand(program: Command) {
       telemetry.record('command_used', {
         name: 'list evals',
       });
-      await telemetry.send();
 
       const evals = await Eval.getMany(Number(cmdObj.n) || undefined);
 
@@ -75,7 +74,6 @@ export function listCommand(program: Command) {
       telemetry.record('command_used', {
         name: 'list prompts',
       });
-      await telemetry.send();
 
       const prompts = (await getPrompts(Number(cmdObj.n) || undefined)).sort((a, b) =>
         a.recentEvalId.localeCompare(b.recentEvalId),
@@ -121,7 +119,6 @@ export function listCommand(program: Command) {
       telemetry.record('command_used', {
         name: 'list datasets',
       });
-      await telemetry.send();
 
       const datasets = (await getTestCases(Number(cmdObj.n) || undefined)).sort((a, b) =>
         b.recentEvalId.localeCompare(a.recentEvalId),

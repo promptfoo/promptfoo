@@ -29,7 +29,10 @@ jest.mock('../../src/commands/init', () => {
 });
 
 jest.mock('fs/promises');
-jest.mock('path');
+jest.mock('path', () => ({
+  ...jest.requireActual('path'),
+  resolve: jest.fn(),
+}));
 jest.mock('../../src/constants');
 jest.mock('../../src/onboarding');
 jest.mock('../../src/telemetry');

@@ -63,7 +63,6 @@ export function validateCommand(
     )
     .action(async (opts: ValidateOptions) => {
       telemetry.record('command_used', { name: 'validate' });
-      await telemetry.send();
       await doValidate(opts, defaultConfig, defaultConfigPath);
     });
 }
