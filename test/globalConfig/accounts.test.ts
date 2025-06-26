@@ -3,6 +3,7 @@ import chalk from 'chalk';
 import { getEnvString, isCI } from '../../src/envars';
 import { fetchWithTimeout } from '../../src/fetch';
 import {
+  getUserId,
   getUserEmail,
   setUserEmail,
   getAuthor,
@@ -11,7 +12,11 @@ import {
   checkEmailStatus,
   isLoggedIntoCloud,
 } from '../../src/globalConfig/accounts';
-import { readGlobalConfig, writeGlobalConfigPartial } from '../../src/globalConfig/globalConfig';
+import {
+  readGlobalConfig,
+  writeGlobalConfig,
+  writeGlobalConfigPartial,
+} from '../../src/globalConfig/globalConfig';
 import logger from '../../src/logger';
 import telemetry from '../../src/telemetry';
 
@@ -24,6 +29,87 @@ jest.mock('../../src/util');
 describe('accounts', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  describe('getUserId', () => {
+    it('should return existing ID from global config', () => {
+      const existingId = 'existing-test-id';
+      jest.mocked(readGlobalConfig).mockReturnValue({
+        id: existingId,
+        account: { email: 'test@example.com' },
+      });
+
+      const result = getUserId();
+
+      expect(result).toBe(existingId);
+      expect(writeGlobalConfig).not.toHaveBeenCalled();
+    });
+
+    it('should generate new ID and save to config when no ID exists', () => {
+      jest.mocked(readGlobalConfig).mockReturnValue({
+        account: { email: 'test@example.com' },
+      });
+
+      const result = getUserId();
+
+      // Should return a UUID-like string
+      expect(typeof result).toBe('string');
+      expect(result).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+
+      // Should have saved the config with the new ID
+      expect(writeGlobalConfig).toHaveBeenCalledWith({
+        account: { email: 'test@example.com' },
+        id: result,
+      });
+    });
+
+    it('should generate new ID when global config is null', () => {
+      jest.mocked(readGlobalConfig).mockReturnValue(null as any);
+
+      const result = getUserId();
+
+      // Should return a UUID-like string
+      expect(typeof result).toBe('string');
+      expect(result).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+
+      // Should have saved the config with the new ID
+      expect(writeGlobalConfig).toHaveBeenCalledWith({
+        id: result,
+      });
+    });
+
+    it('should generate new ID when global config is undefined', () => {
+      jest.mocked(readGlobalConfig).mockReturnValue(undefined as any);
+
+      const result = getUserId();
+
+      // Should return a UUID-like string
+      expect(typeof result).toBe('string');
+      expect(result).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+
+      // Should have saved the config with the new ID
+      expect(writeGlobalConfig).toHaveBeenCalledWith({
+        id: result,
+      });
+    });
+
+    it('should generate new ID when config exists but has no id property', () => {
+      jest.mocked(readGlobalConfig).mockReturnValue({
+        account: { email: 'test@example.com' },
+      });
+
+      const result = getUserId();
+
+      // Should return a UUID-like string
+      expect(typeof result).toBe('string');
+      expect(result).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+
+      // Should have saved the config with the new ID
+      expect(writeGlobalConfig).toHaveBeenCalledWith({
+        account: { email: 'test@example.com' },
+        id: result,
+      });
+    });
   });
 
   describe('getUserEmail', () => {

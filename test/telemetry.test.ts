@@ -13,6 +13,7 @@ jest.mock('../src/globalConfig/globalConfig', () => ({
   readGlobalConfig: jest
     .fn()
     .mockReturnValue({ id: 'test-user-id', account: { email: 'test@example.com' } }),
+  writeGlobalConfig: jest.fn(),
 }));
 
 jest.mock('../src/constants', () => ({

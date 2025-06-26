@@ -1,5 +1,5 @@
 export interface GlobalConfig {
-  id: string;
+  id?: string;
   hasHarmfulRedteamConsent?: boolean;
   account?: {
     email?: string;

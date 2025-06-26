@@ -10,10 +10,12 @@ import logger from '../logger';
 import { readGlobalConfig, writeGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
 
 export function getUserId(): string {
-  const globalConfig = readGlobalConfig();
+  let globalConfig = readGlobalConfig();
   if (!globalConfig?.id) {
-    globalConfig.id = randomUUID();
+    const newId = randomUUID();
+    globalConfig = { ...globalConfig, id: newId };
     writeGlobalConfig(globalConfig);
+    return newId;
   }
 
   return globalConfig.id;
