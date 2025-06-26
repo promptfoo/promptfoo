@@ -10,6 +10,7 @@ import {
   DEFAULT_NUM_TESTS_PER_PLUGIN,
   DEFAULT_PLUGINS,
   FOUNDATION_PLUGINS,
+  GUARDRAILS_EVALUATION_PLUGINS,
   HARM_PLUGINS,
   LLAMA_GUARD_ENABLED_CATEGORIES,
   LLAMA_GUARD_REPLICATE_PROVIDER,
@@ -56,6 +57,11 @@ describe('plugins constants', () => {
   it('should define FOUNDATION_PLUGINS array', () => {
     expect(Array.isArray(FOUNDATION_PLUGINS)).toBe(true);
     expect(FOUNDATION_PLUGINS.length).toBeGreaterThan(0);
+  });
+
+  it('should define GUARDRAILS_EVALUATION_PLUGINS array', () => {
+    expect(Array.isArray(GUARDRAILS_EVALUATION_PLUGINS)).toBe(true);
+    expect(GUARDRAILS_EVALUATION_PLUGINS.length).toBeGreaterThan(0);
   });
 
   it('should define AGENTIC_PLUGINS with memory poisoning plugin', () => {
