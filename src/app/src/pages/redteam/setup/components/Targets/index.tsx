@@ -286,13 +286,19 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
     setTestResult(null);
     recordEvent('feature_used', { feature: 'redteam_config_target_test' });
     try {
+      const abortController = new AbortController();
+      const timeoutId = setTimeout(() => abortController.abort(), 30000);
+
       const response = await callApi('/providers/test', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(selectedTarget),
+        signal: abortController.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         let errorMessage = 'Network response was not ok';
@@ -330,7 +336,14 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
       }
     } catch (error) {
       console.error('Error testing target:', error);
-      const message = error instanceof Error ? error.message : String(error);
+      let message: string;
+
+      if (error instanceof Error && error.name === 'AbortError') {
+        message = 'Request timed out after 30 seconds';
+      } else {
+        message = error instanceof Error ? error.message : String(error);
+      }
+
       setTestResult({
         success: false,
         message,
