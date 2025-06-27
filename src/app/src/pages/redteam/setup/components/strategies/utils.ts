@@ -13,6 +13,7 @@ export const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   'best-of-n': 1,
   camelcase: 1,
   citation: 1,
+  counterfactual: 1,
   crescendo: 10,
   default: 1,
   gcg: 1,
