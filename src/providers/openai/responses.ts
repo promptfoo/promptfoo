@@ -42,6 +42,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-4.5-preview',
     'gpt-4.5-preview-2025-02-27',
     'codex-mini-latest',
+    // Deep research models
+    'o3-deep-research',
+    'o3-deep-research-2025-06-26',
+    'o4-mini-deep-research',
+    'o4-mini-deep-research-2025-06-26',
   ];
 
   config: OpenAiCompletionOptions;
@@ -61,6 +66,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       this.modelName.startsWith('o4') ||
       this.modelName === 'codex-mini-latest'
     );
+  }
+
+  protected isDeepResearchModel(): boolean {
+    return this.modelName.includes('deep-research');
   }
 
   protected supportsTemperature(): boolean {
@@ -247,12 +256,25 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     }
 
     logger.debug(`\tOpenAI Responses API response: ${JSON.stringify(data)}`);
+    
+    // Log deep research output structure for debugging
+    if (this.isDeepResearchModel() && data.output) {
+      logger.debug(`\tDeep research output types: ${data.output.map((item: any) => item.type).join(', ')}`);
+    }
+    
     if (data.error) {
       await data.deleteFromCache?.();
       return {
         error: formatOpenAiError(data),
       };
     }
+
+    // Check if response was incomplete due to token limits
+    const _isIncomplete = data.status === 'incomplete';
+    const hitTokenLimit = data.incomplete_details?.reason === 'max_output_tokens';
+    const tokenLimitWarning = hitTokenLimit 
+      ? `\n\n⚠️  Response incomplete: Hit max_output_tokens limit (${body.max_output_tokens || 'default'}). Consider increasing max_output_tokens for deep research models.`
+      : '';
 
     try {
       // Find the assistant message in the output
@@ -266,12 +288,15 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       let result = '';
       let refusal = '';
       let isRefusal = false;
+      const isDeepResearch = this.isDeepResearchModel();
+      const researchSteps = [];
 
       // Process all output items
       for (const item of output) {
         if (item.type === 'function_call') {
           result = JSON.stringify(item);
-        } else if (item.type === 'message' && item.role === 'assistant') {
+        } else if (item.type === 'message' && (item.role === 'assistant' || !item.role)) {
+          // Deep research models may not always include role
           if (item.content) {
             for (const contentItem of item.content) {
               if (contentItem.type === 'output_text') {
@@ -289,6 +314,27 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           }
         } else if (item.type === 'tool_result') {
           result = JSON.stringify(item);
+        } else if (item.type === 'web_search_call' && isDeepResearch) {
+          // Deep research web search calls
+          const action = item.action;
+          if (action?.type === 'search') {
+            researchSteps.push(`🔍 Searched: "${action.query}"`);
+          } else if (action?.type === 'open_page') {
+            researchSteps.push(`📄 Opened: ${action.url || 'page'}`);
+          } else if (action?.type === 'find_in_page') {
+            researchSteps.push(`🔍 Found in page: "${action.query}"`);
+          }
+        } else if (item.type === 'code_interpreter_call' && isDeepResearch) {
+          // Deep research code interpreter calls
+          researchSteps.push(`⚙️ Executed code`);
+        } else if (item.type === 'mcp_tool_call' && isDeepResearch) {
+          // Deep research MCP calls
+          researchSteps.push(`🔗 MCP call: ${item.name || 'unknown'}`);
+        } else if (item.type === 'reasoning' && isDeepResearch) {
+          // Deep research reasoning steps
+          if (item.summary && item.summary.length > 0) {
+            researchSteps.push(`🧠 Reasoning: ${item.summary.join('; ')}`);
+          }
         } else if (item.type === 'mcp_list_tools') {
           // MCP tools list - include in result for debugging/visibility
           if (result) {
@@ -315,6 +361,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           }
           result += `MCP Approval Required for ${item.server_label}.${item.name}: ${item.arguments}`;
         }
+      }
+
+      // For deep research models, if we have no final result but have research steps, show the research process
+      if (isDeepResearch && !result && researchSteps.length > 0) {
+        result = `🔬 Deep Research Process:\n${researchSteps.join('\n')}\n\n⚠️ No final answer generated - response may be incomplete.`;
       }
 
       if (isRefusal) {
@@ -346,7 +397,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       const tokenUsage = getTokenUsage(data, cached);
 
       return {
-        output: result,
+        output: result + tokenLimitWarning,
         tokenUsage,
         cached,
         cost: calculateOpenAICost(
