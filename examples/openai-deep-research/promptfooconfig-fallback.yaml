@@ -14,11 +14,9 @@ providers:
 
 tests:
   - vars:
-      topic: "Python programming language"
+      topic: 'Python programming language'
     assert:
       - type: contains-any
         value: ['Python', 'programming', 'language', 'code', 'development']
       - type: llm-rubric
         value: 'Response should provide information about Python programming language. Should be informative.'
-      - type: is-json
-        value: false 

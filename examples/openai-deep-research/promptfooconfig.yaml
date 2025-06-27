@@ -19,5 +19,3 @@ tests:
         value: ['Python', 'programming', 'language', 'code', 'development']
       - type: llm-rubric
         value: 'Response should provide information about Python programming language. Should be informative and demonstrate research capabilities.'
-      - type: is-json
-        value: false

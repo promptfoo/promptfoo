@@ -40,6 +40,7 @@ export OPENAI_API_KEY="your-api-key-here"
 ```
 
 Or create a `.env` file in this directory:
+
 ```
 OPENAI_API_KEY=your-api-key-here
 ```
@@ -60,6 +61,7 @@ The example uses a simple configuration with:
    ```
 
 2. Set your OpenAI API key:
+
    ```bash
    export OPENAI_API_KEY="your-api-key-here"
    ```
@@ -69,7 +71,7 @@ The example uses a simple configuration with:
    ```bash
    # Using the deep research model (requires special access)
    promptfoo eval
-   
+
    # Or use the fallback configuration for testing
    promptfoo eval -c promptfooconfig-fallback.yaml
    ```
@@ -79,13 +81,30 @@ The example uses a simple configuration with:
    promptfoo view
    ```
 
+### Testing & Validation
+
+You can validate that the deep research models are properly configured without making API calls:
+
+```bash
+# Test deep research model configuration
+node test-deep-research-models.js
+```
+
+This test validates:
+- Deep research models are recognized
+- Proper reasoning model classification  
+- Correct tool configuration
+- API body generation
+
 ### Troubleshooting
 
 If you get an error about the deep research model not being available, try:
 
-1. **Use the fallback config**: `promptfoo eval -c promptfooconfig-fallback.yaml`
-2. **Check model access**: Deep research models may require special access from OpenAI
-3. **Verify API key**: Ensure your `OPENAI_API_KEY` is set and valid
+1. **Run the validation test**: `node test-deep-research-models.js`
+2. **Use the fallback config**: `promptfoo eval -c promptfooconfig-fallback.yaml`
+3. **Check model access**: Deep research models may require special access from OpenAI
+4. **Verify API key**: Ensure your `OPENAI_API_KEY` is set and valid
+5. **Test network connectivity**: Ensure you can reach `api.openai.com`
 
 ## What's Being Tested
 
