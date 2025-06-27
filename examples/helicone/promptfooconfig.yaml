@@ -6,22 +6,19 @@ providers:
   # Basic usage with different providers through Helicone AI Gateway
   - id: helicone-openai
     label: "OpenAI via Helicone Gateway"
-    provider: helicone:openai/gpt-4o-mini
-    config:
+    helicone:openai/gpt-4o-mini:
       temperature: 0.7
       max_tokens: 500
 
   - id: helicone-anthropic
     label: "Anthropic via Helicone Gateway"
-    provider: helicone:anthropic/claude-3-5-sonnet
-    config:
+    helicone:anthropic/claude-3-5-sonnet:
       temperature: 0.7
       max_tokens: 500
 
   - id: helicone-groq
     label: "Groq via Helicone Gateway"
-    provider: helicone:groq/llama-3.1-8b-instant
-    config:
+    helicone:groq/llama-3.1-8b-instant:
       temperature: 0.7
       max_tokens: 500
 

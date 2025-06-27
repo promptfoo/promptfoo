@@ -108,8 +108,7 @@ You can modify the configuration to:
 ```yaml
 providers:
   - id: custom-helicone-provider
-    provider: helicone:openai/gpt-4o
-    config:
+    helicone:openai/gpt-4o:
       baseUrl: http://my-gateway.company.com:8080
       router: production
       temperature: 0.5
@@ -124,13 +123,11 @@ Route to different environments using routers:
 ```yaml
 providers:
   - id: production-gateway
-    provider: helicone:openai/gpt-4o
-    config:
+    helicone:openai/gpt-4o:
       router: production
       
   - id: development-gateway
-    provider: helicone:openai/gpt-3.5-turbo
-    config:
+    helicone:openai/gpt-3.5-turbo:
       router: development
 ```
 
@@ -141,8 +138,7 @@ If you're running your own Helicone AI Gateway with custom configuration:
 ```yaml
 providers:
   - id: my-helicone-gateway
-    provider: helicone:custom-provider/custom-model
-    config:
+    helicone:custom-provider/custom-model:
       baseUrl: http://localhost:9000
       headers:
         Custom-Header: value

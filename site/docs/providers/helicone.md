@@ -58,8 +58,8 @@ For more advanced configuration:
 
 ```yaml
 providers:
-  - id: helicone:openai/gpt-4o
-    config:
+  - id: helicone-custom
+    helicone:openai/gpt-4o:
       # Gateway configuration
       baseUrl: http://localhost:8080  # Custom gateway URL
       router: production              # Use specific router
@@ -77,13 +77,11 @@ If your Helicone AI Gateway is configured with custom routers:
 ```yaml
 providers:
   - id: helicone-production
-    config:
+    helicone:openai/gpt-4o:
       router: production
-      model: openai/gpt-4o
   - id: helicone-development  
-    config:
+    helicone:openai/gpt-3.5-turbo:
       router: development
-      model: openai/gpt-3.5-turbo
 ```
 
 ## Configuration Options
