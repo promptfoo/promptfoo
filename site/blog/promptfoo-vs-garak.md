@@ -102,7 +102,7 @@ promptfoo eval --config security-tests.yaml
 
 Teams often run a small subset on every pull request, then a full scan nightly.
 
-Garak works well as a periodic audit tool:
+Garak can be used for one-off audits:
 
 ```bash
 python -m garak --model my-api --probes all --report audit-$(date +%Y%m%d)
@@ -120,10 +120,29 @@ Promptfoo maps results to OWASP, NIST RMF, MITRE ATLAS, and the EU AI Act, pro
 
 Garak can optionally push findings to the AI Vulnerability Database and compare guardrail effectiveness via NeMo integrations.
 
+## Enterprise Readiness
+
+For organizations evaluating these tools at scale, enterprise features and support can be a key decision point. While both Garak and Promptfoo are open-source, Promptfoo has an Enterprise edition.
+
+Available in Promptfoo Enterprise:
+
+- On-premise deployment - Run entirely within your infrastructure
+- Professional support with SLAs
+- Team collaboration - Shared dashboards and test management
+- Advanced analytics - Track security metrics over time
+- SSO/SAML integration - Seamless authentication
+
+The enterprise version also includes a web-based dashboard where teams can:
+
+- Manage and version control test suites
+- Track vulnerability trends across releases
+- Generate executive-ready compliance reports
+- Set up automated alerts for failed security tests
+
 ## Making the Right Choice
 
 - **Promptfoo** excels at discovering application‑specific vulnerabilities through intelligent, context‑aware testing—especially for complex RAG and agent systems.
-- **Garak** provides broad coverage of known vulnerabilities through its extensive test library.
+- **Garak** provides coverage of known vulnerabilities through its test library.
 
 Choose **Promptfoo** when you need continuous CI/CD coverage, custom attack generation, and deep RAG/agent testing.
 
