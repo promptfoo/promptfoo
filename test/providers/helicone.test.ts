@@ -62,4 +62,4 @@ describe('HeliconeGatewayProvider', () => {
       expect(provider.id()).toBe('helicone-gateway:test:openai/gpt-4o');
     });
   });
-}); 
+});
