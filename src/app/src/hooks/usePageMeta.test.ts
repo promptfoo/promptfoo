@@ -2,12 +2,6 @@ import { renderHook } from '@testing-library/react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { usePageMeta } from './usePageMeta';
 
-// Mock document methods
-const mockDocument = {
-  title: 'Original Title',
-  querySelector: vi.fn(),
-};
-
 // Mock meta tag elements
 const createMockMetaElement = (content = '') => ({
   getAttribute: vi.fn().mockReturnValue(content),
@@ -124,7 +118,7 @@ describe('usePageMeta', () => {
 
     // Clear mocks to track cleanup calls
     vi.clearAllMocks();
-    
+
     // Unmount to trigger cleanup
     unmount();
 
@@ -166,4 +160,4 @@ describe('usePageMeta', () => {
     expect(mockOgDescriptionTag.setAttribute).not.toHaveBeenCalled();
     expect(mockOgImageTag.setAttribute).not.toHaveBeenCalled();
   });
-}); 
+});
