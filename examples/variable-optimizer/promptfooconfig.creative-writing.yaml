@@ -4,7 +4,7 @@ description: Variable Optimizer - Creative Writing Multi-Constraint Testing
 prompts:
   - |
     Write a creative story based on this prompt: {{story_prompt}}
-    
+
     Additional requirements: {{requirements}}
 
 providers:
@@ -12,33 +12,32 @@ providers:
 
 defaultTest:
   provider:
-    id: promptfoo:variable-optimizer
+    id: promptfoo:anthropic:prompt-improver
     config:
       maxTurns: 10
       targetVariable: requirements
       numCandidates: 4
       stallIterations: 6
-      improverModel: openai:gpt-4.1
 
 tests:
   # Test 1: Multi-constraint fairy tale
   - vars:
-      story_prompt: "A dragon who has lost their fire"
-      requirements: "Make it engaging and creative"
+      story_prompt: 'A dragon who has lost their fire'
+      requirements: 'Make it engaging and creative'
     assert:
       - type: icontains
-        value: "Once upon a time"
+        value: 'Once upon a time'
       - type: javascript
         value: output.length >= 200 && output.length <= 500
       - type: icontains
         value: dragon
       - type: llm-rubric
-        value: "Story should have a clear beginning, middle, and end with character development"
+        value: 'Story should have a clear beginning, middle, and end with character development'
 
   # Test 2: Sci-fi with specific elements
   - vars:
-      story_prompt: "The last human on a space station discovers something unexpected"
-      requirements: "Include dialogue and suspense"
+      story_prompt: 'The last human on a space station discovers something unexpected'
+      requirements: 'Include dialogue and suspense'
     assert:
       - type: icontains
         value: '"'
@@ -47,33 +46,33 @@ tests:
       - type: icontains
         value: space
       - type: llm-rubric
-        value: "Story should build suspense and have an unexpected discovery"
+        value: 'Story should build suspense and have an unexpected discovery'
       - type: javascript
         value: output.length >= 300
 
   # Test 3: Historical fiction with constraints
   - vars:
-      story_prompt: "A young inventor in Victorian London"
-      requirements: "Must be historically accurate and inspiring"
+      story_prompt: 'A young inventor in Victorian London'
+      requirements: 'Must be historically accurate and inspiring'
     assert:
       - type: icontains
         value: London
       - type: javascript
         value: /18\d\d|19\d\d|Victorian|Queen Victoria/i.test(output)
       - type: llm-rubric
-        value: "Story should be historically plausible and inspire readers"
+        value: 'Story should be historically plausible and inspire readers'
       - type: javascript
         value: output.length >= 250 && output.length <= 600
 
   # Test 4: Mystery with specific structure
   - vars:
-      story_prompt: "A detective investigating a crime in a small town"
-      requirements: "Include a red herring and surprise ending"
+      story_prompt: 'A detective investigating a crime in a small town'
+      requirements: 'Include a red herring and surprise ending'
     assert:
       - type: icontains
         value: detective
       - type: llm-rubric
-        value: "Story must include a misleading clue (red herring) and an unexpected resolution"
+        value: 'Story must include a misleading clue (red herring) and an unexpected resolution'
       - type: javascript
         value: output.toLowerCase().includes('mystery') || output.toLowerCase().includes('crime') || output.toLowerCase().includes('investigate')
       - type: javascript
@@ -82,12 +81,12 @@ tests:
   # Test 5: Comedy with specific tone
   - vars:
       story_prompt: "A clumsy superhero's first day on the job"
-      requirements: "Make readers laugh while being family-friendly"
+      requirements: 'Make readers laugh while being family-friendly'
     assert:
       - type: icontains
         value: superhero
       - type: llm-rubric
-        value: "Story should be genuinely funny and appropriate for all ages"
+        value: 'Story should be genuinely funny and appropriate for all ages'
       - type: javascript
         value: |
           // Check for humor indicators
@@ -100,13 +99,13 @@ tests:
 
   # Test 6: Complex multi-genre story
   - vars:
-      story_prompt: "A time traveler who accidentally changes history"
-      requirements: "Blend science fiction with romance and adventure"
+      story_prompt: 'A time traveler who accidentally changes history'
+      requirements: 'Blend science fiction with romance and adventure'
     assert:
       - type: icontains
         value: time
       - type: llm-rubric
-        value: "Story successfully combines science fiction, romance, and adventure elements"
+        value: 'Story successfully combines science fiction, romance, and adventure elements'
       - type: javascript
         value: |
           const text = output.toLowerCase();
@@ -115,4 +114,4 @@ tests:
           const adventure = /danger|quest|journey|exciting|risk|adventure/i.test(output);
           return sciFi && romance && adventure;
       - type: javascript
-        value: output.length >= 350 && output.length <= 700 
+        value: output.length >= 350 && output.length <= 700

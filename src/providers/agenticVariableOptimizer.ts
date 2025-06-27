@@ -421,6 +421,31 @@ class AgentPlanningSystem {
     const analysisResult = await this.tools.get('constraint_analyzer')?.execute({ constraints }, context);
     
     // Phase 2: Create multi-phase plan
+    const contingencyPlans = new Map<string, AgentAction[]>([
+      ['low_progress', [
+        {
+          type: 'analyze',
+          tool: 'pattern_detector',
+          parameters: { focus: 'failure_modes' },
+          expectedOutcome: 'Identify why strategies are failing',
+        },
+        {
+          type: 'generate',
+          tool: 'strategy_generator',
+          parameters: { mode: 'aggressive' },
+          expectedOutcome: 'More aggressive optimization strategies',
+        },
+      ]],
+      ['stagnation', [
+        {
+          type: 'generate',
+          tool: 'strategy_generator',
+          parameters: { mode: 'creative' },
+          expectedOutcome: 'Novel approaches to break stagnation',
+        },
+      ]],
+    ]);
+
     const plan: AgentPlan = {
       goal: `Optimize "${targetVariable}" to satisfy all constraints`,
       subGoals: [
@@ -456,29 +481,7 @@ class AgentPlanningSystem {
           expectedOutcome: 'Learning insights and strategy updates',
         },
       ],
-      contingencyPlans: new Map([
-        ['low_progress', [
-          {
-            type: 'analyze',
-            tool: 'pattern_detector',
-            parameters: { focus: 'failure_modes' },
-            expectedOutcome: 'Identify why strategies are failing',
-          },
-          {
-            type: 'generate',
-            tool: 'strategy_generator',
-            parameters: { mode: 'aggressive' },
-            expectedOutcome: 'More aggressive optimization strategies',
-          },
-        ]],
-        ['stagnation', [
-          {
-            type: 'generate',
-            tool: 'strategy_generator',
-            parameters: { mode: 'creative' },
-            expectedOutcome: 'Novel approaches to break stagnation',
-          },
-        ]]],
+      contingencyPlans,
       successMetrics: [
         'constraint_satisfaction_rate',
         'score_improvement_rate',
@@ -598,7 +601,7 @@ export class AgenticVariableOptimizerProvider implements ApiProvider {
   private learningSystem: AgentLearningSystem;
   private planningSystem: AgentPlanningSystem;
   private reflectionSystem: AgentReflectionSystem;
-  private tools: Map<string, AgentTool>;
+  private tools: Map<string, AgentTool> = new Map();
 
   constructor({ id, label, config }: ProviderOptions) {
     this.identifier = id ?? label ?? 'promptfoo:agentic-variable-optimizer';
@@ -618,11 +621,9 @@ export class AgenticVariableOptimizerProvider implements ApiProvider {
   }
 
   private initializeTools(): void {
-    this.tools = new Map([
-      ['constraint_analyzer', new ConstraintAnalyzerTool()],
-      ['pattern_detector', new PatternDetectorTool()],
-      ['strategy_generator', new StrategyGeneratorTool()],
-    ]);
+    this.tools.set('constraint_analyzer', new ConstraintAnalyzerTool());
+    this.tools.set('pattern_detector', new PatternDetectorTool());
+    this.tools.set('strategy_generator', new StrategyGeneratorTool());
   }
 
   id() {
@@ -797,7 +798,7 @@ export class AgenticVariableOptimizerProvider implements ApiProvider {
     const testVars = { ...vars, [targetVar]: optimizedValue };
     const rendered = nunjucks.renderString(prompt, testVars);
     
-    const resp = await provider.callApi(rendered, { ...context, vars: testVars }, options);
+    const resp = await provider.callApi(rendered, { ...context, vars: testVars }, options || {});
     const grading = await runAssertions({
       prompt: rendered,
       provider,

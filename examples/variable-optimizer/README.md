@@ -43,7 +43,8 @@ The Variable Optimizer iteratively improves prompt variables when tests fail. In
 
 **Challenge**: Find prompts that produce outputs meeting specific length requirements.
 
-**Test cases**: 
+**Test cases**:
+
 - Twitter character limit (280 chars)
 - Very short outputs (50 chars max)
 - Exact length constraints (100 chars)
@@ -64,6 +65,7 @@ The Variable Optimizer iteratively improves prompt variables when tests fail. In
 **Challenge**: Generate prompts that reliably produce valid JSON meeting specific schemas.
 
 **Test cases**:
+
 - Simple JSON structures with required fields
 - Complex nested JSON with arrays
 - Specific schema compliance
@@ -76,6 +78,7 @@ The Variable Optimizer iteratively improves prompt variables when tests fail. In
 **Challenge**: Find prompts that produce creative stories satisfying multiple complex constraints simultaneously.
 
 **Test cases**:
+
 - Fairy tales with specific elements and length constraints
 - Sci-fi stories with dialogue and suspense requirements
 - Historical fiction with accuracy and inspiration criteria
@@ -88,6 +91,7 @@ The Variable Optimizer iteratively improves prompt variables when tests fail. In
 **Challenge**: Generate prompts that produce code meeting specific technical requirements.
 
 **Test cases**:
+
 - Python functions with error handling
 - JavaScript classes with specific methods
 - SQL queries with joins and aggregations

@@ -4,9 +4,9 @@ description: Variable Optimizer - Code Generation Testing
 prompts:
   - |
     {{instruction}}
-    
+
     Requirements: {{requirements}}
-    
+
     Generate {{language}} code:
 
 providers:
@@ -24,16 +24,16 @@ defaultTest:
 tests:
   # Test 1: Python function with specific signature
   - vars:
-      instruction: "Create a utility function"
-      requirements: "Must handle edge cases and include error handling"
-      language: "Python"
+      instruction: 'Create a utility function'
+      requirements: 'Must handle edge cases and include error handling'
+      language: 'Python'
     assert:
       - type: icontains
-        value: "def "
+        value: 'def '
       - type: icontains
-        value: "try:"
+        value: 'try:'
       - type: icontains
-        value: "except"
+        value: 'except'
       - type: javascript
         value: |
           // Check for function definition and error handling
@@ -43,14 +43,14 @@ tests:
 
   # Test 2: JavaScript class with specific methods
   - vars:
-      instruction: "Build a data structure"
-      requirements: "Must have constructor, getter, setter, and validation"
-      language: "JavaScript"
+      instruction: 'Build a data structure'
+      requirements: 'Must have constructor, getter, setter, and validation'
+      language: 'JavaScript'
     assert:
       - type: icontains
-        value: "class "
+        value: 'class '
       - type: icontains
-        value: "constructor"
+        value: 'constructor'
       - type: javascript
         value: |
           // Check for class structure with required methods
@@ -62,14 +62,14 @@ tests:
 
   # Test 3: SQL query with specific constraints
   - vars:
-      instruction: "Write a database query"
-      requirements: "Must join multiple tables and include aggregation"
-      language: "SQL"
+      instruction: 'Write a database query'
+      requirements: 'Must join multiple tables and include aggregation'
+      language: 'SQL'
     assert:
       - type: icontains
-        value: "SELECT"
+        value: 'SELECT'
       - type: icontains
-        value: "JOIN"
+        value: 'JOIN'
       - type: javascript
         value: |
           // Check for SQL aggregation functions
@@ -79,9 +79,9 @@ tests:
 
   # Test 4: API endpoint with error handling
   - vars:
-      instruction: "Create a REST API endpoint"
-      requirements: "Must include input validation and proper HTTP status codes"
-      language: "Node.js"
+      instruction: 'Create a REST API endpoint'
+      requirements: 'Must include input validation and proper HTTP status codes'
+      language: 'Node.js'
     assert:
       - type: javascript
         value: |
@@ -89,40 +89,40 @@ tests:
           const apiPatterns = ['app.', 'router.', 'express', 'req.', 'res.'];
           const statusPatterns = ['status(', '.json(', '200', '400', '404', '500'];
           const validationPatterns = ['validation', 'validate', 'check', 'required'];
-          
+
           const hasApi = apiPatterns.some(pattern => output.includes(pattern));
           const hasStatus = statusPatterns.some(pattern => output.includes(pattern));
           const hasValidation = validationPatterns.some(pattern => 
             output.toLowerCase().includes(pattern.toLowerCase()));
-          
+
           return hasApi && hasStatus && hasValidation;
 
   # Test 5: React component with hooks
   - vars:
-      instruction: "Build a user interface component"
-      requirements: "Must use modern React hooks and handle user interactions"
-      language: "React/TypeScript"
+      instruction: 'Build a user interface component'
+      requirements: 'Must use modern React hooks and handle user interactions'
+      language: 'React/TypeScript'
     assert:
       - type: icontains
-        value: "useState"
+        value: 'useState'
       - type: icontains
-        value: "useEffect"
+        value: 'useEffect'
       - type: javascript
         value: |
           // Check for React component patterns
           const reactPatterns = ['useState', 'useEffect', 'onClick', 'onChange', 'return'];
           return reactPatterns.every(pattern => output.includes(pattern));
       - type: icontains
-        value: "interface"
+        value: 'interface'
 
   # Test 6: Algorithm with specific complexity
   - vars:
-      instruction: "Implement a search algorithm"
-      requirements: "Must be efficient with O(log n) time complexity and include comments"
-      language: "Python"
+      instruction: 'Implement a search algorithm'
+      requirements: 'Must be efficient with O(log n) time complexity and include comments'
+      language: 'Python'
     assert:
       - type: icontains
-        value: "def "
+        value: 'def '
       - type: javascript
         value: |
           // Check for algorithm characteristics
@@ -132,19 +132,19 @@ tests:
                                  output.includes('left') && output.includes('right');
           const hasComplexity = output.toLowerCase().includes('o(log') || 
                                output.toLowerCase().includes('logarithmic');
-          
+
           return hasComments && (hasBinarySearch || hasComplexity);
       - type: icontains
-        value: "return"
+        value: 'return'
 
   # Test 7: Database schema with relationships
   - vars:
-      instruction: "Design database tables"
-      requirements: "Must include foreign keys and proper indexing"
-      language: "SQL"
+      instruction: 'Design database tables'
+      requirements: 'Must include foreign keys and proper indexing'
+      language: 'SQL'
     assert:
       - type: icontains
-        value: "CREATE TABLE"
+        value: 'CREATE TABLE'
       - type: javascript
         value: |
           // Check for database design elements
@@ -155,5 +155,5 @@ tests:
                           upperOutput.includes('PRIMARY KEY');
           const hasConstraint = upperOutput.includes('CONSTRAINT') || 
                                upperOutput.includes('NOT NULL');
-          
-          return hasForeignKey && hasIndex && hasConstraint; 
+
+          return hasForeignKey && hasIndex && hasConstraint;

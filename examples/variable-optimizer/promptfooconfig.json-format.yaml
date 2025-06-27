@@ -4,9 +4,9 @@ description: Variable Optimizer - JSON Format Compliance Testing
 prompts:
   - |
     {{instruction}}
-    
+
     Topic: {{topic}}
-    
+
     Respond with valid JSON only:
 
 providers:
@@ -24,8 +24,8 @@ defaultTest:
 tests:
   # Test 1: Simple JSON structure
   - vars:
-      instruction: "Create a simple profile"
-      topic: "software engineer"
+      instruction: 'Create a simple profile'
+      topic: 'software engineer'
     assert:
       - type: is-json
       - type: javascript
@@ -35,8 +35,8 @@ tests:
 
   # Test 2: Complex nested JSON with arrays
   - vars:
-      instruction: "Generate a detailed report"
-      topic: "quarterly sales data"
+      instruction: 'Generate a detailed report'
+      topic: 'quarterly sales data'
     assert:
       - type: is-json
       - type: javascript
@@ -49,8 +49,8 @@ tests:
 
   # Test 3: Specific JSON schema compliance
   - vars:
-      instruction: "Create a product catalog entry"
-      topic: "wireless headphones"
+      instruction: 'Create a product catalog entry'
+      topic: 'wireless headphones'
     assert:
       - type: is-json
         value:
@@ -68,12 +68,12 @@ tests:
               type: array
               items:
                 type: string
-          required: ["id", "name", "price", "inStock"]
+          required: ['id', 'name', 'price', 'inStock']
 
   # Test 4: JSON with specific field values
   - vars:
-      instruction: "Generate an error response"
-      topic: "authentication failure"
+      instruction: 'Generate an error response'
+      topic: 'authentication failure'
     assert:
       - type: is-json
       - type: javascript
@@ -85,8 +85,8 @@ tests:
 
   # Test 5: Multi-level nested JSON
   - vars:
-      instruction: "Create a user profile with settings"
-      topic: "premium account holder"
+      instruction: 'Create a user profile with settings'
+      topic: 'premium account holder'
     assert:
       - type: is-json
       - type: javascript
@@ -99,8 +99,8 @@ tests:
 
   # Test 6: JSON array format
   - vars:
-      instruction: "List top items"
-      topic: "bestselling books"
+      instruction: 'List top items'
+      topic: 'bestselling books'
     assert:
       - type: is-json
       - type: javascript
@@ -108,4 +108,4 @@ tests:
           const data = JSON.parse(output);
           return Array.isArray(data) && 
                  data.length >= 3 &&
-                 data.every(item => item.hasOwnProperty('title') && item.hasOwnProperty('rank')); 
+                 data.every(item => item.hasOwnProperty('title') && item.hasOwnProperty('rank'));

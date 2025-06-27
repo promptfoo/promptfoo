@@ -58,4 +58,4 @@ tests:
       - type: javascript
         value: output.length >= 80 && output.length <= 120
       - type: icontains
-        value: quantum 
+        value: quantum

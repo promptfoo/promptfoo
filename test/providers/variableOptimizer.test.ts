@@ -37,9 +37,9 @@ describe('VariableOptimizerProvider', () => {
 
     // Mock improver to suggest better value in JSON format with candidates array and reasoning
     mockImprover.callApi.mockResolvedValue({
-      output: JSON.stringify({ 
+      output: JSON.stringify({
         reasoning: 'Testing translation with French greeting',
-        candidates: ['Bonjour le monde'] 
+        candidates: ['Bonjour le monde'],
       }),
     });
 
@@ -145,15 +145,15 @@ describe('VariableOptimizerProvider', () => {
     // Mock improver to return JSON candidates for both iterations
     mockImprover.callApi
       .mockResolvedValueOnce({
-        output: JSON.stringify({ 
+        output: JSON.stringify({
           reasoning: 'Trying first improvement strategy',
-          candidates: ['attempt 1'] 
+          candidates: ['attempt 1'],
         }),
       })
       .mockResolvedValueOnce({
-        output: JSON.stringify({ 
+        output: JSON.stringify({
           reasoning: 'Trying second improvement strategy',
-          candidates: ['attempt 2'] 
+          candidates: ['attempt 2'],
         }),
       });
 
