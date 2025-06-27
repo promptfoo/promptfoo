@@ -1,6 +1,6 @@
 ---
 description: 'Compare Promptfoo and Garak for LLM security testing. Learn how dynamic attack generation differs from curated exploits, and when to use each tool.'
-image: /img/blog/garak/promptfoo-vs-garak.png
+image: /img/blog/garak/promptfoo-vs-garak.jpg
 date: 2025-06-26
 authors: [ian]
 ---
@@ -112,7 +112,11 @@ Promptfoo offers support for REST HTTP interfaces, Python scripts (and other lan
 
 ## Standards, Compliance, and Reporting
 
-Promptfoo maps results to OWASP, NIST RMF, MITRE ATLAS, and the EU AI Act, producing ready‑to‑share reports. Garak can optionally push findings to the AI Vulnerability Database and compare guardrail effectiveness via NeMo integrations.
+Promptfoo maps results to OWASP, NIST RMF, MITRE ATLAS, and the EU AI Act, producing ready‑to‑share reports.
+
+![gen ai compliance test](/img/compliance-frameworks.png)
+
+Garak can optionally push findings to the AI Vulnerability Database and compare guardrail effectiveness via NeMo integrations.
 
 ## Making the Right Choice
 
