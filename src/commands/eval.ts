@@ -13,6 +13,7 @@ import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
 import { checkEmailStatusOrExit, promptForEmailUnverified } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger, { getLogLevel } from '../logger';
+import { getGlobalAbortController, clearGlobalAbortController } from '../main';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
 import { loadApiProvider } from '../providers';
@@ -264,13 +265,53 @@ export async function doEval(
       ? await Eval.create(config, testSuite.prompts)
       : new Eval(config);
 
+    // Get the global abort controller for CLI cancellation
+    const globalAbortController = getGlobalAbortController();
+
+    // Combine any existing abort signal with the global one
+    const combinedAbortSignal = evaluateOptions.abortSignal
+      ? AbortSignal.any([evaluateOptions.abortSignal, globalAbortController.signal])
+      : globalAbortController.signal;
+
     // Run the evaluation!!!!!!
-    const ret = await evaluate(testSuite, evalRecord, {
-      ...options,
-      eventSource: 'cli',
-      abortSignal: evaluateOptions.abortSignal,
-      isRedteam: Boolean(config.redteam),
-    });
+    let ret: Eval;
+    let evaluationAborted = false;
+
+    try {
+      ret = await evaluate(testSuite, evalRecord, {
+        ...options,
+        eventSource: 'cli',
+        abortSignal: combinedAbortSignal,
+        isRedteam: Boolean(config.redteam),
+      });
+
+      // Check if the evaluation was aborted (even if no error was thrown)
+      if (combinedAbortSignal.aborted) {
+        evaluationAborted = true;
+        logger.info(chalk.yellow('\nEvaluation cancelled. Showing partial results...'));
+      }
+    } catch (error) {
+      // Check if this was due to cancellation
+      if (
+        combinedAbortSignal.aborted ||
+        String(error).includes('cancelled') ||
+        String(error).includes('aborted')
+      ) {
+        evaluationAborted = true;
+        ret = evalRecord; // Use the partial results we have so far
+        logger.info(chalk.yellow('\nEvaluation cancelled. Showing partial results...'));
+      } else {
+        // Re-throw non-cancellation errors
+        throw error;
+      }
+    }
+
+    // Clear the global abort controller since evaluation is complete
+    clearGlobalAbortController();
+
+    logger.debug(
+      `Evaluation finished. Aborted: ${evaluationAborted}, Results count: ${ret.results?.length || 0}`,
+    );
 
     // Clear results from memory to avoid memory issues
     evalRecord.clearResults();
@@ -386,11 +427,15 @@ export async function doEval(
     printBorder();
     if (cmdObj.write) {
       if (shareableUrl) {
-        logger.info(`${chalk.green('✔')} Evaluation complete: ${shareableUrl}`);
+        const status = evaluationAborted ? 'cancelled (partial results saved)' : 'complete';
+        logger.info(`${chalk.green('✔')} Evaluation ${status}: ${shareableUrl}`);
       } else if (wantsToShare && !isSharingEnabled(evalRecord)) {
         notCloudEnabledShareInstructions();
       } else {
-        logger.info(`${chalk.green('✔')} Evaluation complete. ID: ${chalk.cyan(evalRecord.id)}\n`);
+        const status = evaluationAborted ? 'cancelled (partial results saved)' : 'complete';
+        logger.info(
+          `${chalk.green('✔')} Evaluation ${status}. ID: ${chalk.cyan(evalRecord.id)}\n`,
+        );
         logger.info(
           `» Run ${chalk.greenBright.bold('promptfoo view')} to use the local web viewer`,
         );
@@ -411,7 +456,8 @@ export async function doEval(
         );
       }
     } else {
-      logger.info(`${chalk.green('✔')} Evaluation complete`);
+      const status = evaluationAborted ? 'cancelled' : 'complete';
+      logger.info(`${chalk.green('✔')} Evaluation ${status}`);
     }
 
     printBorder();
@@ -541,6 +587,9 @@ export async function doEval(
     }
 
     logger.info(chalk.gray(`Duration: ${durationDisplay} (concurrency: ${maxConcurrency})`));
+    if (evaluationAborted) {
+      logger.info(chalk.yellow.bold(`Status: Cancelled (showing partial results)`));
+    }
     logger.info(chalk.green.bold(`Successes: ${successes}`));
     logger.info(chalk.red.bold(`Failures: ${failures}`));
     if (!Number.isNaN(errors)) {

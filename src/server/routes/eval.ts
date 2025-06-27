@@ -26,9 +26,17 @@ export const evalRouter = Router();
 // Running jobs
 export const evalJobs = new Map<string, Job>();
 
+// Track running eval jobs with their abort controllers
+const runningEvalJobs = new Map<string, AbortController>();
+
 evalRouter.post('/job', (req: Request, res: Response): void => {
   const { evaluateOptions, ...testSuite } = req.body as EvaluateTestSuiteWithEvaluateOptions;
   const id = uuidv4();
+
+  // Create abort controller for this job
+  const abortController = new AbortController();
+  runningEvalJobs.set(id, abortController);
+
   evalJobs.set(id, {
     evalId: null,
     status: 'in-progress',
@@ -46,6 +54,7 @@ evalRouter.post('/job', (req: Request, res: Response): void => {
       }),
       Object.assign({}, evaluateOptions, {
         eventSource: 'web',
+        abortSignal: abortController.signal,
         progressCallback: (progress: number, total: number) => {
           const job = evalJobs.get(id);
           invariant(job, 'Job not found');
@@ -64,19 +73,53 @@ evalRouter.post('/job', (req: Request, res: Response): void => {
       console.log(`[${id}] Complete`);
     })
     .catch((error) => {
-      logger.error(dedent`Failed to eval tests:
-        Error: ${error}
-        Body: ${JSON.stringify(req.body, null, 2)}`);
-
       const job = evalJobs.get(id);
       invariant(job, 'Job not found');
-      job.status = 'error';
-      job.result = null;
-      job.evalId = null;
-      job.logs = [String(error)];
+
+      if (abortController.signal.aborted) {
+        logger.info(`[${id}] Job cancelled by user`);
+        job.status = 'error';
+        job.logs = ['Job cancelled by user'];
+      } else {
+        logger.error(dedent`Failed to eval tests:
+          Error: ${error}
+          Body: ${JSON.stringify(req.body, null, 2)}`);
+        job.status = 'error';
+        job.result = null;
+        job.evalId = null;
+        job.logs = [String(error)];
+      }
+    })
+    .finally(() => {
+      // Clean up the abort controller
+      runningEvalJobs.delete(id);
     });
 
   res.json({ id });
+});
+
+evalRouter.post('/job/:id/cancel', (req: Request, res: Response): void => {
+  const id = req.params.id;
+  const abortController = runningEvalJobs.get(id);
+
+  if (!abortController) {
+    res.status(404).json({ error: 'Job not found or already completed' });
+    return;
+  }
+
+  // Abort the job
+  abortController.abort();
+
+  const job = evalJobs.get(id);
+  if (job) {
+    job.status = 'error';
+    job.logs.push('Job cancelled by user');
+  }
+
+  // Clean up
+  runningEvalJobs.delete(id);
+
+  res.json({ message: 'Job cancelled successfully' });
 });
 
 evalRouter.get('/job/:id', (req: Request, res: Response): void => {

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
+import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 
@@ -19,9 +20,34 @@ const RunTestSuiteButton: React.FC = () => {
   } = useStore();
   const [isRunning, setIsRunning] = useState(false);
   const [progressPercent, setProgressPercent] = useState(0);
+  const [currentJobId, setCurrentJobId] = useState<string | null>(null);
+
+  const cancelEvaluation = async () => {
+    if (!currentJobId) {
+      return;
+    }
+
+    try {
+      const response = await callApi(`/eval/job/${currentJobId}/cancel`, {
+        method: 'POST',
+      });
+
+      if (response.ok) {
+        setIsRunning(false);
+        setCurrentJobId(null);
+        setProgressPercent(0);
+        console.log('Evaluation cancelled successfully');
+      } else {
+        console.error('Failed to cancel evaluation');
+      }
+    } catch (error) {
+      console.error('Error cancelling evaluation:', error);
+    }
+  };
 
   const runTestSuite = async () => {
     setIsRunning(true);
+    setProgressPercent(0);
 
     const testSuite = {
       defaultTest,
@@ -48,6 +74,7 @@ const RunTestSuiteButton: React.FC = () => {
       }
 
       const job = await response.json();
+      setCurrentJobId(job.id);
 
       const intervalId = setInterval(async () => {
         try {
@@ -63,13 +90,23 @@ const RunTestSuiteButton: React.FC = () => {
           if (progressData.status === 'complete') {
             clearInterval(intervalId);
             setIsRunning(false);
+            setCurrentJobId(null);
             if (progressData.evalId) {
               navigate(`/eval/${progressData.evalId}`);
             }
           } else if (['failed', 'error'].includes(progressData.status)) {
             clearInterval(intervalId);
             setIsRunning(false);
-            throw new Error(progressData.logs?.join('\n') || 'Job failed');
+            setCurrentJobId(null);
+
+            // Check if it was cancelled by user
+            const wasCancelled = progressData.logs?.some(
+              (log: string) => log.includes('cancelled by user') || log.includes('Job cancelled'),
+            );
+
+            if (!wasCancelled) {
+              throw new Error(progressData.logs?.join('\n') || 'Job failed');
+            }
           } else {
             const percent =
               progressData.total === 0
@@ -81,27 +118,37 @@ const RunTestSuiteButton: React.FC = () => {
           clearInterval(intervalId);
           console.error(error);
           setIsRunning(false);
+          setCurrentJobId(null);
           alert(`An error occurred: ${(error as Error).message}`);
         }
       }, 1000);
     } catch (error) {
       console.error(error);
       setIsRunning(false);
+      setCurrentJobId(null);
       alert(`An error occurred: ${(error as Error).message}`);
     }
   };
 
   return (
-    <Button variant="contained" color="primary" onClick={runTestSuite} disabled={isRunning}>
-      {isRunning ? (
-        <>
-          <CircularProgress size={24} sx={{ marginRight: 2 }} />
-          {progressPercent.toFixed(0)}% complete
-        </>
-      ) : (
-        'Run Eval'
+    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+      <Button variant="contained" color="primary" onClick={runTestSuite} disabled={isRunning}>
+        {isRunning ? (
+          <>
+            <CircularProgress size={24} sx={{ marginRight: 2 }} />
+            {progressPercent.toFixed(0)}% complete
+          </>
+        ) : (
+          'Run Eval'
+        )}
+      </Button>
+
+      {isRunning && (
+        <Button variant="outlined" color="secondary" onClick={cancelEvaluation}>
+          Cancel
+        </Button>
       )}
-    </Button>
+    </Box>
   );
 };
 
