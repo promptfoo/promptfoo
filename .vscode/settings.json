@@ -66,6 +66,7 @@
     "mitigations",
     "mixtral",
     "MMLU",
+    "modelaudit",
     "moderations",
     "multibar",
     "multimodal",
