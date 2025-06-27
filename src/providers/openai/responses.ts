@@ -9,7 +9,33 @@ import { maybeLoadFromExternalFile } from '../../util/file';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
 import { calculateOpenAICost } from './util';
-import { formatOpenAiError, getTokenUsage } from './util';
+import { formatOpenAiError } from './util';
+import type { TokenUsage } from '../../types';
+
+// Custom token usage function for Responses API which uses different field names
+function getResponsesTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
+  if (data.usage) {
+    if (cached) {
+      return { cached: data.usage.total_tokens, total: data.usage.total_tokens };
+    } else {
+      return {
+        total: data.usage.total_tokens,
+        prompt: data.usage.input_tokens || 0,
+        completion: data.usage.output_tokens || 0,
+        ...(data.usage.completion_tokens_details
+          ? {
+              completionDetails: {
+                reasoning: data.usage.completion_tokens_details.reasoning_tokens,
+                acceptedPrediction: data.usage.completion_tokens_details.accepted_prediction_tokens,
+                rejectedPrediction: data.usage.completion_tokens_details.rejected_prediction_tokens,
+              },
+            }
+          : {}),
+      };
+    }
+  }
+  return {};
+}
 
 export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   static OPENAI_RESPONSES_MODEL_NAMES = [
@@ -256,12 +282,14 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     }
 
     logger.debug(`\tOpenAI Responses API response: ${JSON.stringify(data)}`);
-    
+
     // Log deep research output structure for debugging
     if (this.isDeepResearchModel() && data.output) {
-      logger.debug(`\tDeep research output types: ${data.output.map((item: any) => item.type).join(', ')}`);
+      logger.debug(
+        `\tDeep research output types: ${data.output.map((item: any) => item.type).join(', ')}`,
+      );
     }
-    
+
     if (data.error) {
       await data.deleteFromCache?.();
       return {
@@ -272,16 +300,35 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // Check if response was incomplete due to token limits
     const _isIncomplete = data.status === 'incomplete';
     const hitTokenLimit = data.incomplete_details?.reason === 'max_output_tokens';
-    const tokenLimitWarning = hitTokenLimit 
+    const tokenLimitWarning = hitTokenLimit
       ? `\n\n⚠️  Response incomplete: Hit max_output_tokens limit (${body.max_output_tokens || 'default'}). Consider increasing max_output_tokens for deep research models.`
       : '';
 
     try {
-      // Find the assistant message in the output
+      // Check if the response has a standardized output_text field first
+      if (data.output_text && typeof data.output_text === 'string') {
+        const tokenUsage = getResponsesTokenUsage(data, cached);
+        return {
+          output: data.output_text + tokenLimitWarning,
+          tokenUsage,
+          cached,
+          cost: calculateOpenAICost(
+            this.modelName,
+            config,
+            data.usage?.input_tokens,
+            data.usage?.output_tokens,
+            0,
+            0,
+          ),
+          raw: data,
+        };
+      }
+
+      // Fallback to manual parsing for older API versions or special cases
       const output = data.output;
       if (!output || !Array.isArray(output) || output.length === 0) {
         return {
-          error: `Invalid response format: Missing output array`,
+          error: `Invalid response format: Missing output array and output_text`,
         };
       }
 
@@ -321,8 +368,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
             researchSteps.push(`🔍 Searched: "${action.query}"`);
           } else if (action?.type === 'open_page') {
             researchSteps.push(`📄 Opened: ${action.url || 'page'}`);
-          } else if (action?.type === 'find_in_page') {
-            researchSteps.push(`🔍 Found in page: "${action.query}"`);
+          } else if (action?.type === 'find') {
+            researchSteps.push(
+              `🔍 Found in page: "${action.pattern}" at ${action.url || 'unknown URL'}`,
+            );
           }
         } else if (item.type === 'code_interpreter_call' && isDeepResearch) {
           // Deep research code interpreter calls
@@ -371,7 +420,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       if (isRefusal) {
         return {
           output: refusal,
-          tokenUsage: getTokenUsage(data, cached),
+          tokenUsage: getResponsesTokenUsage(data, cached),
           isRefusal: true,
           cached,
           cost: calculateOpenAICost(
@@ -394,7 +443,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         }
       }
 
-      const tokenUsage = getTokenUsage(data, cached);
+      const tokenUsage = getResponsesTokenUsage(data, cached);
 
       return {
         output: result + tokenLimitWarning,

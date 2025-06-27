@@ -2443,4 +2443,94 @@ describe('OpenAiResponsesProvider', () => {
     expect(o3DeepProvider['supportsTemperature']()).toBe(false);
     expect(o4MiniDeepProvider['supportsTemperature']()).toBe(false);
   });
+
+  it('should handle standardized output_text field correctly', async () => {
+    const mockApiResponse = {
+      id: 'resp_abc123',
+      status: 'completed',
+      model: 'o3-deep-research',
+      output_text: 'This is the standardized output text from the API.',
+      usage: { input_tokens: 10, output_tokens: 15, total_tokens: 25 },
+    };
+
+    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new OpenAiResponsesProvider('o3-deep-research', {
+      config: { apiKey: 'test-key' },
+    });
+
+    const result = await provider.callApi('Test prompt');
+
+    expect(result.output).toBe('This is the standardized output text from the API.');
+    expect(result.tokenUsage).toEqual({
+      total: 25,
+      prompt: 10,
+      completion: 15,
+    });
+  });
+
+  it('should handle web search actions with correct types', async () => {
+    const mockApiResponse = {
+      id: 'resp_abc123',
+      status: 'completed',
+      model: 'o4-mini-deep-research',
+      output: [
+        {
+          type: 'web_search_call',
+          action: {
+            type: 'search',
+            query: 'Python programming language',
+          },
+        },
+        {
+          type: 'web_search_call',
+          action: {
+            type: 'open_page',
+            url: 'https://python.org',
+          },
+        },
+        {
+          type: 'web_search_call',
+          action: {
+            type: 'find',
+            pattern: 'programming language',
+            url: 'https://python.org',
+          },
+        },
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [
+            {
+              type: 'output_text',
+              text: 'Found information about Python programming.',
+            },
+          ],
+        },
+      ],
+      usage: { input_tokens: 20, output_tokens: 30, total_tokens: 50 },
+    };
+
+    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new OpenAiResponsesProvider('o4-mini-deep-research', {
+      config: { apiKey: 'test-key' },
+    });
+
+    const result = await provider.callApi('Test prompt');
+
+    expect(result.output).toContain('Found information about Python programming.');
+    // Should not show research steps in final output since we have a final result
+    expect(result.output).not.toContain('🔬 Deep Research Process');
+  });
 });

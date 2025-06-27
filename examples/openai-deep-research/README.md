@@ -14,7 +14,7 @@ Deep research models (`o3-deep-research` and `o4-mini-deep-research`) are newly 
 
 ## What This Example Shows
 
-- **o4-mini-deep-research**: Deep research model with web search access  
+- **o4-mini-deep-research**: Deep research model with web search access
 - **Research capabilities**: Demonstrates how to configure research tasks
 - **Web search integration**: Shows proper tool configuration for web search
 
@@ -34,17 +34,20 @@ Deep research models (`o3-deep-research` and `o4-mini-deep-research`) are newly 
 ## Configuration
 
 The example uses a simple configuration with:
+
 - **Web search preview**: For internet research on current topics
 - **Automatic search**: The model decides when to search based on the query
 
 ## Running the Example
 
 1. Initialize the example:
+
    ```bash
    npx promptfoo@latest init --example openai-deep-research
    ```
 
 2. Run the evaluation:
+
    ```bash
    promptfoo eval
    ```
@@ -57,11 +60,13 @@ The example uses a simple configuration with:
 ## What's Being Tested
 
 This example tests basic research capabilities:
+
 - **Topic**: "Python programming language"
 - **Task**: The model researches Python and provides a summary
 - **Tools**: The model can use web search to find information
 
 The test verifies that:
+
 - The response contains relevant terms about Python programming
 - The response demonstrates research capabilities (via LLM rubric)
 - The response is text format (not JSON)
@@ -69,6 +74,7 @@ The test verifies that:
 ## Expected Results
 
 The deep research model should:
+
 - **Search the web** for information about Python when needed
 - **Provide a comprehensive summary** using available information
 - **Demonstrate tool integration** by automatically using web search
@@ -87,6 +93,7 @@ providers:
 ```
 
 **Key points**:
+
 - The model automatically chooses when to use web search
 - High token limit (20,000) for deep research and reasoning
 - Simple tool configuration for web search capabilities
@@ -94,4 +101,4 @@ providers:
 ## Learn More
 
 - [OpenAI Deep Research Guide](https://platform.openai.com/docs/guides/deep-research)
-- [Promptfoo Documentation](https://promptfoo.dev/docs) 
+- [Promptfoo Documentation](https://promptfoo.dev/docs)
