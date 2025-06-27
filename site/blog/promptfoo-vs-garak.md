@@ -1,6 +1,6 @@
 ---
 description: ''
-image: /img/blog/100k-users-milestone.jpg
+image: /img/blog/garak/promptfoo-vs-garak.png
 date: 2025-06-26
 authors: [ian]
 ---
@@ -35,6 +35,14 @@ Two open‑source tools have emerged as popular choices for LLM red teaming, eac
 **Garak** (Generative AI Red‑teaming & Assessment Kit) is developed with support from NVIDIA ([announcement](https://developer.nvidia.com/blog/introducing-garak)) and provides a library of pre‑defined attacks based on academic research and documented vulnerabilities. Security researchers can run Garak against LLM endpoints to check for known weaknesses.
 
 Both projects are actively maintained. Promptfoo uses an MIT license and is adopted by teams at Shopify, Discord, and Microsoft. Garak uses Apache 2.0 and integrates with NVIDIA’s NeMo Guardrails.
+
+Garak interface:
+
+![Garak](https://camo.githubusercontent.com/3c772412f9310195163d6092ba995d436ebad8d7e430d89a8484c3a92b5ec972/68747470733a2f2f692e696d6775722e636f6d2f3844786634354e2e706e67)
+
+Promptfoo interface (Promptfoo has a [CLI](/docs/red-team/quickstart/#run-the-scan) too, but here is its web view):
+
+![Promptfoo interface](https://www.promptfoo.dev/img/riskreport-1@2x.png)
 
 ## Attack Generation: Dynamic vs Curated
 
