@@ -63,7 +63,7 @@ promptfoo eval -c promptfooconfig.jumpstart.yaml
 
 ## Testing Your Setup
 
-This directory includes a test script to validate your SageMaker AIendpoint configuration before running a full evaluation:
+This directory includes a test script to validate your SageMaker AI endpoint configuration before running a full evaluation:
 
 ```bash
 # Basic test for an OpenAI-compatible endpoint
