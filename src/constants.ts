@@ -5,12 +5,6 @@ export const VERSION = packageJson.version;
 
 export const DEFAULT_QUERY_LIMIT = 100;
 
-// Redteam configuration defaults
-export const REDTEAM_DEFAULTS = {
-  MAX_CONCURRENCY: 4,
-  NUM_TESTS: 10,
-} as const;
-
 // Default API base URL used for sharing and other API operations
 export const DEFAULT_API_BASE_URL = 'https://api.promptfoo.app';
 

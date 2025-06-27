@@ -28,7 +28,7 @@ import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { styled } from '@mui/material/styles';
-import { REDTEAM_DEFAULTS } from '@promptfoo/constants';
+import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import type { RedteamStrategy } from '@promptfoo/types';
 import { ProviderOptionsSchema } from '@promptfoo/validators/providers';
 import yaml from 'js-yaml';

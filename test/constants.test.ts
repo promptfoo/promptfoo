@@ -9,8 +9,8 @@ import {
   getDefaultPort,
   TERMINAL_MAX_WIDTH,
   CLOUD_PROVIDER_PREFIX,
-  REDTEAM_DEFAULTS,
 } from '../src/constants';
+import { REDTEAM_DEFAULTS } from '../src/redteam/constants';
 
 describe('constants', () => {
   beforeEach(() => {
