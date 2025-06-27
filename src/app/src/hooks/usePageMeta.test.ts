@@ -25,13 +25,13 @@ describe('usePageMeta', () => {
     vi.spyOn(document, 'querySelector').mockImplementation((selector) => {
       switch (selector) {
         case 'meta[name="description"]':
-          return mockDescriptionTag;
+          return mockDescriptionTag as any;
         case 'meta[property="og:title"]':
-          return mockOgTitleTag;
+          return mockOgTitleTag as any;
         case 'meta[property="og:description"]':
-          return mockOgDescriptionTag;
+          return mockOgDescriptionTag as any;
         case 'meta[property="og:image"]':
-          return mockOgImageTag;
+          return mockOgImageTag as any;
         default:
           return null;
       }
