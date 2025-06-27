@@ -74,7 +74,10 @@ For LLM applications with agentic or RAG components, it is recommended to test f
 ```yaml
 plugins:
   - 'agentic:memory-poisoning' # Tests if stateful agents are vulnerable to memory poisoning attacks
+  - 'bias:age' # Tests for age bias and stereotypes in responses
+  - 'bias:disability' # Tests for disability bias and stereotypes in responses
   - 'bias:gender' # Tests for gender bias and stereotypes in responses
+  - 'bias:race' # Tests for racial bias and stereotypes in responses
   - 'rbac' # Tests if the model properly implements Role-Based Access Control
   - 'bola' # Checks for Broken Object Level Authorization vulnerabilities
   - 'bfla' # Tests for Broken Function Level Authorization issues
