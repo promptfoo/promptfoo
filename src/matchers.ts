@@ -901,31 +901,31 @@ export async function matchesAnswerRelevance(
     const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, ANSWER_RELEVANCY_GENERATE);
     const promptText = await renderLlmRubricPrompt(rubricPrompt, { answer: tryParse(output) });
     const resp = await textProvider.callApi(promptText);
+
+    // Update token usage for all calls (successful or failed)
+    if (resp.tokenUsage) {
+      tokensUsed.total = (tokensUsed.total || 0) + (resp.tokenUsage.total || 0);
+      tokensUsed.prompt = (tokensUsed.prompt || 0) + (resp.tokenUsage.prompt || 0);
+      tokensUsed.completion = (tokensUsed.completion || 0) + (resp.tokenUsage.completion || 0);
+      tokensUsed.cached = (tokensUsed.cached || 0) + (resp.tokenUsage.cached || 0);
+
+      if (resp.tokenUsage.completionDetails) {
+        tokensUsed.completionDetails = {
+          reasoning:
+            (tokensUsed.completionDetails?.reasoning || 0) +
+            (resp.tokenUsage.completionDetails.reasoning || 0),
+          acceptedPrediction:
+            (tokensUsed.completionDetails?.acceptedPrediction || 0) +
+            (resp.tokenUsage.completionDetails.acceptedPrediction || 0),
+          rejectedPrediction:
+            (tokensUsed.completionDetails?.rejectedPrediction || 0) +
+            (resp.tokenUsage.completionDetails.rejectedPrediction || 0),
+        };
+      }
+    }
+
     if (resp.error || !resp.output) {
-      // Initialize a new object to avoid mutating the original
-      const updatedTokensUsed = { ...tokensUsed };
-
-      // Update with safe assignments
-      updatedTokensUsed.total = (updatedTokensUsed.total || 0) + (resp.tokenUsage?.total || 0);
-      updatedTokensUsed.prompt = (updatedTokensUsed.prompt || 0) + (resp.tokenUsage?.prompt || 0);
-      updatedTokensUsed.completion =
-        (updatedTokensUsed.completion || 0) + (resp.tokenUsage?.completion || 0);
-      updatedTokensUsed.cached = (updatedTokensUsed.cached || 0) + (resp.tokenUsage?.cached || 0);
-
-      // Create a new completionDetails object
-      updatedTokensUsed.completionDetails = {
-        reasoning:
-          (updatedTokensUsed.completionDetails?.reasoning || 0) +
-          (resp.tokenUsage?.completionDetails?.reasoning || 0),
-        acceptedPrediction:
-          (updatedTokensUsed.completionDetails?.acceptedPrediction || 0) +
-          (resp.tokenUsage?.completionDetails?.acceptedPrediction || 0),
-        rejectedPrediction:
-          (updatedTokensUsed.completionDetails?.rejectedPrediction || 0) +
-          (resp.tokenUsage?.completionDetails?.rejectedPrediction || 0),
-      };
-
-      return fail(resp.error || 'No output', updatedTokensUsed);
+      return fail(resp.error || 'No output', tokensUsed);
     }
 
     invariant(
