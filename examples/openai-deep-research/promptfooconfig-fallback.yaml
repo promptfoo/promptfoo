@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: OpenAI Deep Research Example (Fallback Config)
+prompts:
+  - |
+    Research {{topic}} and provide a summary of what you find.
+
+providers:
+  # Fallback configuration using gpt-4o with responses API for testing
+  - id: openai:responses:gpt-4o
+    config:
+      max_output_tokens: 4000
+      # Note: Web search is not available with regular gpt-4o via responses API
+      # This is just to test the configuration structure
+
+tests:
+  - vars:
+      topic: "Python programming language"
+    assert:
+      - type: contains-any
+        value: ['Python', 'programming', 'language', 'code', 'development']
+      - type: llm-rubric
+        value: 'Response should provide information about Python programming language. Should be informative.'
+      - type: is-json
+        value: false 

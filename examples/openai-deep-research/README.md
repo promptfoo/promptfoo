@@ -10,6 +10,8 @@ This example demonstrates how to use OpenAI's new deep research models via the *
 
 :::warning Experimental Models
 Deep research models (`o3-deep-research` and `o4-mini-deep-research`) are newly announced and may not be fully available or functional in the OpenAI API yet. This example serves as a demonstration of the intended configuration and may require updates as the models become fully available.
+
+**API Key Required**: This example requires a valid OpenAI API key set as the `OPENAI_API_KEY` environment variable and access to the deep research models (which may require special access).
 :::
 
 ## What This Example Shows
@@ -29,7 +31,18 @@ Deep research models (`o3-deep-research` and `o4-mini-deep-research`) are newly 
 
 - promptfoo CLI installed
 - OpenAI API key set as `OPENAI_API_KEY` environment variable
-- Access to the deep research models
+- Access to the deep research models (may require special access)
+
+### Setting up your API Key
+
+```bash
+export OPENAI_API_KEY="your-api-key-here"
+```
+
+Or create a `.env` file in this directory:
+```
+OPENAI_API_KEY=your-api-key-here
+```
 
 ## Configuration
 
@@ -46,16 +59,33 @@ The example uses a simple configuration with:
    npx promptfoo@latest init --example openai-deep-research
    ```
 
-2. Run the evaluation:
-
+2. Set your OpenAI API key:
    ```bash
-   promptfoo eval
+   export OPENAI_API_KEY="your-api-key-here"
    ```
 
-3. View results:
+3. Run the evaluation:
+
+   ```bash
+   # Using the deep research model (requires special access)
+   promptfoo eval
+   
+   # Or use the fallback configuration for testing
+   promptfoo eval -c promptfooconfig-fallback.yaml
+   ```
+
+4. View results:
    ```bash
    promptfoo view
    ```
+
+### Troubleshooting
+
+If you get an error about the deep research model not being available, try:
+
+1. **Use the fallback config**: `promptfoo eval -c promptfooconfig-fallback.yaml`
+2. **Check model access**: Deep research models may require special access from OpenAI
+3. **Verify API key**: Ensure your `OPENAI_API_KEY` is set and valid
 
 ## What's Being Tested
 
