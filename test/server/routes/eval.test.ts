@@ -1,4 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
+// Import the mocked evaluate function
+import { evaluate } from '../../../src/index';
 import { evalJobs, evalRouter } from '../../../src/server/routes/eval';
 
 // Mock promptfoo to avoid actual evaluation
@@ -6,8 +8,6 @@ jest.mock('../../../src/index', () => ({
   evaluate: jest.fn(),
 }));
 
-// Import the mocked evaluate function  
-import { evaluate } from '../../../src/index';
 const mockEvaluate = jest.mocked(evaluate);
 
 describe('evalRouter', () => {
