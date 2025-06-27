@@ -5,8 +5,10 @@ import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import YamlEditor from '@app/pages/eval-creator/components/YamlEditor';
 import { callApi } from '@app/utils/api';
+import AddIcon from '@mui/icons-material/Add';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import CloseIcon from '@mui/icons-material/Close';
+import DeleteIcon from '@mui/icons-material/Delete';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import SaveIcon from '@mui/icons-material/Save';
 import SearchIcon from '@mui/icons-material/Search';
@@ -77,6 +79,37 @@ export default function Review() {
   const { checkEmailStatus } = useEmailVerification();
   const [isPurposeExpanded, setIsPurposeExpanded] = useState(false);
   const [isTestInstructionsExpanded, setIsTestInstructionsExpanded] = useState(false);
+
+  const updateDefaultTestVars = (vars: Record<string, any>) => {
+    updateConfig('defaultTest', { ...config.defaultTest, vars });
+  };
+
+  const addVar = () => {
+    const currentVars = config.defaultTest?.vars || {};
+    let newKey = 'newVar';
+    let counter = 1;
+    while (newKey in currentVars) {
+      newKey = `newVar${counter}`;
+      counter++;
+    }
+    const newVars = { ...currentVars, [newKey]: '' };
+    updateDefaultTestVars(newVars);
+  };
+
+  const updateVar = (oldKey: string, newKey: string, value: string) => {
+    const currentVars = { ...(config.defaultTest?.vars || {}) };
+    if (oldKey !== newKey && oldKey in currentVars) {
+      delete currentVars[oldKey];
+    }
+    currentVars[newKey] = value;
+    updateDefaultTestVars(currentVars);
+  };
+
+  const removeVar = (key: string) => {
+    const currentVars = { ...(config.defaultTest?.vars || {}) };
+    delete currentVars[key];
+    updateDefaultTestVars(currentVars);
+  };
 
   const handleDescriptionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     updateConfig('description', event.target.value);
@@ -640,6 +673,85 @@ export default function Review() {
       <Divider sx={{ my: 4 }} />
 
       <Typography variant="h5" gutterBottom sx={{ mb: 3 }}>
+        Test Variables
+      </Typography>
+
+      <Paper elevation={2} sx={{ p: 3, mb: 4 }}>
+        <Box sx={{ mb: 3 }}>
+          <Box display="flex" alignItems="flex-start" justifyContent="space-between" mb={2}>
+            <Typography
+              variant="body1"
+              color="text.secondary"
+              sx={{ maxWidth: '70%', lineHeight: 1.6 }}
+            >
+              Set default variables that will be available across all test cases. Useful for
+              parameterizing endpoints, API keys, language codes, etc.
+            </Typography>
+            <Button
+              size="small"
+              startIcon={<AddIcon />}
+              onClick={addVar}
+              variant="outlined"
+              sx={{ flexShrink: 0, ml: 2 }}
+            >
+              Add Variable
+            </Button>
+          </Box>
+        </Box>
+
+        {Object.keys(config.defaultTest?.vars || {}).length > 0 ? (
+          <Stack spacing={2.5}>
+            {Object.entries(config.defaultTest?.vars || {}).map(([key, value], index) => (
+              <Box key={key || `var-${index}`} display="flex" gap={2} alignItems="center">
+                <TextField
+                  size="small"
+                  label="Variable name"
+                  value={key}
+                  onChange={(e) => updateVar(key, e.target.value, String(value))}
+                  sx={{ minWidth: 200 }}
+                />
+                <TextField
+                  size="small"
+                  label="Value"
+                  value={String(value)}
+                  onChange={(e) => updateVar(key, key, e.target.value)}
+                  sx={{ flexGrow: 1 }}
+                />
+                <IconButton
+                  onClick={() => removeVar(key)}
+                  size="small"
+                  color="error"
+                  aria-label={`Delete variable ${key}`}
+                  sx={{ ml: 1 }}
+                >
+                  <DeleteIcon />
+                </IconButton>
+              </Box>
+            ))}
+          </Stack>
+        ) : (
+          <Box
+            sx={{
+              textAlign: 'center',
+              py: 6,
+              px: 3,
+              borderRadius: 2,
+              bgcolor: 'grey.50',
+              border: '1px dashed',
+              borderColor: 'grey.300',
+            }}
+          >
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              No test variables configured
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Optional variables that will be added to every test case
+            </Typography>
+          </Box>
+        )}
+      </Paper>
+
+      <Typography variant="h5" gutterBottom sx={{ mb: 3 }}>
         Running Your Configuration
       </Typography>
 
@@ -894,6 +1006,7 @@ export default function Review() {
                 </span>
               </Tooltip>
             </Box>
+
             <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
               <Button onClick={() => setIsRunSettingsDialogOpen(false)}>Close</Button>
             </Box>
