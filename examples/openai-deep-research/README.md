@@ -1,4 +1,4 @@
-# openai-deep-research (OpenAI Responses API Example)
+# openai-deep-research (OpenAI Deep Research Models)
 
 You can run this example with:
 
@@ -6,77 +6,36 @@ You can run this example with:
 npx promptfoo@latest init --example openai-deep-research
 ```
 
-This example demonstrates how to use OpenAI's **Responses API** for structured conversations and advanced use cases beyond the standard Chat Completions API.
+This example demonstrates OpenAI's deep research models with web search capabilities via the Responses API.
 
-## What This Example Shows
+## Setup
 
-- **Responses API usage**: How to configure and use OpenAI's Responses API
-- **Structured output handling**: Working with the responses format
-- **Multiple test cases**: Testing different topics with the same prompt
-
-## Prerequisites
-
-- promptfoo CLI installed
-- OpenAI API key set as `OPENAI_API_KEY` environment variable
-
-### Setting up your API Key
+1. Set your OpenAI API key:
 
 ```bash
-export OPENAI_API_KEY="your-api-key-here"
+export OPENAI_API_KEY=your-key-here
 ```
 
-Or create a `.env` file in this directory:
-```
-OPENAI_API_KEY=your-api-key-here
-```
+_Note: Deep research models may require special access from OpenAI._
 
-## Running the Example
+2. Run the evaluation:
 
-1. Initialize the example:
-   ```bash
-   npx promptfoo@latest init --example openai-deep-research
-   ```
-
-2. Set your OpenAI API key:
-   ```bash
-   export OPENAI_API_KEY="your-api-key-here"
-   ```
-
-3. Run the evaluation:
-   ```bash
-   promptfoo eval
-   ```
-
-4. View results:
-   ```bash
-   promptfoo view
-   ```
-
-## Configuration Details
-
-The example uses this configuration:
-
-```yaml
-providers:
-  - id: openai:responses:gpt-4o
-    config:
-      max_output_tokens: 4000
+```bash
+promptfoo eval
 ```
 
-**Key points**:
-- Uses the Responses API endpoint instead of Chat Completions
-- Higher token limit for detailed responses
-- Tests multiple topics to show versatility
+## What's happening?
 
-## Expected Results
+This example:
 
-The evaluation should pass both test cases:
-- **Machine learning topic**: Response contains relevant ML terms
-- **Space exploration topic**: Response contains space-related terms
+- Tests OpenAI's `o4-mini-deep-research` model with web search tools
+- Evaluates research capabilities on machine learning and space exploration topics
+- Uses the model's ability to automatically search the web for current information
+- Checks that responses contain relevant technical terminology
 
-Both responses should be informative and demonstrate the Responses API's capabilities.
+The model automatically decides when to use web search to provide comprehensive, up-to-date answers.
 
 ## Learn More
 
-- [OpenAI Responses API Documentation](https://platform.openai.com/docs/guides/responses)
+- [OpenAI Deep Research Guide](https://platform.openai.com/docs/guides/deep-research)
 - [Promptfoo Documentation](https://promptfoo.dev/docs)

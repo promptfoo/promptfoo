@@ -3,6 +3,7 @@ import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
+import type { TokenUsage } from '../../types';
 import type { EnvOverrides } from '../../types/env';
 import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util';
 import { maybeLoadFromExternalFile } from '../../util/file';
@@ -10,7 +11,6 @@ import { REQUEST_TIMEOUT_MS } from '../shared';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
 import { calculateOpenAICost } from './util';
 import { formatOpenAiError } from './util';
-import type { TokenUsage } from '../../types';
 
 // Custom token usage function for Responses API which uses different field names
 function getResponsesTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {

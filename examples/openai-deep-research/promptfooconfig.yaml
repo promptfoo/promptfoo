@@ -3,9 +3,11 @@ description: OpenAI Responses API demonstration
 prompts:
   - Tell me about {{topic}}
 providers:
-  - id: openai:responses:gpt-4o
+  - id: openai:responses:o4-mini-deep-research
     config:
-      max_output_tokens: 4000
+      max_output_tokens: 20000
+      tools:
+        - type: web_search_preview
 tests:
   - vars:
       topic: machine learning
