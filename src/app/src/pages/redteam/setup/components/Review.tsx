@@ -32,6 +32,7 @@ import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
+import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import { strategyDisplayNames } from '@promptfoo/redteam/constants';
 import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
 import type { RedteamPlugin } from '@promptfoo/redteam/types';
@@ -66,7 +67,9 @@ export default function Review() {
   const { showToast } = useToast();
   const [forceRegeneration /*, setForceRegeneration*/] = React.useState(true);
   const [debugMode, setDebugMode] = React.useState(false);
-  const [maxConcurrency, setMaxConcurrency] = React.useState(String(config.maxConcurrency || 4));
+  const [maxConcurrency, setMaxConcurrency] = React.useState(
+    String(config.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY),
+  );
   const [delayMs, setDelayMs] = React.useState('0');
   const [isJobStatusDialogOpen, setIsJobStatusDialogOpen] = useState(false);
   const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
@@ -88,7 +91,7 @@ export default function Review() {
 
   // Sync local maxConcurrency state with config
   useEffect(() => {
-    setMaxConcurrency(String(config.maxConcurrency || 4));
+    setMaxConcurrency(String(config.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY));
   }, [config.maxConcurrency]);
 
   const handleSaveYaml = () => {
