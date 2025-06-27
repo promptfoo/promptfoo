@@ -49,6 +49,11 @@ promptfoo scan-model [OPTIONS] PATH...
 # Scan a single model file
 promptfoo scan-model model.pkl
 
+# Scan a model directly from HuggingFace without downloading
+promptfoo scan-model https://huggingface.co/bert-base-uncased
+promptfoo scan-model hf://microsoft/resnet-50
+promptfoo scan-model https://hf.co/gpt2
+
 # Scan multiple models and directories
 promptfoo scan-model model.pkl model2.h5 models_directory
 
@@ -99,6 +104,10 @@ ModelAudit can scan:
   - Raw PyTorch tensor files
   - Embedded executables (PE, ELF, Mach-O)
 - **Model configuration files** (`.json`, `.yaml`, etc.)
+- **HuggingFace URLs** - scan models directly from HuggingFace without downloading:
+  - `https://huggingface.co/user/model`
+  - `https://hf.co/user/model`
+  - `hf://user/model`
 
 ## Security Checks Performed
 
@@ -160,4 +169,7 @@ pip install pyyaml
 
 # For SafeTensors support
 pip install safetensors
+
+# For HuggingFace URL scanning
+pip install huggingface-hub
 ```
