@@ -702,7 +702,7 @@ export default function Review() {
         {Object.keys(config.defaultTest?.vars || {}).length > 0 ? (
           <Stack spacing={2.5}>
             {Object.entries(config.defaultTest?.vars || {}).map(([key, value], index) => (
-              <Box key={key || `var-${index}`} display="flex" gap={2} alignItems="center">
+              <Box key={`variable-${index}`} display="flex" gap={2} alignItems="center">
                 <TextField
                   size="small"
                   label="Variable name"
