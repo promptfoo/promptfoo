@@ -1,4 +1,4 @@
-# openai-deep-research (OpenAI Deep Research Models Example)
+# openai-deep-research (OpenAI Responses API Example)
 
 You can run this example with:
 
@@ -6,32 +6,18 @@ You can run this example with:
 npx promptfoo@latest init --example openai-deep-research
 ```
 
-This example demonstrates how to use OpenAI's new deep research models via the **Responses API** with web search capabilities.
-
-:::warning Experimental Models
-Deep research models (`o3-deep-research` and `o4-mini-deep-research`) are newly announced and may not be fully available or functional in the OpenAI API yet. This example serves as a demonstration of the intended configuration and may require updates as the models become fully available.
-
-**API Key Required**: This example requires a valid OpenAI API key set as the `OPENAI_API_KEY` environment variable and access to the deep research models (which may require special access).
-:::
+This example demonstrates how to use OpenAI's **Responses API** for structured conversations and advanced use cases beyond the standard Chat Completions API.
 
 ## What This Example Shows
 
-- **o4-mini-deep-research**: Deep research model with web search access
-- **Research capabilities**: Demonstrates how to configure research tasks
-- **Web search integration**: Shows proper tool configuration for web search
-
-## Features Demonstrated
-
-- **Web search**: The model can search the internet for current information
-- **Current events**: Research topics that change frequently
-- **Automatic tool use**: The model decides when to search for information
-- **Quality assessment**: Uses LLM rubric to evaluate research depth
+- **Responses API usage**: How to configure and use OpenAI's Responses API
+- **Structured output handling**: Working with the responses format
+- **Multiple test cases**: Testing different topics with the same prompt
 
 ## Prerequisites
 
 - promptfoo CLI installed
 - OpenAI API key set as `OPENAI_API_KEY` environment variable
-- Access to the deep research models (may require special access)
 
 ### Setting up your API Key
 
@@ -40,40 +26,25 @@ export OPENAI_API_KEY="your-api-key-here"
 ```
 
 Or create a `.env` file in this directory:
-
 ```
 OPENAI_API_KEY=your-api-key-here
 ```
 
-## Configuration
-
-The example uses a simple configuration with:
-
-- **Web search preview**: For internet research on current topics
-- **Automatic search**: The model decides when to search based on the query
-
 ## Running the Example
 
 1. Initialize the example:
-
    ```bash
    npx promptfoo@latest init --example openai-deep-research
    ```
 
 2. Set your OpenAI API key:
-
    ```bash
    export OPENAI_API_KEY="your-api-key-here"
    ```
 
 3. Run the evaluation:
-
    ```bash
-   # Using the deep research model (requires special access)
    promptfoo eval
-
-   # Or use the fallback configuration for testing
-   promptfoo eval -c promptfooconfig-fallback.yaml
    ```
 
 4. View results:
@@ -81,73 +52,31 @@ The example uses a simple configuration with:
    promptfoo view
    ```
 
-### Testing & Validation
-
-You can validate that the deep research models are properly configured without making API calls:
-
-```bash
-# Test deep research model configuration
-node test-deep-research-models.js
-```
-
-This test validates:
-- Deep research models are recognized
-- Proper reasoning model classification  
-- Correct tool configuration
-- API body generation
-
-### Troubleshooting
-
-If you get an error about the deep research model not being available, try:
-
-1. **Run the validation test**: `node test-deep-research-models.js`
-2. **Use the fallback config**: `promptfoo eval -c promptfooconfig-fallback.yaml`
-3. **Check model access**: Deep research models may require special access from OpenAI
-4. **Verify API key**: Ensure your `OPENAI_API_KEY` is set and valid
-5. **Test network connectivity**: Ensure you can reach `api.openai.com`
-
-## What's Being Tested
-
-This example tests basic research capabilities:
-
-- **Topic**: "Python programming language"
-- **Task**: The model researches Python and provides a summary
-- **Tools**: The model can use web search to find information
-
-The test verifies that:
-
-- The response contains relevant terms about Python programming
-- The response demonstrates research capabilities (via LLM rubric)
-- The response is text format (not JSON)
-
-## Expected Results
-
-The deep research model should:
-
-- **Search the web** for information about Python when needed
-- **Provide a comprehensive summary** using available information
-- **Demonstrate tool integration** by automatically using web search
-
 ## Configuration Details
 
-The example uses this simple configuration:
+The example uses this configuration:
 
 ```yaml
 providers:
-  - id: openai:responses:o4-mini-deep-research
+  - id: openai:responses:gpt-4o
     config:
-      max_output_tokens: 20000
-      tools:
-        - type: web_search_preview
+      max_output_tokens: 4000
 ```
 
 **Key points**:
+- Uses the Responses API endpoint instead of Chat Completions
+- Higher token limit for detailed responses
+- Tests multiple topics to show versatility
 
-- The model automatically chooses when to use web search
-- High token limit (20,000) for deep research and reasoning
-- Simple tool configuration for web search capabilities
+## Expected Results
+
+The evaluation should pass both test cases:
+- **Machine learning topic**: Response contains relevant ML terms
+- **Space exploration topic**: Response contains space-related terms
+
+Both responses should be informative and demonstrate the Responses API's capabilities.
 
 ## Learn More
 
-- [OpenAI Deep Research Guide](https://platform.openai.com/docs/guides/deep-research)
+- [OpenAI Responses API Documentation](https://platform.openai.com/docs/guides/responses)
 - [Promptfoo Documentation](https://promptfoo.dev/docs)
