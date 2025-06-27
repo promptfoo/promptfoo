@@ -55,6 +55,8 @@ export class SimulatedUser implements ApiProvider {
       };
     });
 
+    // TODO(Will): Tau server-task may not comply! Fix this server-side.
+    // i.e. Respond "I'm sorry, but I can't help with that request."
     const response = await userProvider.callApi(JSON.stringify(flippedMessages));
     logger.debug(`User: ${response.output}`);
     return [...messages, { role: 'user', content: String(response.output || '') }];
@@ -88,6 +90,7 @@ export class SimulatedUser implements ApiProvider {
   }
 
   async callApi(
+    // NOTE: `prompt` is not used in this provider; `vars.instructions` is used instead.
     prompt: string,
     context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
@@ -99,13 +102,14 @@ export class SimulatedUser implements ApiProvider {
       instructions,
     });
 
-    logger.debug(`Formatted user instructions: ${instructions}`);
+    logger.debug(`[SimulatedUser] Formatted user instructions: ${instructions}`);
     let messages: Message[] = [];
     const maxTurns = this.maxTurns;
     let numRequests = 0;
     for (let i = 0; i < maxTurns; i++) {
       logger.debug(`[SimulatedUser] Turn ${i + 1} of ${maxTurns}`);
 
+      // NOTE: Simulated-user provider acts as a judge to determine whether the instruction goal is satisfied.
       const messagesToUser = await this.sendMessageToUser(messages, userProvider);
       const lastMessage = messagesToUser[messagesToUser.length - 1];
       if (
