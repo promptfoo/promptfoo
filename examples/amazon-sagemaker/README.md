@@ -1,6 +1,6 @@
-# amazon-sagemaker (Amazon SageMaker Provider)
+# amazon-sagemaker (Amazon SageMaker AI Provider)
 
-This example demonstrates how to evaluate models deployed on Amazon SageMaker endpoints using promptfoo.
+This example demonstrates how to evaluate models deployed on Amazon SageMaker AI endpoints using promptfoo.
 
 You can run this example with:
 
@@ -12,16 +12,16 @@ npx promptfoo@latest init --example amazon-sagemaker
 
 This example shows how to:
 
-- Connect to and evaluate models deployed on Amazon SageMaker endpoints
-- Configure various model types (OpenAI, Anthropic, Llama, Mistral) running on SageMaker
-- Compare performance between different SageMaker-hosted models
+- Connect to and evaluate models deployed on Amazon SageMaker AI endpoints
+- Configure various model types (OpenAI, Anthropic, Llama, Mistral) running on SageMaker AI
+- Compare performance between different SageMaker AI -hosted models
 - Use transform functions to format prompts for specific model requirements
 - Work with embeddings models on SageMaker
 
 ## Prerequisites
 
-1. AWS account with SageMaker access
-2. Deployed SageMaker endpoints with your models
+1. AWS account with SageMaker AI access
+2. Deployed SageMaker AI endpoints with your models
 3. AWS credentials configured locally
 4. Required npm packages:
    ```bash
@@ -64,7 +64,7 @@ promptfoo eval -c promptfooconfig.jumpstart.yaml
 
 ## Testing Your Setup
 
-This directory includes a test script to validate your SageMaker endpoint configuration before running a full evaluation:
+This directory includes a test script to validate your SageMaker AIendpoint configuration before running a full evaluation:
 
 ```bash
 # Basic test for an OpenAI-compatible endpoint
