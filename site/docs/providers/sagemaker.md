@@ -10,7 +10,7 @@ The `sagemaker` provider allows you to use Amazon SageMaker AI endpoints in your
 
 ## Setup
 
-1. Ensure you have deployed the desired models as SageMaker endpoints.
+1. Ensure you have deployed the desired models as SageMaker AI endpoints.
 
 2. Install required dependencies:
 

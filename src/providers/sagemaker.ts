@@ -13,7 +13,6 @@ import type {
 import type { EnvOverrides } from '../types/env';
 import { transform } from '../util/transform';
 import type { TransformContext } from '../util/transform';
-import { parseChatPrompt } from './shared';
 
 /**
  * Sleep utility function for implementing delays
@@ -49,7 +48,9 @@ interface SageMakerOptions {
   transform?: string; // Transform function or file path to transform prompts
 
   // Model type for request/response handling
-  modelType?: 'openai' | 'anthropic' | 'llama' | 'huggingface' | 'jumpstart' | 'custom';
+  // TODO(Will): What is custom? User uploaded model?
+  // - Jumpstart is a model service, not a model type.
+  modelType?: 'openai' | 'llama' | 'huggingface' | 'jumpstart' | 'custom';
 
   // Response format options
   responseFormat?: {
@@ -395,14 +396,7 @@ export abstract class SageMakerGenericProvider {
  * Provider for text generation with SageMaker endpoints
  */
 export class SageMakerCompletionProvider extends SageMakerGenericProvider implements ApiProvider {
-  static SAGEMAKER_MODEL_TYPES = [
-    'openai',
-    'anthropic',
-    'llama',
-    'huggingface',
-    'jumpstart',
-    'custom',
-  ];
+  static SAGEMAKER_MODEL_TYPES = ['openai', 'llama', 'huggingface', 'jumpstart', 'custom'];
 
   /**
    * Format the request payload based on model type
@@ -449,42 +443,6 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
             top_p: topP,
             stop: stopSequences.length > 0 ? stopSequences : undefined,
           };
-        }
-        break;
-
-      case 'anthropic':
-        try {
-          const messages = JSON.parse(prompt);
-          if (Array.isArray(messages)) {
-            payload = {
-              messages,
-              max_tokens: maxTokens,
-              temperature,
-              top_p: topP,
-              stop_sequences: stopSequences.length > 0 ? stopSequences : undefined,
-            };
-          } else {
-            throw new Error('Not valid messages format');
-          }
-        } catch {
-          // Extract system and user messages using the same logic as Anthropic provider
-          const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
-
-          // Extract system message if present
-          const systemMessages = messages.filter((msg: any) => msg.role === 'system');
-          const nonSystemMessages = messages.filter((msg: any) => msg.role !== 'system');
-
-          payload = {
-            messages: nonSystemMessages,
-            max_tokens: maxTokens,
-            temperature,
-            top_p: topP,
-            stop_sequences: stopSequences.length > 0 ? stopSequences : undefined,
-          };
-
-          if (systemMessages.length > 0) {
-            payload.system = systemMessages[0].content;
-          }
         }
         break;
 
@@ -610,9 +568,6 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
           responseJson
         );
 
-      case 'anthropic':
-        return responseJson.content?.[0]?.text || responseJson.completion || responseJson;
-
       case 'llama':
         return (
           responseJson.generation ||
@@ -702,9 +657,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     const bustCache = context?.bustCache ?? context?.debug === true; // If debug mode is on, bust the cache
     if (isCacheEnabled() && !bustCache) {
       const cacheKey = this.getCacheKey(transformedPrompt);
-      const cache = (await getCache)
-        ? await getCache()
-        : await import('../cache').then((m) => m.getCache());
+      const cache = getCache ? getCache() : await import('../cache').then((m) => m.getCache());
 
       // Try to get from cache
       const cachedResult = await cache.get<string>(cacheKey);
@@ -805,9 +758,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
       // Save result to cache if successful and caching enabled
       if (isCacheEnabled() && !bustCache && result.output && !result.error) {
         const cacheKey = this.getCacheKey(transformedPrompt);
-        const cache = (await getCache)
-          ? await getCache()
-          : await import('../cache').then((m) => m.getCache());
+        const cache = getCache ? getCache() : await import('../cache').then((m) => m.getCache());
         const resultToCache = JSON.stringify(result);
 
         try {

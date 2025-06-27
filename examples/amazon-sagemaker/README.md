@@ -43,7 +43,6 @@ You can set these in a `.env` file or directly in your environment.
 This example includes multiple configuration files demonstrating different SageMaker integration patterns:
 
 - **promptfooconfig.openai.yaml**: OpenAI-compatible models on SageMaker
-- **promptfooconfig.anthropic.yaml**: Anthropic Claude models on SageMaker
 - **promptfooconfig.jumpstart.yaml**: AWS JumpStart foundation models
 - **promptfooconfig.llama.yaml**: Llama 3.2 models on SageMaker JumpStart
 - **promptfooconfig.mistral.yaml**: Mistral 7B v3 models on SageMaker (Hugging Face)
