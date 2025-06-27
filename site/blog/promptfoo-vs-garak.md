@@ -1,5 +1,5 @@
 ---
-description: ''
+description: 'Compare Promptfoo and Garak for LLM security testing. Learn how dynamic attack generation differs from curated exploits, and when to use each tool.'
 image: /img/blog/garak/promptfoo-vs-garak.png
 date: 2025-06-26
 authors: [ian]
