@@ -98,6 +98,49 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     return this.modelName.includes('deep-research');
   }
 
+  private parseStandardMessage(item: any): { content: string; isRefusal: boolean } {
+    let content = '';
+    let isRefusal = false;
+
+    if (item.content) {
+      for (const contentItem of item.content) {
+        if (contentItem.type === 'output_text') {
+          content += contentItem.text || '';
+        } else if (contentItem.type === 'tool_use' || contentItem.type === 'function_call') {
+          content = JSON.stringify(contentItem);
+        } else if (contentItem.type === 'refusal') {
+          content = contentItem.refusal || '';
+          isRefusal = true;
+        }
+      }
+    }
+
+    return { content, isRefusal };
+  }
+
+  private parseDeepResearchSteps(item: any): string[] {
+    const steps: string[] = [];
+
+    if (item.type === 'web_search_call') {
+      const action = item.action;
+      if (action?.type === 'search') {
+        steps.push(`🔍 Searched: "${action.query}"`);
+      } else if (action?.type === 'open_page') {
+        steps.push(`📄 Opened: ${action.url || 'page'}`);
+      } else if (action?.type === 'find') {
+        steps.push(`🔍 Found in page: "${action.pattern}" at ${action.url || 'unknown URL'}`);
+      }
+    } else if (item.type === 'code_interpreter_call') {
+      steps.push(`⚙️ Executed code`);
+    } else if (item.type === 'mcp_tool_call') {
+      steps.push(`🔗 MCP call: ${item.name || 'unknown'}`);
+    } else if (item.type === 'reasoning' && item.summary && item.summary.length > 0) {
+      steps.push(`🧠 Reasoning: ${item.summary.join('; ')}`);
+    }
+
+    return steps;
+  }
+
   protected supportsTemperature(): boolean {
     // OpenAI's o1 and o3 models don't support temperature but some 3rd
     // party reasoning models do.
@@ -343,47 +386,25 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         if (item.type === 'function_call') {
           result = JSON.stringify(item);
         } else if (item.type === 'message' && (item.role === 'assistant' || !item.role)) {
-          // Deep research models may not always include role
-          if (item.content) {
-            for (const contentItem of item.content) {
-              if (contentItem.type === 'output_text') {
-                result += contentItem.text;
-              } else if (contentItem.type === 'tool_use' || contentItem.type === 'function_call') {
-                result = JSON.stringify(contentItem);
-              } else if (contentItem.type === 'refusal') {
-                refusal = contentItem.refusal;
-                isRefusal = true;
-              }
-            }
-          } else if (item.refusal) {
+          const messageResult = this.parseStandardMessage(item);
+          if (messageResult.content) {
+            result += messageResult.content;
+          }
+          if (messageResult.isRefusal) {
+            refusal = messageResult.content;
+            isRefusal = true;
+          }
+          // Handle legacy refusal format
+          if (item.refusal) {
             refusal = item.refusal;
             isRefusal = true;
           }
         } else if (item.type === 'tool_result') {
           result = JSON.stringify(item);
-        } else if (item.type === 'web_search_call' && isDeepResearch) {
-          // Deep research web search calls
-          const action = item.action;
-          if (action?.type === 'search') {
-            researchSteps.push(`🔍 Searched: "${action.query}"`);
-          } else if (action?.type === 'open_page') {
-            researchSteps.push(`📄 Opened: ${action.url || 'page'}`);
-          } else if (action?.type === 'find') {
-            researchSteps.push(
-              `🔍 Found in page: "${action.pattern}" at ${action.url || 'unknown URL'}`,
-            );
-          }
-        } else if (item.type === 'code_interpreter_call' && isDeepResearch) {
-          // Deep research code interpreter calls
-          researchSteps.push(`⚙️ Executed code`);
-        } else if (item.type === 'mcp_tool_call' && isDeepResearch) {
-          // Deep research MCP calls
-          researchSteps.push(`🔗 MCP call: ${item.name || 'unknown'}`);
-        } else if (item.type === 'reasoning' && isDeepResearch) {
-          // Deep research reasoning steps
-          if (item.summary && item.summary.length > 0) {
-            researchSteps.push(`🧠 Reasoning: ${item.summary.join('; ')}`);
-          }
+        } else if (isDeepResearch) {
+          // Handle all deep research specific items
+          const steps = this.parseDeepResearchSteps(item);
+          researchSteps.push(...steps);
         } else if (item.type === 'mcp_list_tools') {
           // MCP tools list - include in result for debugging/visibility
           if (result) {
