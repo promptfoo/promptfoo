@@ -5,6 +5,8 @@ import { callApi } from '@app/utils/api';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
+import StopIcon from '@mui/icons-material/Stop';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 
 const RunTestSuiteButton: React.FC = () => {
   const navigate = useNavigate();
@@ -132,19 +134,25 @@ const RunTestSuiteButton: React.FC = () => {
 
   return (
     <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-      <Button variant="contained" color="primary" onClick={runTestSuite} disabled={isRunning}>
-        {isRunning ? (
-          <>
-            <CircularProgress size={24} sx={{ marginRight: 2 }} />
-            {progressPercent.toFixed(0)}% complete
-          </>
-        ) : (
-          'Run Eval'
-        )}
+      <Button 
+        variant="contained" 
+        color="primary" 
+        onClick={runTestSuite} 
+        disabled={isRunning}
+        startIcon={
+          isRunning ? <CircularProgress size={20} color="inherit" /> : <PlayArrowIcon />
+        }
+      >
+        {isRunning ? `${progressPercent.toFixed(0)}% complete` : 'Run Eval'}
       </Button>
 
       {isRunning && (
-        <Button variant="outlined" color="secondary" onClick={cancelEvaluation}>
+        <Button
+          variant="contained"
+          color="error"
+          onClick={cancelEvaluation}
+          startIcon={<StopIcon />}
+        >
           Cancel
         </Button>
       )}

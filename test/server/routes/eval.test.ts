@@ -6,6 +6,10 @@ jest.mock('../../../src/index', () => ({
   evaluate: jest.fn(),
 }));
 
+// Import the mocked evaluate function  
+import { evaluate } from '../../../src/index';
+const mockEvaluate = jest.mocked(evaluate);
+
 describe('evalRouter', () => {
   let mockRequest: Partial<Request>;
   let mockResponse: Partial<Response>;
@@ -32,8 +36,7 @@ describe('evalRouter', () => {
     it('should cancel a running job successfully', async () => {
       // Set up a mock running job
       const jobId = 'test-job-id';
-      const mockAbortController = new AbortController();
-      
+
       // Mock the private runningEvalJobs map by accessing the route handler
       const cancelHandler = evalRouter.stack.find(
         (layer: any) => layer.route?.path === '/job/:id/cancel' && layer.route?.methods?.post,
@@ -84,14 +87,12 @@ describe('evalRouter', () => {
 
   describe('POST /job', () => {
     it('should create a new eval job with abort signal', async () => {
-      const { evaluate } = require('../../../src/index');
-      
-      // Mock evaluate to return a promise that can be controlled
+      // Mock evaluate to return a simple result - the actual structure doesn't matter for this test
       const mockResult = {
         id: 'eval-123',
         toEvaluateSummary: jest.fn().mockResolvedValue({ summary: 'test' }),
-      };
-      evaluate.mockResolvedValue(mockResult);
+      } as any;
+      mockEvaluate.mockResolvedValue(mockResult);
 
       mockRequest.body = {
         prompts: ['test prompt'],
@@ -109,7 +110,7 @@ describe('evalRouter', () => {
       }
 
       expect(mockJson).toHaveBeenCalledWith({ id: expect.any(String) });
-      expect(evaluate).toHaveBeenCalledWith(
+      expect(mockEvaluate).toHaveBeenCalledWith(
         expect.objectContaining({
           prompts: ['test prompt'],
           providers: ['openai:gpt-3.5-turbo'],
@@ -125,4 +126,4 @@ describe('evalRouter', () => {
       );
     });
   });
-}); 
+});
