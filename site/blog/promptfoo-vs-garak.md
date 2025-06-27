@@ -30,9 +30,9 @@ Two open‑source tools have emerged as popular choices for LLM red teaming, eac
 
 ## Two Different Security Testing Philosophies
 
-**Promptfoo** approaches LLM security from an application‑developer perspective. Rather than treating the model as an isolated component, it tests complete LLM systems—including RAG pipelines, agent architectures, and API integrations ([docs](https://promptfoo.dev/docs/red-team/overview)). The tool dynamically generates thousands of attack variations tailored to your specific application context, much like a fuzzer that understands natural language.
+**Promptfoo** approaches LLM security from an application‑developer perspective. Rather than treating the model as an isolated component, it tests complete LLM systems—including RAG pipelines, agent architectures, and API integrations. The tool dynamically generates thousands of attack variations tailored to your specific application context, much like a fuzzer that understands natural language.
 
-**Garak** (Generative AI Red‑teaming & Assessment Kit) is developed with support from NVIDIA ([announcement](https://developer.nvidia.com/blog/introducing-garak)) and provides a library of pre‑defined attacks based on academic research and documented vulnerabilities. Security researchers can run Garak against LLM endpoints to check for known weaknesses.
+**Garak** (Generative AI Red‑teaming & Assessment Kit) is developed with support from NVIDIA and provides a library of pre‑defined attacks based on academic research and documented vulnerabilities. Security researchers can run Garak against LLM endpoints to check for known weaknesses.
 
 Both projects are actively maintained. Promptfoo uses an MIT license and is adopted by teams at Shopify, Discord, and Microsoft. Garak uses Apache 2.0 and integrates with NVIDIA’s NeMo Guardrails.
 
