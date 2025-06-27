@@ -71,9 +71,10 @@ promptfoo scan-model models/ --max-file-size 1073741824 --max-total-size 5368709
 ```
 
 :::info Alternative Installation and Usage
+
 - **Standalone**: Install modelaudit directly using `pip install modelaudit`. `modelaudit scan` behaves the same as `promptfoo scan-model`.
 - **Web Interface**: For a GUI experience, use `promptfoo view` and navigate to `/model-audit` for visual scanning and configuration.
-:::
+  :::
 
 ### Options
 
@@ -94,6 +95,7 @@ Promptfoo includes a web interface for ModelAudit at `/model-audit` with visual 
 **Access:** Run `promptfoo view` and navigate to `http://localhost:15500/model-audit`
 
 **Key Features:**
+
 - Visual file/directory selection with current working directory context
 - GUI configuration for all scan options (blacklist patterns, timeouts, file limits)
 - Live scanning progress and tabbed results display with severity color coding
