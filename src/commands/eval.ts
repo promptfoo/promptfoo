@@ -310,7 +310,7 @@ export async function doEval(
     clearGlobalAbortController();
 
     logger.debug(
-      `Evaluation finished. Aborted: ${evaluationAborted}, Results count: ${ret?.results?.length || 0}`,
+      `Evaluation finished. Aborted: ${evaluationAborted}, Results count: ${ret.results?.length || 0}`,
     );
 
     // Clear results from memory to avoid memory issues
@@ -920,3 +920,5 @@ export function evalCommand(
 
   return evalCmd;
 }
+
+export { EvalCommandSchema };

@@ -27,11 +27,9 @@ jest.mock('../../src/share');
 jest.mock('../../src/table');
 jest.mock('fs');
 jest.mock('path', () => {
-  // Use actual path module for platform-agnostic tests
   const actualPath = jest.requireActual('path');
   return {
     ...actualPath,
-    // Add any specific mocks for path methods if needed
   };
 });
 jest.mock('../../src/util/config/load');
@@ -71,7 +69,7 @@ describe('evalCommand', () => {
         prompts: [],
         providers: [],
       },
-      basePath: path.resolve('/'), // Platform-agnostic root path
+      basePath: path.resolve('/'),
     });
   });
 
@@ -83,6 +81,10 @@ describe('evalCommand', () => {
 
   it('should handle --no-cache option', async () => {
     const cmdObj = { cache: false };
+    const mockEvalRecord = new Eval(defaultConfig);
+    mockEvalRecord.results = [];
+    jest.mocked(evaluate).mockResolvedValue(mockEvalRecord);
+
     await doEval(cmdObj, defaultConfig, defaultConfigPath, {});
     expect(disableCache).toHaveBeenCalledTimes(1);
   });
@@ -90,6 +92,7 @@ describe('evalCommand', () => {
   it('should handle --write option', async () => {
     const cmdObj = { write: true };
     const mockEvalRecord = new Eval(defaultConfig);
+    mockEvalRecord.results = [];
     jest.mocked(evaluate).mockResolvedValue(mockEvalRecord);
 
     await doEval(cmdObj, defaultConfig, defaultConfigPath, {});
@@ -110,10 +113,11 @@ describe('evalCommand', () => {
         providers: [],
         tests: [{ vars: { test: 'value' } }],
       },
-      basePath: path.resolve('/'), // Platform-agnostic root path
+      basePath: path.resolve('/'),
     });
 
     const mockEvalRecord = new Eval(config);
+    mockEvalRecord.results = [];
     jest.mocked(evaluate).mockResolvedValue(mockEvalRecord);
 
     await doEval(cmdObj, config, defaultConfigPath, {});
@@ -126,6 +130,7 @@ describe('evalCommand', () => {
     const cmdObj = { share: true };
     const config = { sharing: true } as UnifiedConfig;
     const evalRecord = new Eval(config);
+    evalRecord.results = [];
 
     jest.mocked(resolveConfigs).mockResolvedValue({
       config,
@@ -133,7 +138,7 @@ describe('evalCommand', () => {
         prompts: [],
         providers: [],
       },
-      basePath: path.resolve('/'), // Platform-agnostic root path
+      basePath: path.resolve('/'),
     });
 
     jest.mocked(evaluate).mockResolvedValue(evalRecord);
@@ -151,8 +156,11 @@ describe('evalCommand', () => {
       id: () => 'test-grader',
       callApi: async () => ({ output: 'test' }),
     } as ApiProvider;
+    const mockEvalRecord = new Eval(defaultConfig);
+    mockEvalRecord.results = [];
 
     jest.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+    jest.mocked(evaluate).mockResolvedValue(mockEvalRecord);
 
     await doEval(cmdObj, defaultConfig, defaultConfigPath, {});
 
@@ -161,6 +169,10 @@ describe('evalCommand', () => {
 
   it('should handle repeat option', async () => {
     const cmdObj = { repeat: 3 };
+    const mockEvalRecord = new Eval(defaultConfig);
+    mockEvalRecord.results = [];
+    jest.mocked(evaluate).mockResolvedValue(mockEvalRecord);
+
     await doEval(cmdObj, defaultConfig, defaultConfigPath, {});
     expect(evaluate).toHaveBeenCalledWith(
       expect.anything(),
@@ -171,6 +183,10 @@ describe('evalCommand', () => {
 
   it('should handle delay option', async () => {
     const cmdObj = { delay: 1000 };
+    const mockEvalRecord = new Eval(defaultConfig);
+    mockEvalRecord.results = [];
+    jest.mocked(evaluate).mockResolvedValue(mockEvalRecord);
+
     await doEval(cmdObj, defaultConfig, defaultConfigPath, {});
     expect(evaluate).toHaveBeenCalledWith(
       expect.anything(),
@@ -181,6 +197,10 @@ describe('evalCommand', () => {
 
   it('should handle maxConcurrency option', async () => {
     const cmdObj = { maxConcurrency: 5 };
+    const mockEvalRecord = new Eval(defaultConfig);
+    mockEvalRecord.results = [];
+    jest.mocked(evaluate).mockResolvedValue(mockEvalRecord);
+
     await doEval(cmdObj, defaultConfig, defaultConfigPath, {});
     expect(evaluate).toHaveBeenCalledWith(
       expect.anything(),
@@ -190,8 +210,11 @@ describe('evalCommand', () => {
   });
 
   it('should fallback to evaluateOptions.maxConcurrency when cmdObj.maxConcurrency is undefined', async () => {
-    const cmdObj = {}; // No maxConcurrency set
+    const cmdObj = {};
     const evaluateOptions = { maxConcurrency: 3 };
+    const mockEvalRecord = new Eval(defaultConfig);
+    mockEvalRecord.results = [];
+    jest.mocked(evaluate).mockResolvedValue(mockEvalRecord);
 
     await doEval(cmdObj, defaultConfig, defaultConfigPath, evaluateOptions);
 
@@ -203,15 +226,18 @@ describe('evalCommand', () => {
   });
 
   it('should fallback to DEFAULT_MAX_CONCURRENCY when both cmdObj and evaluateOptions maxConcurrency are undefined', async () => {
-    const cmdObj = {}; // No maxConcurrency set
-    const evaluateOptions = {}; // No maxConcurrency set
+    const cmdObj = {};
+    const evaluateOptions = {};
+    const mockEvalRecord = new Eval(defaultConfig);
+    mockEvalRecord.results = [];
+    jest.mocked(evaluate).mockResolvedValue(mockEvalRecord);
 
     await doEval(cmdObj, defaultConfig, defaultConfigPath, evaluateOptions);
 
     expect(evaluate).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
-      expect.objectContaining({ maxConcurrency: 4 }), // DEFAULT_MAX_CONCURRENCY is 4 in the mock
+      expect.objectContaining({ maxConcurrency: 4 }),
     );
   });
 });
@@ -309,7 +335,6 @@ describe('Provider Token Tracking', () => {
     jest.clearAllMocks();
     mockLogger.mockClear();
 
-    // Create a mock instance of TokenUsageTracker
     mockTokenUsageTracker = {
       getProviderIds: jest.fn(),
       getProviderUsage: jest.fn(),
@@ -320,7 +345,6 @@ describe('Provider Token Tracking', () => {
       cleanup: jest.fn(),
     } as any;
 
-    // Mock the getInstance static method
     jest.mocked(TokenUsageTracker.getInstance).mockReturnValue(mockTokenUsageTracker);
   });
 
@@ -332,22 +356,7 @@ describe('Provider Token Tracking', () => {
   });
 
   it('should handle provider token tracking when mocked properly', () => {
-    // Setup mock data
-    const providerUsageData: Record<
-      string,
-      {
-        total: number;
-        prompt: number;
-        completion: number;
-        cached: number;
-        numRequests: number;
-        completionDetails: {
-          reasoning: number;
-          acceptedPrediction: number;
-          rejectedPrediction: number;
-        };
-      }
-    > = {
+    const providerUsageData = {
       'openai:gpt-4': {
         total: 1500,
         prompt: 600,
@@ -368,10 +377,9 @@ describe('Provider Token Tracking', () => {
 
     mockTokenUsageTracker.getProviderIds.mockReturnValue(['openai:gpt-4', 'anthropic:claude-3']);
     mockTokenUsageTracker.getProviderUsage.mockImplementation(
-      (id: string) => providerUsageData[id],
+      (id: string) => providerUsageData[id as keyof typeof providerUsageData],
     );
 
-    // Test the tracker functionality directly
     const tracker = TokenUsageTracker.getInstance();
     const providerIds = tracker.getProviderIds();
     expect(providerIds).toEqual(['openai:gpt-4', 'anthropic:claude-3']);
