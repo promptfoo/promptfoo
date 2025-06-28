@@ -153,6 +153,10 @@ modelaudit scan [OPTIONS] PATH [PATH...]
 | `--max-file-size`   | Maximum file size to scan in bytes                              |
 | `--max-total-size`  | Maximum total bytes to scan before stopping                     |
 
+:::info Feature Parity Achieved
+The Promptfoo CLI wrapper (`promptfoo scan-model`) now provides full feature parity with the standalone `modelaudit` command, including all advanced options.
+:::
+
 ### Configuration File
 
 For more complex scanning requirements, you can use a configuration file. For example:
@@ -234,8 +238,20 @@ timeout: 600 # 10 minutes
 Use the configuration file with:
 
 ```bash
+# Standalone command (config files only supported here)
 modelaudit scan --config modelaudit-config.yaml path/to/models/
+
+# Promptfoo CLI (config files not supported - use CLI options instead)
+promptfoo scan-model --verbose --max-file-size 1000000 path/to/models/
 ```
+
+## Promptfoo vs Standalone
+
+When using ModelAudit through Promptfoo, you get additional benefits:
+
+- **Web Interface**: Access via `promptfoo view` at `/model-audit` (see [overview](./index.md#web-interface) for details)
+- **Integrated Workflows**: Seamless integration with Promptfoo evaluation pipelines
+- **Unified Installation**: Single `npm install` gets both Promptfoo and ModelAudit integration
 
 ## Advanced Security Features
 

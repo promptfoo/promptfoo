@@ -8,7 +8,7 @@ const lightCodeTheme = themes.github;
 const darkCodeTheme = themes.duotoneDark;
 
 const config: Config = {
-  title: 'promptfoo',
+  title: 'Promptfoo',
   tagline: 'Test your prompts',
   favicon: '/favicon.ico',
 

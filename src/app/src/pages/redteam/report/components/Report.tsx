@@ -1,5 +1,6 @@
 import React from 'react';
 import EnterpriseBanner from '@app/components/EnterpriseBanner';
+import { usePageMeta } from '@app/hooks/usePageMeta';
 import { callApi } from '@app/utils/api';
 import ListAltIcon from '@mui/icons-material/ListAlt';
 import PrintIcon from '@mui/icons-material/Print';
@@ -224,9 +225,10 @@ const App: React.FC = () => {
     return stats;
   }, [failuresByPlugin, passesByPlugin]);
 
-  React.useEffect(() => {
-    document.title = `Report: ${evalData?.config.description || evalId || 'Red Team'} | promptfoo`;
-  }, [evalData, evalId]);
+  usePageMeta({
+    title: `Report: ${evalData?.config.description || evalId || 'Red Team'}`,
+    description: 'Red team evaluation report',
+  });
 
   if (!evalData || !evalId) {
     return <Box sx={{ width: '100%', textAlign: 'center' }}>Loading...</Box>;

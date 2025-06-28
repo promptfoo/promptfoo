@@ -36,13 +36,13 @@ The self-hosted app is an Express server serving the web UI and API.
 :::warning
 **Self-hosting is not recommended for production use cases.**
 
-- Uses SQLite as the database backend, which requires manual persistence management
+- Uses a local SQLite database that requires manual persistence management and cannot be shared across replicas
 - Built for individual or experimental usage
 - No multi-team support or role-based access control.
-- No support for horizontal scalability
+- No support for horizontal scalability. Evaluation jobs live in each server's memory and multiple pods cannot share the SQLite database, so running more than one replica (for example in Kubernetes) will lead to "Job not found" errors.
 - No built-in authentication or SSO capabilities
 
-For a scalable enterprise-grade option with all the above capabilities, consider our [Enterprise platform](/docs/enterprise/).
+For production deployments requiring horizontal scaling, shared databases, or multi-team support, see our [Enterprise platform](/docs/enterprise/).
 :::
 
 ## Method 1: Using Pre-built Docker Images (Recommended Start)
@@ -163,6 +163,10 @@ Helm support is currently experimental. Please report any issues you encounter.
 :::
 
 Deploy promptfoo to Kubernetes using the provided Helm chart located within the main promptfoo repository.
+
+:::info
+Keep `replicaCount: 1` (the default) as the self-hosted server uses a local SQLite database and in-memory job queue that cannot be shared across multiple replicas.
+:::
 
 ### Prerequisites
 
