@@ -330,6 +330,113 @@ describe('Review Component - Test Variables', () => {
         });
       });
     });
+
+    it('handles variables with empty values', async () => {
+      mockUseRedTeamConfig.mockReturnValue({
+        config: defaultConfig,
+        updateConfig: mockUpdateConfig,
+      });
+
+      render(<Review />);
+
+      const addButton = screen.getByText('Add Variable');
+      fireEvent.click(addButton);
+
+      await waitFor(() => {
+        expect(mockUpdateConfig).toHaveBeenCalledWith('defaultTest', {
+          vars: { newVar: '' },
+        });
+      });
+
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          ...defaultConfig,
+          defaultTest: { vars: { newVar: '' } },
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      render(<Review />);
+
+      const valueField = screen.getByDisplayValue('');
+      expect(valueField).toBeInTheDocument();
+    });
+
+    it('handles variable names with special characters', async () => {
+      mockUseRedTeamConfig.mockReturnValue({
+        config: configWithVariables,
+        updateConfig: mockUpdateConfig,
+      });
+
+      render(<Review />);
+
+      const nameField = screen.getByDisplayValue('apiKey');
+      fireEvent.change(nameField, { target: { value: 'invalid@#$ name' } });
+
+      await waitFor(() => {
+        expect(mockUpdateConfig).toHaveBeenCalledWith('defaultTest', {
+          vars: {
+            'invalid@#$ name': 'test-key',
+            language: 'en',
+            endpoint: 'https://api.example.com',
+          },
+        });
+      });
+    });
+
+    it('handles empty variable name', async () => {
+      mockUseRedTeamConfig.mockReturnValue({
+        config: configWithVariables,
+        updateConfig: mockUpdateConfig,
+      });
+
+      render(<Review />);
+
+      const nameField = screen.getByDisplayValue('apiKey');
+      fireEvent.change(nameField, { target: { value: '' } });
+
+      await waitFor(() => {
+        expect(mockUpdateConfig).toHaveBeenCalledWith('defaultTest', {
+          vars: {
+            '': 'test-key',
+            language: 'en',
+            endpoint: 'https://api.example.com',
+          },
+        });
+      });
+    });
+
+    it('handles extremely long variable names and values', async () => {
+      const longString = 'a'.repeat(5000);
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          ...defaultConfig,
+          defaultTest: { vars: { initialVar: 'initialValue' } },
+        },
+        updateConfig: mockUpdateConfig,
+      });
+      render(<Review />);
+
+      const nameField = screen.getByLabelText('Variable name');
+      const valueField = screen.getByLabelText('Value');
+
+      expect(nameField).toBeInTheDocument();
+      expect(valueField).toBeInTheDocument();
+
+      fireEvent.change(nameField, { target: { value: longString } });
+      fireEvent.change(valueField, { target: { value: longString } });
+
+      await waitFor(() => {
+        expect(mockUpdateConfig).toHaveBeenCalled();
+        const calls = mockUpdateConfig.mock.calls;
+        const lastCall = calls[calls.length - 1];
+        expect(lastCall[0]).toBe('defaultTest');
+        expect(Object.keys(lastCall[1].vars as Record<string, string>).length).toBe(1);
+
+        const varsEntries = Object.entries(lastCall[1].vars as Record<string, string>)[0];
+        expect(varsEntries[0].length > 1000 || varsEntries[1].length > 1000).toBe(true);
+      });
+    });
   });
 
   describe('Integration with Other Sections', () => {
@@ -340,6 +447,44 @@ describe('Review Component - Test Variables', () => {
       expect(screen.getByText('Configuration Summary')).toBeInTheDocument();
       expect(screen.getByText('Test Variables')).toBeInTheDocument();
       expect(screen.getByText('Running Your Configuration')).toBeInTheDocument();
+    });
+  });
+
+  it('converts non-string values to strings when updating variable values', async () => {
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        ...defaultConfig,
+        defaultTest: {
+          vars: {
+            myVar: 'initial value',
+          },
+        },
+      },
+      updateConfig: mockUpdateConfig,
+    });
+
+    render(<Review />);
+
+    const valueField = screen.getByDisplayValue('initial value');
+
+    fireEvent.change(valueField, { target: { value: '123' } });
+
+    await waitFor(() => {
+      expect(mockUpdateConfig).toHaveBeenCalledWith('defaultTest', {
+        vars: {
+          myVar: '123',
+        },
+      });
+    });
+
+    fireEvent.change(valueField, { target: { value: 'true' } });
+
+    await waitFor(() => {
+      expect(mockUpdateConfig).toHaveBeenCalledWith('defaultTest', {
+        vars: {
+          myVar: 'true',
+        },
+      });
     });
   });
 });
