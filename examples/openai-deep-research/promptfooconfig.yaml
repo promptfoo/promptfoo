@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: OpenAI Responses API demonstration
+prompts:
+  - Tell me about {{topic}}
+providers:
+  - id: openai:responses:o4-mini-deep-research
+    config:
+      max_output_tokens: 20000
+      tools:
+        - type: web_search_preview
+tests:
+  - vars:
+      topic: machine learning
+    assert:
+      - type: contains-any
+        value: [machine learning, ML, algorithms, data]
+  - vars:
+      topic: space exploration
+    assert:
+      - type: contains-any
+        value: [space, NASA, rocket, planet, astronomy]

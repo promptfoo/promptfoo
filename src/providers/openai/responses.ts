@@ -3,13 +3,39 @@ import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
+import type { TokenUsage } from '../../types';
 import type { EnvOverrides } from '../../types/env';
 import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
 import { calculateOpenAICost } from './util';
-import { formatOpenAiError, getTokenUsage } from './util';
+import { formatOpenAiError } from './util';
+
+// Custom token usage function for Responses API which uses different field names
+function getResponsesTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
+  if (data.usage) {
+    if (cached) {
+      return { cached: data.usage.total_tokens, total: data.usage.total_tokens };
+    } else {
+      return {
+        total: data.usage.total_tokens,
+        prompt: data.usage.input_tokens || 0,
+        completion: data.usage.output_tokens || 0,
+        ...(data.usage.completion_tokens_details
+          ? {
+              completionDetails: {
+                reasoning: data.usage.completion_tokens_details.reasoning_tokens,
+                acceptedPrediction: data.usage.completion_tokens_details.accepted_prediction_tokens,
+                rejectedPrediction: data.usage.completion_tokens_details.rejected_prediction_tokens,
+              },
+            }
+          : {}),
+      };
+    }
+  }
+  return {};
+}
 
 export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   static OPENAI_RESPONSES_MODEL_NAMES = [
@@ -42,6 +68,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-4.5-preview',
     'gpt-4.5-preview-2025-02-27',
     'codex-mini-latest',
+    // Deep research models
+    'o3-deep-research',
+    'o3-deep-research-2025-06-26',
+    'o4-mini-deep-research',
+    'o4-mini-deep-research-2025-06-26',
   ];
 
   config: OpenAiCompletionOptions;
@@ -61,6 +92,53 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       this.modelName.startsWith('o4') ||
       this.modelName === 'codex-mini-latest'
     );
+  }
+
+  protected isDeepResearchModel(): boolean {
+    return this.modelName.includes('deep-research');
+  }
+
+  private parseStandardMessage(item: any): { content: string; isRefusal: boolean } {
+    let content = '';
+    let isRefusal = false;
+
+    if (item.content) {
+      for (const contentItem of item.content) {
+        if (contentItem.type === 'output_text') {
+          content += contentItem.text || '';
+        } else if (contentItem.type === 'tool_use' || contentItem.type === 'function_call') {
+          content = JSON.stringify(contentItem);
+        } else if (contentItem.type === 'refusal') {
+          content = contentItem.refusal || '';
+          isRefusal = true;
+        }
+      }
+    }
+
+    return { content, isRefusal };
+  }
+
+  private parseDeepResearchSteps(item: any): string[] {
+    const steps: string[] = [];
+
+    if (item.type === 'web_search_call') {
+      const action = item.action;
+      if (action?.type === 'search') {
+        steps.push(`🔍 Searched: "${action.query}"`);
+      } else if (action?.type === 'open_page') {
+        steps.push(`📄 Opened: ${action.url || 'page'}`);
+      } else if (action?.type === 'find') {
+        steps.push(`🔍 Found in page: "${action.pattern}" at ${action.url || 'unknown URL'}`);
+      }
+    } else if (item.type === 'code_interpreter_call') {
+      steps.push(`⚙️ Executed code`);
+    } else if (item.type === 'mcp_tool_call') {
+      steps.push(`🔗 MCP call: ${item.name || 'unknown'}`);
+    } else if (item.type === 'reasoning' && item.summary && item.summary.length > 0) {
+      steps.push(`🧠 Reasoning: ${item.summary.join('; ')}`);
+    }
+
+    return steps;
   }
 
   protected supportsTemperature(): boolean {
@@ -247,6 +325,14 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     }
 
     logger.debug(`\tOpenAI Responses API response: ${JSON.stringify(data)}`);
+
+    // Log deep research output structure for debugging
+    if (this.isDeepResearchModel() && data.output) {
+      logger.debug(
+        `\tDeep research output types: ${data.output.map((item: any) => item.type).join(', ')}`,
+      );
+    }
+
     if (data.error) {
       await data.deleteFromCache?.();
       return {
@@ -254,41 +340,71 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       };
     }
 
+    // Check if response was incomplete due to token limits
+    const _isIncomplete = data.status === 'incomplete';
+    const hitTokenLimit = data.incomplete_details?.reason === 'max_output_tokens';
+    const tokenLimitWarning = hitTokenLimit
+      ? `\n\n⚠️  Response incomplete: Hit max_output_tokens limit (${body.max_output_tokens || 'default'}). Consider increasing max_output_tokens for deep research models.`
+      : '';
+
     try {
-      // Find the assistant message in the output
+      // Check if the response has a standardized output_text field first
+      if (data.output_text && typeof data.output_text === 'string') {
+        const tokenUsage = getResponsesTokenUsage(data, cached);
+        return {
+          output: data.output_text + tokenLimitWarning,
+          tokenUsage,
+          cached,
+          cost: calculateOpenAICost(
+            this.modelName,
+            config,
+            data.usage?.input_tokens,
+            data.usage?.output_tokens,
+            0,
+            0,
+          ),
+          raw: data,
+        };
+      }
+
+      // Fallback to manual parsing for older API versions or special cases
       const output = data.output;
       if (!output || !Array.isArray(output) || output.length === 0) {
         return {
-          error: `Invalid response format: Missing output array`,
+          error: `Invalid response format: Missing output array and output_text`,
         };
       }
 
       let result = '';
       let refusal = '';
       let isRefusal = false;
+      const isDeepResearch = this.isDeepResearchModel();
+      const researchSteps = [];
 
       // Process all output items
       for (const item of output) {
         if (item.type === 'function_call') {
           result = JSON.stringify(item);
-        } else if (item.type === 'message' && item.role === 'assistant') {
-          if (item.content) {
-            for (const contentItem of item.content) {
-              if (contentItem.type === 'output_text') {
-                result += contentItem.text;
-              } else if (contentItem.type === 'tool_use' || contentItem.type === 'function_call') {
-                result = JSON.stringify(contentItem);
-              } else if (contentItem.type === 'refusal') {
-                refusal = contentItem.refusal;
-                isRefusal = true;
-              }
-            }
-          } else if (item.refusal) {
+        } else if (item.type === 'message' && (item.role === 'assistant' || !item.role)) {
+          const messageResult = this.parseStandardMessage(item);
+          if (messageResult.content) {
+            result += messageResult.content;
+          }
+          if (messageResult.isRefusal) {
+            refusal = messageResult.content;
+            isRefusal = true;
+          }
+          // Handle legacy refusal format
+          if (item.refusal) {
             refusal = item.refusal;
             isRefusal = true;
           }
         } else if (item.type === 'tool_result') {
           result = JSON.stringify(item);
+        } else if (isDeepResearch) {
+          // Handle all deep research specific items
+          const steps = this.parseDeepResearchSteps(item);
+          researchSteps.push(...steps);
         } else if (item.type === 'mcp_list_tools') {
           // MCP tools list - include in result for debugging/visibility
           if (result) {
@@ -317,10 +433,15 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         }
       }
 
+      // For deep research models, if we have no final result but have research steps, show the research process
+      if (isDeepResearch && !result && researchSteps.length > 0) {
+        result = `🔬 Deep Research Process:\n${researchSteps.join('\n')}\n\n⚠️ No final answer generated - response may be incomplete.`;
+      }
+
       if (isRefusal) {
         return {
           output: refusal,
-          tokenUsage: getTokenUsage(data, cached),
+          tokenUsage: getResponsesTokenUsage(data, cached),
           isRefusal: true,
           cached,
           cost: calculateOpenAICost(
@@ -343,10 +464,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         }
       }
 
-      const tokenUsage = getTokenUsage(data, cached);
+      const tokenUsage = getResponsesTokenUsage(data, cached);
 
       return {
-        output: result,
+        output: result + tokenLimitWarning,
         tokenUsage,
         cached,
         cost: calculateOpenAICost(

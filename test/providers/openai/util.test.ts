@@ -196,6 +196,26 @@ describe('calculateOpenAICost', () => {
     expect(cost).toBeCloseTo((1000 * 1.5 + 500 * 6.0) / 1e6, 6);
   });
 
+  it('should calculate cost correctly for o3-deep-research (responses model)', () => {
+    const cost = calculateOpenAICost('o3-deep-research', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 10 + 500 * 40) / 1e6, 6);
+  });
+
+  it('should calculate cost correctly for o3-deep-research-2025-06-26 (responses model)', () => {
+    const cost = calculateOpenAICost('o3-deep-research-2025-06-26', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 10 + 500 * 40) / 1e6, 6);
+  });
+
+  it('should calculate cost correctly for o4-mini-deep-research (responses model)', () => {
+    const cost = calculateOpenAICost('o4-mini-deep-research', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 2 + 500 * 8) / 1e6, 6);
+  });
+
+  it('should calculate cost correctly for o4-mini-deep-research-2025-06-26 (responses model)', () => {
+    const cost = calculateOpenAICost('o4-mini-deep-research-2025-06-26', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 2 + 500 * 8) / 1e6, 6);
+  });
+
   it('should handle undefined token counts', () => {
     const cost = calculateOpenAICost('gpt-4', {}, undefined, undefined);
     expect(cost).toBeUndefined();
