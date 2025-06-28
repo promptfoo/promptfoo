@@ -48,6 +48,10 @@ const sidebars = {
         { type: 'doc', id: 'configuration/scenarios' },
         { type: 'doc', id: 'configuration/caching' },
         { type: 'doc', id: 'configuration/telemetry' },
+        {
+          type: 'doc',
+          id: 'tracing',
+        },
       ],
     },
     {

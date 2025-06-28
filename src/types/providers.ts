@@ -56,6 +56,14 @@ export interface CallApiContextParams {
   // Vars and prompts should be access using the arguments above.
   test?: AtomicTestCase;
   bustCache?: boolean;
+
+  // W3C Trace Context headers
+  traceparent?: string; // Format: version-trace-id-parent-id-trace-flags
+  tracestate?: string; // Optional vendor-specific trace state
+
+  // Evaluation metadata (for manual correlation if needed)
+  evaluationId?: string;
+  testCaseId?: string;
 }
 
 export interface CallApiOptionsParams {

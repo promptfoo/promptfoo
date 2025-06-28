@@ -2,7 +2,7 @@
 title: 'Next Generation of Red Teaming for LLM Agents'
 description: Promptfoo is introducing our revolutionary, next-generation red teaming agent designed for enterprise-grade LLM agents.
 image: /img/blog/summer-2025-new-redteam-agent/title.jpg
-keywords: [promptfoo, AI security, red teaming, LLM evaluation, prompt engineering, AI agents]
+keywords: [promptfoo, AI security, red teaming, LLM eval, prompt engineering, AI agents]
 date: 2025-06-15
 authors: [steve]
 ---
@@ -11,7 +11,7 @@ authors: [steve]
 
 ## The Evolution of Red Teaming
 
-Early red teaming tools and research started with jailbreaks like "Ignore all previous instructions", and static lists of harmful prompts. At Promptfoo we took those ideas a step forward by dynamically generating attacks based on the context of the target application.
+Early red teaming tools and research began with jailbreaks like "Ignore all previous instructions" and static lists of harmful prompts. At Promptfoo, we took those ideas a step further by dynamically generating attacks based on the context of the target application.
 
 <!-- truncate -->
 
@@ -21,30 +21,30 @@ Early red teaming tools and research started with jailbreaks like "Ignore all pr
 
 ## The Reality of Modern Agent Systems
 
-First generation systems were simple Q&A chat bots, with maybe a vector database. However, we've rapidly moved past these, the systems being developed are complex.
+First-generation systems were simple Q&A chatbots, perhaps with only a vector database. However, we've rapidly moved past these; the systems being developed are far more complex.
 
-**What a public facing Customer Service Agent might look like in 2025:**
+**What a public-facing Customer Service Agent might look like in 2025:**
 
 ![Complex Agent Architecture](/img/blog/summer-2025-new-redteam-agent/customer_service_agent.jpg)
 
-Engineers are used to building secure distributed systems, leveraging well known and solid security principles. Just because there's an LLM involved does not mean everything we've learned goes out the window. Enterprise developers are not letting a public facing agent write their own SQL queries or handle authentication (although, we can help you confirm that).
+Engineers are used to building secure distributed systems, leveraging well-known and solid security principles. Just because there's an LLM involved does not mean everything we've learned goes out the window. Enterprise developers are not allowing public-facing agents to write their own SQL queries or handle authentication (although we can help you confirm that).
 
-In the systems we've worked with authentication and session management is properly handled outside of the LLM by the systems that were already in place on the website. SQL queries are parameterized properly inside code, not free-handed by LLMs.
+In the systems we've worked with, authentication and session management are properly handled outside the LLM by mechanisms already in place on the website. SQL queries are parameterized within the code, not handled freely by LLMs.
 
 Imagine we're logged into an e-commerce website and chatting with their bot about our order history. We're not letting the LLM decide who the user is. We're relying on our existing session/authentication system to scope our queries.
 
-```javascript
+```python
 def handle_request(...):
     user = session.user
     query = params.query
-    llm_response = agent.call(user_query: query)
-    if(llm_response.tool_response.lookup_order_history):
+    llm_response = agent.call(user_query=query)
+    if llm_response.tool_response.lookup_order_history:
         lookup_order_history(user.id)
 ```
 
 ## Why Traditional Attacks Fall Short
 
-Here's how crescendo would attempt to break something like this:
+Here's how Crescendo would attempt to break something like this:
 
 <div style={{fontFamily: 'system-ui, -apple-system, sans-serif', maxWidth: '500px', margin: '20px 0', border: '1px solid #e1e5e9', borderRadius: '12px', padding: '16px', backgroundColor: '#f8f9fa'}}>
   <div style={{marginBottom: '12px'}}>
@@ -90,20 +90,19 @@ After being thoroughly embarrassed seeing our system bang its head against the w
 
 ## What Was Missing?
 
-We needed to apply traditional pen-testing techniques to these systems. To address advanced agent-based systems, we identified critical gaps:
+We needed to apply traditional penetration testing techniques to these systems. To address advanced agent-based systems, we identified critical gaps:
 
 - **Reconnaissance**
 - **Strategic Planning**
 - **Continuous Learning and Adaptation**
-- ...?
 
 ## The Next Evolution
 
-Our new system is built from the ground up to emulate a human red teamer's intelligence, creativity, and adaptability.
+We built our new system from the ground up to emulate a human red teamer's intelligence, creativity, and adaptability.
 
 ### 1. Deep Reconnaissance
 
-Like a pen tester running an nmap scan, our new agent begins with thorough reconnaissance:
+Like a penetration tester running an nmap scan, our new agent begins with thorough reconnaissance:
 
 - **Tool Enumeration:** Identifying system capabilities
 - **Boundary Testing:** Probing to see the actual versus declared capabilities
@@ -171,15 +170,15 @@ This comprehensive understanding forms the foundation for strategic planning.
 
 ### 2. Strategic Planning
 
-The goal of this step is to appropriately prioritze and plan our attacks.
+The goal of this step is to appropriately prioritize and plan our attacks.
 
 Let's say we're an insurance company and our bot has two functions: Look up claims history and Find a provider. What should we prioritize and what are our goals? As a red teamer, the answer is obvious - I want everybody's claim history.
 
-What if we add in a third function: Medical Advice (I am not promoting this idea). We need to set our goals approprioately. It's probably just a RAG, so we need to confirm and look for a damaging exploit like this: [PR Disaster!](https://futurism.com/therapy-chatbot-addict-meth).
+What if we add in a third function: Medical Advice (I am not promoting this idea). We need to set our goals appropriately. It's probably just a RAG, so we need to confirm and look for a damaging exploit like this: [PR Disaster!](https://futurism.com/therapy-chatbot-addict-meth).
 
 We will prioritize our attacks based on:
 
-1. **System owner Input:** This is the most important. What is important to the system owner? Generating harmful content, mis-information or exfiltrating customer information?
+1. **System owner input:** This is the most important. What is important to the system owner? Generating harmful content, misinformation, or exfiltrating customer information?
 2. **Business Impact:** Prioritize based on potential risk or harm of individual tools or features.
 3. **System Information:** Focus on high-value or clearly exploitable weaknesses identified during reconnaissance.
 
@@ -241,8 +240,8 @@ If you're interested in helping us build cool stuff like this, check out our [ca
 
 ## Who Am I?
 
-I began my career as a pen tester and security consultant at PricewaterhouseCoopers, providing security services to the Fortune 500 and learning from some of the best in the world. Since then I've worked at companies like Microsoft, Shopify, Intercom and Discord building massively scalable and complex products including [Clyde](https://support.discord.com/hc/en-us/community/posts/19375132536087/comments/19768445858071).
+I began my career as a penetration tester and security consultant at PricewaterhouseCoopers, providing security services to the Fortune 500 and learning from some of the best in the world. Since then, I've worked at companies like Microsoft, Shopify, Intercom, and Discord building massively scalable and complex products including [Clyde](https://support.discord.com/hc/en-us/community/posts/19375132536087/comments/19768445858071).
 
 ## What is Promptfoo?
 
-Promptfoo is the world leader in LLM evals and red teaming. We are powered by an open source project with over [100k users](https://www.promptfoo.dev/blog/100k-users/) - trusted by foundation labs and the fortune 500.
+Promptfoo is the world leader in LLM evals and red teaming. We are powered by an open source project with over [100k users](https://www.promptfoo.dev/blog/100k-users/) - trusted by foundation labs and the Fortune 500.

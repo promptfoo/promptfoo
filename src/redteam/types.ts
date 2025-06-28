@@ -183,6 +183,7 @@ export interface SavedRedteamConfig {
   purpose?: string;
   extensions?: string[];
   numTests?: number;
+  maxConcurrency?: number;
   applicationDefinition: {
     purpose?: string;
     features?: string;
