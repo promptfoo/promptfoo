@@ -94,14 +94,3 @@ Join our [Discord community](https://discord.gg/promptfoo) for help and discussi
 <a href="https://github.com/promptfoo/promptfoo/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=promptfoo/promptfoo" />
 </a>
-
-## Features
-
-- **Comprehensive Evaluations**: Test multiple prompts against multiple test cases
-- **Support for Many LLM Providers**: Works with OpenAI, Anthropic, Cohere, Llama, local models, etc.
-- **CLI & Web Interface**: Run from command line or use our webapp
-- **Evaluation Metrics**: Configure accuracy, F1, BLEU, and more built-in metrics, or add your own
-- **Custom Assertions**: Verify outputs using expected values, regex, JSON schema, etc.
-- **Multi-Provider Testing**: Compare performance across different models
-- **Adversarial Testing**: Red team your AI systems for safety and robustness
-- **Model Context Protocol (MCP)**: Expose promptfoo evaluation data to LLMs via the Model Context Protocol

@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "promptfoo": {
-      "command": "./mcp-server.sh",
-      "args": ["mcp", "--transport", "stdio"],
+      "command": "npx",
+      "args": ["ts-node", "--transpileOnly", "src/main.ts", "mcp", "--transport", "stdio"],
       "description": "Promptfoo MCP server for LLM evaluation and testing"
     }
   }
