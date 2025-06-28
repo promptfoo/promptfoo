@@ -179,15 +179,25 @@ describe('DefaultTestVariables Component', () => {
       });
     });
 
-    it('prevents key collision when renaming to existing variable name', async () => {
+    it('shows validation error when creating duplicate variable names', async () => {
       render(<DefaultTestVariables />);
 
       const nameField = screen.getByDisplayValue('apiKey');
       fireEvent.change(nameField, { target: { value: 'language' } });
 
-      // Should not update config when trying to rename to existing key
+      // Should show validation error for duplicate names
       await waitFor(() => {
-        expect(mockUpdateConfig).not.toHaveBeenCalled();
+        const errors = screen.getAllByText('Duplicate variable name');
+        expect(errors).toHaveLength(2); // Both duplicates should show error
+      });
+
+      // Variables with validation errors should not be included in global state
+      await waitFor(() => {
+        expect(mockUpdateConfig).toHaveBeenCalledWith('defaultTest', {
+          vars: {
+            endpoint: 'https://api.example.com',
+          },
+        });
       });
     });
   });
@@ -288,33 +298,18 @@ describe('DefaultTestVariables Component', () => {
 
     it('handles variables with empty values', async () => {
       mockUseRedTeamConfig.mockReturnValue({
-        config: defaultConfig,
-        updateConfig: mockUpdateConfig,
-      });
-
-      render(<DefaultTestVariables />);
-
-      const addButton = screen.getByText('Add Variable');
-      fireEvent.click(addButton);
-
-      await waitFor(() => {
-        expect(mockUpdateConfig).toHaveBeenCalledWith('defaultTest', {
-          vars: { newVar: '' },
-        });
-      });
-
-      mockUseRedTeamConfig.mockReturnValue({
         config: {
           ...defaultConfig,
-          defaultTest: { vars: { newVar: '' } },
+          defaultTest: { vars: { testVar: '' } },
         },
         updateConfig: mockUpdateConfig,
       });
 
       render(<DefaultTestVariables />);
 
-      const valueField = screen.getByDisplayValue('');
-      expect(valueField).toBeInTheDocument();
+      // Should display the variable with empty value
+      expect(screen.getByDisplayValue('testVar')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('')).toBeInTheDocument();
     });
 
     it('handles variable names with special characters', async () => {
@@ -339,7 +334,7 @@ describe('DefaultTestVariables Component', () => {
       });
     });
 
-    it('handles empty variable name', async () => {
+    it('filters out variables with empty names from global state', async () => {
       mockUseRedTeamConfig.mockReturnValue({
         config: configWithVariables,
         updateConfig: mockUpdateConfig,
@@ -350,10 +345,10 @@ describe('DefaultTestVariables Component', () => {
       const nameField = screen.getByDisplayValue('apiKey');
       fireEvent.change(nameField, { target: { value: '' } });
 
+      // Variables with empty names should be filtered out from global state
       await waitFor(() => {
         expect(mockUpdateConfig).toHaveBeenCalledWith('defaultTest', {
           vars: {
-            '': 'test-key',
             language: 'en',
             endpoint: 'https://api.example.com',
           },
