@@ -39,6 +39,7 @@ import type { RedteamPlugin } from '@promptfoo/redteam/types';
 import type { Job } from '@promptfoo/types';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { generateOrderedYaml } from '../utils/yamlHelpers';
+import DefaultTestVariables from './DefaultTestVariables';
 import { EmailVerificationDialog } from './EmailVerificationDialog';
 import { LogViewer } from './LogViewer';
 
@@ -642,6 +643,8 @@ export default function Review() {
 
       <Divider sx={{ my: 4 }} />
 
+      <DefaultTestVariables />
+
       <Typography variant="h5" gutterBottom sx={{ mb: 3 }}>
         Running Your Configuration
       </Typography>
@@ -897,6 +900,7 @@ export default function Review() {
                 </span>
               </Tooltip>
             </Box>
+
             <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
               <Button onClick={() => setIsRunSettingsDialogOpen(false)}>Close</Button>
             </Box>
