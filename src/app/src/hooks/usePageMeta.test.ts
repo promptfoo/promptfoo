@@ -160,4 +160,81 @@ describe('usePageMeta', () => {
     expect(mockOgDescriptionTag.setAttribute).not.toHaveBeenCalled();
     expect(mockOgImageTag.setAttribute).not.toHaveBeenCalled();
   });
+
+  it('should set document title, meta description, Open Graph title, Open Graph description, and Open Graph image when all fields are provided', () => {
+    renderHook(() =>
+      usePageMeta({
+        title: 'Test Page',
+        description: 'Test description',
+        image: 'https://example.com/image.jpg',
+      }),
+    );
+
+    expect(document.title).toBe('Test Page | promptfoo');
+    expect(mockDescriptionTag.setAttribute).toHaveBeenCalledWith('content', 'Test description');
+    expect(mockOgTitleTag.setAttribute).toHaveBeenCalledWith('content', 'Test Page | promptfoo');
+    expect(mockOgDescriptionTag.setAttribute).toHaveBeenCalledWith('content', 'Test description');
+    expect(mockOgImageTag.setAttribute).toHaveBeenCalledWith(
+      'content',
+      'https://example.com/image.jpg',
+    );
+  });
+
+  it('should handle missing meta tags during cleanup gracefully', () => {
+    const { unmount } = renderHook(() =>
+      usePageMeta({ title: 'Test Page', description: 'Test description' }),
+    );
+
+    vi.spyOn(document, 'querySelector').mockReturnValue(null);
+
+    expect(() => {
+      unmount();
+    }).not.toThrow();
+  });
+
+  it('should handle extremely long title and description strings', () => {
+    const longString = 'This is a very long string. '.repeat(100);
+    renderHook(() =>
+      usePageMeta({
+        title: longString,
+        description: longString,
+      }),
+    );
+
+    expect(document.title).toBe(`${longString} | promptfoo`);
+    expect(mockDescriptionTag.setAttribute).toHaveBeenCalledWith('content', longString);
+    expect(mockOgTitleTag.setAttribute).toHaveBeenCalledWith(
+      'content',
+      `${longString} | promptfoo`,
+    );
+    expect(mockOgDescriptionTag.setAttribute).toHaveBeenCalledWith('content', longString);
+  });
+
+  it('should handle undefined description gracefully', () => {
+    renderHook(() => usePageMeta({ title: 'Test Page', description: undefined }));
+
+    expect(document.title).toBe('Test Page | promptfoo');
+    expect(mockDescriptionTag.setAttribute).not.toHaveBeenCalled();
+    expect(mockOgDescriptionTag.setAttribute).not.toHaveBeenCalled();
+  });
+
+  it('should handle null description gracefully', () => {
+    renderHook(() => usePageMeta({ title: 'Test Page', description: null as any }));
+
+    expect(document.title).toBe('Test Page | promptfoo');
+    expect(mockDescriptionTag.setAttribute).not.toHaveBeenCalled();
+    expect(mockOgDescriptionTag.setAttribute).not.toHaveBeenCalled();
+  });
+
+  it('should set Open Graph image when provided an invalid URL', () => {
+    const invalidImageUrl = 'invalid-image-url';
+    renderHook(() =>
+      usePageMeta({
+        title: 'Test Page',
+        image: invalidImageUrl,
+      }),
+    );
+
+    expect(mockOgImageTag.setAttribute).toHaveBeenCalledWith('content', invalidImageUrl);
+  });
 });
