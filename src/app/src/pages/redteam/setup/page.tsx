@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import CrispChat from '@app/components/CrispChat';
 import ErrorBoundary from '@app/components/ErrorBoundary';
+import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
@@ -253,6 +254,7 @@ const StatusSection = styled(Box)(({ theme }) => ({
 
 export default function RedTeamSetupPage() {
   // --- Hooks ---
+  usePageMeta({ title: 'Red team setup', description: 'Configure red team testing' });
   const location = useLocation();
   const navigate = useNavigate();
   const { recordEvent } = useTelemetry();
