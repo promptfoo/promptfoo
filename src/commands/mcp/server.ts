@@ -6,6 +6,8 @@ import logger from '../../logger';
 import { registerResources } from './resources';
 import { registerGetEvaluationDetailsTool } from './tools/getEvaluationDetails';
 import { registerListEvaluationsTool } from './tools/listEvaluations';
+import { registerRedteamGenerateTool } from './tools/redteamGenerate';
+import { registerRedteamRunTool } from './tools/redteamRun';
 import { registerRunAssertionTool } from './tools/runAssertion';
 import { registerRunEvaluationTool } from './tools/runEvaluation';
 import { registerShareEvaluationTool } from './tools/shareEvaluation';
@@ -29,6 +31,10 @@ export async function createMcpServer() {
   registerRunAssertionTool(server);
   registerRunEvaluationTool(server);
   registerShareEvaluationTool(server);
+
+  // Register redteam tools
+  registerRedteamRunTool(server);
+  registerRedteamGenerateTool(server);
 
   // Register resources
   registerResources(server);

@@ -188,26 +188,25 @@ npx promptfoo@latest mcp --transport http --port 8080
 
 ### Available Tools
 
-The MCP server provides 7 tools for AI agents:
+The MCP server provides 9 tools for AI agents:
 
-**Eval Tools:**
+**Core Evaluation Tools:**
 
-- `list_evaluations` - Browse eval runs with optional filtering
-- `get_evaluation_details` - Get detailed results for specific evals
-- `run_evaluation` - Execute evals with custom parameters
-- `share_evaluation` - Create shareable URLs for results
+- **`list_evaluations`** - Browse your evaluation runs with optional dataset filtering
+- **`get_evaluation_details`** - Get comprehensive results, metrics, and test cases for a specific evaluation
+- **`run_evaluation`** - Execute evaluations with custom parameters, test case filtering, and concurrency control
+- **`share_evaluation`** - Generate publicly shareable URLs for evaluation results
 
-**Configuration Tools:**
+**Redteam Security Tools:**
 
-- `validate_promptfoo_config` - Validate configuration files
+- **`redteam_run`** - Execute comprehensive security testing against AI applications with dynamic attack probes
+- **`redteam_generate`** - Generate adversarial test cases for redteam security testing with configurable plugins and strategies
 
-**Provider Tools:**
+**Configuration & Testing:**
 
-- `test_provider` - Test provider connectivity and response quality
-
-**Testing Tools:**
-
-- `run_assertion` - Test individual assertions against outputs
+- **`validate_promptfoo_config`** - Validate configuration files using the same logic as the CLI
+- **`test_provider`** - Test AI provider connectivity, credentials, and response quality
+- **`run_assertion`** - Test individual assertion rules against outputs for debugging
 
 For detailed setup instructions and integration examples, see the [MCP Server documentation](/docs/integrations/mcp-server).
 

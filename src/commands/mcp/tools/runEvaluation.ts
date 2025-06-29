@@ -1,14 +1,11 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import dedent from 'dedent';
 import { z } from 'zod';
-import { fromError } from 'zod-validation-error';
-import { evaluate } from '../../../evaluator';
 import logger from '../../../logger';
-import Eval from '../../../models/eval';
-import type { TestSuite } from '../../../types';
-import { TestSuiteSchema, UnifiedConfigSchema } from '../../../types';
+import type { CommandLineOptions, EvaluateOptions } from '../../../types';
 import { loadDefaultConfig } from '../../../util/config/default';
 import { resolveConfigs } from '../../../util/config/load';
+import { doEval } from '../../eval';
 import { createToolResponse } from '../utils';
 
 /**
@@ -96,6 +93,16 @@ export function registerRunEvaluationTool(server: McpServer) {
         .max(300000)
         .optional()
         .describe('Timeout per eval in milliseconds (1s-5min, default: 30s)'),
+      repeat: z
+        .number()
+        .min(1)
+        .max(10)
+        .optional()
+        .describe('Number of times to repeat the evaluation (1-10)'),
+      delay: z.number().min(0).optional().describe('Delay in milliseconds between API calls'),
+      cache: z.boolean().optional().default(true).describe('Enable caching of results'),
+      write: z.boolean().optional().default(false).describe('Write results to database'),
+      share: z.boolean().optional().default(false).describe('Create shareable URL for results'),
     },
     async (args) => {
       try {
@@ -106,13 +113,20 @@ export function registerRunEvaluationTool(server: McpServer) {
           providerFilter,
           maxConcurrency = 4,
           timeoutMs = 30000,
+          repeat = 1,
+          delay,
+          cache = true,
+          write = false,
+          share = false,
         } = args;
 
         // Load default config
         let defaultConfig;
+        let defaultConfigPath;
         try {
           const result = await loadDefaultConfig();
           defaultConfig = result.defaultConfig;
+          defaultConfigPath = result.defaultConfigPath;
         } catch (error) {
           return createToolResponse(
             'run_evaluation',
@@ -122,253 +136,368 @@ export function registerRunEvaluationTool(server: McpServer) {
           );
         }
 
-        // Resolve configuration
-        const configPaths = configPath ? [configPath] : ['promptfooconfig.yaml'];
-        const { config, testSuite } = await resolveConfigs({ config: configPaths }, defaultConfig);
-
-        // Validate configuration
-        const configParse = UnifiedConfigSchema.safeParse(config);
-        if (!configParse.success) {
-          return createToolResponse(
-            'run_evaluation',
-            false,
-            undefined,
-            `Configuration validation error: ${fromError(configParse.error).message}`,
+        // If we need to filter test cases or prompts, we need to handle this ourselves
+        // since doEval doesn't support these specific filters
+        if (testCaseIndices !== undefined || promptFilter !== undefined) {
+          // Resolve config to get the test suite first
+          const configPaths = configPath ? [configPath] : ['promptfooconfig.yaml'];
+          const { config, testSuite } = await resolveConfigs(
+            { config: configPaths },
+            defaultConfig,
           );
-        }
 
-        const suiteParse = TestSuiteSchema.safeParse(testSuite);
-        if (!suiteParse.success) {
-          return createToolResponse(
-            'run_evaluation',
-            false,
-            undefined,
-            `Test suite validation error: ${fromError(suiteParse.error).message}`,
-          );
-        }
+          // Apply our custom filtering
+          const filteredTestSuite = { ...testSuite };
 
-        // Filter test cases if specified
-        let filteredTests = testSuite.tests || [];
-        if (testCaseIndices !== undefined) {
-          if (typeof testCaseIndices === 'number') {
-            // Single index
-            if (testCaseIndices < 0 || testCaseIndices >= filteredTests.length) {
-              return createToolResponse(
-                'run_evaluation',
-                false,
-                undefined,
-                `Test case index ${testCaseIndices} is out of range. Available indices: 0-${filteredTests.length - 1}`,
+          // Filter test cases if specified
+          if (testCaseIndices !== undefined && filteredTestSuite.tests) {
+            let filteredTests = filteredTestSuite.tests;
+
+            if (typeof testCaseIndices === 'number') {
+              // Single index
+              if (testCaseIndices < 0 || testCaseIndices >= filteredTests.length) {
+                return createToolResponse(
+                  'run_evaluation',
+                  false,
+                  undefined,
+                  `Test case index ${testCaseIndices} is out of range. Available indices: 0-${filteredTests.length - 1}`,
+                );
+              }
+              filteredTests = [filteredTests[testCaseIndices]];
+            } else if (Array.isArray(testCaseIndices)) {
+              // Multiple indices
+              const invalidIndices = testCaseIndices.filter(
+                (i) => i < 0 || i >= filteredTests.length,
               );
+              if (invalidIndices.length > 0) {
+                return createToolResponse(
+                  'run_evaluation',
+                  false,
+                  undefined,
+                  `Invalid test case indices: ${invalidIndices.join(', ')}. Available indices: 0-${filteredTests.length - 1}`,
+                );
+              }
+              filteredTests = testCaseIndices.map((i) => filteredTests[i]);
+            } else {
+              // Range
+              const { start, end } = testCaseIndices;
+              if (start < 0 || end > filteredTests.length || start >= end) {
+                return createToolResponse(
+                  'run_evaluation',
+                  false,
+                  undefined,
+                  `Invalid range: start=${start}, end=${end}. Available indices: 0-${filteredTests.length - 1}`,
+                );
+              }
+              filteredTests = filteredTests.slice(start, end);
             }
-            filteredTests = [filteredTests[testCaseIndices]];
-          } else if (Array.isArray(testCaseIndices)) {
-            // Multiple indices
-            const invalidIndices = testCaseIndices.filter(
-              (i) => i < 0 || i >= filteredTests.length,
-            );
-            if (invalidIndices.length > 0) {
-              return createToolResponse(
-                'run_evaluation',
-                false,
-                undefined,
-                `Invalid test case indices: ${invalidIndices.join(', ')}. Available indices: 0-${filteredTests.length - 1}`,
-              );
-            }
-            filteredTests = testCaseIndices.map((i) => filteredTests[i]);
-          } else {
-            // Range
-            const { start, end } = testCaseIndices;
-            if (start < 0 || end > filteredTests.length || start >= end) {
-              return createToolResponse(
-                'run_evaluation',
-                false,
-                undefined,
-                `Invalid range: start=${start}, end=${end}. Available indices: 0-${filteredTests.length - 1}`,
-              );
-            }
-            filteredTests = filteredTests.slice(start, end);
+
+            filteredTestSuite.tests = filteredTests;
           }
-        }
 
-        // Filter prompts if specified
-        let filteredPrompts = testSuite.prompts;
-        if (promptFilter) {
-          const filters = Array.isArray(promptFilter) ? promptFilter : [promptFilter];
-          filteredPrompts = testSuite.prompts.filter((prompt, index) => {
-            const label = prompt.label || prompt.raw;
-            return filters.includes(label) || filters.includes(index.toString());
+          // Filter prompts if specified
+          if (promptFilter !== undefined) {
+            const filters = Array.isArray(promptFilter) ? promptFilter : [promptFilter];
+            const filteredPrompts = filteredTestSuite.prompts.filter((prompt, index) => {
+              const label = prompt.label || prompt.raw;
+              return filters.includes(label) || filters.includes(index.toString());
+            });
+
+            if (filteredPrompts.length === 0) {
+              return createToolResponse(
+                'run_evaluation',
+                false,
+                undefined,
+                `No prompts matched filter: ${Array.isArray(promptFilter) ? promptFilter.join(', ') : promptFilter}`,
+              );
+            }
+
+            filteredTestSuite.prompts = filteredPrompts;
+          }
+
+          // Use the evaluate function directly instead of doEval for filtered cases
+          const { evaluate } = await import('../../../evaluator');
+          const Eval = (await import('../../../models/eval')).default;
+
+          const evalRecord = await Eval.create(config, filteredTestSuite.prompts, {
+            id: `mcp-eval-${Date.now()}`,
           });
 
-          if (filteredPrompts.length === 0) {
-            return createToolResponse(
-              'run_evaluation',
-              false,
-              undefined,
-              `No prompts matched filter: ${Array.isArray(promptFilter) ? promptFilter.join(', ') : promptFilter}`,
-            );
-          }
-        }
+          logger.debug(
+            `Running filtered eval with ${filteredTestSuite.tests?.length || 0} test cases, ${filteredTestSuite.prompts.length} prompts, ${filteredTestSuite.providers.length} providers`,
+          );
 
-        // Filter providers if specified
-        let filteredProviders = testSuite.providers;
-        if (providerFilter) {
-          const filters = Array.isArray(providerFilter) ? providerFilter : [providerFilter];
-          filteredProviders = testSuite.providers.filter((provider) => {
-            const providerId = typeof provider.id === 'function' ? provider.id() : provider.id;
-            const providerLabel = provider.label || providerId;
-            return filters.some(
-              (filter) =>
-                providerId.includes(filter) ||
-                providerLabel.includes(filter) ||
-                filter === providerId ||
-                filter === providerLabel,
-            );
+          // Run the evaluation
+          const startTime = Date.now();
+          const result = await evaluate(filteredTestSuite, evalRecord, {
+            maxConcurrency,
+            timeoutMs,
+            eventSource: 'mcp',
           });
+          const endTime = Date.now();
 
-          if (filteredProviders.length === 0) {
-            return createToolResponse(
-              'run_evaluation',
-              false,
-              undefined,
-              `No providers matched filter: ${Array.isArray(providerFilter) ? providerFilter.join(', ') : providerFilter}`,
-            );
-          }
-        }
+          const summary = await result.toEvaluateSummary();
 
-        // Create filtered test suite
-        const filteredTestSuite: TestSuite = {
-          ...testSuite,
-          prompts: filteredPrompts,
-          providers: filteredProviders,
-          tests: filteredTests,
-        };
-
-        logger.debug(
-          `Running eval with ${filteredTests.length} test cases, ${filteredPrompts.length} prompts, ${filteredProviders.length} providers`,
-        );
-
-        // Create eval record
-        const evalRecord = await Eval.create(config, filteredTestSuite.prompts, {
-          id: `mcp-eval-${Date.now()}`,
-        });
-
-        // Run the eval
-        const startTime = Date.now();
-        const result = await evaluate(filteredTestSuite, evalRecord, {
-          maxConcurrency,
-          timeoutMs,
-          eventSource: 'mcp',
-        });
-
-        const endTime = Date.now();
-        const summary = await result.toEvaluateSummary();
-
-        // Prepare detailed response
-        const evalData = {
-          eval: {
-            id: result.id,
-            status: 'completed',
-            duration: endTime - startTime,
-            timestamp: new Date().toISOString(),
-          },
-          configuration: {
-            configPath: configPath || 'promptfooconfig.yaml',
-            testCases: {
-              total: testSuite.tests?.length || 0,
-              filtered: filteredTests.length,
-              indices: testCaseIndices,
+          // Prepare detailed response
+          const evalData = {
+            eval: {
+              id: result.id,
+              status: 'completed',
+              duration: endTime - startTime,
+              timestamp: new Date().toISOString(),
             },
-            prompts: {
-              total: testSuite.prompts.length,
-              filtered: filteredPrompts.length,
-              labels: filteredPrompts.map(
-                (p) => p.label || p.raw.slice(0, 50) + (p.raw.length > 50 ? '...' : ''),
-              ),
-            },
-            providers: {
-              total: testSuite.providers.length,
-              filtered: filteredProviders.length,
-              ids: filteredProviders.map((p) => (typeof p.id === 'function' ? p.id() : p.id)),
-            },
-            options: {
-              maxConcurrency,
-              timeoutMs,
-            },
-          },
-          results: {
-            stats: summary.stats,
-            totalEvals: summary.results.length,
-            successRate:
-              summary.results.length > 0
-                ? ((summary.stats.successes / summary.results.length) * 100).toFixed(1) + '%'
-                : '0%',
-            results: summary.results.map((result, index) => ({
-              index,
-              testCase: {
-                description: result.testCase.description,
-                vars: result.vars,
+            configuration: {
+              configPath: configPath || 'promptfooconfig.yaml',
+              testCases: {
+                total: testSuite.tests?.length || 0,
+                filtered: filteredTestSuite.tests?.length || 0,
+                filters: {
+                  testCaseIndices,
+                  promptFilter,
+                  providerFilter,
+                },
               },
-              prompt: {
-                label: result.prompt.label,
-                raw:
-                  result.prompt.raw.slice(0, 100) + (result.prompt.raw.length > 100 ? '...' : ''),
+              prompts: {
+                total: testSuite.prompts.length,
+                filtered: filteredTestSuite.prompts.length,
+                labels: filteredTestSuite.prompts.map(
+                  (p) => p.label || p.raw.slice(0, 50) + (p.raw.length > 50 ? '...' : ''),
+                ),
               },
-              provider: {
-                id: result.provider.id,
-                label: result.provider.label,
+              providers: {
+                total: testSuite.providers.length,
+                filtered: filteredTestSuite.providers.length,
+                ids: filteredTestSuite.providers.map((p) =>
+                  typeof p.id === 'function' ? p.id() : p.id,
+                ),
               },
-              response: {
-                output: result.response?.output
-                  ? typeof result.response.output === 'string'
-                    ? result.response.output.slice(0, 200) +
-                      (result.response.output.length > 200 ? '...' : '')
-                    : JSON.stringify(result.response.output).slice(0, 200)
+              options: {
+                maxConcurrency,
+                timeoutMs,
+                repeat,
+                delay,
+                cache,
+                write,
+                share,
+              },
+            },
+            results: {
+              stats: summary.stats,
+              totalEvals: summary.results.length,
+              successRate:
+                summary.results.length > 0
+                  ? ((summary.stats.successes / summary.results.length) * 100).toFixed(1) + '%'
+                  : '0%',
+              results: summary.results.slice(0, 20).map((result, index) => ({
+                // Limit to first 20 for MCP response size
+                index,
+                testCase: {
+                  description: result.testCase.description,
+                  vars: result.vars,
+                },
+                prompt: {
+                  label: result.prompt.label,
+                  raw:
+                    result.prompt.raw.slice(0, 100) + (result.prompt.raw.length > 100 ? '...' : ''),
+                },
+                provider: {
+                  id: result.provider.id,
+                  label: result.provider.label,
+                },
+                response: {
+                  output: result.response?.output
+                    ? typeof result.response.output === 'string'
+                      ? result.response.output.slice(0, 200) +
+                        (result.response.output.length > 200 ? '...' : '')
+                      : JSON.stringify(result.response.output).slice(0, 200)
+                    : null,
+                  tokenUsage: result.tokenUsage,
+                  cost: result.cost,
+                  latencyMs: result.latencyMs,
+                },
+                eval: {
+                  success: result.success,
+                  score: result.score,
+                  namedScores: result.namedScores,
+                  error: result.error,
+                  failureReason: result.failureReason,
+                },
+                assertions: result.gradingResult
+                  ? {
+                      totalAssertions: result.testCase.assert?.length || 0,
+                      passedAssertions:
+                        result.gradingResult.componentResults?.filter((r) => r.pass).length || 0,
+                      failedAssertions:
+                        result.gradingResult.componentResults?.filter((r) => !r.pass).length || 0,
+                      componentResults:
+                        result.gradingResult.componentResults?.slice(0, 5).map((cr, idx) => ({
+                          // Limit to first 5 assertions
+                          index: idx,
+                          type: result.testCase.assert?.[idx]?.type || 'unknown',
+                          pass: cr.pass,
+                          score: cr.score,
+                          reason: cr.reason.slice(0, 100) + (cr.reason.length > 100 ? '...' : ''),
+                          metric: result.testCase.assert?.[idx]?.metric,
+                        })) || [],
+                    }
                   : null,
-                tokenUsage: result.tokenUsage,
-                cost: result.cost,
-                latencyMs: result.latencyMs,
-              },
-              eval: {
-                success: result.success,
-                score: result.score,
-                namedScores: result.namedScores,
-                error: result.error,
-                failureReason: result.failureReason,
-              },
-              assertions: result.gradingResult
-                ? {
-                    totalAssertions: result.testCase.assert?.length || 0,
-                    passedAssertions:
-                      result.gradingResult.componentResults?.filter((r) => r.pass).length || 0,
-                    failedAssertions:
-                      result.gradingResult.componentResults?.filter((r) => !r.pass).length || 0,
-                    componentResults:
-                      result.gradingResult.componentResults?.map((cr, idx) => ({
-                        index: idx,
-                        type: result.testCase.assert?.[idx]?.type || 'unknown',
-                        pass: cr.pass,
-                        score: cr.score,
-                        reason: cr.reason.slice(0, 100) + (cr.reason.length > 100 ? '...' : ''),
-                        metric: result.testCase.assert?.[idx]?.metric,
-                      })) || [],
-                  }
-                : null,
-            })),
-          },
-          prompts:
-            summary.version === 3 && 'prompts' in summary
-              ? (summary as any).prompts.map((prompt: any) => ({
-                  label: prompt.label,
-                  provider: prompt.provider,
-                  metrics: prompt.metrics,
-                }))
-              : [],
-        };
+              })),
+            },
+            prompts:
+              summary.version === 3 && 'prompts' in summary
+                ? (summary as any).prompts.map((prompt: any) => ({
+                    label: prompt.label,
+                    provider: prompt.provider,
+                    metrics: prompt.metrics,
+                  }))
+                : [],
+          };
 
-        return createToolResponse('run_evaluation', true, evalData);
+          return createToolResponse('run_evaluation', true, evalData);
+        } else {
+          // For simple cases without custom filtering, use doEval directly
+          // Prepare command line options that doEval expects
+          const cmdObj = {
+            config: configPath ? [configPath] : ['promptfooconfig.yaml'],
+            maxConcurrency,
+            repeat,
+            delay,
+            cache,
+            write,
+            share,
+            // Set up provider filtering - doEval supports this natively
+            filterProviders: Array.isArray(providerFilter)
+              ? providerFilter.join('|')
+              : providerFilter,
+          } as Partial<CommandLineOptions>;
+
+          // Prepare evaluate options
+          const evaluateOptions: EvaluateOptions = {
+            maxConcurrency,
+            eventSource: 'mcp',
+            showProgressBar: false, // Disable for MCP usage
+          };
+
+          logger.debug(`Running evaluation with config: ${configPath || 'promptfooconfig.yaml'}`);
+
+          // Run the evaluation using the existing doEval function
+          const startTime = Date.now();
+          const evalResult = await doEval(
+            cmdObj as any,
+            defaultConfig,
+            defaultConfigPath,
+            evaluateOptions,
+          );
+          const endTime = Date.now();
+
+          // Get summary data
+          const summary = await evalResult.toEvaluateSummary();
+
+          // Prepare detailed response
+          const evalData = {
+            eval: {
+              id: evalResult.id,
+              status: 'completed',
+              duration: endTime - startTime,
+              timestamp: new Date().toISOString(),
+            },
+            configuration: {
+              configPath: configPath || 'promptfooconfig.yaml',
+              testCases: {
+                total: summary.results.length,
+                filters: {
+                  testCaseIndices,
+                  promptFilter,
+                  providerFilter,
+                },
+              },
+              options: {
+                maxConcurrency,
+                timeoutMs,
+                repeat,
+                delay,
+                cache,
+                write,
+                share,
+              },
+            },
+            results: {
+              stats: summary.stats,
+              totalEvals: summary.results.length,
+              successRate:
+                summary.results.length > 0
+                  ? ((summary.stats.successes / summary.results.length) * 100).toFixed(1) + '%'
+                  : '0%',
+              results: summary.results.slice(0, 20).map((result, index) => ({
+                // Limit to first 20 for MCP response size
+                index,
+                testCase: {
+                  description: result.testCase.description,
+                  vars: result.vars,
+                },
+                prompt: {
+                  label: result.prompt.label,
+                  raw:
+                    result.prompt.raw.slice(0, 100) + (result.prompt.raw.length > 100 ? '...' : ''),
+                },
+                provider: {
+                  id: result.provider.id,
+                  label: result.provider.label,
+                },
+                response: {
+                  output: result.response?.output
+                    ? typeof result.response.output === 'string'
+                      ? result.response.output.slice(0, 200) +
+                        (result.response.output.length > 200 ? '...' : '')
+                      : JSON.stringify(result.response.output).slice(0, 200)
+                    : null,
+                  tokenUsage: result.tokenUsage,
+                  cost: result.cost,
+                  latencyMs: result.latencyMs,
+                },
+                eval: {
+                  success: result.success,
+                  score: result.score,
+                  namedScores: result.namedScores,
+                  error: result.error,
+                  failureReason: result.failureReason,
+                },
+                assertions: result.gradingResult
+                  ? {
+                      totalAssertions: result.testCase.assert?.length || 0,
+                      passedAssertions:
+                        result.gradingResult.componentResults?.filter((r) => r.pass).length || 0,
+                      failedAssertions:
+                        result.gradingResult.componentResults?.filter((r) => !r.pass).length || 0,
+                      componentResults:
+                        result.gradingResult.componentResults?.slice(0, 5).map((cr, idx) => ({
+                          // Limit to first 5 assertions
+                          index: idx,
+                          type: result.testCase.assert?.[idx]?.type || 'unknown',
+                          pass: cr.pass,
+                          score: cr.score,
+                          reason: cr.reason.slice(0, 100) + (cr.reason.length > 100 ? '...' : ''),
+                          metric: result.testCase.assert?.[idx]?.metric,
+                        })) || [],
+                    }
+                  : null,
+              })),
+            },
+            prompts:
+              summary.version === 3 && 'prompts' in summary
+                ? (summary as any).prompts.map((prompt: any) => ({
+                    label: prompt.label,
+                    provider: prompt.provider,
+                    metrics: prompt.metrics,
+                  }))
+                : [],
+          };
+
+          return createToolResponse('run_evaluation', true, evalData);
+        }
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-        logger.error(`Eval execution failed: ${errorMessage}`);
+        logger.error(`Evaluation execution failed: ${errorMessage}`);
 
         const errorData = {
           configuration: {
