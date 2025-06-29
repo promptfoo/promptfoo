@@ -67,8 +67,7 @@ export function registerResources(server: McpServer) {
         },
         {
           name: 'run_evaluation',
-          description:
-            'Run an eval from a promptfoo config with optional test case filtering',
+          description: 'Run an eval from a promptfoo config with optional test case filtering',
           parameters:
             'configPath?: string, testCaseIndices?: number | number[] | {start: number, end: number}, promptFilter?: string | string[], providerFilter?: string | string[], maxConcurrency?: number, timeoutMs?: number',
         },

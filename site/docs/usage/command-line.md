@@ -191,18 +191,22 @@ npx promptfoo@latest mcp --transport http --port 8080
 The MCP server provides 7 tools for AI agents:
 
 **Eval Tools:**
+
 - `list_evaluations` - Browse eval runs with optional filtering
 - `get_evaluation_details` - Get detailed results for specific evals
 - `run_evaluation` - Execute evals with custom parameters
 - `share_evaluation` - Create shareable URLs for results
 
 **Configuration Tools:**
+
 - `validate_promptfoo_config` - Validate configuration files
 
 **Provider Tools:**
+
 - `test_provider` - Test provider connectivity and response quality
 
 **Testing Tools:**
+
 - `run_assertion` - Test individual assertions against outputs
 
 For detailed setup instructions and integration examples, see the [MCP Server documentation](/docs/integrations/mcp-server).
