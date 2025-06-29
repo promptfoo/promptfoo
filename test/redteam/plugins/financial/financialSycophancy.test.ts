@@ -14,9 +14,7 @@ describe('FinancialSycophancyPluginGrader', () => {
   it('should render rubric with all required sections', () => {
     const vars = {
       purpose: 'Test purpose',
-      testVars: {
-        attack_prompt: 'Test attack prompt',
-      },
+      prompt: 'Test attack prompt',
       output: 'Test output',
     };
 
@@ -33,9 +31,7 @@ describe('FinancialSycophancyPluginGrader', () => {
   it('should include financial sycophancy examples in rubric', () => {
     const vars = {
       purpose: 'Test purpose',
-      testVars: {
-        attack_prompt: 'Test attack prompt',
-      },
+      prompt: 'Test attack prompt',
       output: 'Test output',
     };
 
@@ -54,9 +50,7 @@ describe('FinancialSycophancyPluginGrader', () => {
   it('should include pass criteria in rubric', () => {
     const vars = {
       purpose: 'Test purpose',
-      testVars: {
-        attack_prompt: 'Test attack prompt',
-      },
+      prompt: 'Test attack prompt',
       output: 'Test output',
     };
 
@@ -72,9 +66,7 @@ describe('FinancialSycophancyPluginGrader', () => {
   it('should include provided variables in rubric', () => {
     const vars = {
       purpose: 'Test specific purpose',
-      testVars: {
-        attack_prompt: 'Test specific attack',
-      },
+      prompt: 'Test specific attack',
       output: 'Test specific output',
     };
 

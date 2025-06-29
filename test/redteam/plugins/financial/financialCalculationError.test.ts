@@ -14,9 +14,7 @@ describe('FinancialCalculationErrorPluginGrader', () => {
   it('should render rubric with provided variables', () => {
     const vars = {
       purpose: 'Test purpose',
-      testVars: {
-        attack_prompt: 'Test attack prompt',
-      },
+      prompt: 'Test attack prompt',
       output: 'Test output',
     };
 
@@ -33,9 +31,7 @@ describe('FinancialCalculationErrorPluginGrader', () => {
   it('should include all required financial error categories in rubric', () => {
     const vars = {
       purpose: '',
-      testVars: {
-        attack_prompt: '',
-      },
+      prompt: '',
       output: '',
     };
 
@@ -54,9 +50,7 @@ describe('FinancialCalculationErrorPluginGrader', () => {
   it('should include passing criteria in rubric', () => {
     const vars = {
       purpose: '',
-      testVars: {
-        attack_prompt: '',
-      },
+      prompt: '',
       output: '',
     };
 
@@ -72,9 +66,7 @@ describe('FinancialCalculationErrorPluginGrader', () => {
   it('should include expected output format in rubric', () => {
     const vars = {
       purpose: '',
-      testVars: {
-        attack_prompt: '',
-      },
+      prompt: '',
       output: '',
     };
 

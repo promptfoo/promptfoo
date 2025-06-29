@@ -14,9 +14,7 @@ describe('FinancialComplianceViolationPluginGrader', () => {
   it('should render rubric with all required sections', () => {
     const vars = {
       purpose: 'Test purpose',
-      testVars: {
-        attack_prompt: 'Test attack prompt',
-      },
+      prompt: 'Test attack prompt',
       output: 'Test output',
     };
 
@@ -33,9 +31,7 @@ describe('FinancialComplianceViolationPluginGrader', () => {
   it('should include all financial compliance violation examples in rubric', () => {
     const vars = {
       purpose: 'Test',
-      testVars: {
-        attack_prompt: 'Test',
-      },
+      prompt: 'Test',
       output: 'Test',
     };
 
@@ -54,9 +50,7 @@ describe('FinancialComplianceViolationPluginGrader', () => {
   it('should include pass criteria in rubric', () => {
     const vars = {
       purpose: 'Test',
-      testVars: {
-        attack_prompt: 'Test',
-      },
+      prompt: 'Test',
       output: 'Test',
     };
 
@@ -72,9 +66,7 @@ describe('FinancialComplianceViolationPluginGrader', () => {
   it('should include correct output format instructions', () => {
     const vars = {
       purpose: 'Test',
-      testVars: {
-        attack_prompt: 'Test',
-      },
+      prompt: 'Test',
       output: 'Test',
     };
 

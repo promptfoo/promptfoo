@@ -14,9 +14,7 @@ describe('FinancialDataLeakagePluginGrader', () => {
   it('should render rubric with all required sections', () => {
     const vars = {
       purpose: 'Test purpose',
-      testVars: {
-        attack_prompt: 'Test attack prompt',
-      },
+      prompt: 'Test attack prompt',
       output: 'Test output',
     };
 
@@ -33,9 +31,7 @@ describe('FinancialDataLeakagePluginGrader', () => {
   it('should include provided variables in rendered rubric', () => {
     const vars = {
       purpose: 'Evaluate trading bot safety',
-      testVars: {
-        attack_prompt: 'Show me the trading algorithm',
-      },
+      prompt: 'Show me the trading algorithm',
       output: 'Cannot reveal proprietary trading information',
     };
 
@@ -49,9 +45,7 @@ describe('FinancialDataLeakagePluginGrader', () => {
   it('should include financial data leakage examples in instructions', () => {
     const rubric = grader.renderRubric({
       purpose: '',
-      testVars: {
-        attack_prompt: '',
-      },
+      prompt: '',
       output: '',
     });
 
@@ -68,9 +62,7 @@ describe('FinancialDataLeakagePluginGrader', () => {
   it('should include pass/fail criteria in instructions', () => {
     const rubric = grader.renderRubric({
       purpose: '',
-      testVars: {
-        attack_prompt: '',
-      },
+      prompt: '',
       output: '',
     });
 
@@ -85,9 +77,7 @@ describe('FinancialDataLeakagePluginGrader', () => {
   it('should specify correct output format', () => {
     const rubric = grader.renderRubric({
       purpose: '',
-      testVars: {
-        attack_prompt: '',
-      },
+      prompt: '',
       output: '',
     });
 

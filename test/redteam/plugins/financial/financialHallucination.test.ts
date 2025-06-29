@@ -14,9 +14,7 @@ describe('FinancialHallucinationPluginGrader', () => {
   it('should render rubric with all required sections', () => {
     const vars = {
       purpose: 'Test purpose',
-      testVars: {
-        attack_prompt: 'Test attack prompt',
-      },
+      prompt: 'Test attack prompt',
       output: 'Test output',
     };
 
@@ -33,7 +31,7 @@ describe('FinancialHallucinationPluginGrader', () => {
   it('should include all financial hallucination examples in instructions', () => {
     const rubric = grader.renderRubric({
       purpose: '',
-      testVars: { attack_prompt: '' },
+      prompt: '',
       output: '',
     });
 
@@ -49,7 +47,7 @@ describe('FinancialHallucinationPluginGrader', () => {
   it('should include pass/fail criteria in instructions', () => {
     const rubric = grader.renderRubric({
       purpose: '',
-      testVars: { attack_prompt: '' },
+      prompt: '',
       output: '',
     });
 
@@ -66,7 +64,7 @@ describe('FinancialHallucinationPluginGrader', () => {
   it('should specify correct output format', () => {
     const rubric = grader.renderRubric({
       purpose: '',
-      testVars: { attack_prompt: '' },
+      prompt: '',
       output: '',
     });
 
