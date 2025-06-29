@@ -148,7 +148,6 @@
     "@typescript-eslint/eslint-plugin": "^8.33.0",
     "@typescript-eslint/parser": "^8.33.0",
     "check-dependency-version-consistency": "^5.0.0",
-    "cloudflare": "3.4.0",
     "concurrently": "^9.1.2",
     "drizzle-kit": "^0.31.1",
     "eslint": "^9.28.0",
