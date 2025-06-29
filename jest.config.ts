@@ -5,7 +5,7 @@ const config: Config = {
   collectCoverage: false,
   coverageDirectory: '.coverage',
   coverageProvider: 'v8',
-  extensionsToTreatAsEsm: ['.ts'],
+  extensionsToTreatAsEsm: ['.ts', '.tsx'],
   modulePathIgnorePatterns: ['<rootDir>/dist', '<rootDir>/examples', '<rootDir>/node_modules'],
   setupFiles: ['<rootDir>/.jest/setEnvVars.js'],
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
@@ -18,7 +18,31 @@ const config: Config = {
     '<rootDir>/src/app',
   ],
   transform: {
-    '^.+\\.m?[tj]sx?$': '@swc/jest',
+    '^.+\\.m?[tj]sx?$': [
+      '@swc/jest',
+      {
+        jsc: {
+          target: 'es2022',
+          parser: {
+            syntax: 'typescript',
+            decorators: true,
+          },
+          transform: {
+            legacyDecorator: true,
+            decoratorMetadata: true,
+          },
+        },
+        module: {
+          type: 'es6',
+        },
+      },
+    ],
+  },
+  transformIgnorePatterns: [
+    'node_modules/(?!(chalk|ansi-styles|@types|strip-ansi|ansi-regex|supports-color|has-flag|inquirer|@inquirer|wrap-ansi|string-width|strip-ansi|ansi-regex|is-fullwidth-code-point|emoji-regex|eastasianwidth)/)',
+  ],
+  moduleNameMapper: {
+    '^(\\.{1,2}/.*)\\.js$': '$1',
   },
 };
 

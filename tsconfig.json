@@ -19,6 +19,15 @@
     "swc": true,
     "esm": true
   },
-  "include": ["src/", "typings/**/*", "test/", "./package.json", "src/**/*.json", "test/**/*.json"],
+  "include": [
+    "src/",
+    "scripts/",
+    "typings/**/*",
+    "test/",
+    "./package.json",
+    "src/**/*.json",
+    "test/**/*.json",
+    "jest.config.ts"
+  ],
   "exclude": ["node_modules", "dist", "src/workers/**/*", "src/app/**/*", "test/site/"]
 }
