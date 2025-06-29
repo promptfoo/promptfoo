@@ -7,6 +7,7 @@ import type {
 import type { EnvOverrides } from '../types/env';
 import invariant from '../util/invariant';
 import { OpenAiChatCompletionProvider } from './openai/chat';
+import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 import type { OpenAiCompletionOptions } from './openai/types';
 
@@ -60,18 +61,30 @@ function getCloudflareApiConfig(
   };
 }
 
+function getApiBaseUrl(config?: CloudflareAiConfig, env?: EnvOverrides): string {
+  // If custom API base URL is provided, use it
+  if (config?.apiBaseUrl) {
+    return config.apiBaseUrl;
+  }
+
+  // Otherwise, construct the default Cloudflare AI API URL
+  const { accountId } = getCloudflareApiConfig(config, env);
+  return `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/v1`;
+}
+
 export class CloudflareAiChatCompletionProvider extends OpenAiChatCompletionProvider {
   private cloudflareConfig: CloudflareAiConfig;
+  private modelType = 'chat';
 
   constructor(modelName: string, providerOptions: CloudflareAiProviderOptions) {
-    const { accountId } = getCloudflareApiConfig(providerOptions.config, providerOptions.env);
+    const apiBaseUrl = getApiBaseUrl(providerOptions.config, providerOptions.env);
 
     super(modelName, {
       ...providerOptions,
       config: {
         ...providerOptions.config,
         apiKeyEnvar: 'CLOUDFLARE_API_KEY',
-        apiBaseUrl: `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/v1`,
+        apiBaseUrl,
       },
     });
 
@@ -79,11 +92,11 @@ export class CloudflareAiChatCompletionProvider extends OpenAiChatCompletionProv
   }
 
   id(): string {
-    return `cloudflare-ai:${this.modelName}`;
+    return `cloudflare-ai:${this.modelType}:${this.modelName}`;
   }
 
   toString(): string {
-    return `[Cloudflare AI Provider ${this.modelName}]`;
+    return `[Cloudflare AI ${this.modelType} Provider ${this.modelName}]`;
   }
 
   getApiKey(): string | undefined {
@@ -95,6 +108,52 @@ export class CloudflareAiChatCompletionProvider extends OpenAiChatCompletionProv
     return {
       provider: 'cloudflare-ai',
       model: this.modelName,
+      modelType: this.modelType,
+      config: {
+        ...this.config,
+        ...(this.getApiKey() && { apiKey: undefined }),
+      },
+    };
+  }
+}
+
+export class CloudflareAiCompletionProvider extends OpenAiCompletionProvider {
+  private cloudflareConfig: CloudflareAiConfig;
+  private modelType = 'completion';
+
+  constructor(modelName: string, providerOptions: CloudflareAiProviderOptions) {
+    const apiBaseUrl = getApiBaseUrl(providerOptions.config, providerOptions.env);
+
+    super(modelName, {
+      ...providerOptions,
+      config: {
+        ...providerOptions.config,
+        apiKeyEnvar: 'CLOUDFLARE_API_KEY',
+        apiBaseUrl,
+      },
+    });
+
+    this.cloudflareConfig = providerOptions.config || {};
+  }
+
+  id(): string {
+    return `cloudflare-ai:${this.modelType}:${this.modelName}`;
+  }
+
+  toString(): string {
+    return `[Cloudflare AI ${this.modelType} Provider ${this.modelName}]`;
+  }
+
+  getApiKey(): string | undefined {
+    const { apiToken } = getCloudflareApiConfig(this.cloudflareConfig, this.env);
+    return apiToken;
+  }
+
+  toJSON() {
+    return {
+      provider: 'cloudflare-ai',
+      model: this.modelName,
+      modelType: this.modelType,
       config: {
         ...this.config,
         ...(this.getApiKey() && { apiKey: undefined }),
@@ -105,16 +164,17 @@ export class CloudflareAiChatCompletionProvider extends OpenAiChatCompletionProv
 
 export class CloudflareAiEmbeddingProvider extends OpenAiEmbeddingProvider {
   private cloudflareConfig: CloudflareAiConfig;
+  private modelType = 'embedding';
 
   constructor(modelName: string, providerOptions: CloudflareAiProviderOptions) {
-    const { accountId } = getCloudflareApiConfig(providerOptions.config, providerOptions.env);
+    const apiBaseUrl = getApiBaseUrl(providerOptions.config, providerOptions.env);
 
     super(modelName, {
       ...providerOptions,
       config: {
         ...providerOptions.config,
         apiKeyEnvar: 'CLOUDFLARE_API_KEY',
-        apiBaseUrl: `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/v1`,
+        apiBaseUrl,
       },
     });
 
@@ -122,11 +182,11 @@ export class CloudflareAiEmbeddingProvider extends OpenAiEmbeddingProvider {
   }
 
   id(): string {
-    return `cloudflare-ai:${this.modelName}`;
+    return `cloudflare-ai:${this.modelType}:${this.modelName}`;
   }
 
   toString(): string {
-    return `[Cloudflare AI Provider ${this.modelName}]`;
+    return `[Cloudflare AI ${this.modelType} Provider ${this.modelName}]`;
   }
 
   getApiKey(): string | undefined {
@@ -138,18 +198,12 @@ export class CloudflareAiEmbeddingProvider extends OpenAiEmbeddingProvider {
     return {
       provider: 'cloudflare-ai',
       model: this.modelName,
+      modelType: this.modelType,
       config: {
         ...this.config,
         ...(this.getApiKey() && { apiKey: undefined }),
       },
     };
-  }
-}
-
-// For backward compatibility, keep the old class names
-export class CloudflareAiCompletionProvider extends CloudflareAiChatCompletionProvider {
-  constructor(modelName: string, providerOptions: CloudflareAiProviderOptions) {
-    super(modelName, providerOptions);
   }
 }
 

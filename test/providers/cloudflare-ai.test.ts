@@ -194,6 +194,116 @@ describe('CloudflareAi Provider', () => {
         }),
       );
     });
+
+    it('Uses environment variables when config not provided', () => {
+      process.env.CLOUDFLARE_ACCOUNT_ID = 'env-account-id';
+      process.env.CLOUDFLARE_API_KEY = 'env-api-key';
+
+      const provider = new CloudflareAiChatCompletionProvider(testModelName, {});
+
+      expect(provider.id()).toBe(`cloudflare-ai:chat:${testModelName}`);
+      expect(provider.toString()).toBe(`[Cloudflare AI chat Provider ${testModelName}]`);
+
+      // Clean up
+      delete process.env.CLOUDFLARE_ACCOUNT_ID;
+      delete process.env.CLOUDFLARE_API_KEY;
+    });
+
+    it('Should use custom API base URL when provided', async () => {
+      const customConfig: CloudflareAiConfig = {
+        accountId: 'test-account',
+        apiKey: 'test-key',
+        apiBaseUrl: 'https://custom-cloudflare-api.example.com/v1',
+      };
+
+      const provider = new CloudflareAiChatCompletionProvider(testModelName, {
+        config: customConfig,
+      });
+
+      const responsePayload = {
+        choices: [
+          {
+            message: {
+              content: 'Test response with custom API base URL',
+            },
+          },
+        ],
+        usage: {
+          total_tokens: 50,
+          prompt_tokens: 25,
+          completion_tokens: 25,
+        },
+      };
+      const mockResponse = {
+        ...defaultMockResponse,
+        text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
+        ok: true,
+      };
+
+      mockFetch.mockResolvedValue(mockResponse);
+      await provider.callApi('Test prompt with custom URL');
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      // Verify that the custom API base URL is used in the request
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('custom-cloudflare-api.example.com'),
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer test-key',
+          }),
+        }),
+      );
+    });
+  });
+
+  describe('CloudflareAiCompletionProvider', () => {
+    it('Should handle completion provider', async () => {
+      const provider = new CloudflareAiCompletionProvider(testModelName, {
+        config: cloudflareMinimumConfig,
+      });
+
+      const responsePayload = {
+        choices: [
+          {
+            text: 'Test completion output',
+          },
+        ],
+        usage: {
+          total_tokens: 50,
+          prompt_tokens: 25,
+          completion_tokens: 25,
+        },
+      };
+      const mockResponse = {
+        ...defaultMockResponse,
+        text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
+        ok: true,
+      };
+
+      mockFetch.mockResolvedValue(mockResponse);
+      const result = await provider.callApi('Test completion prompt');
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(result.output).toBe(responsePayload.choices[0].text);
+      expect(result.tokenUsage).toEqual(tokenUsageDefaultResponse);
+      expect(provider.id()).toBe(`cloudflare-ai:completion:${testModelName}`);
+      expect(provider.toString()).toBe(`[Cloudflare AI completion Provider ${testModelName}]`);
+
+      // Check that the request uses the completions endpoint
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('completions'),
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer testApiKey',
+          }),
+          body: expect.stringContaining(testModelName),
+        }),
+      );
+    });
   });
 
   describe('CloudflareAiEmbeddingProvider', () => {
@@ -289,20 +399,6 @@ describe('CloudflareAi Provider', () => {
             config: { accountId: 'test-account' },
           }),
       ).toThrow('Cloudflare API token required');
-    });
-
-    it('Uses environment variables when config not provided', () => {
-      process.env.CLOUDFLARE_ACCOUNT_ID = 'env-account-id';
-      process.env.CLOUDFLARE_API_KEY = 'env-api-key';
-
-      const provider = new CloudflareAiChatCompletionProvider(testModelName, {});
-
-      expect(provider.id()).toBe(`cloudflare-ai:${testModelName}`);
-      expect(provider.toString()).toBe(`[Cloudflare AI Provider ${testModelName}]`);
-
-      // Clean up
-      delete process.env.CLOUDFLARE_ACCOUNT_ID;
-      delete process.env.CLOUDFLARE_API_KEY;
     });
   });
 });
