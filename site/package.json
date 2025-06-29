@@ -2,7 +2,6 @@
   "name": "promptfoo-docs",
   "version": "0.0.1",
   "license": "MIT",
-  "type": "module",
   "scripts": {
     "docusaurus": "docusaurus",
     "start": "NODE_ENV=development docusaurus start --port ${PORT:-3100}",
