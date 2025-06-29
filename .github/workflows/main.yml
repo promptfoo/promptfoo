@@ -119,6 +119,10 @@ jobs:
           # shellcheck disable=SC2046
           npx madge $(git ls-files '*.ts') --circular
 
+      - name: Verify Plugin Synchronization
+        run: |
+          npm run verify:plugin-sync
+
   shell-format:
     name: Shell Format Check
     timeout-minutes: 5
