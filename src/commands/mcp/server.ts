@@ -3,7 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import express from 'express';
 import logger from '../../logger';
-import { registerResources } from './resources/resources';
+import { registerResources } from './resources';
 import { registerAnalyzeEvaluationMetricsTool } from './tools/analyzeEvaluationMetrics';
 import { registerGetEvaluationDetailsTool } from './tools/getEvaluationDetails';
 import { registerGetTestPromptsTool } from './tools/getTestPrompts';
@@ -14,7 +14,7 @@ import { registerRunAssertionTool } from './tools/runAssertion';
 import { registerRunEvaluationTool } from './tools/runEvaluation';
 import { registerShareEvaluationTool } from './tools/shareEvaluation';
 import { registerTestAiProviderTool } from './tools/testAiProvider';
-import { registerValidatePrompfooConfigTool } from './tools/validatePrompfooConfig';
+import { registerValidatePromptfooConfigTool } from './tools/validatePromptfooConfig';
 
 /**
  * Creates an MCP server with tools for interacting with promptfoo
@@ -32,7 +32,7 @@ export async function createMcpServer() {
   registerGetTestPromptsTool(server);
   registerListTestDatasetsTool(server);
   registerAnalyzeEvaluationMetricsTool(server);
-  registerValidatePrompfooConfigTool(server);
+  registerValidatePromptfooConfigTool(server);
   registerTestAiProviderTool(server);
   registerRunAssertionTool(server);
   registerRunEvaluationTool(server);

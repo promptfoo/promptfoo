@@ -1,5 +1,5 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { loadDefaultConfig } from '../../../util/config/default';
+import { loadDefaultConfig } from '../../util/config/default';
 
 /**
  * Register MCP resources with the server

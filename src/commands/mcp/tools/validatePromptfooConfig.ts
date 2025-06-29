@@ -20,7 +20,7 @@ import { createToolResponse } from '../utils';
  *
  * This uses the same validation logic as `promptfoo validate` command.
  */
-export function registerValidatePrompfooConfigTool(server: McpServer) {
+export function registerValidatePromptfooConfigTool(server: McpServer) {
   server.tool(
     'validate_promptfoo_config',
     {
