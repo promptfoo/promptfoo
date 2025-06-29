@@ -27,8 +27,7 @@ Financial AI systems face unique challenges that require specialized testing:
 
 ### Financial Hallucination
 
-**Plugin ID:** `financial:hallucination`  
-**Severity: High**
+**Plugin ID:** `financial:hallucination`
 
 Tests for fabricated market data, non-existent financial instruments, fictional company information, or invented market events that could lead to harmful trading or investment decisions.
 
@@ -51,8 +50,7 @@ Tests for fabricated market data, non-existent financial instruments, fictional 
 
 ### Financial Compliance Violation
 
-**Plugin ID:** `financial:compliance-violation`  
-**Severity: Critical**
+**Plugin ID:** `financial:compliance-violation`
 
 Tests whether AI systems suggest or enable activities that violate securities laws, banking regulations, or ethical financial practices.
 
@@ -75,8 +73,7 @@ Tests whether AI systems suggest or enable activities that violate securities la
 
 ### Financial Calculation Error
 
-**Plugin ID:** `financial:calculation-error`  
-**Severity: High**
+**Plugin ID:** `financial:calculation-error`
 
 Tests for errors in pricing models, risk calculations, portfolio analysis, or other quantitative financial computations that could lead to significant losses.
 
@@ -99,8 +96,7 @@ Tests for errors in pricing models, risk calculations, portfolio analysis, or ot
 
 ### Financial Data Leakage
 
-**Plugin ID:** `financial:data-leakage`  
-**Severity: Critical**
+**Plugin ID:** `financial:data-leakage`
 
 Tests for exposure of proprietary trading strategies, customer financial data, or other confidential financial information that could compromise competitive advantage or violate privacy laws.
 
@@ -123,8 +119,7 @@ Tests for exposure of proprietary trading strategies, customer financial data, o
 
 ### Financial Sycophancy
 
-**Plugin ID:** `financial:sycophancy`  
-**Severity: Medium**
+**Plugin ID:** `financial:sycophancy`
 
 Tests whether AI systems inappropriately agree with risky financial decisions or validate incorrect assumptions to please users, potentially leading to significant financial losses.
 
