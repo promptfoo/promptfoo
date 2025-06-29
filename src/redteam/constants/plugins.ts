@@ -73,10 +73,94 @@ export const FOUNDATION_PLUGINS = [
   'religion',
 ] as const;
 
+export const GUARDRAILS_EVALUATION_PLUGINS = [
+  // === PROMPT INJECTION & JAILBREAKING (Core Requirement - 80% coverage) ===
+  'ascii-smuggling', // Unicode obfuscation attacks
+  'indirect-prompt-injection', // Context-based injection attacks
+  'cca', // Context compliance attacks
+  'hijacking', // Goal hijacking attempts
+  'system-prompt-override', // System prompt manipulation
+  'beavertails', // 330K jailbreak prompts dataset
+  'harmbench', // Academic jailbreak dataset
+  'pliny', // Curated jailbreak collection
+  'donotanswer', // Refusal testing dataset
+  'prompt-extraction', // System prompt disclosure
+
+  // === HARMFUL CONTENT (MITRE Framework - 90% block rate) ===
+  // WMD & Weapons
+  'harmful:chemical-biological-weapons', // WMD content (CRITICAL!)
+  'harmful:indiscriminate-weapons', // Mass destruction weapons
+  'harmful:weapons:ied', // IED instructions (CRITICAL!)
+
+  // Violence & Crime
+  'harmful:violent-crime', // Violent criminal activities
+  'harmful:sex-crime', // Sexual crime content (CRITICAL!)
+  'harmful:non-violent-crime', // Non-violent crimes
+  'harmful:graphic-content', // Graphic/violent content
+  'harmful:unsafe-practices', // Dangerous instructions (CRITICAL!)
+
+  // Exploitation & Abuse
+  'harmful:child-exploitation', // Child safety (CRITICAL!)
+  'harmful:harassment-bullying', // Harassment content (CRITICAL!)
+  'harmful:hate', // Hate speech
+  'harmful:self-harm', // Self-harm content
+  'harmful:sexual-content', // Sexual content
+  'harmful:insults', // Personal attacks
+  'harmful:profanity', // Profane language
+
+  // Radicalization & Extremism
+  'harmful:radicalization', // Extremist content (CRITICAL!)
+
+  // Cybercrime & Security
+  'harmful:cybercrime', // General cybercrime
+  'harmful:cybercrime:malicious-code', // Malicious code (CRITICAL!)
+
+  // Substances
+  'harmful:illegal-activities', // General illegal activities
+  'harmful:illegal-drugs', // Drug-related content
+  'harmful:illegal-drugs:meth', // Specific methamphetamine content
+
+  // Information Integrity
+  'harmful:misinformation-disinformation', // False information
+  'harmful:specialized-advice', // Unqualified advice
+
+  // Legal & IP
+  'harmful:copyright-violations', // Copyright infringement
+  'harmful:intellectual-property', // IP theft
+
+  // === SYSTEM SECURITY & INTEGRITY ===
+  'cyberseceval', // Meta's cybersecurity dataset (CRITICAL!)
+  'excessive-agency', // Unauthorized actions (CRITICAL!)
+  'hallucination', // False information generation (CRITICAL!)
+  'overreliance', // Over-dependence issues (CRITICAL!)
+  'divergent-repetition', // Resource exhaustion
+  'reasoning-dos', // Reasoning DoS attacks
+
+  // === PII & PRIVACY PROTECTION (UK/EU Compliance) ===
+  'pii:direct', // Direct PII disclosure
+  'pii:social', // Social engineering PII
+  'harmful:privacy', // Privacy violations
+
+  // === BIAS & FAIRNESS ===
+  'bias:gender', // Gender bias testing (CRITICAL!)
+
+  // === BUSINESS & COMPLIANCE ===
+  'contracts', // Unauthorized contractual commitments
+  'imitation', // Entity impersonation
+  'politics', // Political content/bias
+  'religion', // Religious content/bias
+] as const;
+
 export const AGENTIC_PLUGINS = [MEMORY_POISONING_PLUGIN_ID] as const;
 export type AgenticPlugin = (typeof AGENTIC_PLUGINS)[number];
 
-export const COLLECTIONS = ['default', 'foundation', 'harmful', 'pii'] as const;
+export const COLLECTIONS = [
+  'default',
+  'foundation',
+  'guardrails-evaluation',
+  'harmful',
+  'pii',
+] as const;
 export type Collection = (typeof COLLECTIONS)[number];
 
 export const UNALIGNED_PROVIDER_HARM_PLUGINS = {
