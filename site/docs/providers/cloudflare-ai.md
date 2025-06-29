@@ -6,6 +6,8 @@ sidebar_label: Cloudflare Workers AI
 
 This provider supports the [models](https://developers.cloudflare.com/workers-ai/models/) provided by Cloudflare Workers AI, a serverless edge embedding and inference runtime.
 
+The provider uses Cloudflare's OpenAI-compatible API endpoints, making it easy to migrate between OpenAI and Cloudflare AI or use them interchangeably.
+
 ## Required Configuration
 
 Calling the Workers AI requires the user to supply a Cloudflare account ID and API key with sufficient permissions to invoke the Workers AI REST endpoints.
@@ -41,15 +43,74 @@ tests:
 
 In addition to `apiKeyEnvar` allowed environment variable redirection for the `CLOUDFLARE_API_KEY` value, the `accountIdEnvar` can be used to similarly redirect to a value for the `CLOUDFLARE_ACCOUNT_ID`.
 
+## OpenAI Compatibility
+
+This provider leverages Cloudflare's OpenAI-compatible endpoints:
+
+- **Chat completions**: `https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1/chat/completions`
+- **Embeddings**: `https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1/embeddings`
+
+This means you can use standard OpenAI parameters like `temperature`, `max_tokens`, `top_p`, `frequency_penalty`, and `presence_penalty` with Cloudflare AI models.
+
+## Provider Types
+
+The Cloudflare AI provider supports three different provider types:
+
+### Chat Completion
+For conversational AI and instruction-following models:
+```yaml
+providers:
+  - cloudflare-ai:chat:@cf/meta/llama-3-8b-instruct
+```
+
+### Text Completion
+For completion-style tasks:
+```yaml
+providers:
+  - cloudflare-ai:completion:@cf/meta/llama-3-8b-instruct
+```
+
+### Embeddings
+For generating text embeddings:
+```yaml
+providers:
+  - cloudflare-ai:embedding:@cf/baai/bge-base-en-v1.5
+```
+
 ## Available Models and Model Parameters
 
-Cloudflare is constantly adding new models to its inventory. See their [official list of models](https://developers.cloudflare.com/workers-ai/models/) for a list of supported models. Different models support different parameters, which is supported by supplying those parameters as additional keys of the config object in the `promptfoo` config file.
+Cloudflare is constantly adding new models to its inventory. See their [official list of models](https://developers.cloudflare.com/workers-ai/models/) for a list of supported models. 
 
-For an example of how advanced embedding configuration should be supplied, see `examples/cloudflare-ai/embedding_configuration.yaml`
+Since the provider uses OpenAI-compatible endpoints, you can use standard OpenAI parameters:
 
-For an example of how advanced completion/chat configuration should be supplied, see `examples/cloudflare-ai/chat_advanced_configuration.yaml`
+```yaml
+providers:
+  - id: cloudflare-ai:chat:@cf/meta/llama-3-8b-instruct
+    config:
+      accountId: YOUR_ACCOUNT_ID_HERE
+      temperature: 0.7
+      max_tokens: 500
+      top_p: 0.9
+      frequency_penalty: 0.1
+      presence_penalty: 0.1
+```
 
-Different models support different parameters. While this provider strives to be relatively flexible, it is possible that not all possible parameters have been added. If you need support for a parameter that is not yet supported, please open up a PR to add support.
+For examples of different configurations:
+- Basic usage: `examples/cloudflare-ai/chat_config.yaml`
+- Advanced chat configuration: `examples/cloudflare-ai/chat_advanced_configuration.yaml`
+- Embedding configuration: `examples/cloudflare-ai/embedding_configuration.yaml`
+
+## Custom API Base URL
+
+You can override the default API base URL if needed:
+
+```yaml
+providers:
+  - id: cloudflare-ai:chat:@cf/meta/llama-3-8b-instruct
+    config:
+      accountId: YOUR_ACCOUNT_ID_HERE
+      apiBaseUrl: https://api.cloudflare.com/client/v4/accounts/YOUR_ACCOUNT_ID/ai/v1
+```
 
 ## Future Improvements
 
