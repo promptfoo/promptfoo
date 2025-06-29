@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { AbstractTool } from '../../../../src/commands/mcp/lib/base-tool';
+import { AbstractTool } from '../../../../src/commands/mcp/lib/baseTool';
 import { ValidationError } from '../../../../src/commands/mcp/lib/errors';
 import type { ToolResult } from '../../../../src/commands/mcp/lib/types';
 

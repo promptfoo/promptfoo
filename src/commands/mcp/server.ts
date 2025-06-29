@@ -3,7 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import express from 'express';
 import logger from '../../logger';
-import { registerResources } from './resources';
+import { registerResources } from './resources/resources';
 import { registerAnalyzeEvaluationMetricsTool } from './tools/analyzeEvaluationMetrics';
 import { registerGetEvaluationDetailsTool } from './tools/getEvaluationDetails';
 import { registerGetTestPromptsTool } from './tools/getTestPrompts';
