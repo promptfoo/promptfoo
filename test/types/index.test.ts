@@ -409,7 +409,14 @@ describe('TestSuiteConfigSchema', () => {
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = dirname(__filename);
   const rootDir = path.join(__dirname, '../..');
-  const configFiles = globSync(`${rootDir}/examples/**/promptfooconfig.{yaml,yml,json}`);
+  // Convert Windows backslashes to forward slashes for glob pattern
+  const globPattern = path.posix.join(
+    rootDir.replace(/\\/g, '/'),
+    'examples',
+    '**',
+    'promptfooconfig.{yaml,yml,json}',
+  );
+  const configFiles = globSync(globPattern);
 
   it('should find configuration files', () => {
     expect(configFiles.length).toBeGreaterThan(0);
