@@ -58,7 +58,7 @@
     "lint:tests": "eslint test --max-warnings=0",
     "lint": "npm run lint:src",
     "local:web": "npm run dev --prefix src/app",
-    "local": "node --loader ts-node/esm src/main.ts",
+    "local": "tsx src/main.ts",
     "preversion": "command -v gh >/dev/null 2>&1 || (echo \"Error: GitHub CLI required.\" && exit 1) && [ \"$(git rev-parse --abbrev-ref HEAD)\" = \"main\" ] || (echo \"Error: Must be on main branch to version\" && exit 1) && git pull origin main && git checkout -b \"chore/bump-version-$(date +%s)\"",
     "postversion": "npm run citation:generate && git add CITATION.cff && git commit --amend --no-edit && gh pr create --repo promptfoo/promptfoo --title \"chore: bump version $npm_package_version\" --body \"\"",
     "prepublishOnly": "npm run build:clean && npm run build",

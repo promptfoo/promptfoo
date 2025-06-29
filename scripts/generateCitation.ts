@@ -108,6 +108,6 @@ export const updateCitation = async (): Promise<void> => {
   console.log('CITATION.cff file has been updated.');
 };
 
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
   updateCitation().catch(console.error);
 }

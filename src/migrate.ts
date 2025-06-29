@@ -1,7 +1,10 @@
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
 import { getDb } from './database';
 import logger from './logger';
+
+const currentDir = path.dirname(fileURLToPath(import.meta.url));
 
 /**
  * Run migrations on the database, skipping the ones already applied. Also creates the sqlite db if it doesn't exist.
@@ -9,7 +12,7 @@ import logger from './logger';
 export async function runDbMigrations() {
   try {
     const db = getDb();
-    const migrationsFolder = path.join(__dirname, '..', 'drizzle');
+    const migrationsFolder = path.join(currentDir, '..', 'drizzle');
     logger.debug(`[DB Migrate] Running migrations from ${migrationsFolder}...`);
     await migrate(db, { migrationsFolder });
     logger.debug('[DB Migrate] Migrations completed');
@@ -18,6 +21,6 @@ export async function runDbMigrations() {
   }
 }
 
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
   runDbMigrations();
 }

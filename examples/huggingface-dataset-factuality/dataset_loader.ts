@@ -166,7 +166,7 @@ export async function generate_tests(cfg: DatasetLoaderConfig = {}): Promise<Pro
 }
 
 // When this module is run directly
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
   generate_tests()
     .then((tests) => {
       console.log('\nSample test case:');
