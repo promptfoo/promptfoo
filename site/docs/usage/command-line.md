@@ -27,6 +27,7 @@ The `promptfoo` command line utility supports the following subcommands:
   - `list evals`
   - `list prompts`
   - `list datasets`
+- `mcp` - Start a Model Context Protocol (MCP) server to expose promptfoo tools to AI agents and development environments.
 - `scan-model` - Scan ML models for security vulnerabilities.
 - `show <id>` - Show details of a specific resource (evaluation, prompt, dataset).
 - `delete <id>` - Delete a resource by its ID (currently, just evaluations)
@@ -157,6 +158,65 @@ List various resources like evaluations, prompts, and datasets.
 | ------------ | --------------------------------------------------------------- |
 | `-n`         | Show the first n records, sorted by descending date of creation |
 | `--ids-only` | Show only IDs without descriptions                              |
+
+## `promptfoo mcp`
+
+Start a Model Context Protocol (MCP) server to expose promptfoo's eval and testing capabilities as tools that AI agents and development environments can use.
+
+| Option                | Description                       | Default |
+| --------------------- | --------------------------------- | ------- |
+| `-p, --port <number>` | Port number for HTTP transport    | 3100    |
+| `--transport <type>`  | Transport type: "http" or "stdio" | http    |
+
+### Transport Types
+
+- **STDIO**: Best for desktop AI tools like Cursor, Claude Desktop, and local AI agents that communicate via standard input/output
+- **HTTP**: Best for web applications, APIs, and remote integrations that need HTTP endpoints
+
+### Examples
+
+```sh
+# Start MCP server with STDIO transport (for Cursor, Claude Desktop, etc.)
+npx promptfoo@latest mcp --transport stdio
+
+# Start MCP server with HTTP transport on default port
+npx promptfoo@latest mcp --transport http
+
+# Start MCP server with HTTP transport on custom port
+npx promptfoo@latest mcp --transport http --port 8080
+```
+
+### Available Tools
+
+The MCP server provides 11 tools for AI agents:
+
+**System Tools:**
+
+- `promptfoo_health_check` - Verify server status and connectivity
+
+**Eval Tools:**
+
+- `list_evaluations` - Browse eval runs with optional filtering
+- `get_evaluation_details` - Get detailed results for specific evals
+- `analyze_evaluation_metrics` - Calculate statistics and performance metrics
+- `run_evaluation` - Execute evals with custom parameters
+- `share_evaluation` - Create shareable URLs for results
+
+**Configuration Tools:**
+
+- `validate_promptfoo_config` - Validate configuration files
+
+**Provider Tools:**
+
+- `test_ai_provider` - Test provider connectivity and response quality
+
+**Testing Tools:**
+
+- `run_assertion` - Test individual assertions against outputs
+- `get_test_prompts` - Retrieve prompts for specific test cases
+- `list_test_datasets` - Browse available test datasets
+
+For detailed setup instructions and integration examples, see the [MCP Server documentation](/docs/integrations/mcp-server).
 
 ## `promptfoo show <id>`
 
