@@ -74,6 +74,7 @@ providers:
 | [Web Browser](./browser.md)                         | Custom - Automate web browser interactions        | `browser`                                          |
 | [Sequence](./sequence.md)                           | Custom - Multi-prompt sequencing                  | `sequence` with config.inputs array                |
 | [Simulated User](./simulated-user.md)               | Custom - Conversation simulator                   | `promptfoo:simulated-user`                         |
+| [Variable Optimizer](./variable-optimizer.md)       | Custom - Automated prompt variable optimization   | `promptfoo:variable-optimizer`                     |
 | [WatsonX](./watsonx.md)                             | IBM's WatsonX                                     | `watsonx:ibm/granite-13b-chat-v2`                  |
 | [X.AI](./xai.md)                                    | X.AI's models                                     | `xai:grok-3-beta`                                  |
 
