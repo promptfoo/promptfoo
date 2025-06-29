@@ -1,14 +1,29 @@
 ---
+title: 'Defending Against Data Poisoning Attacks on LLMs: A Comprehensive Guide'
 sidebar_label: Defending Against Data Poisoning Attacks on LLMs—A Comprehensive Guide
+description: 'Data poisoning attacks can corrupt LLMs during training, fine-tuning, and RAG retrieval. Discover how attackers exploit your data pipeline and how to defend against it.'
 image: /img/blog/data-poisoning/poisoning-panda.jpeg
+keywords:
+  [
+    data poisoning,
+    LLM security,
+    AI security,
+    model poisoning,
+    RAG poisoning,
+    OWASP Top 10,
+    machine learning security,
+    AI vulnerability,
+    model training security,
+  ]
 date: 2025-01-07
+authors: [vanessa]
 ---
 
 # Defending Against Data Poisoning Attacks on LLMs: A Comprehensive Guide
 
 Data poisoning remains a top concern on the [OWASP Top 10 for 2025](https://owasp.org/www-project-top-10-for-large-language-model-applications/). However, the scope of data poisoning has expanded since the 2023 version. Data poisoning is no longer strictly a risk during the training of Large Language Models (LLMs); it now encompasses all three stages of the LLM lifecycle: pre-training, fine-tuning, and retrieval from external sources. OWASP also highlights the risk of model poisoning from shared repositories or open-source platforms, where models may contain backdoors or embedded malware.
 
-When exploited, data poisoning can degrade model performance, produce biased or toxic content, exploit downstream systems, or tamper with the model’s generation capabilities.
+When exploited, data poisoning can degrade model performance, produce biased or toxic content, exploit downstream systems, or tamper with the model's generation capabilities.
 
 Understanding how these attacks work and implementing preventative measures is crucial for developers, security engineers, and technical leaders responsible for maintaining the security and reliability of these systems. This comprehensive guide delves into the nature of data poisoning attacks and offers strategies to safeguard against these threats.
 

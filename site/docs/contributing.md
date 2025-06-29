@@ -367,6 +367,17 @@ While promptfoo is primarily written in TypeScript, we support custom Python pro
 
 If you're adding new features or changing existing ones, please update the relevant documentation. We use [Docusaurus](https://docusaurus.io/) for our documentation. We strongly encourage examples and guides as well.
 
+### Documentation Standards
+
+Our documentation follows several standards to ensure accessibility:
+
+- **Human-readable**: Clean, well-structured markdown with clear navigation
+- **LLM-friendly**: Automated generation of [LLMs.txt files](https://llmstxt.org) for AI tool integration
+- **Searchable**: Proper headings, tags, and cross-references
+- **Example-driven**: Real-world examples and use cases
+
+### Development Workflow
+
 To run the documentation in development mode:
 
 ```bash

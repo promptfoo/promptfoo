@@ -20,7 +20,6 @@ import {
   type EvaluateTable,
   type PromptWithMetadata,
   type ResultsFile,
-  type TestCase,
   type TestCasesWithMetadata,
   type TestCasesWithMetadataPrompt,
   type UnifiedConfig,
@@ -212,11 +211,6 @@ export async function updateResult(
   }
 }
 
-export async function getLatestEval(filterDescription?: string): Promise<ResultsFile | undefined> {
-  const eval_ = await Eval.latest();
-  return await eval_?.toResultsFile();
-}
-
 export async function getPromptsWithPredicate(
   predicate: (result: ResultsFile) => boolean,
   limit: number,
@@ -280,12 +274,6 @@ export function getPromptsForTestCasesHash(
     const hash = sha256(testsJson);
     return hash === testCasesSha256;
   }, limit);
-}
-
-export function getPromptsForTestCases(testCases: TestCase[]) {
-  const testCasesJson = JSON.stringify(testCases);
-  const testCasesSha256 = sha256(testCasesJson);
-  return getPromptsForTestCasesHash(testCasesSha256);
 }
 
 export async function getTestCasesWithPredicate(

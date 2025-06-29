@@ -173,6 +173,7 @@ describe('redteam types', () => {
       plugins: ['plugin1', { id: 'plugin2' }],
       strategies: ['strategy1'],
       entities: ['entity1'],
+      maxConcurrency: 5,
       applicationDefinition: {
         purpose: 'test purpose',
         features: 'key app features',
@@ -199,6 +200,7 @@ describe('redteam types', () => {
     expect(config.description).toBe('Test config');
     expect(config.prompts).toHaveLength(2);
     expect(config.plugins).toHaveLength(2);
+    expect(config.maxConcurrency).toBe(5);
     expect(config.applicationDefinition.features).toBe('key app features');
     expect(config.applicationDefinition.hasAccessTo).toBe('allowed data and systems');
     expect(config.applicationDefinition.doesNotHaveAccessTo).toBe('restricted data');

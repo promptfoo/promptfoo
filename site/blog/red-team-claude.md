@@ -1,6 +1,19 @@
 ---
-date: 2025-05-22
+title: 'How to Red Team Claude: Complete Security Testing Guide for Anthropic Models'
+description: "Claude is known for safety, but how secure is it really? Step-by-step guide to red teaming Anthropic's models and uncovering hidden vulnerabilities."
 image: /img/blog/red-team-claude.png
+keywords:
+  [
+    Claude red teaming,
+    Anthropic security testing,
+    Claude jailbreak,
+    LLM security testing,
+    AI model evaluation,
+    Claude vulnerabilities,
+    AI safety testing,
+  ]
+date: 2025-05-22
+authors: [ian]
 ---
 
 # How to Red Team Claude
@@ -22,10 +35,7 @@ Let's start with a simple setup to test Claude 4 Sonnet, then explore more advan
 
 ```bash
 export ANTHROPIC_API_KEY=your_anthropic_api_key
-export OPENAI_API_KEY=your_openai_api_key  # For generating test cases
 ```
-
-> **Note**: We use OpenAI to generate adversarial test cases to avoid account issues with Anthropic.
 
 ### Step 1: Initialize Your Project
 

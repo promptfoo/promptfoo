@@ -126,30 +126,30 @@ export async function getPluginSeverityOverridesFromCloud(cloudProviderId: strin
 
     const body = await response.json();
 
-    if (body.pluginSeveritySetId) {
-      // Fetch the plugin severity set from the cloud:
-      const pluginSeveritySetResponse = await makeRequest(
-        `/redteam/plugins/severity-sets/${body.pluginSeveritySetId}`,
+    if (body.pluginSeverityOverrideId) {
+      // Fetch the plugin severity override from the cloud:
+      const overrideRes = await makeRequest(
+        `/redteam/plugins/severity-overrides/${body.pluginSeverityOverrideId}`,
         'GET',
       );
 
-      if (!pluginSeveritySetResponse.ok) {
-        const errorMessage = await pluginSeveritySetResponse.text();
-        const formattedErrorMessage = `Failed to fetch plugin severity set from cloud: ${errorMessage}. HTTP Status: ${pluginSeveritySetResponse.status} -- ${pluginSeveritySetResponse.statusText}.`;
+      if (!overrideRes.ok) {
+        const errorMessage = await overrideRes.text();
+        const formattedErrorMessage = `Failed to fetch plugin severity override from cloud: ${errorMessage}. HTTP Status: ${overrideRes.status} -- ${overrideRes.statusText}.`;
 
         logger.error(`[Cloud] ${formattedErrorMessage}`);
         throw new Error(formattedErrorMessage);
       }
 
-      const pluginSeveritySet = await pluginSeveritySetResponse.json();
+      const pluginSeverityOverride = await overrideRes.json();
 
       logger.debug(
-        `Plugin severity overrides ${pluginSeveritySet.id} fetched from cloud: ${JSON.stringify(pluginSeveritySet.members, null, 2)}`,
+        `Plugin severity overrides ${pluginSeverityOverride.id} fetched from cloud: ${JSON.stringify(pluginSeverityOverride.members, null, 2)}`,
       );
 
       return {
-        id: pluginSeveritySet.id,
-        severities: pluginSeveritySet.members.reduce(
+        id: pluginSeverityOverride.id,
+        severities: pluginSeverityOverride.members.reduce(
           (acc: Record<Plugin, Severity>, member: { pluginId: Plugin; severity: Severity }) => ({
             ...acc,
             [member.pluginId]: member.severity,

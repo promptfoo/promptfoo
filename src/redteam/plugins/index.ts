@@ -218,6 +218,7 @@ const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
         params.purpose,
         params.injectVar,
         params.n,
+        params.config,
       );
       return testCases.map((testCase) => ({
         ...testCase,
