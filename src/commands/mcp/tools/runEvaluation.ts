@@ -12,19 +12,19 @@ import { resolveConfigs } from '../../../util/config/load';
 import { createToolResponse } from '../utils';
 
 /**
- * Run an evaluation from a promptfoo config with optional test case filtering
+ * Run an eval from a promptfoo config with optional test case filtering
  *
  * Use this tool to:
  * - Test specific test cases from a promptfoo configuration
- * - Debug individual test scenarios without running full evaluations
+ * - Debug individual test scenarios without running full evals
  * - Validate changes to prompts, providers, or assertions quickly
- * - Run targeted evaluations during development and testing
+ * - Run targeted evals during development and testing
  *
  * Features:
  * - Load any promptfoo configuration file
  * - Select specific test cases by index or range
  * - Filter by specific prompts and/or providers
- * - Run full evaluation pipeline with all assertions and scoring
+ * - Run full eval pipeline with all assertions and scoring
  * - Return detailed results with metrics and grading information
  *
  * Perfect for:
@@ -89,13 +89,13 @@ export function registerRunEvaluationTool(server: McpServer) {
         .min(1)
         .max(20)
         .optional()
-        .describe('Maximum concurrent evaluations (1-20, default: 4)'),
+        .describe('Maximum concurrent evals (1-20, default: 4)'),
       timeoutMs: z
         .number()
         .min(1000)
         .max(300000)
         .optional()
-        .describe('Timeout per evaluation in milliseconds (1s-5min, default: 30s)'),
+        .describe('Timeout per eval in milliseconds (1s-5min, default: 30s)'),
     },
     async (args) => {
       try {
@@ -244,15 +244,15 @@ export function registerRunEvaluationTool(server: McpServer) {
         };
 
         logger.debug(
-          `Running evaluation with ${filteredTests.length} test cases, ${filteredPrompts.length} prompts, ${filteredProviders.length} providers`,
+          `Running eval with ${filteredTests.length} test cases, ${filteredPrompts.length} prompts, ${filteredProviders.length} providers`,
         );
 
-        // Create evaluation record
+        // Create eval record
         const evalRecord = await Eval.create(config, filteredTestSuite.prompts, {
           id: `mcp-eval-${Date.now()}`,
         });
 
-        // Run the evaluation
+        // Run the eval
         const startTime = Date.now();
         const result = await evaluate(filteredTestSuite, evalRecord, {
           maxConcurrency,
@@ -264,8 +264,8 @@ export function registerRunEvaluationTool(server: McpServer) {
         const summary = await result.toEvaluateSummary();
 
         // Prepare detailed response
-        const evaluationData = {
-          evaluation: {
+        const evalData = {
+          eval: {
             id: result.id,
             status: 'completed',
             duration: endTime - startTime,
@@ -297,7 +297,7 @@ export function registerRunEvaluationTool(server: McpServer) {
           },
           results: {
             stats: summary.stats,
-            totalEvaluations: summary.results.length,
+            totalEvals: summary.results.length,
             successRate:
               summary.results.length > 0
                 ? ((summary.stats.successes / summary.results.length) * 100).toFixed(1) + '%'
@@ -328,7 +328,7 @@ export function registerRunEvaluationTool(server: McpServer) {
                 cost: result.cost,
                 latencyMs: result.latencyMs,
               },
-              evaluation: {
+              eval: {
                 success: result.success,
                 score: result.score,
                 namedScores: result.namedScores,
@@ -365,10 +365,10 @@ export function registerRunEvaluationTool(server: McpServer) {
               : [],
         };
 
-        return createToolResponse('run_evaluation', true, evaluationData);
+        return createToolResponse('run_evaluation', true, evalData);
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-        logger.error(`Evaluation execution failed: ${errorMessage}`);
+        logger.error(`Eval execution failed: ${errorMessage}`);
 
         const errorData = {
           configuration: {

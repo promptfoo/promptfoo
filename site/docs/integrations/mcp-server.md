@@ -62,19 +62,12 @@ Restart your AI tool after adding the configuration.
 - **`get_evaluation_details`** - Get complete results for an eval
 - **`run_evaluation`** - Execute evals with custom parameters
 - **`validate_promptfoo_config`** - Check config file syntax
-- **`test_ai_provider`** - Test provider connectivity
+- **`test_provider`** - Test provider connectivity
 
 ### Analysis & Sharing
 
-- **`analyze_evaluation_metrics`** - Calculate performance stats
 - **`share_evaluation`** - Create shareable result URLs
 - **`run_assertion`** - Test individual grading rules
-
-### Data Access
-
-- **`get_test_prompts`** - Get prompts for specific test cases
-- **`list_test_datasets`** - Browse available datasets
-- **`promptfoo_health_check`** - Check server status
 
 ## Troubleshooting
 
@@ -95,7 +88,7 @@ npx promptfoo@latest validate   # Check config
 
 - "Eval not found": Use `list_evaluations` to get valid IDs
 - "Config error": Run `validate_promptfoo_config`
-- "Provider error": Use `test_ai_provider` to diagnose
+- "Provider error": Use `test_provider` to diagnose
 
 ## See Also
 

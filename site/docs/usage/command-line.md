@@ -188,33 +188,22 @@ npx promptfoo@latest mcp --transport http --port 8080
 
 ### Available Tools
 
-The MCP server provides 11 tools for AI agents:
-
-**System Tools:**
-
-- `promptfoo_health_check` - Verify server status and connectivity
+The MCP server provides 7 tools for AI agents:
 
 **Eval Tools:**
-
 - `list_evaluations` - Browse eval runs with optional filtering
 - `get_evaluation_details` - Get detailed results for specific evals
-- `analyze_evaluation_metrics` - Calculate statistics and performance metrics
 - `run_evaluation` - Execute evals with custom parameters
 - `share_evaluation` - Create shareable URLs for results
 
 **Configuration Tools:**
-
 - `validate_promptfoo_config` - Validate configuration files
 
 **Provider Tools:**
-
-- `test_ai_provider` - Test provider connectivity and response quality
+- `test_provider` - Test provider connectivity and response quality
 
 **Testing Tools:**
-
 - `run_assertion` - Test individual assertions against outputs
-- `get_test_prompts` - Retrieve prompts for specific test cases
-- `list_test_datasets` - Browse available test datasets
 
 For detailed setup instructions and integration examples, see the [MCP Server documentation](/docs/integrations/mcp-server).
 

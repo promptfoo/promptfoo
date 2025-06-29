@@ -9,10 +9,10 @@ import type { ValidationResults } from '../types';
 import { createToolResponse } from '../utils';
 
 /**
- * Validate promptfoo configuration files before running evaluations
+ * Validate promptfoo configuration files before running evals
  *
  * Use this tool to:
- * - Catch configuration errors before evaluation runs
+ * - Catch configuration errors before eval runs
  * - Validate YAML/JSON syntax and schema compliance
  * - Check provider configurations and credentials
  * - Verify prompt and test case definitions
@@ -100,7 +100,7 @@ export function registerValidatePromptfooConfigTool(server: McpServer) {
             (Array.isArray(config.providers) && config.providers.length === 0)
           ) {
             validationResults.warnings.push(
-              'No providers defined - add providers like "openai:gpt-4" to run evaluations',
+              'No providers defined - add providers like "openai:gpt-4" to run evals',
             );
           }
 
@@ -117,7 +117,7 @@ export function registerValidatePromptfooConfigTool(server: McpServer) {
             const totalEvals = promptCount * providerCount * testCount;
 
             validationResults.warnings.push(
-              `Configuration ready: ${promptCount} prompts × ${providerCount} providers × ${testCount} tests = ${totalEvals} total evaluations`,
+              `Configuration ready: ${promptCount} prompts × ${providerCount} providers × ${testCount} tests = ${totalEvals} total evals`,
             );
           }
         }

@@ -17,9 +17,9 @@ import { createToolResponse, withTimeout } from '../utils';
  *
  * Supports all promptfoo provider formats including custom providers.
  */
-export function registerTestAiProviderTool(server: McpServer) {
+export function registerTestProviderTool(server: McpServer) {
   server.tool(
-    'test_ai_provider',
+    'test_provider',
     {
       provider: z
         .union([
@@ -91,7 +91,7 @@ export function registerTestAiProviderTool(server: McpServer) {
           providerToLoad = provider;
         } else {
           return createToolResponse(
-            'test_ai_provider',
+            'test_provider',
             false,
             undefined,
             'Invalid provider format. Use string like "openai:gpt-4" or object like {"id": "provider-name", "config": {...}}',
@@ -109,7 +109,7 @@ export function registerTestAiProviderTool(server: McpServer) {
           }
         } catch (error) {
           return createToolResponse(
-            'test_ai_provider',
+            'test_provider',
             false,
             undefined,
             `Failed to load provider "${providerId}": ${error instanceof Error ? error.message : 'Unknown error'}. Check provider ID format and credentials.`,
@@ -118,7 +118,7 @@ export function registerTestAiProviderTool(server: McpServer) {
 
         if (!apiProvider) {
           return createToolResponse(
-            'test_ai_provider',
+            'test_provider',
             false,
             undefined,
             `Provider "${providerId}" could not be loaded. Verify the provider ID is correct and properly configured.`,
@@ -154,7 +154,7 @@ export function registerTestAiProviderTool(server: McpServer) {
             },
           };
 
-          return createToolResponse('test_ai_provider', true, testResult);
+          return createToolResponse('test_provider', true, testResult);
         } catch (error) {
           const endTime = Date.now();
           const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
@@ -173,7 +173,7 @@ export function registerTestAiProviderTool(server: McpServer) {
             },
           };
 
-          return createToolResponse('test_ai_provider', false, testResult);
+          return createToolResponse('test_provider', false, testResult);
         }
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
@@ -187,7 +187,7 @@ export function registerTestAiProviderTool(server: McpServer) {
           timedOut: false,
         };
 
-        return createToolResponse('test_ai_provider', false, testResult);
+        return createToolResponse('test_provider', false, testResult);
       }
     },
   );

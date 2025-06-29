@@ -4,16 +4,12 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import express from 'express';
 import logger from '../../logger';
 import { registerResources } from './resources';
-import { registerAnalyzeEvaluationMetricsTool } from './tools/analyzeEvaluationMetrics';
 import { registerGetEvaluationDetailsTool } from './tools/getEvaluationDetails';
-import { registerGetTestPromptsTool } from './tools/getTestPrompts';
-import { registerHealthCheckTool } from './tools/healthCheck';
 import { registerListEvaluationsTool } from './tools/listEvaluations';
-import { registerListTestDatasetsTool } from './tools/listTestDatasets';
 import { registerRunAssertionTool } from './tools/runAssertion';
 import { registerRunEvaluationTool } from './tools/runEvaluation';
 import { registerShareEvaluationTool } from './tools/shareEvaluation';
-import { registerTestAiProviderTool } from './tools/testAiProvider';
+import { registerTestProviderTool } from './tools/testProvider';
 import { registerValidatePromptfooConfigTool } from './tools/validatePromptfooConfig';
 
 /**
@@ -26,14 +22,10 @@ export async function createMcpServer() {
   });
 
   // Register all tools
-  registerHealthCheckTool(server);
   registerListEvaluationsTool(server);
   registerGetEvaluationDetailsTool(server);
-  registerGetTestPromptsTool(server);
-  registerListTestDatasetsTool(server);
-  registerAnalyzeEvaluationMetricsTool(server);
   registerValidatePromptfooConfigTool(server);
-  registerTestAiProviderTool(server);
+  registerTestProviderTool(server);
   registerRunAssertionTool(server);
   registerRunEvaluationTool(server);
   registerShareEvaluationTool(server);

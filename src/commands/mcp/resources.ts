@@ -39,23 +39,13 @@ export function registerResources(server: McpServer) {
     const toolDocs = {
       tools: [
         {
-          name: 'promptfoo_health_check',
-          description: 'Check server health and status',
-          parameters: 'none',
-        },
-        {
           name: 'list_evaluations',
-          description: 'List all evaluations, optionally filtered by dataset ID',
+          description: 'List all evals, optionally filtered by dataset ID',
           parameters: 'datasetId?: string',
         },
         {
           name: 'get_evaluation_details',
-          description: 'Get detailed evaluation results by ID',
-          parameters: 'id: string (required)',
-        },
-        {
-          name: 'analyze_evaluation_metrics',
-          description: 'Get summary statistics for an evaluation',
+          description: 'Get detailed eval results by ID',
           parameters: 'id: string (required)',
         },
         {
@@ -64,20 +54,10 @@ export function registerResources(server: McpServer) {
           parameters: 'configPaths?: string[] (defaults to promptfooconfig.yaml)',
         },
         {
-          name: 'test_ai_provider',
+          name: 'test_provider',
           description: 'Test provider connectivity and response quality with timeout support',
           parameters:
             'provider: string | object (required), testPrompt?: string, timeoutMs?: number (1000-300000)',
-        },
-        {
-          name: 'get_test_prompts',
-          description: 'Get prompts associated with a test case hash',
-          parameters: 'sha256hash: string (required)',
-        },
-        {
-          name: 'list_test_datasets',
-          description: 'List all available datasets',
-          parameters: 'none',
         },
         {
           name: 'run_assertion',
@@ -88,13 +68,13 @@ export function registerResources(server: McpServer) {
         {
           name: 'run_evaluation',
           description:
-            'Run an evaluation from a promptfoo config with optional test case filtering',
+            'Run an eval from a promptfoo config with optional test case filtering',
           parameters:
             'configPath?: string, testCaseIndices?: number | number[] | {start: number, end: number}, promptFilter?: string | string[], providerFilter?: string | string[], maxConcurrency?: number, timeoutMs?: number',
         },
         {
           name: 'share_evaluation',
-          description: 'Share an evaluation to create a publicly accessible URL',
+          description: 'Share an eval to create a publicly accessible URL',
           parameters: 'evalId?: string, showAuth?: boolean, overwrite?: boolean',
         },
       ],
