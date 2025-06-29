@@ -12,7 +12,6 @@ import { AnthropicCompletionProvider } from '../../src/providers/anthropic/compl
 import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
 import { AzureCompletionProvider } from '../../src/providers/azure/completion';
 import { AwsBedrockCompletionProvider } from '../../src/providers/bedrock/index';
-
 import { VertexChatProvider, VertexEmbeddingProvider } from '../../src/providers/google/vertex';
 import {
   HuggingfaceTextGenerationProvider,
@@ -360,8 +359,6 @@ describe('call provider apis', () => {
     });
   });
 
-
-
   describe.each([
     ['python rag.py', 'python', ['rag.py']],
     ['echo "hello world"', 'echo', ['hello world']],
@@ -692,8 +689,6 @@ describe('loadApiProvider', () => {
     expect(provider).toBeInstanceOf(PythonProvider);
     expect(provider.id()).toBe('python:script.py:default');
   });
-
-
 
   it('loadApiProvider with promptfoo:redteam:iterative', async () => {
     const provider = await loadApiProvider('promptfoo:redteam:iterative', {

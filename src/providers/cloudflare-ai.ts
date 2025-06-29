@@ -2,11 +2,7 @@ import type { EnvVarKey } from '../envars';
 import { getEnvString } from '../envars';
 import type {
   ApiProvider,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  ProviderEmbeddingResponse,
   ProviderOptions,
-  ProviderResponse,
 } from '../types';
 import type { EnvOverrides } from '../types/env';
 import invariant from '../util/invariant';

@@ -1,4 +1,4 @@
-import { clearCache, disableCache, enableCache } from '../../src/cache';
+import { clearCache, enableCache } from '../../src/cache';
 import {
   CloudflareAiChatCompletionProvider,
   CloudflareAiCompletionProvider,
@@ -274,18 +274,20 @@ describe('CloudflareAi Provider', () => {
 
   describe('Provider configuration validation', () => {
     it('requires account ID', () => {
-      expect(() =>
-        new CloudflareAiChatCompletionProvider(testModelName, {
-          config: { apiKey: 'test-key' },
-        }),
+      expect(
+        () =>
+          new CloudflareAiChatCompletionProvider(testModelName, {
+            config: { apiKey: 'test-key' },
+          }),
       ).toThrow('Cloudflare account ID required');
     });
 
     it('requires API key', () => {
-      expect(() =>
-        new CloudflareAiChatCompletionProvider(testModelName, {
-          config: { accountId: 'test-account' },
-        }),
+      expect(
+        () =>
+          new CloudflareAiChatCompletionProvider(testModelName, {
+            config: { accountId: 'test-account' },
+          }),
       ).toThrow('Cloudflare API token required');
     });
 
@@ -303,4 +305,4 @@ describe('CloudflareAi Provider', () => {
       delete process.env.CLOUDFLARE_API_KEY;
     });
   });
-}); 
+});
