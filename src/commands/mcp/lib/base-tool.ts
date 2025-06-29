@@ -26,7 +26,7 @@ export abstract class AbstractTool implements BaseTool {
    * Register this tool with the MCP server
    */
   register(server: McpServer): void {
-    server.tool(this.name, this.schema ? { args: this.schema } : {}, async (args: unknown) => {
+    server.tool(this.name, this.schema || {}, async (args: unknown) => {
       try {
         // Validate arguments if schema is provided
         if (this.schema) {

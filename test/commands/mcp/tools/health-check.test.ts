@@ -28,7 +28,7 @@ describe('HealthCheckTool', () => {
 
       expect(mockServer.tool).toHaveBeenCalledWith(
         'promptfoo_health_check',
-        { args: expect.any(Object) },
+        expect.any(Object),
         expect.any(Function),
       );
     });

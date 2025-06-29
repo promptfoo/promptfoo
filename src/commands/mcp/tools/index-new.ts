@@ -8,10 +8,10 @@ export * from './evaluation';
 export * from './configuration';
 
 // Provider tools
-export * from './provider';
+// export * from './provider'; // TODO: Uncomment when provider tools are implemented
 
 // Testing tools
-export * from './testing';
+// export * from './testing'; // TODO: Uncomment when testing tools are implemented
 
 // Legacy tool registration functions for backward compatibility
 // These will be deprecated once all tools are migrated to the new structure

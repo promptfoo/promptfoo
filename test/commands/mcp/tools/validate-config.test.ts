@@ -57,7 +57,7 @@ describe('ValidateConfigTool', () => {
 
       expect(mockServer.tool).toHaveBeenCalledWith(
         'validate_promptfoo_config',
-        { args: expect.any(Object) },
+        expect.any(Object),
         expect.any(Function),
       );
     });
@@ -65,11 +65,26 @@ describe('ValidateConfigTool', () => {
 
   describe('schema validation', () => {
     it('should accept valid arguments with configPaths', async () => {
-      const mockConfig = { prompts: ['test'], providers: ['openai'], tests: [{ input: 'test' }] };
-      const mockTestSuite = { tests: [{ input: 'test' }] };
+      const mockConfig = {
+        prompts: ['test'],
+        providers: ['openai'],
+        tests: [{ input: 'test', vars: {}, assert: [] }],
+      } as any;
+      const mockTestSuite = {
+        prompts: [{ raw: 'test', label: 'test' }],
+        providers: [{ id: 'openai' }],
+        tests: [{ input: 'test', vars: {}, assert: [] }],
+      } as any;
 
-      mockLoadDefaultConfig.mockResolvedValue({ defaultConfig: {} });
-      mockResolveConfigs.mockResolvedValue({ config: mockConfig, testSuite: mockTestSuite });
+      mockLoadDefaultConfig.mockResolvedValue({
+        defaultConfig: {},
+        defaultConfigPath: undefined,
+      } as any);
+      mockResolveConfigs.mockResolvedValue({
+        config: mockConfig,
+        testSuite: mockTestSuite,
+        basePath: '.',
+      } as any);
       mockUnifiedConfigSchema.safeParse.mockReturnValue({ success: true });
       mockTestSuiteSchema.safeParse.mockReturnValue({ success: true });
 
@@ -84,11 +99,26 @@ describe('ValidateConfigTool', () => {
     });
 
     it('should accept empty arguments (uses default config path)', async () => {
-      const mockConfig = { prompts: ['test'], providers: ['openai'], tests: [{ input: 'test' }] };
-      const mockTestSuite = { tests: [{ input: 'test' }] };
+      const mockConfig = {
+        prompts: ['test'],
+        providers: ['openai'],
+        tests: [{ input: 'test', vars: {}, assert: [] }],
+      } as any;
+      const mockTestSuite = {
+        prompts: [{ raw: 'test', label: 'test' }],
+        providers: [{ id: 'openai' }],
+        tests: [{ input: 'test', vars: {}, assert: [] }],
+      } as any;
 
-      mockLoadDefaultConfig.mockResolvedValue({ defaultConfig: {} });
-      mockResolveConfigs.mockResolvedValue({ config: mockConfig, testSuite: mockTestSuite });
+      mockLoadDefaultConfig.mockResolvedValue({
+        defaultConfig: {},
+        defaultConfigPath: undefined,
+      } as any);
+      mockResolveConfigs.mockResolvedValue({
+        config: mockConfig,
+        testSuite: mockTestSuite,
+        basePath: '.',
+      } as any);
       mockUnifiedConfigSchema.safeParse.mockReturnValue({ success: true });
       mockTestSuiteSchema.safeParse.mockReturnValue({ success: true });
 
@@ -116,11 +146,26 @@ describe('ValidateConfigTool', () => {
     });
 
     it('should accept strict mode flag', async () => {
-      const mockConfig = { prompts: ['test'], providers: ['openai'], tests: [{ input: 'test' }] };
-      const mockTestSuite = { tests: [{ input: 'test' }] };
+      const mockConfig = {
+        prompts: ['test'],
+        providers: ['openai'],
+        tests: [{ input: 'test', vars: {}, assert: [] }],
+      } as any;
+      const mockTestSuite = {
+        prompts: [{ raw: 'test', label: 'test' }],
+        providers: [{ id: 'openai' }],
+        tests: [{ input: 'test', vars: {}, assert: [] }],
+      } as any;
 
-      mockLoadDefaultConfig.mockResolvedValue({ defaultConfig: {} });
-      mockResolveConfigs.mockResolvedValue({ config: mockConfig, testSuite: mockTestSuite });
+      mockLoadDefaultConfig.mockResolvedValue({
+        defaultConfig: {},
+        defaultConfigPath: undefined,
+      } as any);
+      mockResolveConfigs.mockResolvedValue({
+        config: mockConfig,
+        testSuite: mockTestSuite,
+        basePath: '.',
+      } as any);
       mockUnifiedConfigSchema.safeParse.mockReturnValue({ success: true });
       mockTestSuiteSchema.safeParse.mockReturnValue({ success: true });
 
@@ -140,14 +185,23 @@ describe('ValidateConfigTool', () => {
       const mockConfig = {
         prompts: ['test prompt'],
         providers: ['openai:gpt-4'],
-        tests: [{ input: 'test input' }],
-      };
-      const mockTestSuite = {
         tests: [{ input: 'test input', vars: {}, assert: [] }],
-      };
+      } as any;
+      const mockTestSuite = {
+        prompts: [{ raw: 'test prompt', label: 'test prompt' }],
+        providers: [{ id: 'openai:gpt-4' }],
+        tests: [{ input: 'test input', vars: {}, assert: [] }],
+      } as any;
 
-      mockLoadDefaultConfig.mockResolvedValue({ defaultConfig: {} });
-      mockResolveConfigs.mockResolvedValue({ config: mockConfig, testSuite: mockTestSuite });
+      mockLoadDefaultConfig.mockResolvedValue({
+        defaultConfig: {},
+        defaultConfigPath: undefined,
+      } as any);
+      mockResolveConfigs.mockResolvedValue({
+        config: mockConfig,
+        testSuite: mockTestSuite,
+        basePath: '.',
+      } as any);
       mockUnifiedConfigSchema.safeParse.mockReturnValue({ success: true });
       mockTestSuiteSchema.safeParse.mockReturnValue({ success: true });
 
@@ -170,11 +224,26 @@ describe('ValidateConfigTool', () => {
     });
 
     it('should include warnings for missing components', async () => {
-      const mockConfig = {};
-      const mockTestSuite = {};
+      const mockConfig = {
+        prompts: [],
+        providers: [],
+        tests: [],
+      } as any;
+      const mockTestSuite = {
+        prompts: [],
+        providers: [],
+        tests: [],
+      } as any;
 
-      mockLoadDefaultConfig.mockResolvedValue({ defaultConfig: {} });
-      mockResolveConfigs.mockResolvedValue({ config: mockConfig, testSuite: mockTestSuite });
+      mockLoadDefaultConfig.mockResolvedValue({
+        defaultConfig: {},
+        defaultConfigPath: undefined,
+      } as any);
+      mockResolveConfigs.mockResolvedValue({
+        config: mockConfig,
+        testSuite: mockTestSuite,
+        basePath: '.',
+      } as any);
       mockUnifiedConfigSchema.safeParse.mockReturnValue({ success: true });
       mockTestSuiteSchema.safeParse.mockReturnValue({ success: true });
 
@@ -201,11 +270,22 @@ describe('ValidateConfigTool', () => {
         prompts: [],
         providers: [],
         tests: [],
-      };
-      const mockTestSuite = { tests: [] };
+      } as any;
+      const mockTestSuite = {
+        prompts: [],
+        providers: [],
+        tests: [],
+      } as any;
 
-      mockLoadDefaultConfig.mockResolvedValue({ defaultConfig: {} });
-      mockResolveConfigs.mockResolvedValue({ config: mockConfig, testSuite: mockTestSuite });
+      mockLoadDefaultConfig.mockResolvedValue({
+        defaultConfig: {},
+        defaultConfigPath: undefined,
+      } as any);
+      mockResolveConfigs.mockResolvedValue({
+        config: mockConfig,
+        testSuite: mockTestSuite,
+        basePath: '.',
+      } as any);
       mockUnifiedConfigSchema.safeParse.mockReturnValue({ success: true });
       mockTestSuiteSchema.safeParse.mockReturnValue({ success: true });
 
@@ -229,11 +309,22 @@ describe('ValidateConfigTool', () => {
 
   describe('validation errors', () => {
     it('should return errors when config schema validation fails', async () => {
-      const mockConfig = { invalid: 'config' };
-      const mockTestSuite = { tests: [] };
+      const mockConfig = { prompts: [], providers: [], tests: [] } as any;
+      const mockTestSuite = {
+        prompts: [],
+        providers: [],
+        tests: [],
+      } as any;
 
-      mockLoadDefaultConfig.mockResolvedValue({ defaultConfig: {} });
-      mockResolveConfigs.mockResolvedValue({ config: mockConfig, testSuite: mockTestSuite });
+      mockLoadDefaultConfig.mockResolvedValue({
+        defaultConfig: {},
+        defaultConfigPath: undefined,
+      } as any);
+      mockResolveConfigs.mockResolvedValue({
+        config: mockConfig,
+        testSuite: mockTestSuite,
+        basePath: '.',
+      } as any);
       mockUnifiedConfigSchema.safeParse.mockReturnValue({
         success: false,
         error: { message: 'Config validation failed' },
@@ -252,11 +343,26 @@ describe('ValidateConfigTool', () => {
     });
 
     it('should return errors when test suite schema validation fails', async () => {
-      const mockConfig = { prompts: ['test'] };
-      const mockTestSuite = { invalid: 'suite' };
+      const mockConfig = {
+        prompts: ['test'],
+        providers: ['openai'],
+        tests: [],
+      } as any;
+      const mockTestSuite = {
+        prompts: [],
+        providers: [],
+        tests: [],
+      } as any;
 
-      mockLoadDefaultConfig.mockResolvedValue({ defaultConfig: {} });
-      mockResolveConfigs.mockResolvedValue({ config: mockConfig, testSuite: mockTestSuite });
+      mockLoadDefaultConfig.mockResolvedValue({
+        defaultConfig: {},
+        defaultConfigPath: undefined,
+      } as any);
+      mockResolveConfigs.mockResolvedValue({
+        config: mockConfig,
+        testSuite: mockTestSuite,
+        basePath: '.',
+      } as any);
       mockUnifiedConfigSchema.safeParse.mockReturnValue({ success: true });
       mockTestSuiteSchema.safeParse.mockReturnValue({
         success: false,
@@ -275,11 +381,18 @@ describe('ValidateConfigTool', () => {
     });
 
     it('should return errors for both config and test suite validation failures', async () => {
-      const mockConfig = { invalid: 'config' };
-      const mockTestSuite = { invalid: 'suite' };
+      const mockConfig = {} as any;
+      const mockTestSuite = {} as any;
 
-      mockLoadDefaultConfig.mockResolvedValue({ defaultConfig: {} });
-      mockResolveConfigs.mockResolvedValue({ config: mockConfig, testSuite: mockTestSuite });
+      mockLoadDefaultConfig.mockResolvedValue({
+        defaultConfig: {},
+        defaultConfigPath: undefined,
+      } as any);
+      mockResolveConfigs.mockResolvedValue({
+        config: mockConfig,
+        testSuite: mockTestSuite,
+        basePath: '.',
+      } as any);
       mockUnifiedConfigSchema.safeParse.mockReturnValue({
         success: false,
         error: { message: 'Config validation failed' },
@@ -320,7 +433,10 @@ describe('ValidateConfigTool', () => {
     });
 
     it('should handle resolveConfigs errors', async () => {
-      mockLoadDefaultConfig.mockResolvedValue({ defaultConfig: {} });
+      mockLoadDefaultConfig.mockResolvedValue({
+        defaultConfig: {},
+        defaultConfigPath: undefined,
+      } as any);
       mockResolveConfigs.mockRejectedValue(new Error('Failed to resolve config'));
 
       validateConfigTool.register(mockServer);
@@ -336,7 +452,10 @@ describe('ValidateConfigTool', () => {
     });
 
     it('should include config path in error when provided', async () => {
-      mockLoadDefaultConfig.mockResolvedValue({ defaultConfig: {} });
+      mockLoadDefaultConfig.mockResolvedValue({
+        defaultConfig: {},
+        defaultConfigPath: undefined,
+      } as any);
       mockResolveConfigs.mockRejectedValue(new Error('Config file not found'));
 
       validateConfigTool.register(mockServer);
@@ -352,7 +471,10 @@ describe('ValidateConfigTool', () => {
     });
 
     it('should handle unknown error types', async () => {
-      mockLoadDefaultConfig.mockResolvedValue({ defaultConfig: {} });
+      mockLoadDefaultConfig.mockResolvedValue({
+        defaultConfig: {},
+        defaultConfigPath: undefined,
+      } as any);
       mockResolveConfigs.mockRejectedValue('String error');
 
       validateConfigTool.register(mockServer);
@@ -368,11 +490,18 @@ describe('ValidateConfigTool', () => {
 
   describe('integration scenarios', () => {
     it('should handle multiple config paths', async () => {
-      const mockConfig = { prompts: ['test'] };
-      const mockTestSuite = { tests: [] };
+      const mockConfig = { prompts: ['test'] } as any;
+      const mockTestSuite = { tests: [] } as any;
 
-      mockLoadDefaultConfig.mockResolvedValue({ defaultConfig: {} });
-      mockResolveConfigs.mockResolvedValue({ config: mockConfig, testSuite: mockTestSuite });
+      mockLoadDefaultConfig.mockResolvedValue({
+        defaultConfig: {},
+        defaultConfigPath: undefined,
+      } as any);
+      mockResolveConfigs.mockResolvedValue({
+        config: mockConfig,
+        testSuite: mockTestSuite,
+        basePath: '.',
+      } as any);
       mockUnifiedConfigSchema.safeParse.mockReturnValue({ success: true });
       mockTestSuiteSchema.safeParse.mockReturnValue({ success: true });
 
@@ -396,11 +525,18 @@ describe('ValidateConfigTool', () => {
         prompts: ['prompt1', 'prompt2'],
         providers: ['provider1', 'provider2', 'provider3'],
         tests: [{ input: 'test1' }, { input: 'test2' }, { input: 'test3' }, { input: 'test4' }],
-      };
-      const mockTestSuite = { tests: mockConfig.tests };
+      } as any;
+      const mockTestSuite = { tests: mockConfig.tests } as any;
 
-      mockLoadDefaultConfig.mockResolvedValue({ defaultConfig: {} });
-      mockResolveConfigs.mockResolvedValue({ config: mockConfig, testSuite: mockTestSuite });
+      mockLoadDefaultConfig.mockResolvedValue({
+        defaultConfig: {},
+        defaultConfigPath: undefined,
+      } as any);
+      mockResolveConfigs.mockResolvedValue({
+        config: mockConfig,
+        testSuite: mockTestSuite,
+        basePath: '.',
+      } as any);
       mockUnifiedConfigSchema.safeParse.mockReturnValue({ success: true });
       mockTestSuiteSchema.safeParse.mockReturnValue({ success: true });
 
@@ -420,11 +556,18 @@ describe('ValidateConfigTool', () => {
         prompts: 'single prompt',
         providers: 'single provider',
         tests: { input: 'single test' },
-      };
-      const mockTestSuite = { tests: [{ input: 'single test' }] };
+      } as any;
+      const mockTestSuite = { tests: [{ input: 'single test' }] } as any;
 
-      mockLoadDefaultConfig.mockResolvedValue({ defaultConfig: {} });
-      mockResolveConfigs.mockResolvedValue({ config: mockConfig, testSuite: mockTestSuite });
+      mockLoadDefaultConfig.mockResolvedValue({
+        defaultConfig: {},
+        defaultConfigPath: undefined,
+      } as any);
+      mockResolveConfigs.mockResolvedValue({
+        config: mockConfig,
+        testSuite: mockTestSuite,
+        basePath: '.',
+      } as any);
       mockUnifiedConfigSchema.safeParse.mockReturnValue({ success: true });
       mockTestSuiteSchema.safeParse.mockReturnValue({ success: true });
 

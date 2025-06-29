@@ -331,7 +331,7 @@ describe('MCP Utility Functions', () => {
       // Mock setTimeout to simulate delays
       const mockSetTimeout = jest.spyOn(global, 'setTimeout');
       mockSetTimeout.mockImplementation((callback, delay) => {
-        timeOffset += delay;
+        timeOffset += delay ?? 0;
         callback();
         return {} as any;
       });

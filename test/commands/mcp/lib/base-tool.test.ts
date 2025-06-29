@@ -86,7 +86,7 @@ describe('AbstractTool', () => {
 
       expect(mockMcpServer.tool).toHaveBeenCalledWith(
         'test_tool',
-        { args: expect.any(z.ZodObject) },
+        expect.any(z.ZodObject),
         expect.any(Function),
       );
     });

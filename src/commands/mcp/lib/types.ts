@@ -16,11 +16,13 @@ export interface ToolResponse<T = unknown> {
 }
 
 export interface ToolContent {
+  [x: string]: unknown;
   type: 'text';
   text: string;
 }
 
 export interface ToolResult<_T = unknown> {
+  [x: string]: unknown;
   content: ToolContent[];
   isError: boolean;
 }

@@ -40,7 +40,7 @@ describe('ListEvaluationsTool', () => {
 
       expect(mockServer.tool).toHaveBeenCalledWith(
         'list_evaluations',
-        { args: expect.any(Object) },
+        expect.any(Object),
         expect.any(Function),
       );
     });
@@ -50,10 +50,13 @@ describe('ListEvaluationsTool', () => {
     it('should accept valid arguments with datasetId', async () => {
       const mockEvaluations = [
         {
-          id: 'eval-1',
+          evalId: 'eval-1',
+          datasetId: 'dataset-123',
+          createdAt: Date.parse('2024-01-01T00:00:00Z'),
           description: 'Test evaluation',
-          createdAt: '2024-01-01T00:00:00Z',
-          stats: { total: 10, passed: 8, failed: 2 },
+          numTests: 10,
+          label: 'Test evaluation',
+          passRate: 0.8,
         },
       ];
       mockGetEvalSummaries.mockResolvedValue(mockEvaluations);
@@ -72,9 +75,13 @@ describe('ListEvaluationsTool', () => {
     it('should accept empty arguments', async () => {
       const mockEvaluations = [
         {
-          id: 'eval-1',
+          evalId: 'eval-1',
+          datasetId: null,
+          createdAt: Date.parse('2024-01-01T00:00:00Z'),
           description: 'Test evaluation',
-          createdAt: '2024-01-01T00:00:00Z',
+          numTests: 5,
+          label: 'Test evaluation',
+          passRate: 1.0,
         },
       ];
       mockGetEvalSummaries.mockResolvedValue(mockEvaluations);
@@ -119,16 +126,22 @@ describe('ListEvaluationsTool', () => {
     it('should return evaluations when found', async () => {
       const mockEvaluations = [
         {
-          id: 'eval-1',
+          evalId: 'eval-1',
+          datasetId: 'dataset-123',
+          createdAt: Date.parse('2024-01-01T00:00:00Z'),
           description: 'First evaluation',
-          createdAt: '2024-01-01T00:00:00Z',
-          stats: { total: 10, passed: 8, failed: 2 },
+          numTests: 10,
+          label: 'First evaluation',
+          passRate: 0.8,
         },
         {
-          id: 'eval-2',
+          evalId: 'eval-2',
+          datasetId: 'dataset-123',
+          createdAt: Date.parse('2024-01-02T00:00:00Z'),
           description: 'Second evaluation',
-          createdAt: '2024-01-02T00:00:00Z',
-          stats: { total: 5, passed: 5, failed: 0 },
+          numTests: 5,
+          label: 'Second evaluation',
+          passRate: 1.0,
         },
       ];
       mockGetEvalSummaries.mockResolvedValue(mockEvaluations);
@@ -148,9 +161,13 @@ describe('ListEvaluationsTool', () => {
     it('should return evaluations without datasetId filter', async () => {
       const mockEvaluations = [
         {
-          id: 'eval-1',
+          evalId: 'eval-1',
+          datasetId: null,
+          createdAt: Date.parse('2024-01-01T00:00:00Z'),
           description: 'Evaluation without dataset filter',
-          createdAt: '2024-01-01T00:00:00Z',
+          numTests: 3,
+          label: 'Evaluation without dataset filter',
+          passRate: 0.67,
         },
       ];
       mockGetEvalSummaries.mockResolvedValue(mockEvaluations);
@@ -170,8 +187,13 @@ describe('ListEvaluationsTool', () => {
     it('should handle evaluations with minimal data', async () => {
       const mockEvaluations = [
         {
-          id: 'eval-minimal',
-          createdAt: '2024-01-01T00:00:00Z',
+          evalId: 'eval-minimal',
+          datasetId: null,
+          createdAt: Date.parse('2024-01-01T00:00:00Z'),
+          description: null,
+          numTests: 1,
+          label: 'eval-minimal',
+          passRate: 1.0,
         },
       ];
       mockGetEvalSummaries.mockResolvedValue(mockEvaluations);
@@ -285,7 +307,17 @@ describe('ListEvaluationsTool', () => {
     });
 
     it('should use AbstractTool success response', async () => {
-      const mockEvaluations = [{ id: 'eval-1', createdAt: '2024-01-01T00:00:00Z' }];
+      const mockEvaluations = [
+        {
+          evalId: 'eval-1',
+          datasetId: null,
+          createdAt: Date.parse('2024-01-01T00:00:00Z'),
+          description: null,
+          numTests: 1,
+          label: 'eval-1',
+          passRate: 1.0,
+        },
+      ];
       mockGetEvalSummaries.mockResolvedValue(mockEvaluations);
 
       listEvaluationsTool.register(mockServer);
@@ -304,10 +336,13 @@ describe('ListEvaluationsTool', () => {
   describe('integration scenarios', () => {
     it('should handle large number of evaluations', async () => {
       const mockEvaluations = Array.from({ length: 100 }, (_, i) => ({
-        id: `eval-${i}`,
+        evalId: `eval-${i}`,
+        datasetId: i % 2 === 0 ? `dataset-${i}` : null,
+        createdAt: Date.parse(`2024-01-${String((i % 30) + 1).padStart(2, '0')}T00:00:00Z`),
         description: `Evaluation ${i}`,
-        createdAt: `2024-01-${String(i + 1).padStart(2, '0')}T00:00:00Z`,
-        stats: { total: i * 2, passed: i, failed: i },
+        numTests: Math.max(1, i * 2),
+        label: `Evaluation ${i}`,
+        passRate: i === 0 ? 1.0 : i / (i * 2),
       }));
       mockGetEvalSummaries.mockResolvedValue(mockEvaluations);
 
@@ -325,14 +360,13 @@ describe('ListEvaluationsTool', () => {
     it('should preserve evaluation data structure', async () => {
       const mockEvaluations = [
         {
-          id: 'eval-complex',
+          evalId: 'eval-complex',
+          datasetId: 'complex-dataset',
+          createdAt: Date.parse('2024-01-01T12:00:00Z'),
           description: 'Complex evaluation with all fields',
-          createdAt: '2024-01-01T12:00:00Z',
-          stats: {
-            total: 25,
-            passed: 20,
-            failed: 5,
-          },
+          numTests: 25,
+          label: 'Complex evaluation with all fields',
+          passRate: 0.8,
         },
       ];
       mockGetEvalSummaries.mockResolvedValue(mockEvaluations);
@@ -344,9 +378,9 @@ describe('ListEvaluationsTool', () => {
 
       const parsedContent = JSON.parse(result.content[0].text);
       expect(parsedContent.data).toEqual(mockEvaluations);
-      expect(parsedContent.data[0].stats.total).toBe(25);
-      expect(parsedContent.data[0].stats.passed).toBe(20);
-      expect(parsedContent.data[0].stats.failed).toBe(5);
+      expect(parsedContent.data[0].numTests).toBe(25);
+      expect(parsedContent.data[0].passRate).toBe(0.8);
+      expect(parsedContent.data[0].description).toBe('Complex evaluation with all fields');
     });
   });
 });
