@@ -6,6 +6,7 @@ import { importModule } from '../../esm';
 import logger from '../../logger';
 import type { RedteamStrategyObject, TestCase, TestCaseWithPlugin } from '../../types';
 import { isJavascriptFile } from '../../util/fileExtensions';
+import { REDTEAM_SIMULATED_USER_STRATEGY_ID } from '../constants/strategies';
 import { addBase64Encoding } from './base64';
 import { addBestOfNTestCases } from './bestOfN';
 import { addCitationTestCases } from './citation';
@@ -27,6 +28,7 @@ import { addRot13 } from './rot13';
 import { addAudioToBase64 } from './simpleAudio';
 import { addImageToBase64 } from './simpleImage';
 import { addVideoToBase64 } from './simpleVideo';
+import { addSimulatedUser } from './simulatedUser';
 import { addCompositeTestCases } from './singleTurnComposite';
 
 export interface Strategy {
@@ -107,6 +109,15 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding GOAT to ${testCases.length} test cases`);
       const newTestCases = await addGoatTestCases(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} GOAT test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: REDTEAM_SIMULATED_USER_STRATEGY_ID,
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding simulated user test cases to ${testCases.length} test cases`);
+      const newTestCases = addSimulatedUser(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} simulated user test cases`);
       return newTestCases;
     },
   },

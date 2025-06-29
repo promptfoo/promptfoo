@@ -136,6 +136,16 @@ export const strategies: Strategy[] = [
     link: '/docs/red-team/strategies/goat/',
   },
   {
+    category: 'Multi-turn',
+    strategy: 'simulated-user',
+    displayName: 'Simulated User',
+    description: 'Simulated user conversations',
+    longDescription: 'Simulates a user over multiple turns using Tau-bench style instructions',
+    cost: 'High',
+    asrIncrease: '60-80%',
+    link: '/docs/red-team/strategies/simulated-user/',
+  },
+  {
     category: 'Static (Single-Turn)',
     strategy: 'video',
     displayName: 'Video Encoding',

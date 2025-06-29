@@ -21,6 +21,7 @@ export type AgentProviderOptions = ProviderOptions & {
     userProvider?: ProviderOptions;
     instructions?: string;
     maxTurns?: number;
+    stateful?: boolean;
   };
 };
 
@@ -28,11 +29,13 @@ export class SimulatedUser implements ApiProvider {
   private readonly identifier: string;
   private readonly maxTurns: number;
   private readonly rawInstructions: string;
+  private readonly stateful: boolean;
 
   constructor({ id, label, config }: AgentProviderOptions) {
     this.identifier = id ?? label ?? 'agent-provider';
     this.maxTurns = config.maxTurns ?? 10;
     this.rawInstructions = config.instructions || '{{instructions}}';
+    this.stateful = config.stateful ?? false;
   }
 
   id() {
@@ -43,6 +46,8 @@ export class SimulatedUser implements ApiProvider {
     messages: Message[],
     userProvider: PromptfooSimulatedUserProvider,
   ): Promise<Message[]> {
+    logger.debug('[SimulatedUser] Sending message to simulated user (tau) provider');
+
     const flippedMessages = messages.map((message) => {
       return {
         role: message.role === 'user' ? 'assistant' : 'user',
@@ -50,6 +55,8 @@ export class SimulatedUser implements ApiProvider {
       };
     });
 
+    // TODO(Will): Tau server-task may not comply! Fix this server-side.
+    // i.e. Respond "I'm sorry, but I can't help with that request."
     const response = await userProvider.callApi(JSON.stringify(flippedMessages));
     logger.debug(`User: ${response.output}`);
     return [...messages, { role: 'user', content: String(response.output || '') }];
@@ -58,22 +65,32 @@ export class SimulatedUser implements ApiProvider {
   private async sendMessageToAgent(
     messages: Message[],
     targetProvider: ApiProvider,
-    prompt: string,
-    context?: CallApiContextParams,
+    context: CallApiContextParams,
   ): Promise<Message[]> {
-    const response = await targetProvider.callApi(
-      JSON.stringify([{ role: 'system', content: prompt }, ...messages]),
-      context,
-    );
+    const targetPrompt = this.stateful
+      ? messages[messages.length - 1].content
+      : JSON.stringify(messages);
+
+    logger.debug(`[SimulatedUser] Sending message to target provider: ${targetPrompt}`);
+
+    const response = await targetProvider.callApi(targetPrompt, context);
+
+    if (response.sessionId) {
+      context = context ?? { vars: {}, prompt: { raw: '', label: 'target' } };
+      context.vars.sessionId = response.sessionId;
+    }
+
     if (targetProvider.delay) {
       logger.debug(`[SimulatedUser] Sleeping for ${targetProvider.delay}ms`);
       await sleep(targetProvider.delay);
     }
-    logger.debug(`Agent: ${response.output}`);
+
+    logger.debug(`[SimulatedUser] Agent: ${response.output}`);
     return [...messages, { role: 'assistant', content: String(response.output || '') }];
   }
 
   async callApi(
+    // NOTE: `prompt` is not used in this provider; `vars.instructions` is used instead.
     prompt: string,
     context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
@@ -85,11 +102,14 @@ export class SimulatedUser implements ApiProvider {
       instructions,
     });
 
-    logger.debug(`Formatted user instructions: ${instructions}`);
+    logger.debug(`[SimulatedUser] Formatted user instructions: ${instructions}`);
     let messages: Message[] = [];
     const maxTurns = this.maxTurns;
     let numRequests = 0;
     for (let i = 0; i < maxTurns; i++) {
+      logger.debug(`[SimulatedUser] Turn ${i + 1} of ${maxTurns}`);
+
+      // NOTE: Simulated-user provider acts as a judge to determine whether the instruction goal is satisfied.
       const messagesToUser = await this.sendMessageToUser(messages, userProvider);
       const lastMessage = messagesToUser[messagesToUser.length - 1];
       if (
@@ -103,7 +123,6 @@ export class SimulatedUser implements ApiProvider {
       const messagesToAgent = await this.sendMessageToAgent(
         messagesToUser,
         context.originalProvider,
-        prompt,
         context,
       );
       messages = messagesToAgent;

@@ -8,15 +8,22 @@ export const FRAMEWORK_COMPLIANCE_IDS = [
 ] as const;
 export type FrameworkComplianceId = (typeof FRAMEWORK_COMPLIANCE_IDS)[number];
 
+export const REDTEAM_SIMULATED_USER_STRATEGY_ID = 'simulated-user';
+
 export const DEFAULT_STRATEGIES = ['basic', 'jailbreak', 'jailbreak:composite'] as const;
 export type DefaultStrategy = (typeof DEFAULT_STRATEGIES)[number];
 
-export const MULTI_TURN_STRATEGIES = ['crescendo', 'goat'] as const;
+export const MULTI_TURN_STRATEGIES = [
+  'crescendo',
+  'goat',
+  REDTEAM_SIMULATED_USER_STRATEGY_ID,
+] as const;
 export type MultiTurnStrategy = (typeof MULTI_TURN_STRATEGIES)[number];
 
 export const AGENTIC_STRATEGIES = [
   'crescendo',
   'goat',
+  REDTEAM_SIMULATED_USER_STRATEGY_ID,
   'jailbreak',
   'jailbreak:tree',
   'pandamonium',
@@ -45,6 +52,7 @@ export const ADDITIONAL_STRATEGIES = [
   'crescendo',
   'gcg',
   'goat',
+  REDTEAM_SIMULATED_USER_STRATEGY_ID,
   'hex',
   'homoglyph',
   'image',
@@ -79,3 +87,18 @@ const _ALL_STRATEGIES = [
 ] as const;
 export const ALL_STRATEGIES = Array.from(new Set(_ALL_STRATEGIES)).sort();
 export type Strategy = (typeof ALL_STRATEGIES)[number];
+
+export const CONFIGURABLE_STRATEGIES = [
+  'multilingual',
+  'best-of-n',
+  'goat',
+  'crescendo',
+  'pandamonium',
+  'jailbreak',
+  'jailbreak:tree',
+  'gcg',
+  'citation',
+  REDTEAM_SIMULATED_USER_STRATEGY_ID,
+] as const;
+
+export type ConfigurableStrategy = (typeof CONFIGURABLE_STRATEGIES)[number];
