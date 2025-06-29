@@ -1,5 +1,7 @@
 import { ValidateConfigTool } from '../../../../src/commands/mcp/tools/configuration/validate-config';
-import { ConfigurationError } from '../../../../src/commands/mcp/lib/errors';
+import { UnifiedConfigSchema, TestSuiteSchema } from '../../../../src/types';
+import { loadDefaultConfig } from '../../../../src/util/config/default';
+import { resolveConfigs } from '../../../../src/util/config/load';
 
 // Mock the configuration loading functions
 jest.mock('../../../../src/util/config/default', () => ({
@@ -19,12 +21,8 @@ jest.mock('../../../../src/types', () => ({
   },
 }));
 
-import { loadDefaultConfig } from '../../../../src/util/config/default';
-import { resolveConfigs } from '../../../../src/util/config/load';
-import { UnifiedConfigSchema, TestSuiteSchema } from '../../../../src/types';
-
-const mockLoadDefaultConfig = loadDefaultConfig as jest.MockedFunction<typeof loadDefaultConfig>;
-const mockResolveConfigs = resolveConfigs as jest.MockedFunction<typeof resolveConfigs>;
+const mockLoadDefaultConfig = jest.mocked(loadDefaultConfig);
+const mockResolveConfigs = jest.mocked(resolveConfigs);
 const mockUnifiedConfigSchema = UnifiedConfigSchema as any;
 const mockTestSuiteSchema = TestSuiteSchema as any;
 
@@ -165,9 +163,7 @@ describe('ValidateConfigTool', () => {
       expect(parsedContent.data).toEqual({
         isValid: true,
         errors: [],
-        warnings: [
-          'Configuration ready: 1 prompts × 1 providers × 1 tests = 1 total evaluations',
-        ],
+        warnings: ['Configuration ready: 1 prompts × 1 providers × 1 tests = 1 total evaluations'],
         config: mockConfig,
         testSuite: mockTestSuite,
       });
@@ -252,9 +248,7 @@ describe('ValidateConfigTool', () => {
       const parsedContent = JSON.parse(result.content[0].text);
       expect(parsedContent.success).toBe(true);
       expect(parsedContent.data.isValid).toBe(false);
-      expect(parsedContent.data.errors).toContain(
-        'Configuration validation error: Unknown error',
-      );
+      expect(parsedContent.data.errors).toContain('Configuration validation error: Unknown error');
     });
 
     it('should return errors when test suite schema validation fails', async () => {
@@ -277,9 +271,7 @@ describe('ValidateConfigTool', () => {
       const parsedContent = JSON.parse(result.content[0].text);
       expect(parsedContent.success).toBe(true);
       expect(parsedContent.data.isValid).toBe(false);
-      expect(parsedContent.data.errors).toContain(
-        'Test suite validation error: Unknown error',
-      );
+      expect(parsedContent.data.errors).toContain('Test suite validation error: Unknown error');
     });
 
     it('should return errors for both config and test suite validation failures', async () => {
@@ -447,4 +439,4 @@ describe('ValidateConfigTool', () => {
       );
     });
   });
-}); 
+});

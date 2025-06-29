@@ -247,4 +247,4 @@ describe('MCP Error Classes', () => {
       expect(error.stack).toContain('ValidationError');
     });
   });
-}); 
+});

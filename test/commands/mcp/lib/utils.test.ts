@@ -174,7 +174,7 @@ describe('MCP Utility Functions', () => {
       const obj = { value: null };
       const result = getProperty(obj, 'value', 'default');
 
-      expect(result).toBe(null);
+      expect(result).toBeNull();
     });
 
     it('should return property value when it is falsy but not undefined', () => {
@@ -307,9 +307,9 @@ describe('MCP Utility Functions', () => {
     it('should throw last error after max attempts', async () => {
       const operation = jest.fn().mockRejectedValue(new Error('persistent failure'));
 
-      await expect(
-        retry(operation, { maxAttempts: 2, baseDelay: 10 }),
-      ).rejects.toThrow('persistent failure');
+      await expect(retry(operation, { maxAttempts: 2, baseDelay: 10 })).rejects.toThrow(
+        'persistent failure',
+      );
 
       expect(operation).toHaveBeenCalledTimes(2);
     });
@@ -322,7 +322,7 @@ describe('MCP Utility Functions', () => {
         .mockResolvedValue('success');
 
       const startTime = Date.now();
-      
+
       // Mock Date.now to control timing
       const mockDateNow = jest.spyOn(Date, 'now');
       let timeOffset = 0;
@@ -357,11 +357,11 @@ describe('MCP Utility Functions', () => {
         return {} as any;
       });
 
-      await retry(operation, { 
-        maxAttempts: 2, 
-        baseDelay: 1000, 
-        backoffFactor: 10, 
-        maxDelay: 500 
+      await retry(operation, {
+        maxAttempts: 2,
+        baseDelay: 1000,
+        backoffFactor: 10,
+        maxDelay: 500,
       });
 
       expect(mockSetTimeout).toHaveBeenCalledWith(expect.any(Function), 500);
@@ -437,4 +437,4 @@ describe('MCP Utility Functions', () => {
       expect(result).toBe('');
     });
   });
-}); 
+});

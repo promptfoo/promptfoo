@@ -94,11 +94,7 @@ describe('AbstractTool', () => {
     it('should register tool without schema', () => {
       noSchemaTestTool.register(mockMcpServer as any);
 
-      expect(mockMcpServer.tool).toHaveBeenCalledWith(
-        'no_schema_tool',
-        {},
-        expect.any(Function),
-      );
+      expect(mockMcpServer.tool).toHaveBeenCalledWith('no_schema_tool', {}, expect.any(Function));
     });
 
     it('should handle tool execution with valid arguments', async () => {
@@ -329,7 +325,7 @@ describe('AbstractTool', () => {
   });
 
   describe('schema validation edge cases', () => {
-    it('should handle complex schema validation', () => {
+    it('should handle complex schema validation', async () => {
       const complexSchemaTool = new (class extends AbstractTool {
         readonly name = 'complex_schema_tool';
         readonly description = 'Tool with complex schema';
@@ -352,15 +348,15 @@ describe('AbstractTool', () => {
       const toolHandler = mockMcpServer.tool.mock.calls[0][2];
 
       // Test with invalid data
-      return toolHandler({
+      const result = await toolHandler({
         required: '',
         nested: { value: -1 },
         array: [],
-      }).then((result) => {
-        const parsedContent = JSON.parse(result.content[0].text);
-        expect(parsedContent.success).toBe(false);
-        expect(parsedContent.error).toContain('Invalid arguments');
       });
+
+      const parsedContent = JSON.parse(result.content[0].text);
+      expect(parsedContent.success).toBe(false);
+      expect(parsedContent.error).toContain('Invalid arguments');
     });
   });
-}); 
+});

@@ -1,14 +1,13 @@
-import { ListEvaluationsTool } from '../../../../src/commands/mcp/tools/evaluation/list-evaluations';
 import { NotFoundError } from '../../../../src/commands/mcp/lib/errors';
+import { ListEvaluationsTool } from '../../../../src/commands/mcp/tools/evaluation/list-evaluations';
+import { getEvalSummaries } from '../../../../src/models/eval';
 
 // Mock the getEvalSummaries function
 jest.mock('../../../../src/models/eval', () => ({
   getEvalSummaries: jest.fn(),
 }));
 
-import { getEvalSummaries } from '../../../../src/models/eval';
-
-const mockGetEvalSummaries = getEvalSummaries as jest.MockedFunction<typeof getEvalSummaries>;
+const mockGetEvalSummaries = jest.mocked(getEvalSummaries);
 
 describe('ListEvaluationsTool', () => {
   let listEvaluationsTool: ListEvaluationsTool;
@@ -350,4 +349,4 @@ describe('ListEvaluationsTool', () => {
       expect(parsedContent.data[0].stats.failed).toBe(5);
     });
   });
-}); 
+});

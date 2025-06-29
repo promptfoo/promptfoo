@@ -40,8 +40,8 @@ describe('HealthCheckTool', () => {
       const originalUptime = process.uptime;
       const originalMemoryUsage = process.memoryUsage;
 
-      process.uptime = jest.fn().mockReturnValue(123.456);
-      process.memoryUsage = jest.fn().mockReturnValue({
+      jest.spyOn(process, 'uptime').mockImplementation().mockReturnValue(123.456);
+      jest.spyOn(process, 'memoryUsage').mockImplementation().mockReturnValue({
         rss: 1234567,
         heapTotal: 2345678,
         heapUsed: 3456789,
@@ -174,7 +174,7 @@ describe('HealthCheckTool', () => {
     it('should handle unexpected errors gracefully', async () => {
       // Mock process.uptime to throw an error
       const originalUptime = process.uptime;
-      process.uptime = jest.fn().mockImplementation(() => {
+      jest.spyOn(process, 'uptime').mockImplementation(() => {
         throw new Error('Process error');
       });
 
@@ -194,7 +194,7 @@ describe('HealthCheckTool', () => {
     it('should handle memory usage errors', async () => {
       // Mock process.memoryUsage to throw an error
       const originalMemoryUsage = process.memoryUsage;
-      process.memoryUsage = jest.fn().mockImplementation(() => {
+      jest.spyOn(process, 'memoryUsage').mockImplementation(() => {
         throw new Error('Memory usage error');
       });
 
@@ -232,4 +232,4 @@ describe('HealthCheckTool', () => {
       expect(parsedContent).toHaveProperty('timestamp');
     });
   });
-}); 
+});
