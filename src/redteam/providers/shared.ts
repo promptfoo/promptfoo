@@ -1,6 +1,7 @@
 import cliState from '../../cliState';
 import logger from '../../logger';
 import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
+import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
 import {
   type ApiProvider,
   type CallApiContextParams,
@@ -223,4 +224,92 @@ export interface BaseRedteamResponse {
   tokenUsage: TokenUsage;
   guardrails?: GuardrailResponse;
   additionalResults?: EvaluateResult[];
+}
+
+/**
+ * Shared unblocking functionality used by redteam providers to handle blocking questions
+ */
+export async function tryUnblocking({
+  messages,
+  lastResponse,
+  goal,
+  purpose,
+}: {
+  messages: Message[];
+  lastResponse: string;
+  goal: string | undefined;
+  purpose?: string;
+}): Promise<{
+  success: boolean;
+  unblockingPrompt?: string;
+  tokenUsage?: TokenUsage;
+}> {
+  try {
+    // Check if the server supports unblocking feature
+    const { checkServerFeatureSupport } = await import('../../util/server');
+    const supportsUnblocking = await checkServerFeatureSupport(
+      'blocking-question-analysis',
+      '2025-06-16T14:49:11-07:00',
+    );
+
+    if (!supportsUnblocking) {
+      logger.debug('[Unblocking] Server does not support unblocking, skipping gracefully');
+      return { success: false };
+    }
+
+    logger.debug('[Unblocking] Attempting to unblock with blocking-question-analysis task');
+
+    // Create unblocking provider
+    const unblockingProvider = new PromptfooChatCompletionProvider({
+      task: 'blocking-question-analysis',
+      jsonOnly: true,
+      preferSmallModel: false,
+    });
+
+    const unblockingRequest = {
+      conversationObjective: goal || '',
+      recentHistory: messages.map((msg) => ({
+        role: msg.role,
+        content: msg.content,
+      })),
+      targetResponse: lastResponse,
+      purpose: purpose || '',
+    };
+
+    const response = await unblockingProvider.callApi(JSON.stringify(unblockingRequest), {
+      prompt: {
+        raw: JSON.stringify(unblockingRequest),
+        label: 'unblocking',
+      },
+      vars: {},
+    });
+
+    if (response.error) {
+      logger.error(`[Unblocking] Unblocking provider error: ${response.error}`);
+      return { success: false, tokenUsage: response.tokenUsage };
+    }
+
+    const parsed = response.output as any;
+    logger.debug(`[Unblocking] Unblocking analysis: ${JSON.stringify(parsed)}`);
+
+    if (parsed.isBlocking && parsed.unblockingAnswer) {
+      logger.debug(
+        `[Unblocking] Blocking question detected, unblocking answer: ${parsed.unblockingAnswer}`,
+      );
+      return {
+        success: true,
+        unblockingPrompt: parsed.unblockingAnswer,
+        tokenUsage: response.tokenUsage,
+      };
+    } else {
+      logger.debug('[Unblocking] No blocking question detected');
+      return {
+        success: false,
+        tokenUsage: response.tokenUsage,
+      };
+    }
+  } catch (error) {
+    logger.error(`[Unblocking] Error in unblocking: ${error}`);
+    return { success: false };
+  }
 }

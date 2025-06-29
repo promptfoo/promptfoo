@@ -14,6 +14,10 @@ jest.mock('../../../src/redteam/graders', () => ({
   getGraderById: mockGetGraderById,
 }));
 
+jest.mock('../../../src/util/server', () => ({
+  checkServerFeatureSupport: jest.fn(() => Promise.resolve(false)),
+}));
+
 describe('RedteamGoatProvider', () => {
   let mockFetch: jest.Mock;
 
