@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import type { Command } from 'commander';
 import * as fs from 'fs';
 import * as os from 'os';
-import { version } from '../../package.json';
+import pkg from '../../package.json';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import type { UnifiedConfig } from '../types';
@@ -17,7 +17,7 @@ interface DebugOptions {
 
 async function doDebug(options: DebugOptions): Promise<void> {
   const debugInfo = {
-    version,
+    version: pkg.version,
     platform: {
       os: os.platform(),
       release: os.release(),
