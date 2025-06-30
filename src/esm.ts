@@ -1,11 +1,17 @@
 import { createRequire } from 'module';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
+import * as path from 'path';
 import logger from './logger';
 import { safeResolve } from './util/file.node';
 
 const require = createRequire(import.meta.url);
+const currentFileDir = path.dirname(fileURLToPath(import.meta.url));
 
 // esm-specific crap that needs to get mocked out in tests
+
+export function getDirectory(): string {
+  return currentFileDir;
+}
 
 export async function importModule(modulePath: string, functionName?: string) {
   logger.debug(
@@ -61,3 +67,5 @@ export async function importModule(modulePath: string, functionName?: string) {
     }
   }
 }
+
+export { require, currentFileDir };
