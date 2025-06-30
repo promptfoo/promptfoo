@@ -1202,6 +1202,49 @@ describe('Azure Assistant Provider', () => {
     });
   });
 
-  // TODO: Add comprehensive context tests for Azure assistant provider
-  // The Azure provider now supports explicit context parameters like the OpenAI provider
+  describe('Function Callbacks with Context', () => {
+    it('should pass context to function callbacks', async () => {
+      const mockCallback = jest.fn().mockResolvedValue('test result');
+
+      const provider = new AzureAssistantProvider('test-deployment', {
+        config: {
+          apiKey: 'test-key',
+          apiHost: 'test.azure.com',
+          functionToolCallbacks: {
+            test_function: mockCallback,
+          },
+        },
+      });
+
+      // Mock required methods
+      jest.spyOn(provider as any, 'getHeaders').mockResolvedValue({
+        'Content-Type': 'application/json',
+        'api-key': 'test-key',
+      });
+      jest.spyOn(provider as any, 'getApiKey').mockReturnValue('test-key');
+      jest.spyOn(provider as any, 'getApiBaseUrl').mockReturnValue('https://test.azure.com');
+      jest.spyOn(provider as any, 'ensureInitialized').mockResolvedValue(undefined);
+
+      // Test the executeFunctionCallback method directly with context
+      const result = await (provider as any).executeFunctionCallback(
+        'test_function',
+        '{"param": "value"}',
+        {
+          threadId: 'thread-123',
+          runId: 'run-456',
+          assistantId: 'test-deployment',
+          provider: 'azure',
+        },
+      );
+
+      // Verify the callback was called with the correct context
+      expect(mockCallback).toHaveBeenCalledWith('{"param": "value"}', {
+        threadId: 'thread-123',
+        runId: 'run-456',
+        assistantId: 'test-deployment',
+        provider: 'azure',
+      });
+      expect(result).toBe('test result');
+    });
+  });
 });
