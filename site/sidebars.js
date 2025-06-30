@@ -110,7 +110,7 @@ const redTeamSidebar = [
         type: 'category',
         label: 'Domain-Specific',
         collapsed: true,
-        items: ['red-team/plugins/medical'],
+        items: ['red-team/plugins/medical', 'red-team/plugins/financial'],
       },
       {
         type: 'category',
