@@ -19,7 +19,6 @@ The `sagemaker` provider allows you to use Amazon SageMaker endpoints in your ev
    ```
 
 3. The AWS SDK will automatically pull credentials from the following locations:
-
    - IAM roles on EC2, Lambda, or SageMaker Studio
    - `~/.aws/credentials` or `~/.aws/config` files
    - `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` environment variables
