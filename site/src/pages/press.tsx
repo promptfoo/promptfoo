@@ -9,7 +9,6 @@ import Typography from '@mui/material/Typography';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import Layout from '@theme/Layout';
 import LogoPanda from '../../static/img/logo-panda.svg';
-import { scrollToTop } from '../utils/navigation';
 import styles from './press.module.css';
 
 const PressContent = () => {
@@ -38,7 +37,13 @@ const PressContent = () => {
 
         {/* Company Overview Section */}
         <Box mb={8}>
-          <Typography variant="h4" component="h3" gutterBottom fontWeight="medium">
+          <Typography
+            variant="h4"
+            component="h3"
+            id="about-promptfoo"
+            gutterBottom
+            fontWeight="medium"
+          >
             About Promptfoo
           </Typography>
           <Typography variant="body1" paragraph>
@@ -48,7 +53,7 @@ const PressContent = () => {
             security industries.
           </Typography>
           <Typography variant="body1" paragraph>
-            Our core product is an open-source pentesting and evaluation framework used by 80,000+
+            Our core product is an open-source pentesting and evaluation framework used by 100,000+
             developers. Promptfoo is among the most popular evaluation frameworks and is the first
             product to adapt AI-specific pentesting techniques to your application.
           </Typography>
@@ -58,7 +63,13 @@ const PressContent = () => {
 
         {/* Press Coverage Section */}
         <Box mb={8}>
-          <Typography variant="h4" component="h3" gutterBottom fontWeight="medium">
+          <Typography
+            variant="h4"
+            component="h3"
+            id="recent-coverage"
+            gutterBottom
+            fontWeight="medium"
+          >
             Recent Coverage
           </Typography>
 
@@ -77,9 +88,7 @@ const PressContent = () => {
                   models has been widely covered by major technology and news publications.
                 </Typography>
                 <Typography variant="body2" paragraph>
-                  <Link to="/blog/deepseek-censorship/" onClick={scrollToTop}>
-                    Read the original research →
-                  </Link>
+                  <Link to="/blog/deepseek-censorship/">Read the original research →</Link>
                 </Typography>
                 <Grid container spacing={2} mt={2}>
                   {[
@@ -152,7 +161,7 @@ const PressContent = () => {
           </Grid>
 
           {/* Featured Podcasts */}
-          <Typography variant="h5" component="h4" gutterBottom mt={6}>
+          <Typography variant="h5" component="h4" id="featured-podcasts" gutterBottom mt={6}>
             Featured Podcasts
           </Typography>
           <Grid container spacing={4} mb={6}>
@@ -232,7 +241,7 @@ const PressContent = () => {
           </Grid>
 
           {/* Educational Resources Section */}
-          <Typography variant="h5" component="h4" gutterBottom mt={6}>
+          <Typography variant="h5" component="h4" id="educational-resources" gutterBottom mt={6}>
             Educational Resources
           </Typography>
           <Typography variant="body1" paragraph>
@@ -360,7 +369,7 @@ const PressContent = () => {
           </Grid>
 
           {/* Technical Content Section */}
-          <Typography variant="h5" component="h4" gutterBottom mt={6}>
+          <Typography variant="h5" component="h4" id="technical-content-guides" gutterBottom mt={6}>
             Technical Content & Guides
           </Typography>
           <Grid container spacing={4} mb={6}>
@@ -392,7 +401,13 @@ const PressContent = () => {
 
         {/* Brand Assets Section */}
         <Box mb={8}>
-          <Typography variant="h4" component="h3" gutterBottom fontWeight="medium">
+          <Typography
+            variant="h4"
+            component="h3"
+            id="brand-assets"
+            gutterBottom
+            fontWeight="medium"
+          >
             Brand Assets
           </Typography>
           <Typography variant="body1" paragraph>
@@ -425,7 +440,13 @@ const PressContent = () => {
 
         {/* Media Contact Section */}
         <Box mb={8}>
-          <Typography variant="h4" component="h3" gutterBottom fontWeight="medium">
+          <Typography
+            variant="h4"
+            component="h3"
+            id="media-contact"
+            gutterBottom
+            fontWeight="medium"
+          >
             Media Contact
           </Typography>
           <Typography variant="body1" paragraph>
@@ -441,7 +462,7 @@ const PressContent = () => {
 
         {/* Company Facts Section */}
         <Box mb={8}>
-          <Typography variant="h4" component="h3" gutterBottom fontWeight="medium">
+          <Typography variant="h4" component="h3" id="quick-facts" gutterBottom fontWeight="medium">
             Quick Facts
           </Typography>
           <Grid container spacing={4}>

@@ -1,8 +1,22 @@
 ---
+title: 'Prompt Injection: A Comprehensive Guide'
 sidebar_label: Prompt injection
+description: 'Prompt injections are the most critical LLM vulnerability. From Microsoft Copilot data theft to ChatGPT jailbreaks, see how these attacks work and how to defend.'
 image: /img/blog/prompt-injection/direct-vs-indirect.svg
+keywords:
+  [
+    prompt injection,
+    LLM security,
+    AI security,
+    indirect prompt injection,
+    jailbreak attacks,
+    LLM vulnerabilities,
+    AI safety,
+    prompt engineering security,
+  ]
 date: 2024-10-09
 # https://www.tldraw.com/r/f_RRQMHxGe4erRNUVAfZA?d=v-171.-485.3560.2381.page
+authors: [ian]
 ---
 
 # Prompt Injection: A Comprehensive Guide
@@ -212,7 +226,7 @@ Many LLM architectures weren't designed with robust security as a primary focus.
 
 - Formal verification of LLM behavior
 - Built-in adversarial training
-- Architectures separating instruction processing from content generation (OpenAI's most recent attempt at this was `gpt-4o-mini`)
+- Architectures separating instruction processing from content generation (OpenAI's most recent attempt at this was `gpt-4.1-mini`)
 
 ## What's next?
 

@@ -10,6 +10,7 @@ import { deleteCommand } from './commands/delete';
 import { evalCommand } from './commands/eval';
 import { exportCommand } from './commands/export';
 import { feedbackCommand } from './commands/feedback';
+import { generateAssertionsCommand } from './commands/generate/assertions';
 import { generateDatasetCommand } from './commands/generate/dataset';
 import { importCommand } from './commands/import';
 import { initCommand } from './commands/init';
@@ -17,6 +18,7 @@ import { listCommand } from './commands/list';
 import { modelScanCommand } from './commands/modelScan';
 import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
+import { validateCommand } from './commands/validate';
 import { viewCommand } from './commands/view';
 import logger, { setLogLevel } from './logger';
 import { runDbMigrations } from './migrate';
@@ -103,9 +105,11 @@ async function main() {
   importCommand(program);
   listCommand(program);
   modelScanCommand(program);
+  validateCommand(program, defaultConfig, defaultConfigPath);
   showCommand(program);
 
   generateDatasetCommand(generateCommand, defaultConfig, defaultConfigPath);
+  generateAssertionsCommand(generateCommand, defaultConfig, defaultConfigPath);
   redteamGenerateCommand(generateCommand, 'redteam', defaultConfig, defaultConfigPath);
 
   const { defaultConfig: redteamConfig, defaultConfigPath: redteamConfigPath } =
@@ -117,7 +121,7 @@ async function main() {
     redteamConfig ?? defaultConfig,
     redteamConfigPath ?? defaultConfigPath,
   );
-  redteamDiscoverCommand(redteamBaseCommand);
+  redteamDiscoverCommand(redteamBaseCommand, defaultConfig, defaultConfigPath);
   redteamGenerateCommand(redteamBaseCommand, 'generate', defaultConfig, defaultConfigPath);
   redteamRunCommand(redteamBaseCommand);
   redteamReportCommand(redteamBaseCommand);

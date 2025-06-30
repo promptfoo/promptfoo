@@ -9,6 +9,7 @@ const RunTestSuiteButton: React.FC = () => {
   const navigate = useNavigate();
   const {
     defaultTest,
+    derivedMetrics,
     description,
     env,
     evaluateOptions,
@@ -25,6 +26,7 @@ const RunTestSuiteButton: React.FC = () => {
 
     const testSuite = {
       defaultTest,
+      derivedMetrics,
       description,
       env,
       evaluateOptions,
@@ -63,9 +65,9 @@ const RunTestSuiteButton: React.FC = () => {
           if (progressData.status === 'complete') {
             clearInterval(intervalId);
             setIsRunning(false);
-
-            // TODO(ian): This just redirects to the eval page, which shows the most recent eval.  Redirect to this specific eval to avoid race.
-            navigate('/eval');
+            if (progressData.evalId) {
+              navigate(`/eval/${progressData.evalId}`);
+            }
           } else if (['failed', 'error'].includes(progressData.status)) {
             clearInterval(intervalId);
             setIsRunning(false);

@@ -108,6 +108,29 @@ Remember that like all environment variables, these settings are specific to you
 
 Promptfoo can be integrated into CI/CD pipelines via [GitHub Action](https://github.com/promptfoo/promptfoo-action), used with testing frameworks like Jest and Vitest, and incorporated into various stages of the development process.
 
+### How can I use Promptfoo in a completely offline environment?
+
+Set the following environment variables before running the CLI to disable all outbound network requests:
+
+```bash
+export PROMPTFOO_DISABLE_TELEMETRY=1
+export PROMPTFOO_DISABLE_UPDATE=1
+export PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true
+export PROMPTFOO_DISABLE_SHARING=1
+export PROMPTFOO_SELF_HOSTED=1
+```
+
+Only configure local or self-hosted LLM providers (e.g., Ollama) so the CLI does not attempt to reach external APIs.
+
+### Do you publish an LLMs.txt?
+
+Yes. The documentation website follows the [LLMs.txt specification](https://llmspec.ai/) so automated tools can easily index our content. You can access the files at:
+
+- [llms.txt](https://www.promptfoo.dev/llms.txt) - Navigation and structure
+- [llms-full.txt](https://www.promptfoo.dev/llms-full.txt) - Complete documentation content
+
+**Usage with AI assistants:** Copy the llms-full.txt content into your AI assistant (ChatGPT, Claude, etc.) for comprehensive promptfoo context when working on LLM evaluations, red-teaming, or configuration questions.
+
 ### Further Reading
 
 - [General Troubleshooting Guide](/docs/usage/troubleshooting) - Memory optimization, API keys, timeouts, and debugging

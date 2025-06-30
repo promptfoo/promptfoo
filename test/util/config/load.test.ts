@@ -343,7 +343,11 @@ describe('combineConfigs', () => {
       },
     ]);
 
-    expect(result.tests?.[0]).toEqual({ vars: { topic: 'bananas' } });
+    expect(Array.isArray(result.tests)).toBe(true);
+    // Use type assertion after confirming it's an array
+    const tests = result.tests as any[];
+    expect(tests).toHaveLength(1);
+    expect(tests[0]).toEqual({ vars: { topic: 'bananas' } });
   });
 
   it('throws error for unsupported configuration file format', async () => {
@@ -1209,7 +1213,7 @@ describe('resolveConfigs', () => {
     );
 
     expect(logger.error).toHaveBeenCalledWith(
-      expect.stringContaining('You must specify at least 1 provider (for example, openai:gpt-4o)'),
+      expect.stringContaining('You must specify at least 1 provider (for example, openai:gpt-4.1)'),
     );
   });
 

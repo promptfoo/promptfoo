@@ -3,7 +3,7 @@ import path from 'path';
 import { ProxyAgent, setGlobalDispatcher } from 'undici';
 import cliState from '../src/cliState';
 import { VERSION } from '../src/constants';
-import { getEnvBool, getEnvString } from '../src/envars';
+import { getEnvBool, getEnvInt, getEnvString } from '../src/envars';
 import {
   fetchWithProxy,
   fetchWithRetries,
@@ -13,6 +13,7 @@ import {
   sanitizeUrl,
 } from '../src/fetch';
 import logger from '../src/logger';
+import { REQUEST_TIMEOUT_MS } from '../src/providers/shared';
 import { sleep } from '../src/util/time';
 import { createMockResponse } from './util/utils';
 
@@ -114,6 +115,10 @@ describe('fetchWithProxy', () => {
     delete process.env.https_proxy;
     delete process.env.HTTP_PROXY;
     delete process.env.http_proxy;
+    delete process.env.npm_config_https_proxy;
+    delete process.env.npm_config_http_proxy;
+    delete process.env.npm_config_proxy;
+    delete process.env.all_proxy;
   });
 
   afterEach(() => {
@@ -326,6 +331,7 @@ describe('fetchWithProxy', () => {
         ca: mockCertContent,
         rejectUnauthorized: true,
       },
+      headersTimeout: REQUEST_TIMEOUT_MS,
     });
     expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
   });
@@ -367,6 +373,7 @@ describe('fetchWithProxy', () => {
       requestTls: {
         rejectUnauthorized: true,
       },
+      headersTimeout: REQUEST_TIMEOUT_MS,
     });
     expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
   });
@@ -403,6 +410,7 @@ describe('fetchWithProxy', () => {
       requestTls: {
         rejectUnauthorized: false,
       },
+      headersTimeout: REQUEST_TIMEOUT_MS,
     });
     expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
   });
@@ -463,6 +471,7 @@ describe('fetchWithProxy', () => {
         ca: mockCertContent,
         rejectUnauthorized: true,
       },
+      headersTimeout: REQUEST_TIMEOUT_MS,
     });
     expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
 
@@ -528,6 +537,7 @@ describe('fetchWithProxy', () => {
         requestTls: {
           rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
         },
+        headersTimeout: REQUEST_TIMEOUT_MS,
       });
       expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
 
@@ -564,6 +574,7 @@ describe('fetchWithProxy', () => {
         requestTls: {
           rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
         },
+        headersTimeout: REQUEST_TIMEOUT_MS,
       });
       expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
 
@@ -921,6 +932,10 @@ describe('fetchWithProxy with NO_PROXY', () => {
     delete process.env.https_proxy;
     delete process.env.HTTP_PROXY;
     delete process.env.http_proxy;
+    delete process.env.npm_config_https_proxy;
+    delete process.env.npm_config_http_proxy;
+    delete process.env.npm_config_proxy;
+    delete process.env.all_proxy;
     delete process.env.NO_PROXY;
     delete process.env.no_proxy;
   });
@@ -930,6 +945,10 @@ describe('fetchWithProxy with NO_PROXY', () => {
     delete process.env.https_proxy;
     delete process.env.HTTP_PROXY;
     delete process.env.http_proxy;
+    delete process.env.npm_config_https_proxy;
+    delete process.env.npm_config_http_proxy;
+    delete process.env.npm_config_proxy;
+    delete process.env.all_proxy;
     delete process.env.NO_PROXY;
     delete process.env.no_proxy;
     jest.resetAllMocks();

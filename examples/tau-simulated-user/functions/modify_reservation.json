@@ -1,0 +1,34 @@
+{
+  "type": "function",
+  "function": {
+    "name": "modify_reservation",
+    "description": "Modify an existing reservation",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "User ID"
+        },
+        "reservation_id": {
+          "type": "string",
+          "description": "Reservation ID to modify"
+        },
+        "modification_type": {
+          "type": "string",
+          "enum": ["change_flights", "change_cabin", "add_bags", "update_passenger"],
+          "description": "Type of modification"
+        },
+        "new_details": {
+          "type": "object",
+          "description": "New details for the modification"
+        },
+        "payment_method": {
+          "type": "string",
+          "description": "Payment method for additional charges"
+        }
+      },
+      "required": ["user_id", "reservation_id", "modification_type"]
+    }
+  }
+}

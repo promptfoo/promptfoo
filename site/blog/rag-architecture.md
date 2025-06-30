@@ -1,6 +1,19 @@
 ---
-date: 2024-10-14
+title: 'How Do You Secure RAG Applications?'
+description: 'RAG applications face unique security challenges beyond foundation models. Discover the vulnerabilities in retrieval systems and how to build secure AI architectures.'
 image: /img/blog/rag-architecture/promptfoo_panda_rag.png
+keywords:
+  [
+    RAG security,
+    retrieval augmented generation,
+    AI security architecture,
+    data poisoning prevention,
+    vector database security,
+    RAG vulnerabilities,
+    AI application security,
+  ]
+date: 2024-10-14
+authors: [vanessa]
 ---
 
 # How Do You Secure RAG Applications?
@@ -17,23 +30,23 @@ Creating an LLM as complex as Llama 3.2, Claude Opus, or gpt-4o is the culminati
 
 ## Why Knowledge Cutoff Matters
 
-As we mentioned in our earlier blog post, foundation models are trained on a vast corpus of data that informs how the model will perform. This training data will also impact an LLM’s factual recall, which is the process by which an LLM accesses and reproduces factual knowledge stored in its parameters.
+As we mentioned in our earlier blog post, foundation models are trained on a vast corpus of data that informs how the model will perform. This training data will also impact an LLM's factual recall, which is the process by which an LLM accesses and reproduces factual knowledge stored in its parameters.
 
-While LLMs may contain a wide range of knowledge based on its training data, there is always a knowledge cutoff. Foundation model providers may disclose this in model cards for transparency. For example, [Llama 3.2’s model card](https://github.com/meta-llama/llama-models/blob/main/models/llama3_2/MODEL_CARD.md) states that its knowledge cutoff is August 2023. Ask the foundation model a question about an event in September 2023 and it simply won’t know (though it may hallucinate to be helpful).
+While LLMs may contain a wide range of knowledge based on its training data, there is always a knowledge cutoff. Foundation model providers may disclose this in model cards for transparency. For example, [Llama 3.2's model card](https://github.com/meta-llama/llama-models/blob/main/models/llama3_2/MODEL_CARD.md) states that its knowledge cutoff is August 2023. Ask the foundation model a question about an event in September 2023 and it simply won't know (though it may hallucinate to be helpful).
 
-We can see how this works through asking ChatGPT historical questions compared to questions about today’s news.
+We can see how this works through asking ChatGPT historical questions compared to questions about today's news.
 
 ![gpt-4o napoleon question](/img/blog/rag-architecture/napoleon_question.png)
 
-In this response, gpt-4o reproduced factual knowledge based on information encoded in its neural network weights. However, the accuracy of the output can widely vary based on the prompt and any training biases in the model, therefore compromising the reliability of the LLM’s factual recall. Since there is no way of “citing” the sources used by the LLM to generate the response, you cannot rely solely on the foundation model’s output as the single source of truth.
+In this response, gpt-4o reproduced factual knowledge based on information encoded in its neural network weights. However, the accuracy of the output can widely vary based on the prompt and any training biases in the model, therefore compromising the reliability of the LLM's factual recall. Since there is no way of "citing" the sources used by the LLM to generate the response, you cannot rely solely on the foundation model's output as the single source of truth.
 
 In other words, when a foundation model produces factual knowledge, you need to take it with a grain of salt. Trust, but verify.
 
-An example of a foundation model’s knowledge cutoff can be seen when you ask the model about recent events. In the example below, we asked ChatGPT about the latest inflation news. You can see that the model completes a function where it searches the web and summarizes results.
+An example of a foundation model's knowledge cutoff can be seen when you ask the model about recent events. In the example below, we asked ChatGPT about the latest inflation news. You can see that the model completes a function where it searches the web and summarizes results.
 
 ![gpt-4o CPI question](/img/blog/rag-architecture/CPI_question.png)
 
-This output relied on a type of Retrieval Augmented Generation (RAG) that searches up-to-date knowledge bases and integrates relevant information into the prompt given to the LLM. In other words, the LLM enhances its response by embedding context from a third-party source. We’ll dive deeper into this structure later in this post.
+This output relied on a type of Retrieval Augmented Generation (RAG) that searches up-to-date knowledge bases and integrates relevant information into the prompt given to the LLM. In other words, the LLM enhances its response by embedding context from a third-party source. We'll dive deeper into this structure later in this post.
 
 While foundation models have their strengths, they are also limited in their usefulness for domain-specific tasks and real-time analysis. Enterprises who want to leverage LLM with their proprietary data or external sources will then need to determine whether they want to fine-tune a model and/or deploy RAG architecture. Below is a high-level overview of capabilities of each option.
 
@@ -45,7 +58,7 @@ While foundation models have their strengths, they are also limited in their use
 
 ## The Case for Fine-Tuning
 
-There are scenarios when fine-tuning a model makes the most sense. Fine-tuning enhances an LLM’s performance on domain-specific tasks by training it on smaller, more targeted datasets. As a result, the model’s weights will be adjusted to optimize performance on that task, consequently improving the accuracy and relevance of the LLM while maintaining the model’s general knowledge.
+There are scenarios when fine-tuning a model makes the most sense. Fine-tuning enhances an LLM's performance on domain-specific tasks by training it on smaller, more targeted datasets. As a result, the model's weights will be adjusted to optimize performance on that task, consequently improving the accuracy and relevance of the LLM while maintaining the model's general knowledge.
 
 Imagine your LLM graduated from college and remembers all of its knowledge from its college courses. Fine-tuning is the equivalent of sending your LLM to get its masters. It will remember everything from Calculus I from sophomore year, but it will now be able to answer questions from the masters courses it took on algebraic topology and probability theory.
 
@@ -59,9 +72,9 @@ A fine-tuned model trained on medical knowledge may be particularly helpful for 
 
 ## The Case for Retrieval Augmented Generation
 
-At its core, Retrieval Augmented Generation (RAG) is a framework designed to augment an LLM’s capabilities by incorporating external knowledge sources. Put simply, RAG-based architecture enhances an LLM’s response by providing additional context to the LLM in the prompt. Think of it like attaching a file in an email.
+At its core, Retrieval Augmented Generation (RAG) is a framework designed to augment an LLM's capabilities by incorporating external knowledge sources. Put simply, RAG-based architecture enhances an LLM's response by providing additional context to the LLM in the prompt. Think of it like attaching a file in an email.
 
-Without RAG, here’s what a basic chatbot flow would look like.
+Without RAG, here's what a basic chatbot flow would look like.
 
 <!-- Centering and resizing the image -->
 <div style={{ textAlign: 'center' }}>
@@ -75,13 +88,13 @@ With RAG, the flow might work like this:
     <img src="/img/blog/rag-architecture/basic_rag_flow.png" style={{ width: '65%' }} alt="basic_rag_flow" />
 </div>
 
-Using a RAG framework, the prompt generates a query to a vector database that identifies relevant information (“context”) to provide to the LLM. This context is essentially “attached” to the prompt when it is sent to the foundation model.
+Using a RAG framework, the prompt generates a query to a vector database that identifies relevant information ("context") to provide to the LLM. This context is essentially "attached" to the prompt when it is sent to the foundation model.
 
 Now you may be asking—what is the difference between manually including the context in a prompt, such as attaching a PDF in a chatbot, versus implementing RAG architecture?
 
 The answer comes down to scalability and access. A single user can retrieve a PDF from his local storage and attach it in a query to an LLM like ChatGPT. But the beauty of RAG is connecting heterogeneous and expansive data sources that can provide powerful context to the user—even if the user does not have direct access to that data source.
 
-Let’s say that you purchased a smart thermostat for your home and are having trouble setting it up. You reach out to a support chatbot that asks how it can help, but when the chatbot asks for the model number, you have genuinely no clue. The receipt and the thermostat box have long been recycled, and since you’re feeling particularly lazy, you don’t want to inspect the device to find a model number.
+Let's say that you purchased a smart thermostat for your home and are having trouble setting it up. You reach out to a support chatbot that asks how it can help, but when the chatbot asks for the model number, you have genuinely no clue. The receipt and the thermostat box have long been recycled, and since you're feeling particularly lazy, you don't want to inspect the device to find a model number.
 
 When you provide your contact information, the chatbot retrieves details about the thermostat you purchased, including the date you bought it and the model number. Then using that information, it helps you triage your issue by summarizing material from the user manual and maybe even pulling solutions from similar support tickets that were resolved with other customers.
 
@@ -96,13 +109,13 @@ A RAG framework will consist of a number of key components.
 3. **Embedding Model**: The model that creates vector representations (embeddings) based on the data provided. These vectors are stored in the vector database that will be used to retrieve relevant information.
 4. **Large Language Model**: This is the foundation model that will process the user input and context to produce an output.
 
-Okay, so we’ve got a rough understanding of how a RAG framework could work, but what are the misconfigurations that could lead to security issues?
+Okay, so we've got a rough understanding of how a RAG framework could work, but what are the misconfigurations that could lead to security issues?
 
 ## Security Concerns for RAG Architecture
 
 ### Proper Authentication and Authorization Flows
 
-Depending on your LLM application’s use case, you may want to require authentication. From a security perspective, there are two major benefits to this:
+Depending on your LLM application's use case, you may want to require authentication. From a security perspective, there are two major benefits to this:
 
 - Enforces accountability and logging
 - Partially mitigates risk of Denial of Wallet (DoW) and Denial of Service (DoS)
@@ -134,7 +147,7 @@ You should assume that whatever is stored in a vector database can be retrieved 
 
 In the event that sensitive data needs to be indexed, then access should be enforced at the database level, and queries should be performed with the user token rather than with global authorization.
 
-The authorization flow should never rely on the prompt itself. Instead, a separate function should be called that verifies what the user is allowed to access and retrieves relevant information based on the user’s authorization.
+The authorization flow should never rely on the prompt itself. Instead, a separate function should be called that verifies what the user is allowed to access and retrieves relevant information based on the user's authorization.
 
 ## What Could Go Wrong?
 
@@ -181,15 +194,15 @@ All LLMs have a context window, which functions like its working memory. It dete
 
 ## Mitigating Controls for RAG
 
-By overloading a context window with irrelevant information, an attack can push out important context or instructions. As a consequence, the LLM can “forget” its instructions and go rogue.
+By overloading a context window with irrelevant information, an attack can push out important context or instructions. As a consequence, the LLM can "forget" its instructions and go rogue.
 
-This type of attack is more common for smaller models with shorter context windows. For a model like Google’s Gemini 1.5 Pro, where the context window has more than one million tokens, the likelihood of a context window overflow is reduced. The risk might be more pronounced for a model like [Llama 3.2](https://huggingface.co/meta-llama/Llama-3.2-1B), where the maximum content window is 128,000 tokens.
+This type of attack is more common for smaller models with shorter context windows. For a model like Google's Gemini 1.5 Pro, where the context window has more than one million tokens, the likelihood of a context window overflow is reduced. The risk might be more pronounced for a model like [Llama 3.2](https://huggingface.co/meta-llama/Llama-3.2-1B), where the maximum content window is 128,000 tokens.
 
 ## Mitigating Controls for RAG
 
 With careful implementation and secure by design controls, an LLM application using a RAG framework can produce extraordinary results.
 
-You can gain a baseline understanding of your LLM application’s risk by [running a Promptfoo red team evaluation](https://www.promptfoo.dev/docs/guides/evaluate-rag/) configured to your RAG environment. Once you have an understanding of what vulnerabilities exist in your application, then there are a number of controls that can be enforced to allow a user to safely interact with the LLM application.
+You can gain a baseline understanding of your LLM application's risk by [running a Promptfoo red team evaluation](https://www.promptfoo.dev/docs/guides/evaluate-rag/) configured to your RAG environment. Once you have an understanding of what vulnerabilities exist in your application, then there are a number of controls that can be enforced to allow a user to safely interact with the LLM application.
 
 1. **Input and Output Validation and Sanitization**: Implement robust input validation to filter out potentially harmful or manipulative prompts
 2. **Context Locking**: Limit how much conversation history or context the model can access at any given time
@@ -197,4 +210,4 @@ You can gain a baseline understanding of your LLM application’s risk by [runni
 4. **Enhanced Filtering**: Analyze the entire input context, not just the user message, to detect harmful content
 5. **Continuous Research and Improvement**: Stay updated on new attack vectors and defense mechanisms and run continuous scans against your LLM applications to identify new vulnerabilities
 
-In our next blog post, we’ll cover the exciting world of AI agents and how to prevent them from going rogue. Happy prompting!
+In our next blog post, we'll cover the exciting world of AI agents and how to prevent them from going rogue. Happy prompting!

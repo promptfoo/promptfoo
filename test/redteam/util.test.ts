@@ -1,9 +1,14 @@
+import { fetchWithCache } from '../../src/cache';
 import {
-  removePrefix,
-  normalizeApostrophes,
-  isEmptyResponse,
+  extractGoalFromPrompt,
+  getShortPluginId,
   isBasicRefusal,
+  isEmptyResponse,
+  normalizeApostrophes,
+  removePrefix,
 } from '../../src/redteam/util';
+
+jest.mock('../../src/cache');
 
 describe('removePrefix', () => {
   it('should remove a simple prefix', () => {
@@ -89,5 +94,129 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal('I will help you with that')).toBe(false);
     expect(isBasicRefusal('Here is the information you requested')).toBe(false);
     expect(isBasicRefusal('The answer is 42')).toBe(false);
+  });
+});
+
+describe('getShortPluginId', () => {
+  it('should remove promptfoo:redteam: prefix', () => {
+    expect(getShortPluginId('promptfoo:redteam:test')).toBe('test');
+  });
+
+  it('should return original if no prefix', () => {
+    expect(getShortPluginId('test')).toBe('test');
+  });
+});
+
+describe('extractGoalFromPrompt', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+  });
+
+  it('should successfully extract goal', async () => {
+    jest.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      data: { intent: 'test goal' },
+      deleteFromCache: async () => {},
+    });
+
+    const result = await extractGoalFromPrompt('test prompt', 'test purpose');
+    expect(result).toBe('test goal');
+  });
+
+  it('should return null on HTTP error', async () => {
+    jest.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      status: 500,
+      statusText: 'Internal Server Error',
+      headers: {},
+      data: {},
+      deleteFromCache: async () => {},
+    });
+
+    const result = await extractGoalFromPrompt('test prompt', 'test purpose');
+    expect(result).toBeNull();
+  });
+
+  it('should return null when no intent returned', async () => {
+    jest.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      data: {},
+      deleteFromCache: async () => {},
+    });
+
+    const result = await extractGoalFromPrompt('test prompt', 'test purpose');
+    expect(result).toBeNull();
+  });
+
+  it('should return null when API throws error', async () => {
+    jest.mocked(fetchWithCache).mockRejectedValue(new Error('API error'));
+
+    const result = await extractGoalFromPrompt('test prompt', 'test purpose');
+    expect(result).toBeNull();
+  });
+
+  it('should handle empty prompt and purpose', async () => {
+    jest.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      data: { intent: 'empty goal' },
+      deleteFromCache: async () => {},
+    });
+
+    const result = await extractGoalFromPrompt('', '');
+    expect(result).toBe('empty goal');
+  });
+
+  it('should include plugin context when pluginId is provided', async () => {
+    jest.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      data: { intent: 'plugin-specific goal' },
+      deleteFromCache: async () => {},
+    });
+
+    const result = await extractGoalFromPrompt(
+      'innocent prompt',
+      'test purpose',
+      'indirect-prompt-injection',
+    );
+    expect(result).toBe('plugin-specific goal');
+
+    // Verify that the API was called with plugin context
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        body: expect.stringContaining('pluginContext'),
+      }),
+      expect.any(Number),
+    );
+  });
+
+  it('should skip remote call when remote generation is disabled', async () => {
+    // Preserve original environment setting
+    const originalValue = process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION;
+    process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'true';
+
+    const result = await extractGoalFromPrompt('test prompt', 'test purpose');
+
+    expect(result).toBeNull();
+    expect(fetchWithCache).not.toHaveBeenCalled();
+
+    // Cleanup: restore or delete the env var to avoid leaking into other tests
+    if (originalValue === undefined) {
+      delete process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION;
+    } else {
+      process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = originalValue;
+    }
   });
 });

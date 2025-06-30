@@ -1,0 +1,51 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Advanced reasoning with Mistral Magistral models'
+
+providers:
+  - id: mistral:magistral-medium-latest
+    label: magistral-medium
+    config:
+      temperature: 0.7
+      top_p: 0.95
+      max_tokens: 40960
+
+  - id: mistral:magistral-small-latest
+    label: magistral-small
+    config:
+      temperature: 0.7
+      top_p: 0.95
+      max_tokens: 40960
+
+prompts:
+  - 'Think through this problem step by step: {{problem}}'
+
+tests:
+  - vars:
+      problem: 'A farmer has chickens and rabbits in a pen. There are 30 heads and 74 legs total. How many chickens and how many rabbits are there?'
+    assert:
+      - type: contains
+        value: 'step'
+      - type: llm-rubric
+        value: 'Correctly identifies that there are 16 chickens and 14 rabbits through systematic reasoning'
+      - type: contains-any
+        value: ['16 chickens', '14 rabbits', 'chickens: 16', 'rabbits: 14']
+
+  - vars:
+      problem: 'Three friends split a restaurant bill. Alice pays twice as much as Bob, and Charlie pays $15 more than Bob. If the total bill is $105, how much does each person pay?'
+    assert:
+      - type: contains
+        value: 'equation'
+      - type: llm-rubric
+        value: 'Shows the algebraic setup and correctly calculates Bob: $22.50, Alice: $45, Charlie: $37.50'
+      - type: contains-any
+        value: ['22.50', '$22.50', '45', '$45', '37.50', '$37.50']
+
+  - vars:
+      problem: 'A water tank is being filled by two pipes and drained by one pipe. Pipe A fills at 10 gallons/minute, Pipe B fills at 15 gallons/minute, and the drain empties at 8 gallons/minute. If all pipes operate simultaneously and the tank starts empty, how long will it take to fill a 340-gallon tank?'
+    assert:
+      - type: contains
+        value: 'rate'
+      - type: llm-rubric
+        value: 'Correctly calculates the net fill rate (17 gallons/minute) and determines it takes 20 minutes'
+      - type: contains-any
+        value: ['20 minutes', '20 min', '17 gallons/minute', '17 gal/min']

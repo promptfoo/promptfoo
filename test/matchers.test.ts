@@ -264,8 +264,27 @@ describe('matchesLlmRubric', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.resetAllMocks();
     jest.mocked(fs.existsSync).mockReturnValue(true);
     jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
+
+    // Reset cliState to default
+    (cliState as any).config = {};
+
+    // Reset remote grading mock with default behavior
+    jest.mocked(remoteGrading.doRemoteGrading).mockReset();
+    jest.mocked(remoteGrading.doRemoteGrading).mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Remote grading passed',
+    });
+
+    // Reset DefaultGradingProvider mock to prevent contamination
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockReset();
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+      output: JSON.stringify({ pass: true, score: 1, reason: 'Test passed' }),
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
   });
 
   it('should pass when the grading provider returns a passing result', async () => {
@@ -275,6 +294,12 @@ describe('matchesLlmRubric', () => {
       rubricPrompt: 'Grading prompt',
       provider: Grader,
     };
+
+    // Ensure Grader mock is properly set up for this test
+    jest.spyOn(Grader, 'callApi').mockResolvedValue({
+      output: JSON.stringify({ pass: true, reason: 'Test grading output' }),
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
 
     await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
       pass: true,
@@ -1004,8 +1029,20 @@ describe('matchesLlmRubric', () => {
       },
     };
 
+    // Clear and set up specific mock behavior for this test
+    jest.mocked(remoteGrading.doRemoteGrading).mockClear();
+    jest.mocked(remoteGrading.doRemoteGrading).mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Remote grading passed',
+    });
+
+    // Import and set up shouldGenerateRemote mock properly
+    const { shouldGenerateRemote } = jest.requireMock('../src/redteam/remoteGeneration');
+    jest.mocked(shouldGenerateRemote).mockReturnValue(true);
+
     // Give it a redteam config
-    cliState.config = { redteam: {} };
+    (cliState as any).config = { redteam: {} };
 
     await matchesLlmRubric(rubric, llmOutput, grading);
 
@@ -1024,6 +1061,15 @@ describe('matchesLlmRubric', () => {
 describe('matchesFactuality', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.resetAllMocks();
+
+    // Reset DefaultGradingProvider mock to prevent contamination
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockReset();
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+      output:
+        '(A) The submitted answer is a subset of the expert answer and is fully consistent with it.',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
   });
 
   afterEach(() => {
@@ -1355,6 +1401,22 @@ The submitted answer may either be a subset or superset of the expert answer, or
 });
 
 describe('matchesClosedQa', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.resetAllMocks();
+
+    // Reset DefaultGradingProvider mock to prevent contamination
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockReset();
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+      output: 'foo \n \n bar\n Y Y \n',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   it('should pass when the closed QA check passes', async () => {
     const input = 'Input text';
     const expected = 'Expected output';
@@ -1617,6 +1679,29 @@ describe('getAndCheckProvider', () => {
 });
 
 describe('matchesAnswerRelevance', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.resetAllMocks();
+
+    // Reset DefaultGradingProvider and DefaultEmbeddingProvider mocks to prevent contamination
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockReset();
+    jest.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockReset();
+
+    // Set up robust default mocks that work for most tests
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+      output: 'foobar',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+    jest.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockResolvedValue({
+      embedding: [1, 0, 0],
+      tokenUsage: { total: 5, prompt: 2, completion: 3 },
+    });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   it('should pass when the relevance score is above the threshold', async () => {
     const input = 'Input text';
     const output = 'Sample output';
@@ -1654,9 +1739,6 @@ describe('matchesAnswerRelevance', () => {
       expect.stringContaining(ANSWER_RELEVANCY_GENERATE.slice(0, 50)),
     );
     expect(mockCallEmbeddingApi).toHaveBeenCalledWith('Input text');
-
-    mockCallApi.mockRestore();
-    mockCallEmbeddingApi.mockRestore();
   });
 
   it('should fail when the relevance score is below the threshold', async () => {
@@ -1706,9 +1788,28 @@ describe('matchesAnswerRelevance', () => {
     expect(mockCallEmbeddingApi).toHaveBeenCalledWith(
       expect.stringContaining(ANSWER_RELEVANCY_GENERATE.slice(0, 50)),
     );
+  });
 
-    mockCallApi.mockRestore();
-    mockCallEmbeddingApi.mockRestore();
+  it('tracks token usage for successful calls', async () => {
+    const input = 'Input text';
+    const output = 'Sample output';
+    const threshold = 0.5;
+
+    const result = await matchesAnswerRelevance(input, output, threshold);
+
+    // Verify token usage is properly accumulated from all API calls
+    expect(result.tokensUsed?.total).toBeGreaterThan(0);
+    expect(result.tokensUsed?.prompt).toBeGreaterThan(0);
+    expect(result.tokensUsed?.completion).toBeGreaterThan(0);
+    expect(result.tokensUsed?.total).toBe(
+      (result.tokensUsed?.prompt || 0) + (result.tokensUsed?.completion || 0),
+    );
+
+    // Should accumulate from multiple calls: 3 text generations + 1 input embedding + 3 candidate embeddings = 7 calls
+    // With mocked values: 3*10 + 1*5 + 3*5 = 50 total tokens
+    expect(result.tokensUsed?.total).toBe(50);
+    expect(result.tokensUsed?.cached).toBe(0);
+    expect(result.tokensUsed?.completionDetails).toBeDefined();
   });
 });
 
@@ -1818,6 +1919,14 @@ describe('matchesClassification', () => {
 describe('matchesContextRelevance', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.resetAllMocks();
+
+    // Reset DefaultGradingProvider mock to prevent contamination
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockReset();
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+      output: 'foo\nbar\nbaz Insufficient Information\n',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
   });
 
   afterEach(() => {
@@ -1884,6 +1993,24 @@ describe('matchesContextRelevance', () => {
 describe('matchesContextFaithfulness', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.resetAllMocks();
+
+    // Reset DefaultGradingProvider mock to prevent contamination
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockReset();
+    jest
+      .spyOn(DefaultGradingProvider, 'callApi')
+      .mockImplementationOnce(() => {
+        return Promise.resolve({
+          output: 'Statement 1\nStatement 2\nStatement 3\n',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        });
+      })
+      .mockImplementationOnce(() => {
+        return Promise.resolve({
+          output: 'Final verdict for each statement in order: Yes. No. Yes.',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        });
+      });
   });
 
   afterEach(() => {
@@ -1963,11 +2090,36 @@ describe('matchesContextFaithfulness', () => {
       },
     });
   });
+
+  it('tracks token usage for multiple API calls', async () => {
+    const query = 'Query text';
+    const output = 'Output text';
+    const context = 'Context text';
+    const threshold = 0.5;
+
+    const result = await matchesContextFaithfulness(query, output, context, threshold);
+
+    expect(result.tokensUsed).toEqual({
+      total: 20, // 10 from first call + 10 from second call
+      prompt: 10, // 5 from first call + 5 from second call
+      completion: 10, // 5 from first call + 5 from second call
+      cached: 0,
+      completionDetails: expect.any(Object),
+    });
+  });
 });
 
 describe('matchesContextRecall', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.resetAllMocks();
+
+    // Reset DefaultGradingProvider mock to prevent contamination
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockReset();
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+      output: 'foo [Attributed]\nbar [Not attributed]\nbaz [Attributed]\n',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
   });
 
   afterEach(() => {
@@ -2288,6 +2440,50 @@ describe('tryParse and renderLlmRubricPrompt', () => {
     const expected = 'statements:\nStatement 1\nStatement 2\nStatement 3';
     expect(result).toBe(expected);
   });
+
+  it('should stringify objects in arrays', async () => {
+    const template = 'Items: {{items}}';
+    const items = [{ name: 'Item 1', price: 10 }, 'string item', { name: 'Item 2', price: 20 }];
+
+    const result = await renderLlmRubricPrompt(template, { items });
+
+    expect(result).not.toContain('[object Object]');
+    expect(result).toContain(JSON.stringify(items[0]));
+    expect(result).toContain('string item');
+    expect(result).toContain(JSON.stringify(items[2]));
+  });
+
+  it('should stringify deeply nested objects and arrays', async () => {
+    const template = 'Complex data: {{data}}';
+    const data = {
+      products: [
+        {
+          name: 'Item 1',
+          price: 10,
+          details: {
+            color: 'red',
+            specs: { weight: '2kg', dimensions: { width: 10, height: 20 } },
+          },
+        },
+        'string item',
+        {
+          name: 'Item 2',
+          price: 20,
+          nested: [{ a: 1 }, { b: 2 }],
+          metadata: { tags: ['electronics', 'gadget'] },
+        },
+      ],
+    };
+
+    const result = await renderLlmRubricPrompt(template, { data });
+
+    expect(result).not.toContain('[object Object]');
+    expect(result).toContain('"specs":{"weight":"2kg"');
+    expect(result).toContain('"dimensions":{"width":10,"height":20}');
+    expect(result).toContain('[{"a":1},{"b":2}]');
+    expect(result).toContain('"tags":["electronics","gadget"]');
+    expect(result).toContain('string item');
+  });
 });
 
 describe('matchesGEval', () => {
@@ -2327,6 +2523,7 @@ describe('matchesGEval', () => {
       pass: true,
       score: 0.8,
       reason: 'The response is well-structured and clear',
+      tokensUsed: expect.any(Object),
     });
 
     expect(DefaultGradingProvider.callApi).toHaveBeenCalledTimes(2);
@@ -2404,6 +2601,86 @@ describe('matchesGEval', () => {
       pass: false,
       score: 0.3,
       reason: 'The response lacks coherence',
+      tokensUsed: expect.any(Object),
+    });
+  });
+
+  it('tracks token usage for both API calls', async () => {
+    const criteria = 'Evaluate coherence and clarity';
+    const input = 'Test input';
+    const output = 'Test output';
+    const threshold = 0.7;
+
+    const result = await matchesGEval(criteria, input, output, threshold);
+
+    expect(result.tokensUsed).toEqual({
+      total: 25, // 10 from steps call + 15 from evaluation call
+      prompt: 13, // 5 from steps call + 8 from evaluation call
+      completion: 12, // 5 from steps call + 7 from evaluation call
+      cached: 0,
+      completionDetails: expect.any(Object),
+    });
+  });
+});
+
+describe('PROMPTFOO_DISABLE_OBJECT_STRINGIFY environment variable', () => {
+  afterEach(() => {
+    // Clean up environment variable after each test
+    delete process.env.PROMPTFOO_DISABLE_OBJECT_STRINGIFY;
+  });
+
+  describe('Default behavior (PROMPTFOO_DISABLE_OBJECT_STRINGIFY=false)', () => {
+    beforeEach(() => {
+      process.env.PROMPTFOO_DISABLE_OBJECT_STRINGIFY = 'false';
+    });
+
+    it('should stringify objects to prevent [object Object] issues', async () => {
+      const template = 'Product: {{product}}';
+      const product = { name: 'Headphones', price: 99.99 };
+
+      const result = await renderLlmRubricPrompt(template, { product });
+
+      expect(result).not.toContain('[object Object]');
+      expect(result).toBe(`Product: ${JSON.stringify(product)}`);
+    });
+
+    it('should stringify objects in arrays', async () => {
+      const template = 'Items: {{items}}';
+      const items = [{ name: 'Item 1', price: 10 }, 'string item', { name: 'Item 2', price: 20 }];
+
+      const result = await renderLlmRubricPrompt(template, { items });
+
+      expect(result).not.toContain('[object Object]');
+      expect(result).toContain(JSON.stringify(items[0]));
+      expect(result).toContain('string item');
+      expect(result).toContain(JSON.stringify(items[2]));
+    });
+  });
+
+  describe('Object access enabled (PROMPTFOO_DISABLE_OBJECT_STRINGIFY=true)', () => {
+    beforeEach(() => {
+      process.env.PROMPTFOO_DISABLE_OBJECT_STRINGIFY = 'true';
+    });
+
+    it('should allow direct object property access', async () => {
+      const template = 'Product: {{product.name}} - ${{product.price}}';
+      const product = { name: 'Headphones', price: 99.99 };
+
+      const result = await renderLlmRubricPrompt(template, { product });
+
+      expect(result).toBe('Product: Headphones - $99.99');
+    });
+
+    it('should allow array indexing and property access', async () => {
+      const template = 'First item: {{items[0].name}}';
+      const items = [
+        { name: 'First Item', price: 10 },
+        { name: 'Second Item', price: 20 },
+      ];
+
+      const result = await renderLlmRubricPrompt(template, { items });
+
+      expect(result).toBe('First item: First Item');
     });
   });
 });
