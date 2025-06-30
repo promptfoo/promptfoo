@@ -267,8 +267,6 @@ tests:
   - huggingface://datasets/bigbench?config=logical_deduction
 ```
 
-
-
 ### ChatGPT Prompts
 
 [awesome-chatgpt-prompts](https://huggingface.co/datasets/fka/awesome-chatgpt-prompts) provides a curated collection of effective prompts. Example usage:
@@ -310,10 +308,6 @@ defaultTest:
     - type: llm-rubric
       value: Solution must show clear mathematical reasoning
 ```
-
-
-
-
 
 ## Configuration Options
 
