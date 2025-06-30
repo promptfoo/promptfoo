@@ -22,7 +22,7 @@ export function handleFinishReason({
   const normalizedValue = value.toLowerCase();
   const normalizedFinishReason = providerResponse.finishReason.toLowerCase();
   const pass = normalizedValue === normalizedFinishReason;
-  
+
   return {
     pass,
     score: pass ? 1 : 0,

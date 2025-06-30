@@ -991,6 +991,7 @@ tests:
 #### Provider Compatibility
 
 **Currently Supported Providers:**
+
 - **OpenAI and OpenAI-compatible providers** (GPT-3.5, GPT-4, Azure OpenAI, etc.)
 - **Anthropic** (Claude models)
 

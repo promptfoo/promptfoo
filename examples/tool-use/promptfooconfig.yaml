@@ -48,7 +48,7 @@ providers:
     label: gpt-4-mini-limited
     config:
       max_tokens: 10 # Very short limit to trigger 'length' finish reason
-      
+
   - id: groq:llama-3.3-70b-versatile
     config:
       tools:
@@ -82,22 +82,22 @@ tests:
       - type: finish-reason
         value: tool_calls # Should trigger tool use for weather lookup
       - type: is-valid-openai-tools-call # Ensure tool call is valid
-      
+
   - vars:
       city: New York
     assert:
       - type: finish-reason
         value: tool_calls
-        
+
   # Test natural completion without tools
   - vars:
       city: Mars
     assert:
       - type: contains
-        value: "cannot provide" # Mars weather not available
+        value: 'cannot provide' # Mars weather not available
       - type: finish-reason
         value: stop # Should complete naturally without tool use
-        
+
   # Test token limit - only for the limited provider
   - vars:
       city: London
