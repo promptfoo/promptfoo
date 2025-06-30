@@ -411,18 +411,23 @@ export class AzureAssistantProvider extends AzureGenericProvider {
             const errorMessage = completedRun.last_error.message || '';
 
             if (errorCode === 'content_filter' || this.isContentFilterError(errorMessage)) {
+              const lowerErrorMessage = errorMessage.toLowerCase();
+              const isInputFiltered =
+                lowerErrorMessage.includes('prompt') || lowerErrorMessage.includes('input');
+              const isOutputFiltered =
+                lowerErrorMessage.includes('output') || lowerErrorMessage.includes('response');
+
+              // Ensure mutual exclusivity - prioritize input if both are detected
+              const flaggedInput = isInputFiltered;
+              const flaggedOutput = !isInputFiltered && (isOutputFiltered || !isOutputFiltered);
+
               result = {
                 output:
                   "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.",
                 guardrails: {
                   flagged: true,
-                  flaggedInput:
-                    errorMessage.toLowerCase().includes('prompt') ||
-                    errorMessage.toLowerCase().includes('input'),
-                  flaggedOutput:
-                    errorMessage.toLowerCase().includes('output') ||
-                    errorMessage.toLowerCase().includes('response') ||
-                    !errorMessage.toLowerCase().includes('input'),
+                  flaggedInput,
+                  flaggedOutput,
                 },
               };
             } else {
@@ -868,13 +873,17 @@ export class AzureAssistantProvider extends AzureGenericProvider {
                 const isOutputFiltered =
                   lowerErrorMessage.includes('output') || lowerErrorMessage.includes('response');
 
+                // Ensure mutual exclusivity - prioritize input if both are detected
+                const flaggedInput = isInputFiltered;
+                const flaggedOutput = !isInputFiltered && (isOutputFiltered || !isOutputFiltered);
+
                 return {
                   output:
                     "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.",
                   guardrails: {
                     flagged: true,
-                    flaggedInput: isInputFiltered,
-                    flaggedOutput: isOutputFiltered || (!isInputFiltered && !isOutputFiltered), // Default to output if neither is explicitly mentioned
+                    flaggedInput,
+                    flaggedOutput,
                   },
                 };
               }
