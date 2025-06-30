@@ -18,7 +18,11 @@ export function handleFinishReason({
     };
   }
 
-  const pass = value === providerResponse.finishReason;
+  // Case-insensitive comparison to be more user-friendly
+  const normalizedValue = value.toLowerCase();
+  const normalizedFinishReason = providerResponse.finishReason.toLowerCase();
+  const pass = normalizedValue === normalizedFinishReason;
+  
   return {
     pass,
     score: pass ? 1 : 0,

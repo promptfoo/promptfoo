@@ -43,6 +43,12 @@ providers:
   - id: openai:chat:gpt-4.1-mini
     config:
       tools: file://external_tools.yaml
+  # Provider with token limit to demonstrate 'length' finish reason
+  - id: openai:chat:gpt-4.1-mini
+    label: gpt-4-mini-limited
+    config:
+      max_tokens: 10 # Very short limit to trigger 'length' finish reason
+      
   - id: groq:llama-3.3-70b-versatile
     config:
       tools:
@@ -69,11 +75,33 @@ prompts:
   - Tell me about the weather in {{city}} in the default unit for the location.
 
 tests:
+  # Test that tool calls result in 'tool_calls' finish reason
   - vars:
       city: Boston
+    assert:
+      - type: finish-reason
+        value: tool_calls # Should trigger tool use for weather lookup
+      - type: is-valid-openai-tools-call # Ensure tool call is valid
+      
   - vars:
       city: New York
-  - vars:
-      city: Paris
+    assert:
+      - type: finish-reason
+        value: tool_calls
+        
+  # Test natural completion without tools
   - vars:
       city: Mars
+    assert:
+      - type: contains
+        value: "cannot provide" # Mars weather not available
+      - type: finish-reason
+        value: stop # Should complete naturally without tool use
+        
+  # Test token limit - only for the limited provider
+  - vars:
+      city: London
+    provider: gpt-4-mini-limited
+    assert:
+      - type: finish-reason
+        value: length # Should hit token limit before completing

@@ -97,15 +97,26 @@ describe('finishReason assertion', () => {
     expect(result.reason).toContain('did not supply');
   });
 
-  it('should perform exact string matching', () => {
+  it('should perform case-insensitive matching', () => {
     const params: Partial<AssertionParams> = {
       assertion: { type: 'finish-reason', value: 'stop' },
       providerResponse: { finishReason: 'STOP' }, // Different case
     };
 
     const result = handleFinishReason(params as AssertionParams);
-    expect(result.pass).toBe(false);
-    expect(result.score).toBe(0);
-    expect(result.reason).toContain('Expected finish reason "stop" but got "STOP"');
+    expect(result.pass).toBe(true); // Now passes with case-insensitive comparison
+    expect(result.score).toBe(1);
+    expect(result.reason).toBe('Assertion passed');
+  });
+
+  it('should handle mixed case in both assertion and response', () => {
+    const params: Partial<AssertionParams> = {
+      assertion: { type: 'finish-reason', value: 'LENGTH' },
+      providerResponse: { finishReason: 'length' },
+    };
+
+    const result = handleFinishReason(params as AssertionParams);
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
   });
 });

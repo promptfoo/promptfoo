@@ -69,3 +69,13 @@ promptfoo view
 This example uses a simple weather lookup function that takes a location and optionally a temperature unit. The example illustrates how different providers handle the same function definition with different syntaxes.
 
 External tools can also be loaded from separate files, as demonstrated with `external_tools.yaml`.
+
+## Finish Reason Assertions
+
+This example also demonstrates the use of `finish-reason` assertions to validate why a model stopped generating:
+
+- **`tool_calls`**: Verifies the model stopped to make a function/tool call (e.g., weather lookup for real cities)
+- **`stop`**: Confirms natural completion without tool use (e.g., when asked about Mars weather)
+- **`length`**: Tests token limit handling with a constrained provider configuration
+
+These assertions help ensure your models are using tools appropriately and handling edge cases correctly.

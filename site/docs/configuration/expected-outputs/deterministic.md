@@ -990,10 +990,18 @@ tests:
 
 #### Provider Compatibility
 
-This assertion works across different providers through automatic normalization:
+**Currently Supported Providers:**
+- **OpenAI and OpenAI-compatible providers** (GPT-3.5, GPT-4, Azure OpenAI, etc.)
+- **Anthropic** (Claude models)
+
+The assertion automatically normalizes provider-specific values:
 
 - **OpenAI**: `stop`, `length`, `content_filter`, `tool_calls`, `function_call` (legacy)
 - **Anthropic**: `end_turn` → `stop`, `max_tokens` → `length`, `tool_use` → `tool_calls`, `stop_sequence` → `stop`
+
+:::note
+Support for additional providers (Google Vertex AI, AWS Bedrock, etc.) is planned for future releases.
+:::
 
 #### Advanced Usage
 
@@ -1037,8 +1045,8 @@ tests:
 
 **Expected reason doesn't match:**
 
-- Finish reasons are case-sensitive after normalization
-- Use exact values: `stop`, `length`, `content_filter`, `tool_calls`
+- Finish reason comparison is case-insensitive (e.g., `stop`, `Stop`, and `STOP` are all valid)
+- Standard normalized values: `stop`, `length`, `content_filter`, `tool_calls`
 - Check provider documentation for specific finish reason values
 
 ### Is-Refusal
