@@ -74,8 +74,6 @@ External tools can also be loaded from separate files, as demonstrated with `ext
 
 This example also demonstrates the use of `finish-reason` assertions to validate why a model stopped generating:
 
-- **`tool_calls`**: Verifies the model stopped to make a function/tool call (e.g., weather lookup for real cities)
-- **`stop`**: Confirms natural completion without tool use (e.g., when asked about Mars weather)
-- **`length`**: Tests token limit handling with a constrained provider configuration
+- **`tool_calls`**: Verifies the model stopped to make a function/tool call (e.g., weather lookup for cities)
 
-These assertions help ensure your models are using tools appropriately and handling edge cases correctly.
+The example shows that when models are asked about weather in real cities (Boston, New York, Paris), they correctly stop generation to make tool calls, resulting in a `tool_calls` finish reason. This helps ensure your models are using tools appropriately when they should be.
