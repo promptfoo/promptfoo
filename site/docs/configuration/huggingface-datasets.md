@@ -56,6 +56,8 @@ tests: huggingface://datasets/rajpurkar/squad
 | `config`  | Dataset configuration name                    | `default`   |
 | `limit`   | Maximum number of test cases to load          | `unlimited` |
 
+The loader accepts any parameter supported by the [HuggingFace Datasets API](https://huggingface.co/docs/datasets-server/api_reference#get-apirows). Additional parameters beyond these common ones are passed directly to the API.
+
 To limit the number of test cases:
 
 ```yaml
@@ -72,6 +74,10 @@ export HF_TOKEN=your_token_here
 export HF_API_TOKEN=your_token_here
 export HUGGING_FACE_HUB_TOKEN=your_token_here
 ```
+
+:::info
+Authentication is required for private datasets and gated models. For public datasets, authentication is optional but provides higher rate limits.
+:::
 
 ## Implementation details
 
