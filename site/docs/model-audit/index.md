@@ -22,7 +22,7 @@ sidebar_position: 1
 
 ModelAudit is a lightweight static security scanner for machine learning models, integrated into Promptfoo. Scan your AI/ML models for malicious code, backdoors, and security vulnerabilities before production deployment.
 
-By invoking `promptfoo scan-model`, you can use ModelAudit's static security scanning capabilities.
+Use `promptfoo scan-model` to access ModelAudit's comprehensive security scanning capabilities across 15+ model formats and remote sources.
 
 ![example model scan results](/img/docs/modelaudit/modelaudit-result.png)
 
@@ -36,17 +36,9 @@ And displays the results:
 
 ## Purpose
 
-AI/ML models can introduce security risks through:
+AI/ML models can introduce significant security risks that traditional security tools miss. These threats include malicious code embedded in pickled models, suspicious TensorFlow operations, potentially unsafe Keras Lambda layers, encoded payloads hidden in model structures, risky configurations in model architectures, malicious content in ZIP archives, and embedded executables in binary model files.
 
-- Malicious code embedded in pickled models
-- Suspicious TensorFlow operations
-- Potentially unsafe Keras Lambda layers
-- Encoded payloads hidden in model structures
-- Risky configurations in model architectures
-- Malicious content in ZIP archives and compressed model files
-- Embedded executables in binary model files
-
-ModelAudit helps identify these risks before models are deployed to production environments, ensuring a more secure AI pipeline.
+ModelAudit addresses these unique AI security challenges by providing specialized scanning capabilities designed specifically for machine learning artifacts. This ensures threats are identified before models reach production environments, maintaining the integrity of your AI pipeline.
 
 ## Usage
 
@@ -78,7 +70,7 @@ promptfoo scan-model models:/MyModel/1  # MLflow registry
 
 # Output options
 promptfoo scan-model model.pkl --format json --output results.json
-promptfoo scan-model models/ --sbom compliance-report.json
+promptfoo scan-model models/ --sbom compliance-report.json  # Software Bill of Materials
 ```
 
 :::info Alternative Installation and Usage
@@ -91,16 +83,13 @@ For complete CLI options and advanced usage, see **[Usage Guide](./usage.md)**.
 
 ## Web Interface
 
-Promptfoo includes a web interface for ModelAudit at `/model-audit` with visual path selection, real-time progress tracking, and detailed results visualization.
+For users who prefer visual interfaces, Promptfoo includes a web-based ModelAudit interface at `/model-audit`. This provides an intuitive alternative to command-line scanning with visual path selection, real-time progress tracking, and detailed results visualization.
 
 **Access:** Run `promptfoo view` and navigate to `http://localhost:15500/model-audit`
 
 **Key Features:**
 
-- Visual file/directory selection with current working directory context
-- GUI configuration for all scan options (blacklist patterns, timeouts, file limits)
-- Live scanning progress and tabbed results display with severity color coding
-- Scan history and automatic installation detection
+The web interface streamlines the scanning process with visual file/directory selection, GUI configuration for all scan options, live progress tracking with severity color coding, and automatic scan history management.
 
 ## Supported Model Formats
 
@@ -128,6 +117,8 @@ For detailed scanner capabilities, see **[Scanner Reference](./scanners.md)**.
 
 ## Security Checks Performed
 
+ModelAudit performs comprehensive security analysis across all supported formats:
+
 **Code Execution Risks:**
 
 - **Malicious Code** - Dangerous imports, eval/exec calls, system commands
@@ -144,8 +135,8 @@ For detailed scanner capabilities, see **[Scanner Reference](./scanners.md)**.
 
 **Compliance & Configuration:**
 
-- **License Detection** - AGPL warnings, commercial restrictions, SBOM generation
-- **Container Security** - OCI/Docker layer scanning, path traversal protection
+- **License Detection** - AGPL network service warnings, commercial use restrictions, software bill of materials (SBOM) generation
+- **Container Security** - OCI/Docker layer scanning with path traversal attack prevention
 - **XML Security** - XXE attack prevention in PMML files
 - **Blacklist Matching** - Custom security patterns and known threats
 
@@ -188,4 +179,4 @@ In CI/CD pipelines, exit code 1 indicates findings that should be reviewed but d
 
 ## Getting Started
 
-Ready to secure your models? Start with our **[Installation & Quick Start Guide](./installation.md)** for a 5-minute setup, or see **[Usage Guide](./usage.md)** for detailed instructions and integrations.
+Start with the **[Installation & Quick Start Guide](./installation.md)** to scan your first model in 5 minutes, or explore the **[Usage Guide](./usage.md)** for advanced integrations and CI/CD workflows.

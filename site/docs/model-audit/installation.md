@@ -16,7 +16,7 @@ sidebar_position: 2
 
 # Installation & Quick Start
 
-Get ModelAudit running in 5 minutes, then dive into detailed setup for production use.
+Install ModelAudit and scan your first model in 5 minutes, then configure detailed settings for production use.
 
 ## Quick Start (5 Minutes)
 
@@ -77,10 +77,12 @@ ModelAudit classifies findings by severity:
 
 **Severity Levels:**
 
-- 🚨 **CRITICAL**: Immediate security concerns - investigate immediately
-- ⚠️ **WARNING**: Potential issues - review and assess risk
-- ℹ️ **INFO**: Informational findings - good to know
-- 🔍 **DEBUG**: Detailed analysis (shown with `--verbose`)
+ModelAudit classifies each finding to help you prioritize response actions:
+
+- 🚨 **CRITICAL**: Immediate security concerns requiring investigation
+- ⚠️ **WARNING**: Potential issues that should be reviewed and assessed
+- ℹ️ **INFO**: Informational findings for awareness
+- 🔍 **DEBUG**: Detailed analysis available with `--verbose` flag
 
 ### Exit Codes for Automation
 
@@ -90,7 +92,7 @@ ModelAudit classifies findings by severity:
 # 2 = Scan errors (file not found, permission denied, etc.)
 ```
 
-**🎯 Quick Start Complete!** You can now scan models and understand the results. Continue below for detailed setup.
+You can now scan models and interpret security findings. Continue below for detailed installation options and production configuration.
 
 ---
 
@@ -144,7 +146,7 @@ docker pull ghcr.io/promptfoo/modelaudit:latest-tensorflow  # TensorFlow only
 
 ## Dependencies by Model Format
 
-ModelAudit has different dependency requirements based on which model formats you need to scan:
+ModelAudit uses a modular dependency system, installing only the packages needed for your specific model formats. This reduces installation size and potential conflicts.
 
 ### Core Dependencies (Always Installed)
 
@@ -237,9 +239,7 @@ modelaudit doctor --show-failed
 
 **NumPy 2.x Notes:**
 
-- Some ML framework scanners may not load due to compatibility issues
-- Core scanning functionality works perfectly
-- Use `modelaudit doctor` to see which scanners loaded successfully
+While ModelAudit fully supports NumPy 2.x, some ML framework scanners may not load due to downstream compatibility issues. However, core scanning functionality works perfectly, and you can use `modelaudit doctor` to see which scanners loaded successfully.
 
 ## Development Installation
 
@@ -336,6 +336,8 @@ echo "JFROG_API_TOKEN=your_token" > .env
 
 ## Troubleshooting
 
+Resolve common installation and configuration issues.
+
 ### Common Issues
 
 **Missing Dependencies:**
@@ -388,6 +390,8 @@ docker run --rm -v "${PWD}:/data" ghcr.io/promptfoo/modelaudit:latest scan /data
 
 ## System Requirements
 
+Ensure your system meets these minimum requirements for optimal ModelAudit performance:
+
 - **Python**: 3.9 or higher
 - **Memory**: 1GB+ RAM (more for large models)
 - **Storage**: 500MB+ free space (for temporary model downloads)
@@ -395,7 +399,4 @@ docker run --rm -v "${PWD}:/data" ghcr.io/promptfoo/modelaudit:latest scan /data
 
 **Platform Support:**
 
-- ✅ Linux (x86_64, ARM64)
-- ✅ macOS (Intel, Apple Silicon)
-- ✅ Windows (x86_64)
-- ✅ Docker containers
+ModelAudit runs on all major platforms: Linux (x86_64, ARM64), macOS (Intel, Apple Silicon), Windows (x86_64), and Docker containers.

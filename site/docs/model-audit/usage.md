@@ -17,6 +17,8 @@ Complete the **[Installation & Quick Start Guide](./installation.md)** before us
 
 ## Basic Commands
 
+Start with these fundamental commands to scan models from various sources:
+
 ```bash
 # Scan local models
 promptfoo scan-model ./model.pkl
@@ -26,11 +28,13 @@ promptfoo scan-model ./models/
 promptfoo scan-model hf://microsoft/resnet-50               # HuggingFace
 promptfoo scan-model s3://my-bucket/model.pt                # Cloud storage
 promptfoo scan-model https://company.jfrog.io/.../model.pkl # JFrog
-promptfoo scan-model model.pkl.dvc                         # DVC
-promptfoo scan-model models:/MyModel/1                      # MLflow
+promptfoo scan-model model.pkl.dvc                          # DVC
+promptfoo scan-model models:/MyModel/1                       # MLflow
 ```
 
 ## Remote Model Scanning
+
+Expand beyond local files by connecting to external model repositories and storage systems.
 
 ### HuggingFace Models
 
@@ -55,7 +59,7 @@ promptfoo scan-model hf://your-org/private-model
 
 ### Cloud Storage
 
-Scan models from cloud providers with automatic authentication.
+Expand your scanning capabilities to cloud-hosted models with automatic authentication.
 
 **AWS S3:**
 
@@ -95,7 +99,7 @@ promptfoo scan-model https://company.jfrog.io/.../model.pkl --jfrog-api-token ab
 
 ### DVC Integration
 
-Automatically resolves DVC pointer files to scan actual models.
+Automatically resolves DVC (Data Version Control) pointer files to scan the actual model files they reference.
 
 ```bash
 # Scan DVC-tracked models (auto-resolves)
@@ -105,7 +109,7 @@ promptfoo scan-model ./models/  # Scans all .dvc files
 
 ### MLflow Registry
 
-Scan models from MLflow registries.
+Connect directly to MLflow model registries to scan versioned models without manual downloads.
 
 ```bash
 export MLFLOW_TRACKING_URI=http://mlflow-server:5000
@@ -117,6 +121,8 @@ promptfoo scan-model models:/MyModel/Latest --registry-uri https://mlflow.compan
 ```
 
 ## CLI Options
+
+Configure ModelAudit's behavior using command-line options for different scanning scenarios.
 
 **Output Control:**
 
@@ -147,6 +153,8 @@ promptfoo scan-model https://company.jfrog.io/.../model.pkl --jfrog-api-token ab
 
 ## Web Interface
 
+Access ModelAudit's visual interface for an interactive scanning experience.
+
 Access ModelAudit through Promptfoo's web interface for visual scanning:
 
 ```bash
@@ -163,16 +171,16 @@ promptfoo view
 
 ## Security Features
 
-ModelAudit includes advanced security protections:
+ModelAudit includes multiple layers of security protection to defend against sophisticated attacks:
 
 - **File Type Validation**: Detects spoofed file extensions and format mismatches
 - **Resource Protection**: Prevents zip bombs, memory exhaustion, and DoS attacks
-- **Path Traversal Prevention**: Blocks malicious archive extractions
+- **Path Traversal Prevention**: Blocks malicious archive extractions that attempt to write files outside their intended directory
 - **Executable Detection**: Finds embedded PE, ELF, and Mach-O files with validation
 
 ## CI/CD Integration
 
-Use ModelAudit in your development workflows:
+Integrate ModelAudit into your development workflows to automate security scanning:
 
 **Exit codes for automation:**
 
@@ -194,6 +202,8 @@ Use ModelAudit in your development workflows:
 ```
 
 ## Troubleshooting
+
+Resolve common issues that may occur during installation or scanning.
 
 **Missing dependencies:**
 
