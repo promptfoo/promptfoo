@@ -18,11 +18,12 @@ export interface CallbackContext {
 
 /**
  * Function callback that can receive context about the current assistant execution
+ *
+ * @param args - Function arguments. OpenAI Assistant provider passes parsed objects,
+ *               Azure Assistant provider passes raw JSON strings.
+ * @param context - Optional execution context with thread/run/assistant information
  */
-export type AssistantFunctionCallback = (
-  args: string,
-  context?: CallbackContext,
-) => Promise<string>;
+export type AssistantFunctionCallback = (args: any, context?: CallbackContext) => Promise<string>;
 
 export interface OpenAiSharedOptions {
   apiKey?: string;

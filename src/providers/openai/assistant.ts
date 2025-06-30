@@ -177,12 +177,21 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       }
 
       // Execute the callback with explicit context
+      // Note: OpenAI assistant provider maintains backward compatibility by parsing args
       logger.debug(
         `Executing function '${functionName}' with args: ${args}${
           context ? ` and context: ${JSON.stringify(context)}` : ''
         }`,
       );
-      const result = await callback(args, context);
+      let parsedArgs;
+      try {
+        parsedArgs = JSON.parse(args);
+      } catch (error) {
+        logger.warn(`Error parsing function arguments for '${functionName}': ${error}`);
+        parsedArgs = {};
+      }
+
+      const result = await callback(parsedArgs, context);
 
       // Format the result
       if (result === undefined || result === null) {

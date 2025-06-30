@@ -333,12 +333,15 @@ describe('OpenAI Provider', () => {
       await provider.callApi('test prompt');
 
       // Verify that the callback was called with the correct context
-      expect(mockCallback).toHaveBeenCalledWith('{"param": "value"}', {
-        threadId: 'thread_test',
-        runId: 'run_test',
-        assistantId: 'asst_test',
-        provider: 'openai',
-      });
+      expect(mockCallback).toHaveBeenCalledWith(
+        { param: 'value' },
+        {
+          threadId: 'thread_test',
+          runId: 'run_test',
+          assistantId: 'asst_test',
+          provider: 'openai',
+        },
+      );
     });
 
     it('should work with callbacks that do not use context', async () => {
@@ -388,7 +391,7 @@ describe('OpenAI Provider', () => {
 
       // Callback should be called with args and context, but context is optional
       expect(oldStyleCallback).toHaveBeenCalledWith(
-        '{"param": "value"}',
+        { param: 'value' },
         expect.objectContaining({
           threadId: 'thread_test',
           runId: 'run_test',
@@ -404,7 +407,7 @@ describe('OpenAI Provider', () => {
           apiKey: 'test-key',
           functionToolCallbacks: {
             string_function:
-              '(args, context) => { return `received: ${args} with context: ${JSON.stringify(context)}`; }',
+              '(args, context) => { return `received: ${JSON.stringify(args)} with context: ${JSON.stringify(context)}`; }',
           },
         },
       });
@@ -448,7 +451,7 @@ describe('OpenAI Provider', () => {
         tool_outputs: [
           {
             tool_call_id: 'call_test',
-            output: expect.stringContaining('received: {"test": "data"}'),
+            output: expect.stringContaining('received: {"test":"data"}'),
           },
         ],
       });
@@ -457,10 +460,9 @@ describe('OpenAI Provider', () => {
     it('should handle callbacks that access context properties', async () => {
       const contextAwareCallback = jest
         .fn()
-        .mockImplementation((args: string, context?: CallbackContext) => {
-          const parsed = JSON.parse(args);
+        .mockImplementation((args: any, context?: CallbackContext) => {
           const result = {
-            originalArgs: parsed,
+            originalArgs: args,
             contextInfo: {
               threadId: context?.threadId,
               provider: context?.provider,
@@ -513,7 +515,7 @@ describe('OpenAI Provider', () => {
 
       // Verify the callback was called with the correct parameters
       expect(contextAwareCallback).toHaveBeenCalledWith(
-        '{"user_id": "123"}',
+        { user_id: '123' },
         expect.objectContaining({
           threadId: 'thread_test',
           runId: 'run_test',
