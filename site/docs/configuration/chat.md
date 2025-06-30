@@ -1,9 +1,20 @@
 ---
 sidebar_label: Chat threads
-sidebar_position: 10
+sidebar_position: 32
 title: Chat Conversations and Multi-Turn Threads
-description: Learn how to create and manage chat conversations, multi-turn threads, and conversation history in promptfoo
-keywords: [chat, conversations, threads, multi-turn, history, messages, _conversation]
+description: Configure chat conversations and multi-turn threads for LLM evaluation. Learn conversation history, multi-shot prompts, and chat flow testing.
+keywords:
+  [
+    chat conversations,
+    multi-turn evaluation,
+    conversation history,
+    chat threads,
+    dialogue testing,
+    conversational AI,
+    chat flow,
+  ]
+pagination_prev: configuration/outputs
+pagination_next: configuration/caching
 ---
 
 # Chat conversations / threads

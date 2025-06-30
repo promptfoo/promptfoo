@@ -1185,7 +1185,7 @@ export const PLUGINS = [
     category: 'Dataset',
     description: 'Tests handling of toxic user prompts from the ToxicChat dataset',
     label: 'harmful',
-    link: '/docs/red-team/plugins/toxicchat/',
+    link: '/docs/red-team/plugins/toxic-chat/',
     name: 'ToxicChat',
     pluginId: 'toxic-chat',
     applicationTypes: {

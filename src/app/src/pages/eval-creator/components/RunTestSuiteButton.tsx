@@ -12,6 +12,7 @@ const RunTestSuiteButton: React.FC = () => {
   const navigate = useNavigate();
   const {
     defaultTest,
+    derivedMetrics,
     description,
     env,
     evaluateOptions,
@@ -53,6 +54,7 @@ const RunTestSuiteButton: React.FC = () => {
 
     const testSuite = {
       defaultTest,
+      derivedMetrics,
       description,
       env,
       evaluateOptions,

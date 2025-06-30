@@ -24,7 +24,6 @@ This example demonstrates how to security test an Azure OpenAI Assistant that ha
    ```
 
 2. **Update configuration**:
-
    - Edit `promptfooconfig.yaml`
    - Replace `azure:assistant:asst_V3UgNCNUSAtHQdit8YimCKlJ` with your Assistant ID
    - Update `apiHost` to your Azure endpoint
