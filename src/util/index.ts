@@ -6,9 +6,9 @@ import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import * as path from 'path';
-import { TERMINAL_MAX_WIDTH } from '../constants';
+import { TERMINAL_MAX_WIDTH, SRC_DIR } from '../constants';
 import { getEnvBool, getEnvString } from '../envars';
-import { getDirectory, importModule } from '../esm';
+import { importModule } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
 import type Eval from '../models/eval';
@@ -153,7 +153,7 @@ export async function writeOutput(
     const table = await evalRecord.getTable();
     invariant(table, 'Table is required');
     const summary = await evalRecord.toEvaluateSummary();
-    const template = fs.readFileSync(`${getDirectory()}/tableOutput.html`, 'utf-8');
+    const template = fs.readFileSync(`${SRC_DIR}/tableOutput.html`, 'utf-8');
     const htmlTable = [
       [
         ...table.head.vars,

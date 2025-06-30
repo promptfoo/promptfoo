@@ -7,9 +7,8 @@ import http from 'node:http';
 import path from 'node:path';
 import { Server as SocketIOServer } from 'socket.io';
 import { fromError } from 'zod-validation-error';
-import { getDefaultPort, VERSION } from '../constants';
+import { getDefaultPort, VERSION, SRC_DIR } from '../constants';
 import { setupSignalWatcher } from '../database/signal';
-import { getDirectory } from '../esm';
 import { cloudConfig } from '../globalConfig/cloud';
 import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index';
 import logger from '../logger';
@@ -76,7 +75,7 @@ export function handleServerError(error: NodeJS.ErrnoException, port: number): v
 export function createApp() {
   const app = express();
 
-  const staticDir = path.join(getDirectory(), 'app');
+  const staticDir = path.join(SRC_DIR, 'app');
 
   app.use(cors());
   app.use(compression());

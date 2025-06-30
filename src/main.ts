@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
-import { version } from '../package.json';
+import pkg from '../package.json';
 import { checkNodeVersion } from './checkNodeVersion';
 import { authCommand } from './commands/auth';
 import { cacheCommand } from './commands/cache';
@@ -77,7 +77,7 @@ async function main() {
 
   const program = new Command('promptfoo');
   program
-    .version(version)
+    .version(pkg.version)
     .showHelpAfterError()
     .showSuggestionAfterError()
     .on('option:*', function () {
@@ -134,7 +134,7 @@ async function main() {
   program.parse();
 }
 
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
   checkNodeVersion();
   main();
 }

@@ -1,20 +1,11 @@
+import { createRequire } from 'module';
 import { pathToFileURL } from 'node:url';
 import logger from './logger';
 import { safeResolve } from './util/file.node';
 
+const require = createRequire(import.meta.url);
+
 // esm-specific crap that needs to get mocked out in tests
-
-//import path from 'path';
-//import { fileURLToPath } from 'url';
-
-export function getDirectory(): string {
-  /*
-  // @ts-ignore: Jest chokes on this
-  const __filename = fileURLToPath(import.meta.url);
-  return path.dirname(__filename);
- */
-  return __dirname;
-}
 
 export async function importModule(modulePath: string, functionName?: string) {
   logger.debug(
@@ -45,7 +36,6 @@ export async function importModule(modulePath: string, functionName?: string) {
     logger.debug(`ESM import failed: ${err}`);
     logger.debug('Attempting CommonJS require fallback...');
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const importedModule = require(safeResolve(modulePath));
       const mod = importedModule?.default?.default || importedModule?.default || importedModule;
       logger.debug(
@@ -58,6 +48,15 @@ export async function importModule(modulePath: string, functionName?: string) {
       return mod;
     } catch (requireErr) {
       logger.debug(`CommonJS require also failed: ${requireErr}`);
+      // Check if this is a circular dependency error
+      if (
+        requireErr instanceof Error &&
+        requireErr.message &&
+        requireErr.message.includes('cycle')
+      ) {
+        logger.debug('Circular dependency detected, attempting to use original ESM error');
+        throw err;
+      }
       throw requireErr;
     }
   }
