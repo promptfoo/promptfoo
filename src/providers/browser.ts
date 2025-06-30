@@ -38,7 +38,7 @@ interface BrowserProviderConfig {
   responseParser?: string | Function;
 }
 
-function createTransformResponse(
+export function createTransformResponse(
   parser: any,
 ): (extracted: Record<string, any>, finalHtml: string) => ProviderResponse {
   if (typeof parser === 'function') {
@@ -319,5 +319,3 @@ export class BrowserProvider implements ApiProvider {
     return renderedArgs;
   }
 }
-
-export { nunjucks, createTransformResponse };
