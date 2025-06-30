@@ -27,13 +27,11 @@ If this request fails or times out, it likely means your network is blocking acc
 ## Common Solutions
 
 1. **Check with IT**: Since promptfoo generates adversarial content for security testing, our API endpoints may be blocked by corporate security policies. Contact your IT department to:
-
    - Allowlist `api.promptfoo.app`
    - Allow HTTPS traffic to our endpoints
    - Review security logs for blocked requests
 
 2. **Use a Different Network**: Try running promptfoo on:
-
    - A personal network
    - Mobile hotspot
    - Development environment outside corporate network

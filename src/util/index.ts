@@ -18,7 +18,6 @@ import {
   type EvaluateResult,
   type EvaluateTableOutput,
   type NunjucksFilterMap,
-  type ResultsFile,
   type TestCase,
   type OutputFile,
   type CompletedPrompt,
@@ -29,8 +28,6 @@ import {
   ResultFailureReason,
 } from '../types';
 import invariant from '../util/invariant';
-import { getConfigDirectoryPath } from './config/manage';
-import { sha256 } from './createHash';
 import { convertTestResultsToTableRow } from './exportToFile';
 import { getHeaderForTable } from './exportToFile/getHeaderForTable';
 import { maybeLoadFromExternalFile } from './file';
@@ -196,108 +193,6 @@ export async function readOutput(outputPath: string): Promise<OutputFile> {
       return JSON.parse(fs.readFileSync(outputPath, 'utf-8')) as OutputFile;
     default:
       throw new Error(`Unsupported output file format: ${ext} currently only supports json`);
-  }
-}
-
-/**
- * TODO(ian): Remove this
- * @deprecated Use readLatestResults directly instead.
- */
-export function getLatestResultsPath(): string {
-  return path.join(getConfigDirectoryPath(), 'output', 'latest.json');
-}
-/**
- * @deprecated Used only for migration to sqlite
- */
-export function listPreviousResultFilenames_fileSystem(): string[] {
-  const directory = path.join(getConfigDirectoryPath(), 'output');
-  if (!fs.existsSync(directory)) {
-    return [];
-  }
-  const files = fs.readdirSync(directory);
-  const resultsFiles = files.filter((file) => file.startsWith('eval-') && file.endsWith('.json'));
-  return resultsFiles.sort((a, b) => {
-    const statA = fs.statSync(path.join(directory, a));
-    const statB = fs.statSync(path.join(directory, b));
-    return statA.birthtime.getTime() - statB.birthtime.getTime(); // sort in ascending order
-  });
-}
-
-const resultsCache: { [fileName: string]: ResultsFile | undefined } = {};
-
-/**
- * @deprecated Used only for migration to sqlite
- */
-export function listPreviousResults_fileSystem(): { fileName: string; description?: string }[] {
-  const directory = path.join(getConfigDirectoryPath(), 'output');
-  if (!fs.existsSync(directory)) {
-    return [];
-  }
-  const sortedFiles = listPreviousResultFilenames_fileSystem();
-  return sortedFiles.map((fileName) => {
-    if (!resultsCache[fileName]) {
-      try {
-        const fileContents = fs.readFileSync(path.join(directory, fileName), 'utf8');
-        const data = yaml.load(fileContents) as ResultsFile;
-        resultsCache[fileName] = data;
-      } catch (error) {
-        logger.warn(`Failed to read results from ${fileName}:\n${error}`);
-      }
-    }
-    return {
-      fileName,
-      description: resultsCache[fileName]?.config.description,
-    };
-  });
-}
-
-export function filenameToDate(filename: string) {
-  const dateString = filename.slice('eval-'.length, filename.length - '.json'.length);
-
-  // Replace hyphens with colons where necessary (Windows compatibility).
-  const dateParts = dateString.split('T');
-  const timePart = dateParts[1].replace(/-/g, ':');
-  const formattedDateString = `${dateParts[0]}T${timePart}`;
-
-  const date = new Date(formattedDateString);
-  return date;
-  /*
-  return date.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    timeZoneName: 'short',
-  });
-  */
-}
-
-export function dateToFilename(date: Date) {
-  return `eval-${date.toISOString().replace(/:/g, '-')}.json`;
-}
-
-/**
- * @deprecated Used only for migration to sqlite
- */
-export function readResult_fileSystem(
-  name: string,
-): { id: string; result: ResultsFile; createdAt: Date } | undefined {
-  const resultsDirectory = path.join(getConfigDirectoryPath(), 'output');
-  const resultsPath = path.join(resultsDirectory, name);
-  try {
-    const result = JSON.parse(
-      fs.readFileSync(fs.realpathSync(resultsPath), 'utf-8'),
-    ) as ResultsFile;
-    const createdAt = filenameToDate(name);
-    return {
-      id: sha256(JSON.stringify(result.config)),
-      result,
-      createdAt,
-    };
-  } catch (err) {
-    logger.error(`Failed to read results from ${resultsPath}:\n${err}`);
   }
 }
 

@@ -2,6 +2,29 @@ import type OpenAI from 'openai';
 import type { MCPConfig } from '../mcp/types';
 import { type OpenAiFunction, type OpenAiTool } from './util';
 
+/**
+ * Context provided to function callbacks for assistant providers
+ */
+export interface CallbackContext {
+  /** The thread ID for the current conversation */
+  threadId: string;
+  /** The run ID for the current execution */
+  runId: string;
+  /** The assistant ID being used */
+  assistantId: string;
+  /** The provider type (e.g., 'openai', 'azure') */
+  provider: string;
+}
+
+/**
+ * Function callback that can receive context about the current assistant execution
+ *
+ * @param args - Function arguments. OpenAI Assistant provider passes parsed objects,
+ *               Azure Assistant provider passes raw JSON strings.
+ * @param context - Optional execution context with thread/run/assistant information
+ */
+export type AssistantFunctionCallback = (args: any, context?: CallbackContext) => Promise<string>;
+
 export interface OpenAiSharedOptions {
   apiKey?: string;
   apiKeyEnvar?: string;
@@ -13,7 +36,32 @@ export interface OpenAiSharedOptions {
   headers?: { [key: string]: string };
 }
 
-export type ReasoningEffort = 'low' | 'medium' | 'high';
+export type ReasoningEffort = 'low' | 'medium' | 'high' | null;
+
+/**
+ * **o-series models only**
+ *
+ * Configuration options for
+ * [reasoning models](https://platform.openai.com/docs/guides/reasoning).
+ */
+export interface Reasoning {
+  /**
+   * **o-series models only**
+   *
+   * Constraints effort on reasoning for
+   * [reasoning models](https://platform.openai.com/docs/guides/reasoning). Currently
+   * supported values are `low`, `medium`, and `high`. Reducing reasoning effort can
+   * result in faster responses and fewer tokens used on reasoning in a response.
+   */
+  effort?: ReasoningEffort;
+
+  /**
+   * A summary of the reasoning performed by the model. This can be useful for
+   * debugging and understanding the model's reasoning process. One of `auto`,
+   * `concise`, or `detailed`.
+   */
+  summary?: 'auto' | 'concise' | 'detailed' | null;
+}
 
 // OpenAI MCP tool configuration for Responses API
 export interface OpenAiMCPTool {
@@ -66,6 +114,8 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   seed?: number;
   passthrough?: object;
   reasoning_effort?: ReasoningEffort;
+  reasoning?: Reasoning;
+  service_tier?: ('auto' | 'default' | 'premium') | null;
   modalities?: string[];
   audio?: {
     bitrate?: string;
@@ -91,7 +141,7 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
    */
   functionToolCallbacks?: Record<
     OpenAI.FunctionDefinition['name'],
-    (arg: string) => Promise<string>
+    AssistantFunctionCallback | string
   >;
   mcp?: MCPConfig;
 };

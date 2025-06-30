@@ -4,122 +4,203 @@ sidebar_label: Custom Python
 
 # Python Provider
 
-The `python` provider allows you to use a Python script as an API provider for evaluating prompts. This is useful when you have custom logic or models implemented in Python that you want to integrate with your test suite.
+The Python provider enables you to create custom evaluation logic using Python scripts. This allows you to integrate Promptfoo with any Python-based model, API, or custom logic.
 
-### Configuration
+**Common use cases:**
 
-To configure the Python provider, you need to specify the path to your Python script and any additional options you want to pass to the script. Here's an example configuration in YAML format:
+- Integrating proprietary or local models
+- Adding custom preprocessing/postprocessing logic
+- Implementing complex evaluation workflows
+- Using Python-specific ML libraries
+- Creating mock providers for testing
 
-```yaml
-providers:
-  - id: 'file://my_script.py'
-    label: 'Test script 1' # Optional display label for this provider
-    config:
-      additionalOption: 123
-```
+## Prerequisites
 
-You can load configuration values from external files using the `file://` protocol. This is useful for managing complex configurations or sharing configurations between different providers.
+Before using the Python provider, ensure you have:
 
-```yaml title="promptfooconfig.yaml"
-providers:
-  - id: 'file://my_custom_provider.py:call_api'
-    config:
-      # Load from a JSON file
-      modelSettings: 'file://configs/model_settings.json'
+- Python 3.7 or higher installed
+- Basic familiarity with Promptfoo configuration
+- Understanding of Python dictionaries and JSON
 
-      # Or a YAML file
-      templates: 'file://configs/prompt_templates.yaml'
+## Quick Start
 
-      # Or a JavaScript file
-      preprocessing: 'file://configs/preprocess.js:getPreprocessingConfig'
+Let's create a simple Python provider that echoes back the input with a prefix.
 
-      # Or a Python file
-      extra_body: 'file://configs/extra_body.py:get_extra_body'
-
-      # You can also nest file references within an object
-      advanced:
-        {
-          systemPromptPrefix: 'file://templates/system_prompt.txt',
-          guardrails: 'file://configs/guardrails.json',
-          metrics:
-            {
-              evaluation: 'file://configs/metrics/eval.yaml',
-              reporting: 'file://configs/metrics/reporting.js:getReportingConfig',
-            },
-        }
-```
-
-Supported file formats:
-
-- **JSON files** (`.json`): Will be parsed as JSON objects/arrays
-- **YAML files** (`.yaml`, `.yml`): Will be parsed as YAML objects/arrays
-- **JavaScript files** (`.js`, `.mjs`, `.ts`, `.cjs`): Should export a function that takes no arguments and returns configuration values
-- **Python files** (`.py`): Should contain a function that takes no arguments and returns configuration values
-- **Text files** (`.txt`, `.md`): Will be loaded as plain text strings
-
-For JavaScript and Python files, you can specify a specific function to use with the format `file://path/to/file.js:functionName`. If no function name is specified, a default function name is used (`get_config` for Python files or the default export for JavaScript files).
-
-### Python script
-
-Your Python script should implement a function that accepts a prompt, options, and context as arguments. It should return a JSON-encoded `ProviderResponse`.
-
-- The `ProviderResponse` must include an `output` field containing the result of the API call.
-- Optionally, it can include an `error` field if something goes wrong, and a `tokenUsage` field to report the number of tokens used.
-- By default, supported functions are `call_api`, `call_embedding_api`, and `call_classification_api`. To override the function name, specify the script like so: `file://my_script.py:function_name`
-
-Here's an example of a Python script that could be used with the Python provider, which includes handling for the prompt, options, and context:
+### Step 1: Create your Python script
 
 ```python
-# my_script.py
-import json
+# echo_provider.py
+def call_api(prompt, options, context):
+    """Simple provider that echoes the prompt with a prefix."""
+    config = options.get('config', {})
+    prefix = config.get('prefix', 'Tell me about: ')
 
-def call_api(prompt: str, options: Dict[str, Any], context: Dict[str, Any]) -> ProviderResponse:
-    # Note: The prompt may be in JSON format, so you might need to parse it.
-    # For example, if the prompt is a JSON string representing a conversation:
-    # prompt = '[{"role": "user", "content": "Hello, world!"}]'
-    # You would parse it like this:
-    # prompt = json.loads(prompt)
+    return {
+        "output": f"{prefix}{prompt}"
+    }
+```
 
-    # The 'options' parameter contains additional configuration for the API call.
-    config = options.get('config', None)
-    additional_option = config.get('additionalOption', None)
+### Step 2: Configure Promptfoo
 
-    # The 'context' parameter provides info about which vars were used to create the final prompt.
-    user_variable = context['vars'].get('userVariable', None)
+```yaml
+# promptfooconfig.yaml
+providers:
+  - id: 'file://echo_provider.py'
 
-    # The prompt is the final prompt string after the variables have been processed.
-    # Custom logic to process the prompt goes here.
-    # For instance, you might call an external API or run some computations.
-    # TODO: Replace with actual LLM API implementation.
-    def call_llm(prompt):
-        return f"Stub response for prompt: {prompt}"
-    output = call_llm(prompt)
+prompts:
+  - 'Tell me a joke'
+  - 'What is 2+2?'
+```
 
-    # The result should be a dictionary with at least an 'output' field.
+### Step 3: Run the evaluation
+
+```bash
+npx promptfoo@latest eval
+```
+
+That's it! You've created your first custom Python provider.
+
+## How It Works
+
+When Promptfoo evaluates a test case with a Python provider:
+
+1. **Promptfoo** prepares the prompt based on your configuration
+2. **Python Script** is called with three parameters:
+   - `prompt`: The final prompt string
+   - `options`: Provider configuration from your YAML
+   - `context`: Variables and metadata for the current test
+3. **Your Code** processes the prompt and returns a response
+4. **Promptfoo** validates the response and continues evaluation
+
+```
+┌─────────────┐     ┌──────────────┐     ┌─────────────┐
+│ Promptfoo   │────▶│ Your Python  │────▶│ Your Logic  │
+│ Evaluation  │     │ Provider     │     │ (API/Model) │
+└─────────────┘     └──────────────┘     └─────────────┘
+       ▲                    │
+       │                    ▼
+       │            ┌──────────────┐
+       └────────────│   Response   │
+                    └──────────────┘
+```
+
+## Basic Usage
+
+### Function Interface
+
+Your Python script must implement one or more of these functions. Both synchronous and asynchronous versions are supported:
+
+**Synchronous Functions:**
+
+```python
+def call_api(prompt: str, options: dict, context: dict) -> dict:
+    """Main function for text generation tasks."""
+    pass
+
+def call_embedding_api(prompt: str, options: dict, context: dict) -> dict:
+    """For embedding generation tasks."""
+    pass
+
+def call_classification_api(prompt: str, options: dict, context: dict) -> dict:
+    """For classification tasks."""
+    pass
+```
+
+**Asynchronous Functions:**
+
+```python
+async def call_api(prompt: str, options: dict, context: dict) -> dict:
+    """Async main function for text generation tasks."""
+    pass
+
+async def call_embedding_api(prompt: str, options: dict, context: dict) -> dict:
+    """Async function for embedding generation tasks."""
+    pass
+
+async def call_classification_api(prompt: str, options: dict, context: dict) -> dict:
+    """Async function for classification tasks."""
+    pass
+```
+
+### Understanding Parameters
+
+#### The `prompt` Parameter
+
+The prompt can be either:
+
+- A simple string: `"What is the capital of France?"`
+- A JSON-encoded conversation: `'[{"role": "user", "content": "Hello"}]'`
+
+```python
+def call_api(prompt, options, context):
+    # Check if prompt is a conversation
+    try:
+        messages = json.loads(prompt)
+        # Handle as chat messages
+        for msg in messages:
+            print(f"{msg['role']}: {msg['content']}")
+    except:
+        # Handle as simple string
+        print(f"Prompt: {prompt}")
+```
+
+#### The `options` Parameter
+
+Contains your provider configuration:
+
+```python
+{
+    "id": "file://my_provider.py",
+    "config": {
+        # Your custom configuration from promptfooconfig.yaml
+        "model_name": "gpt-3.5-turbo",
+        "temperature": 0.7,
+        "max_tokens": 100
+    }
+}
+```
+
+#### The `context` Parameter
+
+Provides information about the current test case:
+
+```python
+{
+    "vars": {
+        # Variables used in this test case
+        "user_input": "Hello world",
+        "system_prompt": "You are a helpful assistant"
+    }
+}
+```
+
+### Return Format
+
+Your function must return a dictionary with these fields:
+
+```python
+def call_api(prompt, options, context):
+    # Required field
     result = {
-        "output": output,
+        "output": "Your response here"
     }
 
-    if some_error_condition:
-        result['error'] = "An error occurred during processing"
+    # Optional fields
+    result["tokenUsage"] = {
+        "total": 150,
+        "prompt": 50,
+        "completion": 100
+    }
 
-    if token_usage_calculated:
-        # If you want to report token usage, you can set the 'tokenUsage' field.
-        result['tokenUsage'] = {"total": token_count, "prompt": prompt_token_count, "completion": completion_token_count}
+    result["cost"] = 0.0025  # in dollars
+    result["cached"] = False
+    result["logProbs"] = [-0.5, -0.3, -0.1]
 
-    if failed_guardrails:
-        # If guardrails triggered, you can set the 'guardrails' field.
-        result['guardrails'] = {"flagged": True}
+    # Error handling
+    if something_went_wrong:
+        result["error"] = "Description of what went wrong"
 
     return result
-
-def call_embedding_api(prompt: str) -> ProviderEmbeddingResponse:
-    # Returns ProviderEmbeddingResponse
-    pass
-
-def call_classification_api(prompt: str) -> ProviderClassificationResponse:
-    # Returns ProviderClassificationResponse
-    pass
 ```
 
 ### Types
@@ -159,37 +240,385 @@ class ProviderClassificationResponse:
 
 ```
 
-### Setting the Python executable
+:::tip
+Always include the `output` field in your response, even if it's an empty string when an error occurs.
+:::
 
-In some scenarios, you may need to specify a custom Python executable. This is particularly useful when working with virtual environments or when the default Python path does not point to the desired Python interpreter.
+## Complete Examples
 
-Here's an example of how you can override the Python executable using the `pythonExecutable` option:
+### Example 1: OpenAI-Compatible Provider
+
+```python
+# openai_provider.py
+import os
+import json
+from openai import OpenAI
+
+def call_api(prompt, options, context):
+    """Provider that calls OpenAI API."""
+    config = options.get('config', {})
+
+    # Initialize client
+    client = OpenAI(
+        api_key=os.getenv('OPENAI_API_KEY'),
+        base_url=config.get('base_url', 'https://api.openai.com/v1')
+    )
+
+    # Parse messages if needed
+    try:
+        messages = json.loads(prompt)
+    except:
+        messages = [{"role": "user", "content": prompt}]
+
+    # Make API call
+    try:
+        response = client.chat.completions.create(
+            model=config.get('model', 'gpt-3.5-turbo'),
+            messages=messages,
+            temperature=config.get('temperature', 0.7),
+            max_tokens=config.get('max_tokens', 150)
+        )
+
+        return {
+            "output": response.choices[0].message.content,
+            "tokenUsage": {
+                "total": response.usage.total_tokens,
+                "prompt": response.usage.prompt_tokens,
+                "completion": response.usage.completion_tokens
+            }
+        }
+    except Exception as e:
+        return {
+            "output": "",
+            "error": str(e)
+        }
+```
+
+### Example 2: Local Model with Preprocessing
+
+```python
+# local_model_provider.py
+import torch
+from transformers import pipeline
+
+# Initialize model once
+generator = pipeline('text-generation', model='gpt2')
+
+def preprocess_prompt(prompt, context):
+    """Add context-specific preprocessing."""
+    template = context['vars'].get('template', '{prompt}')
+    return template.format(prompt=prompt)
+
+def call_api(prompt, options, context):
+    """Provider using a local Hugging Face model."""
+    config = options.get('config', {})
+
+    # Preprocess
+    processed_prompt = preprocess_prompt(prompt, context)
+
+    # Generate
+    result = generator(
+        processed_prompt,
+        max_length=config.get('max_length', 100),
+        temperature=config.get('temperature', 0.7),
+        do_sample=True
+    )
+
+    return {
+        "output": result[0]['generated_text'],
+        "cached": False
+    }
+```
+
+### Example 3: Mock Provider for Testing
+
+```python
+# mock_provider.py
+import time
+import random
+
+def call_api(prompt, options, context):
+    """Mock provider for testing evaluation pipelines."""
+    config = options.get('config', {})
+
+    # Simulate processing time
+    delay = config.get('delay', 0.1)
+    time.sleep(delay)
+
+    # Simulate different response types
+    if "error" in prompt.lower():
+        return {
+            "output": "",
+            "error": "Simulated error for testing"
+        }
+
+    # Generate mock response
+    responses = config.get('responses', [
+        "This is a mock response.",
+        "Mock provider is working correctly.",
+        "Test response generated successfully."
+    ])
+
+    response = random.choice(responses)
+    mock_tokens = len(prompt.split()) + len(response.split())
+
+    return {
+        "output": response,
+        "tokenUsage": {
+            "total": mock_tokens,
+            "prompt": len(prompt.split()),
+            "completion": len(response.split())
+        },
+        "cost": mock_tokens * 0.00001
+    }
+```
+
+## Configuration
+
+### Basic Configuration
 
 ```yaml
 providers:
-  - id: 'file://my_script.py'
+  - id: 'file://my_provider.py'
+    label: 'My Custom Provider' # Optional display name
     config:
-      pythonExecutable: /path/to/python3.11
+      # Any configuration your provider needs
+      api_key: ${CUSTOM_API_KEY}
+      endpoint: https://api.example.com
+      model_params:
+        temperature: 0.7
+        max_tokens: 100
 ```
 
-### Troubleshooting
+### Using External Configuration Files
 
-#### Viewing python output
+You can load configuration from external files:
 
-If you use `print` statements in your python script, set `LOG_LEVEL=debug` to view script invocations and output:
+```yaml
+providers:
+  - id: 'file://my_provider.py'
+    config:
+      # Load entire config from JSON
+      settings: file://config/model_settings.json
 
-```sh
-LOG_LEVEL=debug npx promptfoo@latest eval
+      # Load from YAML with specific function
+      prompts: file://config/prompts.yaml
+
+      # Load from Python function
+      preprocessing: file://config/preprocess.py:get_config
+
+      # Nested file references
+      models:
+        primary: file://config/primary_model.json
+        fallback: file://config/fallback_model.yaml
 ```
 
-#### Setting the Python binary path
+Supported formats:
 
-If you are using a specific Python binary (e.g. from a virtualenv or poetry), set the `PROMPTFOO_PYTHON` environment variable to be the binary location.
+- **JSON** (`.json`) - Parsed as objects/arrays
+- **YAML** (`.yaml`, `.yml`) - Parsed as objects/arrays
+- **Text** (`.txt`, `.md`) - Loaded as strings
+- **Python** (`.py`) - Must export a function returning config
+- **JavaScript** (`.js`, `.mjs`) - Must export a function returning config
 
-Also note that promptfoo will respect the `PYTHONPATH`. You can use this to tell the python interpreter where your custom modules live.
+### Environment Configuration
 
-For example:
+#### Custom Python Executable
 
-```sh
-PROMPTFOO_PYTHON=venv/bin/python3.9 PYTHONPATH=/usr/lib/foo npx promptfoo@latest eval
+```yaml
+providers:
+  - id: 'file://my_provider.py'
+    config:
+      pythonExecutable: /path/to/venv/bin/python
 ```
+
+#### Environment Variables
+
+```bash
+# Use specific Python version
+export PROMPTFOO_PYTHON=/usr/bin/python3.11
+
+# Add custom module paths
+export PYTHONPATH=/path/to/my/modules:$PYTHONPATH
+
+# Run evaluation
+npx promptfoo@latest eval
+```
+
+## Advanced Features
+
+### Custom Function Names
+
+Override the default function name:
+
+```yaml
+providers:
+  - id: 'file://my_provider.py:generate_response'
+    config:
+      model: 'custom-model'
+```
+
+```python
+# my_provider.py
+def generate_response(prompt, options, context):
+    # Your custom function
+    return {"output": "Custom response"}
+```
+
+### Handling Different Input Types
+
+```python
+def call_api(prompt, options, context):
+    """Handle various prompt formats."""
+
+    # Text prompt
+    if isinstance(prompt, str):
+        try:
+            # Try parsing as JSON
+            data = json.loads(prompt)
+            if isinstance(data, list):
+                # Chat format
+                return handle_chat(data, options)
+            elif isinstance(data, dict):
+                # Structured prompt
+                return handle_structured(data, options)
+        except:
+            # Plain text
+            return handle_text(prompt, options)
+```
+
+### Implementing Guardrails
+
+```python
+def call_api(prompt, options, context):
+    """Provider with safety guardrails."""
+
+    # Check for prohibited content
+    prohibited_terms = config.get('prohibited_terms', [])
+    for term in prohibited_terms:
+        if term.lower() in prompt.lower():
+            return {
+                "output": "I cannot process this request.",
+                "guardrails": {
+                    "flagged": True,
+                    "reason": "Prohibited content detected"
+                }
+            }
+
+    # Process normally
+    result = generate_response(prompt)
+
+    # Post-process checks
+    if check_output_safety(result):
+        return {"output": result}
+    else:
+        return {
+            "output": "[Content filtered]",
+            "guardrails": {"flagged": True}
+        }
+```
+
+## Troubleshooting
+
+### Common Issues and Solutions
+
+| Issue                     | Solution                                                            |
+| ------------------------- | ------------------------------------------------------------------- |
+| "Module not found" errors | Set `PYTHONPATH` or use `pythonExecutable` for virtual environments |
+| Script not executing      | Check file path is relative to `promptfooconfig.yaml`               |
+| No output visible         | Use `LOG_LEVEL=debug` to see print statements                       |
+| JSON parsing errors       | Ensure prompt format matches your parsing logic                     |
+| Timeout errors            | Optimize initialization code, load models once                      |
+
+### Debugging Tips
+
+1. **Enable debug logging:**
+
+   ```bash
+   LOG_LEVEL=debug npx promptfoo@latest eval
+   ```
+
+2. **Add logging to your provider:**
+
+   ```python
+   import sys
+
+   def call_api(prompt, options, context):
+       print(f"Received prompt: {prompt}", file=sys.stderr)
+       print(f"Config: {options.get('config', {})}", file=sys.stderr)
+       # Your logic here
+   ```
+
+3. **Test your provider standalone:**
+
+   ```python
+   # test_provider.py
+   from my_provider import call_api
+
+   result = call_api(
+       "Test prompt",
+       {"config": {"model": "test"}},
+       {"vars": {}}
+   )
+   print(result)
+   ```
+
+### Performance Optimization
+
+:::tip
+Initialize expensive resources (models, connections) outside the function to avoid reloading on each call:
+
+```python
+# Initialize once
+model = load_model()
+
+def call_api(prompt, options, context):
+    # Use pre-loaded model
+    return {"output": model.generate(prompt)}
+```
+
+:::
+
+## Migration Guide
+
+### From HTTP Provider
+
+If you're currently using an HTTP provider, you can wrap your API calls:
+
+```python
+# http_wrapper.py
+import requests
+
+def call_api(prompt, options, context):
+    config = options.get('config', {})
+    response = requests.post(
+        config.get('url'),
+        json={"prompt": prompt},
+        headers=config.get('headers', {})
+    )
+    return response.json()
+```
+
+### From JavaScript Provider
+
+The Python provider follows the same interface as JavaScript providers:
+
+```javascript
+// JavaScript
+module.exports = {
+  async callApi(prompt, options, context) {
+    return { output: `Echo: ${prompt}` };
+  },
+};
+```
+
+```python
+# Python equivalent
+def call_api(prompt, options, context):
+    return {"output": f"Echo: {prompt}"}
+```
+
+## Next Steps
+
+- Learn about [custom assertions](/docs/configuration/expected-outputs/)
+- Set up [CI/CD integration](/docs/integrations/github-action.md)

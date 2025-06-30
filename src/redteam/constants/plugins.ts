@@ -2,6 +2,12 @@ import { MEMORY_POISONING_PLUGIN_ID } from '../plugins/agentic/constants';
 
 export const DEFAULT_NUM_TESTS_PER_PLUGIN = 5;
 
+// Redteam configuration defaults
+export const REDTEAM_DEFAULTS = {
+  MAX_CONCURRENCY: 4,
+  NUM_TESTS: 10,
+} as const;
+
 export const REDTEAM_MODEL = 'openai:chat:gpt-4.1-2025-04-14';
 
 export const LLAMA_GUARD_REPLICATE_PROVIDER =
@@ -142,6 +148,7 @@ export const BASE_PLUGINS = [
 export type BasePlugin = (typeof BASE_PLUGINS)[number];
 
 export const ADDITIONAL_PLUGINS = [
+  'aegis',
   'ascii-smuggling',
   'beavertails',
   'bfla',
@@ -163,6 +170,11 @@ export const ADDITIONAL_PLUGINS = [
   'medical:incorrect-knowledge',
   'medical:prioritization-error',
   'medical:sycophancy',
+  'financial:calculation-error',
+  'financial:compliance-violation',
+  'financial:data-leakage',
+  'financial:hallucination',
+  'financial:sycophancy',
   'off-topic',
   'overreliance',
   'pliny',

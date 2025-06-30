@@ -1,0 +1,40 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: GPT-4.1 vs GPT-4o MMLU comparison with enhanced prompting
+
+prompts:
+  - |
+    You are an expert test taker. Please solve the following multiple choice question step by step.
+
+    Question: {{question}}
+
+    Options:
+    A) {{choices[0]}}
+    B) {{choices[1]}}
+    C) {{choices[2]}}
+    D) {{choices[3]}}
+
+    Think through this step by step, then provide your final answer in the format "Therefore, the answer is A/B/C/D."
+
+providers:
+  - id: openai:gpt-4.1
+    config:
+      temperature: 0.1
+      max_tokens: 1000
+  - id: openai:gpt-4o
+    config:
+      temperature: 0.1
+      max_tokens: 1000
+
+defaultTest:
+  assert:
+    - type: latency
+      threshold: 60000
+    - type: llm-rubric
+      value: Response includes clear step-by-step reasoning
+    - type: regex
+      value: 'Therefore, the answer is [ABCD]'
+
+tests:
+  # Start with reasoning-heavy subjects where improvements are most visible
+  - huggingface://datasets/cais/mmlu?split=test&subset=abstract_algebra&config=abstract_algebra&limit=10
+  - huggingface://datasets/cais/mmlu?split=test&subset=formal_logic&config=formal_logic&limit=10

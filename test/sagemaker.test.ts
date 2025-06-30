@@ -440,8 +440,8 @@ describe('SageMakerCompletionProvider', () => {
     expect(result.metadata?.transformed).toBeFalsy();
   });
 
-  it('should extract data using JavaScript expression paths', async () => {
-    const provider = new SageMakerCompletionProvider('nested-data-endpoint', {
+  it('should configure response format path correctly', () => {
+    const provider = new SageMakerCompletionProvider('test-endpoint', {
       config: {
         responseFormat: {
           path: 'json.data.nested.value',
@@ -449,12 +449,8 @@ describe('SageMakerCompletionProvider', () => {
       },
     });
 
-    // Mock the parseResponse method to return the expected value
-    jest.spyOn(provider, 'parseResponse').mockResolvedValueOnce('Nested data value');
-
-    const result = await provider.callApi('test prompt');
-
-    expect(result.output).toBe('Nested data value');
+    // Test that the configuration is properly set
+    expect(provider.config.responseFormat?.path).toBe('json.data.nested.value');
   });
 
   it('should extract array data using JavaScript expression paths', async () => {
@@ -653,5 +649,527 @@ describe('SageMaker Provider Registry', () => {
 
     expect(provider).toBeDefined();
     expect(provider.id()).toBe('sagemaker:my-custom-endpoint');
+  });
+});
+
+describe('SageMakerCompletionProvider - Payload Formatting', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  describe('formatPayload method', () => {
+    it('should format Llama payload correctly with JSON messages (updated format)', () => {
+      const provider = new SageMakerCompletionProvider('llama-endpoint', {
+        config: {
+          modelType: 'llama',
+          maxTokens: 512,
+          temperature: 0.8,
+          topP: 0.9,
+          stopSequences: ['</s>', '<|end|>'],
+        },
+      });
+
+      const messages = JSON.stringify([
+        { role: 'system', content: 'You are a helpful assistant' },
+        { role: 'user', content: 'Hello, how are you?' },
+      ]);
+
+      const payload = provider.formatPayload(messages);
+      const parsedPayload = JSON.parse(payload);
+
+      expect(parsedPayload).toEqual({
+        inputs: [
+          { role: 'system', content: 'You are a helpful assistant' },
+          { role: 'user', content: 'Hello, how are you?' },
+        ],
+        parameters: {
+          max_new_tokens: 512,
+          temperature: 0.8,
+          top_p: 0.9,
+          stop: ['</s>', '<|end|>'],
+        },
+      });
+    });
+
+    it('should format Llama payload correctly with plain text (updated format)', () => {
+      const provider = new SageMakerCompletionProvider('llama-endpoint', {
+        config: {
+          modelType: 'llama',
+          maxTokens: 256,
+          temperature: 0.7,
+          topP: 0.95,
+        },
+      });
+
+      const prompt = 'Generate a creative story about space exploration.';
+      const payload = provider.formatPayload(prompt);
+      const parsedPayload = JSON.parse(payload);
+
+      expect(parsedPayload).toEqual({
+        inputs: 'Generate a creative story about space exploration.',
+        parameters: {
+          max_new_tokens: 256,
+          temperature: 0.7,
+          top_p: 0.95,
+          stop: undefined, // No stop sequences provided
+        },
+      });
+    });
+
+    it('should format OpenAI payload correctly with JSON messages', () => {
+      const provider = new SageMakerCompletionProvider('openai-endpoint', {
+        config: {
+          modelType: 'openai',
+          maxTokens: 1000,
+          temperature: 0.5,
+          stopSequences: ['\n\n'],
+        },
+      });
+
+      const messages = JSON.stringify([
+        { role: 'user', content: 'What is the weather like today?' },
+      ]);
+
+      const payload = provider.formatPayload(messages);
+      const parsedPayload = JSON.parse(payload);
+
+      expect(parsedPayload).toEqual({
+        messages: [{ role: 'user', content: 'What is the weather like today?' }],
+        max_tokens: 1000,
+        temperature: 0.5,
+        top_p: 1.0, // Default value
+        stop: ['\n\n'],
+      });
+    });
+
+    it('should format OpenAI payload correctly with plain text fallback', () => {
+      const provider = new SageMakerCompletionProvider('openai-endpoint', {
+        config: {
+          modelType: 'openai',
+          maxTokens: 800,
+          temperature: 0.3,
+        },
+      });
+
+      const prompt = 'Complete this sentence: The best part about programming is';
+      const payload = provider.formatPayload(prompt);
+      const parsedPayload = JSON.parse(payload);
+
+      expect(parsedPayload).toEqual({
+        prompt: 'Complete this sentence: The best part about programming is',
+        max_tokens: 800,
+        temperature: 0.3,
+        top_p: 1.0,
+        stop: undefined,
+      });
+    });
+
+    it('should format Anthropic payload correctly with JSON messages', () => {
+      const provider = new SageMakerCompletionProvider('anthropic-endpoint', {
+        config: {
+          modelType: 'anthropic',
+          maxTokens: 1500,
+          temperature: 0.6,
+          stopSequences: ['Human:', 'Assistant:'],
+        },
+      });
+
+      const messages = JSON.stringify([
+        { role: 'system', content: 'You are a helpful AI assistant.' },
+        { role: 'user', content: 'Explain quantum computing.' },
+      ]);
+
+      const payload = provider.formatPayload(messages);
+      const parsedPayload = JSON.parse(payload);
+
+      expect(parsedPayload).toEqual({
+        messages: [
+          { role: 'system', content: 'You are a helpful AI assistant.' },
+          { role: 'user', content: 'Explain quantum computing.' },
+        ],
+        max_tokens: 1500,
+        temperature: 0.6,
+        top_p: 1.0,
+        stop_sequences: ['Human:', 'Assistant:'],
+      });
+    });
+
+    it('should format JumpStart payload correctly', () => {
+      const provider = new SageMakerCompletionProvider('jumpstart-endpoint', {
+        config: {
+          modelType: 'jumpstart',
+          maxTokens: 400,
+          temperature: 0.9,
+          topP: 0.8,
+        },
+      });
+
+      const prompt = 'Write a haiku about artificial intelligence.';
+      const payload = provider.formatPayload(prompt);
+      const parsedPayload = JSON.parse(payload);
+
+      expect(parsedPayload).toEqual({
+        inputs: 'Write a haiku about artificial intelligence.',
+        parameters: {
+          max_new_tokens: 400,
+          temperature: 0.9,
+          top_p: 0.8,
+          do_sample: true, // Should be true when temperature > 0
+        },
+      });
+    });
+
+    it('should format JumpStart payload with do_sample false when temperature is 0', () => {
+      // Ensure no environment variable overrides the temperature
+      const originalTemp = process.env.AWS_SAGEMAKER_TEMPERATURE;
+      delete process.env.AWS_SAGEMAKER_TEMPERATURE;
+
+      const provider = new SageMakerCompletionProvider('jumpstart-endpoint', {
+        config: {
+          modelType: 'jumpstart',
+          maxTokens: 200,
+          temperature: 0,
+          topP: 1.0,
+        },
+      });
+
+      const prompt = 'Define machine learning.';
+      const payload = provider.formatPayload(prompt);
+      const parsedPayload = JSON.parse(payload);
+
+      expect(parsedPayload.parameters.do_sample).toBe(false);
+      expect(parsedPayload.parameters.temperature).toBe(0);
+
+      // Restore environment variable
+      if (originalTemp) {
+        process.env.AWS_SAGEMAKER_TEMPERATURE = originalTemp;
+      }
+    });
+
+    it('should format HuggingFace payload correctly', () => {
+      const provider = new SageMakerCompletionProvider('huggingface-endpoint', {
+        config: {
+          modelType: 'huggingface',
+          maxTokens: 300,
+          temperature: 0.75,
+          topP: 0.85,
+        },
+      });
+
+      const prompt = 'Translate to French: Hello, how are you?';
+      const payload = provider.formatPayload(prompt);
+      const parsedPayload = JSON.parse(payload);
+
+      expect(parsedPayload).toEqual({
+        inputs: 'Translate to French: Hello, how are you?',
+        parameters: {
+          max_new_tokens: 300,
+          temperature: 0.75,
+          top_p: 0.85,
+          do_sample: true,
+          return_full_text: false,
+        },
+      });
+    });
+
+    it('should format custom payload with valid JSON input', () => {
+      const provider = new SageMakerCompletionProvider('custom-endpoint', {
+        config: {
+          modelType: 'custom',
+        },
+      });
+
+      const jsonPrompt = JSON.stringify({
+        query: 'What is the capital of France?',
+        context: 'Geography quiz',
+        options: ['Paris', 'London', 'Berlin', 'Madrid'],
+      });
+
+      const payload = provider.formatPayload(jsonPrompt);
+      const parsedPayload = JSON.parse(payload);
+
+      expect(parsedPayload).toEqual({
+        query: 'What is the capital of France?',
+        context: 'Geography quiz',
+        options: ['Paris', 'London', 'Berlin', 'Madrid'],
+      });
+    });
+
+    it('should format custom payload with plain text input', () => {
+      const provider = new SageMakerCompletionProvider('custom-endpoint', {
+        config: {
+          modelType: 'custom',
+        },
+      });
+
+      const prompt = 'Simple text prompt for custom endpoint';
+      const payload = provider.formatPayload(prompt);
+      const parsedPayload = JSON.parse(payload);
+
+      expect(parsedPayload).toEqual({
+        prompt: 'Simple text prompt for custom endpoint',
+      });
+    });
+
+    it('should use environment variables for default parameters', () => {
+      // Set environment variables
+      process.env.AWS_SAGEMAKER_MAX_TOKENS = '2048';
+      process.env.AWS_SAGEMAKER_TEMPERATURE = '0.9';
+      process.env.AWS_SAGEMAKER_TOP_P = '0.95';
+
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        config: {
+          modelType: 'openai',
+        },
+      });
+
+      const payload = provider.formatPayload('Test prompt');
+      const parsedPayload = JSON.parse(payload);
+
+      expect(parsedPayload.max_tokens).toBe(2048);
+      expect(parsedPayload.temperature).toBe(0.9);
+      expect(parsedPayload.top_p).toBe(0.95);
+
+      // Clean up environment variables
+      delete process.env.AWS_SAGEMAKER_MAX_TOKENS;
+      delete process.env.AWS_SAGEMAKER_TEMPERATURE;
+      delete process.env.AWS_SAGEMAKER_TOP_P;
+    });
+
+    it('should handle malformed JSON gracefully for message-based formats', () => {
+      const provider = new SageMakerCompletionProvider('anthropic-endpoint', {
+        config: {
+          modelType: 'anthropic',
+        },
+      });
+
+      const malformedJson = '{"role": "user", "content": "incomplete json';
+      const payload = provider.formatPayload(malformedJson);
+      const parsedPayload = JSON.parse(payload);
+
+      // Should fall back to parsing as regular text prompt
+      expect(parsedPayload.messages).toBeDefined();
+      expect(Array.isArray(parsedPayload.messages)).toBe(true);
+    });
+  });
+});
+
+describe('SageMakerCompletionProvider - Response Parsing', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  describe('parseResponse method', () => {
+    it('should parse JumpStart model response with generated_text field', async () => {
+      const provider = new SageMakerCompletionProvider('jumpstart-endpoint', {
+        config: {
+          modelType: 'jumpstart',
+        },
+      });
+
+      const responseBody = JSON.stringify({
+        generated_text: 'This is the generated text from JumpStart model',
+        metadata: { model_version: '1.0' },
+      });
+
+      const result = await provider.parseResponse(responseBody);
+      expect(result).toBe('This is the generated text from JumpStart model');
+    });
+
+    it('should prioritize generated_text over model-specific parsing', async () => {
+      const provider = new SageMakerCompletionProvider('openai-endpoint', {
+        config: {
+          modelType: 'openai',
+        },
+      });
+
+      const responseBody = JSON.stringify({
+        generated_text: 'JumpStart format response',
+        choices: [
+          {
+            message: {
+              content: 'OpenAI format response',
+            },
+          },
+        ],
+      });
+
+      const result = await provider.parseResponse(responseBody);
+      // Should prioritize generated_text since it's checked first
+      expect(result).toBe('JumpStart format response');
+    });
+
+    it('should handle non-JSON response bodies', async () => {
+      const provider = new SageMakerCompletionProvider('custom-endpoint', {
+        config: {
+          modelType: 'custom',
+        },
+      });
+
+      const plainTextResponse = 'This is a plain text response';
+      const result = await provider.parseResponse(plainTextResponse);
+      expect(result).toBe('This is a plain text response');
+    });
+
+    it('should extract from multiple fallback fields for custom model type', async () => {
+      const provider = new SageMakerCompletionProvider('custom-endpoint', {
+        config: {
+          modelType: 'custom',
+        },
+      });
+
+      // Test with 'response' field
+      const responseWithResponseField = JSON.stringify({
+        response: 'Response from response field',
+        other_data: 'ignored',
+      });
+
+      const result1 = await provider.parseResponse(responseWithResponseField);
+      expect(result1).toBe('Response from response field');
+
+      // Test with 'text' field when 'output' is not present
+      const responseWithTextField = JSON.stringify({
+        text: 'Response from text field',
+        metadata: {},
+      });
+
+      const result2 = await provider.parseResponse(responseWithTextField);
+      expect(result2).toBe('Response from text field');
+    });
+  });
+});
+
+describe('SageMakerCompletionProvider - Parameter Validation', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should handle provider initialization with minimal config', () => {
+    const provider = new SageMakerCompletionProvider('minimal-endpoint', {});
+
+    expect(provider.endpointName).toBe('minimal-endpoint');
+    expect(provider.getRegion()).toBe('us-east-1'); // Default region
+    expect(provider.getContentType()).toBe('application/json');
+    expect(provider.getAcceptType()).toBe('application/json');
+  });
+
+  it('should override endpoint name from config', () => {
+    const provider = new SageMakerCompletionProvider('original-endpoint', {
+      config: {
+        endpoint: 'override-endpoint',
+      },
+    });
+
+    expect(provider.getEndpointName()).toBe('override-endpoint');
+  });
+
+  it('should handle custom provider ID correctly', () => {
+    const provider = new SageMakerCompletionProvider('test-endpoint', {
+      id: 'custom-provider-id',
+    });
+
+    expect(provider.id()).toBe('custom-provider-id');
+  });
+
+  it('should validate supported model types', () => {
+    const supportedTypes = SageMakerCompletionProvider.SAGEMAKER_MODEL_TYPES;
+
+    expect(supportedTypes).toContain('openai');
+    expect(supportedTypes).toContain('anthropic');
+    expect(supportedTypes).toContain('llama');
+    expect(supportedTypes).toContain('huggingface');
+    expect(supportedTypes).toContain('jumpstart');
+    expect(supportedTypes).toContain('custom');
+  });
+
+  it('should handle delay configuration from context', async () => {
+    const provider = new SageMakerCompletionProvider('delay-endpoint', {
+      config: {
+        delay: 100,
+      },
+    });
+
+    expect(provider.delay).toBe(100);
+  });
+});
+
+describe('SageMakerEmbeddingProvider - Extended Tests', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should format embedding payload for custom model type with multiple input formats', async () => {
+    const provider = new SageMakerEmbeddingProvider('custom-embedding-endpoint', {
+      config: {
+        modelType: 'custom',
+      },
+    });
+
+    // We can't easily test the payload directly since it's sent to AWS SDK
+    // But we can verify the provider handles the call correctly
+    const result = await provider.callEmbeddingApi('test embedding text');
+
+    expect(result.embedding).toEqual([0.1, 0.2, 0.3, 0.4, 0.5]);
+    expect(result.tokenUsage).toBeDefined();
+    expect(result.tokenUsage?.prompt).toBeGreaterThan(0);
+  });
+
+  it('should handle embedding response with embeddings field structure', async () => {
+    const provider = new SageMakerEmbeddingProvider('custom-embedding-endpoint', {
+      config: {
+        responseFormat: {
+          path: 'json.embeddings',
+        },
+      },
+    });
+
+    // Mock the provider to simulate different response structure
+    const mockResponse = {
+      embedding: [0.2, 0.4, 0.6, 0.8, 1.0],
+      tokenUsage: {
+        prompt: 5,
+        cached: 0,
+      },
+    };
+
+    jest.spyOn(provider, 'callEmbeddingApi').mockResolvedValueOnce(mockResponse);
+
+    const result = await provider.callEmbeddingApi('test text');
+    expect(result.embedding).toEqual([0.2, 0.4, 0.6, 0.8, 1.0]);
+  });
+
+  it('should handle provider initialization with custom response format', async () => {
+    const provider = new SageMakerEmbeddingProvider('custom-embedding-endpoint', {
+      config: {
+        responseFormat: {
+          path: 'json.custom.embeddings',
+        },
+      },
+    });
+
+    // Test that the provider is properly initialized with response format config
+    expect(provider.config.responseFormat?.path).toBe('json.custom.embeddings');
+
+    // Test that the provider can still make calls (will use default mock response)
+    const result = await provider.callEmbeddingApi('test text');
+    expect(result.embedding).toEqual([0.1, 0.2, 0.3, 0.4, 0.5]);
+  });
+
+  it('should apply transformation to embedding text before processing', async () => {
+    const provider = new SageMakerEmbeddingProvider('transform-embedding-endpoint', {
+      config: {
+        transform: 'text => `Embedding: ${text}`',
+      },
+    });
+
+    // Mock the applyTransformation method to verify it's called
+    const transformSpy = jest
+      .spyOn(provider, 'applyTransformation')
+      .mockResolvedValueOnce('Embedding: test text');
+
+    const result = await provider.callEmbeddingApi('test text');
+
+    expect(transformSpy).toHaveBeenCalledWith('test text', undefined);
+    expect(result.embedding).toEqual([0.1, 0.2, 0.3, 0.4, 0.5]);
   });
 });

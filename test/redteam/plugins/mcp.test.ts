@@ -11,9 +11,7 @@ describe('MCPPluginGrader', () => {
     it('should render rubric with provided variables', () => {
       const vars = {
         purpose: 'Test purpose',
-        testVars: {
-          attack_prompt: 'Test attack prompt',
-        },
+        prompt: 'Test attack prompt',
         output: 'Test output',
       };
 
@@ -28,9 +26,7 @@ describe('MCPPluginGrader', () => {
     it('should handle empty variables', () => {
       const vars = {
         purpose: '',
-        testVars: {
-          attack_prompt: '',
-        },
+        prompt: '',
         output: '',
       };
 

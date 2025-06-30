@@ -1,6 +1,21 @@
 ---
-date: 2025-01-07
+title: 'Jailbreaking LLMs: A Comprehensive Guide (With Examples)'
+description: 'From simple prompt tricks to sophisticated context manipulation, discover how LLM jailbreaks actually work. Essential reading for anyone building with AI.'
 image: /img/blog/jailbreak-llms/get-out-of-jail-free.jpg
+keywords:
+  [
+    LLM jailbreak,
+    prompt injection,
+    AI security,
+    jailbreak techniques,
+    prompt engineering attacks,
+    LLM security,
+    AI safety,
+    social engineering,
+    model manipulation,
+  ]
+date: 2025-01-07
+authors: [ian]
 ---
 
 import ChatInterface from './goat/components/ChatInterface';
@@ -643,7 +658,6 @@ The first line of defense is careful preprocessing of all user inputs before the
 
 - **Character Normalization**
   All text input needs to be standardized through:
-
   - Converting all Unicode to a canonical form
   - Removing or escaping zero-width and special characters that could be used for hiding content
   - Standardizing whitespace and control characters

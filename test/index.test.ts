@@ -73,6 +73,7 @@ describe('index.ts exports', () => {
     'TestCasesWithMetadataPromptSchema',
     'TestCasesWithMetadataSchema',
     'TestCaseWithVarsFileSchema',
+    'TestGeneratorConfigSchema',
     'TestSuiteConfigSchema',
     'TestSuiteSchema',
     'TokenUsageSchema',

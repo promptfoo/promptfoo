@@ -31,6 +31,22 @@ alwaysApply: false
 - Structure examples consistently with common patterns across the project
 - Include a working `promptfooconfig.yaml` (or equivalent) file
 
+## Local Development and Testing
+
+When developing or testing examples locally (especially with coding agents), use the local version instead of the published package:
+
+- **For evaluations with coding agents**: Use `npm run local -- eval -c ...` instead of `npx promptfoo@latest eval -c ...`
+- **For other local testing**: Use `npm run local` commands to test your current development version
+- This ensures you're testing the local changes rather than the latest published version
+- Always test examples with the local version before submitting changes
+
+Example:
+
+```bash
+# Instead of: npx promptfoo@latest eval -c path/to/config.yaml
+# Use: npm run local -- eval -c path/to/config.yaml
+```
+
 ## Configuration File Structure
 
 - Always include the YAML schema reference at the top of configuration files:

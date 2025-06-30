@@ -19,8 +19,10 @@ import { Strategies, validateStrategies } from '../../src/redteam/strategies';
 import { DEFAULT_LANGUAGES } from '../../src/redteam/strategies/multilingual';
 import type { TestCaseWithPlugin } from '../../src/types';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
+import { extractVariablesFromTemplates } from '../../src/util/templates';
 
 jest.mock('cli-progress');
+jest.mock('../../src/logger');
 jest.mock('../../src/providers');
 jest.mock('../../src/redteam/extraction/entities');
 jest.mock('../../src/redteam/extraction/purpose');
@@ -28,7 +30,7 @@ jest.mock('../../src/util/templates', () => {
   const originalModule = jest.requireActual('../../src/util/templates');
   return {
     ...originalModule,
-    extractVariablesFromTemplates: jest.fn(originalModule.extractVariablesFromTemplates),
+    extractVariablesFromTemplates: jest.fn().mockReturnValue(['query']),
   };
 });
 
@@ -62,6 +64,17 @@ describe('synthesize', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.resetAllMocks();
+
+    // Set up logger mocks
+    jest.mocked(logger.info).mockReturnValue(logger as any);
+    jest.mocked(logger.warn).mockReturnValue(logger as any);
+    jest.mocked(logger.error).mockReturnValue(logger as any);
+    jest.mocked(logger.debug).mockReturnValue(logger as any);
+
+    // Set up templates mock with consistent default behavior
+    jest.mocked(extractVariablesFromTemplates).mockReturnValue(['query']);
+
     jest.mocked(extractEntities).mockResolvedValue(['entity1', 'entity2']);
     jest.mocked(extractSystemPurpose).mockResolvedValue('Test purpose');
     jest.mocked(loadApiProvider).mockResolvedValue(mockProvider);
@@ -75,6 +88,14 @@ describe('synthesize', () => {
       stop: jest.fn(),
       update: jest.fn(),
     } as any);
+    // Disable remote generation by default to avoid health checks interfering
+    // with tests that don't explicitly set this behaviour
+    jest.mocked(shouldGenerateRemote).mockReturnValue(false);
+    jest.mocked(getRemoteHealthUrl).mockReturnValue('https://api.test/health');
+    jest.mocked(checkRemoteHealth).mockResolvedValue({
+      status: 'OK',
+      message: 'Cloud API is healthy',
+    });
   });
 
   // Input handling tests
@@ -532,6 +553,17 @@ describe('synthesize', () => {
   describe('API Health Check', () => {
     beforeEach(() => {
       jest.clearAllMocks();
+      jest.resetAllMocks();
+
+      // Reset logger mocks
+      jest.mocked(logger.info).mockReturnValue(logger as any);
+      jest.mocked(logger.warn).mockReturnValue(logger as any);
+      jest.mocked(logger.error).mockReturnValue(logger as any);
+      jest.mocked(logger.debug).mockReturnValue(logger as any);
+
+      // Set up templates mock with consistent default behavior
+      jest.mocked(extractVariablesFromTemplates).mockReturnValue(['query']);
+
       jest.mocked(shouldGenerateRemote).mockReturnValue(true);
       jest.mocked(getRemoteHealthUrl).mockReturnValue('https://api.test/health');
       jest.mocked(checkRemoteHealth).mockResolvedValue({
@@ -730,6 +762,17 @@ jest.mock('fs');
 jest.mock('js-yaml');
 
 describe('resolvePluginConfig', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.resetAllMocks();
+
+    // Set up logger mocks
+    jest.mocked(logger.info).mockReturnValue(logger as any);
+    jest.mocked(logger.warn).mockReturnValue(logger as any);
+    jest.mocked(logger.error).mockReturnValue(logger as any);
+    jest.mocked(logger.debug).mockReturnValue(logger as any);
+  });
+
   afterEach(() => {
     jest.clearAllMocks();
   });
