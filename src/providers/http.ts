@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import fs from 'fs';
+import http from 'http';
 import httpZ from 'http-z';
 import path from 'path';
 import { z } from 'zod';
@@ -12,15 +13,69 @@ import type {
   CallApiContextParams,
   ProviderOptions,
   ProviderResponse,
+  TokenUsage,
 } from '../types';
-import { maybeLoadFromExternalFile } from '../util';
-import { isJavascriptFile } from '../util/file';
+import { renderVarsInObject } from '../util';
+import { maybeLoadFromExternalFile } from '../util/file';
+import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
-const nunjucks = getNunjucksEngine();
+// This function is used to encode the URL in the first line of a raw request
+export function urlEncodeRawRequestPath(rawRequest: string) {
+  const firstLine = rawRequest.split('\n')[0];
+
+  const firstSpace = firstLine.indexOf(' ');
+  const method = firstLine.slice(0, firstSpace);
+  if (!method || !http.METHODS.includes(method)) {
+    logger.error(`[Http Provider] HTTP request method ${method} is not valid. From: ${firstLine}`);
+    throw new Error(
+      `[Http Provider] HTTP request method ${method} is not valid. From: ${firstLine}`,
+    );
+  }
+  const lastSpace = firstLine.lastIndexOf(' ');
+  if (lastSpace === -1) {
+    logger.error(
+      `[Http Provider] HTTP request URL is not valid. Protocol is missing. From: ${firstLine}`,
+    );
+    throw new Error(
+      `[Http Provider] HTTP request URL is not valid. Protocol is missing. From: ${firstLine}`,
+    );
+  }
+  const url = firstLine.slice(firstSpace + 1, lastSpace);
+
+  if (url.length === 0) {
+    logger.error(`[Http Provider] HTTP request URL is not valid. From: ${firstLine}`);
+    throw new Error(`[Http Provider] HTTP request URL is not valid. From: ${firstLine}`);
+  }
+
+  const protocol = lastSpace < firstLine.length ? firstLine.slice(lastSpace + 1) : '';
+
+  if (!protocol.toLowerCase().startsWith('http')) {
+    logger.error(`[Http Provider] HTTP request protocol is not valid. From: ${firstLine}`);
+    throw new Error(`[Http Provider] HTTP request protocol is not valid. From: ${firstLine}`);
+  }
+
+  logger.debug(`[Http Provider] Encoding URL: ${url} from first line of raw request: ${firstLine}`);
+
+  try {
+    // Use the built-in URL class to parse and encode the URL
+    const parsedUrl = new URL(url, 'http://placeholder-base.com');
+
+    // Replace the original URL in the first line
+    rawRequest = rawRequest.replace(
+      firstLine,
+      `${method} ${parsedUrl.pathname}${parsedUrl.search}${protocol ? ' ' + protocol : ''}`,
+    );
+  } catch (err) {
+    logger.error(`[Http Provider] Error parsing URL in HTTP request: ${String(err)}`);
+    throw new Error(`[Http Provider] Error parsing URL in HTTP request: ${String(err)}`);
+  }
+
+  return rawRequest;
+}
 
 export async function generateSignature(
   privateKeyPathOrKey: string,
@@ -31,7 +86,7 @@ export async function generateSignature(
 ): Promise<string> {
   try {
     const privateKey = isPath ? fs.readFileSync(privateKeyPathOrKey, 'utf8') : privateKeyPathOrKey;
-    const data = nunjucks
+    const data = getNunjucksEngine()
       .renderString(signatureDataTemplate, {
         signatureTimestamp,
       })
@@ -58,6 +113,13 @@ export function needsSignatureRefresh(
   return timeElapsed + effectiveBufferMs >= validityMs;
 }
 
+export const TokenEstimationConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  multiplier: z.number().min(0.01).default(1.3),
+});
+
+export type TokenEstimationConfig = z.infer<typeof TokenEstimationConfigSchema>;
+
 export const HttpProviderConfigSchema = z.object({
   body: z.union([z.record(z.any()), z.string(), z.array(z.any())]).optional(),
   headers: z.record(z.string()).optional(),
@@ -65,6 +127,10 @@ export const HttpProviderConfigSchema = z.object({
   method: z.string().optional(),
   queryParams: z.record(z.string()).optional(),
   request: z.string().optional(),
+  useHttps: z
+    .boolean()
+    .optional()
+    .describe('Use HTTPS for the request. This only works with the raw request option'),
   sessionParser: z.union([z.string(), z.function()]).optional(),
   transformRequest: z.union([z.string(), z.function()]).optional(),
   transformResponse: z.union([z.string(), z.function()]).optional(),
@@ -76,6 +142,8 @@ export const HttpProviderConfigSchema = z.object({
    * @deprecated use transformResponse instead
    */
   responseParser: z.union([z.string(), z.function()]).optional(),
+  // Token estimation configuration
+  tokenEstimation: TokenEstimationConfigSchema.optional(),
   // Digital Signature Authentication
   signatureAuth: z
     .object({
@@ -169,12 +237,15 @@ export async function createTransformResponse(
     return (data, text, context) => {
       try {
         const result = parser(data, text, context);
-        if (typeof result === 'string') {
+        if (typeof result === 'object') {
+          return result;
+        } else {
           return { output: result };
         }
-        return { output: result };
       } catch (err) {
-        logger.error(`Error in response transform function: ${String(err)}`);
+        logger.error(
+          `[Http Provider] Error in response transform function: ${String(err)}. Data: ${safeJsonStringify(data)}. Text: ${text}. Context: ${safeJsonStringify(context)}.`,
+        );
         throw err;
       }
     };
@@ -209,8 +280,8 @@ export async function createTransformResponse(
           'text',
           'context',
           isFunctionExpression
-            ? `try { return (${trimmedParser})(json, text, context); } catch(e) { throw new Error('Transform failed: ' + e.message); }`
-            : `try { return (${trimmedParser}); } catch(e) { throw new Error('Transform failed: ' + e.message); }`,
+            ? `try { return (${trimmedParser})(json, text, context); } catch(e) { throw new Error('Transform failed: ' + e.message + ' : ' + text + ' : ' + JSON.stringify(json) + ' : ' + JSON.stringify(context)); }`
+            : `try { return (${trimmedParser}); } catch(e) { throw new Error('Transform failed: ' + e.message + ' : ' + text + ' : ' + JSON.stringify(json) + ' : ' + JSON.stringify(context)); }`,
         );
         let resp: ProviderResponse | string;
         if (context) {
@@ -224,7 +295,9 @@ export async function createTransformResponse(
         }
         return resp;
       } catch (err) {
-        logger.error(`Error in response transform: ${String(err)}`);
+        logger.error(
+          `[Http Provider] Error in response transform: ${String(err)}. Data: ${safeJsonStringify(data)}. Text: ${text}. Context: ${safeJsonStringify(context)}.`,
+        );
         throw new Error(`Failed to transform response: ${String(err)}`);
       }
     };
@@ -234,57 +307,82 @@ export async function createTransformResponse(
   );
 }
 
-function processValue(value: any, vars: Record<string, any>): any {
-  if (typeof value === 'string') {
-    const renderedValue = nunjucks.renderString(value, vars || {});
-    try {
-      return JSON.parse(renderedValue);
-    } catch {
-      return renderedValue;
-    }
-  }
-  return value;
-}
-
-function processObjects(
-  body: Record<string, any> | any[],
-  vars: Record<string, any>,
-): Record<string, any> | any[] {
-  if (Array.isArray(body)) {
-    return body.map((item) =>
-      typeof item === 'object' && item !== null
-        ? processObjects(item, vars)
-        : processValue(item, vars),
-    );
-  }
-
-  const processedBody: Record<string, any> = {};
-
-  for (const [key, value] of Object.entries(body)) {
-    if (typeof value === 'object' && value !== null) {
-      processedBody[key] = processObjects(value, vars);
-    } else {
-      processedBody[key] = processValue(value, vars);
-    }
-  }
-  return processedBody;
-}
-
+/**
+ * Substitutes template variables in a JSON object or array.
+ *
+ * This function walks through all properties of the provided JSON structure
+ * and replaces template expressions (like {{varName}}) with their actual values.
+ * If a substituted string is valid JSON, it will be parsed into an object or array.
+ *
+ * Example:
+ * Input: {"greeting": "Hello {{name}}!", "data": {"id": "{{userId}}"}}
+ * Vars: {name: "World", userId: 123}
+ * Output: {"greeting": "Hello World!", "data": {"id": 123}}
+ *
+ * @param body The JSON object or array containing template expressions
+ * @param vars Dictionary of variable names and their values for substitution
+ * @returns A new object or array with all template expressions replaced
+ */
 export function processJsonBody(
   body: Record<string, any> | any[],
   vars: Record<string, any>,
 ): Record<string, any> | any[] {
-  // attempting to process a string as a stringifiedJSON object
-  if (typeof body === 'string') {
-    body = processValue(body, vars);
-    if (typeof body == 'string') {
-      return body;
-    }
-    return processObjects(body, vars);
+  // First apply the standard variable rendering
+  const rendered = renderVarsInObject(body, vars);
+
+  // For objects and arrays, we need to check each string value to see if it can be parsed as JSON
+  if (typeof rendered === 'object' && rendered !== null) {
+    // Function to process nested values
+    const processNestedValues = (obj: any): any => {
+      if (Array.isArray(obj)) {
+        return obj.map(processNestedValues);
+      } else if (typeof obj === 'object' && obj !== null) {
+        const result: Record<string, any> = {};
+        for (const [key, value] of Object.entries(obj)) {
+          result[key] = processNestedValues(value);
+        }
+        return result;
+      } else if (typeof obj === 'string') {
+        try {
+          return JSON.parse(obj);
+        } catch {
+          return obj;
+        }
+      }
+      return obj;
+    };
+
+    return processNestedValues(rendered);
   }
-  return processObjects(body, vars);
+
+  // If it's a string, attempt to parse as JSON
+  if (typeof rendered === 'string') {
+    try {
+      return JSON.parse(rendered);
+    } catch {
+      return rendered;
+    }
+  }
+
+  return rendered;
 }
 
+/**
+ * Substitutes template variables in a text string.
+ *
+ * Replaces template expressions (like {{varName}}) in the string with their
+ * actual values from the provided variables dictionary.
+ *
+ * Example:
+ * Input: "Hello {{name}}! Your user ID is {{userId}}."
+ * Vars: {name: "World", userId: 123}
+ * Output: "Hello World! Your user ID is 123."
+ *
+ * @param body The string containing template expressions to substitute
+ * @param vars Dictionary of variable names and their values for substitution
+ * @returns A new string with all template expressions replaced
+ * @throws Error if body is an object instead of a string
+ */
 export function processTextBody(body: string, vars: Record<string, any>): string {
   if (body == null) {
     return body;
@@ -293,13 +391,20 @@ export function processTextBody(body: string, vars: Record<string, any>): string
     typeof body !== 'object',
     'Expected body to be a string when content type is not application/json',
   );
-  return nunjucks.renderString(body, vars);
+  try {
+    return renderVarsInObject(body, vars);
+  } catch (err) {
+    logger.warn(`Error rendering body template: ${err}`);
+    return body;
+  }
 }
 
 function parseRawRequest(input: string) {
   const adjusted = input.trim().replace(/\n/g, '\r\n') + '\r\n\r\n';
+  // If the injectVar is in a query param, we need to encode the URL in the first line
+  const encoded = urlEncodeRawRequestPath(adjusted);
   try {
-    const messageModel = httpZ.parse(adjusted) as httpZ.HttpZRequestModel;
+    const messageModel = httpZ.parse(encoded) as httpZ.HttpZRequestModel;
     return {
       method: messageModel.method,
       url: messageModel.target,
@@ -372,7 +477,7 @@ export async function createTransformRequest(
     // Handle string template
     return async (prompt) => {
       try {
-        const rendered = nunjucks.renderString(transform, { prompt });
+        const rendered = getNunjucksEngine().renderString(transform, { prompt });
         return await new Function('prompt', `${rendered}`)(prompt);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
@@ -469,6 +574,22 @@ export async function createValidateStatus(
   );
 }
 
+/**
+ * Estimates token count for a given text using word-based counting
+ */
+export function estimateTokenCount(text: string, multiplier: number = 1.3): number {
+  if (!text || typeof text !== 'string') {
+    return 0;
+  }
+
+  // Split by whitespace and filter out empty strings
+  const words = text
+    .trim()
+    .split(/\s+/)
+    .filter((word) => word.length > 0);
+  return Math.ceil(words.length * multiplier);
+}
+
 export class HttpProvider implements ApiProvider {
   url: string;
   config: HttpProviderConfig;
@@ -483,6 +604,9 @@ export class HttpProvider implements ApiProvider {
 
   constructor(url: string, options: ProviderOptions) {
     this.config = HttpProviderConfigSchema.parse(options.config);
+    if (!this.config.tokenEstimation && cliState.config?.redteam) {
+      this.config.tokenEstimation = { enabled: true, multiplier: 1.3 };
+    }
     this.url = this.config.url || url;
     this.transformResponse = createTransformResponse(
       this.config.transformResponse || this.config.responseParser,
@@ -490,6 +614,7 @@ export class HttpProvider implements ApiProvider {
     this.sessionParser = createSessionParser(this.config.sessionParser);
     this.transformRequest = createTransformRequest(this.config.transformRequest);
     this.validateStatus = createValidateStatus(this.config.validateStatus);
+
     if (this.config.request) {
       this.config.request = maybeLoadFromExternalFile(this.config.request) as string;
     } else {
@@ -508,6 +633,36 @@ export class HttpProvider implements ApiProvider {
 
   toString(): string {
     return `[HTTP Provider ${this.url}]`;
+  }
+
+  /**
+   * Estimates token usage for prompt and completion text
+   */
+  private async estimateTokenUsage(
+    promptText: string,
+    completionText: string,
+  ): Promise<Partial<TokenUsage> | undefined> {
+    if (!this.config.tokenEstimation?.enabled) {
+      return undefined;
+    }
+
+    try {
+      const config = this.config.tokenEstimation;
+
+      const promptTokens = estimateTokenCount(promptText, config.multiplier);
+      const completionTokens = estimateTokenCount(completionText, config.multiplier);
+      const totalTokens = promptTokens + completionTokens;
+
+      return {
+        prompt: promptTokens,
+        completion: completionTokens,
+        total: totalTokens,
+        numRequests: 1,
+      };
+    } catch (err) {
+      logger.warn(`Failed to estimate tokens: ${String(err)}`);
+      return undefined;
+    }
   }
 
   private async refreshSignatureIfNeeded(): Promise<void> {
@@ -571,9 +726,14 @@ export class HttpProvider implements ApiProvider {
           'Content-Type is not application/json, but body is an object or array. The body must be a string if the Content-Type is not application/json.',
         );
       }
-      if (typeof body === 'string' && contentTypeIsJson(headers)) {
+
+      try {
+        if (typeof body === 'string' && contentTypeIsJson(headers)) {
+          JSON.parse(body);
+        }
+      } catch {
         logger.warn(
-          'Content-Type is application/json, but body is a string. This is likely to cause unexpected results. It should be an object or array.',
+          `[HTTP Provider] Content-Type is application/json, but body is a string. This is likely to cause unexpected results. It should be an object or array. Body: ${body} headers: ${safeJsonStringify(headers)}`,
         );
       }
     }
@@ -588,6 +748,8 @@ export class HttpProvider implements ApiProvider {
     const headers = Object.fromEntries(
       Object.entries(configHeaders).map(([key, value]) => [key.toLowerCase(), value]),
     );
+
+    const nunjucks = getNunjucksEngine();
 
     return Object.fromEntries(
       Object.entries({ ...defaultHeaders, ...headers }).map(([key, value]) => [
@@ -625,7 +787,7 @@ export class HttpProvider implements ApiProvider {
     }
 
     if (this.config.request) {
-      return this.callApiWithRawRequest(vars);
+      return this.callApiWithRawRequest(vars, context);
     }
 
     const defaultHeaders = this.getDefaultHeaders(this.config.body);
@@ -635,12 +797,12 @@ export class HttpProvider implements ApiProvider {
     // Transform prompt using request transform
     const transformedPrompt = await (await this.transformRequest)(prompt);
     logger.debug(
-      `[HTTP Provider]: Transformed prompt: ${transformedPrompt}. Original prompt: ${prompt}`,
+      `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(transformedPrompt)}. Original prompt: ${safeJsonStringify(prompt)}`,
     );
 
     const renderedConfig: Partial<HttpProviderConfig> = {
-      url: this.url,
-      method: nunjucks.renderString(this.config.method || 'GET', vars),
+      url: getNunjucksEngine().renderString(this.url, vars),
+      method: getNunjucksEngine().renderString(this.config.method || 'GET', vars),
       headers,
       body: determineRequestBody(
         contentTypeIsJson(headers),
@@ -652,7 +814,7 @@ export class HttpProvider implements ApiProvider {
         ? Object.fromEntries(
             Object.entries(this.config.queryParams).map(([key, value]) => [
               key,
-              nunjucks.renderString(value, vars),
+              getNunjucksEngine().renderString(value, vars),
             ]),
           )
         : undefined,
@@ -664,11 +826,22 @@ export class HttpProvider implements ApiProvider {
     invariant(typeof method === 'string', 'Expected method to be a string');
     invariant(typeof headers === 'object', 'Expected headers to be an object');
 
-    // Construct URL with query parameters for GET requests
-    let url = this.url;
+    // Template the base URL first, then construct URL with query parameters
+    let url = renderedConfig.url as string;
     if (renderedConfig.queryParams) {
-      const queryString = new URLSearchParams(renderedConfig.queryParams).toString();
-      url = `${url}?${queryString}`;
+      try {
+        const urlObj = new URL(url);
+        // Add each query parameter to the URL object
+        Object.entries(renderedConfig.queryParams).forEach(([key, value]) => {
+          urlObj.searchParams.append(key, value);
+        });
+        url = urlObj.toString();
+      } catch (err) {
+        // Fallback for potentially malformed URLs
+        logger.warn(`[HTTP Provider]: Failed to construct URL object: ${String(err)}`);
+        const queryString = new URLSearchParams(renderedConfig.queryParams).toString();
+        url = `${url}${url.includes('?') ? '&' : '?'}${queryString}`;
+      }
     }
 
     logger.debug(
@@ -688,25 +861,29 @@ export class HttpProvider implements ApiProvider {
       },
       REQUEST_TIMEOUT_MS,
       'text',
-      context?.debug,
+      context?.bustCache ?? context?.debug,
       this.config.maxRetries,
     );
 
-    logger.debug(`[HTTP Provider]: Response: ${response.data}`);
+    logger.debug(`[HTTP Provider]: Response: ${safeJsonStringify(response.data)}`);
     if (!(await this.validateStatus)(response.status)) {
       throw new Error(
         `HTTP call failed with status ${response.status} ${response.statusText}: ${response.data}`,
       );
     }
-    logger.debug(`[HTTP Provider]: Response (HTTP ${response.status}): ${response.data}`);
+    logger.debug(
+      `[HTTP Provider]: Response (HTTP ${response.status}): ${safeJsonStringify(response.data)}`,
+    );
 
     const ret: ProviderResponse = {};
-    if (context?.debug) {
-      ret.raw = response.data;
-      ret.metadata = {
-        headers: response.headers,
-      };
-    }
+    ret.raw = response.data;
+    ret.metadata = {
+      http: {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers || {},
+      },
+    };
 
     const rawText = response.data as string;
     let parsedData;
@@ -731,30 +908,48 @@ export class HttpProvider implements ApiProvider {
       throw err;
     }
     const parsedOutput = (await this.transformResponse)(parsedData, rawText, { response });
-    if (parsedOutput?.output) {
-      return {
-        ...ret,
-        ...parsedOutput,
-      };
-    }
-    return {
-      ...ret,
-      output: parsedOutput,
-    };
+
+    return this.processResponseWithTokenEstimation(
+      ret,
+      parsedOutput,
+      rawText,
+      transformedPrompt,
+      prompt,
+    );
   }
 
-  private async callApiWithRawRequest(vars: Record<string, any>): Promise<ProviderResponse> {
+  private async callApiWithRawRequest(
+    vars: Record<string, any>,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
     invariant(this.config.request, 'Expected request to be set in http provider config');
-    const renderedRequest = nunjucks.renderString(this.config.request, vars);
+
+    // Transform prompt using request transform
+    const prompt = vars.prompt;
+    const transformFn = await this.transformRequest;
+    const transformedPrompt = await transformFn(prompt);
+    logger.debug(
+      `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(transformedPrompt)}. Original prompt: ${safeJsonStringify(prompt)}`,
+    );
+
+    const renderedRequest = getNunjucksEngine().renderString(this.config.request, {
+      ...vars,
+      prompt: transformedPrompt,
+    });
     const parsedRequest = parseRawRequest(renderedRequest.trim());
 
-    const protocol = this.url.startsWith('https') ? 'https' : 'http';
+    const protocol = this.url.startsWith('https') || this.config.useHttps ? 'https' : 'http';
     const url = new URL(
       parsedRequest.url,
       `${protocol}://${parsedRequest.headers['host']}`,
     ).toString();
 
-    logger.debug(`[HTTP Provider]: Calling ${url} with raw request: ${parsedRequest}`);
+    // Remove content-length header from raw request if the user added it, it will be added by fetch with the correct value
+    delete parsedRequest.headers['content-length'];
+
+    logger.debug(
+      `[HTTP Provider]: Calling ${url} with raw request: ${parsedRequest.method}  ${safeJsonStringify(parsedRequest.body)} \n headers: ${safeJsonStringify(parsedRequest.headers)}`,
+    );
     const response = await fetchWithCache(
       url,
       {
@@ -764,11 +959,11 @@ export class HttpProvider implements ApiProvider {
       },
       REQUEST_TIMEOUT_MS,
       'text',
-      undefined,
+      context?.debug,
       this.config.maxRetries,
     );
 
-    logger.debug(`[HTTP Provider]: Response: ${response.data}`);
+    logger.debug(`[HTTP Provider]: Response: ${safeJsonStringify(response.data)}`);
 
     if (!(await this.validateStatus)(response.status)) {
       throw new Error(
@@ -783,13 +978,76 @@ export class HttpProvider implements ApiProvider {
     } catch {
       parsedData = null;
     }
+    const ret: ProviderResponse = {};
+    if (context?.debug) {
+      ret.raw = response.data;
+      ret.metadata = {
+        headers: response.headers,
+      };
+    }
 
     const parsedOutput = (await this.transformResponse)(parsedData, rawText, { response });
-    if (parsedOutput?.output) {
+
+    return this.processResponseWithTokenEstimation(
+      ret,
+      parsedOutput,
+      rawText,
+      transformedPrompt,
+      prompt,
+    );
+  }
+
+  /**
+   * Extracts completion text from parsed output with fallback to raw text
+   */
+  private getCompletionText(parsedOutput: any, rawText: string): string {
+    if (typeof parsedOutput === 'string') {
       return parsedOutput;
     }
-    return {
+    if (parsedOutput?.output && typeof parsedOutput.output === 'string') {
+      return parsedOutput.output;
+    }
+    return rawText;
+  }
+
+  /**
+   * Processes response and adds token estimation if enabled
+   */
+  private async processResponseWithTokenEstimation(
+    ret: ProviderResponse,
+    parsedOutput: any,
+    rawText: string,
+    transformedPrompt: any,
+    prompt: string,
+  ): Promise<ProviderResponse> {
+    // Estimate tokens if enabled
+    let estimatedTokenUsage: Partial<TokenUsage> | undefined;
+    if (this.config.tokenEstimation?.enabled) {
+      const promptText = typeof transformedPrompt === 'string' ? transformedPrompt : prompt;
+      const completionText = this.getCompletionText(parsedOutput, rawText);
+      estimatedTokenUsage = await this.estimateTokenUsage(promptText, completionText);
+    }
+
+    if (parsedOutput?.output) {
+      const result = {
+        ...ret,
+        ...parsedOutput,
+      };
+      // Add estimated token usage if available and not already present
+      if (estimatedTokenUsage && !result.tokenUsage) {
+        result.tokenUsage = estimatedTokenUsage;
+      }
+      return result;
+    }
+
+    const result = {
+      ...ret,
       output: parsedOutput,
     };
+    // Add estimated token usage if available
+    if (estimatedTokenUsage && !result.tokenUsage) {
+      result.tokenUsage = estimatedTokenUsage;
+    }
+    return result;
   }
 }

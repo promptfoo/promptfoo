@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
 import logger from '../../logger';
 import type { ApiProvider, Assertion } from '../../types';
-import { maybeLoadFromExternalFile } from '../../util';
+import { maybeLoadFromExternalFile } from '../../util/file';
 import { getNunjucksEngine } from '../../util/templates';
 import { RedteamPluginBase } from './base';
 
@@ -11,6 +11,7 @@ const CustomPluginDefinitionSchema = z
   .object({
     generator: z.string().min(1, 'Generator must not be empty').trim(),
     grader: z.string().min(1, 'Grader must not be empty').trim(),
+    id: z.string().optional(),
   })
   .strict();
 
@@ -38,6 +39,11 @@ export function loadCustomPluginDefinition(filePath: string): CustomPluginDefini
 
 export class CustomPlugin extends RedteamPluginBase {
   private definition: CustomPluginDefinition;
+  static readonly canGenerateRemote = false;
+
+  get id(): string {
+    return this.definition.id || `promptfoo:redteam:custom`;
+  }
 
   constructor(provider: ApiProvider, purpose: string, injectVar: string, filePath: string) {
     super(provider, purpose, injectVar);

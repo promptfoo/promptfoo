@@ -1,11 +1,17 @@
 import dedent from 'dedent';
 import { Router } from 'express';
 import type { Request, Response } from 'express';
+import { v4 as uuidv4 } from 'uuid';
 import type { ZodError } from 'zod-validation-error';
 import { fromZodError } from 'zod-validation-error';
+import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import type { HttpProviderConfig } from '../../providers/http';
-import { HttpProvider, HttpProviderConfigSchema } from '../../providers/http';
+import { loadApiProvider } from '../../providers';
+import {
+  doTargetPurposeDiscovery,
+  type TargetPurposeDiscoveryResult,
+} from '../../redteam/commands/discover';
+import { neverGenerateRemote } from '../../redteam/remoteGeneration';
 import type { ProviderOptions, ProviderTestResponse } from '../../types/providers';
 import invariant from '../../util/invariant';
 import { ProviderOptionsSchema } from '../../validators/providers';
@@ -21,23 +27,23 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
     res.status(400).json({ error: fromZodError(e as ZodError).toString() });
     return;
   }
+  invariant(providerOptions.id, 'id is required');
 
-  let config: HttpProviderConfig;
-  try {
-    config = HttpProviderConfigSchema.parse(providerOptions.config);
-  } catch (e) {
-    res.status(400).json({ error: fromZodError(e as ZodError).toString() });
-    return;
-  }
-  invariant(config.url, 'url is required');
-  const loadedProvider = new HttpProvider(config.url, providerOptions);
+  const loadedProvider = await loadApiProvider(providerOptions.id, { options: providerOptions });
   // Call the provider with the test prompt
   let result;
+  const vars: Record<string, string> = {};
+
+  // Client-generated Session ID:
+  if (providerOptions.config?.sessionSource === 'client') {
+    vars['sessionId'] = uuidv4();
+  }
+
   try {
     result = await loadedProvider.callApi('Hello, world!', {
       debug: true,
       prompt: { raw: 'Hello, world!', label: 'Hello, world!' },
-      vars: {},
+      vars,
     });
     logger.debug(
       dedent`[POST /providers/test] result from API provider
@@ -54,7 +60,9 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
     return;
   }
 
-  const HOST = process.env.PROMPTFOO_CLOUD_API_URL || 'https://api.promptfoo.app';
+  const sessionId = loadedProvider.getSessionId?.() ?? vars.sessionId ?? undefined;
+
+  const HOST = getEnvString('PROMPTFOO_CLOUD_API_URL', 'https://api.promptfoo.app');
   try {
     // Call the the agent helper to evaluate the results of the provider
     const testAnalyzerResponse = await fetch(`${HOST}/providers/test`, {
@@ -76,7 +84,10 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
           error:
             'Error evaluating the results of your configuration. Manually review the provider results below.',
         },
-        providerResponse: result,
+        providerResponse: {
+          ...result,
+          sessionId,
+        },
       } as ProviderTestResponse);
       return;
     }
@@ -86,7 +97,10 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
     res
       .json({
         testResult: testAnalyzerResponseObj,
-        providerResponse: result,
+        providerResponse: {
+          ...result,
+          sessionId,
+        },
       } as ProviderTestResponse)
       .status(200);
   } catch (e) {
@@ -106,3 +120,49 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
     return;
   }
 });
+
+providersRouter.post(
+  '/discover',
+  async (
+    req: Request,
+    res: Response<TargetPurposeDiscoveryResult | { error: string }>,
+  ): Promise<void> => {
+    const body = req.body;
+    let providerOptions: ProviderOptions;
+    try {
+      providerOptions = ProviderOptionsSchema.parse(body);
+    } catch (e) {
+      res.status(400).json({ error: fromZodError(e as ZodError).toString() });
+      return;
+    }
+    invariant(providerOptions.id, 'Provider ID (`id`) is required');
+
+    // Check that remote generation is enabled:
+    if (neverGenerateRemote()) {
+      res.status(400).json({ error: 'Requires remote generation be enabled.' });
+      return;
+    }
+
+    try {
+      const loadedProvider = await loadApiProvider(providerOptions.id, {
+        options: providerOptions,
+      });
+      const result = await doTargetPurposeDiscovery(loadedProvider, undefined, false);
+
+      if (result) {
+        res.json(result);
+      } else {
+        res.status(500).json({ error: "Discovery failed to discover the target's purpose." });
+      }
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : String(e);
+      const serializedError = dedent`
+        [POST /providers/discover] Error calling target purpose discovery
+        error: ${errorMessage}
+        providerOptions: ${JSON.stringify(providerOptions)}`;
+      logger.error(serializedError);
+      res.status(500).json({ error: serializedError });
+      return;
+    }
+  },
+);

@@ -30,12 +30,57 @@
 .heroBanner h1 {
   font-size: 3.5rem;
   margin-bottom: 2rem;
+  font-weight: bold;
+  letter-spacing: -0.02em;
+  color: var(--ifm-font-color-base);
 }
 
 .heroBanner p {
   font-size: 1.25rem;
   font-weight: normal;
   margin-bottom: 2rem;
+}
+
+.heroMainText {
+  background: linear-gradient(90deg, #2563eb, #3b82f6, #60a5fa);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
+  display: inline-block;
+}
+
+.heroHighlight {
+  position: relative;
+  color: var(--ifm-color-primary);
+  font-weight: 800;
+}
+
+.heroHighlight::after {
+  content: '';
+  position: absolute;
+  bottom: 0.1em;
+  left: 0;
+  width: 100%;
+  height: 0.2em;
+  background-color: rgba(59, 130, 246, 0.3);
+  z-index: -1;
+  border-radius: 4px;
+}
+
+[data-theme='dark'] .heroMainText {
+  background: linear-gradient(90deg, #60a5fa, #93c5fd, #bfdbfe);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+[data-theme='dark'] .heroHighlight {
+  color: #93c5fd;
+}
+
+[data-theme='dark'] .heroHighlight::after {
+  background-color: rgba(96, 165, 250, 0.3);
 }
 
 @media screen and (max-width: 996px) {
@@ -49,6 +94,9 @@
   align-items: center;
   justify-content: center;
   gap: 1rem;
+  flex-wrap: wrap;
+  max-width: 100%;
+  padding: 0 1rem;
 }
 
 .walkthroughContainer {
@@ -63,19 +111,25 @@
   justify-content: center;
   border-bottom: 1px solid #e0e0e0;
   margin-bottom: 1rem;
+  flex-wrap: wrap;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 .walkthroughTab {
-  padding: 1rem 1rem;
+  padding: 1rem 1rem calc(1rem - 2px) 1rem;
   border: none;
   background: none;
   font-size: 1.25rem;
   cursor: pointer;
   transition: all 0.3s ease;
+  white-space: normal;
+  text-align: center;
+  border-bottom: 2px solid transparent;
 }
 
 .walkthroughTabActive {
-  border-bottom: 2px solid #1890ff;
+  border-color: #1890ff;
   color: #1890ff;
 }
 
@@ -83,6 +137,8 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 .walkthroughHeading {
@@ -148,6 +204,8 @@
 @media screen and (max-width: 768px) {
   .walkthroughContent {
     flex-direction: column;
+    width: 100%;
+    padding: 0 1rem;
   }
 
   .walkthroughDescription,
@@ -160,6 +218,79 @@
   .walkthroughDescription {
     padding-right: 0;
     margin-bottom: 1rem;
+  }
+
+  .heroBanner h1 {
+    font-size: 2.5rem;
+    margin: 2rem 0;
+  }
+
+  .buttons {
+    flex-direction: column;
+    width: 100%;
+    gap: 0.75rem;
+  }
+
+  .buttons a {
+    width: 100%;
+    max-width: 300px;
+  }
+
+  .walkthroughContainer {
+    flex-direction: column;
+  }
+
+  .walkthroughButtons,
+  .walkthroughImageContainer {
+    width: 100%;
+  }
+
+  .walkthroughButtons {
+    margin-bottom: 2rem;
+  }
+
+  .walkthroughButton {
+    align-items: center;
+  }
+
+  .actionOrientedSection {
+    padding: 4rem 0;
+  }
+
+  .actionOrientedSection h2 {
+    font-size: 2rem;
+  }
+
+  .imageSection {
+    padding: 2rem 0;
+  }
+
+  .ctaSection {
+    padding: 4rem 0;
+  }
+
+  .ctaSection h3 {
+    font-size: 1.5rem;
+  }
+
+  .walkthroughTabs {
+    width: 100%;
+    padding: 0;
+    gap: 0;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .walkthroughTab {
+    padding: 0.75rem 0.25rem;
+    font-size: 0.9rem;
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    word-break: keep-all;
+    white-space: nowrap;
   }
 }
 
@@ -231,48 +362,15 @@
   margin-bottom: 2rem;
 }
 
-@media screen and (max-width: 768px) {
-  .heroBanner h1 {
-    font-size: 2.5rem;
-    margin: 2rem 0;
-  }
+.productSection {
+  padding: 4rem 0;
+  background-color: var(--ifm-background-surface-color);
+}
 
-  .walkthroughContainer {
-    flex-direction: column;
-  }
-
-  .walkthroughButtons,
-  .walkthroughImageContainer {
-    width: 100%;
-  }
-
-  .walkthroughButtons {
-    margin-bottom: 2rem;
-  }
-
-  .walkthroughButton {
-    align-items: center;
-  }
-
-  .actionOrientedSection {
-    padding: 4rem 0;
-  }
-
-  .actionOrientedSection h2 {
-    font-size: 2rem;
-  }
-
-  .imageSection {
-    padding: 2rem 0;
-  }
-
-  .ctaSection {
-    padding: 4rem 0;
-  }
-
-  .ctaSection h3 {
-    font-size: 1.5rem;
-  }
+.sectionTitle {
+  text-align: center;
+  font-size: 2.5rem;
+  margin-bottom: 2rem;
 }
 
 .asSeenOnSection {

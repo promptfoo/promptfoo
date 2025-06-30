@@ -1,62 +1,53 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useTelemetry } from '@app/hooks/useTelemetry';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
-import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
-import { Alert, Paper, Box, Typography, Chip } from '@mui/material';
-import Button from '@mui/material/Button';
-import Checkbox from '@mui/material/Checkbox';
-import FormControl from '@mui/material/FormControl';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import Grid from '@mui/material/Grid';
-import IconButton from '@mui/material/IconButton';
-import Radio from '@mui/material/Radio';
-import RadioGroup from '@mui/material/RadioGroup';
+import { Box, Typography, Button, Tooltip } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
-import { alpha } from '@mui/material/styles';
 import {
-  DEFAULT_STRATEGIES,
   ALL_STRATEGIES,
-  AGENTIC_STRATEGIES,
+  MULTI_TURN_STRATEGIES,
   strategyDescriptions,
   strategyDisplayNames,
-  MULTI_TURN_STRATEGIES,
 } from '@promptfoo/redteam/constants';
-import type { RedteamStrategy } from '@promptfoo/redteam/types';
+import type { RedteamStrategyObject } from '@promptfoo/redteam/types';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import StrategyConfigDialog from './StrategyConfigDialog';
+import { PresetSelector } from './strategies/PresetSelector';
+import { RecommendedOptions } from './strategies/RecommendedOptions';
+import { StrategySection } from './strategies/StrategySection';
+import { SystemConfiguration } from './strategies/SystemConfiguration';
+import {
+  STRATEGY_PRESETS,
+  PRESET_IDS,
+  type PresetId,
+  type StrategyPreset,
+} from './strategies/types';
+import type { ConfigDialogState, StrategyCardData } from './strategies/types';
+import { getEstimatedProbes, getStrategyId } from './strategies/utils';
+
+// ------------------------------------------------------------------
+// Types & Interfaces
+// ------------------------------------------------------------------
 
 interface StrategiesProps {
   onNext: () => void;
   onBack: () => void;
 }
 
-const availableStrategies = ALL_STRATEGIES.filter((id) => id !== 'default').map((id) => ({
-  id,
-  name: strategyDisplayNames[id] || id,
-  description: strategyDescriptions[id],
-}));
+interface CustomPreset {
+  name: 'Custom';
+}
 
-const getStrategyId = (strategy: RedteamStrategy): string => {
-  return typeof strategy === 'string' ? strategy : strategy.id;
-};
+type PresetWithName = StrategyPreset | CustomPreset;
 
-// Add this constant at the top of the file to track which strategies have config options
-const CONFIGURABLE_STRATEGIES = ['basic', 'jailbreak', 'multilingual'] as const;
-
-// Split strategies into two groups
-const singleTurnStrategies = availableStrategies
-  .filter((strategy) => !MULTI_TURN_STRATEGIES.includes(strategy.id as any))
-  .sort((a, b) => {
-    const aIsRecommended = DEFAULT_STRATEGIES.includes(a.id as any);
-    const bIsRecommended = DEFAULT_STRATEGIES.includes(b.id as any);
-    if (aIsRecommended !== bIsRecommended) {
-      return aIsRecommended ? -1 : 1;
-    }
-    return a.name.localeCompare(b.name);
-  });
-const multiTurnStrategies = availableStrategies.filter((strategy) =>
-  MULTI_TURN_STRATEGIES.includes(strategy.id as any),
+const availableStrategies: StrategyCardData[] = ALL_STRATEGIES.filter((id) => id !== 'default').map(
+  (id) => ({
+    id,
+    name: strategyDisplayNames[id] || id,
+    description: strategyDescriptions[id],
+  }),
 );
 
 export default function Strategies({ onNext, onBack }: StrategiesProps) {
@@ -64,93 +55,277 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   const { recordEvent } = useTelemetry();
   const theme = useTheme();
 
-  const [selectedStrategies, setSelectedStrategies] = useState<RedteamStrategy[]>(
-    () =>
-      config.strategies.map((strategy) =>
-        typeof strategy === 'string' ? { id: strategy } : strategy,
-      ) as RedteamStrategy[],
-  );
-
   const [isStatefulValue, setIsStatefulValue] = useState(config.target?.config?.stateful === true);
+  const [isMultiTurnEnabled, setIsMultiTurnEnabled] = useState(false);
 
-  const [configDialogOpen, setConfigDialogOpen] = useState(false);
-  const [selectedConfigStrategy, setSelectedConfigStrategy] = useState<string | null>(null);
-  const [strategyConfig, setStrategyConfig] = useState<Record<string, any>>(() => {
-    const initialConfig: Record<string, any> = {};
-    config.strategies.forEach((strategy) => {
-      if (typeof strategy === 'object' && strategy.config) {
-        initialConfig[strategy.id] = strategy.config;
-      }
-    });
-    return initialConfig;
+  const [configDialog, setConfigDialog] = useState<ConfigDialogState>({
+    isOpen: false,
+    selectedStrategy: null,
   });
 
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_strategies' });
+  }, [recordEvent]);
+
+  // Separate single vs. multi-turn
+  const { singleTurnStrategies, multiTurnStrategies } = useMemo(() => {
+    return {
+      singleTurnStrategies: availableStrategies.filter(
+        (s) => !MULTI_TURN_STRATEGIES.includes(s.id as any),
+      ),
+      multiTurnStrategies: availableStrategies.filter((s) =>
+        MULTI_TURN_STRATEGIES.includes(s.id as any),
+      ),
+    };
   }, []);
 
-  useEffect(() => {
-    updateConfig('strategies', selectedStrategies);
-  }, [selectedStrategies, updateConfig]);
+  // Determine the initially selected preset
+  const initialPreset = useMemo(() => {
+    if (!Array.isArray(config.strategies)) {
+      console.warn('Invalid strategies configuration');
+      return 'Custom';
+    }
+    const hasMultiTurn = config.strategies.some(
+      (s) => s && MULTI_TURN_STRATEGIES.includes(getStrategyId(s) as any),
+    );
 
-  useEffect(() => {
-    const target = { ...config.target };
-    target.config = { ...target.config, stateful: isStatefulValue };
-    updateConfig('target', target);
-  }, [isStatefulValue]);
-
-  const handleStrategyToggle = (strategyId: string) => {
-    if (!selectedStrategies.find((strategy) => getStrategyId(strategy) === strategyId)) {
-      recordEvent('feature_used', {
-        feature: 'redteam_config_strategy_deselected',
-        strategy: strategyId,
-      });
+    if (hasMultiTurn) {
+      setIsMultiTurnEnabled(true);
     }
 
-    setSelectedStrategies((prev) => {
-      if (prev.some((strategy) => getStrategyId(strategy) === strategyId)) {
-        // Remove strategy
-        return prev.filter((strategy) => getStrategyId(strategy) !== strategyId);
-      } else {
-        // Add strategy with any existing config
-        const config = strategyConfig[strategyId];
-
-        const newStrategy: RedteamStrategy = config
-          ? { id: strategyId, config }
-          : { id: strategyId };
-        if (MULTI_TURN_STRATEGIES.includes(strategyId as any)) {
-          const existingConfig = newStrategy.config ?? {};
-          newStrategy.config = { ...existingConfig, stateful: isStatefulValue };
-        }
-        return [...prev, newStrategy];
+    const matchedPresetId = Object.entries(STRATEGY_PRESETS).find(([presetId, preset]) => {
+      if (!preset) {
+        return false;
       }
-    });
-  };
+      if (preset.options?.multiTurn) {
+        const expected = hasMultiTurn
+          ? [...preset.strategies, ...preset.options.multiTurn.strategies]
+          : preset.strategies;
 
-  const handleConfigClick = (strategyId: string) => {
-    setSelectedConfigStrategy(strategyId);
-    setConfigDialogOpen(true);
-  };
+        return (
+          expected.length === config.strategies.length &&
+          expected.every((sid) => config.strategies.some((s) => getStrategyId(s) === sid))
+        );
+      }
+      return (
+        preset.strategies.length === config.strategies.length &&
+        preset.strategies.every((sid) => config.strategies.some((s) => getStrategyId(s) === sid))
+      );
+    })?.[0];
 
-  const updateStrategyConfig = (strategyId: string, newConfig: Record<string, any>) => {
-    setStrategyConfig((prev) => ({
-      ...prev,
-      [strategyId]: newConfig,
-    }));
+    return matchedPresetId || 'Custom';
+  }, [config.strategies]);
 
-    setSelectedStrategies((prev) =>
-      prev.map((strategy) => {
-        const id = getStrategyId(strategy);
-        if (id === strategyId) {
+  const [selectedPreset, setSelectedPreset] = useState<PresetId | 'Custom'>(
+    initialPreset as PresetId | 'Custom',
+  );
+
+  // ----------------------------------------------
+  // Handlers
+  // ----------------------------------------------
+
+  const handlePresetSelect = useCallback(
+    (preset: PresetWithName) => {
+      recordEvent('feature_used', {
+        feature: 'redteam_config_strategy_preset_selected',
+        preset: preset.name,
+      });
+
+      if (preset.name === 'Custom') {
+        setSelectedPreset('Custom');
+        return;
+      }
+
+      // Find the preset ID by matching the name
+      const presetId = Object.entries(STRATEGY_PRESETS).find(
+        ([_, p]) => p.name === preset.name,
+      )?.[0] as PresetId;
+
+      if (!presetId) {
+        console.warn('Invalid preset selected');
+        return;
+      }
+
+      setSelectedPreset(presetId);
+
+      // At this point we know it's a StrategyPreset
+      const strategyPreset = STRATEGY_PRESETS[presetId];
+      if (strategyPreset.options?.multiTurn && isMultiTurnEnabled) {
+        const nextStrats = [
+          ...strategyPreset.strategies,
+          ...strategyPreset.options.multiTurn.strategies,
+        ].map((id: string) => ({ id }));
+        updateConfig('strategies', nextStrats);
+      } else {
+        updateConfig(
+          'strategies',
+          strategyPreset.strategies.map((id: string) => ({ id })),
+        );
+      }
+    },
+    [recordEvent, isMultiTurnEnabled, updateConfig],
+  );
+
+  const handleStrategyToggle = useCallback(
+    (strategyId: string) => {
+      const isSelected = config.strategies.some((s) => getStrategyId(s) === strategyId);
+
+      if (!isSelected) {
+        recordEvent('feature_used', {
+          feature: 'redteam_config_strategy_selected',
+          strategy: strategyId,
+        });
+      }
+
+      // Once user toggles, it's definitely "Custom" preset
+      setSelectedPreset('Custom');
+
+      if (isSelected) {
+        // Remove strategy
+        updateConfig(
+          'strategies',
+          config.strategies.filter((s) => getStrategyId(s) !== strategyId),
+        );
+      } else {
+        // Add strategy with stateful config if it's multi-turn
+        const newStrategy: RedteamStrategyObject = {
+          id: strategyId,
+          config: {},
+        };
+
+        if (MULTI_TURN_STRATEGIES.includes(strategyId as any)) {
+          newStrategy.config = { ...newStrategy.config, stateful: isStatefulValue };
+        }
+
+        updateConfig('strategies', [...config.strategies, newStrategy]);
+      }
+    },
+    [config.strategies, recordEvent, updateConfig, isStatefulValue],
+  );
+
+  const handleSelectNoneInSection = useCallback(
+    (strategyIds: string[]) => {
+      // Once user deselects all, it's definitely "Custom" preset
+      setSelectedPreset('Custom');
+
+      // Remove all strategies in the given section
+      updateConfig(
+        'strategies',
+        config.strategies.filter((s) => !strategyIds.includes(getStrategyId(s))),
+      );
+    },
+    [config.strategies, updateConfig],
+  );
+
+  const handleMultiTurnChange = useCallback(
+    (checked: boolean) => {
+      setIsMultiTurnEnabled(checked);
+
+      const preset = STRATEGY_PRESETS[selectedPreset as PresetId];
+
+      const multiTurnStrategies = preset?.options?.multiTurn?.strategies;
+      if (!multiTurnStrategies) {
+        return;
+      }
+
+      const multiTurnStrats = multiTurnStrategies.map((id: string) => ({
+        id,
+        config: { stateful: isStatefulValue },
+      }));
+
+      if (checked) {
+        // Add multi-turn strategies
+        const newStrats = [
+          ...config.strategies,
+          ...multiTurnStrats.filter(
+            (mts) => !config.strategies.some((existing) => getStrategyId(existing) === mts.id),
+          ),
+        ];
+        updateConfig('strategies', newStrats);
+      } else {
+        // Remove multi-turn strategies
+        const filtered = config.strategies.filter(
+          (s) => !multiTurnStrategies.includes(getStrategyId(s) as string),
+        );
+        updateConfig('strategies', filtered);
+      }
+    },
+    [config.strategies, updateConfig, isStatefulValue, selectedPreset],
+  );
+
+  const handleStatefulChange = useCallback(
+    (isStateful: boolean) => {
+      setIsStatefulValue(isStateful);
+
+      // Update the target config
+      updateConfig('target', {
+        ...config.target,
+        config: {
+          ...config.target.config,
+          stateful: isStateful,
+        },
+      });
+
+      // Update existing multi-turn strategies with new stateful value
+      const updated = config.strategies.map((s) => {
+        const id = getStrategyId(s);
+        if (MULTI_TURN_STRATEGIES.includes(id as any)) {
           return {
-            id: strategyId,
-            config: { ...newConfig }, // spread the config to create a new object
+            id,
+            config: { ...(typeof s === 'object' ? s.config : {}), stateful: isStateful },
           };
         }
-        return strategy;
-      }),
-    );
-  };
+        return s;
+      });
+
+      updateConfig('strategies', updated);
+    },
+    [config.target, config.strategies, updateConfig],
+  );
+
+  const handleConfigClick = useCallback((strategyId: string) => {
+    setConfigDialog({
+      isOpen: true,
+      selectedStrategy: strategyId,
+    });
+  }, []);
+
+  const updateStrategyConfig = useCallback(
+    (strategyId: string, newConfig: Record<string, any>) => {
+      const updated = config.strategies.map((s) => {
+        if (getStrategyId(s) === strategyId) {
+          return {
+            id: strategyId,
+            config: { ...(typeof s === 'object' ? s.config : {}), ...newConfig },
+          };
+        }
+        return s;
+      });
+      updateConfig('strategies', updated);
+    },
+    [config.strategies, updateConfig],
+  );
+
+  // ----------------------------------------------
+  // Derived states
+  // ----------------------------------------------
+
+  const selectedStrategyIds = useMemo(
+    () => config.strategies.map((s) => getStrategyId(s)),
+    [config.strategies],
+  );
+
+  const showSystemConfig = config.strategies.some((s) =>
+    ['goat', 'crescendo'].includes(getStrategyId(s)),
+  );
+
+  const hasSessionParser = Boolean(
+    config.target.config?.sessionParser || config.target.config?.sessionSource === 'client',
+  );
+
+  // ----------------------------------------------
+  // Render
+  // ----------------------------------------------
 
   return (
     <Box>
@@ -158,327 +333,84 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         Strategy Configuration
       </Typography>
 
-      <Paper elevation={1} sx={{ p: 3, mb: 3 }}>
-        <Typography variant="h6" gutterBottom>
-          About Testing Strategies
-        </Typography>
-        <Typography variant="body2" color="text.secondary" paragraph>
-          LLM applications typically interact with users in one of two ways: single-turn (one-shot)
-          or multi-turn (conversational) interactions. Your choice of testing strategy should match
-          your application's interaction model.
-        </Typography>
-        <Box sx={{ ml: 2, mb: 2 }}>
-          <Typography variant="body2" color="text.secondary">
-            <strong>Single-turn strategies</strong> test individual prompts in isolation. These are
-            ideal for:
-          </Typography>
-          <Box component="ul" sx={{ mt: 1, mb: 2, typography: 'body2', color: 'text.secondary' }}>
-            <li>Systems where each prompt is independent</li>
-            <li>API endpoints (e.g., text classification, content generation)</li>
-            <li>Completion tasks (e.g., code generation, text summarization)</li>
-          </Box>
-
-          <Typography variant="body2" color="text.secondary">
-            <strong>Multi-turn strategies</strong> simulate realistic back-and-forth conversations.
-            These are ideal for:
-          </Typography>
-          <Box component="ul" sx={{ mt: 1, mb: 2, typography: 'body2', color: 'text.secondary' }}>
-            <li>Chatbots and conversational agents</li>
-            <li>Systems that maintain conversation history</li>
-            <li>Applications where context builds over time</li>
-          </Box>
-
-          <Typography variant="body2" color="text.secondary">
-            <strong>Agentic strategies</strong> have reasoning capabilities that are better at
-            circumventing guardrails.
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          mb: 3,
+          p: 2,
+          borderRadius: 1,
+          backgroundColor: theme.palette.background.paper,
+          border: `1px solid ${theme.palette.divider}`,
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <Typography variant="body1" color="text.secondary">
+            Estimated Probes:
           </Typography>
         </Box>
-      </Paper>
+        <Typography variant="body1" fontWeight="bold" color="primary.main">
+          {getEstimatedProbes(config).toLocaleString()}
+        </Typography>
+        <Tooltip title="Probes are the number of requests to target application">
+          <InfoOutlinedIcon sx={{ fontSize: 16, color: 'text.secondary', cursor: 'help' }} />
+        </Tooltip>
+      </Box>
 
-      <Typography variant="h6" gutterBottom sx={{ mt: 4, mb: 2 }}>
-        Single-turn Strategies
-      </Typography>
-      <Grid container spacing={2} sx={{ mb: 4 }}>
-        {singleTurnStrategies.map((strategy) => (
-          <Grid item xs={12} sm={6} md={4} key={strategy.id}>
-            <Paper
-              elevation={1}
-              sx={{
-                p: 2,
-                height: '100%',
-                borderRadius: 2,
-                border: (theme) =>
-                  selectedStrategies.some((s) => getStrategyId(s) === strategy.id)
-                    ? `1px solid ${theme.palette.primary.main}`
-                    : '1px solid transparent',
-                backgroundColor: (theme) =>
-                  selectedStrategies.some((s) => getStrategyId(s) === strategy.id)
-                    ? alpha(theme.palette.primary.main, 0.04)
-                    : 'background.paper',
-                transition: 'all 0.2s ease-in-out',
-                '&:hover': {
-                  backgroundColor: (theme) =>
-                    selectedStrategies.some((s) => getStrategyId(s) === strategy.id)
-                      ? alpha(theme.palette.primary.main, 0.08)
-                      : alpha(theme.palette.action.hover, 0.04),
-                },
-              }}
-            >
-              <Box
-                sx={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'flex-start',
-                  width: '100%',
-                }}
-              >
-                <FormControlLabel
-                  sx={{ flex: 1 }}
-                  control={
-                    <Checkbox
-                      checked={selectedStrategies.some((s) => getStrategyId(s) === strategy.id)}
-                      onChange={() => handleStrategyToggle(strategy.id)}
-                      color="primary"
-                    />
-                  }
-                  label={
-                    <Box>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Typography variant="subtitle1">{strategy.name}</Typography>
-                        {DEFAULT_STRATEGIES.includes(
-                          strategy.id as (typeof DEFAULT_STRATEGIES)[number],
-                        ) && <Chip label="Recommended" size="small" color="default" />}
-                        {AGENTIC_STRATEGIES.includes(
-                          strategy.id as (typeof AGENTIC_STRATEGIES)[number],
-                        ) && (
-                          <Chip
-                            label="Agent"
-                            size="small"
-                            sx={{
-                              backgroundColor: (theme) =>
-                                theme.palette.mode === 'dark'
-                                  ? alpha(theme.palette.warning.main, 0.1)
-                                  : alpha(theme.palette.warning.main, 0.1),
-                              color: 'warning.main',
-                              borderColor: 'warning.main',
-                              border: 1,
-                            }}
-                          />
-                        )}
-                        {strategy.id === 'pandamonium' && (
-                          <Chip
-                            label="Experimental"
-                            size="small"
-                            sx={{
-                              backgroundColor: (theme) =>
-                                theme.palette.mode === 'dark'
-                                  ? alpha(theme.palette.error.main, 0.1)
-                                  : alpha(theme.palette.error.main, 0.1),
-                              color: 'error.main',
-                              borderColor: 'error.main',
-                              border: 1,
-                            }}
-                          />
-                        )}
-                      </Box>
-                      <Typography variant="body2" color="text.secondary">
-                        {strategy.description}
-                      </Typography>
-                    </Box>
-                  }
-                />
-                {selectedStrategies.some((s) => getStrategyId(s) === strategy.id) &&
-                  CONFIGURABLE_STRATEGIES.includes(
-                    strategy.id as (typeof CONFIGURABLE_STRATEGIES)[number],
-                  ) && (
-                    <IconButton
-                      size="small"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleConfigClick(strategy.id);
-                      }}
-                      sx={{
-                        ml: 1,
-                        opacity: 0.6,
-                        '&:hover': {
-                          opacity: 1,
-                          backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08),
-                        },
-                      }}
-                    >
-                      <SettingsOutlinedIcon fontSize="small" />
-                    </IconButton>
-                  )}
-              </Box>
-            </Paper>
-          </Grid>
-        ))}
-      </Grid>
+      {/* Preset Selector */}
+      <PresetSelector
+        presets={Object.values(STRATEGY_PRESETS)}
+        selectedPreset={selectedPreset}
+        onSelect={handlePresetSelect}
+      />
 
-      <Typography variant="h6" gutterBottom sx={{ mb: 2 }}>
-        Multi-turn Strategies
-      </Typography>
-      <Grid container spacing={2} sx={{ mb: 3 }}>
-        {multiTurnStrategies.map((strategy) => (
-          <Grid item xs={12} sm={6} md={4} key={strategy.id}>
-            <Paper
-              elevation={1}
-              sx={{
-                p: 2,
-                height: '100%',
-                borderRadius: 2,
-                border: (theme) =>
-                  selectedStrategies.some((s) => getStrategyId(s) === strategy.id)
-                    ? `1px solid ${theme.palette.primary.main}`
-                    : '1px solid transparent',
-                backgroundColor: (theme) =>
-                  selectedStrategies.some((s) => getStrategyId(s) === strategy.id)
-                    ? alpha(theme.palette.primary.main, 0.04)
-                    : 'background.paper',
-                transition: 'all 0.2s ease-in-out',
-                '&:hover': {
-                  backgroundColor: (theme) =>
-                    selectedStrategies.some((s) => getStrategyId(s) === strategy.id)
-                      ? alpha(theme.palette.primary.main, 0.08)
-                      : alpha(theme.palette.action.hover, 0.04),
-                },
-              }}
-            >
-              <Box
-                sx={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'flex-start',
-                  width: '100%',
-                }}
-              >
-                <FormControlLabel
-                  sx={{ flex: 1 }}
-                  control={
-                    <Checkbox
-                      checked={selectedStrategies.some((s) => getStrategyId(s) === strategy.id)}
-                      onChange={() => handleStrategyToggle(strategy.id)}
-                      color="primary"
-                    />
-                  }
-                  label={
-                    <Box>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Typography variant="subtitle1">{strategy.name}</Typography>
-                        {DEFAULT_STRATEGIES.includes(
-                          strategy.id as (typeof DEFAULT_STRATEGIES)[number],
-                        ) && <Chip label="Recommended" size="small" color="default" />}
-                        {AGENTIC_STRATEGIES.includes(
-                          strategy.id as (typeof AGENTIC_STRATEGIES)[number],
-                        ) && (
-                          <Chip
-                            label="Agent"
-                            size="small"
-                            sx={{
-                              backgroundColor: (theme) =>
-                                theme.palette.mode === 'dark'
-                                  ? alpha(theme.palette.warning.main, 0.1)
-                                  : alpha(theme.palette.warning.main, 0.1),
-                              color: 'warning.main',
-                              borderColor: 'warning.main',
-                              border: 1,
-                            }}
-                          />
-                        )}
-                      </Box>
-                      <Typography variant="body2" color="text.secondary">
-                        {strategy.description}
-                      </Typography>
-                    </Box>
-                  }
-                />
-                {selectedStrategies.some((s) => getStrategyId(s) === strategy.id) &&
-                  CONFIGURABLE_STRATEGIES.includes(
-                    strategy.id as (typeof CONFIGURABLE_STRATEGIES)[number],
-                  ) && (
-                    <IconButton
-                      size="small"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleConfigClick(strategy.id);
-                      }}
-                      sx={{
-                        ml: 1,
-                        opacity: 0.6,
-                        '&:hover': {
-                          opacity: 1,
-                          backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08),
-                        },
-                      }}
-                    >
-                      <SettingsOutlinedIcon fontSize="small" />
-                    </IconButton>
-                  )}
-              </Box>
-            </Paper>
-          </Grid>
-        ))}
-      </Grid>
-
-      {selectedStrategies.some((s) => ['goat', 'crescendo'].includes(getStrategyId(s))) && (
-        <Paper elevation={1} sx={{ p: 3, mb: 3 }}>
-          <Typography variant="h6" gutterBottom>
-            System Configuration
-          </Typography>
-          <FormControl component="fieldset">
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Is the target system Stateful? (Does it maintain conversation history?)
-            </Typography>
-            <RadioGroup
-              value={isStatefulValue}
-              onChange={(e) => {
-                const isStateful = e.target.value === 'true';
-                const updatedStrategies = config.strategies.map((strategy) => {
-                  if (typeof strategy === 'string') {
-                    return strategy;
-                  }
-
-                  if (MULTI_TURN_STRATEGIES.includes(strategy.id as any)) {
-                    strategy.config = strategy.config || {};
-                    strategy.config.stateful = isStateful;
-                  }
-                  return strategy;
-                });
-                updateConfig('strategies', updatedStrategies);
-                setIsStatefulValue(isStateful);
-              }}
-            >
-              <FormControlLabel
-                value="true"
-                control={<Radio />}
-                label="Yes - System is stateful, system maintains conversation history."
-              />
-              <FormControlLabel
-                value="false"
-                control={<Radio />}
-                label="No - System does not maintains conversation history"
-              />
-            </RadioGroup>
-
-            {!config.target.config.sessionParser && config.target.config.stateful && (
-              <Alert severity="warning">
-                Your system is stateful but you don't have session handling setup. Please return to
-                your Target setup to configure it.
-              </Alert>
-            )}
-          </FormControl>
-        </Paper>
+      {/* Recommended-specific options */}
+      {(selectedPreset === PRESET_IDS.MEDIUM || selectedPreset === PRESET_IDS.LARGE) && (
+        <RecommendedOptions
+          isMultiTurnEnabled={isMultiTurnEnabled}
+          isStatefulValue={isStatefulValue}
+          onMultiTurnChange={handleMultiTurnChange}
+          onStatefulChange={handleStatefulChange}
+        />
       )}
 
+      {/* Single-turn strategies */}
+      <StrategySection
+        title="Single-turn Strategies"
+        strategies={singleTurnStrategies}
+        selectedIds={selectedStrategyIds}
+        onToggle={handleStrategyToggle}
+        onConfigClick={handleConfigClick}
+        onSelectNone={handleSelectNoneInSection}
+      />
+
+      {/* Multi-turn strategies */}
+      <StrategySection
+        title="Multi-turn Strategies"
+        strategies={multiTurnStrategies}
+        selectedIds={selectedStrategyIds}
+        onToggle={handleStrategyToggle}
+        onConfigClick={handleConfigClick}
+        onSelectNone={handleSelectNoneInSection}
+      />
+
+      {/* Additional system config section, if needed */}
+      {showSystemConfig && (
+        <SystemConfiguration
+          isStatefulValue={isStatefulValue}
+          onStatefulChange={handleStatefulChange}
+          hasSessionParser={hasSessionParser}
+        />
+      )}
+
+      {/* Footer Buttons */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
         <Button
           variant="outlined"
           onClick={onBack}
           startIcon={<KeyboardArrowLeftIcon />}
-          sx={{
-            px: 4,
-            py: 1,
-          }}
+          sx={{ px: 4, py: 1 }}
         >
           Back
         </Button>
@@ -486,28 +418,32 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
           variant="contained"
           onClick={onNext}
           endIcon={<KeyboardArrowRightIcon />}
-          sx={{
-            backgroundColor: theme.palette.primary.main,
-            '&:hover': { backgroundColor: theme.palette.primary.dark },
-            px: 4,
-            py: 1,
-          }}
+          sx={{ px: 4, py: 1 }}
         >
           Next
         </Button>
       </Box>
 
+      {/* Config Dialog */}
       <StrategyConfigDialog
-        open={configDialogOpen}
-        strategy={selectedConfigStrategy}
-        config={selectedConfigStrategy ? strategyConfig[selectedConfigStrategy] || {} : {}}
-        onClose={() => {
-          setConfigDialogOpen(false);
-          setSelectedConfigStrategy(null);
-        }}
-        onSave={(strategy: string, newConfig: Record<string, any>) => {
-          updateStrategyConfig(strategy, newConfig);
-        }}
+        open={configDialog.isOpen}
+        strategy={configDialog.selectedStrategy}
+        config={
+          configDialog.selectedStrategy
+            ? ((
+                config.strategies.find(
+                  (s) => getStrategyId(s) === configDialog.selectedStrategy,
+                ) as RedteamStrategyObject
+              )?.config ?? {})
+            : {}
+        }
+        onClose={() =>
+          setConfigDialog({
+            isOpen: false,
+            selectedStrategy: null,
+          })
+        }
+        onSave={updateStrategyConfig}
       />
     </Box>
   );

@@ -4,7 +4,6 @@ import yaml from 'js-yaml';
 import path from 'path';
 import cliState from '../cliState';
 import { getEnvInt } from '../envars';
-import { importModule } from '../esm';
 import logger from '../logger';
 import {
   matchesAnswerRelevance,
@@ -21,12 +20,12 @@ import {
 } from '../matchers';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
-import telemetry from '../telemetry';
 import type {
   AssertionParams,
   AssertionValueFunctionContext,
   BaseAssertionTypes,
   ProviderResponse,
+  ScoringFunction,
 } from '../types';
 import {
   type ApiProvider,
@@ -35,12 +34,12 @@ import {
   type AtomicTestCase,
   type GradingResult,
 } from '../types';
-import { isJavascriptFile } from '../util/file';
+import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { transform } from '../util/transform';
-import { AssertionsResult } from './AssertionsResult';
 import { handleAnswerRelevance } from './answerRelevance';
+import { AssertionsResult } from './assertionsResult';
 import { handleBleuScore } from './bleu';
 import { handleClassifier } from './classifier';
 import {
@@ -57,7 +56,9 @@ import { handleContextRelevance } from './contextRelevance';
 import { handleCost } from './cost';
 import { handleEquals } from './equals';
 import { handleFactuality } from './factuality';
+import { handleIsValidFunctionCall } from './functionToolCall';
 import { handleGEval } from './geval';
+import { handleGleuScore } from './gleu';
 import { handleGuardrails } from './guardrails';
 import { handleJavascript } from './javascript';
 import { handleContainsJson, handleIsJson } from './json';
@@ -66,8 +67,9 @@ import { handleLevenshtein } from './levenshtein';
 import { handleLlmRubric } from './llmRubric';
 import { handleModelGradedClosedQa } from './modelGradedClosedQa';
 import { handleModeration } from './moderation';
-import { handleIsValidOpenAiFunctionCall, handleIsValidOpenAiToolsCall } from './openai';
+import { handleIsValidOpenAiToolsCall } from './openai';
 import { handlePerplexity, handlePerplexityScore } from './perplexity';
+import { handlePiScorer } from './pi';
 import { handlePython } from './python';
 import { handleRedteam } from './redteam';
 import { handleIsRefusal } from './refusal';
@@ -76,7 +78,7 @@ import { handleRougeScore } from './rouge';
 import { handleSimilar } from './similar';
 import { handleContainsSql, handleIsSql } from './sql';
 import { handleStartsWith } from './startsWith';
-import { coerceString, getFinalTest, processFileReference } from './utils';
+import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
 import { handleWebhook } from './webhook';
 import { handleIsXml } from './xml';
 
@@ -122,10 +124,6 @@ export async function runAssertion({
     ? (assertion.type.slice(4) as AssertionType)
     : (assertion.type as AssertionType);
 
-  telemetry.record('assertion_used', {
-    type: baseType,
-  });
-
   if (assertion.transform) {
     output = await transform(assertion.transform, output, {
       vars: test.vars,
@@ -162,18 +160,7 @@ export async function runAssertion({
       filePath = path.resolve(basePath, filePath);
 
       if (isJavascriptFile(filePath)) {
-        const requiredModule = await importModule(filePath, functionName);
-        if (functionName && typeof requiredModule[functionName] === 'function') {
-          valueFromScript = await Promise.resolve(requiredModule[functionName](output, context));
-        } else if (typeof requiredModule === 'function') {
-          valueFromScript = await Promise.resolve(requiredModule(output, context));
-        } else if (requiredModule.default && typeof requiredModule.default === 'function') {
-          valueFromScript = await Promise.resolve(requiredModule.default(output, context));
-        } else {
-          throw new Error(
-            `Assertion malformed: ${filePath} must export a function or have a default export as a function`,
-          );
-        }
+        valueFromScript = await loadFromJavaScriptFile(filePath, functionName, [output, context]);
         logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
       } else if (filePath.endsWith('.py')) {
         try {
@@ -258,6 +245,7 @@ export async function runAssertion({
     cost: handleCost,
     equals: handleEquals,
     factuality: handleFactuality,
+    gleu: handleGleuScore,
     guardrails: handleGuardrails,
     'g-eval': handleGEval,
     icontains: handleIContains,
@@ -266,13 +254,31 @@ export async function runAssertion({
     'is-json': handleIsJson,
     'is-refusal': handleIsRefusal,
     'is-sql': handleIsSql,
-    'is-valid-openai-function-call': handleIsValidOpenAiFunctionCall,
+    'is-valid-function-call': handleIsValidFunctionCall,
+    'is-valid-openai-function-call': handleIsValidFunctionCall,
     'is-valid-openai-tools-call': handleIsValidOpenAiToolsCall,
     'is-xml': handleIsXml,
     javascript: handleJavascript,
     latency: handleLatency,
     levenshtein: handleLevenshtein,
     'llm-rubric': handleLlmRubric,
+    meteor: async (params: AssertionParams) => {
+      try {
+        const { handleMeteorAssertion } = await import('./meteor');
+        return handleMeteorAssertion(params);
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('Cannot find module')) {
+          return {
+            pass: false,
+            score: 0,
+            reason:
+              'METEOR assertion requires the natural package. Please install it using: npm install natural',
+            assertion: params.assertion,
+          };
+        }
+        throw error;
+      }
+    },
     'model-graded-closedqa': handleModelGradedClosedQa,
     'model-graded-factuality': handleFactuality,
     moderation: handleModeration,
@@ -284,6 +290,7 @@ export async function runAssertion({
     similar: handleSimilar,
     'starts-with': handleStartsWith,
     webhook: handleWebhook,
+    pi: handlePiScorer,
   };
 
   const handler = assertionHandlers[baseType as keyof typeof assertionHandlers];
@@ -308,17 +315,19 @@ export async function runAssertion({
 }
 
 export async function runAssertions({
+  assertScoringFunction,
+  latencyMs,
   prompt,
   provider,
   providerResponse,
   test,
-  latencyMs,
 }: {
+  assertScoringFunction?: ScoringFunction;
+  latencyMs?: number;
   prompt?: string;
   provider?: ApiProvider;
   providerResponse: ProviderResponse;
   test: AtomicTestCase;
-  latencyMs?: number;
 }): Promise<GradingResult> {
   if (!test.assert || test.assert.length < 1) {
     return AssertionsResult.noAssertsResult();
@@ -386,8 +395,8 @@ export async function runAssertions({
     },
   );
 
-  subAssertResults.forEach((subAssertResult) => {
-    const result = subAssertResult.testResult();
+  await async.forEach(subAssertResults, async (subAssertResult) => {
+    const result = await subAssertResult.testResult();
     const {
       index,
       assertionSet: { metric, weight },
@@ -401,7 +410,7 @@ export async function runAssertions({
     });
   });
 
-  return mainAssertResult.testResult();
+  return mainAssertResult.testResult(assertScoringFunction);
 }
 
 export async function runCompareAssertion(

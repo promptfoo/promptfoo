@@ -1,3 +1,7 @@
+---
+sidebar_label: Using LangChain PromptTemplate with Promptfoo
+---
+
 # Using LangChain PromptTemplate with Promptfoo
 
 LangChain PromptTemplate is commonly used to format prompts with injecting variables. Promptfoo allows you to evaluate and test your prompts systematically. Combining the two can streamline your workflow, enabling you to test the prompts that use LangChain PromptTemplate in application code directly within Promptfoo.
@@ -100,7 +104,7 @@ prompts:
   - file:<path to application files>/prompt-template/tone-detection.ts:toneEvaluationInstructions
 
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
 
 tests:
   - description: 'Simple tone detection test'

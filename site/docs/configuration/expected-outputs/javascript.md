@@ -98,15 +98,30 @@ assert:
 
 ## Using test context
 
-The `context` variable contains the prompt and test case variables:
+The `context` variable contains information about the test case and execution environment:
 
 ```ts
-interface AssertContext {
+interface AssertionValueFunctionContext {
   // Raw prompt sent to LLM
-  prompt: string;
+  prompt: string | undefined;
 
   // Test case variables
   vars: Record<string, string | object>;
+
+  // The complete test case
+  test: AtomicTestCase;
+
+  // Log probabilities from the LLM response, if available
+  logProbs: number[] | undefined;
+
+  // Configuration passed to the assertion
+  config?: Record<string, any>;
+
+  // The provider that generated the response
+  provider: ApiProvider | undefined;
+
+  // The complete provider response
+  providerResponse: ProviderResponse | undefined;
 }
 ```
 
@@ -257,6 +272,21 @@ module.exports = (output, context) => {
   return result;
 };
 ```
+
+## Inline assertions
+
+If you are using promptfoo as a JS package, you can build your assertion inline:
+
+```js
+{
+  type:"javascript",
+  value: (output, context) => {
+    return output.includes("specific text");
+  }
+}
+```
+
+Output will always be a string, so if your [custom response parser](/docs/providers/http/#function-parser) returned an object, you can use `JSON.parse(output)` to convert it back to an object.
 
 ### ES modules
 

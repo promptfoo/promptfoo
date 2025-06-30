@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Bedrock Nova Eval with Images'
+
+prompts:
+  - file://nova_multimodal_prompt.json
+
+providers:
+  - id: bedrock:amazon.nova-pro-v1:0
+    config:
+      region: 'us-east-1'
+      inferenceConfig:
+        temperature: 0.7
+        max_new_tokens: 256
+
+tests:
+  - vars:
+      image: file://cat.jpg

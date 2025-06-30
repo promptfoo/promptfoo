@@ -1,4 +1,10 @@
-# DeepSeek-R1 vs OpenAI o1 Comparison
+# deepseek-r1-vs-openai-o1 (DeepSeek-R1 vs OpenAI o1 Comparison)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example deepseek-r1-vs-openai-o1
+```
 
 This example demonstrates how to benchmark DeepSeek's R1 model against OpenAI's o1 model using the Massive Multitask Language Understanding (MMLU) benchmark, focusing on reasoning-heavy subjects.
 
@@ -18,13 +24,13 @@ To access the MMLU dataset, you'll need to authenticate with Hugging Face:
 3. Set your token as an environment variable:
 
    ```bash
-   export HUGGING_FACE_HUB_TOKEN=your_token_here
+   export HF_TOKEN=your_token_here
    ```
 
    Or add it to your `.env` file:
 
    ```env
-   HUGGING_FACE_HUB_TOKEN=your_token_here
+   HF_TOKEN=your_token_here
    ```
 
 ## Running the Eval

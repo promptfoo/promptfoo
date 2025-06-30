@@ -1,0 +1,49 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Function calling with Llama 4 for mathematical problem solving
+prompts:
+  - file://tool_prompts.txt
+providers:
+  - id: cerebras:llama-4-scout-17b-16e-instruct
+    config:
+      temperature: 0.7
+      max_completion_tokens: 1024
+      tools:
+        - type: 'function'
+          function:
+            name: 'calculate'
+            description: 'A calculator that can perform basic arithmetic operations'
+            parameters:
+              type: 'object'
+              properties:
+                expression:
+                  type: 'string'
+                  description: 'The mathematical expression to evaluate'
+              required: ['expression']
+            strict: true
+tests:
+  - vars:
+      problem: '15 × 7'
+      explanation: 'the product of fifteen and seven'
+    assert:
+      - type: contains
+        value: '105'
+      - type: contains-any
+        value: ['multiply', 'multiplication', 'multiplying', 'product']
+  - vars:
+      problem: '(42 × 3) ÷ 6'
+      explanation: 'forty-two times three, divided by six'
+    assert:
+      - type: contains
+        value: '21'
+      - type: contains-any
+        value: ['order of operations', 'PEMDAS', 'parentheses', 'brackets']
+  - vars:
+      problem: '√(144) + 25²'
+      explanation: 'the square root of one hundred forty-four plus twenty-five squared'
+    assert:
+      - type: contains
+        value: '637'
+      - type: contains-any
+        value: ['square root', 'exponent', 'power', 'squared']
+outputs:
+  - type: text

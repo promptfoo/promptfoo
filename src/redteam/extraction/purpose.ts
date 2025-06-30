@@ -1,15 +1,22 @@
 import dedent from 'dedent';
 import logger from '../../logger';
 import type { ApiProvider } from '../../types';
-import { shouldGenerateRemote } from '../remoteGeneration';
+import { neverGenerateRemote } from '../remoteGeneration';
 import type { RedTeamTask } from './util';
 import { callExtraction, fetchRemoteGeneration, formatPrompts } from './util';
+
+export const DEFAULT_PURPOSE = 'An AI system';
 
 export async function extractSystemPurpose(
   provider: ApiProvider,
   prompts: string[],
 ): Promise<string> {
-  if (shouldGenerateRemote()) {
+  if (prompts.length === 0) {
+    logger.debug('[purpose] No prompts provided, returning default purpose');
+    return DEFAULT_PURPOSE;
+  }
+
+  if (!neverGenerateRemote()) {
     try {
       const result = await fetchRemoteGeneration('purpose' as RedTeamTask, prompts);
       return result as string;

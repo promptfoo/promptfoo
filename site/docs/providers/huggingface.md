@@ -1,3 +1,7 @@
+---
+sidebar_label: HuggingFace
+---
+
 # HuggingFace
 
 promptfoo includes support for the [HuggingFace Inference API](https://huggingface.co/inference-api), for text generation, classification, and embeddings related tasks, as well as [HuggingFace Datasets](https://huggingface.co/docs/datasets).
@@ -119,6 +123,14 @@ providers:
       apiEndpoint: http://127.0.0.1:8080/generate
 ```
 
+## Authentication
+
+If you need to access private datasets or want to increase your rate limits, you can authenticate using your HuggingFace token. Set the `HF_TOKEN` environment variable with your token:
+
+```bash
+export HF_TOKEN=your_token_here
+```
+
 ## Datasets
 
 promptfoo can load test cases directly from HuggingFace datasets. To use a dataset, specify it in your config using the `huggingface://datasets/` prefix:
@@ -220,7 +232,7 @@ prompts:
   - 'Act as {{act}}. {{prompt}}'
 
 providers:
-  - id: openai:gpt-4o-mini
+  - id: openai:gpt-4.1-mini
 
 tests: huggingface://datasets/fka/awesome-chatgpt-prompts?split=train&limit=50
 ```

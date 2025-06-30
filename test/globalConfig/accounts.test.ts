@@ -1,4 +1,5 @@
 import input from '@inquirer/input';
+import chalk from 'chalk';
 import { getEnvString, isCI } from '../../src/envars';
 import { fetchWithTimeout } from '../../src/fetch';
 import {
@@ -7,6 +8,8 @@ import {
   getAuthor,
   promptForEmailUnverified,
   checkEmailStatusOrExit,
+  checkEmailStatus,
+  isLoggedIntoCloud,
 } from '../../src/globalConfig/accounts';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../../src/globalConfig/globalConfig';
 import logger from '../../src/logger';
@@ -16,6 +19,7 @@ jest.mock('@inquirer/input');
 jest.mock('../../src/envars');
 jest.mock('../../src/fetch');
 jest.mock('../../src/telemetry');
+jest.mock('../../src/util');
 
 describe('accounts', () => {
   beforeEach(() => {
@@ -68,6 +72,11 @@ describe('accounts', () => {
   });
 
   describe('promptForEmailUnverified', () => {
+    beforeEach(() => {
+      jest.mocked(isCI).mockReturnValue(false);
+      jest.mocked(readGlobalConfig).mockReturnValue({});
+    });
+
     it('should use CI email if in CI environment', async () => {
       jest.mocked(isCI).mockReturnValue(true);
       await promptForEmailUnverified();
@@ -76,9 +85,20 @@ describe('accounts', () => {
       });
     });
 
-    it('should prompt for email if not set', async () => {
-      jest.mocked(isCI).mockReturnValue(false);
-      jest.mocked(readGlobalConfig).mockReturnValue({});
+    it('should not prompt for email if already set', async () => {
+      jest.mocked(readGlobalConfig).mockReturnValue({
+        account: { email: 'existing@example.com' },
+      });
+
+      await promptForEmailUnverified();
+
+      expect(input).not.toHaveBeenCalled();
+      expect(telemetry.saveConsent).toHaveBeenCalledWith('existing@example.com', {
+        source: 'promptForEmailUnverified',
+      });
+    });
+
+    it('should prompt for email and save valid input', async () => {
       jest.mocked(input).mockResolvedValue('new@example.com');
 
       await promptForEmailUnverified();
@@ -91,18 +111,64 @@ describe('accounts', () => {
       });
     });
 
-    it('should validate email input', async () => {
-      jest.mocked(isCI).mockReturnValue(false);
-      jest.mocked(readGlobalConfig).mockReturnValue({});
+    describe('email validation', () => {
+      let validateFn: (input: string) => Promise<string | boolean>;
+
+      beforeEach(async () => {
+        await promptForEmailUnverified();
+        validateFn = jest.mocked(input).mock.calls[0][0].validate as (
+          input: string,
+        ) => Promise<string | boolean>;
+      });
+
+      it('should reject invalid email formats with error message', async () => {
+        const invalidEmails = [
+          '',
+          'invalid',
+          '@example.com',
+          'user@',
+          'user@.',
+          'user.com',
+          'user@.com',
+          '@.',
+          'user@example.',
+          'user.@example.com',
+          'us..er@example.com',
+        ];
+
+        for (const email of invalidEmails) {
+          const result = await validateFn(email);
+          expect(typeof result).toBe('string');
+          expect(result).toBe('Please enter a valid email address');
+        }
+      });
+
+      it('should accept valid email formats with true', async () => {
+        const validEmails = [
+          'valid@example.com',
+          'user.name@example.com',
+          'user+tag@example.com',
+          'user@subdomain.example.com',
+          'user@example.co.uk',
+          '123@example.com',
+          'user-name@example.com',
+          'user_name@example.com',
+        ];
+
+        for (const email of validEmails) {
+          await expect(validateFn(email)).toBe(true);
+        }
+      });
+    });
+
+    it('should save consent after successful email input', async () => {
+      jest.mocked(input).mockResolvedValue('test@example.com');
+
       await promptForEmailUnverified();
 
-      const validateFn = jest.mocked(input).mock.calls[0][0].validate as (
-        input: string,
-      ) => string | boolean;
-
-      expect(validateFn('')).toBe('Email is required');
-      expect(validateFn('invalid')).toBe('Email is required');
-      expect(validateFn('valid@example.com')).toBe(true);
+      expect(telemetry.saveConsent).toHaveBeenCalledWith('test@example.com', {
+        source: 'promptForEmailUnverified',
+      });
     });
   });
 
@@ -125,7 +191,7 @@ describe('accounts', () => {
       await checkEmailStatusOrExit();
 
       expect(fetchWithTimeout).toHaveBeenCalledWith(
-        'https://api.promptfoo.app/api/users/status?email=ci-placeholder@promptfoo.dev',
+        'https://api.promptfoo.app/api/users/status?email=ci-placeholder%40promptfoo.dev',
         undefined,
         500,
       );
@@ -146,7 +212,7 @@ describe('accounts', () => {
       await checkEmailStatusOrExit();
 
       expect(fetchWithTimeout).toHaveBeenCalledWith(
-        'https://api.promptfoo.app/api/users/status?email=test@example.com',
+        'https://api.promptfoo.app/api/users/status?email=test%40example.com',
         undefined,
         500,
       );
@@ -172,6 +238,29 @@ describe('accounts', () => {
       );
     });
 
+    it('should display warning message when status is show_usage_warning', async () => {
+      jest.mocked(isCI).mockReturnValue(false);
+      jest.mocked(readGlobalConfig).mockReturnValue({
+        account: { email: 'test@example.com' },
+      });
+
+      const warningMessage = 'You are approaching your usage limit';
+      const mockResponse = new Response(
+        JSON.stringify({ status: 'show_usage_warning', message: warningMessage }),
+        {
+          status: 200,
+          statusText: 'OK',
+        },
+      );
+      jest.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
+
+      await checkEmailStatusOrExit();
+
+      expect(logger.info).toHaveBeenCalledTimes(2);
+      expect(logger.warn).toHaveBeenCalledWith(chalk.yellow(warningMessage));
+      expect(mockExit).not.toHaveBeenCalled();
+    });
+
     it('should handle fetch errors', async () => {
       jest.mocked(isCI).mockReturnValue(false);
       jest.mocked(readGlobalConfig).mockReturnValue({
@@ -185,6 +274,151 @@ describe('accounts', () => {
         'Failed to check user status: Error: Network error',
       );
       expect(mockExit).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('checkEmailStatus', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('should return no_email status when no email is provided', async () => {
+      jest.mocked(isCI).mockReturnValue(false);
+      jest.mocked(readGlobalConfig).mockReturnValue({});
+
+      const result = await checkEmailStatus();
+
+      expect(result).toEqual({
+        status: 'no_email',
+        hasEmail: false,
+        message: 'Redteam evals require email verification. Please enter your work email:',
+      });
+    });
+
+    it('should use CI email when in CI environment', async () => {
+      jest.mocked(isCI).mockReturnValue(true);
+
+      const mockResponse = new Response(JSON.stringify({ status: 'ok' }), {
+        status: 200,
+        statusText: 'OK',
+      });
+      jest.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
+
+      const result = await checkEmailStatus();
+
+      expect(fetchWithTimeout).toHaveBeenCalledWith(
+        'https://api.promptfoo.app/api/users/status?email=ci-placeholder%40promptfoo.dev',
+        undefined,
+        500,
+      );
+      expect(result).toEqual({
+        status: 'ok',
+        hasEmail: true,
+        email: 'ci-placeholder@promptfoo.dev',
+        message: undefined,
+      });
+    });
+
+    it('should return exceeded_limit status', async () => {
+      jest.mocked(isCI).mockReturnValue(false);
+      jest.mocked(readGlobalConfig).mockReturnValue({
+        account: { email: 'test@example.com' },
+      });
+
+      const mockResponse = new Response(JSON.stringify({ status: 'exceeded_limit' }), {
+        status: 200,
+        statusText: 'OK',
+      });
+      jest.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
+
+      const result = await checkEmailStatus();
+
+      expect(result).toEqual({
+        status: 'exceeded_limit',
+        hasEmail: true,
+        email: 'test@example.com',
+        message: undefined,
+      });
+    });
+
+    it('should return show_usage_warning status with message', async () => {
+      jest.mocked(isCI).mockReturnValue(false);
+      jest.mocked(readGlobalConfig).mockReturnValue({
+        account: { email: 'test@example.com' },
+      });
+
+      const warningMessage = 'You are approaching your usage limit';
+      const mockResponse = new Response(
+        JSON.stringify({ status: 'show_usage_warning', message: warningMessage }),
+        {
+          status: 200,
+          statusText: 'OK',
+        },
+      );
+      jest.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
+
+      const result = await checkEmailStatus();
+
+      expect(result).toEqual({
+        status: 'show_usage_warning',
+        hasEmail: true,
+        email: 'test@example.com',
+        message: warningMessage,
+      });
+    });
+
+    it('should handle fetch errors gracefully', async () => {
+      jest.mocked(isCI).mockReturnValue(false);
+      jest.mocked(readGlobalConfig).mockReturnValue({
+        account: { email: 'test@example.com' },
+      });
+      jest.mocked(fetchWithTimeout).mockRejectedValue(new Error('Network error'));
+
+      const result = await checkEmailStatus();
+
+      expect(logger.debug).toHaveBeenCalledWith(
+        'Failed to check user status: Error: Network error',
+      );
+      expect(result).toEqual({
+        status: 'ok',
+        hasEmail: true,
+        email: 'test@example.com',
+        message: 'Unable to verify email status, but proceeding',
+      });
+    });
+  });
+
+  describe('isLoggedIntoCloud', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('should return true when user has email and not in CI', () => {
+      jest.mocked(readGlobalConfig).mockReturnValue({
+        account: { email: 'test@example.com' },
+      });
+      jest.mocked(isCI).mockReturnValue(false);
+      expect(isLoggedIntoCloud()).toBe(true);
+    });
+
+    it('should return false when user has no email', () => {
+      jest.mocked(readGlobalConfig).mockReturnValue({});
+      jest.mocked(isCI).mockReturnValue(false);
+      expect(isLoggedIntoCloud()).toBe(false);
+    });
+
+    it('should return false when in CI environment', () => {
+      jest.mocked(readGlobalConfig).mockReturnValue({});
+      jest.mocked(isCI).mockReturnValue(true);
+      expect(isLoggedIntoCloud()).toBe(false);
+    });
+
+    it('should return false when user has email but in CI environment', () => {
+      jest.mocked(readGlobalConfig).mockReturnValue({
+        account: { email: 'test@example.com' },
+      });
+      jest.mocked(isCI).mockReturnValue(true);
+      expect(isLoggedIntoCloud()).toBe(false);
     });
   });
 });

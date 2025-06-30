@@ -8,9 +8,10 @@ import Select from '@mui/material/Select';
 interface FilterModeSelectorProps {
   filterMode: string;
   onChange: (event: SelectChangeEvent) => void;
+  showDifferentOption?: boolean;
 }
 
-const options = [
+const BASE_OPTIONS = [
   { value: 'all', label: 'Show all results' },
   { value: 'failures', label: 'Show failures only' },
   { value: 'errors', label: 'Show errors only' },
@@ -18,7 +19,14 @@ const options = [
   { value: 'highlights', label: 'Show highlights only' },
 ];
 
-export const FilterModeSelector: React.FC<FilterModeSelectorProps> = ({ filterMode, onChange }) => {
+export const FilterModeSelector: React.FC<FilterModeSelectorProps> = ({
+  filterMode,
+  onChange,
+  showDifferentOption = true,
+}) => {
+  const options = showDifferentOption
+    ? BASE_OPTIONS
+    : BASE_OPTIONS.filter((o) => o.value !== 'different');
   return (
     <FormControl sx={{ minWidth: 180 }} size="small">
       <InputLabel id="filter-mode-label">Display</InputLabel>

@@ -1,9 +1,11 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Replicate Lifeboat model for conversational responses
+
 prompts:
   - 'Respond to the user concisely: {{message}}'
 
 providers:
-  - id: openai:chat:gpt-4o-mini
+  - id: openai:chat:gpt-4.1-mini
     config:
       apiKey: '...'
       temperature: 0.01

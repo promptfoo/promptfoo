@@ -1,108 +1,84 @@
-import fs from 'fs';
-import os from 'os';
-import path from 'path';
+import { getEnvString } from '../../src/envars';
 import { fetchWithProxy } from '../../src/fetch';
-import { fetchHuggingFaceDataset } from '../../src/integrations/huggingfaceDatasets';
+import {
+  fetchHuggingFaceDataset,
+  parseDatasetPath,
+} from '../../src/integrations/huggingfaceDatasets';
 
 jest.mock('../../src/fetch', () => ({
   fetchWithProxy: jest.fn(),
 }));
 
-jest.mock('fs', () => ({
-  ...jest.requireActual('fs'),
-  existsSync: jest.fn(),
-  unlinkSync: jest.fn(),
-  mkdirSync: jest.fn(),
+jest.mock('../../src/envars', () => ({
+  getEnvString: jest.fn().mockReturnValue(''),
 }));
-
-const createMockDb = (data: any[] = []) => {
-  const mockDb = {
-    pragma: jest.fn(),
-    exec: jest.fn(),
-    prepare: jest.fn((sql) => {
-      if (sql.includes('COUNT(*)')) {
-        return {
-          get: jest.fn(() => ({ count: data.length })),
-        };
-      }
-      if (sql.includes('SELECT')) {
-        return {
-          all: jest.fn(() => data.map((row) => ({ ...row }))),
-          get: jest.fn(() => data[0]),
-        };
-      }
-      return {
-        run: jest.fn(),
-        all: jest.fn(() => data),
-        get: jest.fn(() => ({ count: data.length })),
-      };
-    }),
-    transaction: jest.fn((fn) => {
-      fn();
-      return () => {};
-    }),
-    close: jest.fn(),
-  };
-  return mockDb;
-};
-
 describe('huggingfaceDatasets', () => {
-  const mockDbPath = path.join(os.tmpdir(), 'promptfoo-dataset-test.sqlite');
-  const mockDbDir = path.dirname(mockDbPath);
-
   beforeEach(() => {
-    jest.resetModules();
     jest.mocked(fetchWithProxy).mockClear();
-    jest.mocked(fs.existsSync).mockImplementation((p) => {
-      if (p === mockDbDir) {
-        return true;
-      }
-      return false;
-    });
-    jest.mocked(fs.mkdirSync).mockImplementation(() => undefined);
-    jest.mocked(fs.unlinkSync).mockClear();
+    jest.mocked(getEnvString).mockReturnValue('');
   });
 
   afterEach(() => {
-    try {
-      if (fs.existsSync(mockDbPath)) {
-        fs.unlinkSync(mockDbPath);
-      }
-    } catch {
-      // Ignore cleanup errors
-    }
-    jest.resetModules();
+    jest.resetAllMocks();
+  });
+
+  describe('parseDatasetPath', () => {
+    it('should parse path with default parameters', () => {
+      const result = parseDatasetPath('huggingface://datasets/owner/repo');
+      expect(result).toEqual({
+        owner: 'owner',
+        repo: 'repo',
+        queryParams: expect.any(URLSearchParams),
+      });
+      expect(result.queryParams.get('split')).toBe('test');
+      expect(result.queryParams.get('config')).toBe('default');
+    });
+
+    it('should parse path with custom query parameters', () => {
+      const result = parseDatasetPath(
+        'huggingface://datasets/owner/repo?split=train&config=custom&limit=10',
+      );
+      expect(result).toEqual({
+        owner: 'owner',
+        repo: 'repo',
+        queryParams: expect.any(URLSearchParams),
+      });
+      expect(result.queryParams.get('split')).toBe('train');
+      expect(result.queryParams.get('config')).toBe('custom');
+      expect(result.queryParams.get('limit')).toBe('10');
+    });
+
+    it('should override default parameters with user parameters', () => {
+      const result = parseDatasetPath('huggingface://datasets/owner/repo?split=validation');
+      expect(result.queryParams.get('split')).toBe('validation');
+      expect(result.queryParams.get('config')).toBe('default');
+    });
   });
 
   it('should fetch and parse dataset with default parameters', async () => {
-    const mockData = [
-      { act: 'Linux Terminal', prompt: 'List all files' },
-      { act: 'Math Tutor', prompt: 'Solve 2+2' },
-    ];
-
-    const mockResponse = {
+    jest.mocked(fetchWithProxy).mockResolvedValueOnce({
       ok: true,
       json: async () => ({
-        num_rows_total: mockData.length,
+        num_rows_total: 2,
         features: [
           { name: 'act', type: { dtype: 'string', _type: 'Value' } },
           { name: 'prompt', type: { dtype: 'string', _type: 'Value' } },
         ],
-        rows: mockData.map((row) => ({ row })),
+        rows: [
+          { row: { act: 'Linux Terminal', prompt: 'List all files' } },
+          { row: { act: 'Math Tutor', prompt: 'Solve 2+2' } },
+        ],
       }),
-    };
-
-    jest.mocked(fetchWithProxy).mockResolvedValueOnce(mockResponse as any);
-    const mockDb = createMockDb([]);
-    mockDb.prepare.mockImplementation((sql) => ({
-      run: jest.fn(),
-      all: jest.fn(() => mockData),
-      get: jest.fn(() => ({ count: mockData.length })),
-    }));
-    jest.doMock('better-sqlite3', () => jest.fn(() => mockDb));
+    } as any);
 
     const tests = await fetchHuggingFaceDataset('huggingface://datasets/test/dataset');
 
+    expect(jest.mocked(fetchWithProxy)).toHaveBeenCalledWith(
+      'https://datasets-server.huggingface.co/rows?dataset=test%2Fdataset&split=test&config=default&offset=0&length=100',
+      expect.objectContaining({
+        headers: {},
+      }),
+    );
     expect(tests).toHaveLength(2);
     expect(tests[0].vars).toEqual({
       act: 'Linux Terminal',
@@ -112,122 +88,212 @@ describe('huggingfaceDatasets', () => {
       act: 'Math Tutor',
       prompt: 'Solve 2+2',
     });
+
+    // Check that disableVarExpansion is set for all test cases
+    tests.forEach((test) => {
+      expect(test.options).toEqual({
+        disableVarExpansion: true,
+      });
+    });
   });
 
-  it('should handle custom query parameters', async () => {
-    const mockData = [
-      { question: 'What is 2+2?', answer: '4' },
-      { question: 'What is 3+3?', answer: '6' },
-    ];
+  it('should include auth token when HF_TOKEN is set', async () => {
+    jest.mocked(getEnvString).mockImplementation((key) => {
+      if (key === 'HF_TOKEN') {
+        return 'test-token';
+      }
+      return '';
+    });
 
-    const mockResponse = {
+    jest.mocked(fetchWithProxy).mockResolvedValueOnce({
       ok: true,
       json: async () => ({
-        num_rows_total: mockData.length,
+        num_rows_total: 1,
         features: [
           { name: 'question', type: { dtype: 'string', _type: 'Value' } },
           { name: 'answer', type: { dtype: 'string', _type: 'Value' } },
         ],
-        rows: mockData.map((row) => ({ row })),
+        rows: [{ row: { question: 'What is 2+2?', answer: '4' } }],
       }),
-    };
+    } as any);
 
-    jest.mocked(fetchWithProxy).mockResolvedValueOnce(mockResponse as any);
-    const mockDb = createMockDb([]);
-    mockDb.prepare.mockImplementation((sql) => ({
-      run: jest.fn(),
-      all: jest.fn(() => mockData),
-      get: jest.fn(() => ({ count: mockData.length })),
-    }));
-    jest.doMock('better-sqlite3', () => jest.fn(() => mockDb));
+    await fetchHuggingFaceDataset('huggingface://datasets/test/dataset');
+
+    expect(jest.mocked(fetchWithProxy)).toHaveBeenCalledWith(
+      'https://datasets-server.huggingface.co/rows?dataset=test%2Fdataset&split=test&config=default&offset=0&length=100',
+      expect.objectContaining({
+        headers: {
+          Authorization: 'Bearer test-token',
+        },
+      }),
+    );
+  });
+
+  it('should handle custom query parameters', async () => {
+    jest.mocked(fetchWithProxy).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        num_rows_total: 2,
+        features: [
+          { name: 'question', type: { dtype: 'string', _type: 'Value' } },
+          { name: 'answer', type: { dtype: 'string', _type: 'Value' } },
+        ],
+        rows: [
+          { row: { question: 'What is 2+2?', answer: '4' } },
+          { row: { question: 'What is 3+3?', answer: '6' } },
+        ],
+      }),
+    } as any);
 
     await fetchHuggingFaceDataset('huggingface://datasets/test/dataset?split=train&config=custom');
 
     expect(jest.mocked(fetchWithProxy)).toHaveBeenCalledWith(
-      expect.stringContaining('split=train'),
-      expect.any(Object),
-    );
-    expect(jest.mocked(fetchWithProxy)).toHaveBeenCalledWith(
-      expect.stringContaining('config=custom'),
-      expect.any(Object),
+      'https://datasets-server.huggingface.co/rows?dataset=test%2Fdataset&split=train&config=custom&offset=0&length=100',
+      expect.objectContaining({
+        headers: {},
+      }),
     );
   });
 
   it('should handle pagination', async () => {
-    const mockData = Array(120)
-      .fill(null)
-      .map((_, i) => ({ text: `Item ${i + 1}` }));
+    jest.mocked(fetchWithProxy).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        num_rows_total: 3,
+        features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
+        rows: [{ row: { text: 'First' } }, { row: { text: 'Second' } }],
+      }),
+    } as any);
 
-    const firstPage = {
+    jest.mocked(fetchWithProxy).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        num_rows_total: 3,
+        features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
+        rows: [{ row: { text: 'Third' } }],
+      }),
+    } as any);
+
+    const tests = await fetchHuggingFaceDataset('huggingface://datasets/test/dataset');
+
+    expect(jest.mocked(fetchWithProxy)).toHaveBeenCalledTimes(2);
+    expect(jest.mocked(fetchWithProxy)).toHaveBeenNthCalledWith(
+      1,
+      'https://datasets-server.huggingface.co/rows?dataset=test%2Fdataset&split=test&config=default&offset=0&length=100',
+      expect.objectContaining({
+        headers: {},
+      }),
+    );
+    expect(jest.mocked(fetchWithProxy)).toHaveBeenNthCalledWith(
+      2,
+      'https://datasets-server.huggingface.co/rows?dataset=test%2Fdataset&split=test&config=default&offset=2&length=100',
+      expect.objectContaining({
+        headers: {},
+      }),
+    );
+
+    expect(tests).toHaveLength(3);
+    expect(tests.map((t) => t.vars?.text)).toEqual(['First', 'Second', 'Third']);
+
+    // Check that disableVarExpansion is set for all test cases
+    tests.forEach((test) => {
+      expect(test.options).toEqual({
+        disableVarExpansion: true,
+      });
+    });
+  });
+
+  it('should handle API errors', async () => {
+    jest.mocked(fetchWithProxy).mockResolvedValueOnce({
+      ok: false,
+      statusText: 'Not Found',
+    } as any);
+
+    await expect(
+      fetchHuggingFaceDataset('huggingface://datasets/nonexistent/dataset'),
+    ).rejects.toThrow('[Huggingface Dataset] Failed to fetch dataset: Not Found');
+  });
+
+  it('should respect user-specified limit parameter', async () => {
+    jest.mocked(fetchWithProxy).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        num_rows_total: 5,
+        features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
+        rows: [{ row: { text: 'First' } }, { row: { text: 'Second' } }, { row: { text: 'Third' } }],
+      }),
+    } as any);
+
+    const tests = await fetchHuggingFaceDataset('huggingface://datasets/test/dataset?limit=2');
+
+    expect(jest.mocked(fetchWithProxy)).toHaveBeenCalledWith(
+      'https://datasets-server.huggingface.co/rows?dataset=test%2Fdataset&split=test&config=default&limit=2&offset=0&length=2',
+      expect.objectContaining({
+        headers: {},
+      }),
+    );
+
+    expect(tests).toHaveLength(2);
+    expect(tests.map((t) => t.vars?.text)).toEqual(['First', 'Second']);
+
+    // Check that disableVarExpansion is set for all test cases
+    tests.forEach((test) => {
+      expect(test.options).toEqual({
+        disableVarExpansion: true,
+      });
+    });
+  });
+
+  it('should handle limit larger than page size', async () => {
+    jest.mocked(fetchWithProxy).mockResolvedValueOnce({
       ok: true,
       json: async () => ({
         num_rows_total: 150,
         features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
-        rows: mockData.slice(0, 100).map((row) => ({ row })),
+        rows: Array(100)
+          .fill(null)
+          .map((_, i) => ({ row: { text: `Item ${i + 1}` } })),
       }),
-    };
+    } as any);
 
-    const secondPage = {
+    jest.mocked(fetchWithProxy).mockResolvedValueOnce({
       ok: true,
       json: async () => ({
         num_rows_total: 150,
         features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
-        rows: mockData.slice(100, 120).map((row) => ({ row })),
+        rows: Array(20)
+          .fill(null)
+          .map((_, i) => ({ row: { text: `Item ${i + 101}` } })),
       }),
-    };
-
-    // Clear previous mocks and set up new ones
-    jest.mocked(fetchWithProxy).mockReset();
-    jest
-      .mocked(fetchWithProxy)
-      .mockResolvedValueOnce(firstPage as any)
-      .mockResolvedValueOnce(secondPage as any);
-
-    jest.doMock('better-sqlite3', () => jest.fn(() => createMockDb(mockData)));
+    } as any);
 
     const tests = await fetchHuggingFaceDataset('huggingface://datasets/test/dataset?limit=120');
 
     expect(jest.mocked(fetchWithProxy)).toHaveBeenCalledTimes(2);
     expect(jest.mocked(fetchWithProxy)).toHaveBeenNthCalledWith(
       1,
-      expect.stringContaining('offset=0'),
-      expect.any(Object),
+      'https://datasets-server.huggingface.co/rows?dataset=test%2Fdataset&split=test&config=default&limit=120&offset=0&length=100',
+      expect.objectContaining({
+        headers: {},
+      }),
     );
     expect(jest.mocked(fetchWithProxy)).toHaveBeenNthCalledWith(
       2,
-      expect.stringContaining('offset=100'),
-      expect.any(Object),
+      'https://datasets-server.huggingface.co/rows?dataset=test%2Fdataset&split=test&config=default&limit=120&offset=100&length=20',
+      expect.objectContaining({
+        headers: {},
+      }),
     );
 
     expect(tests).toHaveLength(120);
     expect(tests[119].vars?.text).toBe('Item 120');
+
+    // Check that disableVarExpansion is set for all test cases
+    tests.forEach((test) => {
+      expect(test.options).toEqual({
+        disableVarExpansion: true,
+      });
+    });
   });
 
-  it('should handle empty rows array', async () => {
-    jest.mocked(fetchWithProxy).mockResolvedValueOnce({
-      ok: false,
-      status: 404,
-      statusText: 'Not Found',
-      headers: new Headers(),
-      text: async () => 'Dataset not found',
-    } as any);
-
-    const mockDb = {
-      prepare: jest.fn().mockReturnValue({
-        run: jest.fn(),
-        all: jest.fn().mockReturnValue([]),
-        get: jest.fn(),
-      }),
-      close: jest.fn(),
-      exec: jest.fn(),
-      pragma: jest.fn(),
-      transaction: jest.fn().mockImplementation((fn) => fn),
-    };
-
-    jest.doMock('better-sqlite3', () => jest.fn(() => mockDb));
-
-    await expect(fetchHuggingFaceDataset('huggingface://datasets/test/dataset')).rejects.toThrow(
-      '[Huggingface Dataset] Failed to fetch dataset',
-    );
-  });
 });

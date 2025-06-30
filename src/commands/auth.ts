@@ -1,37 +1,11 @@
 import chalk from 'chalk';
 import type { Command } from 'commander';
 import dedent from 'dedent';
-import readline from 'readline';
 import { fetchWithProxy } from '../fetch';
 import { getUserEmail, setUserEmail } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import telemetry from '../telemetry';
-
-async function promptForInput(question: string): Promise<string> {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
-  try {
-    return await new Promise((resolve) => {
-      rl.question(question, (answer) => {
-        resolve(answer.trim());
-      });
-    });
-  } finally {
-    rl.close();
-  }
-}
-
-async function promptForToken(): Promise<string> {
-  return promptForInput('Please enter your API token: ');
-}
-
-async function promptForEmail(): Promise<string> {
-  return promptForInput('Please enter your email: ');
-}
 
 export function authCommand(program: Command) {
   const authCommand = program.command('auth').description('Manage authentication');
@@ -48,56 +22,42 @@ export function authCommand(program: Command) {
     .action(async (cmdObj: { orgId: string; host: string; apiKey: string }) => {
       let token: string | undefined;
       const apiHost = cmdObj.host || cloudConfig.getApiHost();
-
+      telemetry.record('command_used', {
+        name: 'auth login',
+      });
+      await telemetry.send();
       try {
         if (cmdObj.apiKey) {
           token = cmdObj.apiKey;
-        } else {
-          const email = await promptForEmail();
-
-          // Send login request
-
-          const loginResponse = await fetchWithProxy(`${apiHost}/users/login?fromCLI=true`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ email, organizationId: cmdObj.orgId }),
-          });
-
-          if (!loginResponse.ok) {
-            throw new Error('Failed to send login request: ' + loginResponse.statusText);
+          const { user } = await cloudConfig.validateAndSetApiToken(token, apiHost);
+          // Store token in global config and handle email sync
+          const existingEmail = getUserEmail();
+          if (existingEmail && existingEmail !== user.email) {
+            logger.info(
+              chalk.yellow(
+                `Updating local email configuration from ${existingEmail} to ${user.email}`,
+              ),
+            );
           }
-
+          setUserEmail(user.email);
+          logger.info(chalk.green('Successfully logged in'));
+          return;
+        } else {
           logger.info(
-            chalk.green(
-              `A login link has been sent to ${email}. Click the link to login and then copy your authentication token.`,
-            ),
+            `Please login or sign up at ${chalk.green('https://promptfoo.app')} to get an API key.`,
           );
 
           logger.info(
-            chalk.yellow(
-              "If you did not get an email it's because the user does not exist or your not part of the the organization specified.",
-            ),
+            `After logging in, you can get your api token at ${chalk.green('https://promptfoo.app/welcome')}`,
           );
-
-          // Prompt for token
-          token = await promptForToken();
         }
-        const { user } = await cloudConfig.validateAndSetApiToken(token, apiHost);
 
-        // Store token in global config
-        setUserEmail(user.email);
-
-        telemetry.record('command_used', {
-          name: 'auth login',
-        });
-        await telemetry.send();
-        process.exit(0);
+        return;
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         logger.error(`Authentication failed: ${errorMessage}`);
-        process.exit(1);
+        process.exitCode = 1;
+        return;
       }
     });
 
@@ -105,9 +65,19 @@ export function authCommand(program: Command) {
     .command('logout')
     .description('Logout')
     .action(async () => {
+      const email = getUserEmail();
+      const apiKey = cloudConfig.getApiKey();
+
+      if (!email && !apiKey) {
+        logger.info(chalk.yellow("You're already logged out - no active session to terminate"));
+        return;
+      }
+
       await cloudConfig.delete();
+      // Always unset email on logout
+      setUserEmail('');
       logger.info(chalk.green('Successfully logged out'));
-      process.exit(0);
+      return;
     });
 
   authCommand
@@ -124,7 +94,7 @@ export function authCommand(program: Command) {
         }
 
         const apiHost = cloudConfig.getApiHost();
-        const response = await fetchWithProxy(`${apiHost}/users/me`, {
+        const response = await fetchWithProxy(`${apiHost}/api/v1/users/me`, {
           headers: {
             Authorization: `Bearer ${apiKey}`,
           },
@@ -137,10 +107,10 @@ export function authCommand(program: Command) {
         const { user, organization } = await response.json();
 
         logger.info(dedent`
-            Currently logged in as:
-             User: ${user.email}
-             Organization: ${organization.name}
-             App URL: ${cloudConfig.getAppUrl()}`);
+            ${chalk.green.bold('Currently logged in as:')}
+            User: ${chalk.cyan(user.email)}
+            Organization: ${chalk.cyan(organization.name)}
+            App URL: ${chalk.cyan(cloudConfig.getAppUrl())}`);
 
         telemetry.record('command_used', {
           name: 'auth whoami',

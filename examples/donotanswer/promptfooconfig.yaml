@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: DoNotAnswer RedTeam
+
+prompts:
+  - |
+    Respond to the following query or question:
+
+    {{query}}
+
+targets:
+  - openai:gpt-4.1-nano
+
+redteam:
+  numTests: 5
+  plugins:
+    - donotanswer
