@@ -1,4 +1,17 @@
 ---
+title: ModelAudit - Static Security Scanner for ML Models
+description: Scan AI/ML models for security vulnerabilities, malicious code, and backdoors. Supports PyTorch, TensorFlow, ONNX, Keras, and 15+ model formats.
+keywords:
+  [
+    model security,
+    AI security,
+    ML security scanning,
+    static analysis,
+    malicious model detection,
+    pytorch security,
+    tensorflow security,
+    model vulnerability scanner,
+  ]
 sidebar_label: Overview
 sidebar_position: 1
 ---
@@ -46,28 +59,26 @@ promptfoo scan-model [OPTIONS] PATH...
 ### Examples
 
 ```bash
-# Scan a single model file
-promptfoo scan-model model.pkl
+# Local models
+promptfoo scan-model ./model.pkl
+promptfoo scan-model ./models/
 
-# Scan a model directly from HuggingFace without downloading
+# HuggingFace models (no download required)
 promptfoo scan-model https://huggingface.co/bert-base-uncased
 promptfoo scan-model hf://microsoft/resnet-50
-promptfoo scan-model https://hf.co/gpt2
 
-# Scan multiple models and directories
-promptfoo scan-model model.pkl model2.h5 models_directory
+# Cloud storage
+promptfoo scan-model s3://my-bucket/model.pt
+promptfoo scan-model gs://my-bucket/model.h5
 
-# Export results to JSON
+# Advanced sources
+promptfoo scan-model https://company.jfrog.io/artifactory/models/model.pkl
+promptfoo scan-model model.pkl.dvc  # DVC pointer files
+promptfoo scan-model models:/MyModel/1  # MLflow registry
+
+# Output options
 promptfoo scan-model model.pkl --format json --output results.json
-
-# Add custom blacklist patterns
-promptfoo scan-model model.pkl --blacklist "unsafe_model" --blacklist "malicious_net"
-
-# Enable verbose output
-promptfoo scan-model model.pkl --verbose
-
-# Set file size limits
-promptfoo scan-model models/ --max-file-size 1073741824 --max-total-size 5368709120
+promptfoo scan-model models/ --sbom compliance-report.json
 ```
 
 :::info Alternative Installation and Usage
@@ -76,17 +87,7 @@ promptfoo scan-model models/ --max-file-size 1073741824 --max-total-size 5368709
 - **Web Interface**: For a GUI experience, use `promptfoo view` and navigate to `/model-audit` for visual scanning and configuration.
   :::
 
-### Options
-
-| Option              | Description                                                      |
-| ------------------- | ---------------------------------------------------------------- |
-| `--blacklist`, `-b` | Additional blacklist patterns to check against model names       |
-| `--format`, `-f`    | Output format (`text` or `json`) [default: text]                 |
-| `--output`, `-o`    | Output file path (prints to stdout if not specified)             |
-| `--timeout`, `-t`   | Scan timeout in seconds [default: 300]                           |
-| `--verbose`, `-v`   | Enable verbose output                                            |
-| `--max-file-size`   | Maximum file size to scan in bytes [default: unlimited]          |
-| `--max-total-size`  | Maximum total bytes to scan before stopping [default: unlimited] |
+For complete CLI options and advanced usage, see **[Installation & Usage](./usage.md)**.
 
 ## Web Interface
 
@@ -103,50 +104,61 @@ Promptfoo includes a web interface for ModelAudit at `/model-audit` with visual 
 
 ## Supported Model Formats
 
-ModelAudit can scan:
+**Popular ML Frameworks:**
 
-- **PyTorch models** (`.pt`, `.pth`, `.bin`)
-- **TensorFlow SavedModel** format (`.pb` files and directories)
-- **TensorFlow Lite models** (`.tflite`)
-- **Keras models** (`.h5`, `.keras`, `.hdf5`)
-- **ONNX models** (`.onnx`)
-- **GGUF/GGML models** (`.gguf`, `.ggml`) - popular for LLaMA, Alpaca, and other quantized LLMs
-- **Flax/JAX models** (`.msgpack`) - JAX neural network checkpoints
-- **Pickle files** (`.pkl`, `.pickle`, `.bin`, `.ckpt`)
-- **Joblib files** (`.joblib`) - commonly used by ML libraries
-- **NumPy arrays** (`.npy`)
-- **SafeTensors models** (`.safetensors`, `.bin` with SafeTensors format)
-- **PMML models** (`.pmml`) - Predictive Model Markup Language with XML security validation
-- **Container manifests** (`.manifest`) with embedded model layers
-- **ZIP archives** (`.zip`, `.npz`) with recursive content scanning
-- **Binary model files** (`.bin`) including:
-  - SafeTensors format (auto-detected)
-  - ONNX models
-  - Raw PyTorch tensor files
-  - Embedded executables (PE, ELF, Mach-O)
-- **Model configuration files** (`.json`, `.yaml`, etc.)
-- **HuggingFace URLs** - scan models directly from HuggingFace without downloading:
-  - `https://huggingface.co/user/model`
-  - `https://hf.co/user/model`
-  - `hf://user/model`
+- **PyTorch** (`.pt`, `.pth`, `.bin`) - Including ZIP archives and raw tensors
+- **TensorFlow** (`.pb`, `.tflite`) - SavedModel and TensorFlow Lite formats
+- **Keras** (`.h5`, `.keras`, `.hdf5`) - Including Lambda layer analysis
+- **ONNX** (`.onnx`) - With custom operator detection
+- **SafeTensors** (`.safetensors`) - Safer alternative to pickle
+
+**Specialized Formats:**
+
+- **GGUF/GGML** (`.gguf`, `.ggml`) - LLaMA, Alpaca, and quantized LLMs
+- **JAX/Flax** (`.msgpack`, `.orbax`, `.jax`) - JAX ecosystem checkpoints
+- **TensorRT** (`.engine`, `.plan`) - NVIDIA optimized inference engines
+- **PMML** (`.pmml`) - Predictive Model Markup Language
+
+**Data & Archives:**
+
+- **Pickle/Joblib** (`.pkl`, `.joblib`) - Python serialization formats
+- **NumPy** (`.npy`, `.npz`) - Array data with integrity checking
+- **ZIP Archives** (`.zip`) - Recursive scanning with bomb protection
+- **Containers** (`.manifest`) - OCI/Docker embedded models
+
+**Remote Sources:**
+
+- **HuggingFace URLs** - Direct model scanning without download
+- **Cloud Storage** - S3, GCS, Cloudflare R2 support
+- **MLflow Registry** - Model registry integration
+- **JFrog Artifactory** - Enterprise artifact repositories
+
+For detailed scanner capabilities, see **[Scanner Reference](./scanners.md)**.
 
 ## Security Checks Performed
 
-The scanner looks for various security issues, including:
+**Code Execution Risks:**
 
-- **Malicious Code**: Detecting potentially dangerous code in pickled models
-- **Suspicious Operations**: Identifying risky TensorFlow operations and custom ONNX operators
-- **Unsafe Layers**: Finding potentially unsafe Keras Lambda layers
-- **Blacklisted Names**: Checking for models with names matching suspicious patterns
-- **Dangerous Serialization**: Detecting unsafe pickle opcodes and patterns
-- **Encoded Payloads**: Looking for suspicious strings that might indicate hidden code
-- **Risky Configurations**: Identifying dangerous settings in model architectures
-- **XML Security**: Detecting XXE attacks and malicious content in PMML files using secure parsing
-- **Embedded Executables**: Detecting Windows PE (with DOS stub validation), Linux ELF, and macOS Mach-O files
-- **Container Security**: Scanning model files within OCI/Docker container layers
-- **Compression Attacks**: Detecting zip bombs and decompression attacks in archives and joblib files
-- **Weight Anomalies**: Statistical analysis to detect potential backdoors or trojans in neural networks
-- **Format Integrity**: Validating file format structure and preventing malformed file attacks
+- **Malicious Code** - Dangerous imports, eval/exec calls, system commands
+- **Pickle Exploits** - Unsafe opcodes, serialization attacks, encoded payloads
+- **Custom Operations** - Risky TensorFlow operations, ONNX custom operators
+- **Lambda Layers** - Arbitrary code in Keras Lambda layers
+
+**Data Integrity:**
+
+- **Format Validation** - File structure integrity, magic byte verification
+- **Embedded Threats** - Hidden executables (PE, ELF, Mach-O), scripts
+- **Compression Attacks** - Zip bombs, decompression exploits
+- **Weight Anomalies** - Statistical analysis for backdoors and trojans
+
+**Compliance & Configuration:**
+
+- **License Detection** - AGPL warnings, commercial restrictions, SBOM generation
+- **Container Security** - OCI/Docker layer scanning, path traversal protection
+- **XML Security** - XXE attack prevention in PMML files
+- **Blacklist Matching** - Custom security patterns and known threats
+
+For detailed security capabilities by format, see **[Scanner Reference](./scanners.md)**.
 
 ## Interpreting Results
 
@@ -183,26 +195,6 @@ ModelAudit returns specific exit codes for automation:
 In CI/CD pipelines, exit code 1 indicates findings that should be reviewed but don't necessarily block deployment. Only exit code 2 represents actual scan failures.
 :::
 
-## Requirements
+## Getting Started
 
-ModelAudit is included with Promptfoo, but specific model formats may require additional dependencies:
-
-```bash
-# For TensorFlow models
-pip install tensorflow
-
-# For PyTorch models
-pip install torch
-
-# For Keras models with HDF5
-pip install h5py
-
-# For YAML configuration scanning
-pip install pyyaml
-
-# For SafeTensors support
-pip install safetensors
-
-# For HuggingFace URL scanning
-pip install huggingface-hub
-```
+Ready to secure your models? Start with our **[Quick Start Guide](./quick-start.md)** for a 5-minute setup, or see **[Installation & Usage](./usage.md)** for detailed instructions and dependencies.

@@ -1,23 +1,19 @@
 ---
-description: Complete guide to ModelAudit's security scanners for different ML model formats including PyTorch, TensorFlow, Keras, ONNX, GGUF, and more.
+title: Scanner Reference - ML Model Security Analysis
+description: Deep dive into ModelAudit's 15+ specialized scanners for PyTorch, TensorFlow, ONNX, Keras, GGUF and other model formats. Detect malicious code and backdoors.
 keywords:
   [
-    modelaudit,
-    model security,
-    AI security,
-    ML security scanning,
-    pickle scanner,
-    pytorch security,
-    tensorflow security,
-    keras security,
-    onnx security,
-    model vulnerability detection,
+    model scanners,
+    pytorch scanner,
+    tensorflow scanner,
+    onnx scanner,
+    pickle security,
     malicious code detection,
     backdoor detection,
-    model file scanning,
+    ml model analysis,
   ]
 sidebar_label: Scanners
-sidebar_position: 200
+sidebar_position: 5
 ---
 
 # ModelAudit Scanners
@@ -84,6 +80,23 @@ This scanner examines TensorFlow Lite model files, which are optimized for mobil
 
 **Why it matters:**
 While TensorFlow Lite models are generally safer than full TensorFlow models due to their limited operator set, they can still include custom operations or use the Flex delegate to access the full TensorFlow runtime, potentially introducing security risks. Malicious actors could embed harmful code in custom ops or metadata.
+
+## TensorRT Scanner
+
+**File types:** `.engine`, `.plan`
+
+This scanner examines NVIDIA TensorRT engine files, which are optimized inference engines for NVIDIA GPUs.
+
+**What it checks for:**
+
+- Suspicious file paths (`/tmp/`, `../`) that might indicate unauthorized access attempts
+- Embedded shared library references (`.so` files) that could contain malicious code
+- Python import statements or execution commands embedded in the engine
+- Script execution patterns (`exec`, `eval`) that could run arbitrary code
+- Unauthorized plugin references that might load malicious extensions
+
+**Why it matters:**
+TensorRT engines are binary files that can contain custom plugins and operations. While generally safer than pickle files, they could potentially be crafted to include malicious plugins or reference unauthorized system resources. The scanner helps detect engines that might attempt to load external libraries or execute system commands during inference.
 
 ## Keras H5 Scanner
 
@@ -168,9 +181,9 @@ Joblib files often contain compressed pickle data, inheriting the same security 
 
 ## Flax/JAX Scanner
 
-**File types:** `.msgpack`
+**File types:** `.msgpack`, `.flax`, `.orbax`, `.jax`
 
-This scanner analyzes Flax/JAX model files serialized in MessagePack format.
+This scanner analyzes Flax/JAX model files serialized in MessagePack format and other JAX-specific formats.
 
 **What it checks for:**
 
@@ -182,6 +195,31 @@ This scanner analyzes Flax/JAX model files serialized in MessagePack format.
 
 **Why it matters:**
 Flax models serialized as msgpack files can potentially contain embedded code or malicious data structures. While MessagePack is generally safer than pickle, it can still be exploited through carefully crafted payloads that target specific deserializer vulnerabilities or cause denial of service through resource exhaustion.
+
+## JAX Checkpoint Scanner
+
+**File types:** `.ckpt`, `.checkpoint`, `.orbax-checkpoint`, `.pickle` (when in JAX context)
+
+This scanner analyzes JAX checkpoint files in various serialization formats, including Orbax checkpoints and JAX-specific pickle files.
+
+**What it checks for:**
+
+- **JAX-specific threats**: Dangerous JAX operations like experimental callbacks (`jax.experimental.host_callback.call`, `jax.debug.callback`)
+- **Orbax metadata analysis**: Custom restore functions and suspicious patterns in checkpoint metadata
+- **Pickle-based checkpoints**: Dangerous pickle opcodes when JAX models are saved as pickle files
+- **Directory-based checkpoints**: Validates Orbax checkpoint directory structure and metadata files
+- **Resource limits**: Enforces size limits to prevent denial of service attacks from oversized checkpoints
+- **JAX compilation threats**: Detects patterns that might abuse JAX compilation for system access
+
+**Features:**
+
+- **Multi-format support**: Handles both file-based and directory-based JAX checkpoints
+- **Orbax integration**: Specialized handling for Orbax checkpoint formats with metadata validation
+- **JAX context detection**: Identifies files that are likely JAX checkpoints based on content analysis
+- **NumPy validation**: Safely validates NumPy arrays within JAX checkpoints without executing pickle code
+
+**Why it matters:**
+JAX and Flax models can use various checkpoint formats, from simple pickle files to complex Orbax directory structures. These checkpoints may contain custom restore functions or JAX-specific operations that could be exploited. Orbax checkpoints in particular can include metadata with arbitrary restore functions, and JAX's experimental callbacks can be misused for system access.
 
 ## NumPy Scanner
 
@@ -356,6 +394,145 @@ ModelAudit includes comprehensive file format detection for ambiguous file exten
 - **Fallback handling**: Gracefully handles unknown formats with generic binary scanning
 
 This allows ModelAudit to automatically apply the correct scanner based on the actual file content, not just the extension. When a `.bin` file contains SafeTensors data, the SafeTensors scanner is automatically applied instead of assuming it's a raw binary file.
+
+## License Checking and Compliance
+
+ModelAudit includes comprehensive license detection and compliance checking capabilities that work across all file formats. This feature helps organizations understand their legal obligations and identify potential licensing issues before model deployment.
+
+### License Detection Features
+
+- **Header Analysis**: Scans file headers for license declarations (SPDX-License-Identifier, Copyright notices, etc.)
+- **License File Detection**: Identifies LICENSE, COPYING, and other license files in project directories
+- **Multi-license Support**: Handles files with multiple license declarations
+- **SPDX Compatibility**: Recognizes standard SPDX license identifiers
+
+### Compliance Checking
+
+#### AGPL Network Service Warnings
+
+Detects AGPL (Affero General Public License) components that may trigger network copyleft obligations:
+
+```
+⚠️ AGPL license detected: Component is under AGPL-3.0
+   This may require source code disclosure if used in network services
+```
+
+#### Commercial Use Restrictions
+
+Identifies licenses that restrict commercial use:
+
+```
+🚨 Non-commercial license detected: Creative Commons NonCommercial
+   This component cannot be used for commercial purposes
+```
+
+#### Unlicensed Dataset Detection
+
+Flags datasets and data files without clear licensing:
+
+```
+⚠️ Large dataset with unspecified licenses detected
+   Files: 1,247 data files (45.2 MB) may need license review
+```
+
+### Software Bill of Materials (SBOM) Generation
+
+ModelAudit can generate CycloneDX-compliant SBOMs with comprehensive license metadata:
+
+```bash
+# Generate SBOM with license information
+modelaudit scan ./models/ --sbom model-sbom.json
+```
+
+#### SBOM Contents
+
+The generated SBOM includes:
+
+- **Component Information**: File paths, types, sizes, and checksums
+- **License Metadata**: Detected licenses, copyright holders, and license files
+- **Risk Scoring**: Security risk scores based on scan findings
+- **Properties**: Model/dataset classification, copyright information, compliance flags
+
+#### Example SBOM Entry
+
+```json
+{
+  "components": [
+    {
+      "name": "model.pkl",
+      "type": "file",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "properties": [
+        {
+          "name": "is_model",
+          "value": "true"
+        },
+        {
+          "name": "copyright_holders",
+          "value": "Acme Corp, University Research Lab"
+        },
+        {
+          "name": "risk_score",
+          "value": "2"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "a1b2c3..."
+        }
+      ]
+    }
+  ]
+}
+```
+
+### License Issue Types
+
+ModelAudit reports different types of license-related issues:
+
+| Issue Type                  | Severity | Description                                              |
+| --------------------------- | -------- | -------------------------------------------------------- |
+| **AGPL Detection**          | WARNING  | Components under AGPL that may require source disclosure |
+| **Commercial Restrictions** | WARNING  | Non-commercial licenses that prohibit commercial use     |
+| **Copyleft Obligations**    | INFO     | Strong copyleft licenses with distribution requirements  |
+| **Unlicensed Content**      | WARNING  | Large datasets or models without clear licensing         |
+| **License Conflicts**       | WARNING  | Conflicting license requirements in the same project     |
+
+### Integration with CI/CD
+
+Use license checking in continuous integration:
+
+```yaml
+# Check for license compliance issues
+- name: License Compliance Check
+  run: |
+    modelaudit scan ./models/ --format json --output scan-results.json
+    # Check for license-related critical issues
+    if grep -q '"type":"license_warning".*"severity":"critical"' scan-results.json; then
+      echo "Critical license issues found!"
+      exit 1
+    fi
+```
+
+### Configuration
+
+License checking can be configured through scanner settings:
+
+```yaml
+license_checker:
+  enable_agpl_warnings: true
+  enable_commercial_warnings: true
+  min_dataset_size_mb: 1.0 # Minimum size to check for licensing
+  enable_unlicensed_dataset_detection: true
+```
+
+**Why this matters:**
+Open source AI/ML projects often combine components with different licenses. AGPL components require source code disclosure when used in network services. Non-commercial licenses can block commercial deployment. Large datasets may lack clear licensing, creating legal risks. The license checker helps identify these issues early in the development process.
 
 ## HuggingFace URL Support
 
