@@ -38,7 +38,7 @@ interface BrowserProviderConfig {
   responseParser?: string | Function;
 }
 
-function createTransformResponse(
+export function createTransformResponse(
   parser: any,
 ): (extracted: Record<string, any>, finalHtml: string) => ProviderResponse {
   if (typeof parser === 'function') {
@@ -288,11 +288,17 @@ export class BrowserProvider implements ApiProvider {
 
     const initialChildCount = await page.$$eval(
       `${parentSelector} > *`,
-      (elements) => elements.length,
+      (elements: any[]) => elements.length,
     );
 
     await page.waitForFunction(
-      ({ parentSelector, initialChildCount }) => {
+      ({
+        parentSelector,
+        initialChildCount,
+      }: {
+        parentSelector: string;
+        initialChildCount: number;
+      }) => {
         const currentCount = document.querySelectorAll(`${parentSelector} > *`).length;
         return currentCount > initialChildCount;
       },
