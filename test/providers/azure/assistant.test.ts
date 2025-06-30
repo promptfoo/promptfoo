@@ -137,6 +137,42 @@ describe('Azure Assistant Provider', () => {
 
       expect(result.error).toContain('Error in Azure Assistant API call');
     });
+
+    it('should handle content filter errors during API call', async () => {
+      (provider as any).makeRequest.mockRejectedValueOnce(
+        new Error('Content filter triggered: The input contained inappropriate content'),
+      );
+
+      const result = await provider.callApi('test prompt with harmful content');
+
+      expect(result).toEqual({
+        output:
+          "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.",
+        guardrails: {
+          flagged: true,
+          flaggedInput: true,
+          flaggedOutput: false,
+        },
+      });
+    });
+
+    it('should handle guardrail errors during API call', async () => {
+      (provider as any).makeRequest.mockRejectedValueOnce(
+        new Error('guardrail violation detected in response'),
+      );
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toEqual({
+        output:
+          "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.",
+        guardrails: {
+          flagged: true,
+          flaggedInput: false,
+          flaggedOutput: true,
+        },
+      });
+    });
   });
 
   describe('pollRun', () => {
@@ -275,8 +311,8 @@ describe('Azure Assistant Provider', () => {
 
       // Verify the callback was only stored once but called twice
       expect(mockCallback).toHaveBeenCalledTimes(2);
-      expect(mockCallback).toHaveBeenNthCalledWith(1, '{"test":"value"}');
-      expect(mockCallback).toHaveBeenNthCalledWith(2, '{"test":"value2"}');
+      expect(mockCallback).toHaveBeenNthCalledWith(1, '{"test":"value"}', undefined);
+      expect(mockCallback).toHaveBeenNthCalledWith(2, '{"test":"value2"}', undefined);
     });
 
     it('should handle errors when loading external functions', async () => {
@@ -384,8 +420,16 @@ describe('Azure Assistant Provider', () => {
       // Assert on the entire result object
       expect(result).toEqual({ output: 'Function called successfully' });
 
-      // Verify the function was called with the correct arguments
-      expect(functionCallbacks.testFunction).toHaveBeenCalledWith('{"param": "value"}');
+      // Verify the function was called with the correct arguments and context
+      expect(functionCallbacks.testFunction).toHaveBeenCalledWith(
+        '{"param": "value"}',
+        expect.objectContaining({
+          threadId: 'thread-123',
+          runId: 'run-123',
+          assistantId: 'test-deployment',
+          provider: 'azure',
+        }),
+      );
 
       // Verify the API requests were made correctly
       expect((provider as any).makeRequest).toHaveBeenCalledTimes(6);
@@ -624,7 +668,15 @@ describe('Azure Assistant Provider', () => {
 
       await provider.callApi('test prompt');
 
-      expect(functionCallbacks.testFunction).toHaveBeenCalledWith('{"param": "value"}');
+      expect(functionCallbacks.testFunction).toHaveBeenCalledWith(
+        '{"param": "value"}',
+        expect.objectContaining({
+          threadId: 'thread-123',
+          runId: 'run-123',
+          assistantId: 'test-deployment',
+          provider: 'azure',
+        }),
+      );
 
       expect((provider as any).makeRequest).toHaveBeenCalledTimes(6);
       expect((provider as any).makeRequest.mock.calls[4][0]).toContain('submit_tool_outputs');
@@ -1146,6 +1198,18 @@ describe('Azure Assistant Provider', () => {
   });
 
   describe('error detection methods', () => {
+    it('should identify content filter errors', () => {
+      expect((provider as any).isContentFilterError('content_filter triggered')).toBe(true);
+      expect((provider as any).isContentFilterError('content filter violation')).toBe(true);
+      expect((provider as any).isContentFilterError('Content filter blocked this')).toBe(true);
+      expect((provider as any).isContentFilterError('filtered due to policy')).toBe(true);
+      expect((provider as any).isContentFilterError('content filtering system')).toBe(true);
+      expect((provider as any).isContentFilterError('inappropriate content detected')).toBe(true);
+      expect((provider as any).isContentFilterError('safety guidelines violation')).toBe(true);
+      expect((provider as any).isContentFilterError('guardrail triggered')).toBe(true);
+      expect((provider as any).isContentFilterError('some other error')).toBe(false);
+    });
+
     it('should identify rate limit errors', () => {
       expect((provider as any).isRateLimitError('rate limit exceeded')).toBe(true);
       expect((provider as any).isRateLimitError('Rate limit reached')).toBe(true);
@@ -1183,6 +1247,454 @@ describe('Azure Assistant Provider', () => {
       expect((provider as any).isRetryableError(undefined, 'Invalid request')).toBe(false);
       expect((provider as any).isRetryableError('invalid_request')).toBe(false);
       expect((provider as any).isRetryableError()).toBe(false);
+    });
+  });
+
+  describe('content filter error handling', () => {
+    it('should format content filter errors with proper guardrail response', () => {
+      const contentFilterError = new Error('content_filter violation detected');
+      const result = (provider as any).formatError(contentFilterError);
+
+      expect(result).toEqual({
+        output:
+          "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.",
+        guardrails: {
+          flagged: true,
+          flaggedInput: false,
+          flaggedOutput: true,
+        },
+      });
+    });
+
+    it('should detect input filtering in content filter errors', () => {
+      const inputFilterError = new Error('content filter triggered on input prompt');
+      const result = (provider as any).formatError(inputFilterError);
+
+      expect(result).toEqual({
+        output:
+          "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.",
+        guardrails: {
+          flagged: true,
+          flaggedInput: true,
+          flaggedOutput: false,
+        },
+      });
+    });
+
+    it('should detect output filtering in content filter errors', () => {
+      const outputFilterError = new Error('content filter blocked response output');
+      const result = (provider as any).formatError(outputFilterError);
+
+      expect(result).toEqual({
+        output:
+          "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.",
+        guardrails: {
+          flagged: true,
+          flaggedInput: false,
+          flaggedOutput: true,
+        },
+      });
+    });
+
+    it('should handle content filter errors in makeRequest', async () => {
+      // Reset makeRequest to use the actual implementation
+      (provider as any).makeRequest = AzureAssistantProvider.prototype['makeRequest'];
+
+      const errorResponse = {
+        error: {
+          code: 'content_filter',
+          message: 'Content was filtered due to policy violation',
+        },
+      };
+
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: errorResponse,
+        cached: false,
+        status: 400,
+        statusText: 'Bad Request',
+        headers: {},
+        deleteFromCache: jest.fn(),
+      });
+
+      await expect((provider as any).makeRequest('https://test.url', {})).rejects.toThrow(
+        'Content filter triggered: Content was filtered due to policy violation',
+      );
+    });
+
+    it('should handle content filter errors during run completion', async () => {
+      const mockCompletedRun = {
+        id: 'run-123',
+        status: 'failed',
+        last_error: {
+          code: 'content_filter',
+          message: 'Content filtering blocked the assistant response',
+        },
+      };
+
+      (provider as any).makeRequest
+        .mockResolvedValueOnce({ id: 'thread-123' }) // Thread creation
+        .mockResolvedValueOnce({}) // Message creation
+        .mockResolvedValueOnce({ id: 'run-123' }) // Run creation
+        .mockResolvedValueOnce(mockCompletedRun); // Run polling - content filter error
+
+      const result = await provider.callApi('test prompt with harmful content');
+
+      expect(result).toEqual({
+        output:
+          "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.",
+        guardrails: {
+          flagged: true,
+          flaggedInput: false,
+          flaggedOutput: true,
+        },
+      });
+    });
+
+    it('should handle content filter errors during run polling with tool calls', async () => {
+      const mockThreadResponse = { id: 'thread-123', object: 'thread', created_at: Date.now() };
+      const mockRunResponse = {
+        id: 'run-123',
+        object: 'run',
+        created_at: Date.now(),
+        status: 'queued',
+      };
+
+      // Test the pollRunWithToolCallHandling method since it has tool callbacks
+      provider = new AzureAssistantProvider('test-deployment', {
+        config: {
+          apiKey: 'test-key',
+          apiHost: 'test.azure.com',
+          functionToolCallbacks: {
+            testFunction: jest.fn(),
+          },
+        },
+      });
+
+      jest.spyOn(provider as any, 'makeRequest').mockImplementation(jest.fn());
+      jest.spyOn(provider as any, 'getHeaders').mockResolvedValue({
+        'Content-Type': 'application/json',
+        'api-key': 'test-key',
+      });
+      jest.spyOn(provider as any, 'getApiKey').mockReturnValue('test-key');
+      jest.spyOn(provider as any, 'getApiBaseUrl').mockReturnValue('https://test.azure.com');
+      jest.spyOn(provider as any, 'ensureInitialized').mockResolvedValue(undefined);
+
+      (provider as any).makeRequest
+        .mockResolvedValueOnce(mockThreadResponse) // Thread creation
+        .mockResolvedValueOnce({}) // Message creation
+        .mockResolvedValueOnce(mockRunResponse) // Run creation
+        .mockResolvedValueOnce({
+          // Run polling - content filter during processing
+          id: 'run-123',
+          status: 'failed',
+          last_error: {
+            code: 'content_filter',
+            message: 'Input content triggered content filtering',
+          },
+        });
+
+      const result = await provider.callApi('test prompt with harmful content');
+
+      expect(result).toEqual({
+        output:
+          "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.",
+        guardrails: {
+          flagged: true,
+          flaggedInput: true,
+          flaggedOutput: false,
+        },
+      });
+    });
+
+    it('should handle content filter errors with message-based detection', async () => {
+      const mockCompletedRun = {
+        id: 'run-123',
+        status: 'failed',
+        last_error: {
+          code: 'policy_violation',
+          message: 'The response was filtered due to triggering safety guidelines',
+        },
+      };
+
+      (provider as any).makeRequest
+        .mockResolvedValueOnce({ id: 'thread-123' }) // Thread creation
+        .mockResolvedValueOnce({}) // Message creation
+        .mockResolvedValueOnce({ id: 'run-123' }) // Run creation
+        .mockResolvedValueOnce(mockCompletedRun); // Run polling - content filter error by message
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toEqual({
+        output:
+          "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.",
+        guardrails: {
+          flagged: true,
+          flaggedInput: false,
+          flaggedOutput: true,
+        },
+      });
+    });
+
+    it('should not affect normal error handling for non-content-filter errors', async () => {
+      const mockFailedRun = {
+        id: 'run-123',
+        status: 'failed',
+        last_error: {
+          code: 'server_error',
+          message: 'Internal server error occurred',
+        },
+      };
+
+      (provider as any).makeRequest
+        .mockResolvedValueOnce({ id: 'thread-123' }) // Thread creation
+        .mockResolvedValueOnce({}) // Message creation
+        .mockResolvedValueOnce({ id: 'run-123' }) // Run creation
+        .mockResolvedValueOnce(mockFailedRun); // Run polling - non-content-filter error
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toEqual({
+        error: 'Thread run failed: server_error - Internal server error occurred',
+      });
+    });
+
+    it('should handle stuck requires_action status due to content filtering', async () => {
+      // This tests the scenario where a run gets stuck in "requires_action" because
+      // content filtering prevents tool execution
+      const mockThreadResponse = { id: 'thread-123', object: 'thread', created_at: Date.now() };
+      const mockRunResponse = {
+        id: 'run-123',
+        object: 'run',
+        created_at: Date.now(),
+        status: 'queued',
+      };
+
+      // Set up provider with function callback that might trigger content filtering
+      provider = new AzureAssistantProvider('test-deployment', {
+        config: {
+          apiKey: 'test-key',
+          apiHost: 'test.azure.com',
+          functionToolCallbacks: {
+            get_sensitive_info: jest.fn().mockResolvedValue('sensitive data'),
+          },
+        },
+      });
+
+      jest.spyOn(provider as any, 'makeRequest').mockImplementation(jest.fn());
+      jest.spyOn(provider as any, 'getHeaders').mockResolvedValue({
+        'Content-Type': 'application/json',
+        'api-key': 'test-key',
+      });
+      jest.spyOn(provider as any, 'getApiKey').mockReturnValue('test-key');
+      jest.spyOn(provider as any, 'getApiBaseUrl').mockReturnValue('https://test.azure.com');
+      jest.spyOn(provider as any, 'ensureInitialized').mockResolvedValue(undefined);
+
+      // Mock a run that stays in requires_action (simulating the original "thread incomplete" issue)
+      (provider as any).makeRequest
+        .mockResolvedValueOnce(mockThreadResponse) // Thread creation
+        .mockResolvedValueOnce({}) // Message creation
+        .mockResolvedValueOnce(mockRunResponse) // Run creation
+        .mockResolvedValueOnce({
+          // Run polling - stuck in requires_action due to content filtering
+          id: 'run-123',
+          status: 'requires_action',
+          required_action: {
+            type: 'submit_tool_outputs',
+            submit_tool_outputs: {
+              tool_calls: [
+                {
+                  id: 'call-123',
+                  type: 'function',
+                  function: {
+                    name: 'get_sensitive_info',
+                    arguments: '{"type": "harmful_content"}',
+                  },
+                },
+              ],
+            },
+          },
+        })
+        .mockResolvedValueOnce({}) // Empty response for tool output submission
+        .mockResolvedValueOnce({
+          // Final run status - failed due to content filtering
+          id: 'run-123',
+          status: 'failed',
+          last_error: {
+            code: 'content_filter',
+            message: 'Tool execution blocked by content filtering',
+          },
+        });
+
+      const result = await provider.callApi('test prompt that triggers tool call');
+
+      // Should return guardrail response instead of generic "requires_action" error
+      expect(result).toEqual({
+        output:
+          "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.",
+        guardrails: {
+          flagged: true,
+          flaggedInput: false,
+          flaggedOutput: true,
+        },
+      });
+    });
+  });
+
+  describe('guardrail response consistency', () => {
+    it('should return consistent guardrail responses from different error paths', async () => {
+      const expectedGuardrailResponse = {
+        output:
+          "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.",
+        guardrails: {
+          flagged: true,
+          flaggedInput: false,
+          flaggedOutput: true,
+        },
+      };
+
+      // Test 1: Content filter error from formatError
+      const formatErrorResult = (provider as any).formatError(new Error('content_filter detected'));
+      expect(formatErrorResult).toEqual(expectedGuardrailResponse);
+
+      // Test 2: Content filter error during API call
+      (provider as any).makeRequest.mockRejectedValueOnce(new Error('content filter triggered'));
+      const apiCallResult = await provider.callApi('test prompt');
+      expect(apiCallResult).toEqual(expectedGuardrailResponse);
+
+      // Test 3: Content filter error during run completion
+      (provider as any).makeRequest
+        .mockResolvedValueOnce({ id: 'thread-123' })
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({ id: 'run-123' })
+        .mockResolvedValueOnce({
+          id: 'run-123',
+          status: 'failed',
+          last_error: { code: 'content_filter', message: 'filtered content' },
+        });
+
+      const runCompletionResult = await provider.callApi('test prompt');
+      expect(runCompletionResult).toEqual(expectedGuardrailResponse);
+    });
+
+    it('should distinguish between input and output filtering correctly', () => {
+      // Input filtering test
+      const inputError = new Error('content filter triggered on input prompt data');
+      const inputResult = (provider as any).formatError(inputError);
+      expect(inputResult.guardrails.flaggedInput).toBe(true);
+      expect(inputResult.guardrails.flaggedOutput).toBe(false);
+
+      // Output filtering test
+      const outputError = new Error('content filter blocked the response output');
+      const outputResult = (provider as any).formatError(outputError);
+      expect(outputResult.guardrails.flaggedInput).toBe(false);
+      expect(outputResult.guardrails.flaggedOutput).toBe(true);
+
+      // General filtering test (defaults to output)
+      const generalError = new Error('content filter violation');
+      const generalResult = (provider as any).formatError(generalError);
+      expect(generalResult.guardrails.flaggedInput).toBe(false);
+      expect(generalResult.guardrails.flaggedOutput).toBe(true);
+    });
+
+    it('should never flag both input and output simultaneously', () => {
+      // Test the problematic case that was mentioned in the bug report
+      const promptError = new Error('content filter triggered on prompt');
+      const promptResult = (provider as any).formatError(promptError);
+
+      // With the old buggy logic, this would have flagged both input (because it contains "prompt")
+      // and output (because it doesn't contain "input"). Now it should only flag input.
+      expect(promptResult.guardrails.flaggedInput).toBe(true);
+      expect(promptResult.guardrails.flaggedOutput).toBe(false);
+      expect(promptResult.guardrails.flaggedInput && promptResult.guardrails.flaggedOutput).toBe(
+        false,
+      );
+
+      // Test various error messages to ensure mutual exclusivity
+      const testCases = [
+        {
+          message: 'content filter triggered on prompt',
+          expectedInput: true,
+          expectedOutput: false,
+        },
+        {
+          message: 'content filter triggered on input',
+          expectedInput: true,
+          expectedOutput: false,
+        },
+        {
+          message: 'content filter triggered on output',
+          expectedInput: false,
+          expectedOutput: true,
+        },
+        {
+          message: 'content filter triggered on response',
+          expectedInput: false,
+          expectedOutput: true,
+        },
+        {
+          message: 'content filter violation detected',
+          expectedInput: false,
+          expectedOutput: true,
+        }, // defaults to output
+        { message: 'guardrail triggered', expectedInput: false, expectedOutput: true }, // defaults to output
+      ];
+
+      testCases.forEach(({ message, expectedInput, expectedOutput }) => {
+        const error = new Error(message);
+        const result = (provider as any).formatError(error);
+
+        expect(result.guardrails.flaggedInput).toBe(expectedInput);
+        expect(result.guardrails.flaggedOutput).toBe(expectedOutput);
+
+        // Ensure they are mutually exclusive
+        expect(result.guardrails.flaggedInput && result.guardrails.flaggedOutput).toBe(false);
+      });
+    });
+  });
+
+  describe('Function Callbacks with Context', () => {
+    it('should pass context to function callbacks', async () => {
+      const mockCallback = jest.fn().mockResolvedValue('test result');
+
+      const provider = new AzureAssistantProvider('test-deployment', {
+        config: {
+          apiKey: 'test-key',
+          apiHost: 'test.azure.com',
+          functionToolCallbacks: {
+            test_function: mockCallback,
+          },
+        },
+      });
+
+      // Mock required methods
+      jest.spyOn(provider as any, 'getHeaders').mockResolvedValue({
+        'Content-Type': 'application/json',
+        'api-key': 'test-key',
+      });
+      jest.spyOn(provider as any, 'getApiKey').mockReturnValue('test-key');
+      jest.spyOn(provider as any, 'getApiBaseUrl').mockReturnValue('https://test.azure.com');
+      jest.spyOn(provider as any, 'ensureInitialized').mockResolvedValue(undefined);
+
+      // Test the executeFunctionCallback method directly with context
+      const result = await (provider as any).executeFunctionCallback(
+        'test_function',
+        '{"param": "value"}',
+        {
+          threadId: 'thread-123',
+          runId: 'run-456',
+          assistantId: 'test-deployment',
+          provider: 'azure',
+        },
+      );
+
+      // Verify the callback was called with the correct context
+      expect(mockCallback).toHaveBeenCalledWith('{"param": "value"}', {
+        threadId: 'thread-123',
+        runId: 'run-456',
+        assistantId: 'test-deployment',
+        provider: 'azure',
+      });
+      expect(result).toBe('test result');
     });
   });
 });

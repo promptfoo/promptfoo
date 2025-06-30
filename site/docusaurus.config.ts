@@ -171,7 +171,7 @@ const config: Config = {
               label: 'Docs',
             },
             {
-              to: 'https://www.promptfoo.dev/docs/api-reference/',
+              to: '/docs/api-reference/',
               label: 'API Reference',
             },
             {
