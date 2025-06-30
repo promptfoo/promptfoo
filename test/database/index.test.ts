@@ -1,5 +1,12 @@
 import * as path from 'path';
-import { getDb, getDbPath, getDbSignalPath, closeDb, DrizzleLogWriter } from '../../src/database';
+import {
+  getDb,
+  getDbPath,
+  getDbSignalPath,
+  closeDb,
+  isDbOpen,
+  DrizzleLogWriter,
+} from '../../src/database';
 import { getEnvBool } from '../../src/envars';
 import logger from '../../src/logger';
 import { getConfigDirectoryPath } from '../../src/util/config/manage';
@@ -94,9 +101,12 @@ describe('database', () => {
   describe('closeDb', () => {
     it('should close database connection and reset instances', () => {
       const _db = getDb();
+      expect(isDbOpen()).toBe(true);
       closeDb();
+      expect(isDbOpen()).toBe(false);
       const newDb = getDb();
       expect(newDb).toBeDefined();
+      expect(isDbOpen()).toBe(true);
     });
 
     it('should handle errors when closing database', () => {
@@ -112,6 +122,25 @@ describe('database', () => {
       closeDb();
       closeDb();
       expect(logger.error).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('isDbOpen', () => {
+    it('should return false when database is not initialized', () => {
+      closeDb(); // Ensure clean state
+      expect(isDbOpen()).toBe(false);
+    });
+
+    it('should return true when database is open', () => {
+      const _db = getDb();
+      expect(isDbOpen()).toBe(true);
+    });
+
+    it('should return false after closing database', () => {
+      const _db = getDb();
+      expect(isDbOpen()).toBe(true);
+      closeDb();
+      expect(isDbOpen()).toBe(false);
     });
   });
 });
