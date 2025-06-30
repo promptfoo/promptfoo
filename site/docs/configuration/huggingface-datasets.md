@@ -5,7 +5,7 @@ sidebar_label: HuggingFace Datasets
 keywords: [huggingface datasets, test cases, dataset integration, promptfoo datasets, ml evaluation]
 ---
 
-# Loading Test Cases from HuggingFace Datasets
+# HuggingFace Datasets
 
 Promptfoo can import test cases directly from [HuggingFace datasets](https://huggingface.co/docs/datasets) using the `huggingface://datasets/` prefix.
 
@@ -128,12 +128,11 @@ env:
 
 ## Example projects
 
-| Project                                                                                                    | Description                            | Dataset     |
-| ---------------------------------------------------------------------------------------------------------- | -------------------------------------- | ----------- |
-| [Basic Setup](https://github.com/promptfoo/promptfoo/tree/main/examples/huggingface-dataset)               | Simple evaluation setup                | BeaverTails |
-| [MMLU Comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-gpt-4.1-vs-gpt-4o-mmlu) | Model comparison with query parameters | MMLU        |
-| [Red Team Evaluation](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-beavertails)       | Safety testing                         | BeaverTails |
-| [Model Benchmarking](https://github.com/promptfoo/promptfoo/tree/main/examples/deepseek-r1-vs-openai-o1)   | Advanced model comparison              | MMLU        |
+| Example                                                                                                    | Use Case          | Key Features         |
+| ---------------------------------------------------------------------------------------------------------- | ----------------- | -------------------- |
+| [Basic Setup](https://github.com/promptfoo/promptfoo/tree/main/examples/huggingface-dataset)               | Simple evaluation | Default parameters   |
+| [MMLU Comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-gpt-4.1-vs-gpt-4o-mmlu) | Query parameters  | Split, subset, limit |
+| [Red Team Safety](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-beavertails)           | Safety testing    | BeaverTails dataset  |
 
 ## Troubleshooting
 
