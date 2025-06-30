@@ -1,9 +1,5 @@
+import type { TextGenerationCreateOutput } from '@ibm-generative-ai/node-sdk';
 import { convertResponse } from '../../src/providers/bam';
-
-// Mock type for BAM response
-interface TextGenerationCreateOutput {
-  [key: string]: any;
-}
 
 describe('BAM Provider', () => {
   describe('convertResponse', () => {

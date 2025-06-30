@@ -1,12 +1,10 @@
+import axios from 'axios';
 import dedent from 'dedent';
 import path from 'path';
 import WebSocket from 'ws';
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
 import { GoogleLiveProvider } from '../../../src/providers/google/live';
-
-// Mock axios for testing
-const axios: any = {};
 
 jest.mock('ws');
 jest.mock('axios');
