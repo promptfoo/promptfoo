@@ -1,7 +1,6 @@
 ---
-sidebar_label: Financial Plugins
-title: Financial Red-Teaming Plugins - AI Financial Safety Testing
-description: Comprehensive guide to financial red-teaming plugins for testing AI systems in banking, trading, and investment contexts. Designed for identifying vulnerabilities in financial AI applications used by institutions like JP Morgan and Bloomberg.
+sidebar_label: Security for Finance
+title: Financial Red-Teaming Plugins - AI Security for Finance
 ---
 
 # Financial Red-Teaming Plugins
