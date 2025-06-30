@@ -1600,30 +1600,52 @@ describe('Azure Assistant Provider', () => {
       // Test the problematic case that was mentioned in the bug report
       const promptError = new Error('content filter triggered on prompt');
       const promptResult = (provider as any).formatError(promptError);
-      
-      // With the old buggy logic, this would have flagged both input (because it contains "prompt") 
+
+      // With the old buggy logic, this would have flagged both input (because it contains "prompt")
       // and output (because it doesn't contain "input"). Now it should only flag input.
       expect(promptResult.guardrails.flaggedInput).toBe(true);
       expect(promptResult.guardrails.flaggedOutput).toBe(false);
-      expect(promptResult.guardrails.flaggedInput && promptResult.guardrails.flaggedOutput).toBe(false);
+      expect(promptResult.guardrails.flaggedInput && promptResult.guardrails.flaggedOutput).toBe(
+        false,
+      );
 
       // Test various error messages to ensure mutual exclusivity
       const testCases = [
-        { message: 'content filter triggered on prompt', expectedInput: true, expectedOutput: false },
-        { message: 'content filter triggered on input', expectedInput: true, expectedOutput: false },
-        { message: 'content filter triggered on output', expectedInput: false, expectedOutput: true },
-        { message: 'content filter triggered on response', expectedInput: false, expectedOutput: true },
-        { message: 'content filter violation detected', expectedInput: false, expectedOutput: true }, // defaults to output
+        {
+          message: 'content filter triggered on prompt',
+          expectedInput: true,
+          expectedOutput: false,
+        },
+        {
+          message: 'content filter triggered on input',
+          expectedInput: true,
+          expectedOutput: false,
+        },
+        {
+          message: 'content filter triggered on output',
+          expectedInput: false,
+          expectedOutput: true,
+        },
+        {
+          message: 'content filter triggered on response',
+          expectedInput: false,
+          expectedOutput: true,
+        },
+        {
+          message: 'content filter violation detected',
+          expectedInput: false,
+          expectedOutput: true,
+        }, // defaults to output
         { message: 'guardrail triggered', expectedInput: false, expectedOutput: true }, // defaults to output
       ];
 
       testCases.forEach(({ message, expectedInput, expectedOutput }) => {
         const error = new Error(message);
         const result = (provider as any).formatError(error);
-        
+
         expect(result.guardrails.flaggedInput).toBe(expectedInput);
         expect(result.guardrails.flaggedOutput).toBe(expectedOutput);
-        
+
         // Ensure they are mutually exclusive
         expect(result.guardrails.flaggedInput && result.guardrails.flaggedOutput).toBe(false);
       });

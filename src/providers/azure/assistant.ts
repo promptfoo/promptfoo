@@ -465,18 +465,19 @@ export class AzureAssistantProvider extends AzureGenericProvider {
 
     // Handle content filter errors
     if (this.isContentFilterError(errorMessage)) {
+      const lowerErrorMessage = errorMessage.toLowerCase();
+      const isInputFiltered =
+        lowerErrorMessage.includes('prompt') || lowerErrorMessage.includes('input');
+      const isOutputFiltered =
+        lowerErrorMessage.includes('output') || lowerErrorMessage.includes('response');
+
       return {
         output:
           "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.",
         guardrails: {
           flagged: true,
-          flaggedInput:
-            errorMessage.toLowerCase().includes('prompt') ||
-            errorMessage.toLowerCase().includes('input'),
-          flaggedOutput:
-            errorMessage.toLowerCase().includes('output') ||
-            errorMessage.toLowerCase().includes('response') ||
-            !errorMessage.toLowerCase().includes('input'),
+          flaggedInput: isInputFiltered,
+          flaggedOutput: isOutputFiltered || (!isInputFiltered && !isOutputFiltered), // Default to output if neither is explicitly mentioned
         },
       };
     }
@@ -585,15 +586,15 @@ export class AzureAssistantProvider extends AzureGenericProvider {
    * Helper methods to check for specific error types
    */
   private isContentFilterError(errorMessage: string): boolean {
+    const lowerErrorMessage = errorMessage.toLowerCase();
     return (
-      errorMessage.includes('content_filter') ||
-      errorMessage.includes('content filter') ||
-      errorMessage.includes('Content filter') ||
-      errorMessage.includes('filtered due to') ||
-      errorMessage.includes('content filtering') ||
-      errorMessage.includes('inappropriate content') ||
-      errorMessage.includes('safety guidelines') ||
-      errorMessage.includes('guardrail')
+      lowerErrorMessage.includes('content_filter') ||
+      lowerErrorMessage.includes('content filter') ||
+      lowerErrorMessage.includes('filtered due to') ||
+      lowerErrorMessage.includes('content filtering') ||
+      lowerErrorMessage.includes('inappropriate content') ||
+      lowerErrorMessage.includes('safety guidelines') ||
+      lowerErrorMessage.includes('guardrail')
     );
   }
 
@@ -861,18 +862,19 @@ export class AzureAssistantProvider extends AzureGenericProvider {
               const errorMessage = run.last_error.message || '';
 
               if (errorCode === 'content_filter' || this.isContentFilterError(errorMessage)) {
+                const lowerErrorMessage = errorMessage.toLowerCase();
+                const isInputFiltered =
+                  lowerErrorMessage.includes('prompt') || lowerErrorMessage.includes('input');
+                const isOutputFiltered =
+                  lowerErrorMessage.includes('output') || lowerErrorMessage.includes('response');
+
                 return {
                   output:
                     "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.",
                   guardrails: {
                     flagged: true,
-                    flaggedInput:
-                      errorMessage.toLowerCase().includes('prompt') ||
-                      errorMessage.toLowerCase().includes('input'),
-                    flaggedOutput:
-                      errorMessage.toLowerCase().includes('output') ||
-                      errorMessage.toLowerCase().includes('response') ||
-                      !errorMessage.toLowerCase().includes('input'),
+                    flaggedInput: isInputFiltered,
+                    flaggedOutput: isOutputFiltered || (!isInputFiltered && !isOutputFiltered), // Default to output if neither is explicitly mentioned
                   },
                 };
               }
