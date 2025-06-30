@@ -79,12 +79,12 @@ providers:
 
 ### Different Prompting
 
-Try alternative prompting strategies by modifying `prompt.js` or using static prompts:
+Try alternative prompting strategies by modifying `prompt.py` or using static prompts:
 
 ```yaml
 prompts:
-  - "Answer this question step by step: {{question}}"
-  - file://prompt.js
+  - 'Answer this question step by step: {{question}}'
+  - file://prompt.py:create_hle_prompt
 ```
 
 ## Results
@@ -92,7 +92,7 @@ prompts:
 HLE is designed to be extremely challenging. Current model performance:
 
 - **OpenAI Deep Research**: 26.6% accuracy
-- **o4-mini**: ~13% accuracy  
+- **o4-mini**: ~13% accuracy
 - **DeepSeek-R1**: 8.5% accuracy
 
 Low scores are expected - this benchmark represents the cutting edge of AI evaluation.

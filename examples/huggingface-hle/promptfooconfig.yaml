@@ -2,33 +2,37 @@
 description: HLE benchmark evaluation
 
 prompts:
-  - file://prompt.js
+  - file://prompt.py:create_hle_prompt
 
 providers:
-  - openai:o4-mini
+  - id: anthropic:claude-sonnet-4-20250514
+    config:
+      thinking:
+        type: enabled
+        budget_tokens: 20000
+      max_tokens: 32000
+  - id: openai:o4-mini
+    config:
+      max_completion_tokens: 32000
   # - deepseek:deepseek-reasoner
 
 defaultTest:
   assert:
     - type: llm-rubric
       value: |
-        Judge whether the following [response] to [question] is correct or not based on the precise and unambiguous [correct_answer] below.
+        Evaluate whether the response correctly answers the question.
 
-        [question]: {{ question }}
+        Question: {{ question }}
+        Model Response: {{ output }}
+        Correct Answer: {{ answer }}
 
-        [response]: {{ output }}
+        Grade the response on accuracy (0.0 to 1.0 scale):
+        - 1.0: Response matches the correct answer exactly or is mathematically/logically equivalent
+        - 0.8-0.9: Response is mostly correct with minor differences that don't affect correctness
+        - 0.5-0.7: Response is partially correct but has significant errors
+        - 0.0-0.4: Response is incorrect or doesn't address the question
 
-        Your judgement must be in the format and criteria specified below:
-
-        extracted_final_answer: The final exact answer extracted from the [response]. Put the extracted answer as 'None' if there is no exact, final answer to extract from the response.
-
-        [correct_answer]: {{ answer }}
-
-        reasoning: Explain why the extracted_final_answer is correct or incorrect based on [correct_answer], focusing only on if there are meaningful differences between [correct_answer] and the extracted_final_answer. Do not comment on any background to the problem, do not attempt to solve the problem, do not argue for any answer different than [correct_answer], focus only on whether the answers match.
-
-        correct: Answer 'yes' if extracted_final_answer matches the [correct_answer] given above, or is within a small margin of error for numerical problems. Answer 'no' otherwise, i.e. if there if there is any inconsistency, ambiguity, non-equivalency, or if the extracted answer is incorrect.
-
-        confidence: The extracted confidence score between 0% and 100% from [response]. Put 100 if there is no confidence score available.
+        The response should pass if it demonstrates correct understanding and provides the right answer, even if the explanation differs from the expected format.
 
 tests:
-  - huggingface://datasets/cais/hle?split=test&limit=10
+  - huggingface://datasets/cais/hle?split=test&limit=50

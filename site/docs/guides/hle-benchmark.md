@@ -14,7 +14,7 @@ This guide shows you how to run this challenging benchmark against any LLM using
 Unlike saturated benchmarks where models achieve 90%+ accuracy (like MMLU), HLE reveals true AI limitations:
 
 - **Advanced mathematics**: Complex proofs and theoretical problems
-- **Interdisciplinary reasoning**: Questions requiring knowledge across multiple domains  
+- **Interdisciplinary reasoning**: Questions requiring knowledge across multiple domains
 - **Unambiguous grading**: Each question has a precise, verifiable answer
 - **Jailbreak-resistant**: Questions can't be solved via simple web lookup
 
@@ -42,7 +42,7 @@ npx promptfoo@latest eval
 
 ## Prerequisites
 
-- OpenAI API key set as `OPENAI_API_KEY`  
+- OpenAI API key set as `OPENAI_API_KEY`
 - Hugging Face access token (required for dataset access)
 
 ## Setup
@@ -86,7 +86,7 @@ The default configuration tests 10 questions and should complete in 2-3 minutes.
 HLE evaluates models on:
 
 - **Answer accuracy**: Exact match against verified correct answers
-- **Reasoning quality**: How well the model explains its approach  
+- **Reasoning quality**: How well the model explains its approach
 - **Confidence calibration**: Whether confidence scores match actual performance
 
 Each question uses an LLM judge to compare the model's response against the verified correct answer.
@@ -118,7 +118,7 @@ providers:
 The example includes a sophisticated `prompt.js` function that:
 
 - Handles different model response formats
-- Formats multiple choice questions properly  
+- Formats multiple choice questions properly
 - Supports image-based questions
 - Adapts system prompts for reasoning models (o1, o3, o4)
 
@@ -126,8 +126,8 @@ You can also try simpler static prompts:
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
-  - "Answer this question step by step: {{question}}"
-  - "Think through this problem carefully: {{question}}"
+  - 'Answer this question step by step: {{question}}'
+  - 'Think through this problem carefully: {{question}}'
 ```
 
 ### Custom Grading
@@ -148,13 +148,14 @@ defaultTest:
 HLE includes questions like:
 
 - **Mathematics**: "Compute the Poincaré polynomial of a 6-dimensional Lie algebra..."
-- **Physics**: "Calculate eigenvalues below threshold 14 for Kaluza-Klein modes..."  
+- **Physics**: "Calculate eigenvalues below threshold 14 for Kaluza-Klein modes..."
 - **Computer Science**: "Decipher this two-step substitution cipher..."
 - **Chess**: "Find the mate in 2 sequence without moving the queens..."
 
 Each question is:
+
 - Unambiguous in its correct answer
-- Resistant to internet lookup  
+- Resistant to internet lookup
 - Verified against state-of-the-art models
 - Designed by domain experts
 
@@ -163,7 +164,7 @@ Each question is:
 HLE is intentionally difficult. Expected performance ranges:
 
 - **Leading models**: 15-30% accuracy
-- **Mid-tier models**: 5-15% accuracy  
+- **Mid-tier models**: 5-15% accuracy
 - **Smaller models**: <5% accuracy
 
 Low scores indicate the benchmark is working as intended - measuring genuine reasoning capabilities rather than memorization.
@@ -171,7 +172,7 @@ Low scores indicate the benchmark is working as intended - measuring genuine rea
 ## See Also
 
 - [HLE Research Paper](https://arxiv.org/abs/2501.14249)
-- [HLE Dataset on Hugging Face](https://huggingface.co/datasets/cais/hle)  
+- [HLE Dataset on Hugging Face](https://huggingface.co/datasets/cais/hle)
 - [Hugging Face Provider Guide](../providers/huggingface.md)
 - [Custom Prompts](../configuration/prompts.md)
-- [LLM Grading](../configuration/expected-outputs/model-graded.md) 
+- [LLM Grading](../configuration/expected-outputs/model-graded.md)
