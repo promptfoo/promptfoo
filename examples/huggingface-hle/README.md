@@ -11,6 +11,7 @@ npx promptfoo@latest init --example huggingface-hle
 ## Prerequisites
 
 - OpenAI API key set as `OPENAI_API_KEY`
+- Anthropic API key set as `ANTHROPIC_API_KEY`
 - Hugging Face access token (required for dataset access)
 
 ## Setup
@@ -72,8 +73,8 @@ Compare multiple providers:
 
 ```yaml
 providers:
+  - anthropic:claude-sonnet-4-20250514
   - openai:o4-mini
-  - anthropic:claude-3-7-sonnet-latest
   - deepseek:deepseek-reasoner
 ```
 

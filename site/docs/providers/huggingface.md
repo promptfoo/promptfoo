@@ -147,9 +147,6 @@ tests: huggingface://datasets/fka/awesome-chatgpt-prompts?split=train
 
 # Load from validation split with custom config
 tests: huggingface://datasets/fka/awesome-chatgpt-prompts?split=validation&config=custom
-
-# Limit the number of rows
-tests: huggingface://datasets/fka/awesome-chatgpt-prompts?limit=100
 ```
 
 The dataset rows will be automatically converted to test cases. Each field in the dataset becomes a variable that can be used in your prompts. For example, if your dataset has fields `question` and `answer`, you can reference them in your prompts like this:
@@ -165,21 +162,12 @@ tests: huggingface://datasets/rajpurkar/squad
 
 The dataset loader supports all query parameters from the [HuggingFace Datasets API](https://huggingface.co/docs/datasets-server/api_reference#get-apirows). Common parameters include:
 
-| Parameter | Description                                   | Default    |
-| --------- | --------------------------------------------- | ---------- |
-| `split`   | Dataset split to load (train/test/validation) | `test`     |
-| `config`  | Dataset configuration name                    | `default`  |
-| `limit`   | Maximum number of rows to fetch               | (no limit) |
+| Parameter | Description                                   | Default   |
+| --------- | --------------------------------------------- | --------- |
+| `split`   | Dataset split to load (train/test/validation) | `test`    |
+| `config`  | Dataset configuration name                    | `default` |
 
 Any additional query parameters will be passed directly to the HuggingFace Datasets API.
-
-### Authentication
-
-If you need to access private datasets or want to increase your rate limits, you can authenticate using your HuggingFace token. Set the `HF_TOKEN` environment variable with your token:
-
-```bash
-export HF_TOKEN=your_token_here
-```
 
 ### Example Configuration
 
@@ -192,9 +180,9 @@ prompts:
   - 'Act as {{act}}. {{prompt}}'
 
 providers:
-  - id: openai:o4-mini
+  - id: openai:gpt-4.1-mini
 
-tests: huggingface://datasets/fka/awesome-chatgpt-prompts?split=train&limit=50
+tests: huggingface://datasets/fka/awesome-chatgpt-prompts?split=train
 ```
 
-This will load up to 50 rows from the training split of the dataset and use the `act` and `prompt` fields as variables in the prompt template.
+This will load all rows from the dataset and use the `act` and `prompt` fields as variables in the prompt template.

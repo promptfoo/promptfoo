@@ -43,6 +43,7 @@ npx promptfoo@latest eval
 ## Prerequisites
 
 - OpenAI API key set as `OPENAI_API_KEY`
+- Anthropic API key set as `ANTHROPIC_API_KEY`
 - Hugging Face access token (required for dataset access)
 
 ## Setup
@@ -108,14 +109,14 @@ Evaluate different providers simultaneously:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
+  - anthropic:claude-sonnet-4-20250514
   - openai:o4-mini
-  - anthropic:claude-3-7-sonnet-latest
   - deepseek:deepseek-reasoner
 ```
 
 ### Advanced Prompting
 
-The example includes a sophisticated `prompt.js` function that:
+The example includes a sophisticated `prompt.py` function that:
 
 - Handles different model response formats
 - Formats multiple choice questions properly
