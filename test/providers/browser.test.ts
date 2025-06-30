@@ -1,6 +1,6 @@
 import { jest } from '@jest/globals';
 import type { Page } from 'playwright';
-import { BrowserProvider, createTransformResponse, nunjucks } from '../../src/providers/browser';
+import { BrowserProvider, createTransformResponse } from '../../src/providers/browser';
 
 let mockPage: jest.Mocked<Page>;
 
@@ -392,11 +392,5 @@ describe('createTransformResponse', () => {
     const tr = createTransformResponse(undefined);
     const result = tr({}, 'baz');
     expect(result).toEqual({ output: undefined });
-  });
-});
-
-describe('nunjucks', () => {
-  it('should render string with context', () => {
-    expect(nunjucks.renderString('Hello {{ name }}', { name: 'World' })).toBe('Hello World');
   });
 });
