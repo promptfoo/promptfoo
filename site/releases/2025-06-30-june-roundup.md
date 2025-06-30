@@ -1,190 +1,65 @@
 ---
 slug: june-2025-roundup
 title: June 2025 Roundup
-description: Financial security plugins, Helicone gateway, documentation restructure, and enterprise enhancements across 300+ commits
+description: Financial security testing, self-hosted Helicone gateway, mTLS support, and 300+ commits
 authors: [promptfoo_team]
-tags: [roundup, june-2025, financial, helicone, enterprise, documentation, monthly-summary]
-keywords:
-  [financial security, Helicone gateway, enterprise features, documentation, mTLS, Garak comparison]
+tags: [roundup, june-2025, financial, helicone, enterprise, aegis]
+keywords: [financial security, Helicone AI Gateway, mTLS, documentation restructure, Aegis]
 date: 2025-06-30T23:59
 ---
 
 # June 2025 Roundup
 
-June delivered comprehensive improvements across all product areas with 300+ commits. Major additions include financial security testing, enterprise gateway integrations, massive documentation restructure, and advanced cloud platform capabilities.
+June delivered 300+ commits with financial security testing, self-hosted gateway support, and enterprise security features.
 
 <!-- truncate -->
 
-## Promptfoo (Core Evaluation)
+## 🚀 Major Features
 
-### Provider Integrations
+### Financial Security Suite
 
-**Helicone AI Gateway Provider** ([commit 43f6a9302](https://github.com/promptfoo/promptfoo/commit/43f6a9302))
-
-```yaml
-providers:
-  - helicone:gpt-4
-    config:
-      heliconeApiKey: ${HELICONE_API_KEY}
-      baseUrl: "https://oai.hconeai.com/v1"
-      metadata:
-        user: "eval-system"
-        environment: "production"
-```
-
-Enterprise-grade AI gateway support for comprehensive observability:
-
-- Complete request/response logging
-- Cost tracking across evaluations
-- Performance monitoring
-- Custom metadata tagging
-- Enterprise compliance features
-
-**Enhanced Cloudflare AI Provider** ([commit cbe7d1f9a](https://github.com/promptfoo/promptfoo/commit/cbe7d1f9a))
-
-```yaml
-providers:
-  - cloudflare:@cf/meta/llama-3.1-8b-instruct
-    config:
-      accountId: ${CLOUDFLARE_ACCOUNT_ID}
-      apiToken: ${CLOUDFLARE_API_TOKEN}
-```
-
-Streamlined Cloudflare Workers AI integration with OpenAI-compatible endpoints for simplified configuration.
-
-### Performance & Reliability
-
-**Token Usage Tracking** ([commit related](https://github.com/promptfoo/promptfoo/commit/related))
-Better tracking for successful API calls with enhanced cost monitoring and usage analytics.
-
-**Enhanced Provider Response Handling**
-
-- Improved error handling for undefined outputs
-- Better provider response processing
-- Enhanced API integration reliability
-- More robust timeout and retry mechanisms
-
-### Testing & Quality Assurance
-
-**Plugin Verification System** ([commit related](https://github.com/promptfoo/promptfoo/commit/related))
-Automated verification ensuring plugins are properly documented and synchronized between codebase and documentation.
-
-**Enhanced Test Coverage**
-
-- Comprehensive unit test additions
-- Provider integration testing
-- Better CI/CD pipeline
-- Improved testing coverage across components
-
-### Configuration & Data
-
-**Advanced Variable Support**
-
-- Variable clearing checkbox in WebUI
-- Better derived metrics support in uploaded configurations
-- Enhanced environment variable handling
-
-**Export & Analytics**
-
-- Better handling of undefined outputs in download menus
-- Enhanced data export capabilities
-- Improved analytics and reporting
-
-_[Image placeholder: Helicone integration dashboard with comprehensive observability metrics]_
-
-## Promptfoo Redteam (Security Testing)
-
-### Domain-Specific Security Testing
-
-**Financial Security Plugins** ([commit 32c64dfc0](https://github.com/promptfoo/promptfoo/commit/32c64dfc0))
+Comprehensive testing for financial AI systems:
 
 ```yaml
 redteam:
   plugins:
     - financial
-  purpose: 'Test banking chatbot for financial data security'
+  purpose: 'Banking customer service chatbot'
 ```
 
-Specialized testing for AI systems in financial contexts with comprehensive security validations:
+Five specialized tests:
 
-- **`financialDataLeakage`** - Tests for PII and financial data exposure
-- **`financialComplianceViolation`** - Validates regulatory compliance (GDPR, PCI DSS)
-- **`financialCalculationError`** - Checks financial calculation accuracy
-- **`financialHallucination`** - Detects incorrect financial advice
-- **`financialSycophancy`** - Tests for inappropriate agreement with financial requests
+- **Data leakage** - PII/financial data exposure
+- **Compliance** - GDPR, PCI DSS validation
+- **Calculation errors** - Math accuracy testing
+- **Hallucination** - Prevents incorrect advice
+- **Sycophancy** - Detects inappropriate agreement
 
-Use these plugins to test financial chatbots, advisory systems, and banking applications for domain-specific vulnerabilities.
+[Space for screenshot: Financial plugin results]
 
-### Enhanced Testing Capabilities
+### Helicone AI Gateway
 
-**Centralized REDTEAM_DEFAULTS** ([commit related](https://github.com/promptfoo/promptfoo/commit/related))
+Self-hosted open-source gateway for unified LLM access:
 
 ```yaml
-redteam:
-  maxConcurrency: 10
-  strategies:
-    - multilingual
-    - jailbreak
-  plugins:
-    - harmful
-    - financial
+providers:
+  - helicone:openai/gpt-4.1
+  - helicone:anthropic/claude-4-sonnet
+  - helicone:groq/llama-4-maverick
+    config:
+      baseUrl: "http://localhost:8787"  # Your gateway
 ```
 
-Centralized defaults and maxConcurrency support for consistent red team testing configuration.
+**Key features:**
 
-**Enhanced Grader Integration**
-
-- Improved grader accuracy across all plugins
-- Better integration with cloud grading systems
-- Enhanced logging and debugging capabilities
-
-### Security Analysis
-
-**Advanced Attack Strategies**
-
-- Enhanced encoding strategies for comprehensive testing
-- Better handling of complex attack vectors
-- Improved strategy combination and sequencing
-
-**Vulnerability Assessment**
-
-- Enhanced vulnerability detection algorithms
-- Better classification of security issues
-- Improved reporting and analysis capabilities
-
-_[Image placeholder: Financial security testing interface showing compliance validation and vulnerability assessment]_
-
-## Promptfoo Redteam (Advanced Features)
-
-### Comparative Analysis
-
-**Garak Comparison Framework** ([commit 841008e01](https://github.com/promptfoo/promptfoo/commit/841008e01))
-Comprehensive comparison with Garak for AI security testing:
-
-- Feature comparison matrix
-- Use case recommendations
-- Migration guidance
-- Best practice documentation
-
-### Documentation & Examples
-
-**Enhanced Red Team Documentation** ([commit related](https://github.com/promptfoo/promptfoo/commit/related))
-
-- Improved strategy documentation
-- Better plugin examples
-- Enhanced configuration guides
-- Clearer security testing workflows
-
-**Missing Plugin Documentation** ([commit related](https://github.com/promptfoo/promptfoo/commit/related))
-Added comprehensive documentation for previously undocumented red team plugins.
-
-_[Image placeholder: Garak comparison framework showing feature analysis and migration paths]_
-
-## Promptfoo Cloud (Cloud Platform)
+- Route to 100+ LLM providers
+- Smart caching & rate limiting
+- Local control over your data
+- OpenAI-compatible interface
 
 ### Enterprise Security
 
-**mTLS and Self-Signed SSL Support** ([commit f3aa6452](https://github.com/promptfoo/promptfoo/commit/f3aa6452))
+mTLS support for production databases:
 
 ```yaml
 database:
@@ -194,195 +69,105 @@ database:
     ca: '/path/to/ca.pem'
     cert: '/path/to/client-cert.pem'
     key: '/path/to/client-key.pem'
-    rejectUnauthorized: false
 ```
 
-Enhanced database security for enterprise deployments:
+## 🛡️ Red Team Enhancements
 
-- Mutual TLS authentication
-- Self-signed certificate support
-- Enhanced encryption in transit
-- Enterprise compliance readiness
+### Aegis Dataset
 
-**Advisory Locks for Job Management** ([commit related](https://github.com/promptfoo/promptfoo/commit/related))
-Enterprise-grade job management with PostgreSQL advisory locks:
+New comprehensive security testing dataset for advanced red team evaluations.
 
-- Prevents concurrent job conflicts
-- Better resource utilization
-- Improved scalability
-- Enhanced reliability for large deployments
+### Centralized Defaults
 
-### User Interface Enhancements
+Consistent configuration across all red team tests:
 
-**Highlighted Cell Count Display** ([commit 60926219](https://github.com/promptfoo/promptfoo/commit/60926219))
-
-```bash
-# Click cells to highlight and track important results
+```yaml
+redteam:
+  maxConcurrency: 10
+  numTests: 100
+  strategies:
+    - multilingual
+    - jailbreak
 ```
 
-Improved evaluation analysis with cell highlighting and counting:
+### Enhanced Grading
 
-- Visual highlighting of important results
-- Count display for highlighted cells
-- Better result navigation
-- Enhanced data analysis workflows
+- Improved accuracy for all plugins
+- Better cloud grading integration
+- Enhanced debugging capabilities
 
-**Page Title Management** ([commit related](https://github.com/promptfoo/promptfoo/commit/related))
-Set appropriate titles on all pages for better navigation and user experience.
+## 🎯 Developer Experience
 
-### Performance & Analytics
+### OpenTelemetry Tracing
 
-**Enhanced Telemetry**
-
-- Better telemetry for red team operations
-- Enhanced pass/fail/error tracking in eval runs
-- Improved de-duplication for page view analytics
-- Better debugging logs for guardrails systems
-
-**Job Processing**
-
-- Better job processing with advisory locks
-- Enhanced queue management
-- Improved error handling and recovery
-- Better resource allocation
-
-### Model Management
-
-**Model Cost Updates** ([commit related](https://github.com/promptfoo/promptfoo/commit/related))
-Regular updates to model pricing across all supported providers for accurate cost tracking and budgeting.
-
-**Enhanced Model Catalog**
-
-- Better model organization and discovery
-- Improved model metadata and capabilities
-- Enhanced provider model mapping
-
-_[Image placeholder: Enterprise cloud dashboard showing mTLS configuration and highlighted cell analytics]_
-
-## Infrastructure & Quality
-
-### Documentation Restructure
-
-**Major Configuration Documentation Restructure** ([commit 9a2cfe375](https://github.com/promptfoo/promptfoo/commit/9a2cfe375))
-Comprehensive reorganization of configuration documentation:
-
-- Clearer navigation paths
-- Better categorization of configuration options
-- Enhanced search functionality
-- Improved getting started guides
-
-**Enhanced Internal Linking** ([commit 0d3f7b0d3](https://github.com/promptfoo/promptfoo/commit/0d3f7b0d3))
-Fixed broken references and improved cross-documentation linking:
-
-- Relative URLs for better maintenance
-- Fixed broken internal references
-- Improved navigation flow
-- Better cross-referencing
-
-**HuggingFace Datasets Integration Documentation** ([commit related](https://github.com/promptfoo/promptfoo/commit/related))
-Comprehensive documentation for HuggingFace datasets integration with examples and best practices.
-
-### Self-Hosting Improvements
-
-**Enhanced Self-Hosting Documentation** ([commit related](https://github.com/promptfoo/promptfoo/commit/related))
-
-- Clarified replica limitations
-- Improved deployment guides
-- Better troubleshooting resources
-- Enhanced FAQ section for offline environments
-
-**Offline Environment Support** ([commit related](https://github.com/promptfoo/promptfoo/commit/related))
-Enhanced FAQ and guidance for offline environment usage and deployment.
-
-### Build & Deployment
-
-**Dependency Updates** ([commit related](https://github.com/promptfoo/promptfoo/commit/related))
-
-- Updated to OpenAI 5.8.1
-- Enhanced Anthropic SDK 0.55.0
-- Regular security updates
-- Better build reliability
-
-**Docker & Container Improvements**
-
-- Better container optimization
-- Enhanced deployment configurations
-- Improved environment handling
-
-### Testing & Quality
-
-**Comprehensive Testing Coverage**
-
-- Unit tests for providers and core functionality
-- Integration testing for new features
-- Better CI/CD pipeline reliability
-- Enhanced quality assurance processes
-
-**Provider Testing**
-
-- Comprehensive provider integration testing
-- Better error handling validation
-- Enhanced compatibility testing
-
-_[Image placeholder: Documentation structure showing new organization and internal linking improvements]_
-
-## Bug Fixes & Stability
-
-### Core Platform Fixes
-
-- Fixed build issues and dependency conflicts
-- Improved provider response handling across all integrations
-- Better error handling for undefined outputs throughout platform
-- Enhanced provider reliability and consistency
-
-### User Interface Fixes
-
-- Fixed styling on organization settings pages
-- Improved error handling for null outputs
-- Better handling of undefined values in various UI components
-- Enhanced responsive design for mobile devices
-
-### Provider Reliability
-
-- Enhanced Llama inference config serialization for SageMaker
-- Better handling of content filter errors in Azure Assistant API
-- Improved Azure GPT-4.1 flagged output logging
-- More robust API error handling across all providers
-
-### Performance Optimizations
-
-- Better memory usage across WebUI components
-- Enhanced caching mechanisms
-- Improved database query performance
-- More efficient resource utilization
-
-## Getting Started
+Enterprise observability with distributed tracing:
 
 ```bash
-npm install -g promptfoo@latest
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+npx promptfoo eval --tracing
+```
 
+### Assertion Generation
+
+Automatically create test assertions:
+
+```bash
+npx promptfoo generate assertions --provider openai:gpt-4.1
+```
+
+### UI Improvements
+
+- **Cell highlighting** - Click to highlight important results
+- **Count display** - Shows highlighted cell counts
+- **Evaluation time limits** - Set max runtime per eval
+
+## 📊 Model Support
+
+**New Models:**
+
+- **GPT-4.1** - Latest OpenAI model
+- **Claude 4 Sonnet** - Anthropic's newest
+- **Llama 4 Maverick** - Via Helicone gateway
+- **o4-mini** - Efficient reasoning model
+
+**Provider Updates:**
+
+- Hyperbolic multimodal support
+- Enhanced Cloudflare integration
+- Improved Azure content filtering
+- Better SageMaker serialization
+
+## 🔧 Quick Start
+
+```bash
 # Test financial security
 npx promptfoo redteam --plugins financial
 
 # Use Helicone gateway
-npx promptfoo eval --provider helicone:gpt-4
+npx helicone start  # Start local gateway
+npx promptfoo eval --provider helicone:openai/gpt-4.1
 
-# Configure enterprise mTLS
-npx promptfoo eval --config enterprise-config.yaml
+# Enable tracing
+npx promptfoo eval --tracing
 
-# Compare with Garak
-npx promptfoo redteam --strategies multilingual --compare-with garak
+# Generate assertions
+npx promptfoo generate assertions
 ```
 
-## Documentation
+## 🐛 Bug Fixes & Performance
 
-- [Financial Plugins](/docs/red-team/plugins/financial/)
-- [Helicone Integration](/docs/providers/helicone/)
-- [Self-Hosting Guide](/docs/usage/self-hosting/)
-- [Web UI Features](/docs/usage/web-ui/)
-- [HuggingFace Datasets](/docs/configuration/huggingface-datasets/)
+- Fixed undefined outputs in downloads
+- Resolved organization settings styling
+- Improved token usage tracking
+- Better null output handling
+
+## 📚 Documentation Updates
+
+- Major config documentation restructure
+- New HuggingFace datasets guide
+- Self-hosting clarifications
+- Offline environment FAQ
 
 ---
 
-**Previous**: [May 2025](/releases/may-2025-roundup) • [April 2025](/releases/april-2025-roundup) • [March 2025](/releases/march-2025-roundup)  
-**Next**: July 2025 Roundup (coming soon)
+**[Full Changelog →](https://github.com/promptfoo/promptfoo/releases)**
