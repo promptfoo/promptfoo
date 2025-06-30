@@ -1,7 +1,7 @@
 import React from 'react';
-import ClearIcon from '@mui/icons-material/Clear';
-import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import ViewColumnIcon from '@mui/icons-material/ViewColumn';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import Dialog from '@mui/material/Dialog';
@@ -62,12 +62,8 @@ export const ColumnSelector: React.FC<ColumnSelectorProps> = ({
     onChange(createSelectEvent(newSelected));
   };
 
-  const handleSelectAll = () => {
+  const handleShowAll = () => {
     onChange(createSelectEvent(columnData.map((col) => col.value)));
-  };
-
-  const handleSelectNone = () => {
-    onChange(createSelectEvent([]));
   };
 
   // Get all variable columns
@@ -79,13 +75,13 @@ export const ColumnSelector: React.FC<ColumnSelectorProps> = ({
   const variablesVisible =
     variableColumns.length > 0 && variableColumns.every((col) => selectedColumns.includes(col));
 
-  const handleClearAllVariables = () => {
+  const handleToggleVariables = () => {
     if (variablesVisible) {
-      // Clear all variables - keep non-variable columns
+      // Hide all variables - keep non-variable columns
       const newSelected = selectedColumns.filter((col) => !col.startsWith('Variable'));
       onChange(createSelectEvent(newSelected));
     } else {
-      // Restore all variables - add all variable columns that aren't already selected
+      // Show all variables - add all variable columns that aren't already selected
       const newSelected = [...selectedColumns];
       variableColumns.forEach((col) => {
         if (!newSelected.includes(col)) {
@@ -120,20 +116,25 @@ export const ColumnSelector: React.FC<ColumnSelectorProps> = ({
           <Stack direction="row" justifyContent="space-between" alignItems="center">
             <Typography variant="h6">Select Columns</Typography>
             <Stack direction="row" spacing={1}>
-              <Button size="small" onClick={handleSelectAll}>
-                Select All
-              </Button>
-              <Button size="small" onClick={handleSelectNone}>
-                Clear
+              <Button size="small" onClick={handleShowAll} variant="outlined">
+                Show All
               </Button>
               {variableColumns.length > 0 && (
-                <Button
-                  size="small"
-                  onClick={handleClearAllVariables}
-                  startIcon={variablesVisible ? <ClearIcon /> : <RestartAltIcon />}
+                <Tooltip
+                  title={
+                    variablesVisible ? 'Hide all variable columns' : 'Show all variable columns'
+                  }
                 >
-                  {variablesVisible ? 'Clear Variables' : 'Reset Variables'}
-                </Button>
+                  <Button
+                    size="small"
+                    onClick={handleToggleVariables}
+                    variant={variablesVisible ? 'contained' : 'outlined'}
+                    color={variablesVisible ? 'primary' : 'inherit'}
+                    startIcon={variablesVisible ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                  >
+                    Variables
+                  </Button>
+                </Tooltip>
               )}
             </Stack>
           </Stack>
