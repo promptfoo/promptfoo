@@ -11,6 +11,7 @@ import logger from './logger';
 import { redteamInit } from './redteam/commands/init';
 import telemetry, { type EventProperties } from './telemetry';
 import type { EnvOverrides } from './types/env';
+import { isRunningUnderNpx } from './util';
 import { getNunjucksEngine } from './util/templates';
 
 export const CONFIG_TEMPLATE = `# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -131,6 +132,10 @@ def call_api(prompt, options, context):
     if token_usage_calculated:
         # If you want to report token usage, you can set the 'tokenUsage' field.
         result['tokenUsage'] = {"total": token_count, "prompt": prompt_token_count, "completion": completion_token_count}
+
+    if failed_guardrails:
+        # If guardrails triggered, you can set the 'guardrails' field.
+        result['guardrails'] = {"flagged": True}
 
     return result
 `;
@@ -381,14 +386,14 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     }
 
     const choices: { name: string; value: (string | object)[] }[] = [
-      { name: `I'll choose later`, value: ['openai:gpt-4o-mini', 'openai:gpt-4o'] },
+      { name: `I'll choose later`, value: ['openai:gpt-4.1-mini', 'openai:gpt-4.1'] },
       {
-        name: '[OpenAI] GPT 4o, GPT 4o-mini, GPT-3.5, ...',
+        name: '[OpenAI] o1, o3, GPT 4o, GPT 4o-mini, GPT-3.5, ...',
         value:
           action === 'agent'
             ? [
                 {
-                  id: 'openai:gpt-4o',
+                  id: 'openai:gpt-4.1',
                   config: {
                     tools: [
                       {
@@ -412,13 +417,14 @@ export async function createDummyFiles(directory: string | null, interactive: bo
                   },
                 },
               ]
-            : ['openai:gpt-4o-mini', 'openai:gpt-4o'],
+            : ['openai:gpt-4.1-mini', 'openai:gpt-4.1'],
       },
       {
         name: '[Anthropic] Claude Opus, Sonnet, Haiku, ...',
         value: [
-          'anthropic:messages:claude-3-5-sonnet-20241022',
-          'anthropic:messages:claude-3-5-haiku-20241022',
+          'anthropic:messages:claude-sonnet-4-20250514',
+          'anthropic:messages:claude-opus-4-20250514',
+          'anthropic:messages:claude-3-7-sonnet-20250219',
         ],
       },
       {
@@ -447,22 +453,19 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       },
       {
         name: '[AWS Bedrock] Claude, Llama, Titan, ...',
-        value: [
-          'bedrock:anthropic.claude-3-haiku-20240307-v1:0',
-          'bedrock:anthropic.claude-3-opus-20240307-v1:0',
-        ],
+        value: ['bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0'],
       },
       {
         name: '[Cohere] Command R, Command R+, ...',
         value: ['cohere:command-r', 'cohere:command-r-plus'],
       },
-      { name: '[Google] Gemini Pro, Gemini Ultra, ...', value: ['vertex:gemini-pro'] },
+      { name: '[Google] Gemini 2.5 Pro, ...', value: ['vertex:gemini-2.5-pro-preview-03-25'] },
       {
-        name: '[Ollama] Llama 3, Mixtral, ...',
-        value: ['ollama:chat:llama3', 'ollama:chat:mixtral:8x22b'],
+        name: '[Ollama] Llama, Qwen, Phi, ...',
+        value: ['ollama:chat:llama3.3', 'ollama:chat:phi4'],
       },
       {
-        name: '[WatsonX] Llama 3.2, IBM Granite, ...',
+        name: '[WatsonX] Llama, IBM Granite, ...',
         value: [
           'watsonx:meta-llama/llama-3-2-11b-vision-instruct',
           'watsonx:ibm/granite-13b-chat-v2',
@@ -612,13 +615,11 @@ export async function createDummyFiles(directory: string | null, interactive: bo
 }
 
 export async function initializeProject(directory: string | null, interactive: boolean = true) {
-  const isNpx = getEnvString('npm_execpath')?.includes('npx');
-
   try {
     const result = await createDummyFiles(directory, interactive);
     const { outDirectory, ...telemetryDetails } = result;
 
-    const runCommand = isNpx ? 'npx promptfoo@latest eval' : 'promptfoo eval';
+    const runCommand = isRunningUnderNpx() ? 'npx promptfoo eval' : 'promptfoo eval';
 
     if (outDirectory === '.') {
       logger.info(chalk.green(`✅ Run \`${chalk.bold(runCommand)}\` to get started!`));
@@ -636,7 +637,7 @@ export async function initializeProject(directory: string | null, interactive: b
     return telemetryDetails;
   } catch (err) {
     if (err instanceof ExitPromptError) {
-      const runCommand = isNpx ? 'npx promptfoo@latest init' : 'promptfoo init';
+      const runCommand = isRunningUnderNpx() ? 'npx promptfoo@latest init' : 'promptfoo init';
       logger.info(
         '\n' +
           chalk.blue('Initialization paused. To continue setup later, use the command: ') +

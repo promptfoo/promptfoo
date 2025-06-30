@@ -3,6 +3,7 @@ import type { Command } from 'commander';
 import * as fs from 'fs';
 import * as os from 'os';
 import { version } from '../../package.json';
+import { getEnvString } from '../envars';
 import logger from '../logger';
 import type { UnifiedConfig } from '../types';
 import { printBorder } from '../util';
@@ -24,7 +25,13 @@ async function doDebug(options: DebugOptions): Promise<void> {
       nodeVersion: process.version,
     },
     env: {
-      NODE_ENV: process.env.NODE_ENV,
+      NODE_ENV: getEnvString('NODE_ENV'),
+      httpProxy: getEnvString('HTTP_PROXY') || getEnvString('http_proxy'),
+      httpsProxy: getEnvString('HTTPS_PROXY') || getEnvString('https_proxy'),
+      allProxy: getEnvString('ALL_PROXY') || getEnvString('all_proxy'),
+      noProxy: getEnvString('NO_PROXY') || getEnvString('no_proxy'),
+      nodeExtra: getEnvString('NODE_EXTRA_CA_CERTS'),
+      nodeTls: getEnvString('NODE_TLS_REJECT_UNAUTHORIZED'),
     },
     configInfo: {
       defaultConfigPath: options.defaultConfigPath,

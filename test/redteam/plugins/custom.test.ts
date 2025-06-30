@@ -1,8 +1,8 @@
 import { CustomPlugin, loadCustomPluginDefinition } from '../../../src/redteam/plugins/custom';
 import type { ApiProvider } from '../../../src/types';
-import { maybeLoadFromExternalFile } from '../../../src/util';
+import { maybeLoadFromExternalFile } from '../../../src/util/file';
 
-jest.mock('../../../src/util', () => ({
+jest.mock('../../../src/util/file', () => ({
   maybeLoadFromExternalFile: jest.fn(),
 }));
 
@@ -57,6 +57,10 @@ describe('CustomPlugin', () => {
   it('should use the correct template for getTemplate', async () => {
     const template = await plugin['getTemplate']();
     expect(template).toBe('Generate {{ n }} test prompts for {{ purpose }}');
+  });
+
+  it('should set canGenerateRemote to false', () => {
+    expect(CustomPlugin.canGenerateRemote).toBe(false);
   });
 
   it('should render the grader template with the correct purpose', () => {

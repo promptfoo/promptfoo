@@ -8,24 +8,9 @@
  *
  * {@link https://doi.org/10.3115/1073083.1073135}
  */
-import invariant from 'tiny-invariant';
 import type { AssertionParams, GradingResult } from '../types';
-
-/**
- * Generates n-grams from an array of words
- *
- * @param words - Array of words to generate n-grams from
- * @param n - Length of each n-gram
- * @returns Array of n-grams as strings
- * @internal
- */
-function getNGrams(words: string[], n: number): string[] {
-  const ngrams: string[] = [];
-  for (let i = 0; i <= words.length - n; i++) {
-    ngrams.push(words.slice(i, i + n).join(' '));
-  }
-  return ngrams;
-}
+import invariant from '../util/invariant';
+import { getNGrams } from './ngrams';
 
 /**
  * Calculates the brevity penalty for BLEU score.
@@ -157,7 +142,7 @@ export function handleBleuScore({
     score: inverse ? 1 - score : score,
     reason: pass
       ? 'Assertion passed'
-      : `BLEU score ${score.toFixed(2)} is ${inverse ? 'greater' : 'less'} than threshold ${threshold}`,
+      : `BLEU score ${score.toFixed(4)} is ${inverse ? 'greater' : 'less'} than threshold ${threshold}`,
     assertion,
   };
 }

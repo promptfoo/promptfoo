@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ProviderEnvOverridesSchema } from '../types/env';
 import type {
   ApiProvider,
   CallApiFunction,
@@ -10,63 +11,9 @@ import type {
   ProviderResponse,
   ProviderSimilarityResponse,
 } from '../types/providers';
+import { TokenUsageSchema } from '../types/shared';
 import { PromptSchema } from './prompts';
-import { NunjucksFilterMapSchema, TokenUsageSchema } from './shared';
-
-// Note: sync with types/providers.ts
-export const ProviderEnvOverridesSchema = z.object({
-  AI21_API_BASE_URL: z.string().optional(),
-  AI21_API_KEY: z.string().optional(),
-  ANTHROPIC_API_KEY: z.string().optional(),
-  AWS_BEDROCK_REGION: z.string().optional(),
-  AZURE_OPENAI_API_BASE_URL: z.string().optional(),
-  AZURE_OPENAI_API_HOST: z.string().optional(),
-  AZURE_OPENAI_API_KEY: z.string().optional(),
-  AZURE_API_BASE_URL: z.string().optional(),
-  AZURE_API_HOST: z.string().optional(),
-  AZURE_API_KEY: z.string().optional(),
-  AZURE_DEPLOYMENT_NAME: z.string().optional(),
-  AZURE_EMBEDDING_DEPLOYMENT_NAME: z.string().optional(),
-  AZURE_OPENAI_BASE_URL: z.string().optional(),
-  AZURE_OPENAI_DEPLOYMENT_NAME: z.string().optional(),
-  AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME: z.string().optional(),
-  AZURE_CLIENT_SECRET: z.string().optional(),
-  AZURE_CLIENT_ID: z.string().optional(),
-  AZURE_TENANT_ID: z.string().optional(),
-  AZURE_AUTHORITY_HOST: z.string().optional(),
-  AZURE_TOKEN_SCOPE: z.string().optional(),
-  BAM_API_HOST: z.string().optional(),
-  BAM_API_KEY: z.string().optional(),
-  CLOUDFLARE_ACCOUNT_ID: z.string().optional(),
-  CLOUDFLARE_API_KEY: z.string().optional(),
-  PROMPTFOO_REMOTE_GENERATION_URL: z.string().optional(),
-  COHERE_API_KEY: z.string().optional(),
-  FAL_KEY: z.string().optional(),
-  GOOGLE_API_HOST: z.string().optional(),
-  GOOGLE_API_KEY: z.string().optional(),
-  GROQ_API_KEY: z.string().optional(),
-  LOCALAI_BASE_URL: z.string().optional(),
-  MISTRAL_API_BASE_URL: z.string().optional(),
-  MISTRAL_API_HOST: z.string().optional(),
-  MISTRAL_API_KEY: z.string().optional(),
-  OPENAI_API_BASE_URL: z.string().optional(),
-  OPENAI_API_HOST: z.string().optional(),
-  OPENAI_API_KEY: z.string().optional(),
-  OPENAI_BASE_URL: z.string().optional(),
-  OPENAI_ORGANIZATION: z.string().optional(),
-  PALM_API_HOST: z.string().optional(),
-  PALM_API_KEY: z.string().optional(),
-  REPLICATE_API_KEY: z.string().optional(),
-  REPLICATE_API_TOKEN: z.string().optional(),
-  VERTEX_API_HOST: z.string().optional(),
-  VERTEX_API_KEY: z.string().optional(),
-  VERTEX_PROJECT_ID: z.string().optional(),
-  VERTEX_PUBLISHER: z.string().optional(),
-  VERTEX_REGION: z.string().optional(),
-  WATSONX_AI_APIKEY: z.string().optional(),
-  WATSONX_AI_PROJECT_ID: z.string().optional(),
-  WATSONX_AI_BEARER_TOKEN: z.string().optional(),
-});
+import { NunjucksFilterMapSchema } from './shared';
 
 export const ProviderOptionsSchema = z
   .object({

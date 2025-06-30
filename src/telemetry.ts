@@ -1,6 +1,7 @@
 import { z } from 'zod';
+import cliState from './cliState';
 import { VERSION } from './constants';
-import { getEnvBool } from './envars';
+import { getEnvBool, isCI } from './envars';
 import { fetchWithTimeout } from './fetch';
 import logger from './logger';
 
@@ -52,20 +53,32 @@ export class Telemetry {
       const event: TelemetryEvent = {
         event: eventName,
         packageVersion: VERSION,
-        properties,
+        properties: {
+          ...properties,
+          isRedteam: Boolean(cliState.config?.redteam),
+          isRunningInCi: isCI(),
+        },
       };
 
       const result = TelemetryEventSchema.safeParse(event);
       if (result.success) {
         this.events.push(result.data);
       } else {
-        logger.warn(`Invalid telemetry event: ${result.error}`);
+        logger.debug(
+          `Invalid telemetry event: got ${JSON.stringify(event)}, error: ${result.error}`,
+        );
       }
     }
   }
 
   private recordedEvents: Set<string> = new Set();
 
+  /**
+   * Record an event once, unique by event name and properties.
+   *
+   * @param eventName - The name of the event to record.
+   * @param properties - The properties of the event to record.
+   */
   recordOnce(eventName: TelemetryEventTypes, properties: EventProperties): void {
     if (this.disabled) {
       this.recordTelemetryDisabled();
@@ -145,7 +158,7 @@ export class Telemetry {
         throw new Error(`Failed to save consent: ${response.statusText}`);
       }
     } catch (err) {
-      logger.error(`Error saving consent: ${(err as Error).message}`);
+      logger.debug(`Failed to save consent: ${(err as Error).message}`);
     }
   }
 }

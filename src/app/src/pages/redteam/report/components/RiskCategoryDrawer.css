@@ -15,6 +15,9 @@
 .risk-category-drawer .prompt {
   font-weight: 500;
   margin-bottom: 8px;
+  word-break: break-word;
+  max-width: 100%;
+  overflow-wrap: break-all;
 }
 
 .risk-category-drawer .output {
@@ -23,6 +26,7 @@
   word-break: break-word;
   max-height: 100px;
   overflow-y: auto;
+  overflow-wrap: break-all;
   background-color: #f5f5f5;
   padding: 8px;
   border-radius: 4px;

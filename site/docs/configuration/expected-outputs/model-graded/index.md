@@ -8,19 +8,21 @@ promptfoo supports several types of model-graded assertions:
 
 Output-based:
 
-- [`llm-rubric`](llm-rubric) - checks if the LLM output matches given requirements, using a language model to grade the output based on the rubric.
-- `model-graded-closedqa` - similar to the above, a "criteria-checking" eval that ensures the answer meets a specific requirement. Uses an OpenAI-authored prompt from their public evals.
-- `factuality` - a factual consistency eval which, given a completion `A` and reference answer `B` evaluates whether A is a subset of B, A is a superset of B, A and B are equivalent, A and B disagree, or A and B differ, but difference don't matter from the perspective of factuality. Uses the prompt from OpenAI's public evals.
-- `answer-relevance` - ensure that LLM output is related to original query
-- `classifier` - see [classifier grading docs](/docs/configuration/expected-outputs/classifier).
-- `moderation` - see [moderation grading docs](/docs/configuration/expected-outputs/moderation).
-- `select-best` - compare outputs from multiple test cases and choose a winner
+- [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric) - checks if the LLM output matches given requirements, using a language model to grade the output based on the rubric.
+- [`model-graded-closedqa`](/docs/configuration/expected-outputs/model-graded/model-graded-closedqa) - similar to the above, a "criteria-checking" eval that ensures the answer meets a specific requirement. Uses an OpenAI-authored prompt from their public evals.
+- [`factuality`](/docs/configuration/expected-outputs/model-graded/factuality) - a factual consistency eval which, given a completion `A` and reference answer `B` evaluates whether A is a subset of B, A is a superset of B, A and B are equivalent, A and B disagree, or A and B differ, but that the difference doesn't matter from the perspective of factuality. It uses the prompt from OpenAI's public evals.
+- [`g-eval`](/docs/configuration/expected-outputs/model-graded/g-eval) - uses chain-of-thought prompting to evaluate outputs based on custom criteria, following the G-Eval framework.
+- [`answer-relevance`](/docs/configuration/expected-outputs/model-graded/answer-relevance) - ensure that LLM output is related to original query
+- [`pi`](/docs/configuration/expected-outputs/model-graded/pi) - an alternative scoring approach that uses a dedicated model for evaluating inputs/outputs against criteria.
+- [`classifier`](/docs/configuration/expected-outputs/classifier) - see classifier grading docs.
+- [`moderation`](/docs/configuration/expected-outputs/moderation) - see moderation grading docs.
+- [`select-best`](/docs/configuration/expected-outputs/model-graded/select-best) - compare outputs from multiple test cases and choose a winner
 
 RAG-based (requires `query` and/or `context` vars):
 
-- `context-recall` - ensure that ground truth appears in context
-- `context-relevance` - ensure that context is relevant to original query
-- `context-faithfulness` - ensure that LLM output uses the context
+- [`context-recall`](/docs/configuration/expected-outputs/model-graded/context-recall) - ensure that ground truth appears in context
+- [`context-relevance`](/docs/configuration/expected-outputs/model-graded/context-relevance) - ensure that context is relevant to original query
+- [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/context-faithfulness) - ensure that LLM output uses the context
 
 ## Examples (output-based)
 
@@ -42,6 +44,16 @@ assert:
     value: Sacramento is the capital of California
 ```
 
+Example of pi scorer:
+
+```yaml
+assert:
+  - type: pi
+    # Evaluate output based on this criteria:
+    value: Is not apologetic and provides a clear, concise answer
+    threshold: 0.8 # Requires a score of 0.8 or higher to pass
+```
+
 For more information on factuality, see the [guide on LLM factuality](/docs/guides/factuality-eval).
 
 Here's an example output that indicates PASS/FAIL based on LLM assessment ([see example setup and outputs](https://github.com/promptfoo/promptfoo/tree/main/examples/self-grading)):
@@ -54,7 +66,7 @@ You can use test `vars` in the LLM rubric. This example uses the `question` vari
 
 ```yaml
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
 prompts:
   - file://prompt1.txt
   - file://prompt2.txt
@@ -148,12 +160,12 @@ tests:
 
 ## Overriding the LLM grader
 
-By default, model-graded asserts use GPT-4 for grading. If you do not have access to GPT-4 or prefer not to use it, you can override the rubric grader. There are several ways to do this, depending on your preferred workflow:
+By default, model-graded asserts use `gpt-4.1-2025-04-14` for grading. If you do not have access to `gpt-4.1-2025-04-14` or prefer not to use it, you can override the rubric grader. There are several ways to do this, depending on your preferred workflow:
 
 1. Using the `--grader` CLI option:
 
    ```
-   promptfoo eval --grader openai:gpt-4o-mini
+   promptfoo eval --grader openai:gpt-4.1-mini
    ```
 
 2. Using `test.options` or `defaultTest.options` on a per-test or testsuite basis:
@@ -161,7 +173,7 @@ By default, model-graded asserts use GPT-4 for grading. If you do not have acces
    ```yaml
    defaultTest:
      options:
-       provider: openai:gpt-4o-mini
+       provider: openai:gpt-4.1-mini
    tests:
      - description: Use LLM to evaluate output
        assert:
@@ -177,14 +189,14 @@ By default, model-graded asserts use GPT-4 for grading. If you do not have acces
        assert:
          - type: llm-rubric
            value: Is spoken like a pirate
-           provider: openai:gpt-4o-mini
+           provider: openai:gpt-4.1-mini
    ```
 
 Use the `provider.config` field to set custom parameters:
 
 ```yaml
 provider:
-  - id: openai:gpt-4o-mini
+  - id: openai:gpt-4.1-mini
     config:
       temperature: 0
 ```
@@ -220,6 +232,19 @@ The rubric prompt has two built-in variables that you may use:
 - `{{output}}` - The output of the LLM (you probably want to use this)
 - `{{rubric}}` - The `value` of the llm-rubric `assert` object
 
+:::tip Object handling in variables
+
+When `{{output}}` or `{{rubric}}` contain objects, they are automatically converted to JSON strings by default to prevent display issues. To access object properties directly (e.g., `{{output.text}}`), enable object property access:
+
+```bash
+export PROMPTFOO_DISABLE_OBJECT_STRINGIFY=true
+promptfoo eval
+```
+
+For details, see the [object template handling guide](/docs/usage/troubleshooting#object-template-handling).
+
+:::
+
 In this example, we set `rubricPrompt` under `defaultTest`, which applies it to every test in this test suite:
 
 ```yaml
@@ -239,6 +264,27 @@ defaultTest:
 ```
 
 See the [full example](https://github.com/promptfoo/promptfoo/blob/main/examples/custom-grading-prompt/promptfooconfig.yaml).
+
+### Image-based rubric prompts
+
+`llm-rubric` can also grade responses that reference images. Provide a `rubricPrompt` in OpenAI chat format that includes an image and use a vision-capable provider such as `openai:gpt-4.1`.
+
+```yaml
+defaultTest:
+  options:
+    provider: openai:gpt-4.1
+    rubricPrompt: |
+      [
+        { "role": "system", "content": "Evaluate if the answer matches the image. Respond with JSON {reason:string, pass:boolean, score:number}" },
+        {
+          "role": "user",
+          "content": [
+            { "type": "image_url", "image_url": { "url": "{{image_url}}" } },
+            { "type": "text", "text": "Output: {{ output }}\nRubric: {{ rubric }}" }
+          ]
+        }
+      ]
+```
 
 #### select-best rubric prompt
 

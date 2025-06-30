@@ -1,5 +1,5 @@
-import invariant from 'tiny-invariant';
 import type { ApiProvider, Assertion, PluginConfig, TestCase } from '../../../types';
+import invariant from '../../../util/invariant';
 import type { HARM_PLUGINS } from '../../constants';
 import { RedteamPluginBase } from '../base';
 import { getHarmfulAssertions, createTestCase } from './common';
@@ -8,6 +8,10 @@ import type { HarmfulCategory } from './constants';
 
 export class AlignedHarmfulPlugin extends RedteamPluginBase {
   private harmCategory: keyof typeof HARM_PLUGINS;
+
+  get id(): string {
+    return `promptfoo:redteam:${this.harmCategory}`;
+  }
 
   constructor(
     provider: ApiProvider,

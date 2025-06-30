@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500">
+  <!-- Background -->
+  <rect width="800" height="500" fill="#f8f9fa"/>
+  
+  <!-- Title -->
+  <text x="400" y="40" text-anchor="middle" font-family="Arial" font-size="20" font-weight="bold">
+    DeepSeek R1 - Weakest Areas for Toxicity and Harm (% Failing)
+  </text>
+
+  <!-- Y-axis labels -->
+  <g font-family="Arial" font-size="12" fill="#333">
+    <text x="180" y="100" text-anchor="end">Disinformation campaigns</text>
+    <text x="180" y="140" text-anchor="end">Religious biases</text>
+    <text x="180" y="180" text-anchor="end">Graphic content</text>
+    <text x="180" y="220" text-anchor="end">Malicious code</text>
+    <text x="180" y="260" text-anchor="end">Cybercrime</text>
+    <text x="180" y="300" text-anchor="end">Methamphetamine content</text>
+    <text x="180" y="340" text-anchor="end">Dangerous activity</text>
+    <text x="180" y="380" text-anchor="end">False information</text>
+    <text x="180" y="420" text-anchor="end">Non-violent content</text>
+    <text x="180" y="460" text-anchor="end">Weapons content</text>
+  </g>
+
+  <!-- X-axis -->
+  <line x1="200" y1="480" x2="700" y2="480" stroke="#333" stroke-width="1"/>
+  
+  <!-- X-axis labels -->
+  <g font-family="Arial" font-size="12" fill="#333">
+    <text x="200" y="495" text-anchor="middle">0%</text>
+    <text x="300" y="495" text-anchor="middle">20%</text>
+    <text x="400" y="495" text-anchor="middle">40%</text>
+    <text x="500" y="495" text-anchor="middle">60%</text>
+    <text x="600" y="495" text-anchor="middle">80%</text>
+    <text x="700" y="495" text-anchor="middle">100%</text>
+  </g>
+
+  <!-- Grid lines -->
+  <g stroke="#ddd" stroke-width="1">
+    <line x1="200" y1="70" x2="200" y2="480"/>
+    <line x1="300" y1="70" x2="300" y2="480"/>
+    <line x1="400" y1="70" x2="400" y2="480"/>
+    <line x1="500" y1="70" x2="500" y2="480"/>
+    <line x1="600" y1="70" x2="600" y2="480"/>
+    <line x1="700" y1="70" x2="700" y2="480"/>
+  </g>
+
+  <!-- Bars -->
+  <g>
+    <rect x="200" y="85" width="390" height="20" fill="#ff4d4d" opacity="0.8"/>
+    <rect x="200" y="125" width="375" height="20" fill="#ff4d4d" opacity="0.8"/>
+    <rect x="200" y="165" width="340" height="20" fill="#ff4d4d" opacity="0.8"/>
+    <rect x="200" y="205" width="320" height="20" fill="#ff4d4d" opacity="0.8"/>
+    <rect x="200" y="245" width="310" height="20" fill="#ff4d4d" opacity="0.8"/>
+    <rect x="200" y="285" width="310" height="20" fill="#ff4d4d" opacity="0.8"/>
+    <rect x="200" y="325" width="310" height="20" fill="#ff4d4d" opacity="0.8"/>
+    <rect x="200" y="365" width="310" height="20" fill="#ff4d4d" opacity="0.8"/>
+    <rect x="200" y="405" width="285" height="20" fill="#ff4d4d" opacity="0.8"/>
+    <rect x="200" y="445" width="285" height="20" fill="#ff4d4d" opacity="0.8"/>
+  </g>
+
+  <!-- Percentage labels -->
+  <g font-family="Arial" font-size="12" fill="#333" font-weight="bold">
+    <text x="600" y="100" text-anchor="end">78%</text>
+    <text x="585" y="140" text-anchor="end">75%</text>
+    <text x="550" y="180" text-anchor="end">68%</text>
+    <text x="530" y="220" text-anchor="end">64%</text>
+    <text x="520" y="260" text-anchor="end">62%</text>
+    <text x="520" y="300" text-anchor="end">62%</text>
+    <text x="520" y="340" text-anchor="end">62%</text>
+    <text x="520" y="380" text-anchor="end">62%</text>
+    <text x="495" y="420" text-anchor="end">57%</text>
+    <text x="495" y="460" text-anchor="end">57%</text>
+  </g>
+</svg>

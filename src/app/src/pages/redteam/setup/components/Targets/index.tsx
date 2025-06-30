@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { callApi } from '@app/utils/api';
+import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
@@ -9,20 +10,20 @@ import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
 import Link from '@mui/material/Link';
 import MenuItem from '@mui/material/MenuItem';
-import Select from '@mui/material/Select';
 import type { SelectChangeEvent } from '@mui/material/Select';
+import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
-import {
-  DEFAULT_HTTP_TARGET,
-  DEFAULT_PURPOSE,
-  useRedTeamConfig,
-} from '../../hooks/useRedTeamConfig';
+import type { ProviderResponse, ProviderTestResponse } from '@promptfoo/types';
+import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import type { ProviderOptions } from '../../types';
 import Prompts from '../Prompts';
+import { predefinedTargets, customTargetOption } from '../constants';
+import LoadExampleButton from './../LoadExampleButton';
 import BrowserAutomationConfiguration from './BrowserAutomationConfiguration';
+import CommonConfigurationOptions from './CommonConfigurationOptions';
 import CustomTargetConfiguration from './CustomTargetConfiguration';
 import HttpEndpointConfiguration from './HttpEndpointConfiguration';
 import TestTargetConfiguration from './TestTargetConfiguration';
@@ -30,21 +31,9 @@ import WebSocketEndpointConfiguration from './WebSocketEndpointConfiguration';
 
 interface TargetsProps {
   onNext: () => void;
+  onBack: () => void;
   setupModalOpen: boolean;
 }
-
-const predefinedTargets = [
-  { value: '', label: 'Select a target' },
-  { value: 'http', label: 'HTTP/HTTPS Endpoint' },
-  { value: 'websocket', label: 'WebSocket Endpoint' },
-  { value: 'browser', label: 'Web Browser Automation' },
-  { value: 'openai:gpt-4o-mini', label: 'OpenAI GPT-4o Mini' },
-  { value: 'openai:gpt-4o', label: 'OpenAI GPT-4o' },
-  { value: 'claude-3-5-sonnet-latest', label: 'Anthropic Claude 3.5 Sonnet' },
-  { value: 'vertex:gemini-pro', label: 'Google Vertex AI Gemini Pro' },
-];
-
-const customTargetOption = { value: 'custom', label: 'Custom Target' };
 
 const selectOptions = [...predefinedTargets, customTargetOption];
 
@@ -66,52 +55,34 @@ const validateUrl = (url: string, type: 'http' | 'websocket' = 'http'): boolean 
   }
 };
 
-const requiresResponseParser = (target: ProviderOptions) => {
-  return target.id === 'http' || target.id === 'websocket';
-};
-
 const requiresPrompt = (target: ProviderOptions) => {
   return target.id !== 'http' && target.id !== 'websocket' && target.id !== 'browser';
 };
 
-export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
+export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps) {
   const { config, updateConfig } = useRedTeamConfig();
   const theme = useTheme();
-  const selectedTarget = config.target || DEFAULT_HTTP_TARGET;
-  const setSelectedTarget = (value: ProviderOptions) => {
-    updateConfig('target', value);
-  };
-  const [promptRequired, setPromptRequired] = useState(requiresPrompt(selectedTarget));
-  const [urlError, setUrlError] = useState<string | null>(null);
-  const [bodyError, setBodyError] = useState<string | null>(null);
+  const [selectedTarget, setSelectedTarget] = useState<ProviderOptions>(
+    config.target || DEFAULT_HTTP_TARGET,
+  );
+  const [useGuardrail, setUseGuardrail] = useState(
+    config.defaultTest?.assert?.some((a) => a.type === 'guardrails') ?? false,
+  );
   const [testingTarget, setTestingTarget] = useState(false);
   const [testResult, setTestResult] = useState<{
-    success: boolean;
-    message: string;
+    success?: boolean;
+    message?: string;
     suggestions?: string[];
-    providerResponse?: {
-      raw: string;
-      output: string;
-      sessionId?: string;
-      metadata?: {
-        headers?: Record<string, string>;
-      };
-    };
+    providerResponse?: ProviderResponse;
   } | null>(null);
-  const [testingEnabled, setTestingEnabled] = useState(selectedTarget.id === 'http');
-  const [isJsonContentType, setIsJsonContentType] = useState(
-    selectedTarget.config.headers &&
-      selectedTarget.config.headers['Content-Type'] === 'application/json',
-  );
-  const [requestBody, setRequestBody] = useState(
-    isJsonContentType ? JSON.stringify(selectedTarget.config.body) : selectedTarget.config.body,
-  );
 
+  const [bodyError, setBodyError] = useState<string | null>(null);
+  const [urlError, setUrlError] = useState<string | null>(null);
   const [missingFields, setMissingFields] = useState<string[]>([]);
-  const [hasTestedTarget, setHasTestedTarget] = useState(false);
+  const [promptRequired, setPromptRequired] = useState(requiresPrompt(selectedTarget));
+  const [testingEnabled, setTestingEnabled] = useState(selectedTarget.id === 'http');
 
   const { recordEvent } = useTelemetry();
-
   const [rawConfigJson, setRawConfigJson] = useState<string>(
     JSON.stringify(selectedTarget.config, null, 2),
   );
@@ -121,24 +92,44 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
   }, []);
 
   useEffect(() => {
-    updateConfig('target', selectedTarget);
+    const updatedTarget = { ...selectedTarget };
+
+    if (useGuardrail) {
+      const defaultTestConfig = {
+        assert: [
+          {
+            type: 'guardrails',
+            config: {
+              purpose: 'redteam',
+            },
+          },
+        ],
+      };
+      updateConfig('defaultTest', defaultTestConfig);
+    } else {
+      updateConfig('defaultTest', undefined);
+    }
+
+    updateConfig('target', updatedTarget);
     const missingFields: string[] = [];
 
-    if (!selectedTarget.label) {
+    if (selectedTarget.label) {
+      // Label is valid
+    } else {
       missingFields.push('Target Name');
     }
 
-    // Make sure we have a url target is a valid HTTP or WebSocket endpoint
-    if (
-      (selectedTarget.id.startsWith('http') || selectedTarget.id.startsWith('websocket')) &&
-      (!selectedTarget.config.url || !validateUrl(selectedTarget.config.url))
-    ) {
-      missingFields.push('URL');
+    if (selectedTarget.id.startsWith('http')) {
+      if (selectedTarget.config.request) {
+        // Skip URL validation for raw request mode
+      } else if (!selectedTarget.config.url || !validateUrl(selectedTarget.config.url)) {
+        missingFields.push('URL');
+      }
     }
 
     setMissingFields(missingFields);
     setPromptRequired(requiresPrompt(selectedTarget));
-  }, [selectedTarget, updateConfig]);
+  }, [selectedTarget, useGuardrail, updateConfig]);
 
   const handleTargetChange = (event: SelectChangeEvent<string>) => {
     const value = event.target.value as string;
@@ -152,7 +143,6 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
         config: { temperature: 0.5 },
       });
       setRawConfigJson(JSON.stringify({ temperature: 0.5 }, null, 2));
-      updateConfig('purpose', DEFAULT_PURPOSE);
     } else if (value === 'javascript' || value === 'python') {
       const filePath =
         value === 'javascript'
@@ -163,7 +153,6 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
         config: {},
         label: currentLabel,
       });
-      updateConfig('purpose', DEFAULT_PURPOSE);
     } else if (value === 'http') {
       setSelectedTarget({
         ...DEFAULT_HTTP_TARGET,
@@ -178,7 +167,7 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
           type: 'websocket',
           url: 'wss://example.com/ws',
           messageTemplate: '{"message": "{{prompt}}"}',
-          responseParser: 'response.message',
+          transformResponse: 'response.message',
           timeoutMs: 30000,
         },
       });
@@ -196,61 +185,82 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
           ],
         },
       });
-      updateConfig('purpose', DEFAULT_PURPOSE);
     } else {
       setSelectedTarget({
         id: value,
         config: {},
         label: currentLabel,
       });
-      updateConfig('purpose', DEFAULT_PURPOSE);
     }
   };
 
   useEffect(() => {
     setTestingEnabled(selectedTarget.id === 'http');
-
-    const hasJsonContentType = Object.keys(selectedTarget.config.headers || {}).some(
-      (header) =>
-        header.toLowerCase() === 'content-type' &&
-        selectedTarget.config.headers?.[header].toLowerCase().includes('application/json'),
-    );
-
-    setIsJsonContentType(hasJsonContentType);
   }, [selectedTarget]);
 
   const updateCustomTarget = (field: string, value: any) => {
     if (typeof selectedTarget === 'object') {
       const updatedTarget = { ...selectedTarget } as ProviderOptions;
+
       if (field === 'id') {
         updatedTarget.id = value;
-        if (validateUrl(value, 'http')) {
+      } else if (field === 'url') {
+        updatedTarget.config.url = value;
+        if (validateUrl(value)) {
           setUrlError(null);
         } else {
-          setUrlError('Please enter a valid HTTP URL (http:// or https://)');
+          setUrlError('Invalid URL format');
         }
+      } else if (field === 'method') {
+        updatedTarget.config.method = value;
       } else if (field === 'body') {
         updatedTarget.config.body = value;
-        setBodyError(null);
-        if (isJsonContentType) {
-          try {
-            const parsedBody = JSON.parse(value.trim());
-            updatedTarget.config.body = parsedBody;
-            setBodyError(null);
-          } catch {
-            setBodyError('Invalid JSON');
-          }
-        }
-        if (!value.includes('{{prompt}}')) {
+        const bodyStr = typeof value === 'object' ? JSON.stringify(value) : String(value);
+        if (bodyStr.includes('{{prompt}}')) {
+          setBodyError(null);
+        } else if (!updatedTarget.config.request) {
           setBodyError('Request body must contain {{prompt}}');
+        }
+      } else if (field === 'request') {
+        updatedTarget.config.request = value;
+        if (value && !value.includes('{{prompt}}')) {
+          setBodyError('Raw request must contain {{prompt}} template variable');
+        } else {
+          setBodyError(null);
+        }
+      } else if (field === 'transformResponse') {
+        updatedTarget.config.transformResponse = value;
+        // Check if the transform response includes guardrails
+        const hasGuardrails =
+          value.includes('guardrails:') ||
+          value.includes('"guardrails"') ||
+          value.includes("'guardrails'");
+        setUseGuardrail(hasGuardrails);
+        if (hasGuardrails) {
+          const defaultTestConfig = {
+            assert: [
+              {
+                type: 'guardrails',
+                config: {
+                  purpose: 'redteam',
+                },
+              },
+            ],
+          };
+          updateConfig('defaultTest', defaultTestConfig);
+        } else {
+          updateConfig('defaultTest', undefined);
         }
       } else if (field === 'label') {
         updatedTarget.label = value;
+      } else if (field === 'delay') {
+        updatedTarget.delay = value;
       } else {
-        (updatedTarget.config as any)[field] = value;
+        updatedTarget.config[field] = value;
       }
 
       setSelectedTarget(updatedTarget);
+      updateConfig('target', updatedTarget);
     }
   };
 
@@ -271,88 +281,101 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
     }
   };
 
-  const updateHeaderKey = (index: number, newKey: string) => {
-    if (typeof selectedTarget === 'object') {
-      const updatedHeaders = { ...selectedTarget.config.headers };
-      const oldKey = Object.keys(updatedHeaders)[index];
-      const value = updatedHeaders[oldKey];
-      delete updatedHeaders[oldKey];
-      updatedHeaders[newKey] = value;
-      updateCustomTarget('headers', updatedHeaders);
-    }
-  };
-
-  const updateHeaderValue = (index: number, newValue: string) => {
-    if (typeof selectedTarget === 'object') {
-      const updatedHeaders = { ...selectedTarget.config.headers };
-      const key = Object.keys(updatedHeaders)[index];
-      updatedHeaders[key] = newValue;
-      updateCustomTarget('headers', updatedHeaders);
-    }
-  };
-
-  const addHeader = () => {
-    if (typeof selectedTarget === 'object') {
-      const updatedHeaders = { ...selectedTarget.config.headers, '': '' };
-      updateCustomTarget('headers', updatedHeaders);
-    }
-  };
-
-  const removeHeader = (index: number) => {
-    if (typeof selectedTarget === 'object') {
-      const updatedHeaders = { ...selectedTarget.config.headers };
-      const key = Object.keys(updatedHeaders)[index];
-      delete updatedHeaders[key];
-      updateCustomTarget('headers', updatedHeaders);
-    }
-  };
-
   const handleTestTarget = async () => {
     setTestingTarget(true);
     setTestResult(null);
     recordEvent('feature_used', { feature: 'redteam_config_target_test' });
     try {
+      const abortController = new AbortController();
+      const timeoutId = setTimeout(() => abortController.abort(), 30000);
+
       const response = await callApi('/providers/test', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(selectedTarget),
+        signal: abortController.signal,
       });
 
+      clearTimeout(timeoutId);
+
+      // Handle PF Server Errors:
       if (!response.ok) {
-        throw new Error('Network response was not ok');
+        let errorMessage = 'Network response was not ok';
+        try {
+          const errorData = (await response.json()) as { error?: string };
+          if (errorData.error) {
+            errorMessage = errorData.error;
+          }
+        } catch {
+          // ignore json parsing errors
+        }
+        throw new Error(errorMessage);
       }
 
-      const data = await response.json();
-      const result = data.test_result;
+      const data = (await response.json()) as ProviderTestResponse;
+
+      // Handle Target Server Errors:
+      if (data.providerResponse?.metadata?.http?.status !== 200) {
+        let errorMessage = 'Target Server Error: ';
+
+        if (data.providerResponse.raw) {
+          try {
+            // Attempt to parse the raw response as JSON
+            const parsedResponse = JSON.parse(data.providerResponse.raw);
+            if (parsedResponse.error) {
+              // Check for an error property on the JSON
+              errorMessage += parsedResponse.error;
+            } else {
+              // Fallback: render the raw response
+              errorMessage += data.providerResponse.raw;
+            }
+          } catch {
+            // Fallback: render the raw response
+            errorMessage += data.providerResponse.raw;
+          }
+        } else {
+          // If there's no raw response, render the metadata.statusText
+          errorMessage += data.providerResponse?.metadata?.statusText || 'Unknown error';
+        }
+
+        throw new Error(errorMessage);
+      }
+
+      const result = data.testResult;
 
       if (result.error) {
         setTestResult({
-          success: false,
-          message: result.error,
-          providerResponse: data.provider_response,
+          providerResponse: data.providerResponse,
         });
       } else if (result.changes_needed) {
         setTestResult({
           success: false,
           message: result.changes_needed_reason,
           suggestions: result.changes_needed_suggestions,
-          providerResponse: data.provider_response,
+          providerResponse: data.providerResponse,
         });
       } else {
         setTestResult({
           success: true,
           message: 'Target configuration is valid!',
-          providerResponse: data.provider_response,
+          providerResponse: data.providerResponse,
         });
-        setHasTestedTarget(true);
       }
     } catch (error) {
       console.error('Error testing target:', error);
+      let message: string;
+
+      if (error instanceof Error && error.name === 'AbortError') {
+        message = 'Request timed out after 30 seconds';
+      } else {
+        message = error instanceof Error ? error.message : String(error);
+      }
+
       setTestResult({
         success: false,
-        message: 'An error occurred while testing the target.',
+        message,
       });
     } finally {
       setTestingTarget(false);
@@ -361,15 +384,20 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
 
   return (
     <Stack direction="column" spacing={3}>
-      <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
-        Select Red Team Target
-      </Typography>
+      <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
+          Select Red Team Target
+        </Typography>
+
+        <LoadExampleButton />
+      </Box>
 
       <Typography variant="body1">
         A target is the specific LLM or endpoint you want to evaluate in your red teaming process.
         In Promptfoo targets are also known as providers. You can configure additional targets
         later.
       </Typography>
+
       <Typography variant="body1">
         For more information on available providers and how to configure them, please visit our{' '}
         <Link href="https://www.promptfoo.dev/docs/providers/" target="_blank" rel="noopener">
@@ -382,6 +410,29 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
         <Typography variant="h5" gutterBottom sx={{ fontWeight: 'medium', mb: 3 }}>
           Select a Target
         </Typography>
+        <Box sx={{ mt: 2, mb: 2 }}>
+          <FormControl fullWidth>
+            <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
+              <Box sx={{ flex: 1 }}>
+                <InputLabel id="predefined-target-label">Target Type</InputLabel>
+                <Select
+                  labelId="predefined-target-label"
+                  value={selectedTarget.id}
+                  onChange={handleTargetChange}
+                  label="Target Type"
+                  fullWidth
+                >
+                  {selectOptions.map((target) => (
+                    <MenuItem key={target.value} value={target.value}>
+                      {target.label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </Box>
+            </Box>
+          </FormControl>
+        </Box>
+
         <TextField
           fullWidth
           sx={{ mb: 2 }}
@@ -399,25 +450,10 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
 
         <Typography variant="body2" color="text.secondary" sx={{ mb: 5 }}>
           The target name will be used to report vulnerabilities. Make sure it's meaningful and
-          re-use it when generating new redteam configs for the same target. Eg:
+          re-use it when generating new red team configs for the same target. Eg:
           'customer-service-agent', 'compliance-bot'
         </Typography>
 
-        <FormControl fullWidth>
-          <InputLabel id="predefined-target-label">Target Type</InputLabel>
-          <Select
-            labelId="predefined-target-label"
-            value={selectedTarget.id}
-            onChange={handleTargetChange}
-            label="Target Type"
-          >
-            {selectOptions.map((target) => (
-              <MenuItem key={target.value} value={target.value}>
-                {target.label}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
         {(selectedTarget.id.startsWith('javascript') || selectedTarget.id.startsWith('python')) && (
           <TextField
             fullWidth
@@ -471,15 +507,11 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
           <HttpEndpointConfiguration
             selectedTarget={selectedTarget}
             updateCustomTarget={updateCustomTarget}
-            updateHeaderKey={updateHeaderKey}
-            updateHeaderValue={updateHeaderValue}
-            addHeader={addHeader}
-            removeHeader={removeHeader}
-            requestBody={requestBody || ''}
-            setRequestBody={setRequestBody}
             bodyError={bodyError}
+            setBodyError={setBodyError}
             urlError={urlError}
-            isJsonContentType={isJsonContentType || false}
+            setUrlError={setUrlError}
+            updateFullTarget={setSelectedTarget}
           />
         )}
 
@@ -499,15 +531,29 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
         )}
       </Box>
 
+      <Typography variant="h6" gutterBottom>
+        Additional Configuration
+      </Typography>
+      <CommonConfigurationOptions
+        selectedTarget={selectedTarget}
+        updateCustomTarget={updateCustomTarget}
+        extensions={config.extensions}
+        onExtensionsChange={(extensions) => updateConfig('extensions', extensions)}
+        onValidationChange={(hasErrors) => {
+          setMissingFields((prev) =>
+            hasErrors
+              ? [...prev.filter((f) => f !== 'Extensions'), 'Extensions']
+              : prev.filter((f) => f !== 'Extensions'),
+          );
+        }}
+      />
+
       {testingEnabled && (
         <TestTargetConfiguration
           testingTarget={testingTarget}
           handleTestTarget={handleTestTarget}
           selectedTarget={selectedTarget}
           testResult={testResult}
-          requiresResponseParser={requiresResponseParser}
-          updateCustomTarget={updateCustomTarget}
-          hasTestedTarget={hasTestedTarget}
         />
       )}
 
@@ -517,7 +563,7 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
         sx={{
           display: 'flex',
           justifyContent: 'space-between',
-          alignItems: 'center',
+          gap: 2,
           mt: 4,
           width: '100%',
           position: 'relative',
@@ -540,23 +586,25 @@ export default function Targets({ onNext, setupModalOpen }: TargetsProps) {
             </Typography>
           </Alert>
         )}
-        {!hasTestedTarget && testingEnabled && (
-          <Alert severity="info" sx={{ flexGrow: 1, mr: 2 }}>
-            Please test the target configuration before proceeding
-          </Alert>
-        )}
+        <Button
+          variant="outlined"
+          startIcon={<KeyboardArrowLeftIcon />}
+          onClick={onBack}
+          sx={{ px: 4, py: 1 }}
+        >
+          Back
+        </Button>
         <Button
           variant="contained"
           onClick={onNext}
           endIcon={<KeyboardArrowRightIcon />}
-          disabled={missingFields.length > 0 /*|| (testingEnabled && !hasTestedTarget)*/}
+          disabled={missingFields.length > 0}
           sx={{
             backgroundColor: theme.palette.primary.main,
             '&:hover': { backgroundColor: theme.palette.primary.dark },
             '&:disabled': { backgroundColor: theme.palette.action.disabledBackground },
             px: 4,
             py: 1,
-            minWidth: '150px',
           }}
         >
           Next

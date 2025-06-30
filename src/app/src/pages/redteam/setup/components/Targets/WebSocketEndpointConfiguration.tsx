@@ -39,9 +39,9 @@ const WebSocketEndpointConfiguration: React.FC<WebSocketEndpointConfigurationPro
         />
         <TextField
           fullWidth
-          label="Response Parser"
-          value={selectedTarget.config.responseParser}
-          onChange={(e) => updateWebSocketTarget('responseParser', e.target.value)}
+          label="Response Transform"
+          value={selectedTarget.config.transformResponse}
+          onChange={(e) => updateWebSocketTarget('transformResponse', e.target.value)}
           margin="normal"
         />
         <TextField

@@ -1,42 +1,5 @@
-import invariant from 'tiny-invariant';
-import type {
-  CompletedPrompt,
-  EvaluateTable,
-  EvaluateTableRow,
-  ResultsFile,
-  TokenUsage,
-} from '../types';
-
-export class PromptMetrics {
-  score: number;
-  testPassCount: number;
-  testFailCount: number;
-  assertPassCount: number;
-  assertFailCount: number;
-  totalLatencyMs: number;
-  tokenUsage: TokenUsage;
-  namedScores: Record<string, number>;
-  namedScoresCount: Record<string, number>;
-  cost: number;
-
-  constructor() {
-    this.score = 0;
-    this.testPassCount = 0;
-    this.testFailCount = 0;
-    this.assertPassCount = 0;
-    this.assertFailCount = 0;
-    this.totalLatencyMs = 0;
-    this.tokenUsage = {
-      total: 0,
-      prompt: 0,
-      completion: 0,
-      cached: 0,
-    };
-    this.namedScores = {};
-    this.namedScoresCount = {};
-    this.cost = 0;
-  }
-}
+import { type EvaluateTable, type EvaluateTableRow, type ResultsFile } from '../types';
+import invariant from '../util/invariant';
 
 export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
   invariant(
@@ -45,7 +8,6 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
   );
   // first we need to get our prompts, we can get that from any of the results in each column
   const results = eval_.results;
-  const completedPrompts: CompletedPrompt[] = [];
   const varsForHeader = new Set<string>();
   const varValuesForRow = new Map<number, Record<string, string>>();
 
@@ -72,6 +34,20 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
         : [],
       test: result.testCase,
     };
+
+    if (result.vars && result.metadata?.redteamFinalPrompt) {
+      const varKeys = Object.keys(result.vars);
+      if (varKeys.length === 1 && varKeys[0] !== 'harmCategory') {
+        result.vars[varKeys[0]] = result.metadata.redteamFinalPrompt;
+      } else if (varKeys.length > 1) {
+        // NOTE: This is a hack. We should use config.redteam.injectVar to determine which key to update but we don't have access to the config here
+        const targetKeys = ['prompt', 'query', 'question'];
+        const keyToUpdate = targetKeys.find((key) => result.vars[key]);
+        if (keyToUpdate) {
+          result.vars[keyToUpdate] = result.metadata.redteamFinalPrompt;
+        }
+      }
+    }
     varValuesForRow.set(result.testIdx, result.vars as Record<string, string>);
     rowMap[result.testIdx] = row;
 
@@ -105,44 +81,32 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
       prompt: result.prompt.raw,
       provider: result.provider?.label || result.provider?.id || 'unknown provider',
       pass: result.success,
+      failureReason: result.failureReason,
       cost: result.cost || 0,
+      audio: result.response?.audio
+        ? {
+            id: result.response.audio.id,
+            expiresAt: result.response.audio.expiresAt,
+            data: result.response.audio.data,
+            transcript: result.response.audio.transcript,
+            format: result.response.audio.format,
+          }
+        : undefined,
     };
     invariant(result.promptId, 'Prompt ID is required');
-    if (!completedPrompts[result.promptIdx]) {
-      completedPrompts[result.promptIdx] = {
-        ...result.prompt,
-        provider: result.provider?.label || result.provider?.id || 'unknown provider',
-        metrics: new PromptMetrics(),
-      };
-    }
-    const prompt = completedPrompts[result.promptIdx];
-    invariant(prompt.metrics, 'Prompt metrics are required');
-    prompt.metrics.score += result.score;
-    prompt.metrics.testPassCount += result.success ? 1 : 0;
-    prompt.metrics.testFailCount += result.success ? 0 : 1;
-    prompt.metrics.assertPassCount +=
-      result.gradingResult?.componentResults?.filter((r) => r.pass).length || 0;
-    prompt.metrics.assertFailCount +=
-      result.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
-    prompt.metrics.totalLatencyMs += result.latencyMs || 0;
-    prompt.metrics.tokenUsage!.cached! += result.response?.tokenUsage?.cached || 0;
-    prompt.metrics.tokenUsage!.completion! += result.response?.tokenUsage?.completion || 0;
-    prompt.metrics.tokenUsage!.prompt! += result.response?.tokenUsage?.prompt || 0;
-    prompt.metrics.tokenUsage!.total! += result.response?.tokenUsage?.total || 0;
-    prompt.metrics.cost += result.cost || 0;
-    prompt.metrics.namedScores = eval_.prompts[result.promptIdx]?.metrics?.namedScores || {};
-    prompt.metrics.namedScoresCount =
-      eval_.prompts[result.promptIdx]?.metrics?.namedScoresCount || {};
+
+    row.testIdx = result.testIdx;
   }
+
   const rows = Object.values(rowMap);
   const sortedVars = [...varsForHeader].sort();
-  for (const [rowIdx, row] of rows.entries()) {
-    row.vars = sortedVars.map((varName) => varValuesForRow.get(rowIdx)?.[varName] || '');
+  for (const row of rows) {
+    row.vars = sortedVars.map((varName) => varValuesForRow.get(row.testIdx)?.[varName] || '');
   }
 
   return {
     head: {
-      prompts: completedPrompts,
+      prompts: eval_.prompts,
       vars: [...varsForHeader].sort(),
     },
     body: rows,

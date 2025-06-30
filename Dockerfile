@@ -1,6 +1,6 @@
-FROM --platform=${BUILDPLATFORM} node:20-alpine
+FROM --platform=${BUILDPLATFORM} node:22.14.0-alpine
 
-FROM node:20-alpine AS base
+FROM node:22.14.0-alpine AS base
 
 RUN addgroup -S promptfoo && adduser -S promptfoo -G promptfoo
 
@@ -15,9 +15,9 @@ ARG PROMPTFOO_REMOTE_API_BASE_URL
 
 # Set environment variables for the build
 ENV VITE_IS_HOSTED=1 \
-VITE_TELEMETRY_DISABLED=1 \
-VITE_PUBLIC_BASENAME=${VITE_PUBLIC_BASENAME} \
-PROMPTFOO_REMOTE_API_BASE_URL=${PROMPTFOO_REMOTE_API_BASE_URL}
+    VITE_TELEMETRY_DISABLED=1 \
+    VITE_PUBLIC_BASENAME=${VITE_PUBLIC_BASENAME} \
+    PROMPTFOO_REMOTE_API_BASE_URL=${PROMPTFOO_REMOTE_API_BASE_URL}
 
 COPY . .
 
@@ -51,6 +51,8 @@ ENV PROMPTFOO_SELF_HOSTED=1
 
 RUN chown -R promptfoo:promptfoo /app
 USER promptfoo
+
+RUN mkdir -p /home/promptfoo/.promptfoo
 
 EXPOSE 3000
 

@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400">
+    <!-- Definitions for reusable elements -->
+    <defs>
+        <!-- Gradients -->
+        <linearGradient id="pluginGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#4F46E5;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#7C3AED;stop-opacity:1" />
+        </linearGradient>
+        <linearGradient id="payloadGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#DC2626;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#EF4444;stop-opacity:1" />
+        </linearGradient>
+        <linearGradient id="appGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#059669;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#10B981;stop-opacity:1" />
+        </linearGradient>
+        
+        <!-- Arrow marker -->
+        <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#6B7280"/>
+        </marker>
+        
+        <!-- Drop Shadow Filter -->
+        <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="2" dy="2" stdDeviation="3" flood-opacity="0.3"/>
+        </filter>
+    </defs>
+    
+    <!-- Plugin Box with Stack Effect -->
+    <g transform="translate(50, 150)">
+        <rect width="160" height="100" rx="10" x="16" y="16" fill="#4F46E5" opacity="0.3" />
+        <rect width="160" height="100" rx="10" x="8" y="8" fill="#4F46E5" opacity="0.5" />
+        <rect width="160" height="100" rx="10" x="0" y="0" fill="url(#pluginGradient)" filter="url(#shadow)" />
+        <text x="80" y="45" font-family="system-ui" font-size="16" text-anchor="middle" fill="white" font-weight="bold">Plugin</text>
+        <text x="80" y="65" font-family="system-ui" font-size="12" text-anchor="middle" fill="white">Adversarial LLM</text>
+    </g>
+    
+    <!-- Payload Boxes -->
+    <g transform="translate(340, 50)">
+        <!-- Each payload with red gradient -->
+        <g>
+            <rect width="140" height="60" rx="8" fill="url(#payloadGradient)" filter="url(#shadow)" />
+            <text x="70" y="35" font-family="system-ui" font-size="14" text-anchor="middle" fill="white">Payload 1</text>
+        </g>
+        <g transform="translate(0, 80)">
+            <rect width="140" height="60" rx="8" fill="url(#payloadGradient)" filter="url(#shadow)" />
+            <text x="70" y="35" font-family="system-ui" font-size="14" text-anchor="middle" fill="white">Payload 2</text>
+        </g>
+        <g transform="translate(0, 160)">
+            <rect width="140" height="60" rx="8" fill="url(#payloadGradient)" filter="url(#shadow)" />
+            <text x="70" y="35" font-family="system-ui" font-size="14" text-anchor="middle" fill="white">Payload 3</text>
+        </g>
+        <g transform="translate(0, 240)">
+            <rect width="140" height="60" rx="8" fill="url(#payloadGradient)" filter="url(#shadow)" />
+            <text x="70" y="35" font-family="system-ui" font-size="14" text-anchor="middle" fill="white">Payload 4</text>
+        </g>
+    </g>
+    
+    <!-- Application Box (without stack effect) -->
+    <g transform="translate(590, 150)">
+        <rect width="160" height="100" rx="10" fill="url(#appGradient)" />
+        <text x="80" y="55" font-family="system-ui" font-size="16" text-anchor="middle" fill="white" font-weight="bold">Application</text>
+    </g>
+    
+    <!-- Connecting Lines -->
+    <g>
+        <line x1="210" y1="180" x2="340" y2="80" stroke="#6B7280" stroke-width="2" marker-end="url(#arrowhead)"/>
+        <line x1="210" y1="190" x2="340" y2="160" stroke="#6B7280" stroke-width="2" marker-end="url(#arrowhead)"/>
+        <line x1="210" y1="200" x2="340" y2="240" stroke="#6B7280" stroke-width="2" marker-end="url(#arrowhead)"/>
+        <line x1="210" y1="210" x2="340" y2="320" stroke="#6B7280" stroke-width="2" marker-end="url(#arrowhead)"/>
+        
+        <line x1="480" y1="80" x2="590" y2="180" stroke="#6B7280" stroke-width="2" marker-end="url(#arrowhead)"/>
+        <line x1="480" y1="160" x2="590" y2="190" stroke="#6B7280" stroke-width="2" marker-end="url(#arrowhead)"/>
+        <line x1="480" y1="240" x2="590" y2="200" stroke="#6B7280" stroke-width="2" marker-end="url(#arrowhead)"/>
+        <line x1="480" y1="320" x2="590" y2="210" stroke="#6B7280" stroke-width="2" marker-end="url(#arrowhead)"/>
+    </g>
+</svg>

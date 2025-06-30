@@ -1,16 +1,18 @@
-import invariant from 'tiny-invariant';
 import { matchesLlmRubric } from '../matchers';
 import type { AssertionParams, GradingResult } from '../types';
+import invariant from '../util/invariant';
 
-export const handleLlmRubric = async ({
+export const handleLlmRubric = ({
   assertion,
   renderedValue,
   outputString,
   test,
 }: AssertionParams): Promise<GradingResult> => {
   invariant(
-    typeof renderedValue === 'string' || typeof renderedValue === 'undefined',
-    '"llm-rubric" assertion type must have a string value',
+    typeof renderedValue === 'string' ||
+      typeof renderedValue === 'object' ||
+      typeof renderedValue === 'undefined',
+    '"llm-rubric" assertion type must have a string or object value',
   );
   if (test.options?.rubricPrompt && typeof test.options.rubricPrompt === 'object') {
     test.options.rubricPrompt = JSON.stringify(test.options.rubricPrompt);
@@ -18,8 +20,5 @@ export const handleLlmRubric = async ({
 
   // Update the assertion value. This allows the web view to display the prompt.
   assertion.value = assertion.value || test.options?.rubricPrompt;
-  return {
-    assertion,
-    ...(await matchesLlmRubric(renderedValue || '', outputString, test.options, test.vars)),
-  };
+  return matchesLlmRubric(renderedValue || '', outputString, test.options, test.vars, assertion);
 };

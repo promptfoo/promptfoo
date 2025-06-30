@@ -1,12 +1,10 @@
-import { useState, useEffect, useCallback, memo } from 'react';
+import React, { useState, useEffect, useCallback, memo } from 'react';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import Card from '@mui/material/Card';
-import CardContent from '@mui/material/CardContent';
 import Collapse from '@mui/material/Collapse';
 import IconButton from '@mui/material/IconButton';
 import Stack from '@mui/material/Stack';
@@ -130,72 +128,79 @@ export const CustomPoliciesSection = () => {
   };
 
   return (
-    <Card variant="outlined" sx={{ mb: 3 }}>
-      <CardContent>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h6">Custom Policies</Typography>
-          <Button
-            startIcon={<AddIcon />}
-            onClick={handleAddPolicy}
-            variant="contained"
-            color="primary"
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <Typography variant="body2" color="text.secondary">
+        Custom policies define rules that the AI should follow. These are used to test if the AI
+        adheres to your specific guidelines and constraints.
+      </Typography>
+
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          mb: 1,
+        }}
+      >
+        <Button
+          startIcon={<AddIcon />}
+          onClick={handleAddPolicy}
+          variant="contained"
+          color="primary"
+        >
+          Add Policy
+        </Button>
+      </Box>
+
+      <Stack spacing={2}>
+        {policies.map((policy) => (
+          <Box
+            key={policy.id}
+            sx={{
+              border: 1,
+              borderColor: 'divider',
+              borderRadius: 1,
+              p: 2,
+            }}
           >
-            Add Policy
-          </Button>
-        </Box>
-
-        <Stack spacing={2}>
-          {policies.map((policy) => (
-            <Box
-              key={policy.id}
-              sx={{
-                border: 1,
-                borderColor: 'divider',
-                borderRadius: 1,
-                p: 2,
-              }}
-            >
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <TextField
-                  label="Policy Name"
-                  value={policy.name}
-                  onChange={(e) => {
-                    setPolicies((prev) =>
-                      prev.map((p) => (p.id === policy.id ? { ...p, name: e.target.value } : p)),
-                    );
-                  }}
-                  size="small"
-                  fullWidth
-                />
-                <IconButton
-                  onClick={() => {
-                    setPolicies((prev) =>
-                      prev.map((p) =>
-                        p.id === policy.id ? { ...p, isExpanded: !p.isExpanded } : p,
-                      ),
-                    );
-                  }}
-                >
-                  {policy.isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                </IconButton>
-                <IconButton
-                  onClick={() => setPolicies((prev) => prev.filter((p) => p.id !== policy.id))}
-                  color="error"
-                >
-                  <DeleteIcon />
-                </IconButton>
-              </Box>
-
-              <Collapse in={policy.isExpanded}>
-                <Box sx={{ mt: 2 }}>
-                  <PolicyInput id={policy.id} value={policy.policy} onChange={handlePolicyChange} />
-                </Box>
-              </Collapse>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <TextField
+                label="Policy Name"
+                value={policy.name}
+                onChange={(e) => {
+                  setPolicies((prev) =>
+                    prev.map((p) => (p.id === policy.id ? { ...p, name: e.target.value } : p)),
+                  );
+                }}
+                size="small"
+                fullWidth
+              />
+              <IconButton
+                onClick={() => {
+                  setPolicies((prev) =>
+                    prev.map((p) => (p.id === policy.id ? { ...p, isExpanded: !p.isExpanded } : p)),
+                  );
+                }}
+              >
+                {policy.isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+              </IconButton>
+              <IconButton
+                onClick={() => setPolicies((prev) => prev.filter((p) => p.id !== policy.id))}
+                color="error"
+              >
+                <DeleteIcon />
+              </IconButton>
             </Box>
-          ))}
-        </Stack>
-      </CardContent>
-    </Card>
+
+            <Collapse in={policy.isExpanded}>
+              <Box sx={{ mt: 2 }}>
+                <PolicyInput id={policy.id} value={policy.policy} onChange={handlePolicyChange} />
+              </Box>
+            </Collapse>
+          </Box>
+        ))}
+      </Stack>
+    </Box>
   );
 };
 

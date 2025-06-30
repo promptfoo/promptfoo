@@ -1,84 +1,44 @@
 ---
-sidebar_position: 50
 sidebar_label: Custom Javascript
 ---
 
 # Javascript Provider
 
-Promptfoo supports custom Javascript for integrations that go beyond single API calls (see also [HTTP API](/docs/providers/http/), [Python](/docs/providers/python/), [Browser](/docs/providers/browser/), and [Custom Script](/docs/providers/custom-script/)).
+Custom Javascript providers let you create providers in JavaScript or TypeScript to integrate with any API or service not already built into promptfoo.
 
-To create a custom API provider, implement the `ApiProvider` interface in a separate module. Here is the interface:
+## Supported File Formats and Examples
 
-```ts
-export interface CallApiContextParams {
-  vars: Record<string, string | object>;
-  prompt: Prompt;
-  // Used when provider is overridden on the test case.
-  originalProvider?: ApiProvider;
-  logger?: winston.Logger;
-}
+promptfoo supports multiple JavaScript module formats. Complete working examples are available on GitHub:
 
-export interface CallApiOptionsParams {
-  // Whether to include logprobs in API response (used with OpenAI providers)
-  includeLogProbs?: boolean;
-}
+- [CommonJS Provider](https://github.com/promptfoo/promptfoo/tree/main/examples/custom-provider) - (`.js`, `.cjs`) - Uses `module.exports` and `require()`
+- [ESM Provider](https://github.com/promptfoo/promptfoo/tree/main/examples/custom-provider-mjs) - (`.mjs`, `.js` with `"type": "module"`) - Uses `import`/`export`
+- [TypeScript Provider](https://github.com/promptfoo/promptfoo/tree/main/examples/custom-provider-typescript) - (`.ts`) - Provides type safety with interfaces
+- [Embeddings Provider](https://github.com/promptfoo/promptfoo/tree/main/examples/custom-provider-embeddings) (commonjs)
 
-export interface ApiProvider {
-  constructor(options: { id?: string; config: Record<string, any> });
+## Provider Interface
 
-  // Unique identifier for the provider
-  id: () => string;
+At minimum, a custom provider must implement an `id` method and a `callApi` method.
 
-  // Text generation function
-  callApi: (
-    prompt: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
-  ) => Promise<ProviderResponse>;
+```javascript title="echoProvider.js"
+export default class EchoProvider {
+  id = () => 'echo';
 
-  // Embedding function
-  callEmbeddingApi?: (prompt: string) => Promise<ProviderEmbeddingResponse>;
-
-  // Classification function
-  callClassificationApi?: (prompt: string) => Promise<ProviderClassificationResponse>;
-
-  // Shown on output UI
-  label?: ProviderLabel;
-
-  // Applied by the evaluator on provider response
-  transform?: string;
-
-  // Custom delay for the provider
-  delay?: number;
-
-  // Provider configuration
-  config?: any;
-}
-
-export interface ProviderResponse {
-  cached?: boolean;
-  cost?: number;
-  error?: string;
-  logProbs?: number[];
-  metadata?: Record<string, any>;
-  output?: string | any;
-  tokenUsage?: TokenUsage;
+  callApi = async (prompt, context, options) => {
+    return {
+      output: `Echo: ${prompt}`,
+    };
+  };
 }
 ```
 
-See also: [ProviderResponse](/docs/configuration/reference/#providerresponse)
+You can optionally use a constructor to initialize the provider, for example:
 
-## Example
+```javascript title="openaiProvider.js"
+const promptfoo = require('promptfoo').default;
 
-Here's an example of a custom API provider that returns a predefined output along with token usage:
-
-```javascript
-class CustomApiProvider {
+module.exports = class OpenAIProvider {
   constructor(options) {
-    // Provider ID can be overridden by the config file (e.g. when using multiple of the same provider)
-    this.providerId = options.id || 'custom provider';
-
-    // options.config contains any custom options passed to the provider
+    this.providerId = options.id || 'openai-custom';
     this.config = options.config;
   }
 
@@ -86,172 +46,262 @@ class CustomApiProvider {
     return this.providerId;
   }
 
-  async callApi(prompt, context) {
-    // Add your custom API logic here
-    // Use options like: `this.config.temperature`, `this.config.max_tokens`, etc.
-
-    console.log('Vars for this test case:', JSON.stringify(context.vars));
-
-    return {
-      // Required
-      output: 'Model output',
-
-      // Optional
-      tokenUsage: {
-        total: 10,
-        prompt: 5,
-        completion: 5,
-      },
-    };
-  }
-}
-
-module.exports = CustomApiProvider;
-```
-
-Custom API providers can also be used for embeddings, classification, similarity, or moderation.
-
-```javascript
-module.exports = class CustomApiProvider {
-  constructor(options) {
-    this.providerId = options.id || 'custom provider';
-    this.config = options.config;
-  }
-
-  id() {
-    return this.providerId;
-  }
-
-  // Embeddings
-  async callEmbeddingApi(prompt) {
-    // Add your custom embedding logic here
-    return {
-      embedding: [], // Your embedding array
-      tokenUsage: { total: 10, prompt: 1, completion: 0 },
-    };
-  }
-
-  // Classification
-  async callClassificationApi(prompt) {
-    // Add your custom classification logic here
-    return {
-      classification: {
-        classA: 0.6,
-        classB: 0.4,
-      },
-    };
-  }
-
-  // Similarity
-  async callSimilarityApi(reference, input) {
-    // Add your custom similarity logic here
-    return {
-      similarity: 0.85,
-      tokenUsage: { total: 10, prompt: 5, completion: 5 },
-    };
-  }
-
-  // Moderation
-  async callModerationApi(prompt, response) {
-    // Add your custom moderation logic here
-    return {
-      flags: [
-        {
-          code: 'inappropriate',
-          description: 'Potentially inappropriate content',
-          confidence: 0.7,
+  async callApi(prompt, context, options) {
+    const { data } = await promptfoo.cache.fetchWithCache(
+      'https://api.openai.com/v1/chat/completions',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
         },
-      ],
+        body: JSON.stringify({
+          model: this.config?.model || 'gpt-4.1-mini',
+          messages: [{ role: 'user', content: prompt }],
+          max_tokens: this.config?.max_tokens || 1024,
+          temperature: this.config?.temperature || 0,
+        }),
+      },
+    );
+
+    return {
+      output: data.choices[0].message.content,
+      tokenUsage: data.usage,
     };
   }
 };
 ```
 
-### Caching
+`callApi` returns a `ProviderResponse` object. The `ProviderResponse` object format:
 
-You can interact with promptfoo's cache by importing the `promptfoo.cache` module. For example:
-
-```js
-const promptfoo = require('../../dist/src/index.js').default;
-
-const cache = promptfoo.cache.getCache();
-await cache.set('foo', 'bar');
-console.log(await cache.get('foo')); // "bar"
+```javascript
+{
+  // main response shown to users
+  output: "Model response - can be text or structured data",
+  error: "Error message if applicable",
+  tokenUsage: {
+    total: 100,
+    prompt: 50,
+    completion: 50,
+  },
+  cost: 0.002,
+  cached: false,
+  metadata: {}, // Additional data
+  ...
+}
 ```
 
-The cache is managed by [`cache-manager`](https://www.npmjs.com/package/cache-manager/v/4.1.0).
+### Context Parameter
 
-promptfoo also has built-in utility functions for fetching with cache and timeout:
+The `context` parameter contains:
 
-```js
-const { data, cached } = await promptfoo.cache.fetchWithCache(
-  'https://api.openai.com/v1/chat/completions',
-  {
+```javascript
+{
+  vars: {}, // Test case variables
+  prompt: {}, // Original prompt template
+  originalProvider: {}, // Used when provider is overridden
+  logger: {} // Winston logger instance
+}
+```
+
+### Two-Stage Provider
+
+```javascript title="twoStageProvider.js"
+const promptfoo = require('promptfoo').default;
+
+module.exports = class TwoStageProvider {
+  constructor(options) {
+    this.providerId = options.id || 'two-stage';
+    this.config = options.config;
+  }
+
+  id() {
+    return this.providerId;
+  }
+
+  async callApi(prompt) {
+    // First stage: fetch additional data
+    const secretData = await this.fetchSecret(this.config.secretKey);
+
+    // Second stage: call LLM with enriched prompt
+    const enrichedPrompt = `${prompt}\nContext: ${secretData}`;
+    const llmResponse = await this.callLLM(enrichedPrompt);
+
+    return {
+      output: llmResponse.output,
+      metadata: { secretUsed: true },
+    };
+  }
+
+  async fetchSecret(key) {
+    // Fetch some external data needed for processing
+    return `Secret information for ${key}`;
+  }
+
+  async callLLM(prompt) {
+    const { data } = await promptfoo.cache.fetchWithCache(
+      'https://api.openai.com/v1/chat/completions',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: 'gpt-4.1-mini',
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      },
+    );
+
+    return {
+      output: data.choices[0].message.content,
+    };
+  }
+};
+```
+
+### TypeScript Implementation
+
+```typescript title="typedProvider.ts"
+import promptfoo from 'promptfoo';
+import type {
+  ApiProvider,
+  ProviderOptions,
+  ProviderResponse,
+  CallApiContextParams,
+} from 'promptfoo';
+
+export default class TypedProvider implements ApiProvider {
+  protected providerId: string;
+  public config: Record<string, any>;
+
+  constructor(options: ProviderOptions) {
+    this.providerId = options.id || 'typed-provider';
+    this.config = options.config || {};
+  }
+
+  id(): string {
+    return this.providerId;
+  }
+
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    const username = (context?.vars?.username as string) || 'anonymous';
+
+    return {
+      output: `Hello, ${username}! You said: "${prompt}"`,
+      tokenUsage: {
+        total: prompt.length,
+        prompt: prompt.length,
+        completion: 0,
+      },
+    };
+  }
+}
+```
+
+## Additional Capabilities
+
+### Embeddings API
+
+```javascript title="embeddingProvider.js"
+async callEmbeddingApi(text) {
+  const response = await fetch('https://api.openai.com/v1/embeddings', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify({
+      model: 'text-embedding-3-small',
+      input: text,
+    }),
+  });
+
+  const data = await response.json();
+
+  return {
+    embedding: data.data[0].embedding,
+    tokenUsage: {
+      total: data.usage.total_tokens,
+      prompt: data.usage.prompt_tokens,
+      completion: 0,
+    },
+  };
+}
+```
+
+### Classification API
+
+```javascript title="classificationProvider.js"
+async callClassificationApi(text) {
+  return {
+    classification: {
+      positive: 0.75,
+      neutral: 0.20,
+      negative: 0.05,
+    },
+  };
+}
+```
+
+## Cache System
+
+The built-in caching system helps avoid redundant API calls:
+
+```javascript title="cacheExample.js"
+// Get the cache instance
+const cache = promptfoo.cache.getCache();
+
+// Store and retrieve data
+await cache.set('my-key', 'cached-value', { ttl: 3600 }); // TTL in seconds
+const value = await cache.get('my-key');
+
+// Fetch with cache wrapper
+const { data, cached } = await promptfoo.cache.fetchWithCache(
+  'https://api.example.com/endpoint',
+  {
+    method: 'POST',
+    body: JSON.stringify({ query: 'data' }),
   },
-  10_000, // 10 second timeout
+  5000, // timeout in ms
 );
-
-console.log('Got from OpenAI:', data);
-console.log('Was it cached?', cached);
 ```
 
-## Using the provider
+## Configuration
 
-Include the custom provider in promptfoo config:
+### Provider Configuration
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 providers:
-  - 'file://relative/path/to/customApiProvider.js'
+  - id: file://./myProvider.js
+    label: 'My Custom API' # Display name in UI
+    config:
+      model: 'gpt-4.1'
+      temperature: 0.7
+      max_tokens: 2000
+      custom_parameter: 'custom value'
 ```
 
-Alternatively, you can pass the path to the custom API provider directly in the CLI:
+### Multiple Instances
 
-```
-promptfoo eval -p prompt1.txt prompt2.txt -o results.csv -v vars.csv -r ./customApiProvider.js
-```
-
-This command will evaluate the prompts using the custom API provider and save the results to the specified CSV file.
-
-Full working examples of a [custom provider](https://github.com/promptfoo/promptfoo/tree/main/examples/custom-provider) and [custom provider embeddings](https://github.com/promptfoo/promptfoo/tree/main/examples/custom-provider-embeddings) are available in the [examples directory](https://github.com/promptfoo/promptfoo/tree/main/examples).
-
-## Multiple instances of the same provider
-
-You can instantiate multiple providers of the same type with distinct IDs. In this example, we pass a different temperature config to the provider:
-
-```yaml
+```yaml title="multiple-providers.yaml"
 providers:
-  - id: file:///absolute/path/to/customProvider.js
-    label: custom-provider-hightemp
+  - id: file:///path/to/provider.js
+    label: high-temperature
     config:
-      temperature: 1.0
-  - id: file:///absolute/path/to/customProvider.js
-    label: custom-provider-lowtemp
+      temperature: 0.9
+  - id: file:///path/to/provider.js
+    label: low-temperature
     config:
-      temperature: 0
+      temperature: 0.1
 ```
 
-### ES modules
+## See Also
 
-ES modules are supported, but must have a `.mjs` file extension. Alternatively, if you are transpiling Javascript or Typescript, we recommend pointing promptfoo to the transpiled plain Javascript output.
-
-### Environment Variable Overrides
-
-Custom providers can access environment variables through the `EnvOverrides` type. This allows you to override default API endpoints, keys, and other configuration options. Here's a partial list of available overrides:
-
-```ts
-export type EnvOverrides = {
-  OPENAI_API_KEY?: string;
-  ANTHROPIC_API_KEY?: string;
-  AZURE_OPENAI_API_KEY?: string;
-  COHERE_API_KEY?: string;
-  // ... and many more
-};
-```
-
-You can access these overrides in your custom provider through the `options.config.env` object.
+- [Browser Provider](/docs/providers/browser/)
+- [Custom Provider Examples](https://github.com/promptfoo/promptfoo/tree/main/examples)
+- [Custom Script Provider](/docs/providers/custom-script/)
+- [Go Provider](/docs/providers/go/)
+- [HTTP Provider](/docs/providers/http/)
+- [Python Provider](/docs/providers/python/)

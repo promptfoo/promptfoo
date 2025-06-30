@@ -1,0 +1,24 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "get_weather",
+      "description": "Get current weather information for a location",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "location": {
+            "type": "string",
+            "description": "The city and state, e.g., San Francisco, CA"
+          },
+          "unit": {
+            "type": "string",
+            "enum": ["celsius", "fahrenheit"],
+            "description": "The unit of temperature to use. Infer this from the query. Defaults to celsius if not specified."
+          }
+        },
+        "required": ["location"]
+      }
+    }
+  }
+]

@@ -1,4 +1,5 @@
-const promptfoo = require('../../dist/src/index.js').default;
+// const promptfoo = require('../../dist/src/index.js').default;
+const promptfoo = require('promptfoo').default;
 
 class CustomApiProvider {
   constructor(options) {
@@ -15,7 +16,7 @@ class CustomApiProvider {
 
   async callApi(prompt) {
     const body = {
-      model: 'gpt-4o-mini',
+      model: 'gpt-4.1-mini',
       messages: [
         {
           role: 'user',

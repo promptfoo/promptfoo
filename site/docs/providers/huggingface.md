@@ -1,10 +1,10 @@
 ---
-sidebar_position: 99
+sidebar_label: HuggingFace
 ---
 
 # HuggingFace
 
-promptfoo includes support for the [HuggingFace Inference API](https://huggingface.co/inference-api), for text generation, classification, and embeddings related tasks.
+promptfoo includes support for the [HuggingFace Inference API](https://huggingface.co/inference-api), for text generation, classification, and embeddings related tasks, as well as [HuggingFace Datasets](https://huggingface.co/docs/datasets).
 
 To run a model, specify the task type and model name. Supported models include:
 
@@ -122,3 +122,67 @@ providers:
     config:
       apiEndpoint: http://127.0.0.1:8080/generate
 ```
+
+## Authentication
+
+If you need to access private datasets or want to increase your rate limits, you can authenticate using your HuggingFace token. Set the `HF_TOKEN` environment variable with your token:
+
+```bash
+export HF_TOKEN=your_token_here
+```
+
+## Datasets
+
+promptfoo can load test cases directly from HuggingFace datasets. To use a dataset, specify it in your config using the `huggingface://datasets/` prefix:
+
+```yaml
+tests: huggingface://datasets/fka/awesome-chatgpt-prompts
+```
+
+You can customize the dataset split and other parameters using query parameters:
+
+```yaml
+# Load from training split
+tests: huggingface://datasets/fka/awesome-chatgpt-prompts?split=train
+
+# Load from validation split with custom config
+tests: huggingface://datasets/fka/awesome-chatgpt-prompts?split=validation&config=custom
+```
+
+The dataset rows will be automatically converted to test cases. Each field in the dataset becomes a variable that can be used in your prompts. For example, if your dataset has fields `question` and `answer`, you can reference them in your prompts like this:
+
+```yaml
+prompts:
+  - "Question: {{question}}\nAnswer:"
+
+tests: huggingface://datasets/rajpurkar/squad
+```
+
+### Query Parameters
+
+The dataset loader supports all query parameters from the [HuggingFace Datasets API](https://huggingface.co/docs/datasets-server/api_reference#get-apirows). Common parameters include:
+
+| Parameter | Description                                   | Default   |
+| --------- | --------------------------------------------- | --------- |
+| `split`   | Dataset split to load (train/test/validation) | `test`    |
+| `config`  | Dataset configuration name                    | `default` |
+
+Any additional query parameters will be passed directly to the HuggingFace Datasets API.
+
+### Example Configuration
+
+Here's a complete example that loads test cases from a HuggingFace dataset:
+
+```yaml
+description: Testing with HuggingFace dataset
+
+prompts:
+  - 'Act as {{act}}. {{prompt}}'
+
+providers:
+  - id: openai:gpt-4.1-mini
+
+tests: huggingface://datasets/fka/awesome-chatgpt-prompts?split=train
+```
+
+This will load all rows from the dataset and use the `act` and `prompt` fields as variables in the prompt template.

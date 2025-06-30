@@ -1,5 +1,7 @@
 ---
 sidebar_label: GOAT
+title: GOAT Jailbreaking Strategy
+description: Generative Offensive Agent Tester technique for dynamic multi-turn jailbreaking of LLMs
 ---
 
 # GOAT Technique for Jailbreaking LLMs
@@ -8,14 +10,16 @@ The GOAT (Generative Offensive Agent Tester) strategy is an advanced automated r
 
 It was [introduced by Meta researchers](https://arxiv.org/abs/2410.01606) in 2024 and achieves high success rates against modern LLMs by simulating how real users interact with AI systems, with an Attack Success Rate (ASR@10) of 97% against Llama 3.1 and 88% against GPT-4-Turbo on the JailbreakBench dataset.
 
+## Implementation
+
 Use it like so in your promptfooconfig.yaml:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 strategies:
   - id: goat
     config:
       maxTurns: 5 # Maximum conversation turns (default)
-      stateless: true # Sends the entire conversation history with each turn (Default), set to False if you're using any custom providers
+      stateful: false # Sends the entire conversation history with each turn (Default)
 ```
 
 :::warning
@@ -23,7 +27,7 @@ This is a remote-only strategy and requires an connection to promptfoo's free gr
 :::
 
 :::warning
-If your system maintains a conversation history and only expects the latest message to be sent, set `stateless: false`. [Make sure to configure cookies or sessions in your provider as well.](/docs/providers/http/#server-side-session-management)
+If your system maintains a conversation history and only expects the latest message to be sent, set `stateful: true`. [Make sure to configure cookies or sessions in your provider as well.](/docs/providers/http/#server-side-session-management)
 :::
 
 ## How It Works

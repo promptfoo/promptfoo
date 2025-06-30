@@ -1,7 +1,8 @@
 import type {
+  DerivedMetric,
   EnvOverrides,
   EvaluateOptions,
-  EvaluateTestSuite,
+  EvaluateTestSuiteWithEvaluateOptions,
   ProviderOptions,
   TestCase,
   UnifiedConfig,
@@ -15,20 +16,24 @@ export interface State {
   testCases: TestCase[];
   description: string;
   providers: ProviderOptions[];
-  prompts: string[];
+  prompts: any[];
   defaultTest: TestCase;
+  derivedMetrics: DerivedMetric[];
   evaluateOptions: EvaluateOptions;
   scenarios: Scenario[];
+  extensions: string[];
   setEnv: (env: EnvOverrides) => void;
   setTestCases: (testCases: TestCase[]) => void;
   setDescription: (description: string) => void;
   setProviders: (providers: ProviderOptions[]) => void;
-  setPrompts: (prompts: string[]) => void;
+  setPrompts: (prompts: any[]) => void;
   setDefaultTest: (testCase: TestCase) => void;
+  setDerivedMetrics: (derivedMetrics: DerivedMetric[]) => void;
   setEvaluateOptions: (options: EvaluateOptions) => void;
   setScenarios: (scenarios: Scenario[]) => void;
   setStateFromConfig: (config: Partial<UnifiedConfig>) => void;
-  getTestSuite: () => EvaluateTestSuite;
+  getTestSuite: () => EvaluateTestSuiteWithEvaluateOptions;
+  setExtensions: (extensions: string[]) => void;
 }
 
 export const useStore = create<State>()(
@@ -39,7 +44,9 @@ export const useStore = create<State>()(
       description: '',
       providers: [],
       prompts: [],
+      extensions: [],
       defaultTest: {},
+      derivedMetrics: [],
       evaluateOptions: {},
       scenarios: [],
       setEnv: (env) => set({ env }),
@@ -48,8 +55,10 @@ export const useStore = create<State>()(
       setProviders: (providers) => set({ providers }),
       setPrompts: (prompts) => set({ prompts }),
       setDefaultTest: (testCase) => set({ defaultTest: testCase }),
+      setDerivedMetrics: (derivedMetrics) => set({ derivedMetrics }),
       setEvaluateOptions: (options) => set({ evaluateOptions: options }),
       setScenarios: (scenarios) => set({ scenarios }),
+      setExtensions: (extensions) => set({ extensions }),
       setStateFromConfig: (config: Partial<UnifiedConfig>) => {
         const updates: Partial<State> = {};
         if (config.description) {
@@ -65,14 +74,7 @@ export const useStore = create<State>()(
           if (typeof config.prompts === 'string') {
             updates.prompts = [config.prompts];
           } else if (Array.isArray(config.prompts)) {
-            // If it looks like a file path, don't set it.
-            updates.prompts = config.prompts.filter(
-              (p): p is string =>
-                typeof p === 'string' &&
-                !p.endsWith('.txt') &&
-                !p.endsWith('.json') &&
-                !p.endsWith('.yaml'),
-            );
+            updates.prompts = config.prompts;
           } else {
             console.warn('Invalid prompts config', config.prompts);
           }
@@ -80,23 +82,44 @@ export const useStore = create<State>()(
         if (config.defaultTest) {
           updates.defaultTest = config.defaultTest;
         }
+        if (config.derivedMetrics) {
+          updates.derivedMetrics = config.derivedMetrics;
+        }
         if (config.evaluateOptions) {
           updates.evaluateOptions = config.evaluateOptions;
         }
         if (config.scenarios) {
           updates.scenarios = config.scenarios as Scenario[];
         }
+        if (config.extensions) {
+          updates.extensions = config.extensions;
+        }
         set(updates);
       },
       getTestSuite: () => {
-        const { description, testCases, providers, prompts, env, scenarios } = get();
-        return {
-          env,
+        const {
           description,
-          providers,
+          env,
+          extensions,
           prompts,
-          tests: testCases,
+          providers,
           scenarios,
+          testCases,
+          evaluateOptions,
+          defaultTest,
+          derivedMetrics,
+        } = get();
+        return {
+          description,
+          env,
+          extensions,
+          prompts,
+          providers,
+          scenarios,
+          tests: testCases,
+          evaluateOptions,
+          defaultTest,
+          derivedMetrics,
         };
       },
     }),

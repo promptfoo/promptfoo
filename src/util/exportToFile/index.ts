@@ -1,50 +1,7 @@
-import type Eval from '../../models/eval';
 import type EvalResult from '../../models/evalResult';
 import type { EvaluateTableOutput, EvaluateTableRow } from '../../types';
 
-export function getHeaderForTable(eval_: Eval) {
-  const varsForHeader = new Set<string>();
-
-  if (eval_.config.defaultTest?.vars) {
-    for (const varName of Object.keys(eval_.config.defaultTest.vars || {})) {
-      varsForHeader.add(varName);
-    }
-  }
-
-  for (const test of eval_.config.tests || []) {
-    if (typeof test === 'string') {
-      continue;
-    }
-    for (const varName of Object.keys(test.vars || {})) {
-      varsForHeader.add(varName);
-    }
-  }
-
-  for (const scenario of eval_.config.scenarios || []) {
-    if (typeof scenario === 'string') {
-      continue;
-    }
-    for (const config of scenario.config || []) {
-      for (const varName of Object.keys(config.vars || {})) {
-        varsForHeader.add(varName);
-      }
-    }
-    for (const test of scenario.tests || []) {
-      if (typeof test === 'string') {
-        continue;
-      }
-      for (const varName of Object.keys(test.vars || {})) {
-        varsForHeader.add(varName);
-      }
-    }
-  }
-  return {
-    vars: [...varsForHeader].sort(),
-    prompts: eval_.prompts,
-  };
-}
-
-function convertEvalResultToTableCell(result: EvalResult): EvaluateTableOutput {
+export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableOutput {
   let resultText: string | undefined;
   const failReasons = (result.gradingResult?.componentResults || [])
     .filter((result) => (result ? !result.pass : false))
@@ -75,6 +32,15 @@ function convertEvalResultToTableCell(result: EvalResult): EvaluateTableOutput {
     provider: result.provider?.label || result.provider?.id || 'unknown provider',
     pass: result.success,
     cost: result.cost || 0,
+    audio: result.response?.audio
+      ? {
+          id: result.response.audio.id,
+          expiresAt: result.response.audio.expiresAt,
+          data: result.response.audio.data,
+          transcript: result.response.audio.transcript,
+          format: result.response.audio.format,
+        }
+      : undefined,
   };
 }
 
@@ -97,6 +63,7 @@ export function convertTestResultsToTableRow(
           .flat()
       : [],
     test: results[0].testCase,
+    testIdx: results[0].testIdx,
   };
 
   for (const result of results) {

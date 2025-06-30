@@ -1,3 +1,7 @@
+---
+sidebar_label: WatsonX
+---
+
 # WatsonX
 
 [IBM WatsonX](https://www.ibm.com/watsonx) offers a range of enterprise-grade foundation models optimized for various business use cases. This provider supports several powerful models from the `Granite` and `Llama` series, along with additional models for code generation, multilingual tasks, vision processing, and more.
@@ -66,31 +70,44 @@ To install the WatsonX provider, use the following steps:
 
 2. Set up the necessary environment variables:
 
+   You can choose between two authentication methods:
+
+   **Option 1: IAM Authentication**
+
    ```sh
+   export WATSONX_AI_AUTH_TYPE=iam
    export WATSONX_AI_APIKEY=your-ibm-cloud-api-key
    ```
 
-   or
+   **Option 2: Bearer Token Authentication**
 
-   ```
+   ```sh
+   export WATSONX_AI_AUTH_TYPE=bearertoken
    export WATSONX_AI_BEARER_TOKEN=your-ibm-cloud-bearer-token
    ```
 
-   then
+   Then set your project ID:
 
-   ```
+   ```sh
    export WATSONX_AI_PROJECT_ID=your-ibm-project-id
    ```
 
-3. Alternatively, you can configure the API key and project ID directly in the configuration file.
+   Note: If `WATSONX_AI_AUTH_TYPE` is not set, the provider will automatically choose the authentication method based on which credentials are available, preferring IAM authentication if both are present.
+
+3. Alternatively, you can configure the authentication and project ID directly in the configuration file:
 
    ```yaml
    providers:
      - id: watsonx:ibm/granite-13b-chat-v2
-     config:
-       apiKey: your-ibm-cloud-api-key # replace with apiBearerToken if you are using bearer token instead of apikey
-       projectId: your-ibm-project-id
-       serviceUrl: https://us-south.ml.cloud.ibm.com
+       config:
+         # Option 1: IAM Authentication
+         apiKey: your-ibm-cloud-api-key
+
+         # Option 2: Bearer Token Authentication
+         # apiBearerToken: your-ibm-cloud-bearer-token
+
+         projectId: your-ibm-project-id
+         serviceUrl: https://us-south.ml.cloud.ibm.com
    ```
 
 ### Usage Examples

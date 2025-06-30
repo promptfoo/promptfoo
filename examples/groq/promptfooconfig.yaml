@@ -7,8 +7,9 @@ prompts:
 
 providers:
   - id: groq:gemma2-9b-it
-  - id: groq:llama3-groq-8b-8192-tool-use-preview
+  - id: groq:llama-3.3-70b-versatile
     config:
+      max_completion_tokens: 300
       tools:
         - type: function
           function:

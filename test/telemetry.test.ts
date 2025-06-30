@@ -1,4 +1,5 @@
 import packageJson from '../package.json';
+import cliState from '../src/cliState';
 import { fetchWithTimeout } from '../src/fetch';
 import { Telemetry } from '../src/telemetry';
 
@@ -8,6 +9,39 @@ jest.mock('../src/fetch', () => ({
 
 jest.mock('../package.json', () => ({
   version: '1.0.0',
+}));
+
+jest.mock('../src/cliState', () => ({
+  __esModule: true,
+  default: {
+    config: undefined,
+  },
+}));
+
+jest.mock('../src/envars', () => ({
+  ...jest.requireActual('../src/envars'),
+  getEnvBool: jest.fn().mockImplementation((key) => {
+    if (key === 'PROMPTFOO_DISABLE_TELEMETRY') {
+      return process.env.PROMPTFOO_DISABLE_TELEMETRY === '1';
+    }
+    if (key === 'IS_TESTING') {
+      return false;
+    }
+    return false;
+  }),
+  getEnvString: jest.fn().mockImplementation((key) => {
+    if (key === 'PROMPTFOO_POSTHOG_KEY') {
+      return process.env.PROMPTFOO_POSTHOG_KEY || 'test-key';
+    }
+    if (key === 'PROMPTFOO_POSTHOG_HOST') {
+      return process.env.PROMPTFOO_POSTHOG_HOST || undefined;
+    }
+    if (key === 'NODE_ENV') {
+      return process.env.NODE_ENV || undefined;
+    }
+    return undefined;
+  }),
+  isCI: jest.fn().mockReturnValue(false),
 }));
 
 describe('Telemetry', () => {
@@ -43,7 +77,7 @@ describe('Telemetry', () => {
     expect(telemetry['events'][0]).toEqual({
       event: 'eval_ran',
       packageVersion: packageJson.version,
-      properties: { foo: 'bar' },
+      properties: { foo: 'bar', isRunningInCi: false, isRedteam: false },
     });
   });
 
@@ -63,7 +97,11 @@ describe('Telemetry', () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify([
-          { event: 'eval_ran', packageVersion: '1.0.0', properties: { foo: 'bar' } },
+          {
+            event: 'eval_ran',
+            packageVersion: '1.0.0',
+            properties: { foo: 'bar', isRedteam: false, isRunningInCi: false },
+          },
         ]),
       },
       1000,
@@ -132,5 +170,25 @@ describe('Telemetry', () => {
 
     // Ensure fetchWithTimeout was not called again
     expect(fetchWithTimeout).toHaveBeenCalledTimes(1);
+  });
+
+  it('should include isRedteam: true when redteam configuration is present', () => {
+    delete process.env.PROMPTFOO_DISABLE_TELEMETRY;
+
+    // Mock cliState with redteam configuration
+    cliState.config = { redteam: {} } as any;
+
+    const telemetry = new Telemetry();
+    telemetry.record('eval_ran', { foo: 'bar' });
+
+    expect(telemetry['events']).toHaveLength(1);
+    expect(telemetry['events'][0]).toEqual({
+      event: 'eval_ran',
+      packageVersion: packageJson.version,
+      properties: { foo: 'bar', isRunningInCi: false, isRedteam: true },
+    });
+
+    // Clean up
+    cliState.config = undefined;
   });
 });

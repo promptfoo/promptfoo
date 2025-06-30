@@ -57,9 +57,9 @@ const BrowserAutomationConfiguration: React.FC<BrowserAutomationConfigurationPro
 
         <TextField
           fullWidth
-          label="Response Parser"
-          value={selectedTarget.config.responseParser || ''}
-          onChange={(e) => updateCustomTarget('responseParser', e.target.value)}
+          label="Response Transform"
+          value={selectedTarget.config.transformResponse || ''}
+          onChange={(e) => updateCustomTarget('transformResponse', e.target.value)}
           margin="normal"
           placeholder="e.g., extracted.searchResults"
           helperText="JavaScript expression to parse the extracted data"

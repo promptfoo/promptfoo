@@ -1,6 +1,10 @@
+---
+sidebar_label: Gradio WebUI
+---
+
 # text-generation-webui
 
-promptfoo can run evals on oobabooga's [text-generation-webui](https://github.com/oobabooga/text-generation-webui)-hosted models through the [OpenAPI API extension](https://github.com/oobabooga/text-generation-webui/wiki/12-%E2%80%90-OpenAI-API).
+promptfoo can run evals on oobabooga's gradio based [text-generation-webui](https://github.com/oobabooga/text-generation-webui)-hosted models through the [OpenAPI API extension](https://github.com/oobabooga/text-generation-webui/wiki/12-%E2%80%90-OpenAI-API).
 
 The text-gen-webui extension can be activated from with the UI or via command line. Here is an example of command line usage.
 

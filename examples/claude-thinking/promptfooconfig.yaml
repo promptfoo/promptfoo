@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Claude Thinking Example'
+prompts:
+  - file://prompts.txt
+providers:
+  - id: anthropic:claude-sonnet-4-20250514
+    config:
+      thinking:
+        type: 'enabled'
+        budget_tokens: 16000
+      max_tokens: 32000
+  # For comparison with AWS Bedrock (optional)
+  - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0
+    config:
+      thinking:
+        type: 'enabled'
+        budget_tokens: 16000
+      max_tokens: 32000
+
+tests:
+  - vars:
+      question: |
+        You have 8 identical balls, but one is slightly heavier than the others. 
+        Using a balance scale, what is the minimum number of weighings needed to 
+        find the heavier ball?
+    assert:
+      - type: llm-rubric
+        value: |
+          The answer should explain why 2 weighings are sufficient
+
+  - vars:
+      question: |
+        A train leaves Boston at 8:00 AM traveling west at 100 mph. Another train 
+        leaves Chicago at 10:00 AM traveling east at 120 mph. If the distance 
+        between Boston and Chicago is 1000 miles, at what time will the trains meet?
+    assert:
+      - type: llm-rubric
+        value: |
+          The trains will meet at 1:38 PM.

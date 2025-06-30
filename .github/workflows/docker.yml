@@ -44,7 +44,7 @@ permissions:
 jobs:
   test-and-publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
 
     steps:
       - name: Free disk space
@@ -74,6 +74,10 @@ jobs:
           load: true
           tags: local-test-image:latest
           platforms: linux/amd64
+          build-args: |
+            BUILD_VERSION=${{ github.ref_name }}
+            BUILD_DATE=${{ github.event_name == 'pull_request' && github.event.pull_request.updated_at || github.event.head_commit.timestamp || github.event.repository.updated_at }}
+            GIT_SHA=${{ github.sha }}
 
       - name: Run Docker container for testing
         run: docker run -d --name promptfoo-container -p 3000:3000 local-test-image:latest
@@ -81,15 +85,13 @@ jobs:
       - name: Verify Python and promptfoo
         run: |
           echo "Checking Python version:"
-          docker exec promptfoo-container python --version
-          if [ $? -ne 0 ]; then
+          if ! docker exec promptfoo-container python --version; then
             echo "Python check failed"
             exit 1
           fi
 
           echo "Checking promptfoo version:"
-          docker exec promptfoo-container promptfoo --version
-          if [ $? -ne 0 ]; then
+          if ! docker exec promptfoo-container promptfoo --version; then
             echo "promptfoo check failed"
             exit 1
           fi
@@ -97,7 +99,7 @@ jobs:
       - name: Run health check
         run: |
           # Loop to check if the server is up
-          for i in {1..10}; do
+          for ((retry=1; retry<=10; retry++)); do
             if curl -f http://localhost:3000/health; then
               echo -e "\nHealth check passed"
               HEALTH_CHECK_PASS=true
@@ -121,7 +123,7 @@ jobs:
           PROMPTFOO_SHARING_APP_BASE_URL: http://localhost:3000
         run: |
           npm install
-          npm run local -- eval -c .github/workflows/files/promptfooconfig.yaml --share
+          npm run local -- eval -c .github/assets/promptfooconfig.yaml --share
 
       - name: Test that the eval results are uploaded
         run: |
@@ -182,5 +184,9 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            BUILD_VERSION=${{ github.ref_name }}
+            BUILD_DATE=${{ github.event_name == 'pull_request' && github.event.pull_request.updated_at || github.event.head_commit.timestamp || github.event.repository.updated_at }}
+            GIT_SHA=${{ github.sha }}
           outputs: |
             type=image,name=target,annotation-index.org.opencontainers.image.description=promptfoo is a tool for testing evaluating and red-teaming LLM apps.

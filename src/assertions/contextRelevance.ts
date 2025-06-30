@@ -1,6 +1,6 @@
-import invariant from 'tiny-invariant';
 import { matchesContextRelevance } from '../matchers';
 import type { AssertionParams, GradingResult } from '../types';
+import invariant from '../util/invariant';
 
 export const handleContextRelevance = async ({
   assertion,
@@ -21,7 +21,7 @@ export const handleContextRelevance = async ({
     ...(await matchesContextRelevance(
       test.vars.query,
       test.vars.context,
-      assertion.threshold || 0,
+      assertion.threshold ?? 0,
       test.options,
     )),
   };

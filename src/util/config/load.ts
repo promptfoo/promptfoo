@@ -1,21 +1,22 @@
 import $RefParser from '@apidevtools/json-schema-ref-parser';
+import chalk from 'chalk';
+import dedent from 'dedent';
 import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import * as path from 'path';
-import invariant from 'tiny-invariant';
+import process from 'process';
 import { fromError } from 'zod-validation-error';
 import { readAssertions } from '../../assertions';
 import { validateAssertions } from '../../assertions/validateAssertions';
 import cliState from '../../cliState';
 import { filterTests } from '../../commands/eval/filterTests';
-import { getEnvBool } from '../../envars';
+import { getEnvBool, isCI } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import { readPrompts, readProviderPromptMap } from '../../prompts';
 import { loadApiProviders } from '../../providers';
 import telemetry from '../../telemetry';
-import { readTest, readTests } from '../../testCases';
 import {
   UnifiedConfigSchema,
   type CommandLineOptions,
@@ -28,9 +29,19 @@ import {
   type TestSuite,
   type UnifiedConfig,
 } from '../../types';
-import { maybeLoadFromExternalFile, readFilters } from '../../util';
-import { isJavascriptFile } from '../../util/file';
+import { isRunningUnderNpx, readFilters } from '../../util';
+import { maybeLoadFromExternalFile } from '../../util/file';
+import { isJavascriptFile } from '../../util/fileExtensions';
+import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
+import { readTest, readTests } from '../testCaseReader';
+
+/**
+ * Type guard to check if a test case has vars property
+ */
+function isTestCaseWithVars(test: unknown): test is { vars: Record<string, unknown> } {
+  return typeof test === 'object' && test !== null && 'vars' in test;
+}
 
 export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
   if (getEnvBool('PROMPTFOO_DISABLE_REF_PARSER')) {
@@ -151,17 +162,18 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   };
   const ext = path.parse(configPath).ext;
   if (ext === '.json' || ext === '.yaml' || ext === '.yml') {
-    const rawConfig = yaml.load(fs.readFileSync(configPath, 'utf-8'));
+    const rawConfig = yaml.load(fs.readFileSync(configPath, 'utf-8')) ?? {};
     const dereferencedConfig = await dereferenceConfig(rawConfig as UnifiedConfig);
     // Validator requires `prompts`, but prompts is not actually required for redteam.
-    /*
-    const validationResult = UnifiedConfigSchema.safeParse(dereferencedConfig);
+    const UnifiedConfigSchemaWithoutPrompts = UnifiedConfigSchema.innerType()
+      .innerType()
+      .extend({ prompts: UnifiedConfigSchema.innerType().innerType().shape.prompts.optional() });
+    const validationResult = UnifiedConfigSchemaWithoutPrompts.safeParse(dereferencedConfig);
     if (!validationResult.success) {
       logger.warn(
         `Invalid configuration file ${configPath}:\n${fromError(validationResult.error).message}`,
       );
     }
-    */
     ret = dereferencedConfig;
   } else if (isJavascriptFile(configPath)) {
     const imported = await importModule(configPath);
@@ -203,7 +215,7 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
       // Check the array for `prompt` vars
       (Array.isArray(ret.tests) &&
         ret.tests.some(
-          (test) => typeof test === 'object' && Object.keys(test.vars || {}).includes('prompt'),
+          (test) => isTestCaseWithVars(test) && Object.keys(test.vars || {}).includes('prompt'),
         ));
 
     if (!hasAnyPrompt) {
@@ -232,7 +244,8 @@ export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig
 export async function combineConfigs(configPaths: string[]): Promise<UnifiedConfig> {
   const configs: UnifiedConfig[] = [];
   for (const configPath of configPaths) {
-    const globPaths = globSync(configPath, {
+    const resolvedPath = path.resolve(process.cwd(), configPath);
+    const globPaths = globSync(resolvedPath, {
       windowsPathsNoEscape: true,
     });
     if (globPaths.length === 0) {
@@ -267,12 +280,18 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
   });
 
   const tests: UnifiedConfig['tests'] = [];
-  for (const config of configs) {
+  for (let i = 0; i < configs.length; i++) {
+    const config = configs[i];
+    const configPath = configPaths[i];
     if (typeof config.tests === 'string') {
-      const newTests = await readTests(config.tests, path.dirname(configPaths[0]));
+      const newTests = await readTests(config.tests, path.dirname(configPath));
       tests.push(...newTests);
     } else if (Array.isArray(config.tests)) {
       tests.push(...config.tests);
+    } else if (config.tests && typeof config.tests === 'object' && 'path' in config.tests) {
+      // Handle TestGeneratorConfig object
+      const newTests = await readTests(config.tests, path.dirname(configPath));
+      tests.push(...newTests);
     }
   }
 
@@ -300,11 +319,11 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       for (const redteamKey of Object.keys(config.redteam) as Array<keyof typeof redteam>) {
         if (['entities', 'plugins', 'strategies'].includes(redteamKey)) {
           if (Array.isArray(config.redteam[redteamKey])) {
-            const currentValue = redteam[redteamKey];
+            const currentValue = redteam[redteamKey] || [];
             const newValue = config.redteam[redteamKey];
-            if (Array.isArray(currentValue) && Array.isArray(newValue)) {
+            if (Array.isArray(newValue)) {
               (redteam[redteamKey] as unknown[]) = [
-                ...new Set([...currentValue, ...newValue]),
+                ...new Set([...(currentValue as unknown[]), ...(newValue as unknown[])]),
               ].sort();
             }
           }
@@ -422,15 +441,28 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     extensions,
     redteam,
     metadata: configs.reduce((prev, curr) => ({ ...prev, ...curr.metadata }), {}),
-    sharing: !configs.some((config) => config.sharing === false),
+    sharing: (() => {
+      if (configs.some((config) => config.sharing === false)) {
+        return false;
+      }
+
+      const sharingConfig = configs.find((config) => typeof config.sharing === 'object');
+      return sharingConfig ? sharingConfig.sharing : true;
+    })(),
+    tracing: configs.find((config) => config.tracing)?.tracing,
   };
 
   return combinedConfig;
 }
 
+/**
+ * @param type - The type of configuration file. Incrementally implemented; currently supports `DatasetGeneration`.
+ *  TODO(Optimization): Perform type-specific validation e.g. using Zod schemas for data model variants.
+ */
 export async function resolveConfigs(
   cmdObj: Partial<CommandLineOptions>,
   _defaultConfig: Partial<UnifiedConfig>,
+  type?: 'DatasetGeneration' | 'AssertionGeneration',
 ): Promise<{ testSuite: TestSuite; config: Partial<UnifiedConfig>; basePath: string }> {
   let fileConfig: Partial<UnifiedConfig> = {};
   let defaultConfig = _defaultConfig;
@@ -440,7 +472,6 @@ export async function resolveConfigs(
     // The user has provided a config file, so we do not want to use the default config.
     defaultConfig = {};
   }
-
   // Standalone assertion mode
   if (cmdObj.assertions) {
     telemetry.recordAndSendOnce('feature_used', {
@@ -498,18 +529,44 @@ export async function resolveConfigs(
     extensions: fileConfig.extensions || defaultConfig.extensions || [],
     metadata: fileConfig.metadata || defaultConfig.metadata,
     redteam: fileConfig.redteam || defaultConfig.redteam,
+    tracing: fileConfig.tracing || defaultConfig.tracing,
   };
 
-  // Validation
-  if (!config.prompts || config.prompts.length === 0) {
+  const hasPrompts = [config.prompts].flat().filter(Boolean).length > 0;
+  const hasProviders = [config.providers].flat().filter(Boolean).length > 0;
+  const hasConfigFile = Boolean(configPaths);
+
+  if (!hasConfigFile && !hasPrompts && !hasProviders && !isCI()) {
+    const runCommand = isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo';
+
+    logger.warn(dedent`
+      ${chalk.yellow.bold('⚠️  No promptfooconfig found')}
+
+      ${chalk.white('Try running with:')}
+  
+      ${chalk.cyan(`${runCommand} eval -c ${chalk.bold('path/to/promptfooconfig.yaml')}`)}
+  
+      ${chalk.white('Or create a config with:')}
+  
+      ${chalk.green(`${runCommand} init`)}
+    `);
+    process.exit(1);
+  }
+  if (!hasPrompts) {
     logger.error('You must provide at least 1 prompt');
     process.exit(1);
   }
 
-  if (!config.providers || config.providers.length === 0) {
-    logger.error('You must specify at least 1 provider (for example, openai:gpt-4o)');
+  if (
+    // Dataset configs don't require providers
+    type !== 'DatasetGeneration' &&
+    type !== 'AssertionGeneration' &&
+    !hasProviders
+  ) {
+    logger.error('You must specify at least 1 provider (for example, openai:gpt-4.1)');
     process.exit(1);
   }
+
   invariant(Array.isArray(config.providers), 'providers must be an array');
   // Parse prompts, providers, and tests
   const parsedPrompts = await readPrompts(config.prompts, cmdObj.prompts ? undefined : basePath);
@@ -591,6 +648,7 @@ export async function resolveConfigs(
       basePath,
     ),
     extensions: config.extensions,
+    tracing: config.tracing,
   };
 
   if (testSuite.tests) {

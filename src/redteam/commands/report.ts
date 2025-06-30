@@ -1,5 +1,6 @@
 import type { Command } from 'commander';
-import { DEFAULT_PORT } from '../../constants';
+import { getDefaultPort } from '../../constants';
+import logger from '../../logger';
 import { startServer } from '../../server/server';
 import telemetry from '../../telemetry';
 import { setupEnv } from '../../util';
@@ -10,8 +11,8 @@ import { BrowserBehavior } from '../../util/server';
 export function redteamReportCommand(program: Command) {
   program
     .command('report [directory]')
-    .description('Start browser ui and open to report')
-    .option('-p, --port <number>', 'Port number', DEFAULT_PORT.toString())
+    .description('Start browser UI and open to report')
+    .option('-p, --port <number>', 'Port number', getDefaultPort().toString())
     .option('--filter-description <pattern>', 'Filter evals by description using a regex pattern')
     .option('--env-file, --env-path <path>', 'Path to .env file')
     .action(
@@ -33,12 +34,17 @@ export function redteamReportCommand(program: Command) {
         if (directory) {
           setConfigDirectoryPath(directory);
         }
+        if (cmdObj.filterDescription) {
+          logger.warn(
+            'The --filter-description option is deprecated and not longer supported. The argument will be ignored.',
+          );
+        }
 
         const isRunning = await checkServerRunning();
         if (isRunning) {
           await openBrowser(BrowserBehavior.OPEN_TO_REPORT);
         } else {
-          await startServer(cmdObj.port, BrowserBehavior.OPEN_TO_REPORT, cmdObj.filterDescription);
+          await startServer(cmdObj.port, BrowserBehavior.OPEN_TO_REPORT);
         }
       },
     );

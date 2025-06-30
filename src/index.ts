@@ -1,13 +1,11 @@
-import invariant from 'tiny-invariant';
 import assertions from './assertions';
 import * as cache from './cache';
 import { evaluate as doEvaluate } from './evaluator';
-import logger from './logger';
+import guardrails from './guardrails';
 import { runDbMigrations } from './migrate';
 import Eval from './models/eval';
-import { readPrompts, readProviderPromptMap } from './prompts';
-import providers, { loadApiProvider } from './providers';
-import { loadApiProviders } from './providers';
+import { readProviderPromptMap, processPrompts } from './prompts';
+import { loadApiProvider, loadApiProviders, resolveProvider } from './providers';
 import { extractEntities } from './redteam/extraction/entities';
 import { extractSystemPurpose } from './redteam/extraction/purpose';
 import { GRADERS } from './redteam/graders';
@@ -15,17 +13,10 @@ import { Plugins } from './redteam/plugins';
 import { RedteamPluginBase, RedteamGraderBase } from './redteam/plugins/base';
 import { Strategies } from './redteam/strategies';
 import telemetry from './telemetry';
-import { readTests } from './testCases';
-import type {
-  EvaluateOptions,
-  TestSuite,
-  EvaluateTestSuite,
-  ProviderOptions,
-  PromptFunction,
-  Scenario,
-} from './types';
+import type { EvaluateOptions, TestSuite, EvaluateTestSuite, Scenario } from './types';
+import type { ApiProvider } from './types/providers';
 import { readFilters, writeMultipleOutputs, writeOutput } from './util';
-import { PromptSchema } from './validators/prompts';
+import { readTests } from './util/testCaseReader';
 
 export * from './types';
 
@@ -36,49 +27,43 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     await runDbMigrations();
   }
 
+  const loadedProviders = await loadApiProviders(testSuite.providers, {
+    env: testSuite.env,
+  });
+  const providerMap: Record<string, ApiProvider> = {};
+  for (const p of loadedProviders) {
+    providerMap[p.id()] = p;
+    if (p.label) {
+      providerMap[p.label] = p;
+    }
+  }
+
   const constructedTestSuite: TestSuite = {
     ...testSuite,
     scenarios: testSuite.scenarios as Scenario[],
-    providers: await loadApiProviders(testSuite.providers, {
-      env: testSuite.env,
-    }),
+    providers: loadedProviders,
     tests: await readTests(testSuite.tests),
 
     nunjucksFilters: await readFilters(testSuite.nunjucksFilters || {}),
 
     // Full prompts expected (not filepaths)
-    prompts: (
-      await Promise.all(
-        testSuite.prompts.map(async (promptInput) => {
-          if (typeof promptInput === 'function') {
-            return {
-              raw: promptInput.toString(),
-              label: promptInput?.name ?? promptInput.toString(),
-              function: promptInput as PromptFunction,
-            };
-          } else if (typeof promptInput === 'string') {
-            return readPrompts(promptInput);
-          }
-          try {
-            return PromptSchema.parse(promptInput);
-          } catch (error) {
-            logger.warn(
-              `Prompt input is not a valid prompt schema: ${error}\nFalling back to serialized JSON as raw prompt.`,
-            );
-            return {
-              raw: JSON.stringify(promptInput),
-              label: JSON.stringify(promptInput),
-            };
-          }
-        }),
-      )
-    ).flat(),
+    prompts: await processPrompts(testSuite.prompts),
   };
 
   // Resolve nested providers
+  if (constructedTestSuite.defaultTest?.options?.provider) {
+    constructedTestSuite.defaultTest.options.provider = await resolveProvider(
+      constructedTestSuite.defaultTest.options.provider,
+      providerMap,
+      { env: testSuite.env },
+    );
+  }
+
   for (const test of constructedTestSuite.tests || []) {
-    if (test.options?.provider && typeof test.options.provider === 'function') {
-      test.options.provider = await loadApiProvider(test.options.provider);
+    if (test.options?.provider) {
+      test.options.provider = await resolveProvider(test.options.provider, providerMap, {
+        env: testSuite.env,
+      });
     }
     if (test.assert) {
       for (const assertion of test.assert) {
@@ -87,15 +72,9 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
         }
 
         if (assertion.provider) {
-          if (typeof assertion.provider === 'object') {
-            const casted = assertion.provider as ProviderOptions;
-            invariant(casted.id, 'Provider object must have an id');
-            assertion.provider = await loadApiProvider(casted.id, { options: casted });
-          } else if (typeof assertion.provider === 'string') {
-            assertion.provider = await loadApiProvider(assertion.provider);
-          } else {
-            throw new Error('Invalid provider type');
-          }
+          assertion.provider = await resolveProvider(assertion.provider, providerMap, {
+            env: testSuite.env,
+          });
         }
       }
     }
@@ -121,6 +100,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     evalRecord,
     {
       eventSource: 'library',
+      isRedteam: Boolean(testSuite.redteam),
       ...options,
     },
   );
@@ -151,12 +131,13 @@ const redteam = {
   },
 };
 
-export { assertions, cache, evaluate, providers, redteam };
+export { assertions, cache, evaluate, loadApiProvider, redteam, guardrails };
 
 export default {
   assertions,
   cache,
   evaluate,
-  providers,
+  loadApiProvider,
   redteam,
+  guardrails,
 };

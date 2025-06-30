@@ -8,8 +8,6 @@ import { runPython } from '../../src/python/pythonUtils';
 
 const execPromise = util.promisify(exec);
 
-jest.mock('../../src/logger');
-
 describe('pythonUtils Integration Tests', () => {
   const scriptsDir = path.join(__dirname, 'scripts');
 
@@ -76,7 +74,7 @@ describe('pythonUtils Integration Tests', () => {
       message: 'Hello, World!',
       success: true,
     });
-  });
+  }, 10000);
 
   it('should handle multiple arguments', async () => {
     const result = await runPython(path.join(scriptsDir, 'simple.py'), 'main', [

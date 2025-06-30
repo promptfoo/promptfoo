@@ -1,5 +1,5 @@
 ---
-sidebar_position: 40
+sidebar_label: Llama.cpp
 ---
 
 # Llama.cpp

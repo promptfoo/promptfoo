@@ -1,5 +1,5 @@
 ---
-sidebar_position: 43
+sidebar_label: IBM BAM
 ---
 
 # IBM BAM

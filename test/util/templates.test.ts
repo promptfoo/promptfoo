@@ -1,4 +1,5 @@
 import nunjucks from 'nunjucks';
+import cliState from '../../src/cliState';
 import {
   extractVariablesFromTemplate,
   extractVariablesFromTemplates,
@@ -145,6 +146,27 @@ describe('getNunjucksEngine', () => {
     expect(engine.renderString('{{ 5 | add(3) }}', {})).toBe('8');
   });
 
+  it('should add built-in load filter for JSON parsing', () => {
+    const engine = getNunjucksEngine();
+    const jsonString = '{"name": "test", "value": 42}';
+    const template = `{{ '${jsonString}' | load }}`;
+    const result = engine.renderString(template, {});
+    expect(result).toBe('[object Object]');
+
+    // Test that the filter actually parses JSON correctly
+    const jsonData = '{"key": "value"}';
+    const loadFilter = engine.getFilter('load');
+    expect(loadFilter).toBeDefined();
+    expect(loadFilter(jsonData)).toEqual({ key: 'value' });
+  });
+
+  it('should handle load filter with invalid JSON', () => {
+    const engine = getNunjucksEngine();
+    const loadFilter = engine.getFilter('load');
+    expect(loadFilter).toBeDefined();
+    expect(() => loadFilter('invalid json')).toThrow('Unexpected token');
+  });
+
   it('should add environment variables as globals under "env"', () => {
     process.env.TEST_VAR = 'test_value';
     const engine = getNunjucksEngine();
@@ -179,32 +201,127 @@ describe('getNunjucksEngine', () => {
   });
 
   describe('environment variables as globals', () => {
+    const originalEnv = process.env;
+
+    beforeEach(() => {
+      jest.resetModules();
+      process.env = { ...originalEnv };
+      jest.isolateModules(() => {
+        jest.doMock('../../src/cliState', () => ({
+          default: {
+            config: {},
+          },
+        }));
+      });
+    });
+
+    afterEach(() => {
+      process.env = originalEnv;
+      jest.resetModules();
+    });
+
     it('should add environment variables as globals by default', () => {
       process.env.TEST_VAR = 'test_value';
       const engine = getNunjucksEngine();
       expect(engine.renderString('{{ env.TEST_VAR }}', {})).toBe('test_value');
     });
 
-    it('should not add environment variables when PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS is true', () => {
-      process.env.TEST_VAR = 'test_value';
-      process.env.PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS = 'true';
+    it('should merge cliState.config.env with process.env', () => {
+      const initialConfig = { ...cliState.config };
+
+      cliState.config = {
+        env: {
+          PROCESS_VAR: 'overridden_value',
+          CONFIG_VAR: 'config_value',
+        },
+      };
       const engine = getNunjucksEngine();
-      expect(engine.renderString('{{ env.TEST_VAR }}', {})).toBe('');
+      const rendered = engine.renderString('{{ env.PROCESS_VAR }}', {});
+      expect(rendered).toBe('overridden_value');
+      expect(engine.renderString('{{ env.CONFIG_VAR }}', {})).toBe('config_value');
+      cliState.config = initialConfig;
     });
 
-    it('should not add environment variables when in self-hosted mode by default', () => {
+    it('should handle undefined cliState.config', () => {
       process.env.TEST_VAR = 'test_value';
-      process.env.PROMPTFOO_SELF_HOSTED = 'true';
-      const engine = getNunjucksEngine();
-      expect(engine.renderString('{{ env.TEST_VAR }}', {})).toBe('');
-    });
-
-    it('should add environment variables in self-hosted mode when explicitly enabled', () => {
-      process.env.TEST_VAR = 'test_value';
-      process.env.PROMPTFOO_SELF_HOSTED = 'true';
-      process.env.PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS = 'false';
+      jest.isolateModules(() => {
+        jest.doMock('../../src/cliState', () => ({
+          default: {
+            config: undefined,
+          },
+        }));
+      });
       const engine = getNunjucksEngine();
       expect(engine.renderString('{{ env.TEST_VAR }}', {})).toBe('test_value');
+    });
+
+    it('should handle undefined cliState.config.env', () => {
+      process.env.TEST_VAR = 'test_value';
+      jest.isolateModules(() => {
+        jest.doMock('../../src/cliState', () => ({
+          default: {
+            config: {
+              env: undefined,
+            },
+          },
+        }));
+      });
+      const engine = getNunjucksEngine();
+      expect(engine.renderString('{{ env.TEST_VAR }}', {})).toBe('test_value');
+    });
+
+    it('should disable process.env but allow config env variables when PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS is true', () => {
+      process.env.TEST_VAR = 'test_value';
+      process.env.PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS = 'true';
+      const initialConfig = { ...cliState.config };
+      cliState.config = {
+        env: {
+          CONFIG_VAR: 'config_value',
+        },
+      };
+      const engine = getNunjucksEngine();
+      expect(engine.renderString('{{ env.TEST_VAR }}', {})).toBe('');
+      expect(engine.renderString('{{ env.CONFIG_VAR }}', {})).toBe('config_value');
+      cliState.config = initialConfig;
+    });
+
+    it('should disable process.env but allow config env variables when PROMPTFOO_SELF_HOSTED is true', () => {
+      process.env.TEST_VAR = 'test_value';
+      process.env.PROMPTFOO_SELF_HOSTED = 'true';
+      const initialConfig = { ...cliState.config };
+      cliState.config = {
+        env: {
+          CONFIG_VAR: 'config_value',
+        },
+      };
+      const engine = getNunjucksEngine();
+      expect(engine.renderString('{{ env.TEST_VAR }}', {})).toBe('');
+      expect(engine.renderString('{{ env.CONFIG_VAR }}', {})).toBe('config_value');
+      cliState.config = initialConfig;
+    });
+
+    it('should handle empty config env object', () => {
+      process.env.TEST_VAR = 'test_value';
+      const initialConfig = { ...cliState.config };
+      cliState.config = {
+        env: {},
+      };
+      const engine = getNunjucksEngine();
+      expect(engine.renderString('{{ env.TEST_VAR }}', {})).toBe('test_value');
+      cliState.config = initialConfig;
+    });
+
+    it('should prioritize config env variables over process.env when both exist', () => {
+      process.env.SHARED_VAR = 'process_value';
+      const initialConfig = { ...cliState.config };
+      cliState.config = {
+        env: {
+          SHARED_VAR: 'config_value',
+        },
+      };
+      const engine = getNunjucksEngine();
+      expect(engine.renderString('{{ env.SHARED_VAR }}', {})).toBe('config_value');
+      cliState.config = initialConfig;
     });
   });
 });

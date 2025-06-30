@@ -1,13 +1,11 @@
 import React, { useState } from 'react';
 import EvalSelectorDialog from './EvalSelectorDialog';
-import type { ResultLightweightWithLabel } from './types';
 
 interface EvalSelectorProps {
-  recentEvals: ResultLightweightWithLabel[];
-  onRecentEvalSelected: (evalId: string) => void;
+  onEvalSelected: (evalId: string) => void;
 }
 
-const EvalSelector: React.FC<EvalSelectorProps> = ({ recentEvals, onRecentEvalSelected }) => {
+const EvalSelector: React.FC<EvalSelectorProps> = ({ onEvalSelected }) => {
   const [open, setOpen] = useState(false);
   //const isMac =
   //  typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.userAgent);
@@ -19,6 +17,11 @@ const EvalSelector: React.FC<EvalSelectorProps> = ({ recentEvals, onRecentEvalSe
 
   const handleClose = () => {
     setOpen(false);
+  };
+
+  const handleEvalSelected = (evalId: string) => {
+    onEvalSelected(evalId);
+    handleClose();
   };
 
   React.useEffect(() => {
@@ -41,8 +44,8 @@ const EvalSelector: React.FC<EvalSelectorProps> = ({ recentEvals, onRecentEvalSe
       title="Open an Eval"
       open={open}
       onClose={handleClose}
-      recentEvals={recentEvals}
-      onRecentEvalSelected={onRecentEvalSelected}
+      onEvalSelected={handleEvalSelected}
+      onOpenFocusSearch
     />
   );
 };

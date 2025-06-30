@@ -1,4 +1,5 @@
 import nunjucks from 'nunjucks';
+import cliState from '../cliState';
 import { getEnvBool } from '../envars';
 import type { NunjucksFilterMap } from '../types';
 
@@ -26,12 +27,23 @@ export function getNunjucksEngine(
     throwOnUndefined,
   });
 
-  // Configure environment variables as template globals unless disabled. Defaults to disabled in self-hosted mode
-  if (
-    !getEnvBool('PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS', getEnvBool('PROMPTFOO_SELF_HOSTED', false))
-  ) {
-    env.addGlobal('env', process.env);
-  }
+  // Configure environment variables as template globals
+  // PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS now specifically controls process.env access (defaults to true in self-hosted mode)
+  // Config env variables from the config file are always available
+  const processEnvVarsDisabled = getEnvBool(
+    'PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS',
+    getEnvBool('PROMPTFOO_SELF_HOSTED', false),
+  );
+
+  const envGlobals = {
+    ...(processEnvVarsDisabled ? {} : process.env),
+    ...cliState.config?.env,
+  };
+  env.addGlobal('env', envGlobals);
+
+  env.addFilter('load', function (str) {
+    return JSON.parse(str);
+  });
 
   if (filters) {
     for (const [name, filter] of Object.entries(filters)) {

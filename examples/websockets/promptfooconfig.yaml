@@ -9,7 +9,7 @@ providers:
   - id: 'ws://localhost:4000'
     config:
       messageTemplate: '{"prompt": "{{prompt}}", "model": "{{model}}"}'
-      responseParser: 'data.output'
+      transformResponse: 'data.output'
 
 tests:
   - vars:

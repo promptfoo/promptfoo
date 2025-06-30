@@ -26,7 +26,7 @@ export function getDbSignalPath() {
 
 export function getDb() {
   if (!dbInstance) {
-    const sqlite = new Database(process.env.IS_TESTING ? ':memory:' : getDbPath());
+    const sqlite = new Database(getEnvBool('IS_TESTING') ? ':memory:' : getDbPath());
     const logger = new DefaultLogger({ writer: new DrizzleLogWriter() });
     dbInstance = drizzle(sqlite, { logger });
   }

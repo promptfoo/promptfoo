@@ -1,6 +1,6 @@
 import type Cloudflare from 'cloudflare';
-import invariant from 'tiny-invariant';
 import { fetchWithCache } from '../cache';
+import type { EnvVarKey } from '../envars';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import type {
@@ -11,6 +11,7 @@ import type {
   ProviderResponse,
 } from '../types';
 import type { EnvOverrides } from '../types/env';
+import invariant from '../util/invariant';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
 /**
@@ -85,7 +86,7 @@ abstract class CloudflareAiGenericProvider implements ApiProvider {
     const apiTokenCandidate =
       this.config?.apiKey ||
       (this.config?.apiKeyEnvar
-        ? process.env[this.config.apiKeyEnvar] ||
+        ? getEnvString(this.config.apiKeyEnvar as EnvVarKey) ||
           this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
         : undefined) ||
       this.env?.CLOUDFLARE_API_KEY ||
@@ -99,7 +100,7 @@ abstract class CloudflareAiGenericProvider implements ApiProvider {
     const accountIdCandidate =
       this.config?.accountId ||
       (this.config?.accountIdEnvar
-        ? process.env[this.config.accountIdEnvar] ||
+        ? getEnvString(this.config.accountIdEnvar as EnvVarKey) ||
           this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
         : undefined) ||
       this.env?.CLOUDFLARE_ACCOUNT_ID ||
@@ -273,7 +274,9 @@ export class CloudflareAiEmbeddingProvider extends CloudflareAiGenericProvider {
     try {
       const embedding = data.result.data[0];
       if (!embedding) {
-        logger.error('No data could be found in the Cloudflare API response', JSON.stringify(data));
+        logger.error(
+          `No data could be found in the Cloudflare API response: ${JSON.stringify(data)}`,
+        );
         throw new Error('No embedding returned');
       }
       const ret = {

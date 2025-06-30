@@ -1,35 +1,44 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, act, fireEvent } from '@testing-library/react';
 import React from 'react';
 import type { AssertionType, GradingResult } from '@promptfoo/types';
 import userEvent from '@testing-library/user-event';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 
-describe('EvalOutputPromptDialog', () => {
-  const mockOnClose = vi.fn();
-  const defaultProps = {
-    open: true,
-    onClose: mockOnClose,
-    prompt: 'Test prompt',
-    provider: 'test-provider',
-    output: 'Test output',
-    gradingResults: [
-      {
-        pass: true,
-        score: 1.0,
-        assertion: {
-          type: 'contains',
-          value: 'expected value',
-          metric: 'Custom Metric Name',
-        },
-        reason: 'Test reason',
-      } satisfies GradingResult,
-    ],
-    metadata: {
-      testKey: 'testValue',
-    },
-  };
+// Mock the Citations component to verify it receives the correct props
+vi.mock('./Citations', () => ({
+  default: vi.fn(({ citations }) => (
+    <div data-testid="citations-component" data-citations={JSON.stringify(citations)}>
+      Mocked Citations Component
+    </div>
+  )),
+}));
 
+const mockOnClose = vi.fn();
+const defaultProps = {
+  open: true,
+  onClose: mockOnClose,
+  prompt: 'Test prompt',
+  provider: 'test-provider',
+  output: 'Test output',
+  gradingResults: [
+    {
+      pass: true,
+      score: 1.0,
+      assertion: {
+        type: 'contains',
+        value: 'expected value',
+        metric: 'Custom Metric Name',
+      },
+      reason: 'Test reason',
+    } satisfies GradingResult,
+  ],
+  metadata: {
+    testKey: 'testValue',
+  },
+};
+
+describe('EvalOutputPromptDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -42,13 +51,13 @@ describe('EvalOutputPromptDialog', () => {
   it('displays prompt content', () => {
     render(<EvalOutputPromptDialog {...defaultProps} />);
     expect(screen.getByText('Prompt')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('Test prompt')).toBeInTheDocument();
+    expect(screen.getByText('Test prompt')).toBeInTheDocument();
   });
 
   it('displays output when provided', () => {
     render(<EvalOutputPromptDialog {...defaultProps} />);
     expect(screen.getByText('Output')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('Test output')).toBeInTheDocument();
+    expect(screen.getByText('Test output')).toBeInTheDocument();
   });
 
   it('displays assertion results table with metrics when provided', () => {
@@ -96,9 +105,40 @@ describe('EvalOutputPromptDialog', () => {
     Object.assign(navigator, { clipboard: mockClipboard });
 
     render(<EvalOutputPromptDialog {...defaultProps} />);
-    await userEvent.click(screen.getByTestId('ContentCopyIcon').parentElement!);
+
+    // Find the prompt content box and trigger hover to make copy button visible
+    const promptBox = screen.getByText('Test prompt').closest('.MuiPaper-root');
+    expect(promptBox).toBeInTheDocument();
+
+    fireEvent.mouseEnter(promptBox!);
+
+    // Get the button by its aria-label (updated to match new implementation)
+    const copyButton = screen.getByLabelText('Copy prompt');
+    await userEvent.click(copyButton);
 
     expect(mockClipboard.writeText).toHaveBeenCalledWith('Test prompt');
+    expect(screen.getByTestId('CheckIcon')).toBeInTheDocument();
+  });
+
+  it('copies assertion value to clipboard when copy button is clicked', async () => {
+    const mockClipboard = {
+      writeText: vi.fn().mockResolvedValue(undefined),
+    };
+    Object.assign(navigator, { clipboard: mockClipboard });
+
+    render(<EvalOutputPromptDialog {...defaultProps} />);
+
+    // Trigger the hover event on the value cell to make the copy button visible
+    const valueCell = screen.getByText('expected value').closest('td');
+    if (valueCell) {
+      fireEvent.mouseEnter(valueCell);
+    }
+
+    // Get the button by its aria-label
+    const copyButton = screen.getByLabelText('Copy assertion value 0');
+    await userEvent.click(copyButton);
+
+    expect(mockClipboard.writeText).toHaveBeenCalledWith('expected value');
     expect(screen.getByTestId('CheckIcon')).toBeInTheDocument();
   });
 
@@ -121,6 +161,145 @@ describe('EvalOutputPromptDialog', () => {
     render(<EvalOutputPromptDialog {...propsWithLongValue} />);
     const truncatedCell = screen.getByText(/^a+\.\.\.$/);
     await userEvent.click(truncatedCell);
+    expect(screen.getByText(longValue)).toBeInTheDocument();
+  });
+
+  it('displays the Citations component when citations are in metadata', () => {
+    const propsWithCitations = {
+      ...defaultProps,
+      metadata: {
+        ...defaultProps.metadata,
+        citations: [
+          {
+            retrievedReferences: [
+              {
+                content: { text: 'Citation content' },
+                location: { s3Location: { uri: 'https://example.com' } },
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithCitations} />);
+
+    // Check if Citations component is rendered with correct props
+    const citationsComponent = screen.getByTestId('citations-component');
+    expect(citationsComponent).toBeInTheDocument();
+
+    // Verify citations data was passed correctly
+    const passedCitations = JSON.parse(citationsComponent.getAttribute('data-citations') || '[]');
+    expect(passedCitations).toEqual(propsWithCitations.metadata.citations);
+  });
+
+  it('does not display the Citations component when no citations in metadata', () => {
+    render(<EvalOutputPromptDialog {...defaultProps} />);
+    expect(screen.queryByTestId('citations-component')).not.toBeInTheDocument();
+  });
+
+  it('excludes citations from metadata table to avoid duplication', () => {
+    const propsWithCitations = {
+      ...defaultProps,
+      metadata: {
+        regularKey: 'regular value',
+        citations: [{ source: 'test', content: 'test content' }],
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithCitations} />);
+
+    // Regular metadata should be in the table
+    expect(screen.getByText('regularKey')).toBeInTheDocument();
+    expect(screen.getByText('regular value')).toBeInTheDocument();
+
+    // Citations shouldn't appear in the metadata table
+    const metadataTable = screen.getByText('Metadata').closest('div');
+    expect(metadataTable?.textContent).not.toContain('citations');
+  });
+});
+
+describe('EvalOutputPromptDialog metadata interaction', () => {
+  let user: ReturnType<typeof userEvent.setup>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    user = userEvent.setup();
+  });
+
+  it('expands metadata value on single click', async () => {
+    const longValue = 'a'.repeat(400);
+    const propsWithLongValue = {
+      ...defaultProps,
+      metadata: {
+        testKey: longValue,
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithLongValue} />);
+    const truncatedCell = screen.getByText(/^a+\.\.\.$/);
+
+    await act(async () => {
+      await user.click(truncatedCell);
+    });
+
+    expect(screen.getByText(longValue)).toBeInTheDocument();
+  });
+
+  it('collapses metadata value on double click', async () => {
+    const longValue = 'a'.repeat(400);
+    const propsWithLongValue = {
+      ...defaultProps,
+      metadata: {
+        testKey: longValue,
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithLongValue} />);
+    const cell = screen.getByText(/^a+\.\.\.$/);
+
+    // First click to expand
+    await act(async () => {
+      await user.click(cell);
+    });
+    expect(screen.getByText(longValue)).toBeInTheDocument();
+
+    // Quick second click to collapse (within 300ms threshold)
+    await act(async () => {
+      await user.click(cell);
+    });
+
+    expect(screen.getByText(/^a+\.\.\.$/)).toBeInTheDocument();
+  });
+
+  it('maintains expanded state if second click is after threshold', async () => {
+    const longValue = 'a'.repeat(400);
+    const propsWithLongValue = {
+      ...defaultProps,
+      metadata: {
+        testKey: longValue,
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithLongValue} />);
+    const cell = screen.getByText(/^a+\.\.\.$/);
+
+    // First click to expand
+    await act(async () => {
+      await user.click(cell);
+    });
+    expect(screen.getByText(longValue)).toBeInTheDocument();
+
+    // Wait just over the double-click threshold (300ms)
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 301));
+    });
+
+    // Second click should keep it expanded
+    await act(async () => {
+      await user.click(cell);
+    });
+
     expect(screen.getByText(longValue)).toBeInTheDocument();
   });
 });

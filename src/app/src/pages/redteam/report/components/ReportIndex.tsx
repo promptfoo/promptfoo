@@ -10,12 +10,17 @@ import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
+import TablePagination from '@mui/material/TablePagination';
 import TableRow from '@mui/material/TableRow';
 import TableSortLabel from '@mui/material/TableSortLabel';
+import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import type { ResultLightweightWithLabel } from '@promptfoo/types';
+import fuzzysearch from 'fuzzysearch';
 
 type SortField = 'description' | 'createdAt' | 'evalId';
+
+const ROWS_PER_PAGE = 50;
 
 const ReportIndex: React.FC = () => {
   const navigate = useNavigate();
@@ -23,6 +28,12 @@ const ReportIndex: React.FC = () => {
   const [isLoading, setIsLoading] = React.useState(true);
   const [sortField, setSortField] = React.useState<SortField>('createdAt');
   const [sortOrder, setSortOrder] = React.useState<'asc' | 'desc'>('desc');
+  const [searchQuery, setSearchQuery] = React.useState('');
+  const [page, setPage] = React.useState(0);
+
+  const handleChangePage = (event: unknown, newPage: number) => {
+    setPage(newPage);
+  };
 
   React.useEffect(() => {
     const fetchRecentEvals = async () => {
@@ -52,8 +63,16 @@ const ReportIndex: React.FC = () => {
     setSortOrder(isAsc ? 'desc' : 'asc');
   };
 
-  const sortedEvals = React.useMemo(() => {
-    return [...recentEvals].sort((a, b) => {
+  const filteredAndSortedEvals = React.useMemo(() => {
+    const filtered = recentEvals.filter((eval_) => {
+      const searchLower = searchQuery.toLowerCase();
+      return (
+        fuzzysearch(searchLower, (eval_.description || '').toLowerCase()) ||
+        fuzzysearch(searchLower, eval_.evalId.toLowerCase())
+      );
+    });
+
+    return filtered.sort((a, b) => {
       const multiplier = sortOrder === 'asc' ? 1 : -1;
 
       switch (sortField) {
@@ -67,7 +86,12 @@ const ReportIndex: React.FC = () => {
           return 0;
       }
     });
-  }, [recentEvals, sortField, sortOrder]);
+  }, [recentEvals, sortField, sortOrder, searchQuery]);
+
+  const paginatedEvals = React.useMemo(() => {
+    const startIndex = page * ROWS_PER_PAGE;
+    return filteredAndSortedEvals.slice(startIndex, startIndex + ROWS_PER_PAGE);
+  }, [filteredAndSortedEvals, page]);
 
   if (isLoading) {
     return <Box sx={{ width: '100%', textAlign: 'center' }}>Loading...</Box>;
@@ -95,6 +119,16 @@ const ReportIndex: React.FC = () => {
       <Typography variant="h4" gutterBottom>
         Recent reports
       </Typography>
+      <Box sx={{ mb: 3 }}>
+        <TextField
+          fullWidth
+          variant="outlined"
+          placeholder="Search by name or eval ID..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          size="small"
+        />
+      </Box>
       <TableContainer component={Card}>
         <Table>
           <TableHead>
@@ -129,7 +163,7 @@ const ReportIndex: React.FC = () => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {sortedEvals.map((eval_) => (
+            {paginatedEvals.map((eval_) => (
               <TableRow
                 key={eval_.evalId}
                 hover
@@ -161,6 +195,16 @@ const ReportIndex: React.FC = () => {
             ))}
           </TableBody>
         </Table>
+        {filteredAndSortedEvals.length > ROWS_PER_PAGE && (
+          <TablePagination
+            component="div"
+            count={filteredAndSortedEvals.length}
+            page={page}
+            onPageChange={handleChangePage}
+            rowsPerPage={ROWS_PER_PAGE}
+            rowsPerPageOptions={[ROWS_PER_PAGE]}
+          />
+        )}
       </TableContainer>
     </Container>
   );

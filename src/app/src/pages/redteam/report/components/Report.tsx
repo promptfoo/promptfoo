@@ -1,10 +1,15 @@
 import React from 'react';
+import EnterpriseBanner from '@app/components/EnterpriseBanner';
+import { usePageMeta } from '@app/hooks/usePageMeta';
 import { callApi } from '@app/utils/api';
+import ListAltIcon from '@mui/icons-material/ListAlt';
+import PrintIcon from '@mui/icons-material/Print';
 import WarningIcon from '@mui/icons-material/Warning';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import Chip from '@mui/material/Chip';
 import Container from '@mui/material/Container';
+import IconButton from '@mui/material/IconButton';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
@@ -13,7 +18,6 @@ import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { categoryAliasesReverse, type categoryAliases } from '@promptfoo/redteam/constants';
 import {
   type EvaluateResult,
   type ResultsFile,
@@ -32,7 +36,7 @@ import RiskCategories from './RiskCategories';
 import StrategyStats from './StrategyStats';
 import TestSuites from './TestSuites';
 import ToolsDialog from './ToolsDialog';
-import { getPluginIdFromResult, getStrategyIdFromMetric } from './shared';
+import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
 import './Report.css';
 
 const App: React.FC = () => {
@@ -85,6 +89,10 @@ const App: React.FC = () => {
   }, []);
 
   const failuresByPlugin = React.useMemo(() => {
+    if (!evalData) {
+      return {};
+    }
+
     const failures: Record<
       string,
       { prompt: string; output: string; gradingResult?: GradingResult; result?: EvaluateResult }[]
@@ -95,14 +103,17 @@ const App: React.FC = () => {
         console.warn(`Could not get failures for plugin ${pluginId}`);
         return;
       }
-      if (pluginId && !result.gradingResult?.pass) {
+
+      if (!result.success || !result.gradingResult?.pass) {
         if (!failures[pluginId]) {
           failures[pluginId] = [];
         }
+        // Backwards compatibility for old evals that used 'query' instead of 'prompt'. 2024-12-12
+        const injectVar = evalData.config.redteam?.injectVar ?? 'prompt';
+        const injectVarValue =
+          result.vars[injectVar]?.toString() || result.vars['query']?.toString();
         failures[pluginId].push({
-          // FIXME(ian): Use injectVar (and contextVar), not hardcoded query
-          prompt:
-            result.vars.query?.toString() || result.vars.prompt?.toString() || result.prompt.raw,
+          prompt: injectVarValue || result.prompt.raw,
           output: result.response?.output,
           gradingResult: result.gradingResult || undefined,
           result,
@@ -113,6 +124,10 @@ const App: React.FC = () => {
   }, [evalData]);
 
   const passesByPlugin = React.useMemo(() => {
+    if (!evalData) {
+      return {};
+    }
+
     const passes: Record<
       string,
       { prompt: string; output: string; gradingResult?: GradingResult; result?: EvaluateResult }[]
@@ -123,7 +138,8 @@ const App: React.FC = () => {
         console.warn(`Could not get passes for plugin ${pluginId}`);
         return;
       }
-      if (pluginId && result.gradingResult?.pass) {
+
+      if (result.success && result.gradingResult?.pass) {
         if (!passes[pluginId]) {
           passes[pluginId] = [];
         }
@@ -139,9 +155,80 @@ const App: React.FC = () => {
     return passes;
   }, [evalData]);
 
-  React.useEffect(() => {
-    document.title = `Report: ${evalData?.config.description || evalId || 'Red Team'} | promptfoo`;
-  }, [evalData, evalId]);
+  const categoryStats = React.useMemo(() => {
+    if (!evalData) {
+      return {};
+    }
+
+    return evalData.results.results.reduce(
+      (acc, row) => {
+        const pluginId = getPluginIdFromResult(row);
+        if (!pluginId) {
+          return acc;
+        }
+
+        acc[pluginId] = acc[pluginId] || { pass: 0, total: 0, passWithFilter: 0 };
+        acc[pluginId].total++;
+
+        // Check if moderation tests failed but other tests passed - this indicates content was
+        // flagged by moderation but would have passed otherwise
+        const moderationPassed = row.gradingResult?.componentResults?.some(
+          (result) => result.assertion?.type === 'moderation' && !result.pass,
+        );
+
+        if (row.success) {
+          acc[pluginId].pass++;
+          acc[pluginId].passWithFilter++; // Both regular and filtered pass counts increment
+        } else if (moderationPassed) {
+          acc[pluginId].passWithFilter++; // Only filtered pass count increments (partial success under moderation)
+        }
+        return acc;
+      },
+      {} as Record<string, { pass: number; total: number; passWithFilter: number }>,
+    );
+  }, [evalData]);
+
+  const strategyStats = React.useMemo(() => {
+    if (!failuresByPlugin || !passesByPlugin) {
+      return {};
+    }
+
+    const stats: Record<string, { pass: number; total: number }> = {};
+
+    // Process tests in failuresByPlugin (attack successes)
+    Object.values(failuresByPlugin).forEach((tests) => {
+      tests.forEach((test) => {
+        const strategyId = getStrategyIdFromTest(test);
+
+        if (!stats[strategyId]) {
+          stats[strategyId] = { pass: 0, total: 0 };
+        }
+
+        stats[strategyId].pass += 1;
+        stats[strategyId].total += 1;
+      });
+    });
+
+    // Process tests in passesByPlugin (attack failures)
+    Object.values(passesByPlugin).forEach((tests) => {
+      tests.forEach((test) => {
+        const strategyId = getStrategyIdFromTest(test);
+
+        if (!stats[strategyId]) {
+          stats[strategyId] = { pass: 0, total: 0 };
+        }
+
+        stats[strategyId].total += 1;
+      });
+    });
+
+    return stats;
+  }, [failuresByPlugin, passesByPlugin]);
+
+  usePageMeta({
+    title: `Report: ${evalData?.config.description || evalId || 'Red Team'}`,
+    description: 'Red team evaluation report',
+  });
 
   if (!evalData || !evalId) {
     return <Box sx={{ width: '100%', textAlign: 'center' }}>Loading...</Box>;
@@ -187,94 +274,10 @@ const App: React.FC = () => {
   let tools = [];
   if (Array.isArray(evalData.config.providers) && isProviderOptions(evalData.config.providers[0])) {
     const providerTools = evalData.config.providers[0].config?.tools;
-    tools = Array.isArray(providerTools) ? providerTools : [providerTools];
+    // If providerTools exists, convert it to an array (if it's not already)
+    // Otherwise, use an empty array
+    tools = providerTools ? (Array.isArray(providerTools) ? providerTools : [providerTools]) : [];
   }
-
-  const categoryStats = evalData.results.results.reduce(
-    (acc, row) => {
-      const harm = row.vars['harmCategory'];
-      const metricNames =
-        row.gradingResult?.componentResults?.map((result) => result.assertion?.metric) || [];
-
-      const categoriesToCount = [harm, ...metricNames].filter((c) => c);
-      for (const category of categoriesToCount) {
-        if (typeof category !== 'string') {
-          continue;
-        }
-        const pluginName =
-          categoryAliasesReverse[category.split('/')[0] as keyof typeof categoryAliases];
-        if (!pluginName) {
-          console.log('Unknown harm category:', category);
-          return acc;
-        }
-
-        const rowPassedModeration = row.gradingResult?.componentResults?.some((result) => {
-          const isModeration = result.assertion?.type === 'moderation';
-          const isPass = result.pass;
-          return isModeration && isPass;
-        });
-        const rowPassedLlmRubric = row.gradingResult?.componentResults?.some((result) => {
-          const isLlmRubric =
-            result.assertion?.type === 'llm-rubric' ||
-            result.assertion?.type.startsWith('promptfoo:redteam');
-          const isPass = result.pass;
-          return isLlmRubric && isPass;
-        });
-        const rowPassedHuman = row.gradingResult?.componentResults?.some((result) => {
-          const isHuman = result.assertion?.type === 'human';
-          const isPass = result.pass;
-          return isHuman && isPass;
-        });
-
-        acc[pluginName] = acc[pluginName] || { pass: 0, total: 0, passWithFilter: 0 };
-        acc[pluginName].total++;
-        if (rowPassedLlmRubric || rowPassedHuman) {
-          // Note: We count the row as passed if it passed the LLM rubric or human, even if it failed moderation
-          acc[pluginName].pass++;
-          acc[pluginName].passWithFilter++;
-        } else if (!rowPassedModeration) {
-          acc[pluginName].passWithFilter++;
-        }
-      }
-      return acc;
-    },
-    {} as Record<string, { pass: number; total: number; passWithFilter: number }>,
-  );
-
-  const strategyStats = evalData.results.results.reduce(
-    (acc, row) => {
-      const metricNames =
-        row.gradingResult?.componentResults?.map((result) => result.assertion?.metric) || [];
-
-      for (const metric of metricNames) {
-        if (typeof metric !== 'string') {
-          continue;
-        }
-
-        let strategyId = getStrategyIdFromMetric(metric);
-        if (!strategyId) {
-          strategyId = 'basic';
-        }
-
-        if (!acc[strategyId]) {
-          acc[strategyId] = { pass: 0, total: 0 };
-        }
-
-        acc[strategyId].total++;
-
-        const passed = row.gradingResult?.componentResults?.some(
-          (result) => result.assertion?.metric === metric && result.pass,
-        );
-
-        if (passed) {
-          acc[strategyId].pass++;
-        }
-      }
-
-      return acc;
-    },
-    {} as Record<string, { pass: number; total: number }>,
-  );
 
   const handlePromptChipClick = () => {
     setIsPromptModalOpen(true);
@@ -286,14 +289,46 @@ const App: React.FC = () => {
   };
 
   return (
-    <Container>
+    <Container maxWidth="xl">
       <Stack spacing={4} pb={8} pt={2}>
+        {evalData.config.redteam && <EnterpriseBanner evalId={evalId || ''} />}
         <Card className="report-header" sx={{ position: 'relative' }}>
-          <Box sx={{ position: 'absolute', top: 8, right: 8, display: 'flex' }}>
+          <Box
+            sx={{ position: 'absolute', top: 8, right: 8, display: 'flex' }}
+            className="print-hide"
+          >
+            <Tooltip title="View all logs" placement="top">
+              <IconButton
+                sx={{ position: 'relative' }}
+                aria-label="view all logs"
+                onClick={(event) => {
+                  const url = `/eval/${evalId}`;
+                  if (event.ctrlKey || event.metaKey) {
+                    window.open(url, '_blank');
+                  } else {
+                    window.location.href = url;
+                  }
+                }}
+              >
+                <ListAltIcon />
+              </IconButton>
+            </Tooltip>
             <ReportDownloadButton
               evalDescription={evalData.config.description || evalId}
               evalData={evalData}
             />
+            <Tooltip
+              title="Print this page (Ctrl+P) and select 'Save as PDF' for best results"
+              placement="top"
+            >
+              <IconButton
+                sx={{ position: 'relative' }}
+                aria-label="print page"
+                onClick={() => window.print()}
+              >
+                <PrintIcon />
+              </IconButton>
+            </Tooltip>
             <ReportSettingsDialogButton />
           </Box>
           <Typography variant="h4">
@@ -313,7 +348,7 @@ const App: React.FC = () => {
                 size="small"
                 label={
                   <>
-                    <strong>Model:</strong> {selectedPrompt.provider}
+                    <strong>Target:</strong> {selectedPrompt.provider}
                   </>
                 }
                 onClick={handlePromptChipClick}
@@ -356,7 +391,7 @@ const App: React.FC = () => {
                 style={{ cursor: prompts.length > 1 ? 'pointer' : 'default' }}
               />
             )}
-            {tools.length > -1 && (
+            {tools.length > 0 && (
               <Chip
                 size="small"
                 label={
@@ -371,10 +406,14 @@ const App: React.FC = () => {
           </Box>
         </Card>
         <Overview categoryStats={categoryStats} plugins={evalData.config.redteam.plugins || []} />
-        <FrameworkCompliance categoryStats={categoryStats} strategyStats={strategyStats} />
-        <StrategyStats strategyStats={strategyStats} />
+        <StrategyStats
+          strategyStats={strategyStats}
+          failuresByPlugin={failuresByPlugin}
+          passesByPlugin={passesByPlugin}
+        />
         <RiskCategories
           categoryStats={categoryStats}
+          strategyStats={strategyStats}
           evalId={evalId}
           failuresByPlugin={failuresByPlugin}
           passesByPlugin={passesByPlugin}
@@ -384,6 +423,7 @@ const App: React.FC = () => {
           categoryStats={categoryStats}
           plugins={evalData.config.redteam.plugins || []}
         />
+        <FrameworkCompliance categoryStats={categoryStats} strategyStats={strategyStats} />
       </Stack>
       <Modal
         open={isPromptModalOpen}

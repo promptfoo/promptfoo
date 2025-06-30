@@ -1,15 +1,12 @@
-import path from 'path';
 import cliState from '../cliState';
 import { importModule } from '../esm';
+import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
-import type { Prompt, Vars } from '../types';
-import { isJavascriptFile } from './file';
+import type { Vars } from '../types';
+import { safeJoin } from './file.node';
+import { isJavascriptFile } from './fileExtensions';
 
-export type TransformContext = {
-  vars?: Vars;
-  prompt: Partial<Prompt>;
-  uuid?: string;
-};
+export type TransformContext = object;
 
 export enum TransformInputType {
   OUTPUT = 'output',
@@ -76,7 +73,9 @@ async function getFileTransformFunction(filePath: string): Promise<Function> {
   const [actualFilePath, functionName] = parseFilePathAndFunctionName(
     filePath.slice('file://'.length),
   );
-  const fullPath = path.join(cliState.basePath || '', actualFilePath);
+
+  const fullPath = safeJoin(cliState.basePath || '', actualFilePath);
+
   if (isJavascriptFile(fullPath)) {
     return getJavascriptTransformFunction(fullPath, functionName);
   } else if (fullPath.endsWith('.py')) {
@@ -102,11 +101,28 @@ function getInlineTransformFunction(code: string, inputType: TransformInputType)
 async function getTransformFunction(
   codeOrFilepath: string,
   inputType: TransformInputType,
-): Promise<Function> {
+): Promise<Function | null> {
+  let transformFn: Function | null = null;
   if (codeOrFilepath.startsWith('file://')) {
-    return getFileTransformFunction(codeOrFilepath);
+    try {
+      transformFn = await getFileTransformFunction(codeOrFilepath);
+    } catch (error) {
+      logger.error(
+        `Error loading transform function from file: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw error;
+    }
+  } else {
+    try {
+      transformFn = getInlineTransformFunction(codeOrFilepath, inputType);
+    } catch (error) {
+      logger.error(
+        `Error creating inline transform function: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw error;
+    }
   }
-  return getInlineTransformFunction(codeOrFilepath, inputType);
+  return transformFn;
 }
 
 /**
@@ -118,7 +134,7 @@ async function getTransformFunction(
  * If no function name is provided for Python files, it defaults to 'get_transform'.
  * For inline code, it's treated as JavaScript.
  * @param transformInput - The output to be transformed. Can be a string or an object.
- * @param context - The context object containing variables and prompt information.
+ * @param context - A context object that will be passed to the transform function.
  * @param validateReturn - Optional. If true, throws an error if the transform function doesn't return a value.
  * @returns A promise that resolves to the transformed output.
  * @throws Error if the file format is unsupported or if the transform function
@@ -130,12 +146,15 @@ export async function transform(
   context: TransformContext,
   validateReturn: boolean = true,
   inputType: TransformInputType = TransformInputType.OUTPUT,
-): Promise<string | object | undefined> {
+): Promise<any> {
   const postprocessFn = await getTransformFunction(codeOrFilepath, inputType);
+  if (!postprocessFn) {
+    throw new Error(`Invalid transform function for ${codeOrFilepath}`);
+  }
 
   const ret = await Promise.resolve(postprocessFn(transformInput, context));
 
-  if (validateReturn && ret == null) {
+  if (validateReturn && (ret === null || ret === undefined)) {
     throw new Error(`Transform function did not return a value\n\n${codeOrFilepath}`);
   }
 

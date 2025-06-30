@@ -1,6 +1,6 @@
-import invariant from 'tiny-invariant';
 import { matchesContextFaithfulness } from '../matchers';
 import type { AssertionParams, GradingResult } from '../types';
+import invariant from '../util/invariant';
 
 export async function handleContextFaithfulness({
   assertion,
@@ -27,7 +27,7 @@ export async function handleContextFaithfulness({
       test.vars.query,
       output,
       test.vars.context,
-      assertion.threshold || 0,
+      assertion.threshold ?? 0,
       test.options,
     )),
   };

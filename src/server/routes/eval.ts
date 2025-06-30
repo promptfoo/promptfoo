@@ -1,6 +1,6 @@
+import dedent from 'dedent';
 import { Router } from 'express';
 import type { Request, Response } from 'express';
-import invariant from 'tiny-invariant';
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 import { fromZodError } from 'zod-validation-error';
@@ -11,23 +11,32 @@ import type {
   GradingResult,
   Job,
   ResultsFile,
+  EvalTableDTO,
 } from '../../index';
 import promptfoo from '../../index';
 import logger from '../../logger';
 import Eval from '../../models/eval';
 import EvalResult from '../../models/evalResult';
-import { updateResult, deleteEval, writeResultsToDatabase } from '../../util';
+import { updateResult, deleteEval, writeResultsToDatabase } from '../../util/database';
+import invariant from '../../util/invariant';
 import { ApiSchemas } from '../apiSchemas';
 
 export const evalRouter = Router();
 
 // Running jobs
-const evalJobs = new Map<string, Job>();
+export const evalJobs = new Map<string, Job>();
 
 evalRouter.post('/job', (req: Request, res: Response): void => {
   const { evaluateOptions, ...testSuite } = req.body as EvaluateTestSuiteWithEvaluateOptions;
   const id = uuidv4();
-  evalJobs.set(id, { status: 'in-progress', progress: 0, total: 0, result: null });
+  evalJobs.set(id, {
+    evalId: null,
+    status: 'in-progress',
+    progress: 0,
+    total: 0,
+    result: null,
+    logs: [],
+  });
 
   promptfoo
     .evaluate(
@@ -51,7 +60,20 @@ evalRouter.post('/job', (req: Request, res: Response): void => {
       invariant(job, 'Job not found');
       job.status = 'complete';
       job.result = await result.toEvaluateSummary();
+      job.evalId = result.id;
       console.log(`[${id}] Complete`);
+    })
+    .catch((error) => {
+      logger.error(dedent`Failed to eval tests:
+        Error: ${error}
+        Body: ${JSON.stringify(req.body, null, 2)}`);
+
+      const job = evalJobs.get(id);
+      invariant(job, 'Job not found');
+      job.status = 'error';
+      job.result = null;
+      job.evalId = null;
+      job.logs = [String(error)];
     });
 
   res.json({ id });
@@ -65,9 +87,24 @@ evalRouter.get('/job/:id', (req: Request, res: Response): void => {
     return;
   }
   if (job.status === 'complete') {
-    res.json({ status: 'complete', result: job.result });
+    res.json({
+      status: 'complete',
+      result: job.result,
+      evalId: job.evalId,
+      logs: job.logs,
+    });
+  } else if (job.status === 'error') {
+    res.json({
+      status: 'error',
+      logs: job.logs,
+    });
   } else {
-    res.json({ status: 'in-progress', progress: job.progress, total: job.total });
+    res.json({
+      status: 'in-progress',
+      progress: job.progress,
+      total: job.total,
+      logs: job.logs,
+    });
   }
 });
 
@@ -121,10 +158,140 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
       const validationError = fromZodError(error);
       res.status(400).json({ error: validationError.message });
     } else {
-      console.error('Failed to update eval author:', error);
+      logger.error(`Failed to update eval author: ${error}`);
       res.status(500).json({ error: 'Failed to update eval author' });
     }
   }
+});
+
+evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params;
+  const limit = Number(req.query.limit) || 50;
+  const offset = Number(req.query.offset) || 0;
+  const filter = String(req.query.filter || 'all');
+  const searchText = req.query.search ? String(req.query.search) : '';
+  const metricFilter = req.query.metric ? String(req.query.metric) : '';
+
+  const comparisonEvalIds = Array.isArray(req.query.comparisonEvalIds)
+    ? req.query.comparisonEvalIds
+    : typeof req.query.comparisonEvalIds === 'string'
+      ? [req.query.comparisonEvalIds]
+      : [];
+
+  const eval_ = await Eval.findById(id);
+  if (!eval_) {
+    res.status(404).json({ error: 'Eval not found' });
+    return;
+  }
+
+  const table = await eval_.getTablePage({
+    offset,
+    limit,
+    filterMode: filter as any,
+    searchQuery: searchText,
+    metricFilter,
+  });
+
+  const indices = table.body.map((row) => row.testIdx);
+
+  let returnTable = { head: table.head, body: table.body };
+
+  if (comparisonEvalIds.length > 0) {
+    console.log('comparisonEvalIds', comparisonEvalIds);
+    const comparisonEvals = await Promise.all(
+      comparisonEvalIds.map(async (comparisonEvalId) => {
+        const comparisonEval_ = await Eval.findById(comparisonEvalId as string);
+        return comparisonEval_;
+      }),
+    );
+
+    if (comparisonEvals.some((comparisonEval_) => !comparisonEval_)) {
+      res.status(404).json({ error: 'Comparison eval not found' });
+      return;
+    }
+
+    const comparisonTables = await Promise.all(
+      comparisonEvals.map(async (comparisonEval_) => {
+        invariant(comparisonEval_, 'Comparison eval not found');
+        return comparisonEval_.getTablePage({
+          offset: 0,
+          limit: indices.length,
+          filterMode: 'all',
+          testIndices: indices,
+          searchQuery: searchText,
+          metricFilter,
+        });
+      }),
+    );
+
+    returnTable = {
+      head: {
+        prompts: [
+          ...table.head.prompts.map((prompt) => ({
+            ...prompt,
+            label: `[${id}] ${prompt.label || ''}`,
+          })),
+          ...comparisonTables.flatMap((table) =>
+            table.head.prompts.map((prompt) => ({
+              ...prompt,
+              label: `[${table.id}] ${prompt.label || ''}`,
+            })),
+          ),
+        ],
+        vars: table.head.vars, // Assuming vars are the same
+      },
+      body: table.body.map((row, index) => {
+        // Find matching row in comparison table by test index
+        const testIdx = row.testIdx;
+        const matchingRows = comparisonTables
+          .map((table) => {
+            const compRow = table.body.find((compRow) => {
+              const compTestIdx = compRow.testIdx;
+              return compTestIdx === testIdx;
+            });
+            return compRow;
+          })
+          .filter((r) => r !== undefined);
+
+        return {
+          ...row,
+          outputs: [...row.outputs, ...(matchingRows.flatMap((r) => r?.outputs) || [])],
+        };
+      }),
+    };
+  }
+
+  res.json({
+    table: returnTable,
+    totalCount: table.totalCount,
+    filteredCount: table.filteredCount,
+    config: eval_.config,
+    author: eval_.author || null,
+    version: eval_.version(),
+  } as EvalTableDTO);
+});
+
+evalRouter.post('/:id/results', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const results = req.body as unknown as EvalResult[];
+
+  if (!Array.isArray(results)) {
+    res.status(400).json({ error: 'Results must be an array' });
+    return;
+  }
+  const eval_ = await Eval.findById(id);
+  if (!eval_) {
+    res.status(404).json({ error: 'Eval not found' });
+    return;
+  }
+  try {
+    await eval_.setResults(results);
+  } catch (error) {
+    logger.error(`Failed to add results to eval: ${error}`);
+    res.status(500).json({ error: 'Failed to add results to eval' });
+    return;
+  }
+  res.status(204).send();
 });
 
 evalRouter.post(
@@ -213,7 +380,11 @@ evalRouter.post('/', async (req: Request, res: Response): Promise<void> => {
         author: incEval.author,
         createdAt: new Date(incEval.createdAt),
         results: incEval.results,
+        vars: incEval.vars,
       });
+      if (incEval.prompts) {
+        eval_.addPrompts(incEval.prompts);
+      }
       logger.debug(`[POST /api/eval] Eval created with ID: ${eval_.id}`);
 
       logger.debug(`[POST /api/eval] Saved ${incEval.results.length} results to eval ${eval_.id}`);
@@ -221,7 +392,9 @@ evalRouter.post('/', async (req: Request, res: Response): Promise<void> => {
       res.json({ id: eval_.id });
     }
   } catch (error) {
-    console.error('Failed to write eval to database', error, body);
+    logger.error(dedent`Failed to write eval to database:
+      Error: ${error}
+      Body: ${JSON.stringify(body, null, 2)}`);
     res.status(500).json({ error: 'Failed to write eval to database' });
   }
 });

@@ -1,17 +1,21 @@
+---
+sidebar_label: How to red team LLM applications
+---
+
 # How to red team LLM applications
 
 Promptfoo is a popular open source evaluation framework that includes LLM red team and penetration testing capabilities.
 
 This guide shows you how to automatically generate adversarial tests specifically for your app. The red team covers a wide range of potential vulnerabilities and failure modes, including:
 
-Privacy and Security:
+**Privacy and Security:**
 
 - PII Leaks
 - Cybercrime and Hacking
 - BFLA, BOLA, and other access control vulnerabilities
 - SSRF (Server-Side Request Forgery)
 
-Technical Vulnerabilities:
+**Technical Vulnerabilities:**
 
 - Prompt Injection and Extraction
 - Jailbreaking
@@ -19,7 +23,7 @@ Technical Vulnerabilities:
 - SQL and Shell Injection
 - ASCII Smuggling (invisible characters)
 
-Criminal Activities and Harmful Content:
+**Criminal Activities and Harmful Content:**
 
 - Hate and Discrimination
 - Violent Crimes
@@ -28,7 +32,7 @@ Criminal Activities and Harmful Content:
 - Indiscriminate and Chemical/Biological Weapons
 - Self-Harm and Graphic Content
 
-Misinformation and Misuse:
+**Misinformation and Misuse:**
 
 - Misinformation and Disinformation
 - Copyright Violations
@@ -54,23 +58,25 @@ First, install [Node 18 or later](https://nodejs.org/en/download/package-manager
 Then create a new project for your red teaming needs:
 
 ```sh
-npx promptfoo@latest redteam init my-redteam-project
-cd my-redteam-project
+npx promptfoo@latest redteam init my-redteam-project --no-gui
 ```
 
-The `init` command creates some placeholders, including a `promptfooconfig.yaml` file. This is where we’ll do most of our setup.
+The `init` command will guide you through setting up a redteam for your use case, and includes several useful defaults to quickly get you started.
+
+It will create a `promptfooconfig.yaml` config file where we’ll do most of our setup.
 
 ## Getting started
 
-Edit the config to set up the prompt and the LLM you want to test. See the [configuration guide](/docs/red-team/configuration/) for more information.
+Edit `my-redteam-project/promptfooconfig.yaml` to set up the prompt and the LLM you want to test. See the [configuration guide](/docs/red-team/configuration/) for more information.
 
 Run the eval:
 
-```
+```sh
+cd my-redteam-project
 npx promptfoo@latest redteam run
 ```
 
-This will create a file `redteam.yaml` with adversarialtest cases and run them through your application.
+This will create a file `redteam.yaml` with adversarial test cases and run them through your application.
 
 And view the results:
 
@@ -158,7 +164,7 @@ You should choose at least one target. If desired, set multiple in order to comp
 
 ```yaml
 targets:
-  - openai:gpt-4o
+  - openai:gpt-4.1
   - anthropic:messages:claude-3-5-sonnet-20241022
   - ollama:chat:llama3.1:70b
 ```
@@ -200,12 +206,12 @@ targets:
         'Content-Type': 'application/json'
       body:
         my_prompt: '{{prompt}}'
-      responseParser: 'json.path[0].to.output'
+      transformResponse: 'json.path[0].to.output'
 ```
 
 Customize the HTTP request using a placeholder variable `{{prompt}}` that will be replaced by the final prompt during the pentest.
 
-If your API responds with a JSON object and you want to pick out a specific value, use the `responseParser` key to set a Javascript snippet that manipulates the provided `json` object.
+If your API responds with a JSON object and you want to pick out a specific value, use the `transformResponse` key to set a Javascript snippet that manipulates the provided `json` object.
 
 For example, `json.nested.output` will reference the output in the following API response:
 
@@ -217,7 +223,7 @@ You can also reference nested objects. For example, `json.choices[0].message.con
 
 ### Configuring the grader
 
-The results of the red team are graded by a model. By default, `gpt-4o` is used and the test expects an `OPENAI_API_KEY` environment variable.
+The results of the red team are graded by a model. By default, `gpt-4.1-2025-04-14` is used and the test expects an `OPENAI_API_KEY` environment variable.
 
 You can override the grader by adding a provider override for `defaultTest`, which will apply the override to all test cases. Here’s an example of using Llama3 as a grader locally:
 
@@ -248,7 +254,7 @@ Now that you've configured everything, the next step is to generate the red team
 npx promptfoo@latest redteam generate
 ```
 
-This command works by reading your prompts and targets, and then generating a set of adversarial inputs that stress-test your prompts/models in a variety of situations. Test generation usually takes about 5 minutes.
+This command works by reading your prompts and targets and then generating a set of adversarial inputs that stress-test your prompts/models in a variety of situations. Test generation usually takes about 5 minutes.
 
 The adversarial tests include:
 

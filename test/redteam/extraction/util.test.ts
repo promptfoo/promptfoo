@@ -8,16 +8,15 @@ import {
   formatPrompts,
   RedTeamGenerationResponse,
 } from '../../../src/redteam/extraction/util';
+import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 import type { ApiProvider } from '../../../src/types';
-
-jest.mock('../../../src/logger', () => ({
-  error: jest.fn(),
-  warn: jest.fn(),
-  debug: jest.fn(),
-}));
 
 jest.mock('../../../src/cache', () => ({
   fetchWithCache: jest.fn(),
+}));
+
+jest.mock('../../../src/redteam/remoteGeneration', () => ({
+  getRemoteGenerationUrl: jest.fn().mockReturnValue('https://api.promptfoo.app/api/v1/task'),
 }));
 
 describe('fetchRemoteGeneration', () => {
@@ -27,6 +26,7 @@ describe('fetchRemoteGeneration', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.mocked(getRemoteGenerationUrl).mockReturnValue('https://api.promptfoo.app/api/v1/task');
   });
 
   it('should fetch remote generation for purpose task', async () => {
@@ -45,7 +45,7 @@ describe('fetchRemoteGeneration', () => {
 
     expect(result).toBe('This is a purpose');
     expect(fetchWithCache).toHaveBeenCalledWith(
-      'https://api.promptfoo.dev/v1/generate',
+      'https://api.promptfoo.app/api/v1/task',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -53,6 +53,7 @@ describe('fetchRemoteGeneration', () => {
           task: 'purpose',
           prompts: ['prompt1', 'prompt2'],
           version: VERSION,
+          email: null,
         }),
       },
       REQUEST_TIMEOUT_MS,
@@ -76,7 +77,7 @@ describe('fetchRemoteGeneration', () => {
 
     expect(result).toEqual(['Entity1', 'Entity2']);
     expect(fetchWithCache).toHaveBeenCalledWith(
-      'https://api.promptfoo.dev/v1/generate',
+      'https://api.promptfoo.app/api/v1/task',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -84,6 +85,7 @@ describe('fetchRemoteGeneration', () => {
           task: 'entities',
           prompts: ['prompt1', 'prompt2'],
           version: VERSION,
+          email: null,
         }),
       },
       REQUEST_TIMEOUT_MS,
@@ -116,6 +118,31 @@ describe('fetchRemoteGeneration', () => {
     await expect(fetchRemoteGeneration('purpose', ['prompt'])).rejects.toThrow('Invalid input');
     expect(logger.warn).toHaveBeenCalledWith(
       expect.stringContaining("Error using remote generation for task 'purpose':"),
+    );
+  });
+
+  it('should use custom remote generation URL when provided', async () => {
+    const customUrl = 'https://custom-api.example.com/generate';
+    jest.mocked(getRemoteGenerationUrl).mockReturnValue(customUrl);
+
+    const mockResponse = {
+      data: {
+        task: 'purpose',
+        result: 'This is a purpose',
+      },
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    await fetchRemoteGeneration('purpose', ['prompt1']);
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      customUrl,
+      expect.any(Object),
+      REQUEST_TIMEOUT_MS,
+      'json',
     );
   });
 });
@@ -170,12 +197,14 @@ describe('Extraction Utils', () => {
   });
 
   describe('callExtraction', () => {
-    it('should call API and process output correctly', async () => {
+    it('should call API with formatted chat message and process output correctly', async () => {
       const result = await callExtraction(provider, 'test prompt', (output) =>
         output.toUpperCase(),
       );
       expect(result).toBe('TEST OUTPUT');
-      expect(provider.callApi).toHaveBeenCalledWith('test prompt');
+      expect(provider.callApi).toHaveBeenCalledWith(
+        JSON.stringify([{ role: 'user', content: 'test prompt' }]),
+      );
     });
 
     it('should throw an error if API call fails', async () => {

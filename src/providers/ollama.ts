@@ -1,7 +1,13 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ProviderEmbeddingResponse,
+  ProviderResponse,
+} from '../types';
+import { maybeLoadToolsFromExternalFile } from '../util';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
 interface OllamaCompletionOptions {
@@ -39,6 +45,7 @@ interface OllamaCompletionOptions {
   penalize_newline?: boolean;
   stop?: string[];
   num_thread?: number;
+  tools?: any[]; // Support for function calling/tools
 }
 
 const OllamaCompletionOptionKeys = new Set<keyof OllamaCompletionOptions>([
@@ -75,6 +82,7 @@ const OllamaCompletionOptionKeys = new Set<keyof OllamaCompletionOptions>([
   'penalize_newline',
   'stop',
   'num_thread',
+  'tools',
 ]);
 
 interface OllamaCompletionJsonL {
@@ -226,16 +234,16 @@ export class OllamaChatProvider implements ApiProvider {
     return `[Ollama Chat Provider ${this.modelName}]`;
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
-    const params = {
+    const params: any = {
       model: this.modelName,
       messages,
       options: Object.keys(this.config).reduce(
         (options, key) => {
           const optionName = key as keyof OllamaCompletionOptions;
-          if (OllamaCompletionOptionKeys.has(optionName)) {
+          if (OllamaCompletionOptionKeys.has(optionName) && optionName !== 'tools') {
             options[optionName] = this.config[optionName];
           }
           return options;
@@ -245,6 +253,11 @@ export class OllamaChatProvider implements ApiProvider {
         >,
       ),
     };
+
+    // Handle tools if configured
+    if (this.config.tools) {
+      params.tools = maybeLoadToolsFromExternalFile(this.config.tools, context?.vars);
+    }
 
     logger.debug(`Calling Ollama API: ${JSON.stringify(params)}`);
     let response;
@@ -263,6 +276,7 @@ export class OllamaChatProvider implements ApiProvider {
         },
         REQUEST_TIMEOUT_MS,
         'text',
+        context?.bustCache ?? context?.debug,
       );
     } catch (err) {
       return {

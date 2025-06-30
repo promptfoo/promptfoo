@@ -59,12 +59,14 @@ Testing for debug access vulnerabilities is critical for:
 - Protecting sensitive configuration information
 - Maintaining the security boundaries of the AI system
 
-By incorporating the Debug Access plugin in your LLM red teaming strategy, you can identify and address potential vulnerabilities in your AI system's handling of debug-related queries and commands.
+By incorporating the Debug Access plugin in your LLM red teaming strategy, you can identify and address potential vulnerabilities in your AI system's security controls and prevent unauthorized access to debug information or functionality.
 
 ## Related Concepts
 
-- [RBAC (Role-Based Access Control)](rbac.md)
-- [Information Disclosure](../llm-vulnerability-types.md#privacy-and-security)
-- [Technical Vulnerabilities](../llm-vulnerability-types.md#technical-vulnerabilities)
+The Debug Access plugin is closely related to several other security testing approaches:
+
+- [**Tool Discovery**](/docs/red-team/plugins/tool-discovery) - While Debug Access focuses on debugging interfaces, Tool Discovery attempts to uncover all tools and functions an AI system has access to.
+- [**Prompt Extraction**](/docs/red-team/plugins/prompt-extraction) - Tests if an AI system's system prompt can be extracted, which might be possible through debugging interfaces.
+- [**System Prompt Override**](/docs/red-team/plugins/system-prompt-override) - Tests if a user can override system instructions, which might be possible through debugging access.
 
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.

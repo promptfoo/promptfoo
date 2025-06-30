@@ -8,9 +8,25 @@ import Select from '@mui/material/Select';
 interface FilterModeSelectorProps {
   filterMode: string;
   onChange: (event: SelectChangeEvent) => void;
+  showDifferentOption?: boolean;
 }
 
-export const FilterModeSelector: React.FC<FilterModeSelectorProps> = ({ filterMode, onChange }) => {
+const BASE_OPTIONS = [
+  { value: 'all', label: 'Show all results' },
+  { value: 'failures', label: 'Show failures only' },
+  { value: 'errors', label: 'Show errors only' },
+  { value: 'different', label: 'Show different outputs' },
+  { value: 'highlights', label: 'Show highlights only' },
+];
+
+export const FilterModeSelector: React.FC<FilterModeSelectorProps> = ({
+  filterMode,
+  onChange,
+  showDifferentOption = true,
+}) => {
+  const options = showDifferentOption
+    ? BASE_OPTIONS
+    : BASE_OPTIONS.filter((o) => o.value !== 'different');
   return (
     <FormControl sx={{ minWidth: 180 }} size="small">
       <InputLabel id="filter-mode-label">Display</InputLabel>
@@ -21,10 +37,11 @@ export const FilterModeSelector: React.FC<FilterModeSelectorProps> = ({ filterMo
         onChange={onChange}
         label="Filter"
       >
-        <MenuItem value="all">Show all results</MenuItem>
-        <MenuItem value="failures">Show failures only</MenuItem>
-        <MenuItem value="different">Show different only</MenuItem>
-        <MenuItem value="highlights">Show highlights only</MenuItem>
+        {options.map((option) => (
+          <MenuItem key={option.value} value={option.value}>
+            {option.label}
+          </MenuItem>
+        ))}
       </Select>
     </FormControl>
   );

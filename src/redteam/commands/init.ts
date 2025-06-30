@@ -10,14 +10,15 @@ import type { Command } from 'commander';
 import dedent from 'dedent';
 import fs from 'fs';
 import * as path from 'path';
-import { DEFAULT_PORT } from '../../constants';
+import { getDefaultPort } from '../../constants';
+import { getEnvString } from '../../envars';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../../globalConfig/globalConfig';
 import logger from '../../logger';
 import { startServer } from '../../server/server';
 import telemetry, { type EventProperties } from '../../telemetry';
 import type { ProviderOptions, RedteamPluginObject } from '../../types';
-import { setupEnv } from '../../util';
+import { setupEnv, isRunningUnderNpx } from '../../util';
 import { BrowserBehavior } from '../../util/server';
 import { checkServerRunning, openBrowser } from '../../util/server';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
@@ -74,7 +75,8 @@ redteam:
   purpose: {{ purpose | dump }}
   {% endif %}
   # Default number of inputs to generate for each plugin.
-  # The total number of tests will be (numTests * plugins.length * (1 + strategies.length))
+  # The total number of tests will be (numTests * plugins.length * (1 + strategies.length) * languages.length)
+  # Languages.length is 1 by default, but is added when the multilingual strategy is used.
   numTests: {{numTests}}
 
   {% if plugins.length > 0 -%}
@@ -308,18 +310,21 @@ export async function redteamInit(directory: string | undefined) {
   } else {
     const providerChoices = [
       { name: `I'll choose later`, value: 'Other' },
-      { name: 'openai:gpt-4o-mini', value: 'openai:gpt-4o-mini' },
-      { name: 'openai:gpt-4o', value: 'openai:gpt-4o' },
-      { name: 'openai:gpt-3.5-turbo', value: 'openai:gpt-3.5-turbo' },
+      { name: 'openai:gpt-4.1-mini', value: 'openai:gpt-4.1-mini' },
+      { name: 'openai:gpt-4.1', value: 'openai:gpt-4.1' },
       {
-        name: 'anthropic:claude-3-5-sonnet-20240620',
-        value: 'anthropic:messages:claude-3-5-sonnet-20241022',
+        name: 'anthropic:claude-sonnet-4-20250514',
+        value: 'anthropic:messages:claude-sonnet-4-20250514',
       },
       {
-        name: 'anthropic:claude-3-opus-20240307',
-        value: 'anthropic:messages:claude-3-opus-20240307',
+        name: 'anthropic:claude-opus-4-20250514',
+        value: 'anthropic:messages:claude-opus-4-20250514',
       },
-      { name: 'vertex:gemini-pro', value: 'vertex:gemini-pro' },
+      {
+        name: 'anthropic:claude-3-7-sonnet-20250219',
+        value: 'anthropic:messages:claude-3-7-sonnet-20250219',
+      },
+      { name: 'vertex:gemini-2.5-pro-preview-03-25', value: 'vertex:gemini-2.5-pro-preview-03-25' },
     ];
 
     const selectedProvider = await select({
@@ -331,7 +336,7 @@ export async function redteamInit(directory: string | undefined) {
     recordOnboardingStep('choose provider', { value: selectedProvider });
 
     if (selectedProvider === 'Other') {
-      providers = [{ id: 'openai:gpt-4o-mini', label }];
+      providers = [{ id: 'openai:gpt-4.1-mini', label }];
     } else {
       providers = [{ id: selectedProvider, label }];
     }
@@ -445,7 +450,7 @@ export async function redteamInit(directory: string | undefined) {
       plugins = plugins.filter((p) => p !== 'indirect-prompt-injection');
       recordOnboardingStep('skip indirect prompt injection');
       logger.warn(
-        dedent`${chalk.bold('Warning:')} Skipping indirect prompt injection plugin because no prompt is specified. 
+        dedent`${chalk.bold('Warning:')} Skipping indirect prompt injection plugin because no prompt is specified.
         You can re-add this plugin after adding a prompt in your redteam config.
 
         Learn more: https://www.promptfoo.dev/docs/red-team/plugins/indirect-prompt-injection`,
@@ -570,7 +575,7 @@ export async function redteamInit(directory: string | undefined) {
           });
           writeGlobalConfigPartial({ hasHarmfulRedteamConsent: true });
         } catch (err) {
-          logger.error(`Error saving consent: ${(err as Error).message}`);
+          logger.debug(`Failed to save consent: ${(err as Error).message}`);
         }
       }
     }
@@ -621,7 +626,7 @@ export async function redteamInit(directory: string | undefined) {
         chalk.green(dedent`
           To generate test cases and run your red team, use the command:
 
-              ${chalk.bold('promptfoo redteam run')}
+              ${chalk.bold(`${isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo'} redteam run`)}
         `),
     );
     return;
@@ -649,7 +654,7 @@ export async function redteamInit(directory: string | undefined) {
         '\n' +
           chalk.blue(
             'To generate test cases and run your red team later, use the command: ' +
-              chalk.bold('promptfoo redteam run'),
+              chalk.bold(`${isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo'} redteam run`),
           ),
       );
     }
@@ -670,9 +675,11 @@ export function initCommand(program: Command) {
         setupEnv(opts.envPath);
         try {
           // Check if we're in a non-GUI environment
-          const hasDisplay =
-            process.env.DISPLAY || process.platform === 'win32' || process.platform === 'darwin';
-          const useGui = opts.gui && hasDisplay;
+          const isGUI =
+            getEnvString('DISPLAY') ||
+            process.platform === 'win32' ||
+            process.platform === 'darwin';
+          const useGui = opts.gui && isGUI;
 
           if (useGui) {
             const isRunning = await checkServerRunning();
@@ -680,7 +687,7 @@ export function initCommand(program: Command) {
             if (isRunning) {
               await openBrowser(BrowserBehavior.OPEN_TO_REDTEAM_CREATE);
             } else {
-              await startServer(DEFAULT_PORT, BrowserBehavior.OPEN_TO_REDTEAM_CREATE);
+              await startServer(getDefaultPort(), BrowserBehavior.OPEN_TO_REDTEAM_CREATE);
             }
           } else {
             await redteamInit(directory);
@@ -692,7 +699,7 @@ export function initCommand(program: Command) {
                 chalk.blue(
                   'Red team initialization paused. To continue setup later, use the command: ',
                 ) +
-                chalk.bold('promptfoo redteam init'),
+                chalk.bold(`${isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo'} redteam init`),
             );
             logger.info(
               chalk.blue('For help or feedback, visit ') +

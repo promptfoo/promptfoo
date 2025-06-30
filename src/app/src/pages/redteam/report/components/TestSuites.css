@@ -1,14 +1,14 @@
 /* FIXME(ian): !important because these are global classes, unfortunately */
 
-.pass-high {
+.asr-low {
   color: green !important;
 }
 
-.pass-medium {
+.asr-medium {
   color: rgb(203, 133, 3) !important;
 }
 
-.pass-low {
+.asr-high {
   color: red !important;
 }
 
@@ -27,4 +27,35 @@
 
 .vuln-low {
   color: green !important;
+}
+
+/* Table responsiveness fixes */
+.MuiTableContainer-root {
+  overflow-x: auto !important;
+  max-width: 100% !important;
+}
+
+.MuiTable-root {
+  table-layout: auto !important;
+  width: 100% !important;
+}
+
+.MuiTableCell-root {
+  padding: 8px 12px !important;
+}
+
+/* Ensure buttons don't expand beyond their containers */
+.MuiTableCell-root .MuiButton-root {
+  min-width: auto !important;
+  font-size: 0.75rem !important;
+}
+
+@media print {
+  .MuiTableRow-root {
+    display: table-row !important;
+  }
+
+  .MuiTablePagination-root {
+    display: none !important;
+  }
 }

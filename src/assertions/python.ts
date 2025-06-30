@@ -1,7 +1,40 @@
-import invariant from 'tiny-invariant';
 import { runPythonCode } from '../python/wrapper';
 import type { AssertionParams } from '../types';
 import { type GradingResult, isGradingResult } from '../types';
+import invariant from '../util/invariant';
+
+// Recursively map snake_case keys to camelCase for Python dataclass compatibility
+function mapSnakeCaseToCamelCase(obj: Record<string, any>): Record<string, any> {
+  // Create a shallow copy to avoid mutating the original object
+  const result = { ...obj };
+
+  // Handle top-level mappings
+  // Support both 'pass' and 'pass_' for user convenience
+  if ('pass_' in result && !('pass' in result)) {
+    result.pass = result.pass_;
+  }
+  if ('named_scores' in result && !('namedScores' in result)) {
+    result.namedScores = result.named_scores;
+  }
+  if ('component_results' in result && !('componentResults' in result)) {
+    result.componentResults = result.component_results;
+  }
+  if ('tokens_used' in result && !('tokensUsed' in result)) {
+    result.tokensUsed = result.tokens_used;
+  }
+
+  // Recursively handle nested component results
+  if (result.componentResults && Array.isArray(result.componentResults)) {
+    result.componentResults = result.componentResults.map((component: any) => {
+      if (typeof component === 'object' && component !== null) {
+        return mapSnakeCaseToCamelCase(component);
+      }
+      return component;
+    });
+  }
+
+  return result;
+}
 
 export const handlePython = async ({
   assertion,
@@ -69,19 +102,27 @@ ${
       }
       return parsed;
     } else if (typeof result === 'object') {
-      if (!isGradingResult(result)) {
+      const obj: Record<string, any> = result as any;
+
+      // Support snake_case keys from Python dataclass (recursively)
+      const mappedObj = mapSnakeCaseToCamelCase(obj);
+
+      if (!isGradingResult(mappedObj)) {
         throw new Error(
           `Python assertion must return a boolean, number, or {pass, score, reason} object. Got instead:\n${JSON.stringify(
-            result,
+            mappedObj,
             null,
             2,
           )}`,
         );
       }
-      const pythonGradingResult = result as Omit<GradingResult, 'assertion'>;
+      const pythonGradingResult = mappedObj as Omit<GradingResult, 'assertion'>;
       if (assertion.threshold && pythonGradingResult.score < assertion.threshold) {
         pythonGradingResult.pass = false;
-        pythonGradingResult.reason = `Python score ${pythonGradingResult.score} is less than threshold ${assertion.threshold}`;
+        const scoreMessage = `Python score ${pythonGradingResult.score} is less than threshold ${assertion.threshold}`;
+        pythonGradingResult.reason = pythonGradingResult.reason
+          ? `${scoreMessage}: ${pythonGradingResult.reason}`
+          : scoreMessage;
       }
       return {
         ...pythonGradingResult,

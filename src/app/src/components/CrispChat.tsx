@@ -2,7 +2,7 @@ import React from 'react';
 
 const CrispChat = () => {
   React.useEffect(() => {
-    if (process.env.VITE_NO_CHAT) {
+    if (import.meta.env.VITE_PROMPTFOO_NO_CHAT) {
       return;
     }
     // @ts-ignore

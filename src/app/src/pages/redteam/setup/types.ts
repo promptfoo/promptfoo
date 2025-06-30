@@ -1,29 +1,49 @@
-import type { RedteamPlugin, RedteamStrategy } from '@promptfoo/redteam/types';
-import type { RedteamFileConfig } from '@promptfoo/redteam/types';
+import type { PluginConfig, RedteamPlugin, RedteamStrategy } from '@promptfoo/redteam/types';
+import type { TestCase } from '@promptfoo/types';
+
+export interface ApplicationDefinition {
+  purpose?: string;
+  features?: string;
+  hasAccessTo?: string;
+  doesNotHaveAccessTo?: string;
+  userTypes?: string;
+  securityRequirements?: string;
+  exampleIdentifiers?: string;
+  industry?: string;
+  sensitiveDataTypes?: string;
+  criticalActions?: string;
+  forbiddenTopics?: string;
+  competitors?: string;
+  systemPrompt?: string;
+  redteamUser?: string;
+  accessToData?: string;
+  forbiddenData?: string;
+  accessToActions?: string;
+  forbiddenActions?: string;
+  connectedSystems?: string;
+  attackConstraints?: string;
+}
 
 export interface Config {
   description: string;
   prompts: string[];
   target: ProviderOptions;
   plugins: (RedteamPlugin | { id: string; config?: any })[];
+  testGenerationInstructions?: string;
   strategies: RedteamStrategy[];
   purpose?: string;
-  applicationDefinition: {
-    purpose?: string;
-    systemPrompt?: string;
-    redteamUser?: string;
-    accessToData?: string;
-    forbiddenData?: string;
-    accessToActions?: string;
-    forbiddenActions?: string;
-    connectedSystems?: string;
-  };
+  numTests?: number;
+  maxConcurrency?: number;
+  applicationDefinition: ApplicationDefinition;
   entities: string[];
+  defaultTest?: TestCase;
+  extensions?: string[];
 }
 
 export interface ProviderOptions {
   id: string;
   label?: string;
+  delay?: number;
   config: {
     // Custom provider config can have anything
     [key: string]: any;
@@ -33,13 +53,13 @@ export interface ProviderOptions {
     url?: string;
     method?: string;
     headers?: Record<string, string>;
-    body?: string;
+    body?: string | object;
     messageTemplate?: string;
     // Browser specific options
     steps?: BrowserStep[];
     headless?: boolean;
     timeoutMs?: number;
-    responseParser?: string;
+    transformResponse?: string;
     sessionParser?: string;
     cookies?:
       | Array<{
@@ -49,6 +69,8 @@ export interface ProviderOptions {
           path?: string;
         }>
       | string;
+    stateful?: boolean;
+    sessionSource?: 'client' | 'server';
   };
 }
 
@@ -88,22 +110,11 @@ export interface YamlPreviewProps {
   config: Config;
 }
 
-export interface YamlConfig {
-  description: string;
-  targets: ProviderOptions[];
-  prompts: string[];
-  redteam: RedteamFileConfig;
+export interface LocalPluginConfig {
+  [key: string]: PluginConfig;
 }
 
-export interface LocalPluginConfig {
-  [key: string]: {
-    indirectInjectionVar?: string;
-    intent?: string[];
-    policy?: string;
-    systemPrompt?: string;
-    targetIdentifiers?: string[];
-    targetSystems?: string[];
-    targetUrls?: string[];
-    [key: string]: string | string[] | undefined;
-  };
+export interface RedteamUITarget {
+  value: string;
+  label: string;
 }

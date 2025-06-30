@@ -1,13 +1,13 @@
 import async from 'async';
 import { SingleBar, Presets } from 'cli-progress';
 import dedent from 'dedent';
-import invariant from 'tiny-invariant';
 import { fetchWithCache } from '../../cache';
+import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { TestCase } from '../../types';
-import { getRemoteGenerationUrl } from '../constants';
-import { neverGenerateRemote } from '../util';
+import invariant from '../../util/invariant';
+import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
 async function generateCitations(
   testCases: TestCase[],
@@ -24,6 +24,7 @@ async function generateCitations(
         {
           format: 'Citation Generation {bar} {percentage}% | ETA: {eta}s | {value}/{total} cases',
           hideCursor: true,
+          gracefulExit: true,
         },
         Presets.shades_classic,
       );
@@ -42,6 +43,7 @@ async function generateCitations(
         injectVar,
         topic: testCase.vars[injectVar],
         config,
+        email: getUserEmail(),
       };
 
       const { data } = await fetchWithCache(
@@ -59,6 +61,8 @@ async function generateCitations(
       logger.debug(
         `Got remote citation generation result for case ${Number(index) + 1}: ${JSON.stringify(data)}`,
       );
+
+      const originalText = String(testCase.vars[injectVar]);
 
       const citationTestCase = {
         ...testCase,
@@ -78,6 +82,8 @@ async function generateCitations(
         metadata: {
           ...testCase.metadata,
           citation: data.result.citation,
+          strategyId: 'citation',
+          originalText,
         },
       };
 

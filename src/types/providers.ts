@@ -12,6 +12,17 @@ export type ProviderType = 'embedding' | 'classification' | 'text' | 'moderation
 
 export type ProviderTypeMap = Partial<Record<ProviderType, string | ProviderOptions | ApiProvider>>;
 
+// Local interface to avoid circular dependency with src/types/index.ts
+interface AtomicTestCase {
+  description?: string;
+  vars?: Record<string, string | object>;
+  providerResponse?: ProviderResponse;
+  tokenUsage?: TokenUsage;
+  success?: boolean;
+  score?: number;
+  failureReason?: string;
+  metadata?: Record<string, any>;
+}
 export interface ProviderModerationResponse {
   error?: string;
   flags?: ModerationFlag[];
@@ -34,7 +45,6 @@ export interface ProviderOptions {
 }
 
 export interface CallApiContextParams {
-  fetchWithCache?: any;
   filters?: NunjucksFilterMap;
   getCache?: any;
   logger?: winston.Logger;
@@ -42,22 +52,45 @@ export interface CallApiContextParams {
   prompt: Prompt;
   vars: Record<string, string | object>;
   debug?: boolean;
+  // This was added so we have access to the grader inside the provider.
+  // Vars and prompts should be access using the arguments above.
+  test?: AtomicTestCase;
+  bustCache?: boolean;
+
+  // W3C Trace Context headers
+  traceparent?: string; // Format: version-trace-id-parent-id-trace-flags
+  tracestate?: string; // Optional vendor-specific trace state
+
+  // Evaluation metadata (for manual correlation if needed)
+  evaluationId?: string;
+  testCaseId?: string;
 }
 
 export interface CallApiOptionsParams {
   includeLogProbs?: boolean;
+  /**
+   * Signal that can be used to abort the request
+   */
+  abortSignal?: AbortSignal;
 }
 
 export interface ApiProvider {
   id: () => string;
   callApi: CallApiFunction;
-  callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;
   callClassificationApi?: (prompt: string) => Promise<ProviderClassificationResponse>;
+  callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;
+  config?: any;
+  delay?: number;
+  getSessionId?: () => string;
   label?: ProviderLabel;
   transform?: string;
-  delay?: number;
-  config?: any;
-  getSessionId?: () => string;
+  toJSON?: () => any;
+  /**
+   * Cleanup method called when a provider call is aborted (e.g., due to timeout)
+   * Providers should implement this to clean up any resources they might have
+   * allocated, such as file handles, network connections, etc.
+   */
+  cleanup?: () => void | Promise<void>;
 }
 
 export interface ApiEmbeddingProvider extends ApiProvider {
@@ -76,6 +109,12 @@ export interface ApiModerationProvider extends ApiProvider {
   callModerationApi: (prompt: string, response: string) => Promise<ProviderModerationResponse>;
 }
 
+export interface GuardrailResponse {
+  flaggedInput?: boolean;
+  flaggedOutput?: boolean;
+  flagged?: boolean;
+}
+
 export interface ProviderResponse {
   cached?: boolean;
   cost?: number;
@@ -83,6 +122,11 @@ export interface ProviderResponse {
   logProbs?: number[];
   metadata?: {
     redteamFinalPrompt?: string;
+    http?: {
+      status: number;
+      statusText: string;
+      headers: Record<string, string>;
+    };
     [key: string]: any;
   };
   raw?: string | any;
@@ -90,6 +134,14 @@ export interface ProviderResponse {
   tokenUsage?: TokenUsage;
   isRefusal?: boolean;
   sessionId?: string;
+  guardrails?: GuardrailResponse;
+  audio?: {
+    id?: string;
+    expiresAt?: number;
+    data?: string; // base64 encoded audio data
+    transcript?: string;
+    format?: string;
+  };
 }
 
 export interface ProviderEmbeddingResponse {
@@ -97,6 +149,11 @@ export interface ProviderEmbeddingResponse {
   error?: string;
   embedding?: number[];
   tokenUsage?: Partial<TokenUsage>;
+  metadata?: {
+    transformed?: boolean;
+    originalText?: string;
+    [key: string]: any;
+  };
 }
 
 export interface ProviderSimilarityResponse {
@@ -137,4 +194,29 @@ export function isProviderOptions(provider: any): provider is ProviderOptions {
     'id' in provider &&
     typeof provider.id === 'string'
   );
+}
+
+export interface ProviderTestResponse {
+  testResult: {
+    error?: string;
+    changes_needed?: boolean;
+    changes_needed_reason?: string;
+    changes_needed_suggestions?: string[];
+  };
+  providerResponse: ProviderResponse;
+  unalignedProviderResult?: ProviderResponse;
+  redteamProviderResult?: ProviderResponse;
+}
+
+/**
+ * Interface defining the default providers used by the application
+ */
+export interface DefaultProviders {
+  embeddingProvider: ApiProvider;
+  gradingJsonProvider: ApiProvider;
+  gradingProvider: ApiProvider;
+  llmRubricProvider?: ApiProvider;
+  moderationProvider: ApiProvider;
+  suggestionsProvider: ApiProvider;
+  synthesizeProvider: ApiProvider;
 }

@@ -1,7 +1,14 @@
-import cliState from '../../src/cliState';
-import { getEnvBool, getEnvString } from '../../src/envars';
-import { neverGenerateRemote, removePrefix } from '../../src/redteam/util';
-import { shouldGenerateRemote } from '../../src/redteam/util';
+import { fetchWithCache } from '../../src/cache';
+import {
+  extractGoalFromPrompt,
+  getShortPluginId,
+  isBasicRefusal,
+  isEmptyResponse,
+  normalizeApostrophes,
+  removePrefix,
+} from '../../src/redteam/util';
+
+jest.mock('../../src/cache');
 
 describe('removePrefix', () => {
   it('should remove a simple prefix', () => {
@@ -33,61 +40,183 @@ describe('removePrefix', () => {
   });
 });
 
-jest.mock('../../src/envars');
-jest.mock('../../src/cliState', () => ({
-  remote: undefined,
-}));
-
-describe('shouldGenerateRemote', () => {
-  beforeEach(() => {
-    jest.resetAllMocks();
-    cliState.remote = undefined;
+describe('normalizeApostrophes', () => {
+  it('should normalize different types of apostrophes', () => {
+    expect(normalizeApostrophes("I'm")).toBe("I'm");
+    expect(normalizeApostrophes('I′m')).toBe("I'm");
+    expect(normalizeApostrophes("I'm")).toBe("I'm");
+    expect(normalizeApostrophes("I'm")).toBe("I'm");
   });
 
-  it('should return true when remote generation is not disabled and no OpenAI key exists', () => {
-    jest.mocked(getEnvBool).mockReturnValue(false);
-    jest.mocked(getEnvString).mockReturnValue('');
-    expect(shouldGenerateRemote()).toBe(true);
-  });
-
-  it('should return false when remote generation is disabled via env var', () => {
-    jest.mocked(getEnvBool).mockReturnValue(true);
-    jest.mocked(getEnvString).mockReturnValue('');
-    expect(shouldGenerateRemote()).toBe(false);
-  });
-
-  it('should return false when OpenAI key exists', () => {
-    jest.mocked(getEnvBool).mockReturnValue(false);
-    jest.mocked(getEnvString).mockReturnValue('sk-123');
-    expect(shouldGenerateRemote()).toBe(false);
-  });
-
-  it('should return false when remote generation is disabled via env var and OpenAI key exists', () => {
-    jest.mocked(getEnvBool).mockReturnValue(true);
-    jest.mocked(getEnvString).mockReturnValue('sk-123');
-    expect(shouldGenerateRemote()).toBe(false);
-  });
-
-  it('should return true when cliState.remote is true regardless of other conditions', () => {
-    jest.mocked(getEnvBool).mockReturnValue(true);
-    jest.mocked(getEnvString).mockReturnValue('sk-123');
-    cliState.remote = true;
-    expect(shouldGenerateRemote()).toBe(true);
+  it('should handle strings without apostrophes', () => {
+    expect(normalizeApostrophes('Hello world')).toBe('Hello world');
   });
 });
 
-describe('neverGenerateRemote', () => {
+describe('isEmptyResponse', () => {
+  it('should return true for empty responses', () => {
+    expect(isEmptyResponse('')).toBe(true);
+    expect(isEmptyResponse('   ')).toBe(true);
+    expect(isEmptyResponse('{}')).toBe(true);
+    expect(isEmptyResponse('  {}  ')).toBe(true);
+  });
+
+  it('should return false for non-empty responses', () => {
+    expect(isEmptyResponse('Hello')).toBe(false);
+    expect(isEmptyResponse('{"key": "value"}')).toBe(false);
+  });
+});
+
+describe('isBasicRefusal', () => {
+  it('should detect refusal prefixes', () => {
+    expect(isBasicRefusal('I am sorry, I cannot help with that')).toBe(true);
+    expect(isBasicRefusal("I'm not able to assist with this request")).toBe(true);
+    expect(isBasicRefusal('I apologize, but I cannot do that')).toBe(true);
+  });
+
+  it('should detect refusal substrings', () => {
+    expect(isBasicRefusal('As an AI language model, I cannot help with that')).toBe(true);
+    expect(isBasicRefusal('I cannot assist with that request')).toBe(true);
+    expect(isBasicRefusal('That would not be appropriate')).toBe(true);
+  });
+
+  it('should normalize apostrophes in responses', () => {
+    expect(isBasicRefusal("I′m sorry, I can't help")).toBe(true);
+    expect(isBasicRefusal("I'm unable to assist")).toBe(true);
+  });
+
+  it('should handle case insensitivity', () => {
+    expect(isBasicRefusal('I AM SORRY, I CANNOT HELP')).toBe(true);
+    expect(isBasicRefusal('as an ai language model')).toBe(true);
+  });
+
+  it('should return false for non-refusal responses', () => {
+    expect(isBasicRefusal('I will help you with that')).toBe(false);
+    expect(isBasicRefusal('Here is the information you requested')).toBe(false);
+    expect(isBasicRefusal('The answer is 42')).toBe(false);
+  });
+});
+
+describe('getShortPluginId', () => {
+  it('should remove promptfoo:redteam: prefix', () => {
+    expect(getShortPluginId('promptfoo:redteam:test')).toBe('test');
+  });
+
+  it('should return original if no prefix', () => {
+    expect(getShortPluginId('test')).toBe('test');
+  });
+});
+
+describe('extractGoalFromPrompt', () => {
   beforeEach(() => {
     jest.resetAllMocks();
   });
 
-  it('should return true when PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION is set to true', () => {
-    jest.mocked(getEnvBool).mockReturnValue(true);
-    expect(neverGenerateRemote()).toBe(true);
+  it('should successfully extract goal', async () => {
+    jest.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      data: { intent: 'test goal' },
+      deleteFromCache: async () => {},
+    });
+
+    const result = await extractGoalFromPrompt('test prompt', 'test purpose');
+    expect(result).toBe('test goal');
   });
 
-  it('should return false when PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION is set to false', () => {
-    jest.mocked(getEnvBool).mockReturnValue(false);
-    expect(neverGenerateRemote()).toBe(false);
+  it('should return null on HTTP error', async () => {
+    jest.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      status: 500,
+      statusText: 'Internal Server Error',
+      headers: {},
+      data: {},
+      deleteFromCache: async () => {},
+    });
+
+    const result = await extractGoalFromPrompt('test prompt', 'test purpose');
+    expect(result).toBeNull();
+  });
+
+  it('should return null when no intent returned', async () => {
+    jest.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      data: {},
+      deleteFromCache: async () => {},
+    });
+
+    const result = await extractGoalFromPrompt('test prompt', 'test purpose');
+    expect(result).toBeNull();
+  });
+
+  it('should return null when API throws error', async () => {
+    jest.mocked(fetchWithCache).mockRejectedValue(new Error('API error'));
+
+    const result = await extractGoalFromPrompt('test prompt', 'test purpose');
+    expect(result).toBeNull();
+  });
+
+  it('should handle empty prompt and purpose', async () => {
+    jest.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      data: { intent: 'empty goal' },
+      deleteFromCache: async () => {},
+    });
+
+    const result = await extractGoalFromPrompt('', '');
+    expect(result).toBe('empty goal');
+  });
+
+  it('should include plugin context when pluginId is provided', async () => {
+    jest.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      data: { intent: 'plugin-specific goal' },
+      deleteFromCache: async () => {},
+    });
+
+    const result = await extractGoalFromPrompt(
+      'innocent prompt',
+      'test purpose',
+      'indirect-prompt-injection',
+    );
+    expect(result).toBe('plugin-specific goal');
+
+    // Verify that the API was called with plugin context
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        body: expect.stringContaining('pluginContext'),
+      }),
+      expect.any(Number),
+    );
+  });
+
+  it('should skip remote call when remote generation is disabled', async () => {
+    // Preserve original environment setting
+    const originalValue = process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION;
+    process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'true';
+
+    const result = await extractGoalFromPrompt('test prompt', 'test purpose');
+
+    expect(result).toBeNull();
+    expect(fetchWithCache).not.toHaveBeenCalled();
+
+    // Cleanup: restore or delete the env var to avoid leaking into other tests
+    if (originalValue === undefined) {
+      delete process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION;
+    } else {
+      process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = originalValue;
+    }
   });
 });

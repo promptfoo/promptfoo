@@ -1,15 +1,18 @@
 import { fetchWithCache } from '../cache';
 import { VERSION } from '../constants';
-import { getEnvString } from '../envars';
 import { fetchWithRetries } from '../fetch';
 import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
-import { getRemoteGenerationUrl } from '../redteam/constants';
+import {
+  getRemoteGenerationUrl,
+  getRemoteGenerationUrlForUnaligned,
+} from '../redteam/remoteGeneration';
 import type {
   ApiProvider,
-  ProviderResponse,
   CallApiContextParams,
   CallApiOptionsParams,
+  PluginConfig,
+  ProviderResponse,
   TokenUsage,
 } from '../types';
 import type { EnvOverrides } from '../types/env';
@@ -19,17 +22,20 @@ interface PromptfooHarmfulCompletionOptions {
   harmCategory: string;
   n: number;
   purpose: string;
+  config?: PluginConfig;
 }
 
 export class PromptfooHarmfulCompletionProvider implements ApiProvider {
   harmCategory: string;
   n: number;
   purpose: string;
+  config?: PluginConfig;
 
   constructor(options: PromptfooHarmfulCompletionOptions) {
     this.harmCategory = options.harmCategory;
     this.n = options.n;
     this.purpose = options.purpose;
+    this.config = options.config;
   }
 
   id(): string {
@@ -51,14 +57,16 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
       n: this.n,
       purpose: this.purpose,
       version: VERSION,
+      config: this.config,
     };
 
     try {
-      logger.debug(`Calling promptfoo generate harmful API with body: ${JSON.stringify(body)}`);
+      logger.debug(
+        `[HarmfulCompletionProvider] Calling generate harmful API (${getRemoteGenerationUrlForUnaligned()}) with body: ${JSON.stringify(body)}`,
+      );
       // We're using the promptfoo API to avoid having users provide their own unaligned model.
       const response = await fetchWithRetries(
-        getEnvString('PROMPTFOO_UNALIGNED_INFERENCE_ENDPOINT') ||
-          'https://api.promptfoo.dev/redteam/generateHarmful',
+        getRemoteGenerationUrlForUnaligned(),
         {
           method: 'POST',
           headers: {
@@ -66,7 +74,7 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
           },
           body: JSON.stringify(body),
         },
-        10000,
+        580000,
         2,
       );
 
@@ -75,13 +83,22 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
       }
 
       const data = await response.json();
-      logger.debug(`promptfoo API call response: ${JSON.stringify(data)}`);
+      logger.debug(`[HarmfulCompletionProvider] API call response: ${JSON.stringify(data)}`);
+
+      const validOutputs: string[] = (
+        Array.isArray(data.output) ? data.output : [data.output]
+      ).filter(
+        (item: string | null | undefined): item is string =>
+          typeof item === 'string' && item.length > 0,
+      );
+
       return {
-        output: [data.output].flat(),
+        output: validOutputs,
       };
     } catch (err) {
+      logger.info(`[HarmfulCompletionProvider] ${err}`);
       return {
-        error: `API call error: ${String(err)}`,
+        error: `[HarmfulCompletionProvider] ${err}`,
       };
     }
   }
@@ -92,7 +109,14 @@ interface PromptfooChatCompletionOptions {
   id?: string;
   jsonOnly: boolean;
   preferSmallModel: boolean;
-  task: 'crescendo' | 'goat' | 'iterative' | 'iterative:image' | 'iterative:tree';
+  task:
+    | 'crescendo'
+    | 'goat'
+    | 'iterative'
+    | 'iterative:image'
+    | 'iterative:tree'
+    | 'judge'
+    | 'blocking-question-analysis';
 }
 
 export class PromptfooChatCompletionProvider implements ApiProvider {
@@ -125,7 +149,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
     };
 
     try {
-      const { data } = await fetchWithCache(
+      const { data, status, statusText } = await fetchWithCache(
         getRemoteGenerationUrl(),
         {
           method: 'POST',
@@ -140,7 +164,12 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
       const { result, tokenUsage } = data;
 
       if (!result) {
-        throw new Error('No choices returned from API');
+        logger.error(
+          `Error from promptfoo completion provider. Status: ${status} ${statusText} ${JSON.stringify(data)} `,
+        );
+        return {
+          error: 'LLM did not return a result, likely refusal',
+        };
       }
 
       return {

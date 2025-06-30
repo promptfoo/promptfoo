@@ -1,19 +1,49 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Multi-turn conversation evaluation and testing
+
 prompts:
-  - file://prompt.json
+  - id: file://prompt.json
+    label: multi-turn-conversation
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
 
 # Set up the system message for all tests
 defaultTest:
   vars:
     system_message: You are a helpful assistant
 
-# Test out a conversation with multiple turns
+# Test out conversations with multiple turns
 tests:
+  # First conversation about Facebook
   - vars:
       question: Who founded Facebook?
+    metadata:
+      conversationId: facebook_thread
   - vars:
       question: Where does he live?
+    metadata:
+      conversationId: facebook_thread
   - vars:
       question: Which state is that in?
+    metadata:
+      conversationId: facebook_thread
+
+  # Second conversation about weather (runs independently)
+  - vars:
+      question: What's the weather like in San Francisco?
+    metadata:
+      conversationId: weather_thread
+  - vars:
+      question: Do I need an umbrella today?
+    metadata:
+      conversationId: weather_thread
+
+  # Third conversation about food (runs independently)
+  - vars:
+      question: Whats a good recipe for pasta?
+    metadata:
+      conversationId: food_thread
+  - vars:
+      question: How long should I cook it?
+    metadata:
+      conversationId: food_thread

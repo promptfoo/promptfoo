@@ -1,4 +1,6 @@
+import dedent from 'dedent';
 import * as fs from 'fs';
+import logger from '../../../src/logger';
 import { processYamlFile } from '../../../src/prompts/processors/yaml';
 
 jest.mock('fs');
@@ -8,6 +10,7 @@ describe('processYamlFile', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.mocked(logger.debug).mockClear();
   });
 
   it('should process a valid YAML file without a label', () => {
@@ -99,5 +102,27 @@ template: "{{ variable }}   "
 
     const result = processYamlFile(filePath, {});
     expect(result[0].raw).toBe(expectedJson);
+  });
+
+  it('should handle invalid YAML and return raw file contents', () => {
+    const filePath = 'issue-2368.yaml';
+    const fileContent = dedent`
+    {% import "system_prompt.yaml" as system_prompt %}
+    {% import "user_prompt.yaml" as user_prompt %}
+    {{ system_prompt.system_prompt() }}
+    {{ user_prompt.user_prompt(example) }}`;
+
+    mockReadFileSync.mockReturnValue(fileContent);
+
+    expect(processYamlFile(filePath, {})).toEqual([
+      {
+        raw: fileContent,
+        label: `${filePath}: ${fileContent.slice(0, 80)}`,
+        config: undefined,
+      },
+    ]);
+    expect(logger.debug).toHaveBeenCalledWith(
+      expect.stringMatching(/Error parsing YAML file issue-2368\.yaml:/),
+    );
   });
 });

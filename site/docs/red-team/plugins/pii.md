@@ -1,5 +1,5 @@
 ---
-sidebar_label: PII
+sidebar_label: PII Leak
 ---
 
 # PII Plugin
@@ -50,6 +50,6 @@ redteam:
 
 - [RBAC Plugin](rbac.md)
 - [Cross-Session Leak Plugin](cross-session-leak.md)
-- [Information Disclosure](../llm-vulnerability-types.md#privacy-and-security)
+- [Information Disclosure](/docs/red-team/llm-vulnerability-types/#privacy-vulnerabilities)
 
 For more on LLM vulnerabilities and red teaming strategies, see [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types).

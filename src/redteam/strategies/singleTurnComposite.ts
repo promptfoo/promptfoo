@@ -1,12 +1,12 @@
 import async from 'async';
 import { SingleBar, Presets } from 'cli-progress';
-import invariant from 'tiny-invariant';
 import { fetchWithCache } from '../../cache';
+import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import type { TestCase } from '../../types';
-import { getRemoteGenerationUrl } from '../constants';
-import { neverGenerateRemote } from '../util';
+import invariant from '../../util/invariant';
+import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
 async function generateCompositePrompts(
   testCases: TestCase[],
@@ -24,6 +24,7 @@ async function generateCompositePrompts(
           format:
             'Composite Jailbreak Generation {bar} {percentage}% | ETA: {eta}s | {value}/{total} cases',
           hideCursor: true,
+          gracefulExit: true,
         },
         Presets.shades_classic,
       );
@@ -31,6 +32,7 @@ async function generateCompositePrompts(
     }
 
     await async.forEachOfLimit(testCases, concurrency, async (testCase, index) => {
+      logger.debug(`[Composite] Processing test case: ${JSON.stringify(testCase)}`);
       invariant(
         testCase.vars,
         `Composite: testCase.vars is required, but got ${JSON.stringify(testCase)}`,
@@ -39,6 +41,7 @@ async function generateCompositePrompts(
       const payload = {
         task: 'jailbreak:composite',
         prompt: testCase.vars[injectVar],
+        email: getUserEmail(),
         ...(config.n && { n: config.n }),
         ...(config.modelFamily && { modelFamily: config.modelFamily }),
       };
@@ -60,22 +63,31 @@ async function generateCompositePrompts(
           data,
         )}`,
       );
+      if (data.error) {
+        logger.error(`[jailbreak:composite] Error in composite generation: ${data.error}}`);
+        logger.debug(`[jailbreak:composite] Response: ${JSON.stringify(data)}`);
+        return;
+      }
 
-      const compositeTestCases = data.modifiedPrompts.map((modifiedPrompt: string) => ({
-        ...testCase,
-        vars: {
-          ...testCase.vars,
-          [injectVar]: modifiedPrompt,
-        },
-        assert: testCase.assert?.map((assertion) => ({
-          ...assertion,
-          metric: `${assertion.metric}/Composite`,
-        })),
-        metadata: {
-          ...testCase.metadata,
-          strategy: 'jailbreak:composite',
-        },
-      }));
+      const compositeTestCases = data.modifiedPrompts.map((modifiedPrompt: string) => {
+        const originalText = String(testCase.vars![injectVar]);
+        return {
+          ...testCase,
+          vars: {
+            ...testCase.vars,
+            [injectVar]: modifiedPrompt,
+          },
+          assert: testCase.assert?.map((assertion) => ({
+            ...assertion,
+            metric: `${assertion.metric}/Composite`,
+          })),
+          metadata: {
+            ...testCase.metadata,
+            strategyId: 'jailbreak:composite',
+            originalText,
+          },
+        };
+      });
 
       allResults = allResults.concat(compositeTestCases);
 
