@@ -27,7 +27,7 @@ authors: [michael]
 This guide shows you how to:
 
 - Set up HLE evals with promptfoo
-- Configure reasoning models for expert-level questions
+- Configure reasoning models for HLE questions
 - Analyze real performance data from Claude 4 and o4-mini
 - Understand model limitations on challenging benchmarks
 
@@ -39,22 +39,22 @@ HLE addresses benchmark saturation - the phenomenon where advanced models achiev
 
 - Created by 1,000+ PhD-level experts across 500+ institutions
 - Covers 100+ subjects from mathematics to humanities
-- 14% include images alongside text
+- 14% of questions include images alongside text
 - Questions resist simple web search solutions
 - Focuses on verifiable, closed-ended problems
 
 **Current model performance:**
 
-| Model                | Accuracy | Notes                    |
-| -------------------- | -------- | ------------------------ |
-| OpenAI Deep Research | 26.6%    | With search capabilities |
-| o4-mini              | ~13%     | Reasoning model          |
-| DeepSeek-R1          | 8.5%     | Text-only evaluation     |
-| o1                   | 8.0%     | Previous generation      |
-| Gemini 2.0 Flash     | 6.6%     | Multimodal support       |
-| Claude 3.5 Sonnet    | 4.1%     | Base model               |
+| Model                | Accuracy | Notes                      |
+| -------------------- | -------- | -------------------------- |
+| OpenAI Deep Research | 26.6%    | With search capabilities   |
+| o4-mini              | ~13%     | Official benchmark results |
+| DeepSeek-R1          | 8.5%     | Text-only evaluation       |
+| o1                   | 8.0%     | Previous generation        |
+| Gemini 2.0 Flash     | 6.6%     | Multimodal support         |
+| Claude 3.5 Sonnet    | 4.1%     | Base model                 |
 
-_Current model performance on HLE as of publication_
+_Official model performance on full HLE dataset_
 
 ## Running the Eval
 
@@ -66,6 +66,8 @@ cd huggingface-hle
 npx promptfoo@latest eval
 ```
 
+See the complete example at [examples/huggingface-hle](https://github.com/promptfoo/promptfoo/tree/main/examples/huggingface-hle) for all configuration files and implementation details.
+
 Set these API keys before running:
 
 - `OPENAI_API_KEY` - for o4-mini and GPT models
@@ -74,13 +76,13 @@ Set these API keys before running:
 
 Promptfoo handles dataset loading, parallel execution, cost tracking, and results analysis automatically.
 
+:::note License and Safety
+
+HLE is released under the MIT license. The dataset includes a canary string to help model builders filter it from training data. Images in the dataset may contain copyrighted material. Review your AI provider's policies regarding image content before running evaluations with multimodal models.
+
+:::
+
 ## Eval Results
-
-After running the eval:
-
-```bash
-npx promptfoo@latest eval
-```
 
 After your eval completes, open the web interface:
 
@@ -92,15 +94,15 @@ Promptfoo generates a summary report showing token usage, costs, success rates, 
 
 ![HLE Evaluation Results](/img/hle-token-usage-summary.png)
 
-We tested Claude 4 and o4-mini on 50 HLE questions using promptfoo to demonstrate real-world performance.
+We tested Claude 4 and o4-mini on 50 HLE questions using promptfoo with optimized configurations to demonstrate real-world performance. Note that our results differ from official benchmarks due to different prompting strategies, token budgets, and question sampling.
 
 ![Model Comparison on Bioinformatics Question](/img/hle-model-comparison-detail.png)
 
 This example shows both models attempting a complex bioinformatics question. The interface displays complete reasoning traces and comparative analysis.
 
-**Performance summary:**
+**Performance summary (50 questions per model, 100 total test cases):**
 
-- **Combined pass rate**: 28% (28/100 total test cases)
+- **Combined pass rate**: 28% (28 successes across both models)
 - **Runtime**: 9 minutes with 20 concurrent workers
 - **Token usage**: Approximately 237K tokens for 100 test cases
 
@@ -154,10 +156,32 @@ Promptfoo uses LLM-as-a-judge for automated grading with the built-in `llm-rubri
 
 The grading system:
 
-- Uses o3-mini as the judge model to verify answer correctness
+- Uses a configured judge model to verify answer correctness
 - Accounts for equivalent formats (decimals vs fractions, different notation styles)
 - Handles both multiple-choice and exact-match question types
 - Provides consistent scoring across different response styles
+
+Here's how to configure the grading assertion:
+
+```yaml
+defaultTest:
+  assert:
+    - type: llm-rubric
+      value: |
+        Evaluate whether the response correctly answers the question.
+
+        Question: {{ question }}
+        Model Response: {{ output }}
+        Correct Answer: {{ answer }}
+
+        Grade the response on accuracy (0.0 to 1.0 scale):
+        - 1.0: Response matches the correct answer exactly or is mathematically/logically equivalent
+        - 0.8-0.9: Response is mostly correct with minor differences that don't affect correctness
+        - 0.5-0.7: Response is partially correct but has significant errors
+        - 0.0-0.4: Response is incorrect or doesn't address the question
+
+        The response should pass if it demonstrates correct understanding and provides the right answer, even if the explanation differs from the expected format.
+```
 
 This automated approach scales well for large evaluations while maintaining accuracy comparable to human grading on HLE's objective, closed-ended questions.
 
@@ -165,7 +189,7 @@ This automated approach scales well for large evaluations while maintaining accu
 
 **Key settings:**
 
-- **3K thinking tokens**: Tradeoff between cost and reasoning capability - more tokens may improve accuracy
+- **3K thinking tokens (Claude)**: Tradeoff between cost and reasoning capability - more tokens may improve accuracy
 - **4K max tokens**: Allows detailed explanations without truncation
 - **50 questions**: Sample size chosen for this demonstration - scale up for production evals
 - **Custom prompts**: Can be further optimized for specific models and question types
@@ -205,7 +229,7 @@ o4-mini's 42% success rate stands out and requires validation through larger sam
 
 ## Implications for AI Development
 
-HLE provides a useful benchmark for measuring AI progress on expert-level academic tasks. The low current scores indicate significant room for improvement in AI reasoning capabilities.
+HLE provides a useful benchmark for measuring AI progress on academic tasks. The low current scores indicate significant room for improvement in AI reasoning capabilities.
 
 As Dan Hendrycks (CAIS co-founder) notes:
 
@@ -213,7 +237,7 @@ As Dan Hendrycks (CAIS co-founder) notes:
 
 **Key findings:**
 
-- Current reasoning models achieve modest performance on expert-level questions
+- Current reasoning models achieve modest performance on HLE questions
 - Success varies significantly by domain and question type
 - Token budget increases alone don't guarantee accuracy improvements
 - Substantial gaps remain between AI and human expert performance
