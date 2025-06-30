@@ -224,7 +224,7 @@ describe('CloudflareAi Provider', () => {
         choices: [
           {
             message: {
-              content: 'Test response with custom API base URL',
+              content: 'Custom API response',
             },
           },
         ],
@@ -241,20 +241,92 @@ describe('CloudflareAi Provider', () => {
       };
 
       mockFetch.mockResolvedValue(mockResponse);
-      await provider.callApi('Test prompt with custom URL');
+      const result = await provider.callApi('Test custom API prompt');
 
-      expect(mockFetch).toHaveBeenCalledTimes(1);
-      // Verify that the custom API base URL is used in the request
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('custom-cloudflare-api.example.com'),
+        'https://custom-cloudflare-api.example.com/v1/chat/completions',
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({
-            'Content-Type': 'application/json',
             Authorization: 'Bearer test-key',
+            'Content-Type': 'application/json',
           }),
+          body: expect.any(String),
         }),
       );
+
+      expect(result.output).toBe(responsePayload.choices[0].message.content);
+    });
+
+    it('Should pass through additional configuration parameters', async () => {
+      const configWithPassthrough = {
+        accountId: 'test-account',
+        apiKey: 'test-key',
+        temperature: 0.8,
+        max_tokens: 1000,
+        top_p: 0.9,
+        // Cloudflare-specific parameters
+        seed: 12345,
+        repetition_penalty: 1.1,
+        // Custom passthrough parameters
+        custom_param: 'custom_value',
+        another_param: 42,
+      } as CloudflareAiConfig;
+
+      const provider = new CloudflareAiChatCompletionProvider(testModelName, {
+        config: configWithPassthrough,
+      });
+
+      const responsePayload = {
+        choices: [
+          {
+            message: {
+              content: 'Response with passthrough params',
+            },
+          },
+        ],
+        usage: {
+          total_tokens: 50,
+          prompt_tokens: 25,
+          completion_tokens: 25,
+        },
+      };
+      const mockResponse = {
+        ...defaultMockResponse,
+        text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
+        ok: true,
+      };
+
+      mockFetch.mockResolvedValue(mockResponse);
+      await provider.callApi('Test passthrough');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/chat/completions'),
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            Authorization: 'Bearer test-key',
+            'Content-Type': 'application/json',
+          }),
+          body: expect.stringContaining('"custom_param":"custom_value"'),
+        }),
+      );
+
+      // Verify the request body contains passthrough parameters
+      const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(requestBody.temperature).toBe(0.8);
+      expect(requestBody.max_tokens).toBe(1000);
+      expect(requestBody.top_p).toBe(0.9);
+      expect(requestBody.seed).toBe(12345);
+      expect(requestBody.repetition_penalty).toBe(1.1);
+      expect(requestBody.custom_param).toBe('custom_value');
+      expect(requestBody.another_param).toBe(42);
+
+      // Verify Cloudflare-specific config keys are not in the request body
+      expect(requestBody.accountId).toBeUndefined();
+      expect(requestBody.apiKey).toBeUndefined();
+      expect(requestBody.apiKeyEnvar).toBeUndefined();
+      expect(requestBody.apiBaseUrl).toBeUndefined();
     });
   });
 

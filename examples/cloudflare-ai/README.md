@@ -27,18 +27,24 @@ export CLOUDFLARE_API_KEY=your_api_key_here
 ## Example Configurations
 
 ### Basic Usage (`chat_config.yaml`)
+
 Compares chat and completion providers using current state-of-the-art models:
+
 - `cloudflare-ai:completion:@cf/qwen/qwen2.5-coder-32b-instruct` - Advanced code generation model
 - `cloudflare-ai:chat:@cf/deepseek-ai/deepseek-r1-distill-qwen-32b` - Reasoning and conversation model
 
 ### Advanced Configuration (`chat_advanced_configuration.yaml`)
+
 Demonstrates OpenAI-compatible parameters with Cloudflare AI:
+
 - Uses `@cf/google/gemma-3-12b-it` (latest Gemma with 128K context)
 - Custom `max_tokens`, `temperature`, `seed` parameters
 - Environment variable configuration patterns
 
 ### Embedding Configuration (`embedding_configuration.yaml`)
+
 Shows embedding generation and similarity testing:
+
 - Chat: `@cf/hf/nousresearch/hermes-2-pro-mistral-7b` (function calling support)
 - Embedding: `@cf/baai/bge-large-en-v1.5` (high-quality embeddings)
 - Similarity assertion testing with configurable thresholds
@@ -64,6 +70,7 @@ This example showcases current state-of-the-art models:
 ## OpenAI Compatibility
 
 All examples use Cloudflare's OpenAI-compatible endpoints, supporting standard parameters:
+
 - `temperature` - Response randomness control
 - `max_tokens` - Output length limits
 - `top_p` - Nucleus sampling

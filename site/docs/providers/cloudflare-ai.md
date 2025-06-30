@@ -65,7 +65,9 @@ All standard OpenAI parameters work with Cloudflare AI models: `temperature`, `m
 The Cloudflare AI provider supports three different provider types:
 
 ### Chat Completion
+
 For conversational AI and instruction-following models:
+
 ```yaml
 providers:
   - cloudflare-ai:chat:@cf/deepseek-ai/deepseek-r1-distill-qwen-32b
@@ -74,7 +76,9 @@ providers:
 ```
 
 ### Text Completion
+
 For completion-style tasks:
+
 ```yaml
 providers:
   - cloudflare-ai:completion:@cf/qwen/qwen2.5-coder-32b-instruct
@@ -82,7 +86,9 @@ providers:
 ```
 
 ### Embeddings
+
 For generating text embeddings:
+
 ```yaml
 providers:
   - cloudflare-ai:embedding:@cf/baai/bge-large-en-v1.5
@@ -96,14 +102,17 @@ Here are some of the latest models available on Cloudflare Workers AI:
 ### State-of-the-Art Models
 
 **Reasoning & Problem Solving:**
+
 - `@cf/deepseek-ai/deepseek-r1-distill-qwen-32b` - Advanced reasoning model distilled from DeepSeek R1
 - `@cf/qwen/qwq-32b` - Medium-sized reasoning model competitive with o1-mini
 
 **Code Generation:**
+
 - `@cf/qwen/qwen2.5-coder-32b-instruct` - Current state-of-the-art open-source code model
 - `@hf/thebloke/deepseek-coder-6.7b-instruct-awq` - Efficient coding model
 
 **General Purpose:**
+
 - `@cf/google/gemma-3-12b-it` - Latest Gemma model with 128K context and multilingual support
 - `@hf/nousresearch/hermes-2-pro-mistral-7b` - Function calling and JSON mode support
 
@@ -138,7 +147,7 @@ providers:
       top_p: 0.9
       frequency_penalty: 0.1
       presence_penalty: 0.1
-  
+
   - id: cloudflare-ai:completion:@cf/qwen/qwen2.5-coder-32b-instruct
     config:
       accountId: your_account_id_here
