@@ -1,373 +1,253 @@
-import type Cloudflare from 'cloudflare';
-import { fetchWithCache } from '../cache';
 import type { EnvVarKey } from '../envars';
 import { getEnvString } from '../envars';
-import logger from '../logger';
-import type {
-  ApiProvider,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  ProviderEmbeddingResponse,
-  ProviderResponse,
-} from '../types';
+import type { ApiProvider, ProviderOptions } from '../types';
 import type { EnvOverrides } from '../types/env';
 import invariant from '../util/invariant';
-import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
+import { OpenAiChatCompletionProvider } from './openai/chat';
+import { OpenAiCompletionProvider } from './openai/completion';
+import { OpenAiEmbeddingProvider } from './openai/embedding';
+import type { OpenAiCompletionOptions } from './openai/types';
 
-/**
- * These are parameters that have nothing to do with model invocation
- * TextGeneration was picked by default but other params can be added here
- * to omit them from the types
- */
-type ICloudflareParamsToIgnore = keyof Pick<
-  Cloudflare.Workers.AI.AIRunParams.TextGeneration,
-  'messages' | 'prompt' | 'raw' | 'stream' | 'account_id'
->;
-
-export type ICloudflareProviderBaseConfig = {
+export interface CloudflareAiConfig extends OpenAiCompletionOptions {
   accountId?: string;
   accountIdEnvar?: string;
   apiKey?: string;
   apiKeyEnvar?: string;
   apiBaseUrl?: string;
-};
+}
 
-export type ICloudflareTextGenerationOptions = {
-  frequency_penalty?: number;
-  lora?: number;
-  max_tokens?: number;
-  presence_penalty?: number;
-  repetition_penalty?: number;
-  seed?: number;
-  temperature?: number;
-  top_k?: number;
-  top_p?: number;
-};
+export interface CloudflareAiProviderOptions extends ProviderOptions {
+  config?: CloudflareAiConfig;
+}
 
-export type ICloudflareProviderConfig = ICloudflareProviderBaseConfig &
-  ICloudflareTextGenerationOptions;
+function getCloudflareApiConfig(
+  config?: CloudflareAiConfig,
+  env?: EnvOverrides,
+): { accountId: string; apiToken: string } {
+  const apiTokenCandidate =
+    config?.apiKey ||
+    (config?.apiKeyEnvar
+      ? getEnvString(config.apiKeyEnvar as EnvVarKey) ||
+        env?.[config.apiKeyEnvar as keyof EnvOverrides]
+      : undefined) ||
+    env?.CLOUDFLARE_API_KEY ||
+    getEnvString('CLOUDFLARE_API_KEY');
 
-export type ICloudflareSuccessResponse<SuccessData extends Record<string, unknown>> = {
-  success: true;
-  errors: [];
-  messages: unknown[];
-  result: SuccessData;
-};
+  invariant(
+    apiTokenCandidate,
+    'Cloudflare API token required. Supply it via config apiKey or apiKeyEnvar, or the CLOUDFLARE_API_KEY environment variable',
+  );
 
-export type IBuildCloudflareResponse<SuccessData extends Record<string, unknown>> =
-  | ICloudflareSuccessResponse<SuccessData>
-  | { success: false; errors: unknown[]; messages: unknown[] };
+  const accountIdCandidate =
+    config?.accountId ||
+    (config?.accountIdEnvar
+      ? getEnvString(config.accountIdEnvar as EnvVarKey) ||
+        env?.[config.accountIdEnvar as keyof EnvOverrides]
+      : undefined) ||
+    env?.CLOUDFLARE_ACCOUNT_ID ||
+    getEnvString('CLOUDFLARE_ACCOUNT_ID');
 
-abstract class CloudflareAiGenericProvider implements ApiProvider {
-  abstract readonly modelType: 'embedding' | 'chat' | 'completion';
+  invariant(
+    accountIdCandidate,
+    'Cloudflare account ID required. Supply it via config accountId or accountIdEnvar, or the CLOUDFLARE_ACCOUNT_ID environment variable',
+  );
 
-  deploymentName: string;
-  public readonly config: ICloudflareProviderConfig;
-  env?: EnvOverrides;
+  return {
+    apiToken: apiTokenCandidate,
+    accountId: accountIdCandidate,
+  };
+}
 
-  constructor(
-    deploymentName: string,
-    options: {
-      config?: ICloudflareProviderConfig;
-      id?: string;
-      env?: EnvOverrides;
-    } = {},
-  ) {
-    const { config, id, env } = options;
-    this.env = env;
-
-    this.deploymentName = deploymentName;
-
-    this.config = config || {};
-    this.id = id ? () => id : this.id;
+function getApiBaseUrl(config?: CloudflareAiConfig, env?: EnvOverrides): string {
+  // If custom API base URL is provided, use it
+  if (config?.apiBaseUrl) {
+    return config.apiBaseUrl;
   }
 
-  getApiConfig(): { accountId: string; apiToken: string } {
-    const apiTokenCandidate =
-      this.config?.apiKey ||
-      (this.config?.apiKeyEnvar
-        ? getEnvString(this.config.apiKeyEnvar as EnvVarKey) ||
-          this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
-        : undefined) ||
-      this.env?.CLOUDFLARE_API_KEY ||
-      getEnvString('CLOUDFLARE_API_KEY');
+  // Otherwise, construct the default Cloudflare AI API URL
+  const { accountId } = getCloudflareApiConfig(config, env);
+  return `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/v1`;
+}
 
-    invariant(
-      apiTokenCandidate,
-      'Cloudflare API token required. Supply it via config apiKey or apiKeyEnvar, or the CLOUDFLARE_API_KEY environment variable',
-    );
+function getPassthroughConfig(config?: CloudflareAiConfig) {
+  // Extract Cloudflare-specific config keys that shouldn't be passed through
+  const {
+    accountId: _accountId,
+    accountIdEnvar: _accountIdEnvar,
+    apiKey: _apiKey,
+    apiKeyEnvar: _apiKeyEnvar,
+    apiBaseUrl: _apiBaseUrl,
+    ...passthrough
+  } = config || {};
+  return passthrough;
+}
 
-    const accountIdCandidate =
-      this.config?.accountId ||
-      (this.config?.accountIdEnvar
-        ? getEnvString(this.config.accountIdEnvar as EnvVarKey) ||
-          this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
-        : undefined) ||
-      this.env?.CLOUDFLARE_ACCOUNT_ID ||
-      getEnvString('CLOUDFLARE_ACCOUNT_ID');
+export class CloudflareAiChatCompletionProvider extends OpenAiChatCompletionProvider {
+  private cloudflareConfig: CloudflareAiConfig;
+  private modelType = 'chat';
 
-    invariant(
-      accountIdCandidate,
-      'Cloudflare account ID required. Supply it via config apiKey or apiKeyEnvar, or the CLOUDFLARE_ACCOUNT_ID environment variable',
-    );
+  constructor(modelName: string, providerOptions: CloudflareAiProviderOptions) {
+    const apiBaseUrl = getApiBaseUrl(providerOptions.config, providerOptions.env);
+    const passthrough = getPassthroughConfig(providerOptions.config);
 
-    invariant(
-      apiTokenCandidate,
-      'Cloudflare API token required. Supply it via config apiKey or apiKeyEnvar, or the CLOUDFLARE_API_KEY environment variable',
-    );
-
-    return {
-      apiToken: apiTokenCandidate,
-      accountId: accountIdCandidate,
+    const config: OpenAiCompletionOptions = {
+      ...providerOptions.config,
+      apiKeyEnvar: 'CLOUDFLARE_API_KEY',
+      apiBaseUrl,
+      passthrough,
     };
-  }
 
-  /**
-   * @see https://developers.cloudflare.com/api/operations/workers-ai-post-run-model
-   */
-  getApiBaseUrl(): string {
-    const { accountId } = this.getApiConfig();
-    return this.config.apiBaseUrl || `https://api.cloudflare.com/client/v4/accounts/${accountId}`;
-  }
+    super(modelName, {
+      ...providerOptions,
+      config,
+    });
 
-  /**
-   * @see https://developers.cloudflare.com/api/operations/workers-ai-post-run-model
-   */
-  buildUrl() {
-    return `${this.getApiBaseUrl()}/ai/run/${this.deploymentName}`;
+    this.cloudflareConfig = providerOptions.config || {};
   }
 
   id(): string {
-    return `cloudflare-ai:${this.modelType}:${this.deploymentName}`;
+    return `cloudflare-ai:${this.modelType}:${this.modelName}`;
   }
 
   toString(): string {
-    return `[Cloudflare AI Provider ${this.deploymentName}]`;
+    return `[Cloudflare AI ${this.modelType} Provider ${this.modelName}]`;
   }
 
-  protected buildApiHeaders(): {
-    Authorization: `Bearer ${string}`;
-    'Content-Type': 'application/json';
-  } {
-    const { apiToken } = this.getApiConfig();
+  getApiKey(): string | undefined {
+    const { apiToken } = getCloudflareApiConfig(this.cloudflareConfig, this.env);
+    return apiToken;
+  }
+
+  toJSON() {
     return {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiToken}`,
-    };
-  }
-
-  /**
-   * Cloudflare does not report usage but if it starts to pipe it through its response we can
-   * fill in this implementation
-   */
-  protected getTokenUsageFromResponse(
-    _response: IBuildCloudflareResponse<Record<string, unknown>>,
-  ): ProviderEmbeddingResponse['tokenUsage'] {
-    // TODO: Figure out token usage for invoked + cache situations
-    const tokenUsage: ProviderEmbeddingResponse['tokenUsage'] = {
-      cached: undefined,
-      completion: undefined,
-      prompt: undefined,
-      total: undefined,
-    };
-    return tokenUsage;
-  }
-
-  /**
-   * Handles the actual marshalling of Cloudflare API response data into the response types expected
-   * by inheriting consumers
-   *
-   * This is meant to be used internally across the inheriting providers
-   * @param body
-   * @returns
-   */
-  protected async handleApiCall<
-    InitialResponse extends IBuildCloudflareResponse<Record<string, unknown>>,
-    SuccessResponse extends InitialResponse = InitialResponse extends ICloudflareSuccessResponse<
-      Record<string, unknown>
-    >
-      ? InitialResponse
-      : never,
-  >(
-    body: Record<string, unknown>,
-  ): Promise<
-    | {
-        data: SuccessResponse;
-        cached: boolean;
-        tokenUsage: ProviderEmbeddingResponse['tokenUsage'];
-      }
-    | { error: string }
-  > {
-    let data: InitialResponse;
-    let cached: boolean;
-
-    logger.debug(`Calling Cloudflare AI API: ${JSON.stringify(body)}`);
-
-    const url = this.buildUrl();
-
-    try {
-      ({ data, cached } = (await fetchWithCache(
-        url,
-        {
-          method: 'POST',
-          headers: this.buildApiHeaders(),
-          body: JSON.stringify(body),
-        },
-        REQUEST_TIMEOUT_MS,
-      )) as unknown as any);
-    } catch (err) {
-      return {
-        error: `API call error: ${String(err)}`,
-      };
-    }
-    logger.debug(`\tCloudflare AI API response: ${JSON.stringify(data)}`);
-    const tokenUsage = this.getTokenUsageFromResponse(data);
-
-    if (!data.success) {
-      return {
-        error: `API response error: ${JSON.stringify(data.errors)} (messages: ${String(
-          data.messages,
-        )} -- URL: ${url}): ${JSON.stringify(data)}`,
-        tokenUsage,
-      };
-    }
-
-    return {
-      cached,
-      data: data as SuccessResponse,
-      tokenUsage,
-    };
-  }
-
-  async callApi(
-    prompt: string,
-    context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
-  ): Promise<ProviderResponse> {
-    throw new Error('Not implemented');
-  }
-}
-
-type IEmbeddingsResponse = {
-  shape: [number, number];
-  data: number[][];
-};
-
-export type ICloudflareEmbeddingResponse = IBuildCloudflareResponse<IEmbeddingsResponse>;
-
-export class CloudflareAiEmbeddingProvider extends CloudflareAiGenericProvider {
-  readonly modelType = 'embedding';
-
-  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
-    const body: Omit<Cloudflare.Workers.AI.AIRunParams.TextEmbeddings, ICloudflareParamsToIgnore> =
-      {
-        text,
-      };
-
-    const cfResponse = await this.handleApiCall<ICloudflareEmbeddingResponse>(body);
-    if ('error' in cfResponse) {
-      return { error: cfResponse.error };
-    }
-
-    const { data, tokenUsage, cached } = cfResponse;
-
-    try {
-      const embedding = data.result.data[0];
-      if (!embedding) {
-        logger.error(
-          `No data could be found in the Cloudflare API response: ${JSON.stringify(data)}`,
-        );
-        throw new Error('No embedding returned');
-      }
-      const ret = {
-        cached,
-        embedding,
-        tokenUsage,
-      };
-      return ret;
-    } catch (err) {
-      return {
-        error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
-        tokenUsage,
-      };
-    }
-  }
-}
-
-export type ICloudflareTextGenerationResponse = IBuildCloudflareResponse<{ response: string }>;
-
-export class CloudflareAiCompletionProvider extends CloudflareAiGenericProvider {
-  readonly modelType = 'completion';
-
-  async callApi(
-    prompt: string,
-    context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
-  ): Promise<ProviderResponse> {
-    const body: { [K in keyof ICloudflareTextGenerationOptions]: any } & { prompt: string } = {
-      prompt,
-      max_tokens: this.config.max_tokens,
-      temperature: this.config.temperature,
-      top_p: this.config.top_p,
-      presence_penalty: this.config.presence_penalty,
-      frequency_penalty: this.config.frequency_penalty,
-      lora: this.config.lora,
-      repetition_penalty: this.config.repetition_penalty,
-      seed: this.config.seed,
-      top_k: this.config.top_k,
-    };
-
-    const cfResponse = await this.handleApiCall<ICloudflareTextGenerationResponse>(body);
-    if ('error' in cfResponse) {
-      return { error: cfResponse.error };
-    }
-
-    const { data, cached, tokenUsage } = cfResponse;
-
-    return {
-      output: data.result.response,
-      tokenUsage,
-      cached,
+      provider: 'cloudflare-ai',
+      model: this.modelName,
+      modelType: this.modelType,
+      config: {
+        ...this.config,
+        ...(this.getApiKey() && { apiKey: undefined }),
+      },
     };
   }
 }
 
-export class CloudflareAiChatCompletionProvider extends CloudflareAiGenericProvider {
-  readonly modelType = 'chat';
+export class CloudflareAiCompletionProvider extends OpenAiCompletionProvider {
+  private cloudflareConfig: CloudflareAiConfig;
+  private modelType = 'completion';
 
-  async callApi(
-    prompt: string,
-    context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
-  ): Promise<ProviderResponse> {
-    const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+  constructor(modelName: string, providerOptions: CloudflareAiProviderOptions) {
+    const apiBaseUrl = getApiBaseUrl(providerOptions.config, providerOptions.env);
+    const passthrough = getPassthroughConfig(providerOptions.config);
 
-    const body: { [K in keyof ICloudflareTextGenerationOptions]: any } & {
-      messages: { role: string; content: string }[];
-    } = {
-      messages,
-      max_tokens: this.config.max_tokens,
-      temperature: this.config.temperature,
-      top_p: this.config.top_p,
-      presence_penalty: this.config.presence_penalty,
-      frequency_penalty: this.config.frequency_penalty,
-      lora: this.config.lora,
-      repetition_penalty: this.config.repetition_penalty,
-      seed: this.config.seed,
-      top_k: this.config.top_k,
+    const config: OpenAiCompletionOptions = {
+      ...providerOptions.config,
+      apiKeyEnvar: 'CLOUDFLARE_API_KEY',
+      apiBaseUrl,
+      passthrough,
     };
 
-    const cfResponse = await this.handleApiCall<ICloudflareTextGenerationResponse>(body);
-    if ('error' in cfResponse) {
-      return { error: cfResponse.error };
-    }
+    super(modelName, {
+      ...providerOptions,
+      config,
+    });
 
-    const { data, cached, tokenUsage } = cfResponse;
+    this.cloudflareConfig = providerOptions.config || {};
+  }
 
+  id(): string {
+    return `cloudflare-ai:${this.modelType}:${this.modelName}`;
+  }
+
+  toString(): string {
+    return `[Cloudflare AI ${this.modelType} Provider ${this.modelName}]`;
+  }
+
+  getApiKey(): string | undefined {
+    const { apiToken } = getCloudflareApiConfig(this.cloudflareConfig, this.env);
+    return apiToken;
+  }
+
+  toJSON() {
     return {
-      output: data.result.response,
-      tokenUsage,
-      cached,
+      provider: 'cloudflare-ai',
+      model: this.modelName,
+      modelType: this.modelType,
+      config: {
+        ...this.config,
+        ...(this.getApiKey() && { apiKey: undefined }),
+      },
     };
+  }
+}
+
+export class CloudflareAiEmbeddingProvider extends OpenAiEmbeddingProvider {
+  private cloudflareConfig: CloudflareAiConfig;
+  private modelType = 'embedding';
+
+  constructor(modelName: string, providerOptions: CloudflareAiProviderOptions) {
+    const apiBaseUrl = getApiBaseUrl(providerOptions.config, providerOptions.env);
+    const passthrough = getPassthroughConfig(providerOptions.config);
+
+    const config: OpenAiCompletionOptions = {
+      ...providerOptions.config,
+      apiKeyEnvar: 'CLOUDFLARE_API_KEY',
+      apiBaseUrl,
+      passthrough,
+    };
+
+    super(modelName, {
+      ...providerOptions,
+      config,
+    });
+
+    this.cloudflareConfig = providerOptions.config || {};
+  }
+
+  id(): string {
+    return `cloudflare-ai:${this.modelType}:${this.modelName}`;
+  }
+
+  toString(): string {
+    return `[Cloudflare AI ${this.modelType} Provider ${this.modelName}]`;
+  }
+
+  getApiKey(): string | undefined {
+    const { apiToken } = getCloudflareApiConfig(this.cloudflareConfig, this.env);
+    return apiToken;
+  }
+
+  toJSON() {
+    return {
+      provider: 'cloudflare-ai',
+      model: this.modelName,
+      modelType: this.modelType,
+      config: {
+        ...this.config,
+        ...(this.getApiKey() && { apiKey: undefined }),
+      },
+    };
+  }
+}
+
+export function createCloudflareAiProvider(
+  providerPath: string,
+  options: CloudflareAiProviderOptions = {},
+): ApiProvider {
+  const splits = providerPath.split(':');
+  const modelType = splits[1];
+  const modelName = splits.slice(2).join(':');
+
+  invariant(modelName, 'Model name is required');
+
+  switch (modelType) {
+    case 'chat':
+      return new CloudflareAiChatCompletionProvider(modelName, options);
+    case 'completion':
+      return new CloudflareAiCompletionProvider(modelName, options);
+    case 'embedding':
+    case 'embeddings':
+      return new CloudflareAiEmbeddingProvider(modelName, options);
+    default:
+      throw new Error(`Unknown Cloudflare AI model type: ${modelType}`);
   }
 }
