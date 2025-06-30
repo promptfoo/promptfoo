@@ -1,6 +1,19 @@
 ---
-sidebar_position: 4
-sidebar_label: Overview - Prompts, tests, outputs
+sidebar_position: 3
+sidebar_label: Overview
+title: Configuration Overview - Prompts, Tests, and Outputs
+description: Quick overview of promptfoo's core configuration concepts including prompts, test cases, outputs, and common patterns for LLM evaluation.
+keywords:
+  [
+    promptfoo overview,
+    configuration basics,
+    prompt setup,
+    test cases,
+    output formats,
+    evaluation workflow,
+  ]
+pagination_prev: configuration/reference
+pagination_next: configuration/prompts
 ---
 
 # Prompts, tests, and outputs
