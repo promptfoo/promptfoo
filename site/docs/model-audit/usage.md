@@ -178,28 +178,292 @@ ModelAudit includes multiple layers of security protection to defend against sop
 - **Path Traversal Prevention**: Blocks malicious archive extractions that attempt to write files outside their intended directory
 - **Executable Detection**: Finds embedded PE, ELF, and Mach-O files with validation
 
+## Blacklist Configuration
+
+Configure custom security patterns to detect specific threats relevant to your organization.
+
+### Using Blacklist Patterns
+
+Add custom patterns to flag suspicious model names or content:
+
+```bash
+# Single pattern
+promptfoo scan-model model.pkl --blacklist "unsafe_model"
+
+# Multiple patterns
+promptfoo scan-model model.pkl --blacklist "unsafe_model" --blacklist "malicious_net" --blacklist "backdoor"
+
+# Pattern examples for different threats
+promptfoo scan-model models/ \
+  --blacklist "deepfake" \
+  --blacklist "jailbreak" \
+  --blacklist "bypass" \
+  --blacklist "exploit"
+```
+
+### Common Blacklist Patterns
+
+**Malicious model names:**
+
+```bash
+--blacklist "unsafe_.*" --blacklist "malicious.*" --blacklist "backdoor.*"
+```
+
+**Known vulnerable models:**
+
+```bash
+--blacklist "compromised_model" --blacklist "trojan_net" --blacklist "poison.*"
+```
+
+**Suspicious origins:**
+
+```bash
+--blacklist "unknown_source" --blacklist "untrusted.*" --blacklist "test_exploit"
+```
+
+### Pattern Matching
+
+Blacklist patterns support basic wildcards and are case-insensitive:
+
+- `unsafe_*` matches `unsafe_model`, `unsafe_net`, etc.
+- `.*malicious.*` matches any name containing "malicious"
+- Patterns are checked against model file names and paths
+
 ## CI/CD Integration
 
-Integrate ModelAudit into your development workflows to automate security scanning:
+Integrate ModelAudit into your development workflows to automate security scanning.
 
-**Exit codes for automation:**
+### Exit Codes for Automation
 
-- `0`: No security issues found
-- `1`: Issues detected (warnings or critical)
-- `2`: Scan errors (file not found, etc.)
+ModelAudit returns specific exit codes for different scenarios:
 
-**GitHub Actions example:**
+- `0`: No security issues found (clean scan)
+- `1`: Issues detected (warnings or critical findings)
+- `2`: Scan errors (file not found, permission denied, etc.)
+
+Use these codes to control your CI/CD pipeline behavior.
+
+### GitHub Actions
+
+Complete GitHub Actions workflow for model security scanning:
 
 ```yaml
-- name: Scan models
-  run: promptfoo scan-model models/ --format json --output scan-results.json
-- name: Check for critical issues
-  run: |
-    if grep -q '"severity":"critical"' scan-results.json; then
-      echo "Critical security issues found!"
-      exit 1
-    fi
+# .github/workflows/model-security.yml
+name: Model Security Scan
+
+on:
+  push:
+    paths:
+      - 'models/**'
+      - '**/*.pkl'
+      - '**/*.h5'
+      - '**/*.pt'
+      - '**/*.pth'
+      - '**/*.onnx'
+      - '**/*.safetensors'
+  pull_request:
+    paths:
+      - 'models/**'
+
+jobs:
+  model-security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install ModelAudit
+        run: |
+          npm install -g promptfoo
+          pip install modelaudit[all]
+
+      - name: Scan models for security issues
+        run: |
+          promptfoo scan-model models/ \
+            --format json \
+            --output scan-results.json \
+            --blacklist "unsafe.*" \
+            --blacklist "malicious.*" \
+            --timeout 600
+
+      - name: Check for critical security issues
+        run: |
+          if grep -q '"severity":"critical"' scan-results.json; then
+            echo "🚨 Critical security issues found in models!"
+            echo "Please review the scan results before proceeding."
+            exit 1
+          elif grep -q '"severity":"warning"' scan-results.json; then
+            echo "⚠️ Security warnings found in models."
+            echo "Review recommended but not blocking deployment."
+          else
+            echo "✅ No security issues found in models."
+          fi
+
+      - name: Upload scan results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: model-security-scan-results
+          path: scan-results.json
+
+      - name: Comment PR with results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const results = JSON.parse(fs.readFileSync('scan-results.json', 'utf8'));
+            const criticalCount = results.filter(r => r.severity === 'critical').length;
+            const warningCount = results.filter(r => r.severity === 'warning').length;
+
+            let message = '## 🔍 Model Security Scan Results\n\n';
+            if (criticalCount > 0) {
+              message += `🚨 **${criticalCount} critical security issues found**\n`;
+            }
+            if (warningCount > 0) {
+              message += `⚠️ **${warningCount} warnings found**\n`;
+            }
+            if (criticalCount === 0 && warningCount === 0) {
+              message += '✅ **No security issues detected**\n';
+            }
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: message
+            });
 ```
+
+### GitLab CI
+
+GitLab CI configuration for model security scanning:
+
+```yaml
+# .gitlab-ci.yml
+stages:
+  - security-scan
+
+model-security-scan:
+  stage: security-scan
+  image: node:18
+  before_script:
+    - apt-get update && apt-get install -y python3 python3-pip
+    - npm install -g promptfoo
+    - pip3 install modelaudit[all]
+  script:
+    - |
+      promptfoo scan-model models/ \
+        --format json \
+        --output scan-results.json \
+        --blacklist "unsafe.*" \
+        --blacklist "malicious.*" \
+        --timeout 600
+    - |
+      if grep -q '"severity":"critical"' scan-results.json; then
+        echo "🚨 Critical security issues found!"
+        cat scan-results.json
+        exit 1
+      fi
+  artifacts:
+    reports:
+      junit: scan-results.json
+    paths:
+      - scan-results.json
+    when: always
+    expire_in: 1 week
+  only:
+    changes:
+      - models/**/*
+      - '**/*.pkl'
+      - '**/*.h5'
+      - '**/*.pt'
+      - '**/*.pth'
+      - '**/*.onnx'
+```
+
+### Pre-commit Hook
+
+Add ModelAudit as a pre-commit hook to catch issues early:
+
+```yaml
+# .pre-commit-config.yaml
+repos:
+  - repo: local
+    hooks:
+      - id: modelaudit-scan
+        name: ModelAudit Security Scan
+        entry: promptfoo scan-model
+        language: system
+        files: '\.(pkl|h5|pb|pt|pth|keras|hdf5|onnx|safetensors|bin|tflite|msgpack|pmml|joblib|npy|gguf|ggml)$'
+        args: ['--blacklist', 'unsafe.*', '--blacklist', 'malicious.*']
+        pass_filenames: true
+        stages: [commit]
+```
+
+Install and use:
+
+```bash
+pip install pre-commit
+pre-commit install
+# Now scans run automatically on git commit
+```
+
+### Jenkins Pipeline
+
+Jenkins pipeline configuration:
+
+````groovy
+pipeline {
+    agent any
+
+    stages {
+        stage('Model Security Scan') {
+            when {
+                anyOf {
+                    changeset 'models/**'
+                    changeset '**/*.pkl'
+                    changeset '**/*.h5'
+                    changeset '**/*.pt'
+                    changeset '**/*.onnx'
+                }
+            }
+            steps {
+                script {
+                    sh '''
+                        npm install -g promptfoo
+                        pip install modelaudit[all]
+
+                        promptfoo scan-model models/ \
+                            --format json \
+                            --output scan-results.json \
+                            --blacklist "unsafe.*" \
+                            --blacklist "malicious.*"
+
+                        if grep -q '"severity":"critical"' scan-results.json; then
+                            echo "Critical security issues found!"
+                            exit 1
+                        fi
+                    '''
+                }
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'scan-results.json', allowEmptyArchive: true
+                }
+            }
+        }
+    }
+}
 
 ## Troubleshooting
 
@@ -209,7 +473,7 @@ Resolve common issues that may occur during installation or scanning.
 
 ```bash
 pip install tensorflow h5py torch onnx  # Install format-specific dependencies
-```
+````
 
 **File size limits:**
 
