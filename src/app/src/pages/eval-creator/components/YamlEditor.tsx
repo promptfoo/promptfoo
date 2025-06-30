@@ -100,6 +100,10 @@ const YamlEditorComponent: React.FC<YamlEditorProps> = ({
             newState.defaultTest = parsedConfig.defaultTest;
           }
 
+          if (parsedConfig.derivedMetrics !== undefined) {
+            newState.derivedMetrics = parsedConfig.derivedMetrics;
+          }
+
           if (parsedConfig.evaluateOptions !== undefined) {
             newState.evaluateOptions = parsedConfig.evaluateOptions;
           }

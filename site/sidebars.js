@@ -9,9 +9,269 @@
  Create as many sidebars as you want.
  */
 
-const { amber } = require('@mui/material/colors');
-
-// @ts-check
+const redTeamSidebar = [
+  {
+    type: 'doc',
+    id: 'red-team/index',
+  },
+  {
+    type: 'doc',
+    id: 'red-team/quickstart',
+  },
+  {
+    type: 'doc',
+    id: 'red-team/configuration',
+  },
+  {
+    type: 'doc',
+    id: 'red-team/architecture',
+  },
+  {
+    type: 'doc',
+    id: 'red-team/llm-vulnerability-types',
+  },
+  {
+    type: 'doc',
+    id: 'red-team/owasp-llm-top-10',
+  },
+  {
+    type: 'category',
+    label: 'Plugins',
+    collapsed: true,
+    link: {
+      type: 'doc',
+      id: 'red-team/plugins/index',
+    },
+    items: [
+      {
+        type: 'category',
+        label: 'Privacy & Access Control',
+        collapsed: true,
+        items: [
+          'red-team/plugins/ascii-smuggling',
+          'red-team/plugins/bfla',
+          'red-team/plugins/bola',
+          'red-team/plugins/cross-session-leak',
+          'red-team/plugins/debug-access',
+          'red-team/plugins/context-compliance-attack',
+          'red-team/plugins/divergent-repetition',
+          'red-team/plugins/hijacking',
+          'red-team/plugins/indirect-prompt-injection',
+          'red-team/plugins/mcp',
+          'red-team/plugins/memory-poisoning',
+          'red-team/plugins/pii',
+          'red-team/plugins/prompt-extraction',
+          'red-team/plugins/rag-document-exfiltration',
+          'red-team/plugins/rag-poisoning',
+          'red-team/plugins/rbac',
+          'red-team/plugins/reasoning-dos',
+          'red-team/plugins/shell-injection',
+          'red-team/plugins/sql-injection',
+          'red-team/plugins/ssrf',
+          'red-team/plugins/system-prompt-override',
+          'red-team/plugins/tool-discovery',
+        ],
+      },
+      {
+        type: 'category',
+        label: 'Trust, Safety, & Compliance',
+        collapsed: true,
+        items: [
+          'red-team/plugins/beavertails',
+          'red-team/plugins/contracts',
+          'red-team/plugins/cyberseceval',
+          'red-team/plugins/donotanswer',
+          'red-team/plugins/gender-bias',
+          'red-team/plugins/harmbench',
+          'red-team/plugins/aegis',
+          'red-team/plugins/harmful',
+          'red-team/plugins/pliny',
+          'red-team/plugins/politics',
+          'red-team/plugins/religion',
+          'red-team/plugins/toxic-chat',
+          'red-team/plugins/unsafebench',
+          'red-team/plugins/xstest',
+        ],
+      },
+      {
+        type: 'category',
+        label: 'Brand & Reputation',
+        collapsed: true,
+        items: [
+          'red-team/plugins/competitors',
+          'red-team/plugins/excessive-agency',
+          'red-team/plugins/hallucination',
+          'red-team/plugins/imitation',
+          'red-team/plugins/off-topic',
+          'red-team/plugins/overreliance',
+        ],
+      },
+      {
+        type: 'category',
+        label: 'Domain-Specific',
+        collapsed: true,
+        items: ['red-team/plugins/medical', 'red-team/plugins/financial'],
+      },
+      {
+        type: 'category',
+        label: 'Custom',
+        collapsed: true,
+        items: ['red-team/plugins/policy', 'red-team/plugins/intent', 'red-team/plugins/custom'],
+      },
+    ],
+  },
+  {
+    type: 'category',
+    label: 'Strategies',
+    collapsed: true,
+    link: {
+      type: 'doc',
+      id: 'red-team/strategies/index',
+    },
+    items: [
+      {
+        type: 'category',
+        label: 'Single-Turn',
+        collapsed: true,
+        items: [
+          'red-team/strategies/base64',
+          'red-team/strategies/basic',
+          'red-team/strategies/best-of-n',
+          'red-team/strategies/citation',
+          'red-team/strategies/gcg',
+          'red-team/strategies/hex',
+          'red-team/strategies/homoglyph',
+          'red-team/strategies/leetspeak',
+          'red-team/strategies/likert',
+          'red-team/strategies/math-prompt',
+          'red-team/strategies/multilingual',
+          'red-team/strategies/other-encodings',
+          'red-team/strategies/prompt-injection',
+          'red-team/strategies/rot13',
+        ],
+      },
+      {
+        type: 'category',
+        label: 'Conversational',
+        collapsed: true,
+        items: [
+          'red-team/strategies/multi-turn',
+          'red-team/strategies/goat',
+          'red-team/strategies/pandamonium',
+        ],
+      },
+      {
+        type: 'category',
+        label: 'Agentic',
+        collapsed: true,
+        items: [
+          'red-team/strategies/iterative',
+          'red-team/strategies/tree',
+          'red-team/strategies/composite-jailbreaks',
+        ],
+      },
+      {
+        type: 'category',
+        label: 'Multimodal',
+        collapsed: true,
+        items: [
+          'red-team/strategies/image',
+          'red-team/strategies/audio',
+          'red-team/strategies/video',
+        ],
+      },
+      {
+        type: 'category',
+        label: 'Custom',
+        collapsed: true,
+        items: ['red-team/strategies/custom'],
+      },
+      {
+        type: 'category',
+        label: 'Regression',
+        collapsed: true,
+        items: ['red-team/strategies/retry'],
+      },
+    ],
+  },
+  {
+    type: 'category',
+    label: 'Tools',
+    collapsed: true,
+    items: [
+      {
+        type: 'doc',
+        id: 'red-team/discovery',
+      },
+      {
+        type: 'doc',
+        id: 'red-team/guardrails',
+      },
+      {
+        type: 'category',
+        label: 'Model Scanner',
+        collapsed: true,
+        items: [
+          {
+            type: 'doc',
+            id: 'model-audit/index',
+          },
+          {
+            type: 'doc',
+            id: 'model-audit/usage',
+          },
+          {
+            type: 'doc',
+            id: 'model-audit/scanners',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    type: 'category',
+    label: 'Troubleshooting',
+    collapsed: true,
+    items: [{ type: 'autogenerated', dirName: 'red-team/troubleshooting' }],
+  },
+  {
+    type: 'category',
+    label: 'Guides',
+    collapsed: true,
+    items: [
+      {
+        type: 'doc',
+        label: 'Application Red Teaming',
+        id: 'guides/llm-redteaming',
+      },
+      {
+        type: 'doc',
+        label: 'RAG Red Teaming',
+        id: 'red-team/rag',
+      },
+      {
+        type: 'doc',
+        label: 'Agentic Red Teaming',
+        id: 'red-team/agents',
+      },
+      {
+        type: 'doc',
+        label: 'Multi-Modal Red Teaming',
+        id: 'guides/multimodal-red-team',
+      },
+      {
+        type: 'doc',
+        label: 'Foundation Model Red Teaming',
+        id: 'red-team/foundation-models',
+      },
+      {
+        type: 'doc',
+        label: 'Testing Guardrails',
+        id: 'guides/testing-guardrails',
+      },
+    ],
+  },
+];
 
 /** @type {import('@docusaurus/plugin-content-docs').SidebarsConfig} */
 const sidebars = {
@@ -98,10 +358,7 @@ const sidebars = {
       link: {
         type: 'generated-index',
       },
-      items: [
-        { type: 'autogenerated', dirName: 'red-team' },
-        { type: 'doc', id: 'guides/llm-redteaming' },
-      ],
+      items: [...redTeamSidebar, { type: 'doc', id: 'guides/llm-redteaming' }],
     },
     {
       type: 'category',
@@ -165,240 +422,7 @@ const sidebars = {
     },
   ],
   // Within red team docs, show only the following sidebar
-  redTeamSidebar: [
-    {
-      type: 'doc',
-      id: 'red-team/index',
-    },
-    {
-      type: 'doc',
-      id: 'red-team/quickstart',
-    },
-    {
-      type: 'doc',
-      id: 'red-team/configuration',
-    },
-    {
-      type: 'doc',
-      id: 'red-team/architecture',
-    },
-    {
-      type: 'doc',
-      id: 'red-team/llm-vulnerability-types',
-    },
-    {
-      type: 'doc',
-      id: 'red-team/owasp-llm-top-10',
-    },
-    {
-      type: 'category',
-      label: 'Plugins',
-      collapsed: true,
-      link: {
-        type: 'doc',
-        id: 'red-team/plugins/index',
-      },
-      items: [
-        {
-          type: 'category',
-          label: 'Privacy & Access Control',
-          collapsed: true,
-          items: [
-            'red-team/plugins/ascii-smuggling',
-            'red-team/plugins/bfla',
-            'red-team/plugins/bola',
-            'red-team/plugins/cross-session-leak',
-            'red-team/plugins/debug-access',
-            'red-team/plugins/context-compliance-attack',
-            'red-team/plugins/divergent-repetition',
-            'red-team/plugins/hijacking',
-            'red-team/plugins/indirect-prompt-injection',
-            'red-team/plugins/pii',
-            'red-team/plugins/prompt-extraction',
-            'red-team/plugins/rbac',
-            'red-team/plugins/reasoning-dos',
-            'red-team/plugins/shell-injection',
-            'red-team/plugins/sql-injection',
-            'red-team/plugins/ssrf',
-            'red-team/plugins/system-prompt-override',
-            'red-team/plugins/tool-discovery',
-          ],
-        },
-        {
-          type: 'category',
-          label: 'Trust, Safety, & Compliance',
-          collapsed: true,
-          items: [
-            'red-team/plugins/beavertails',
-            'red-team/plugins/contracts',
-            'red-team/plugins/cyberseceval',
-            'red-team/plugins/donotanswer',
-            'red-team/plugins/harmbench',
-            'red-team/plugins/aegis',
-            'red-team/plugins/harmful',
-            'red-team/plugins/pliny',
-            'red-team/plugins/politics',
-            'red-team/plugins/religion',
-            'red-team/plugins/xstest',
-          ],
-        },
-        {
-          type: 'category',
-          label: 'Brand & Reputation',
-          collapsed: true,
-          items: [
-            'red-team/plugins/competitors',
-            'red-team/plugins/excessive-agency',
-            'red-team/plugins/hallucination',
-            'red-team/plugins/imitation',
-            'red-team/plugins/overreliance',
-          ],
-        },
-        {
-          type: 'category',
-          label: 'Custom',
-          collapsed: true,
-          items: ['red-team/plugins/policy', 'red-team/plugins/intent', 'red-team/plugins/custom'],
-        },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Strategies',
-      collapsed: true,
-      link: {
-        type: 'doc',
-        id: 'red-team/strategies/index',
-      },
-      items: [
-        {
-          type: 'category',
-          label: 'Single-Turn',
-          collapsed: true,
-          items: [
-            'red-team/strategies/base64',
-            'red-team/strategies/basic',
-            'red-team/strategies/best-of-n',
-            'red-team/strategies/citation',
-            'red-team/strategies/gcg',
-            'red-team/strategies/homoglyph',
-            'red-team/strategies/leetspeak',
-            'red-team/strategies/likert',
-            'red-team/strategies/math-prompt',
-            'red-team/strategies/multilingual',
-            'red-team/strategies/other-encodings',
-            'red-team/strategies/prompt-injection',
-            'red-team/strategies/rot13',
-          ],
-        },
-        {
-          type: 'category',
-          label: 'Conversational',
-          collapsed: true,
-          items: ['red-team/strategies/multi-turn', 'red-team/strategies/goat'],
-        },
-        {
-          type: 'category',
-          label: 'Agentic',
-          collapsed: true,
-          items: [
-            'red-team/strategies/iterative',
-            'red-team/strategies/tree',
-            'red-team/strategies/composite-jailbreaks',
-          ],
-        },
-        {
-          type: 'category',
-          label: 'Multimodal',
-          collapsed: true,
-          items: ['red-team/strategies/image', 'red-team/strategies/audio'],
-        },
-        {
-          type: 'category',
-          label: 'Custom',
-          collapsed: true,
-          items: ['red-team/strategies/custom'],
-        },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Tools',
-      collapsed: true,
-      items: [
-        {
-          type: 'doc',
-          id: 'red-team/discovery',
-        },
-        {
-          type: 'doc',
-          id: 'red-team/guardrails',
-        },
-        {
-          type: 'category',
-          label: 'Model Scanner',
-          collapsed: true,
-          items: [
-            {
-              type: 'doc',
-              id: 'model-audit/index',
-            },
-            {
-              type: 'doc',
-              id: 'model-audit/usage',
-            },
-            {
-              type: 'doc',
-              id: 'model-audit/scanners',
-            },
-          ],
-        },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Troubleshooting',
-      collapsed: true,
-      items: [{ type: 'autogenerated', dirName: 'red-team/troubleshooting' }],
-    },
-    {
-      type: 'category',
-      label: 'Guides',
-      collapsed: true,
-      items: [
-        {
-          type: 'doc',
-          label: 'Application Red Teaming',
-          id: 'guides/llm-redteaming',
-        },
-        {
-          type: 'doc',
-          label: 'RAG Red Teaming',
-          id: 'red-team/rag',
-        },
-        {
-          type: 'doc',
-          label: 'Agentic Red Teaming',
-          id: 'red-team/agents',
-        },
-        {
-          type: 'doc',
-          label: 'Multi-Modal Red Teaming',
-          id: 'guides/multimodal-red-team',
-        },
-        {
-          type: 'doc',
-          label: 'Foundation Model Red Teaming',
-          id: 'red-team/foundation-models',
-        },
-        {
-          type: 'doc',
-          label: 'Testing Guardrails',
-          id: 'guides/testing-guardrails',
-        },
-      ],
-    },
-  ],
+  redTeamSidebar,
 };
 
 module.exports = sidebars;

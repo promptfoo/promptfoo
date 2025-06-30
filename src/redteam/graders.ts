@@ -13,6 +13,11 @@ import { CrossSessionLeakGrader } from './plugins/crossSessionLeak';
 import { DebugAccessGrader } from './plugins/debugAccess';
 import { DivergentRepetitionGrader } from './plugins/divergentRepetition';
 import { ExcessiveAgencyGrader } from './plugins/excessiveAgency';
+import { FinancialCalculationErrorPluginGrader } from './plugins/financial/financialCalculationError';
+import { FinancialComplianceViolationPluginGrader } from './plugins/financial/financialComplianceViolation';
+import { FinancialDataLeakagePluginGrader } from './plugins/financial/financialDataLeakage';
+import { FinancialHallucinationPluginGrader } from './plugins/financial/financialHallucination';
+import { FinancialSycophancyPluginGrader } from './plugins/financial/financialSycophancy';
 import { HallucinationGrader } from './plugins/hallucination';
 import { HarmbenchGrader } from './plugins/harmbench';
 import {
@@ -64,7 +69,7 @@ import { ShellInjectionGrader } from './plugins/shellInjection';
 import { SqlInjectionGrader } from './plugins/sqlInjection';
 import { SsrfGrader } from './plugins/ssrf';
 import { ToolDiscoveryGrader } from './plugins/toolDiscovery';
-import { ToxicChatGrader } from './plugins/toxicchat';
+import { ToxicChatGrader } from './plugins/toxicChat';
 import { UnsafeBenchGrader } from './plugins/unsafebench';
 import type { RedteamAssertionTypes } from './types';
 
@@ -83,6 +88,12 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:debug-access': new DebugAccessGrader(),
   'promptfoo:redteam:divergent-repetition': new DivergentRepetitionGrader(),
   'promptfoo:redteam:excessive-agency': new ExcessiveAgencyGrader(),
+  'promptfoo:redteam:financial:calculation-error': new FinancialCalculationErrorPluginGrader(),
+  'promptfoo:redteam:financial:compliance-violation':
+    new FinancialComplianceViolationPluginGrader(),
+  'promptfoo:redteam:financial:data-leakage': new FinancialDataLeakagePluginGrader(),
+  'promptfoo:redteam:financial:hallucination': new FinancialHallucinationPluginGrader(),
+  'promptfoo:redteam:financial:sycophancy': new FinancialSycophancyPluginGrader(),
   'promptfoo:redteam:hallucination': new HallucinationGrader(),
   'promptfoo:redteam:harmbench': new HarmbenchGrader(),
   'promptfoo:redteam:harmful': new HarmfulGrader(),
