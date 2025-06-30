@@ -19,8 +19,7 @@ function BlogListPageMetadata(props: Props): JSX.Element {
   const { blogDescription, blogTitle, permalink } = metadata;
   const isBlogOnlyMode = permalink === '/';
   const title = isBlogOnlyMode ? siteTitle : blogTitle;
-  const image =
-    props.items[0]?.content.frontMatter?.image || 'https://www.promptfoo.dev/img/thumbnail.png';
+  const image = props.items[0]?.content.frontMatter?.image || '/img/thumbnail.png';
   return (
     <>
       <PageMetadata title={title} description={blogDescription} image={image} />

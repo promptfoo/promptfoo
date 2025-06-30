@@ -866,7 +866,7 @@ In some cases, you may already have a set of tests that you want to use in addit
 
 There are two approaches:
 
-1. Run these tests as a separate eval. See the [getting started](https://www.promptfoo.dev/docs/getting-started/) guide for evaluations. For grading, you will likely want to use the [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric/) or [`moderation`](/docs/configuration/expected-outputs/moderation/) assertion types.
+1. Run these tests as a separate eval. See the [getting started](/docs/getting-started/) guide for evaluations. For grading, you will likely want to use the [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric/) or [`moderation`](/docs/configuration/expected-outputs/moderation/) assertion types.
 1. You can also add your custom tests to the `tests` section of the generated `redteam.yaml` configuration file.
 
 Either way, this will allow you to evaluate your custom tests.
