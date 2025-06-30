@@ -18,6 +18,7 @@ export async function handleContextFaithfulness({
   test,
   output,
   prompt,
+  providerResponse,
 }: AssertionParams): Promise<GradingResult> {
   invariant(test.vars, 'context-faithfulness assertion requires a test with variables');
   invariant(
@@ -29,7 +30,14 @@ export async function handleContextFaithfulness({
     'context-faithfulness assertion requires string output from the provider',
   );
 
-  const context = await resolveContext(assertion, test, output, prompt);
+  const context = await resolveContext(
+    assertion,
+    test,
+    output,
+    prompt,
+    undefined,
+    providerResponse,
+  );
 
   return {
     assertion,

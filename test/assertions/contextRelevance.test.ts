@@ -242,6 +242,8 @@ describe('handleContextRelevance', () => {
       { vars: { query: 'q' }, options: {} },
       'out',
       'p',
+      undefined,
+      { output: 'out', tokenUsage: {} },
     );
     expect(matchesContextRelevance).toHaveBeenCalledWith('q', 'cx', 0, {});
   });

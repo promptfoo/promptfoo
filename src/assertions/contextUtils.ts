@@ -11,6 +11,7 @@ import { transform } from '../util/transform';
  * @param output - The provider output
  * @param prompt - The prompt text
  * @param fallbackContext - Optional fallback context (e.g., prompt for context-recall)
+ * @param providerResponse - Optional full provider response for contextTransform
  * @returns The resolved context string
  * @throws Error if context cannot be resolved or transform fails
  */
@@ -20,6 +21,7 @@ export async function resolveContext(
   output: string | object,
   prompt?: string,
   fallbackContext?: string,
+  providerResponse?: any,
 ): Promise<string> {
   // Handle context from test variables - ensure it's a string
   let contextValue: string | undefined;
@@ -34,6 +36,8 @@ export async function resolveContext(
       const transformed = await transform(assertion.contextTransform, output, {
         vars: test.vars,
         prompt: { label: prompt },
+        ...(providerResponse &&
+          providerResponse.metadata && { metadata: providerResponse.metadata }),
       });
 
       invariant(

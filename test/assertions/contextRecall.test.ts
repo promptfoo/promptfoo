@@ -181,9 +181,10 @@ describe('handleContextRecall', () => {
     expect(contextUtils.resolveContext).toHaveBeenCalledWith(
       params.assertion,
       params.test,
-      'test output',
+      params.output,
       'test prompt',
       'test prompt',
+      {},
     );
     expect(mockMatchesContextRecall).toHaveBeenCalledWith('test prompt', 'test output', 0, {}, {});
   });
@@ -224,6 +225,7 @@ describe('handleContextRecall', () => {
       params.output,
       'prompt',
       'prompt',
+      {},
     );
     expect(mockMatchesContextRecall).toHaveBeenCalledWith('ctx', 'val', 0, {}, {});
   });

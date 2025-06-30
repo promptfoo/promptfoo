@@ -19,6 +19,7 @@ export const handleContextRecall = async ({
   prompt,
   test,
   output,
+  providerResponse,
 }: AssertionParams): Promise<GradingResult> => {
   invariant(
     typeof renderedValue === 'string',
@@ -26,7 +27,7 @@ export const handleContextRecall = async ({
   );
   invariant(prompt, 'context-recall assertion requires a prompt');
 
-  const context = await resolveContext(assertion, test, output, prompt, prompt);
+  const context = await resolveContext(assertion, test, output, prompt, prompt, providerResponse);
 
   return {
     assertion,

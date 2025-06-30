@@ -253,6 +253,8 @@ describe('handleContextFaithfulness', () => {
       params.test,
       'raw',
       'prompt text',
+      undefined,
+      null,
     );
     expect(matchers.matchesContextFaithfulness).toHaveBeenCalledWith(
       'test query',

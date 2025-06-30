@@ -18,6 +18,7 @@ export const handleContextRelevance = async ({
   test,
   output,
   prompt,
+  providerResponse,
 }: AssertionParams): Promise<GradingResult> => {
   invariant(test.vars, 'context-relevance assertion requires a test with variables');
   invariant(
@@ -25,7 +26,14 @@ export const handleContextRelevance = async ({
     'context-relevance assertion requires a "query" variable with the user question',
   );
 
-  const context = await resolveContext(assertion, test, output, prompt);
+  const context = await resolveContext(
+    assertion,
+    test,
+    output,
+    prompt,
+    undefined,
+    providerResponse,
+  );
 
   return {
     assertion,

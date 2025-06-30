@@ -42,7 +42,7 @@ This directory contains several example configurations for different Bedrock mod
 - [`promptfooconfig.nova.tool.yaml`](promptfooconfig.nova.tool.yaml) - Nova with tool usage examples
 - [`promptfooconfig.nova.multimodal.yaml`](promptfooconfig.nova.multimodal.yaml) - Nova with multimodal capabilities
 - [`promptfooconfig.titan-text.yaml`](promptfooconfig.titan-text.yaml) - Titan text generation examples
-- [`promptfooconfig.kb.yaml`](promptfooconfig.kb.yaml) - Knowledge Base RAG example with citations
+- [`promptfooconfig.kb.yaml`](promptfooconfig.kb.yaml) - Knowledge Base RAG example with citations and contextTransform
 - [`promptfooconfig.yaml`](promptfooconfig.yaml) - Combined evaluation across multiple providers
 - [`promptfooconfig.nova-sonic.yaml`](promptfooconfig.nova-sonic.yaml) - Amazon Nova Sonic model for audio
 
@@ -55,13 +55,13 @@ The Knowledge Base example (`promptfooconfig.kb.yaml`) demonstrates how to use A
 For this example, you'll need to:
 
 1. Create a Knowledge Base in AWS Bedrock
-2. Configure it to crawl or ingest content (the example uses promptfoo.dev content)
+2. Configure it to crawl or ingest content (the example assumes promptfoo documentation content)
 3. Use the Amazon Titan Embeddings model for vector embeddings
 4. Update the config with your Knowledge Base ID:
 
 ```yaml
 providers:
-  - id: bedrock:kb:us.anthropic.claude-3-7-sonnet-20250219-v1:0
+  - id: bedrock:kb:us.anthropic.claude-sonnet-4-20250514-v1:0
     config:
       region: 'us-east-2' # Change to your region
       knowledgeBaseId: 'YOUR_KNOWLEDGE_BASE_ID' # Replace with your KB ID
@@ -72,6 +72,11 @@ When running the Knowledge Base example, you'll see:
 - Responses from a Knowledge Base-enhanced model with citations
 - Responses from a standard model for comparison
 - Citations from source documents that show where information was retrieved from
+- Example of `contextTransform` feature extracting context from citations for evaluation
+
+The example includes questions about promptfoo configuration, providers, and evaluation techniques that work well with the embedded promptfoo documentation.
+
+**Note**: You'll need to update the `knowledgeBaseId` with your actual Knowledge Base ID and ensure the Knowledge Base is configured to work with the selected Claude model.
 
 For detailed Knowledge Base setup instructions, see the [AWS Bedrock Knowledge Base Documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/knowledge-base.html).
 
