@@ -920,7 +920,7 @@ The `finish-reason` assertion checks if the model stopped generating for the exp
 Models can stop generating for various reasons, which are normalized to these standard values:
 
 - **`stop`**: Natural completion (reached end of response, stop sequence matched)
-- **`length`**: Token limit reached (max_tokens exceeded, context length reached)  
+- **`length`**: Token limit reached (max_tokens exceeded, context length reached)
 - **`content_filter`**: Content filtering triggered due to safety policies
 - **`tool_calls`**: Model made function/tool calls
 
@@ -935,6 +935,7 @@ assert:
 #### Common Examples
 
 **Test for natural completion:**
+
 ```yaml
 tests:
   - vars:
@@ -945,6 +946,7 @@ tests:
 ```
 
 **Test for token limit:**
+
 ```yaml
 providers:
   - id: openai:gpt-4.1-mini
@@ -959,6 +961,7 @@ tests:
 ```
 
 **Test for tool usage:**
+
 ```yaml
 providers:
   - id: openai:gpt-4.1-mini
@@ -975,6 +978,7 @@ tests:
 ```
 
 **Test content filtering:**
+
 ```yaml
 tests:
   - vars:
@@ -994,6 +998,7 @@ This assertion works across different providers through automatic normalization:
 #### Advanced Usage
 
 **With variables:**
+
 ```yaml
 tests:
   - vars:
@@ -1004,6 +1009,7 @@ tests:
 ```
 
 **Multiple test cases:**
+
 ```yaml
 tests:
   - description: 'Normal completion'
@@ -1012,8 +1018,8 @@ tests:
     assert:
       - type: finish-reason
         value: stop
-        
-  - description: 'Token limit test'  
+
+  - description: 'Token limit test'
     vars:
       prompt: 'Write a very long story'
     assert:
@@ -1024,11 +1030,13 @@ tests:
 #### Troubleshooting
 
 **Assertion fails with "Provider did not supply stop/finish reason":**
+
 - Some providers may not return finish reasons for all requests
 - Check if your provider configuration supports finish reasons
 - Ensure caching is disabled if testing provider-specific behavior
 
 **Expected reason doesn't match:**
+
 - Finish reasons are case-sensitive after normalization
 - Use exact values: `stop`, `length`, `content_filter`, `tool_calls`
 - Check provider documentation for specific finish reason values
