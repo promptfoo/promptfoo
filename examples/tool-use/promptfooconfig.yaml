@@ -54,15 +54,15 @@ tests:
     assert:
       - type: finish-reason
         value: tool_calls # Should trigger tool use for weather lookup
-      
+
   - vars:
       city: New York
     assert:
       - type: finish-reason
         value: tool_calls
-        
+
   - vars:
       city: Paris
     assert:
       - type: finish-reason
-        value: tool_calls 
+        value: tool_calls
