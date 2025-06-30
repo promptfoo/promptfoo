@@ -4,7 +4,7 @@ description: Complete usage guide for ModelAudit including CLI options, cloud in
 keywords:
   [modelaudit usage, CLI options, cloud integration, MLflow, JFrog, DVC, CI/CD security scanning]
 sidebar_label: Usage
-sidebar_position: 4
+sidebar_position: 3
 ---
 
 # Usage Guide
@@ -12,7 +12,7 @@ sidebar_position: 4
 Complete reference for ModelAudit CLI options, integrations, and advanced features.
 
 :::info Installation Required
-Complete the **[Installation Guide](./installation.md)** before using these features.
+Complete the **[Installation & Quick Start Guide](./installation.md)** before using these features.
 :::
 
 ## Basic Commands

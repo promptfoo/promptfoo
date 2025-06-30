@@ -20,7 +20,7 @@ sidebar_position: 1
 
 ## Overview
 
-ModelAudit is a lightweight static security scanner for machine learning models integrated into Promptfoo. It allows you to quickly scan your AIML models for potential security risks before deploying them in production environments.
+ModelAudit is a lightweight static security scanner for machine learning models, integrated into Promptfoo. Scan your AI/ML models for malicious code, backdoors, and security vulnerabilities before production deployment.
 
 By invoking `promptfoo scan-model`, you can use ModelAudit's static security scanning capabilities.
 
@@ -104,34 +104,25 @@ Promptfoo includes a web interface for ModelAudit at `/model-audit` with visual 
 
 ## Supported Model Formats
 
-**Popular ML Frameworks:**
-
-- **PyTorch** (`.pt`, `.pth`, `.bin`) - Including ZIP archives and raw tensors
-- **TensorFlow** (`.pb`, `.tflite`) - SavedModel and TensorFlow Lite formats
-- **Keras** (`.h5`, `.keras`, `.hdf5`) - Including Lambda layer analysis
-- **ONNX** (`.onnx`) - With custom operator detection
-- **SafeTensors** (`.safetensors`) - Safer alternative to pickle
-
-**Specialized Formats:**
-
-- **GGUF/GGML** (`.gguf`, `.ggml`) - LLaMA, Alpaca, and quantized LLMs
-- **JAX/Flax** (`.msgpack`, `.orbax`, `.jax`) - JAX ecosystem checkpoints
-- **TensorRT** (`.engine`, `.plan`) - NVIDIA optimized inference engines
-- **PMML** (`.pmml`) - Predictive Model Markup Language
-
-**Data & Archives:**
-
-- **Pickle/Joblib** (`.pkl`, `.joblib`) - Python serialization formats
-- **NumPy** (`.npy`, `.npz`) - Array data with integrity checking
-- **ZIP Archives** (`.zip`) - Recursive scanning with bomb protection
-- **Containers** (`.manifest`) - OCI/Docker embedded models
-
-**Remote Sources:**
-
-- **HuggingFace URLs** - Direct model scanning without download
-- **Cloud Storage** - S3, GCS, Cloudflare R2 support
-- **MLflow Registry** - Model registry integration
-- **JFrog Artifactory** - Enterprise artifact repositories
+| Format                                                        | Extensions                   | Description                             |
+| ------------------------------------------------------------- | ---------------------------- | --------------------------------------- |
+| **[PyTorch](./scanners.md#pytorch-zip-scanner)**              | `.pt`, `.pth`, `.bin`        | ZIP archives and raw tensors            |
+| **[TensorFlow](./scanners.md#tensorflow-savedmodel-scanner)** | `.pb`, `.tflite`             | SavedModel and TensorFlow Lite formats  |
+| **[Keras](./scanners.md#keras-h5-scanner)**                   | `.h5`, `.keras`, `.hdf5`     | Including Lambda layer analysis         |
+| **[ONNX](./scanners.md#onnx-scanner)**                        | `.onnx`                      | With custom operator detection          |
+| **[SafeTensors](./scanners.md#safetensors-scanner)**          | `.safetensors`               | Safer alternative to pickle             |
+| **[GGUF/GGML](./scanners.md#ggufggml-scanner)**               | `.gguf`, `.ggml`             | LLaMA, Alpaca, and quantized LLMs       |
+| **[JAX/Flax](./scanners.md#flaxjax-scanner)**                 | `.msgpack`, `.orbax`, `.jax` | JAX ecosystem checkpoints               |
+| **[TensorRT](./scanners.md#tensorrt-scanner)**                | `.engine`, `.plan`           | NVIDIA optimized inference engines      |
+| **[PMML](./scanners.md#pmml-scanner)**                        | `.pmml`                      | Predictive Model Markup Language        |
+| **[Pickle/Joblib](./scanners.md#pickle-scanner)**             | `.pkl`, `.joblib`            | Python serialization formats            |
+| **[NumPy](./scanners.md#numpy-scanner)**                      | `.npy`, `.npz`               | Array data with integrity checking      |
+| **[ZIP Archives](./scanners.md#zip-archive-scanner)**         | `.zip`                       | Recursive scanning with bomb protection |
+| **[Containers](./scanners.md#oci-layer-scanner)**             | `.manifest`                  | OCI/Docker embedded models              |
+| **[HuggingFace URLs](./scanners.md#huggingface-url-support)** | `hf://`, `https://`          | Direct model scanning without download  |
+| **Cloud Storage**                                             | `s3://`, `gs://`, `r2://`    | S3, GCS, Cloudflare R2 support          |
+| **MLflow Registry**                                           | `models://`                  | Model registry integration              |
+| **JFrog Artifactory**                                         | `https://`                   | Enterprise artifact repositories        |
 
 For detailed scanner capabilities, see **[Scanner Reference](./scanners.md)**.
 
@@ -197,4 +188,4 @@ In CI/CD pipelines, exit code 1 indicates findings that should be reviewed but d
 
 ## Getting Started
 
-Ready to secure your models? Start with our **[Quick Start Guide](./quick-start.md)** for a 5-minute setup, or see **[Usage Guide](./usage.md)** for detailed instructions and dependencies.
+Ready to secure your models? Start with our **[Installation & Quick Start Guide](./installation.md)** for a 5-minute setup, or see **[Usage Guide](./usage.md)** for detailed instructions and integrations.

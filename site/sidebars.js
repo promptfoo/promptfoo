@@ -350,8 +350,6 @@ const sidebars = {
       },
       collapsed: true,
       items: [
-        { type: 'doc', id: 'model-audit/index' },
-        { type: 'doc', id: 'model-audit/quick-start' },
         { type: 'doc', id: 'model-audit/installation' },
         { type: 'doc', id: 'model-audit/usage' },
         { type: 'doc', id: 'model-audit/scanners' },

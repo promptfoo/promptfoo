@@ -13,7 +13,7 @@ keywords:
     ml model analysis,
   ]
 sidebar_label: Scanners
-sidebar_position: 5
+sidebar_position: 4
 ---
 
 # ModelAudit Scanners
@@ -553,5 +553,5 @@ This feature requires the `huggingface-hub` package to be installed.
 ## See Also
 
 - [ModelAudit Overview](./index.md) - Introduction to ModelAudit and supported formats
-- [Installation & Usage](./usage.md) - How to install and use ModelAudit
-- [Command Line Reference](./usage.md#command-line-interface) - CLI options and examples
+- [Usage Guide](./usage.md) - How to install and use ModelAudit
+- [Command Line Reference](./usage.md#cli-options) - CLI options and examples

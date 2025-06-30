@@ -1,17 +1,100 @@
 ---
-title: Installation Guide - ModelAudit Setup and Dependencies
-description: Complete installation guide for ModelAudit including dependencies for TensorFlow, PyTorch, ONNX, cloud storage, and authentication setup.
+title: Installation & Quick Start - Get ModelAudit Running in 5 Minutes
+description: Complete installation guide for ModelAudit with quick start examples. Install dependencies, scan your first model, and set up authentication.
 keywords:
-  [modelaudit installation, AI security setup, ML model scanner setup, dependencies, authentication]
-sidebar_label: Installation
-sidebar_position: 3
+  [
+    modelaudit installation,
+    quick start,
+    AI security setup,
+    ML model scanner setup,
+    dependencies,
+    authentication,
+  ]
+sidebar_label: Installation & Quick Start
+sidebar_position: 2
 ---
 
-# Installation
+# Installation & Quick Start
 
-This guide covers all installation methods and dependencies for ModelAudit. Choose the method that best fits your setup.
+Get ModelAudit running in 5 minutes, then dive into detailed setup for production use.
 
-## Installation Methods
+## Quick Start (5 Minutes)
+
+### Installation
+
+Choose your preferred installation method:
+
+**Option 1: Via Promptfoo (Recommended)**
+
+```bash
+npm install -g promptfoo
+pip install modelaudit
+```
+
+**Option 2: Standalone**
+
+```bash
+pip install modelaudit
+```
+
+### Your First Scan
+
+**Local models:**
+
+```bash
+# Scan a single model file
+promptfoo scan-model ./model.pkl
+
+# Scan a directory of models
+promptfoo scan-model ./models/
+```
+
+**Remote models:**
+
+```bash
+# HuggingFace models (no download required)
+promptfoo scan-model https://huggingface.co/bert-base-uncased
+promptfoo scan-model hf://microsoft/resnet-50
+
+# Cloud storage
+promptfoo scan-model s3://my-bucket/model.pt
+promptfoo scan-model gs://my-bucket/model.h5
+```
+
+### Understanding Results
+
+ModelAudit classifies findings by severity:
+
+```bash
+✓ Scanning model.pkl
+🚨 Found 2 critical, 1 warnings
+
+1. model.pkl (pos 28): [CRITICAL] Suspicious module reference found: os.system
+   Why: Direct system access could execute arbitrary commands
+
+2. model.pkl (pos 71): [WARNING] Found REDUCE opcode - potential code execution
+```
+
+**Severity Levels:**
+
+- 🚨 **CRITICAL**: Immediate security concerns - investigate immediately
+- ⚠️ **WARNING**: Potential issues - review and assess risk
+- ℹ️ **INFO**: Informational findings - good to know
+- 🔍 **DEBUG**: Detailed analysis (shown with `--verbose`)
+
+### Exit Codes for Automation
+
+```bash
+# 0 = Clean (no issues found)
+# 1 = Issues found (warnings or critical findings)
+# 2 = Scan errors (file not found, permission denied, etc.)
+```
+
+**🎯 Quick Start Complete!** You can now scan models and understand the results. Continue below for detailed setup.
+
+---
+
+## Detailed Installation
 
 ### Via Promptfoo (Recommended)
 
@@ -300,8 +383,7 @@ docker run --rm -v "${PWD}:/data" ghcr.io/promptfoo/modelaudit:latest scan /data
 
 ## Next Steps
 
-- **[Quick Start](./quick-start.md)** - Get scanning in 5 minutes
-- **[Usage Guide](./usage.md)** - Detailed usage patterns and configuration
+- **[Usage Guide](./usage.md)** - CLI options and integrations
 - **[Scanner Reference](./scanners.md)** - Understanding what each scanner does
 
 ## System Requirements
