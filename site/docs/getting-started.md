@@ -95,7 +95,6 @@ Next, we can review the example configuration file and make changes to it.
    ```
 
    Each provider is specified using a simple format: `provider_name:model_name`. For example:
-
    - `openai:gpt-4.1` for GPT-4.1
    - `openai:o4-mini` for OpenAI's o4-mini
    - `anthropic:messages:claude-sonnet-4-20250514` for Anthropic's Claude
@@ -108,7 +107,6 @@ Next, we can review the example configuration file and make changes to it.
    ```
 
    You can use:
-
    - **Cloud APIs**: [OpenAI](/docs/providers/openai), [Anthropic](/docs/providers/anthropic), [Google](/docs/providers/google), [Mistral](/docs/providers/mistral), and [many more](/docs/providers)
    - **Local Models**: [Ollama](/docs/providers/ollama), [llama.cpp](/docs/providers/llama.cpp), [LocalAI](/docs/providers/localai)
    - **Custom Code**: [Python](/docs/providers/python), [JavaScript](/docs/providers/custom-api), or any [executable](/docs/providers/custom-script)
@@ -357,8 +355,8 @@ You can also output a nice [spreadsheet](https://docs.google.com/spreadsheets/d/
 
 In [this next example](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-4o-vs-4o-mini), we evaluate the difference between GPT-4.1 and o4-mini outputs for a given prompt:
 
-<<<<<<< HEAD
-=======
+# <<<<<<< HEAD
+
 You can quickly set up this example by running:
 
 <Tabs groupId="promptfoo-command">
@@ -379,7 +377,8 @@ You can quickly set up this example by running:
   </TabItem>
 </Tabs>
 
->>>>>>> main
+> > > > > > > main
+
 ```yaml title="promptfooconfig.yaml"
 prompts:
   - file://prompt1.txt

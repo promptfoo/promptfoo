@@ -864,7 +864,7 @@ tests:
 
 CSV files and Google Sheets provide an easy way to collaborate on test cases with non-technical team members:
 
-```yaml
+````yaml
 # Load from a local CSV file
 =======
 YAML is nice, but some organizations maintain their LLM tests in spreadsheets for ease of collaboration. promptfoo supports a special [CSV file format](/docs/configuration/test-cases#csv-format).
@@ -882,7 +882,7 @@ tests: file://tests.csv
 
 # Or directly from Google Sheets
 tests: https://docs.google.com/spreadsheets/d/your-sheet-id/edit
-```
+````
 
 See the [CSV tests guide](/docs/configuration/tests/csv) for detailed examples and best practices.
 

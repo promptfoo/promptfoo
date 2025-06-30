@@ -31,7 +31,8 @@ tests:
 ## Core Concepts
 
 <<<<<<< HEAD
-```yaml title="promptfooconfig.yaml"
+
+````yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 =======
 ### 📝 [Prompts](/docs/configuration/prompts)
@@ -48,11 +49,12 @@ Define what you send to your LLMs - from simple strings to complex conversations
 prompts:
   - 'Summarize this: {{content}}'
   - file://prompts/customer_service.txt
-```
+````
 
 **Chat conversations**
 
 <<<<<<< HEAD
+
 ### Prompts as JSON
 
 Some LLM APIs accept prompts in a JSON chat format like `[{ "role" : "user", "content": "..."}]`.
@@ -61,18 +63,19 @@ By default, plaintext prompts are wrapped in a `user`-role message. If you provi
 
 Here's an example of a chat-formatted prompt:
 
-```yaml title="promptfooconfig.yaml"
+````yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 =======
 ```yaml
 >>>>>>> main
 prompts:
   - file://prompts/chat.json
-```
+````
 
 **Dynamic prompts**
 
 <<<<<<< HEAD
+
 ```json title="personality1.json"
 [
   {
@@ -92,7 +95,7 @@ Learn more about [chat conversations with OpenAI message format](/docs/providers
 
 Your prompts may be complicated enough that it's difficult to maintain them inline. In that case, reference a file. Filepaths are relative to the configuration file directory:
 
-```yaml title="promptfooconfig.yaml"
+````yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 =======
 ```yaml
@@ -100,7 +103,7 @@ Your prompts may be complicated enough that it's difficult to maintain them inli
 prompts:
   - file://generate_prompt.js
   - file://create_prompt.py
-```
+````
 
 </details>
 
@@ -206,14 +209,14 @@ outputPath: evaluations/customer_service_results.html
 
 | Format      | Prompts | Tests | Use Case                            |
 | ----------- | ------- | ----- | ----------------------------------- |
-| `.txt`      | ✅       | ❌     | Simple text prompts                 |
-| `.json`     | ✅       | ✅     | Chat conversations, structured data |
-| `.yaml`     | ✅       | ✅     | Complex configurations              |
-| `.csv`      | ✅       | ✅     | Bulk data, multiple variants        |
-| `.js`/`.ts` | ✅       | ✅     | Dynamic generation with logic       |
-| `.py`       | ✅       | ✅     | Python-based generation             |
-| `.md`       | ✅       | ❌     | Markdown-formatted prompts          |
-| `.j2`       | ✅       | ❌     | Jinja2 templates                    |
+| `.txt`      | ✅      | ❌    | Simple text prompts                 |
+| `.json`     | ✅      | ✅    | Chat conversations, structured data |
+| `.yaml`     | ✅      | ✅    | Complex configurations              |
+| `.csv`      | ✅      | ✅    | Bulk data, multiple variants        |
+| `.js`/`.ts` | ✅      | ✅    | Dynamic generation with logic       |
+| `.py`       | ✅      | ✅    | Python-based generation             |
+| `.md`       | ✅      | ❌    | Markdown-formatted prompts          |
+| `.j2`       | ✅      | ❌    | Jinja2 templates                    |
 
 ### Variable Syntax
 

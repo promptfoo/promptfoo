@@ -170,7 +170,6 @@ Third line"
 ### File Organization
 
 1. **Separate Concerns**
-
    - Split different test types into separate files
    - Use clear, descriptive filenames
    - Group related tests together
@@ -183,7 +182,6 @@ Third line"
 ### Data Quality
 
 1. **Validation**
-
    - Verify column names match prompt variables
    - Check for proper CSV formatting
    - Validate assertion syntax
@@ -198,7 +196,6 @@ Third line"
 ### Collaboration
 
 1. **Documentation**
-
    - Use `__description` for each test
    - Add comments for complex assertions
    - Document expected behaviors
@@ -215,14 +212,12 @@ Third line"
 ### Common Issues
 
 1. **CSV Parsing Errors**
-
    - Ensure UTF-8 encoding
    - Check for proper escaping of quotes and commas
    - Verify no hidden characters
    - Validate CSV format with a tool
 
 2. **Variable Reference Errors**
-
    - Column names must exactly match prompt variables
    - Check for case sensitivity
    - Avoid spaces in column names
