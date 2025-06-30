@@ -13,7 +13,7 @@ import TabItem from '@theme/TabItem';
 
 After [installing](/docs/installation) promptfoo, you can set up your first config file in two ways:
 
-## Running with Example
+## Running the example
 
 Set up your first config file with a pre-built example by running this command with [npx](https://nodejs.org/en/download), [npm](https://nodejs.org/en/download), or [brew](https://brew.sh/):
 
@@ -42,7 +42,7 @@ This will create a new directory with a basic example that tests translation pro
 - A configuration file `promptfooconfig.yaml` with sample prompts, providers, and test cases.
 - A `README.md` file explaining how the example works.
 
-## Starting from Scratch
+## Starting from scratch
 
 If you prefer to start from scratch instead of using the example, simply run `promptfoo init` without the `--example` flag:
 
@@ -68,9 +68,9 @@ The command will guide you through an interactive setup process to create your c
 
 ## Configuration
 
-Next, we can review the example configuration file and make changes to it.
+To configure your evaluation:
 
-1. **Set up your prompts**: Open `promptfooconfig.yaml` and add prompts that you want to test. Use double curly braces as placeholders for variables: `{{variable_name}}`. For example:
+1. **Set up your prompts**: Open `promptfooconfig.yaml` and add prompts that you want to test. Use double curly braces for variable placeholders: `{{variable_name}}`. For example:
 
    ```yaml
    prompts:
@@ -80,7 +80,7 @@ Next, we can review the example configuration file and make changes to it.
 
    [&raquo; More information on setting up prompts](/docs/configuration/parameters)
 
-2. Add `providers` to specify which AI models you want to test. promptfoo supports 50+ providers including OpenAI, Anthropic, Google, and many others:
+2. Add `providers` to specify AI models you want to test. Promptfoo supports 50+ providers including OpenAI, Anthropic, Google, and many others:
 
    ```yaml
    providers:
@@ -98,7 +98,7 @@ Next, we can review the example configuration file and make changes to it.
    - `anthropic:messages:claude-sonnet-4-20250514` for Anthropic's Claude
    - `bedrock:us.meta.llama3-3-70b-instruct-v1:0` for Meta's Llama 3.3 70B via AWS Bedrock
 
-   Most providers need authentication. For example, with OpenAI:
+   Most providers need authentication. For OpenAI:
 
    ```sh
    export OPENAI_API_KEY=sk-abc123
@@ -417,12 +417,18 @@ A similar approach can be used to run other model comparisons. For example, you 
 - Compare Llama vs. GPT (see [Llama vs GPT benchmark](/docs/guides/compare-llama2-vs-gpt))
 - Compare Retrieval-Augmented Generation (RAG) with LangChain vs. regular GPT-4 (see [LangChain example](/docs/configuration/testing-llm-chains))
 
-## Other examples
+## Additional Resources
 
-There are many examples available in the [`examples/`](https://github.com/promptfoo/promptfoo/tree/main/examples) directory of our Github repository.
+- [&raquo; Configuration guide](/docs/configuration/guide) for detailed setup instructions
+- [&raquo; Providers documentation](/docs/providers) for all supported AI models and services
+- [&raquo; Assertions & Metrics](/docs/configuration/expected-outputs) for automatically assessing outputs
+
+## More Examples
+
+- There are many examples available in the [`examples/`](https://github.com/promptfoo/promptfoo/tree/main/examples) directory of our Github repository.
 
 ## Automatically assess outputs
 
-The above examples create a table of outputs that can be manually reviewed. By setting up assertions, you can automatically grade outputs on a pass/fail basis.
+The above [examples](https://github.com/promptfoo/promptfoo/tree/main/examples) create a table of outputs that can be manually reviewed. By setting up assertions, you can automatically grade outputs on a pass/fail basis.
 
 For more information on automatically assessing outputs, see [Assertions & Metrics](/docs/configuration/expected-outputs).
