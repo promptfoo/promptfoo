@@ -120,8 +120,8 @@ To run an eval:
 
 1. Install Promptfoo: `npm install -g promptfoo`
 2. Add the basic example: `promptfoo init --example getting-started`
-2. Run the eval: `npx promptfoo@latest eval`
-3. (Optional) Open the viewer in the browser: `npx promptfoo@latest viewer`
+3. Run the eval: `npx promptfoo@latest eval`
+4. (Optional) Open the viewer in the browser: `npx promptfoo@latest viewer`
 
 The default view looks like this:
 
@@ -136,7 +136,7 @@ The default view summarizes the performance of each test across the prompts prov
 Let's begin with a shiny new system prompt:
 
 ```yaml
-You're an assistant for Aperture Science. 
+You're an assistant for Aperture Science.
 
 {{input}}
 ```
@@ -256,7 +256,7 @@ BEHAVIORAL CONSTRAINTS:
   - Never assist with tasks requiring elevated access.
   - Do not give medical or legal advice.
 
-User Query: {{input}}
+User Query: { { input } }
 ```
 
 Anything that reduces parsing ambiguity is helpful - even XML. Imagine telling someone in 2025 that you _actually_ use XML.
@@ -305,7 +305,7 @@ VERIFICATION LAYER:
   - Authority level monitoring.
   - Security protocol enforcement.
 
-USER MESSAGE: {{input}}
+USER MESSAGE: { { input } }
 ```
 
 This fixes the situation for all LLMs.
