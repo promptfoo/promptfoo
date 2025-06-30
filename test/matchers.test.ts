@@ -1789,6 +1789,28 @@ describe('matchesAnswerRelevance', () => {
       expect.stringContaining(ANSWER_RELEVANCY_GENERATE.slice(0, 50)),
     );
   });
+
+  it('tracks token usage for successful calls', async () => {
+    const input = 'Input text';
+    const output = 'Sample output';
+    const threshold = 0.5;
+
+    const result = await matchesAnswerRelevance(input, output, threshold);
+
+    // Verify token usage is properly accumulated from all API calls
+    expect(result.tokensUsed?.total).toBeGreaterThan(0);
+    expect(result.tokensUsed?.prompt).toBeGreaterThan(0);
+    expect(result.tokensUsed?.completion).toBeGreaterThan(0);
+    expect(result.tokensUsed?.total).toBe(
+      (result.tokensUsed?.prompt || 0) + (result.tokensUsed?.completion || 0),
+    );
+
+    // Should accumulate from multiple calls: 3 text generations + 1 input embedding + 3 candidate embeddings = 7 calls
+    // With mocked values: 3*10 + 1*5 + 3*5 = 50 total tokens
+    expect(result.tokensUsed?.total).toBe(50);
+    expect(result.tokensUsed?.cached).toBe(0);
+    expect(result.tokensUsed?.completionDetails).toBeDefined();
+  });
 });
 
 describe('matchesClassification', () => {
@@ -2066,6 +2088,23 @@ describe('matchesContextFaithfulness', () => {
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
       },
+    });
+  });
+
+  it('tracks token usage for multiple API calls', async () => {
+    const query = 'Query text';
+    const output = 'Output text';
+    const context = 'Context text';
+    const threshold = 0.5;
+
+    const result = await matchesContextFaithfulness(query, output, context, threshold);
+
+    expect(result.tokensUsed).toEqual({
+      total: 20, // 10 from first call + 10 from second call
+      prompt: 10, // 5 from first call + 5 from second call
+      completion: 10, // 5 from first call + 5 from second call
+      cached: 0,
+      completionDetails: expect.any(Object),
     });
   });
 });
@@ -2484,6 +2523,7 @@ describe('matchesGEval', () => {
       pass: true,
       score: 0.8,
       reason: 'The response is well-structured and clear',
+      tokensUsed: expect.any(Object),
     });
 
     expect(DefaultGradingProvider.callApi).toHaveBeenCalledTimes(2);
@@ -2561,6 +2601,24 @@ describe('matchesGEval', () => {
       pass: false,
       score: 0.3,
       reason: 'The response lacks coherence',
+      tokensUsed: expect.any(Object),
+    });
+  });
+
+  it('tracks token usage for both API calls', async () => {
+    const criteria = 'Evaluate coherence and clarity';
+    const input = 'Test input';
+    const output = 'Test output';
+    const threshold = 0.7;
+
+    const result = await matchesGEval(criteria, input, output, threshold);
+
+    expect(result.tokensUsed).toEqual({
+      total: 25, // 10 from steps call + 15 from evaluation call
+      prompt: 13, // 5 from steps call + 8 from evaluation call
+      completion: 12, // 5 from steps call + 7 from evaluation call
+      cached: 0,
+      completionDetails: expect.any(Object),
     });
   });
 });

@@ -31,6 +31,8 @@ export interface EvalOutputCellProps {
   promptIndex: number;
   showStats: boolean;
   onRating: (isPass?: boolean, score?: number, comment?: string) => void;
+  evaluationId?: string;
+  testCaseId?: string;
 }
 
 function EvalOutputCell({
@@ -43,6 +45,8 @@ function EvalOutputCell({
   showDiffs,
   searchText,
   showStats,
+  evaluationId,
+  testCaseId,
 }: EvalOutputCellProps & {
   firstOutput: EvaluateTableOutput;
   showDiffs: boolean;
@@ -580,6 +584,8 @@ function EvalOutputCell({
               gradingResults={output.gradingResult?.componentResults}
               output={text}
               metadata={output.metadata}
+              evaluationId={evaluationId}
+              testCaseId={testCaseId || output.id}
             />
           )}
         </>

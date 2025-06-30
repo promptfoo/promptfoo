@@ -169,7 +169,6 @@ Choose one of these authentication methods:
    ```
 
 2. Service Account:
-
    - Option A: Use a machine with an authorized service account
    - Option B: Use service account credentials file:
 
@@ -344,7 +343,6 @@ API call error: Error: Publisher Model is not servable in region us-central1
 You need to:
 
 1. Enable access to Claude models:
-
    - Visit the [Vertex AI Model Garden](https://console.cloud.google.com/vertex-ai/publishers)
    - Search for "Claude"
    - Click "Enable" on the specific Claude models you want to use
