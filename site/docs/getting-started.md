@@ -68,6 +68,8 @@ The command will guide you through an interactive setup process to create your c
 
 ## Configuration
 
+To configure your evaluation:
+
 1. **Set up your prompts**: Open `promptfooconfig.yaml` and add prompts that you want to test. Use double curly braces for variable placeholders: `{{variable_name}}`. For example:
 
    ```yaml
@@ -75,6 +77,8 @@ The command will guide you through an interactive setup process to create your c
      - 'Convert this English to {{language}}: {{input}}'
      - 'Translate to {{language}}: {{input}}'
    ```
+
+   [&raquo; More information on setting up prompts](/docs/configuration/parameters)
 
 2. Add `providers` to specify AI models you want to test. Promptfoo supports 50+ providers including OpenAI, Anthropic, Google, and many others:
 
@@ -413,9 +417,14 @@ A similar approach can be used to run other model comparisons. For example, you 
 - Compare Llama vs. GPT (see [Llama vs GPT benchmark](/docs/guides/compare-llama2-vs-gpt))
 - Compare Retrieval-Augmented Generation (RAG) with LangChain vs. regular GPT-4 (see [LangChain example](/docs/configuration/testing-llm-chains))
 
-## Further information
+## Additional Resources
 
-- [&raquo; More information on setting up prompts](/docs/configuration/parameters)
+- [&raquo; Configuration guide](/docs/configuration/guide) for detailed setup instructions
+- [&raquo; Providers documentation](/docs/providers) for all supported AI models and services  
+- [&raquo; Assertions & Metrics](/docs/configuration/expected-outputs) for automatically assessing outputs
+
+## More Examples
+
 - There are many examples available in the [`examples/`](https://github.com/promptfoo/promptfoo/tree/main/examples) directory of our Github repository.
 
 ## Automatically assess outputs
