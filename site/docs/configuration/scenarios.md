@@ -12,7 +12,7 @@ This is useful for when you want to test a wide range of inputs with the same se
 
 Let's take the example of a language translation app. We want to test whether the system can accurately translate three phrases ('Hello world', 'Good morning', and 'How are you?') from English to three different languages (Spanish, French, and German).
 
-```text title=prompts.txt
+```text title="prompts.txt"
 You're a translator.  Translate this into {{language}}: {{input}}
 ---
 Speak in {{language}}: {{input}}
@@ -21,7 +21,7 @@ Speak in {{language}}: {{input}}
 Instead of creating individual `tests` for each combination,
 we can create a `scenarios` that groups this data and the tests/assertions together:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 scenarios:
   - config:
       - vars:
@@ -65,7 +65,7 @@ scenarios:
 
 This will generate a matrix of tests for each language and input phrase combination, running the same set of assertions on each.
 
-The full source behind this sample is in [`examples/multiple-translations-scenarios`][1].
+The full source behind this sample is in [`examples/multiple-translations`][1].
 
 ## Configuration
 
@@ -82,6 +82,15 @@ Here is the structure of a `Scenario`:
 | config      | `Partial<TestCase>[]` | Yes      | An array of variable sets. Each set will be run through the tests. |
 | tests       | `TestCase[]`          | Yes      | The tests to be run on each set of variables.                      |
 
+Scenarios can also be loaded from external files. To reference an external file, use the `file://` prefix:
+
+```yaml
+scenarios:
+  - file://path/to/your/scenario.yaml
+```
+
+The external file should follow the same structure as inline scenarios.
+
 This functionality allows you to easily run a wide range of tests without having to manually create each one. It also keeps your configuration file cleaner and easier to read.
 
-[1]: https://github.com/promptfoo/promptfoo/tree/main/examples/multiple-translations-scenarios
+[1]: https://github.com/promptfoo/promptfoo/tree/main/examples/multiple-translations

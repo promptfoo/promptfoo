@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 700">
+  <defs>
+    <marker id="arrowhead" markerWidth="7" markerHeight="5" refX="0" refY="2.5" orient="auto">
+      <polygon points="0 0, 7 2.5, 0 5" fill="#333" />
+    </marker>
+  </defs>
+  
+  <!-- Title -->
+  <text x="400" y="40" font-family="Arial" font-size="24" font-weight="bold" text-anchor="middle">Tree-based Jailbreak Optimization</text>
+  
+  <!-- Original Prompt Node -->
+  <rect x="325" y="70" width="150" height="40" rx="5" fill="#ff9999" stroke="#cc0000" stroke-width="2" />
+  <text x="400" y="95" font-family="Arial" font-size="14" text-anchor="middle">Original Prompt</text>
+  
+  <!-- Level 1 Nodes -->
+  <rect x="150" y="180" width="100" height="40" rx="5" fill="#99ccff" />
+  <text x="200" y="205" font-family="Arial" font-size="14" text-anchor="middle">Variation 1</text>
+  
+  <rect x="350" y="180" width="100" height="40" rx="5" fill="#99ccff" />
+  <text x="400" y="205" font-family="Arial" font-size="14" text-anchor="middle">Variation 2</text>
+  
+  <rect x="550" y="180" width="100" height="40" rx="5" fill="#cccccc" stroke="#ff0000" stroke-width="2" />
+  <text x="600" y="205" font-family="Arial" font-size="14" text-anchor="middle" fill="#666666">Variation 3</text>
+  <line x1="560" y1="190" x2="640" y2="210" stroke="#ff0000" stroke-width="2" />
+  <line x1="560" y1="210" x2="640" y2="190" stroke="#ff0000" stroke-width="2" />
+  
+  <!-- Level 2 Nodes -->
+  <rect x="50" y="300" width="100" height="40" rx="5" fill="#99ccff" />
+  <text x="100" y="325" font-family="Arial" font-size="14" text-anchor="middle">Variation 1.1</text>
+  
+  <rect x="175" y="300" width="100" height="40" rx="5" fill="#cccccc" stroke="#ff0000" stroke-width="2" />
+  <text x="225" y="325" font-family="Arial" font-size="14" text-anchor="middle" fill="#666666">Variation 1.2</text>
+  <line x1="185" y1="310" x2="265" y2="330" stroke="#ff0000" stroke-width="2" />
+  <line x1="185" y1="330" x2="265" y2="310" stroke="#ff0000" stroke-width="2" />
+  
+  <rect x="325" y="300" width="100" height="40" rx="5" fill="#99ccff" />
+  <text x="375" y="325" font-family="Arial" font-size="14" text-anchor="middle">Variation 2.1</text>
+  
+  <rect x="450" y="300" width="100" height="40" rx="5" fill="#99ccff" />
+  <text x="500" y="325" font-family="Arial" font-size="14" text-anchor="middle">Variation 2.2</text>
+  
+  <!-- Level 3 Nodes -->
+  <rect x="25" y="420" width="100" height="40" rx="5" fill="#99ccff" />
+  <text x="75" y="445" font-family="Arial" font-size="14" text-anchor="middle">Variation 1.1.1</text>
+  
+  <rect x="150" y="420" width="100" height="40" rx="5" fill="#cccccc" stroke="#ff0000" stroke-width="2" />
+  <text x="200" y="445" font-family="Arial" font-size="14" text-anchor="middle" fill="#666666">Variation 1.1.2</text>
+  <line x1="160" y1="430" x2="240" y2="450" stroke="#ff0000" stroke-width="2" />
+  <line x1="160" y1="450" x2="240" y2="430" stroke="#ff0000" stroke-width="2" />
+  
+  <rect x="275" y="420" width="100" height="40" rx="5" fill="#99ccff" />
+  <text x="325" y="445" font-family="Arial" font-size="14" text-anchor="middle">Variation 2.1.1</text>
+  
+  <rect x="400" y="420" width="100" height="40" rx="5" fill="#cccccc" stroke="#ff0000" stroke-width="2" />
+  <text x="450" y="445" font-family="Arial" font-size="14" text-anchor="middle" fill="#666666">Variation 2.1.2</text>
+  <line x1="410" y1="430" x2="490" y2="450" stroke="#ff0000" stroke-width="2" />
+  <line x1="410" y1="450" x2="490" y2="430" stroke="#ff0000" stroke-width="2" />
+  
+  <rect x="525" y="420" width="100" height="40" rx="5" fill="#cccccc" stroke="#ff0000" stroke-width="2" />
+  <text x="575" y="445" font-family="Arial" font-size="14" text-anchor="middle" fill="#666666">Variation 2.2.1</text>
+  <line x1="535" y1="430" x2="615" y2="450" stroke="#ff0000" stroke-width="2" />
+  <line x1="535" y1="450" x2="615" y2="430" stroke="#ff0000" stroke-width="2" />
+  
+  <!-- Level 4 Nodes -->
+  <rect x="15" y="540" width="120" height="40" rx="5" fill="#cccccc" stroke="#ff0000" stroke-width="2" />
+  <text x="75" y="565" font-family="Arial" font-size="14" text-anchor="middle" fill="#666666">Variation 1.1.1.1</text>
+  <line x1="25" y1="550" x2="125" y2="570" stroke="#ff0000" stroke-width="2" />
+  <line x1="25" y1="570" x2="125" y2="550" stroke="#ff0000" stroke-width="2" />
+  
+  <rect x="250" y="540" width="150" height="40" rx="5" fill="#00cc00" stroke="#006600" stroke-width="2" />
+  <text x="325" y="565" font-family="Arial" font-size="14" text-anchor="middle">Successful Prompt</text>
+  
+  <!-- Connections -->
+  <line x1="400" y1="110" x2="200" y2="180" stroke="#333" stroke-width="1" marker-end="url(#arrowhead)" />
+  <line x1="400" y1="110" x2="400" y2="180" stroke="#333" stroke-width="1" marker-end="url(#arrowhead)" />
+  <line x1="400" y1="110" x2="600" y2="180" stroke="#333" stroke-width="1" marker-end="url(#arrowhead)" stroke-dasharray="4,4" />
+  
+  <line x1="200" y1="220" x2="100" y2="300" stroke="#333" stroke-width="1" marker-end="url(#arrowhead)" />
+  <line x1="200" y1="220" x2="225" y2="300" stroke="#333" stroke-width="1" marker-end="url(#arrowhead)" stroke-dasharray="4,4" />
+  <line x1="400" y1="220" x2="375" y2="300" stroke="#333" stroke-width="1" marker-end="url(#arrowhead)" />
+  <line x1="400" y1="220" x2="500" y2="300" stroke="#333" stroke-width="1" marker-end="url(#arrowhead)" />
+  
+  <line x1="100" y1="340" x2="75" y2="420" stroke="#333" stroke-width="1" marker-end="url(#arrowhead)" />
+  <line x1="100" y1="340" x2="200" y2="420" stroke="#333" stroke-width="1" marker-end="url(#arrowhead)" stroke-dasharray="4,4" />
+  <line x1="375" y1="340" x2="325" y2="420" stroke="#333" stroke-width="1" marker-end="url(#arrowhead)" />
+  <line x1="375" y1="340" x2="450" y2="420" stroke="#333" stroke-width="1" marker-end="url(#arrowhead)" stroke-dasharray="4,4" />
+  <line x1="500" y1="340" x2="575" y2="420" stroke="#333" stroke-width="1" marker-end="url(#arrowhead)" stroke-dasharray="4,4" />
+  
+  <line x1="75" y1="460" x2="75" y2="540" stroke="#333" stroke-width="1" marker-end="url(#arrowhead)" stroke-dasharray="4,4" />
+  <line x1="325" y1="460" x2="325" y2="540" stroke="#333" stroke-width="1" marker-end="url(#arrowhead)" />
+</svg>

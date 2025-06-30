@@ -1,5 +1,10 @@
-prompts: [prompts.txt]
-providers: [openai:gpt-3.5-turbo]
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Custom Nunjucks template filters for prompt generation
+
+prompts:
+  - file://prompts.txt
+providers:
+  - openai:gpt-4.1-mini
 nunjucksFilters:
   allcaps: ./allcaps.js
 tests:

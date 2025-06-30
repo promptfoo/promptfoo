@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Adaline Gateway Vision Example'
+
+prompts:
+  - file://prompt.json
+
+providers:
+  - id: adaline:openai:chat:gpt-4o
+
+tests:
+  - vars:
+      question: 'What do you see?'
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg'
+    options:
+      transformVars: |
+        return { ...vars, image_markdown: `![image](${vars.url})` }
+    assert:
+      - type: contains
+        value: 'boardwalk'

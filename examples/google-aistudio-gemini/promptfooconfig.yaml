@@ -1,14 +1,111 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Google AI Studio Gemini model evaluation
+
 prompts:
-  - 'Write a tweet about {{topic}}'
-  - 'Write a very concise, funny tweet about {{topic}}'
+  - |
+    Given this math puzzle: {{puzzle}}
+    Please solve this step by step, showing your reasoning process.
 
 providers:
-  - id: google:gemini-pro
+  - id: google:gemini-2.5-pro
+    config:
+      generationConfig:
+        temperature: 0.7
+        maxOutputTokens: 4096
+        thinkingConfig:
+          thinkingBudget: 2048 # Enhanced thinking for complex reasoning
+
+  - id: google:gemini-2.5-flash
+    config:
+      generationConfig:
+        temperature: 0.7
+        maxOutputTokens: 2048
+        thinkingConfig:
+          thinkingBudget: 1024 # Enhanced reasoning and thinking capabilities
+
+  - id: google:gemini-2.5-flash-lite
+    config:
+      generationConfig:
+        temperature: 0.7
+        maxOutputTokens: 1024
+        thinkingConfig:
+          thinkingBudget: 512 # Most cost-efficient and fastest 2.5 model
+
+  - google:gemini-2.0-flash-exp
+
+  - google:gemini-2.0-flash-thinking-exp
+
+  - id: google:gemini-2.5-pro
+    config:
+      temperature: 0.7
+      maxOutputTokens: 1024
+      topP: 0.9
+      topK: 40
+
+  # System instruction from file example
+  - id: google:gemini-2.5-pro
+    label: gemini-with-system-instruction-file
+    config:
+      temperature: 0.3
+      maxOutputTokens: 1024
+      systemInstruction: file://system-instruction.txt
+
+  # Structured output example
+  - id: google:gemini-2.5-pro
     config:
       generationConfig:
         temperature: 0
-        topP: 1
+        maxOutputTokens: 1024
+        response_mime_type: 'application/json'
+        response_schema:
+          type: 'object'
+          properties:
+            answer:
+              type: 'string'
+              description: 'The numerical or text answer'
+            confidence:
+              type: 'string'
+              enum: ['high', 'medium', 'low']
+            method_used:
+              type: 'string'
+              description: 'One-word description of solving method'
+          required: ['answer', 'confidence', 'method_used']
 
+  # Function calling example
+  - id: google:gemini-2.5-pro
+    config:
+      tools:
+        function_declarations:
+          - name: 'verify_answer'
+            description: 'Verify if the answer is correct'
+            parameters:
+              type: 'object'
+              properties:
+                answer:
+                  type: 'string'
+                  description: 'The proposed answer'
+                explanation:
+                  type: 'string'
+                  description: 'Brief explanation'
+              required: ['answer']
+      tool_config:
+        function_calling_config:
+          mode: 'auto'
+defaultTest:
+  options:
+    provider:
+      text:
+        id: google:gemini-2.5-flash
+      embedding:
+        id: google:embedding:text-embedding-004
 tests:
   - vars:
-      topic: bananas
+      puzzle: 'If a train travels at 60 mph for 2.5 hours, then at 40 mph for 1.5 hours, what is the average speed for the entire journey?'
+    assert:
+      - type: contains
+        value: 52.5
+      - type: llm-rubric
+        value: |
+          The answer should be 52.5 mph.
+      - type: similar
+        value: 52.5 mph

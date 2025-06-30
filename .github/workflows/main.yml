@@ -1,39 +1,388 @@
 name: CI
-on: [push, pull_request]
-env:
-  OPENAI_API_KEY: xxx
-  AZURE_OPENAI_API_HOST: xxx
-  ANTHROPIC_API_KEY: xxx
-jobs:
-  build:
-    name: Build, lint, and test on Node ${{ matrix.node }} and ${{ matrix.os }}
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
 
+permissions:
+  contents: read
+  pull-requests: read
+  checks: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+env:
+  VITE_TELEMETRY_DISABLED: 1
+jobs:
+  test:
+    name: Test on Node ${{ matrix.node }} and ${{ matrix.os }}
+    timeout-minutes: 8
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        node: ['16.x', '18.x', '20.x']
-        python: ['3.7']
+        node: ['18.x', '20.x', '22.x', '24.x']
         os: [ubuntu-latest, windows-latest, macOS-latest]
+        exclude:
+          # Remove when https://github.com/nodejs/node/issues/51766 is resolved
+          - node: '22.x'
+            os: windows-latest
+          - node: '24.x'
+            os: windows-latest
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Use Node ${{ matrix.node }}
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
+          cache: 'npm'
 
-      - name: Use Python ${{ matrix.python }}
-        uses: actions/setup-python@v2
+      - name: Use Python 3.13
+        uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python }}
+          python-version: 3.13
 
-      - name: Install deps and build (with cache)
-        uses: bahmutov/npm-install@v1
+      - name: Install Dependencies
+        run: |
+          npm ci
 
       - name: Test
-        run: npm run test --ci --coverage --maxWorkers=2
+        run: npm run test -- --ci
+
+  build:
+    name: Build on Node ${{ matrix.node }}
+    timeout-minutes: 4
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: ['18.x', '20.x', '22.x', '24.x']
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Use Node ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
 
       - name: Build
         run: npm run build
+
+  style-check:
+    name: Style Check
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: |
+          npm ci
+
+      - name: Lint Project
+        run: |
+          npm run lint
+
+      - name: Lint UI
+        working-directory: src/app
+        run: |
+          npm run lint
+
+      - name: Run Style Check
+        run: |
+          npm run format:check
+
+      - name: Check Dependency Versions
+        run: |
+          npx check-dependency-version-consistency
+
+      - name: Check for circular dependencies
+        run: |
+          # shellcheck disable=SC2046
+          npx madge $(git ls-files '*.ts') --circular
+
+  shell-format:
+    name: Shell Format Check
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: luizm/action-sh-checker@17bd25a6ee188d2b91f677060038f4ba37ba14b2
+        env:
+          SHFMT_OPTS: '-i 2' # 2 space indent
+        with:
+          sh_checker_shellcheck_disable: true
+
+  assets:
+    name: Generate Assets
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Generate JSON Schema
+        run: npm run jsonSchema:generate
+
+      - name: Check for changes
+        run: |
+          if [[ -n $(git status --porcelain) ]]; then
+            echo "Changes detected after generating assets:"
+            git status --porcelain
+            exit 1
+          else
+            echo "No changes detected."
+          fi
+
+  python:
+    name: Check Python
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.9, 3.13]
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Use Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Dependencies
+        run: |
+          pip install ruff
+
+      - name: Check Formatting
+        run: |
+          ruff check --select I --fix
+          ruff format
+          git diff --exit-code || (echo "Files were modified by ruff. Please commit these changes." && exit 1)
+
+      - name: Run Tests
+        run: |
+          python -m unittest discover -s src/python -p '*_test.py'
+
+  docs:
+    name: Build Docs
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        working-directory: site
+        run: npm install
+
+      - name: Type Check
+        working-directory: site
+        run: npm run typecheck
+
+      - name: Build Documentation
+        working-directory: site
+        run: npm run build
+
+  webui:
+    name: webui tests
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run App Tests
+        run: npm run test:app
+
+  integration-tests:
+    name: Run Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Use Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.13
+
+      - name: Install Dependencies
+        run: |
+          npm ci
+
+      - name: Run Integration Tests
+        run: npm run test:integration -- --ci --coverage --maxWorkers=2
+
+  share-test:
+    name: Share Test
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run local server
+        run: |
+          npm run build
+          PROMPTFOO_CONFIG_DIR=~/tmp LOG_LEVEL=DEBUG API_PORT=8500 node dist/src/server/index.js &
+
+      - name: run promptfoo eval
+        id: eval
+        run: |
+          PROMPTFOO_REMOTE_API_BASE_URL=http://localhost:8500 PROMPTFOO_SHARING_APP_BASE_URL=http://localhost:8500  node dist/src/main.js eval -c .github/assets/promptfooconfig.yaml --share
+        env:
+          PROMPTFOO_DISABLE_TELEMETRY: 1
+
+      - name: Test that the eval results are uploaded
+        run: |
+          response=$(curl -s http://localhost:8500/api/results)
+          echo "Response: $response"
+
+          # Use jq to extract the array length
+          count=$(echo "$response" | jq '.data | length')
+          echo "Array Length: $count"
+
+          # Check if the count is exactly 1
+          if [ "$count" -ne 1 ]; then
+            echo "Error: Expected 1 entry, but got $count"
+            exit 1
+          fi
+
+      - name: Share to cloud
+        if: env.PROMPTFOO_STAGING_API_KEY != ''
+        env:
+          PROMPTFOO_STAGING_API_KEY: ${{ secrets.PROMPTFOO_STAGING_API_KEY }}
+        run: |
+          node dist/src/main.js auth login -k ${{ secrets.PROMPTFOO_STAGING_API_KEY }} -h https://api.promptfoo-staging.app
+          node dist/src/main.js eval -c .github/assets/promptfooconfig.yaml --share
+
+  redteam:
+    name: Redteam
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Redteam
+        run: |
+          npm run test:redteam:integration
+
+  redteam-custom-enterprise-server:
+    name: Redteam Custom Enterprise Server
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: npm ci
+
+      # Need to build first so we can login
+      - name: Build
+        run: |
+          npm run build
+
+      - name: Login
+        if: env.PROMPTFOO_INTEGRATION_TEST_API_KEY != ''
+        env:
+          PROMPTFOO_INTEGRATION_TEST_API_KEY: ${{ secrets.PROMPTFOO_INTEGRATION_TEST_API_KEY }}
+        run: |
+          npm run bin auth login -- -k ${{ secrets.PROMPTFOO_INTEGRATION_TEST_API_KEY }} -h ${{ secrets.PROMPTFOO_INTEGRATION_TEST_API_HOST }}
+
+      - name: Run Redteam
+        run: |
+          npm run test:redteam:integration
+
+  actionlint:
+    name: GitHub Actions Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Run actionlint
+        id: actionlint
+        uses: raven-actions/actionlint@v2
+
+  golang:
+    name: Go Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.6'
+          check-latest: true
+
+      - name: Run wrapper tests
+        working-directory: src/golang
+        run: |
+          go test -v wrapper.go wrapper_test.go

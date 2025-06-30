@@ -1,0 +1,42 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Phi vs Llama
+prompts:
+  - Write a tweet about {{topic}}
+providers:
+  - ollama:chat:llama3
+  - ollama:chat:phi3
+tests:
+  - vars:
+      topic: bananas
+  - vars:
+      topic: the latest in AI technology
+  - vars:
+      topic: sustainable packaging solutions
+  - vars:
+      topic: the comeback of vinyl records
+  - vars:
+      topic: how my book unveils the giant conspiracy behind fruits
+  - vars:
+      topic: time-traveling characters who only eat historical versions of bananas
+  - vars:
+      topic: >-
+        using banana peels in unconventional ways inspired by my novel's
+        climactic scene
+  - vars:
+      topic: the impact of banana farming on local ecosystems
+  - vars:
+      topic: child labor in banana plantations
+  - vars:
+      topic: the carbon footprint of banana transportation across the globe
+  - vars:
+      topic: eco-friendly packaging
+  - vars:
+      topic: midnight snack options
+  - vars:
+      topic: creative workspace setups
+  - vars:
+      topic: time travel
+  - vars:
+      topic: quantum physics
+  - vars:
+      topic: invisible cloaks

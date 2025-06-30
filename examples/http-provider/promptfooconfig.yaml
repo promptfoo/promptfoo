@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'HTTP provider test'
+
+prompts:
+  - 'Write a tweet about {{topic}}'
+  - 'Write a very concise, funny tweet about {{topic}}'
+
+providers:
+  - id: https://webhook.site/3d47d2dd-d450-4869-b80d-41862e577e45
+    config:
+      method: 'POST'
+      headers:
+        'Content-Type': 'application/json'
+      body:
+        'prompt': '{{prompt}}'
+        'model':
+          '{{model}}'
+          #
+      # Parse OpenAI response
+      transformResponse: 'json.choices[0].message.content'
+
+tests:
+  - vars:
+      model: gpt-5
+      topic: bananas

@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'LM Studio Eval Example'
+prompts:
+  - file://prompts.json
+providers:
+  - id: 'http://localhost:1234/v1/chat/completions'
+    config:
+      method: 'POST'
+      headers:
+        'Content-Type': 'application/json'
+      body:
+        messages: '{{ prompt }}'
+        model: 'bartowski/gemma-2-9b-it-GGUF'
+        temperature: 0.7
+        max_tokens: 100
+      transformResponse: 'file://parser.js'
+tests:
+  - vars:
+      topic: bananas

@@ -1,23 +1,30 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Bedrock Claude Eval'
 prompts:
   - 'Write a tweet about {{topic}}'
-
 providers:
-  - id: bedrock:anthropic.claude-instant-v1
+  - id: bedrock:us.anthropic.claude-opus-4-20250514-v1:0
+    label: Claude Opus 4
     config:
-      region: 'us-east-1'
-      temperature: 0.7
-      max_tokens_to_sample: 256
-  - id: bedrock:anthropic.claude-3-haiku-20240307-v1:0
+      temperature: 1
+      max_tokens: 2048
+      region: us-west-2
+  - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0
+    label: Claude Sonnet 4 with Thinking
     config:
-      region: 'us-east-1'
-      temperature: 0.7
-      max_tokens: 256
-  - id: bedrock:anthropic.claude-3-sonnet-20240229-v1:0
+      temperature: 1
+      max_tokens: 2048
+      region: us-west-2
+      showThinking: true
+      thinking:
+        type: enabled
+        budget_tokens: 1024
+  - id: bedrock:us.anthropic.claude-3-7-sonnet-20250219-v1:0
+    label: Claude 3.7 Sonnet
     config:
-      region: 'us-east-1'
-      temperature: 0.7
-      max_tokens: 256
-
+      temperature: 1
+      max_tokens: 2048
+      region: us-west-2
 tests:
   - vars:
       topic: Our eco-friendly packaging

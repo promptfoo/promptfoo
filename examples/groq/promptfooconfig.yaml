@@ -1,19 +1,32 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Groq Provider Demo'
+
 prompts:
-  - 'Answer this question as concisely as possible: {{question}}'
+  - 'Answer this question as concisely as possible: {{calculation}}'
+  - 'Calculate the following and provide a brief explanation: {{calculation}}'
 
 providers:
-  - id: openai:chat:mixtral-8x7b-32768
+  - id: groq:gemma2-9b-it
+  - id: groq:llama-3.3-70b-versatile
     config:
-      apiBaseUrl: https://api.groq.com/openai/v1
-      apiKeyEnvar: GROQ_API_KEY
-  - id: openai:chat:llama2-70b-4096
-    config:
-      apiBaseUrl: https://api.groq.com/openai/v1
-      apiKeyEnvar: GROQ_API_KEY
+      max_completion_tokens: 300
+      tools:
+        - type: function
+          function:
+            name: calculate
+            description: 'Evaluate a mathematical expression'
+            parameters:
+              type: object
+              properties:
+                expression:
+                  type: string
+                  description: 'The mathematical expression to evaluate'
+              required:
+                - 'expression'
+      tool_choice: auto
 
 tests:
   - vars:
-      question: What is the capital of France?
-    assert:
-      - type: equals
-        value: Paris
+      calculation: 25 * 4 + 10
+  - vars:
+      calculation: (8 + 2) * 5

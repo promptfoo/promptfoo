@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Websocket test'
+
+prompts:
+  - 'Rephrase this in {{language}}: {{body}}'
+  - 'Translate this to conversational {{language}}: {{body}}'
+
+providers:
+  - id: 'ws://localhost:4000'
+    config:
+      messageTemplate: '{"prompt": "{{prompt}}", "model": "{{model}}"}'
+      transformResponse: 'data.output'
+
+tests:
+  - vars:
+      language: French
+      body: Hello world
+  - vars:
+      language: French
+      body: I'm hungry
+  - vars:
+      language: Pirate
+      body: Hello world
+  - vars:
+      language: Pirate
+      body: I'm hungry

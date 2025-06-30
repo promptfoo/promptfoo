@@ -1,4 +1,7 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: A translator built with LLM
-prompts: [prompts.txt]
-providers: [openai:gpt-3.5-turbo]
-tests: tests.csv
+prompts:
+  - file://prompts.txt
+providers:
+  - openai:gpt-4.1-mini
+tests: file://tests.csv

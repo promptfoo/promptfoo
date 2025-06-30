@@ -1,0 +1,44 @@
+name: tag
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'package.json'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: ${{ github.workflow }}
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+      - name: Get package version
+        id: get_version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+      - name: Check if git tag exists
+        id: check_tag
+        run: |
+          git fetch --tags
+          if [[ $(git tag -l "${VERSION}" | wc -l) -eq '1' ]]; then
+            echo "git tag already exists"
+            echo "TAG=false" >> "$GITHUB_ENV"
+          else
+            echo "git tag does not exist"
+            echo "TAG=true" >> "$GITHUB_ENV"
+          fi
+      - name: Create git tag
+        if: env.TAG == 'true'
+        run: git tag "${VERSION}"
+      - name: Push git tag
+        if: env.TAG == 'true'
+        run: git push --tags

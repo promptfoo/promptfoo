@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'IBM Granite vs Llama'
+
+prompts:
+  - 'Be concise. Answer this riddle :{{riddle}}'
+
+providers:
+  - id: bam:chat:meta-llama/llama-2-70b-chat
+    config:
+      temperature: 0.01 # minimum temperature
+      max_new_tokens: 1024
+      prompt:
+        prefix: '[INST] '
+        suffix: '[/INST] '
+  - id: bam:chat:ibm/granite-13b-chat-v2
+    config:
+      temperature: 0.01 # minimum temperature
+      max_new_tokens: 1024
+      prompt:
+        prefix: '[INST] '
+        suffix: '[/INST] '
+
+defaultTest:
+  assert:
+    - type: latency
+      threshold: 3000
+    - type: javascript
+      value: 'output.length <= 100 ? 1 : output.length > 1000 ? 0 : 1 - (output.length - 100) / 900'
+
+tests:
+  - vars:
+      riddle: >-
+        I am light as a feather, but even the world's strongest man couldn’t
+        hold me for much longer than a minute. What am I ?

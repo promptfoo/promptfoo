@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600">
+  <!-- Background -->
+  <rect width="800" height="600" fill="#f0f8ff"/>
+  
+  <!-- Title -->
+  <text x="400" y="40" font-family="Arial, sans-serif" font-size="24" font-weight="bold" text-anchor="middle" fill="#2c3e50">Excessive Agency in LLMs</text>
+  
+  <!-- Example 1: Overreaching Tools -->
+  <rect x="50" y="80" width="340" height="150" rx="10" fill="#ffffff" stroke="#3498db" stroke-width="2"/>
+  <text x="220" y="135" font-family="Arial, sans-serif" font-size="18" font-weight="bold" text-anchor="middle" fill="#2c3e50">Overreaching Tools</text>
+  <text x="220" y="165" font-family="Arial, sans-serif" font-size="14" text-anchor="middle" fill="#7f8c8d">Document Summarization API</text>
+  <text x="220" y="195" font-family="Arial, sans-serif" font-size="14" text-anchor="middle" fill="#e74c3c">Includes edit &amp; delete capabilities</text>
+  
+  <!-- Example 2: Development Artifacts -->
+  <rect x="410" y="80" width="340" height="150" rx="10" fill="#ffffff" stroke="#3498db" stroke-width="2"/>
+  <text x="580" y="135" font-family="Arial, sans-serif" font-size="18" font-weight="bold" text-anchor="middle" fill="#2c3e50">Development Artifacts</text>
+  <text x="580" y="165" font-family="Arial, sans-serif" font-size="14" text-anchor="middle" fill="#7f8c8d">Testing tool in production</text>
+  <text x="580" y="195" font-family="Arial, sans-serif" font-size="14" text-anchor="middle" fill="#e74c3c">Has broad system access</text>
+  
+  <!-- Example 3: Insecure APIs -->
+  <rect x="50" y="250" width="340" height="150" rx="10" fill="#ffffff" stroke="#3498db" stroke-width="2"/>
+  <text x="220" y="305" font-family="Arial, sans-serif" font-size="18" font-weight="bold" text-anchor="middle" fill="#2c3e50">Insecure APIs</text>
+  <text x="220" y="335" font-family="Arial, sans-serif" font-size="14" text-anchor="middle" fill="#7f8c8d">Customer data lookup</text>
+  <text x="220" y="365" font-family="Arial, sans-serif" font-size="14" text-anchor="middle" fill="#e74c3c">IDOR vulnerability allows arbitrary data access</text>
+  
+  <!-- Example 4: Excessive Database Privileges -->
+  <rect x="410" y="250" width="340" height="150" rx="10" fill="#ffffff" stroke="#3498db" stroke-width="2"/>
+  <text x="580" y="305" font-family="Arial, sans-serif" font-size="18" font-weight="bold" text-anchor="middle" fill="#2c3e50">Excessive Database Privileges</text>
+  <text x="580" y="335" font-family="Arial, sans-serif" font-size="14" text-anchor="middle" fill="#7f8c8d">Product catalog query</text>
+  <text x="580" y="365" font-family="Arial, sans-serif" font-size="14" text-anchor="middle" fill="#e74c3c">Full read/write access to all tables</text>
+  
+  <!-- Example 5: Privileged Account Misuse -->
+  <rect x="230" y="420" width="340" height="150" rx="10" fill="#ffffff" stroke="#3498db" stroke-width="2"/>
+  <text x="400" y="475" font-family="Arial, sans-serif" font-size="18" font-weight="bold" text-anchor="middle" fill="#2c3e50">Privileged Account Misuse</text>
+  <text x="400" y="505" font-family="Arial, sans-serif" font-size="14" text-anchor="middle" fill="#7f8c8d">Support chatbot</text>
+  <text x="400" y="535" font-family="Arial, sans-serif" font-size="14" text-anchor="middle" fill="#e74c3c">Uses admin credentials, can access all data</text>
+</svg>

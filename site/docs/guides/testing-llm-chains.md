@@ -52,16 +52,16 @@ llm_math.run(prompt)
 
 This script is set up so that we can run it like this:
 
-```bash
+```sh
 python langchain_example.py "What is 2+2?"
 ```
 
 Now, let's configure promptfoo to run this LangChain script with a bunch of test cases:
 
 ```yaml
-prompts: prompt.txt
+prompts: file://prompt.txt
 providers:
-  - openai:chat:gpt-4-0613
+  - openai:chat:gpt-4.1
   - exec:python langchain_example.py
 tests:
   - vars:
@@ -99,7 +99,7 @@ A custom provider is a short Javascript file that defines a `callApi` function. 
 
 In the example below, we set up a custom provider that runs a Python script with a prompt as the argument. The output of the Python script is the final result of the chain.
 
-```js title=chainProvider.js
+```js title="chainProvider.js"
 const { spawn } = require('child_process');
 
 class ChainProvider {
@@ -142,9 +142,12 @@ Note that you can always write the logic directly in Javascript if you're comfor
 Now, we can set up a promptfoo config pointing to `chainProvider.js`:
 
 ```yaml
-prompts: [prompt1.txt, prompt2.txt]
+prompts:
+  - file://prompt1.txt
+  - file://prompt2.txt
 // highlight-start
-providers: ['./chainProvider.js']
+providers:
+  - './chainProvider.js'
 // highlight-end
 tests:
   - vars:
@@ -165,4 +168,4 @@ For more detail on testing RAG pipelines, see [RAG evaluations](/docs/guides/eva
 
 ## Other tips
 
-To reference the outputs of previous test cases, use the built-in [`_conversation` variable](/docs/providers/openai#using-the-_conversation-variable).
+To reference the outputs of previous test cases, use the built-in [`_conversation` variable](/docs/configuration/chat#using-the-conversation-variable).

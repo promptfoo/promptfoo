@@ -1,18 +1,39 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Google Vertex AI model evaluation and testing
+
 # This configuration runs each prompt through a series of example inputs and checks if they meet requirements.
 
 prompts:
   - "You are a helpful assistant. Reply with a concise answer to this inquiry: '{{question}}'"
 
-providers: [vertex:gemini-1.5-pro-latest, vertex:chat-bison] # or use the Google AI Studio API: [google:gemini-pro]
+providers:
+  - id: 'vertex:gemini-1.5-flash'
+    config:
+      systemInstruction:
+      parts:
+        - text: Always talk like a cow. Mooo!
+  - id: 'vertex:gemini-2.0-flash-thinking-exp-1219'
+    config:
+      systemInstruction:
+        parts:
+          - text: Always talk like a sheep. Baaaah!
 
 defaultTest:
   options:
-    # Use gemini-pro for model-graded evals (e.g. assertions such as llm-rubric)
-    provider: vertex:gemini-pro
+    provider:
+      # Use gemini-pro for model-graded evals (e.g. assertions such as llm-rubric)
+      text: vertex:chat:gemini-pro
+      # Use vertex embeddings for similarity
+      embedding: vertex:embedding:text-embedding-004
 
 tests:
   - vars:
+      question: 'Solve 3*x^3-5*x=1'
+  - vars:
       question: What's the weather in New York?
+    assert:
+      - type: similar
+        value: 75 and sunny
   - vars:
       question: Who won the latest football match between the Giants and 49ers?
   - vars:

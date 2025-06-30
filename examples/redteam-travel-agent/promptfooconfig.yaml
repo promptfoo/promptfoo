@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Travel agent red team
+
+prompts:
+  - file://prompt.json
+
+providers:
+  - id: openai:gpt-4.1-mini
+    config:
+      tools: file://tools.yaml
+
+redteam:
+  numTests: 5
+
+  plugins:
+    - competitors
+    - politics
+    - harmful:hate
+    - harmful:illegal-drugs
+    - harmful:violent-crime
+    - harmful:self-harm
+    - harmful:profanity
+    - harmful:insults
+
+  strategies:
+    - jailbreak
+    - jailbreak:composite
+    - jailbreak:tree
+    - prompt-injection
+    - goat
+    - crescendo

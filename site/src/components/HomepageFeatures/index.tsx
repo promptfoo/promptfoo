@@ -1,59 +1,119 @@
 import React from 'react';
-import clsx from 'clsx';
+import Link from '@docusaurus/Link';
 import styles from './styles.module.css';
 
-type FeatureItem = {
-  title: string;
-  Svg: React.ComponentType<React.ComponentProps<'svg'>>;
-  description: JSX.Element;
-};
+export default function HomepageFeatures() {
+  const features = [
+    {
+      title: 'Find vulnerabilities you actually care about',
+      description: (
+        <>
+          <p>
+            Our <strong>specialized language models</strong> generate attacks specific to your
+            industry, company, and application.
+          </p>
+          <p>No generic canned attacks - every attack is created on-the-fly.</p>
+        </>
+      ),
+      image: '/img/security-coverage.png',
+      image2x: '/img/security-coverage.png',
+      alt: 'promptfoo security coverage examples',
+      link: '/docs/red-team/llm-vulnerability-types/',
+      cta: 'Learn More',
+    },
+    {
+      title: 'Battle-tested at enterprise scale',
+      description: (
+        <>
+          <p>
+            Adopted by <strong>27 Fortune 500 companies</strong> shipping apps to hundreds of
+            millions of users.
+          </p>
+          <p>
+            Embraced by an open-source community of <strong>over 100,000 developers</strong>{' '}
+            worldwide.
+          </p>
+        </>
+      ),
+      image: '/img/f500-usage.svg',
+      image2x: '/img/f500-usage.svg',
+      alt: 'promptfoo quickstart',
+      link: '/docs/red-team/quickstart/',
+      cta: 'Get Started',
+      className: 'f500',
+    },
+    /*
+    {
+      title: 'Set your standards',
+      description: (
+        <>
+          <p>Map to OWASP, NIST, MITRE, EU AI Act, and more.</p>
+          <p>
+            Customizable to your specific policies and industry regulations, with detailed
+            reporting.
+          </p>
+        </>
+      ),
+      image: '/img/compliance-frameworks.png',
+      image2x: '/img/compliance-frameworks.png',
+      alt: 'promptfoo compliance reporting',
+      link: '/red-teaming/',
+      cta: 'Learn More',
+    },
+    */
+    {
+      title: 'Security-first, developer-friendly',
+      image:
+        'https://user-images.githubusercontent.com/310310/244891726-480e1114-d049-40b9-bd5f-f81c15060284.gif',
+      image2x:
+        'https://user-images.githubusercontent.com/310310/244891726-480e1114-d049-40b9-bd5f-f81c15060284.gif',
+      description:
+        'Move quickly with a command-line interface, live reloads, and caching. No SDKs, cloud dependencies, or logins.',
+      link: '/docs/red-team/quickstart/',
+      cta: 'Get Started',
+    },
+    {
+      title: 'Deploy your way',
+      description:
+        'Get started in minutes with our CLI tool, or choose our managed cloud or on-premises enterprise solutions for advanced features and support.',
+      image: '/img/deploy-options.svg',
+      image2x: '/img/deploy-options.svg',
+      alt: 'promptfoo deployment options',
+      link: '/contact/',
+      cta: 'Get Started',
+      className: 'noBorder',
+    },
+  ];
 
-const FeatureList: FeatureItem[] = [
-  {
-    title: 'Create a test dataset',
-    Svg: require('@site/static/img/svgrepo_science2.svg').default,
-    description: (
-      <>Use a representative sample of user inputs to reduce subjectivity when tuning prompts.</>
-    ),
-  },
-  {
-    title: 'Set up evaluation metrics',
-    Svg: require('@site/static/img/svgrepo_science.svg').default,
-    description: <>Use built-in metrics, LLM-graded evals, or define your own custom metrics.</>,
-  },
-  {
-    title: 'Select the best prompt & model',
-    Svg: require('@site/static/img/svgrepo_electricity.svg').default,
-    description: (
-      <>
-        Compare prompts and model outputs side-by-side, or integrate the library into your existing
-        test/CI workflow.
-      </>
-    ),
-  },
-];
-
-function Feature({ title, Svg, description }: FeatureItem) {
-  return (
-    <div className={clsx('col col--4')}>
-      <div className="text--center">
-        <Svg className={styles.featureSvg} role="img" />
-      </div>
-      <div className="text--center padding-horiz--md">
-        <h3>{title}</h3>
-        <p>{description}</p>
-      </div>
-    </div>
-  );
-}
-
-export default function HomepageFeatures(): JSX.Element {
   return (
     <section className={styles.features}>
       <div className="container">
-        <div className="row">
-          {FeatureList.map((props, idx) => (
-            <Feature key={idx} {...props} />
+        <h2 className={styles.featuresTitle}>Why Promptfoo?</h2>
+        <div className={styles.featuresList}>
+          {features.map((feature, idx) => (
+            <div
+              key={idx}
+              className={`${styles.featureItem} ${feature.className ? styles[feature.className] : ''}`}
+            >
+              <div className={styles.featureContent}>
+                <h3>{feature.title}</h3>
+                <div>{feature.description}</div>
+                <Link to={feature.link} className="button button--secondary">
+                  {feature.cta}
+                </Link>
+              </div>
+              <div className={styles.featureImageWrapper}>
+                <Link to={feature.link}>
+                  <img
+                    loading="lazy"
+                    src={feature.image}
+                    srcSet={`${feature.image} 1x, ${feature.image2x} 2x`}
+                    alt={feature.alt}
+                    className={`${styles.featureImage} ${feature.className ? styles[feature.className + 'Image'] : ''}`}
+                  />
+                </Link>
+              </div>
+            </div>
           ))}
         </div>
       </div>

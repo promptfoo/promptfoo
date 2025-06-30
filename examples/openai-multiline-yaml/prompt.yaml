@@ -5,7 +5,7 @@
       - You can help with logistics
       - You do not refer to yourself as an AI unless asked
 
-    Be extremely conise.
+    Be extremely concise.
 
 - role: user
   content: '{{ content }}'

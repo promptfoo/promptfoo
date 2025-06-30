@@ -1,6 +1,5 @@
 ---
-sidebar_label: LocalAI (Llama, Alpaca, GPT4All, ...)
-sidebar_position: 99
+sidebar_label: LocalAI
 ---
 
 # Local AI
@@ -23,9 +22,9 @@ The model name is typically the filename of the `.bin` file that you downloaded 
 
 ## Configuring parameters
 
-You can set parameters like `temperature` and `apiBaseUrl` ([full list here](https://github.com/promptfoo/promptfoo/blob/main/src/providers/localai.ts#L7)). For example, using [LocalAI's lunademo](https://localai.io/howtos/easy-request-curl/):
+You can set parameters like `temperature` and `apiBaseUrl` ([full list here](https://github.com/promptfoo/promptfoo/blob/main/src/providers/localai.ts#L7)). For example, using [LocalAI's lunademo](https://localai.io/docs/getting-started/models/):
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: localai:lunademo
     config:

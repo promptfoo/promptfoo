@@ -1,0 +1,37 @@
+.custom-metric-container {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  font-weight: normal;
+}
+
+.custom-metric-container > span {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+  margin-right: 0.25rem; /* spacing for failure reason text in output cell */
+  transition: all 0.15s ease-in-out;
+}
+
+.custom-metric-container > span.clickable {
+  cursor: pointer;
+  background-color: var(--custom-darkOverlay, rgba(0, 0, 0, 0.05));
+  color: var(--link-color);
+}
+
+.custom-metric-container > span.clickable:hover {
+  background-color: var(--custom-lightOverlay, rgba(0, 0, 0, 0.08));
+  transform: translateY(-1.5px);
+  box-shadow: 0 3px 6px -2px rgba(0, 0, 0, 0.15);
+  border-color: var(--link-color);
+}
+
+[data-theme='dark'] .custom-metric-container > span.clickable {
+  background-color: var(--custom-darkOverlay, rgba(255, 255, 255, 0.08));
+}
+
+[data-theme='dark'] .custom-metric-container > span.clickable:hover {
+  background-color: var(--custom-lightOverlay, rgba(255, 255, 255, 0.15));
+  box-shadow: 0 3px 6px -2px rgba(0, 0, 0, 0.3);
+}

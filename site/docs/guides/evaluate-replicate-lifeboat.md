@@ -20,7 +20,7 @@ Promptfoo is a command-line tool that can help you run benchmarks across differe
 
 First, we'll initialize the project directory for the eval.
 
-```bash
+```sh
 npx promptfoo@latest init replicate-lifeboat-eval
 ```
 
@@ -28,12 +28,12 @@ npx promptfoo@latest init replicate-lifeboat-eval
 
 Modify the `promptfooconfig.yaml` file to include the models you wish to compare. Below is an example configuration that compares a Llama model on Replicate with a GPT model:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 prompts:
   - 'Respond to the user concisely: {{message}}'
 
 providers:
-  - id: openai:chat:gpt-3.5-turbo
+  - id: openai:chat:gpt-4.1-mini
     config:
       apiKey: 'your_openai_api_key'
       temperature: 0.01
@@ -58,7 +58,7 @@ You'll need to provide your own Replicate and OpenAI API tokens (these are used 
 
 Define a set of test cases in `promptfooconfig.yaml`. Here's an example with a few test cases and corresponding assertions:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 # ... (previous config sections)
 
 tests:
@@ -93,13 +93,13 @@ Learn more about how to set up [assertions](/docs/configuration/expected-outputs
 
 Execute the comparison using the `promptfoo eval` command, which will run your test cases against each model and produce results.
 
-```bash
+```
 npx promptfoo@latest eval
 ```
 
 Then view the results in the web interface:
 
-```bash
+```sh
 npx promptfoo@latest view
 ```
 
@@ -109,7 +109,7 @@ Which produces a nice browser side-by-side view like this:
 
 Or export them to a file:
 
-```bash
+```
 npx promptfoo@latest eval -o results.csv
 ```
 

@@ -1,0 +1,192 @@
+# This GitHub Action builds the Docker image Promptfoo,
+# runs the Docker container, performs a health check to ensure the application
+# is running correctly, and then publishes the image to GitHub Container Registry
+# if all checks pass. This action is triggered on release creation, workflow dispatch,
+# pull requests to main that modify the Dockerfile, and pushes to main.
+
+name: Test and Publish Multi-arch Docker Image
+run-name: |
+  ${{ github.event_name == 'release' && 'Release' ||
+      github.event_name == 'workflow_dispatch' && 'Manual' ||
+      github.event_name == 'pull_request' && 'PR' ||
+      'Push' }}
+  Docker build for ${{ github.ref_name }}
+  ${{ github.event_name == 'pull_request' && format('(PR #{0})', github.event.number) || '' }}
+  by @${{ github.actor }}
+
+on:
+  release:
+    types: [created]
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'Dockerfile'
+  push:
+    branches:
+      - main
+    paths:
+      - 'Dockerfile'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  test-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          sudo apt-get clean
+          df -h
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image for testing
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: local-test-image:latest
+          platforms: linux/amd64
+          build-args: |
+            BUILD_VERSION=${{ github.ref_name }}
+            BUILD_DATE=${{ github.event_name == 'pull_request' && github.event.pull_request.updated_at || github.event.head_commit.timestamp || github.event.repository.updated_at }}
+            GIT_SHA=${{ github.sha }}
+
+      - name: Run Docker container for testing
+        run: docker run -d --name promptfoo-container -p 3000:3000 local-test-image:latest
+
+      - name: Verify Python and promptfoo
+        run: |
+          echo "Checking Python version:"
+          if ! docker exec promptfoo-container python --version; then
+            echo "Python check failed"
+            exit 1
+          fi
+
+          echo "Checking promptfoo version:"
+          if ! docker exec promptfoo-container promptfoo --version; then
+            echo "promptfoo check failed"
+            exit 1
+          fi
+
+      - name: Run health check
+        run: |
+          # Loop to check if the server is up
+          for ((retry=1; retry<=10; retry++)); do
+            if curl -f http://localhost:3000/health; then
+              echo -e "\nHealth check passed"
+              HEALTH_CHECK_PASS=true
+              break
+            else
+              echo "Health check failed, retrying in 2 seconds..."
+              sleep 2
+            fi
+          done
+
+          # If health check did not pass after retries, exit with an error
+          if [ -z "$HEALTH_CHECK_PASS" ]; then
+            echo -e "\nHealth check failed after multiple attempts" >&2
+            exit 1
+          fi
+
+      - name: run promptfoo eval
+        id: eval
+        env:
+          PROMPTFOO_REMOTE_API_BASE_URL: http://localhost:3000
+          PROMPTFOO_SHARING_APP_BASE_URL: http://localhost:3000
+        run: |
+          npm install
+          npm run local -- eval -c .github/assets/promptfooconfig.yaml --share
+
+      - name: Test that the eval results are uploaded
+        run: |
+          response=$(curl -s http://localhost:3000/api/results)
+          echo "Response: $response"
+
+          # Use jq to extract the array length
+          count=$(echo "$response" | jq '.data | length')
+          echo "Array Length: $count"
+
+          # Check if the count is exactly 1
+          if [ "$count" -ne 1 ]; then
+            echo "Error: Expected 1 entry, but got $count"
+            exit 1
+          fi
+
+      - name: Clean up Docker images
+        if: always()
+        run: |
+          docker system prune -af
+          docker volume prune -f
+          df -h
+
+      - name: Stop and remove Docker container
+        if: always()
+        run: |
+          docker stop promptfoo-container
+          docker rm promptfoo-container
+
+      - name: Log in to the Container registry
+        if: success() && (github.event_name != 'pull_request')
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        if: success()
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build and push multi-arch Docker image
+        if: success() && (github.event_name != 'pull_request')
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            BUILD_VERSION=${{ github.ref_name }}
+            BUILD_DATE=${{ github.event_name == 'pull_request' && github.event.pull_request.updated_at || github.event.head_commit.timestamp || github.event.repository.updated_at }}
+            GIT_SHA=${{ github.sha }}
+          outputs: |
+            type=image,name=target,annotation-index.org.opencontainers.image.description=promptfoo is a tool for testing evaluating and red-teaming LLM apps.

@@ -23,23 +23,23 @@ Before we dive in, ensure you have the following ready:
 
 Create a dedicated directory for your comparison project:
 
-```bash
+```sh
 npx promptfoo@latest init gpt-comparison
 ```
 
 Edit `promptfooconfig.yaml` to include GPT-3.5 and GPT-4:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 providers:
-  - openai:gpt-3.5-turbo
-  - openai:gpt-4
+  - openai:gpt-4.1-mini
+  - openai:gpt-4.1
 ```
 
 ## Step 2: Crafting the prompts
 
 For our comparison, we'll use a simple prompt:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 prompts:
   - 'Solve this riddle: {{riddle}}'
 ```
@@ -50,7 +50,7 @@ Feel free to add multiple prompts and tailor to your use case.
 
 Above, we have a `{{riddle}}` placeholder variable. Each test case runs the prompts with a different riddle:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 tests:
   - vars:
       riddle: 'I speak without a mouth and hear without ears. I have no body, but I come alive with wind. What am I?'
@@ -64,13 +64,13 @@ tests:
 
 Execute the comparison with the following command:
 
-```bash
+```
 npx promptfoo@latest eval
 ```
 
 This will process the riddles against both GPT-3.5 and GPT-4, providing you with side-by-side results in your command line interface:
 
-```bash
+```sh
 npx promptfoo@latest view
 ```
 
@@ -125,8 +125,8 @@ Finally, we'll use `defaultTest` to clean things up a bit and apply global `late
 
 ```yaml
 providers:
-  - openai:gpt-3.5-turbo
-  - openai:gpt-4
+  - openai:gpt-4.1-mini
+  - openai:gpt-4.1
 
 prompts:
   - 'Solve this riddle: {{riddle}}'
@@ -168,7 +168,7 @@ In the end, you will see a result like this:
 
 ![gpt 3.5 vs gpt 4](/img/docs/gpt-3.5-vs-gpt-4.png)
 
-In this particular eval, it looks like GPT-3.5 got all the riddles correct except for one (it misinterets the meaning of "single"!). But, GPT-4 failed to meet our cost requirements so it scored lower overall.
+In this particular eval, it looks like GPT-3.5 got all the riddles correct except for one (it misinterprets the meaning of "single"!). But, GPT-4 failed to meet our cost requirements so it scored lower overall.
 
 The tradeoff between cost, latency, and accuracy is going to be tailored for each application. That's why it's important to run your own eval.
 

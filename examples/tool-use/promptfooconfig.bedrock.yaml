@@ -1,0 +1,48 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Bedrock Tool Use
+prompts:
+  - Tell me about the weather in {{city}}.
+providers:
+  - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0
+    label: Claude 4 Sonnet
+    config:
+      region: us-east-2
+      # optional block to force specific tool to be used
+      tool_choice:
+        type: tool
+        name: get_weather
+      tools:
+        - name: get_weather
+          description: Get the current weather in a given location
+          input_schema:
+            type: object
+            properties:
+              location:
+                type: string
+                description: The city and state, e.g. San Francisco, CA
+              unit:
+                type: string
+                enum:
+                  - celsius
+                  - fahrenheit
+            required:
+              - location
+        # irrelevant tool
+        - name: add
+          description: Add two numbers
+          input_schema:
+            type: object
+            properties:
+              a:
+                type: number
+              b:
+                type: number
+tests:
+  - vars:
+      city: Boston
+  - vars:
+      city: New York
+  - vars:
+      city: Paris
+  - vars:
+      city: Mars

@@ -1,7 +1,11 @@
-import type { Config } from 'drizzle-kit';
+import { defineConfig } from 'drizzle-kit';
+import { getDbPath } from './src/database';
 
-export default {
-  schema: './src/database.ts',
+export default defineConfig({
+  dialect: 'turso',
+  schema: './src/database/tables.ts',
   out: './drizzle',
-  driver: 'better-sqlite',
-} satisfies Config;
+  dbCredentials: {
+    url: `file:${getDbPath()}`,
+  },
+});

@@ -1,0 +1,94 @@
+.blogPostGridContainer {
+  margin-top: 4rem;
+}
+
+.blogPostGridTitle {
+  font-size: 2rem;
+  font-weight: 500;
+  margin-bottom: 2rem;
+  color: var(--ifm-heading-color);
+  position: relative;
+  display: inline-block;
+}
+
+.blogPostGridTitle::after {
+  content: '';
+  position: absolute;
+  width: 60px;
+  height: 3px;
+  bottom: -10px;
+  left: 0;
+  background-color: var(--ifm-color-primary);
+}
+
+/* Style for the archive page indicator */
+.blogPostGridTitle[data-is-archive='true'] {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.blogPostGridTitle[data-is-archive='true']::after {
+  width: 40px;
+}
+
+/* Create styling for the page number in the title */
+.pageNumber {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  height: 2rem;
+  padding: 0 0.5rem;
+  margin-left: 0.5rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: white;
+  background-color: var(--ifm-color-primary);
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.blogPostGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 2rem;
+}
+
+/* Responsive breakpoints */
+@media (max-width: 996px) {
+  .blogPostGrid {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1.75rem;
+  }
+
+  .blogPostGridTitle {
+    font-size: 1.8rem;
+  }
+
+  .pageNumber {
+    font-size: 1.1rem;
+    min-width: 1.75rem;
+    height: 1.75rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .blogPostGrid {
+    gap: 1.5rem;
+  }
+
+  .blogPostGridContainer {
+    margin-top: 3rem;
+  }
+
+  .blogPostGridTitle {
+    font-size: 1.5rem;
+  }
+
+  .pageNumber {
+    font-size: 1rem;
+    min-width: 1.5rem;
+    height: 1.5rem;
+  }
+}

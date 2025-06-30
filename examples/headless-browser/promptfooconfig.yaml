@@ -1,0 +1,40 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Headless eval'
+
+prompts:
+  - 'Write a tweet about {{topic}}'
+
+providers:
+  - id: browser
+    config:
+      headless: true # set to false to see the browser
+      steps:
+        # Load the page
+        - action: navigate
+          args:
+            url: 'https://doc-chat-llm.streamlit.app/~/+/'
+        # Enter the message
+        - action: type
+          args:
+            selector: 'textarea'
+            text: '{{prompt}}'
+        # Send the message
+        - action: click
+          args:
+            selector: 'button[data-testid="stChatInputSubmitButton"]'
+        # Wait for the response
+        - action: wait
+          args:
+            ms: 5000
+        # Read the response
+        - action: extract
+          args:
+            selector: 'div.stChatMessage:last-of-type'
+          name: response
+      transformResponse: 'extracted.response'
+
+tests:
+  - vars:
+      topic: bananas
+  - vars:
+      topic: avocado toast

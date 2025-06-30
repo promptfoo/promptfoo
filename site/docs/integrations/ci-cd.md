@@ -22,7 +22,7 @@ This approach works for any CI system. If you're using Github, you can skip dire
 
 2. **Install promptfoo**: Ensure that the `promptfoo`` CLI is installed in the CI/CD environment. You can install it using package managers like npm:
 
-   ```bash
+   ```sh
    npm install -g promptfoo
    ```
 
@@ -32,7 +32,7 @@ This approach works for any CI system. If you're using Github, you can skip dire
 
 4. **Run Evaluation**: Create a step in your pipeline to execute the promptfoo evaluation. Use the `promptfoo eval` command, specifying the configuration file and the prompts to evaluate.
 
-   ```bash
+   ```sh
    promptfoo eval -c path/to/config.yaml --prompts path/to/prompts/**/*.json --share -o output.json
    ```
 
@@ -44,6 +44,7 @@ The schema of the `output.json` file is defined [here](https://github.com/prompt
 
 ```typescript
 interface OutputFile {
+  evalId?: string;
   results: EvaluateSummary;
   config: Partial<UnifiedConfig>;
   shareableUrl: string | null;

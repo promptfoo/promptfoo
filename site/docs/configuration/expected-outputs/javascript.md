@@ -46,6 +46,16 @@ assert:
       };
 ```
 
+## Handling objects
+
+If the LLM outputs a JSON object (such as in the case of tool/function calls), then `output` will already be parsed as an object:
+
+```yaml
+assert:
+  - type: javascript
+    value: output[0].function.name === 'get_current_weather'
+```
+
 ## Return type
 
 The return value of your Javascript function can be a boolean, number, or a `GradingResult`:
@@ -88,15 +98,30 @@ assert:
 
 ## Using test context
 
-The `context` variable contains the prompt and test case variables:
+The `context` variable contains information about the test case and execution environment:
 
 ```ts
-interface AssertContext {
+interface AssertionValueFunctionContext {
   // Raw prompt sent to LLM
-  prompt: string;
+  prompt: string | undefined;
 
   // Test case variables
   vars: Record<string, string | object>;
+
+  // The complete test case
+  test: AtomicTestCase;
+
+  // Log probabilities from the LLM response, if available
+  logProbs: number[] | undefined;
+
+  // Configuration passed to the assertion
+  config?: Record<string, any>;
+
+  // The provider that generated the response
+  provider: ApiProvider | undefined;
+
+  // The complete provider response
+  providerResponse: ProviderResponse | undefined;
 }
 ```
 
@@ -132,13 +157,39 @@ To reference an external file, use the `file://` prefix:
 assert:
   - type: javascript
     value: file://relative/path/to/script.js
+    config:
+      maximumOutputSize: 10
 ```
 
-The Javascript file must export an assertion function. Here's an example:
+You can specify a particular function to use by appending it after a colon:
+
+```yaml
+assert:
+  - type: javascript
+    value: file://relative/path/to/script.js:customFunction
+```
+
+The JavaScript file must export an assertion function. Here are examples:
+
+```js
+// Default export
+module.exports = (output, context) => {
+  return output.length > 10;
+};
+```
+
+```js
+// Named exports
+module.exports.customFunction = (output, context) => {
+  return output.includes('specific text');
+};
+```
+
+Here's an example using configuration data defined in the assertion's YAML file:
 
 ```js
 module.exports = (output, context) => {
-  return output.length > 10;
+  return output.length <= context.config.maximumOutputSize;
 };
 ```
 
@@ -172,6 +223,70 @@ async function main(output, context) {
 
 module.exports = main;
 ```
+
+You can also return complete [`GradingResult`](/docs/configuration/reference/#gradingresult) objects. For example:
+
+```js
+module.exports = (output, context) => {
+  console.log('Prompt:', context.prompt);
+  console.log('Vars', context.vars.topic);
+
+  // You can return a bool...
+  // return output.toLowerCase().includes('bananas');
+
+  // A score (where 0 = Fail)...
+  // return 0.5;
+
+  // Or an entire grading result, which can be simple...
+  let result = {
+    pass: output.toLowerCase().includes('bananas'),
+    score: 0.5,
+    reason: 'Contains banana',
+  };
+
+  // Or include nested assertions...
+  result = {
+    pass: true,
+    score: 0.75,
+    reason: 'Looks good to me',
+    componentResults: [
+      {
+        pass: output.toLowerCase().includes('bananas'),
+        score: 0.5,
+        reason: 'Contains banana',
+        namedScores: {
+          'Uses banana': 1.0,
+        },
+      },
+      {
+        pass: output.toLowerCase().includes('yellow'),
+        score: 0.5,
+        reason: 'Contains yellow',
+        namedScores: {
+          Yellowish: 0.66,
+        },
+      },
+    ],
+  };
+
+  return result;
+};
+```
+
+## Inline assertions
+
+If you are using promptfoo as a JS package, you can build your assertion inline:
+
+```js
+{
+  type:"javascript",
+  value: (output, context) => {
+    return output.includes("specific text");
+  }
+}
+```
+
+Output will always be a string, so if your [custom response parser](/docs/providers/http/#function-parser) returned an object, you can use `JSON.parse(output)` to convert it back to an object.
 
 ### ES modules
 

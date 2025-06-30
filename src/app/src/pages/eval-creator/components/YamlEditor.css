@@ -1,0 +1,38 @@
+.editor-container {
+  position: relative;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.glowing-border {
+  border-color: #1976d2;
+  box-shadow: 0 0 5px rgba(25, 118, 210, 0.5);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+/* Add styles for the editor in both read and edit modes */
+.editor-readonly {
+  background-color: rgba(0, 0, 0, 0.03);
+  cursor: not-allowed;
+}
+
+.editor-container pre {
+  margin: 0;
+}
+
+/* Add a subtle editing indicator in the top right */
+.editing-indicator {
+  position: absolute;
+  top: 10px;
+  right: 40px;
+  font-size: 12px;
+  color: #1976d2;
+  background-color: rgba(255, 255, 255, 0.85);
+  padding: 2px 8px;
+  border-radius: 4px;
+  z-index: 1;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}

@@ -15,7 +15,7 @@ No additional information is collected. The above list is exhaustive.
 
 To disable telemetry, set the following environment variable:
 
-```bash
+```sh
 PROMPTFOO_DISABLE_TELEMETRY=1
 ```
 
@@ -25,6 +25,6 @@ The CLI checks NPM's package registry for updates. If there is a newer version a
 
 To disable, set:
 
-```bash
+```sh
 PROMPTFOO_DISABLE_UPDATE=1
 ```

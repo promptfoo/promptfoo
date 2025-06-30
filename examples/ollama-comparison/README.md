@@ -1,4 +1,12 @@
-To get started, set your OPENAI_API_KEY environment variable and start Ollama.
+# ollama-comparison (Ollama Comparison)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example ollama-comparison
+```
+
+To get started, start Ollama.
 
 Next, change a few of the prompts in prompts.txt and edit promptfooconfig.yaml.
 

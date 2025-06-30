@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500">
+  <!-- Background -->
+  <rect width="800" height="500" fill="#f0f0f0"/>
+  
+  <!-- Title -->
+  <text x="400" y="40" font-size="24" text-anchor="middle" font-weight="bold">Adversarial Testing Approaches for LLMs</text>
+  
+  <!-- White Box Testing -->
+  <rect x="50" y="70" width="340" height="400" fill="white" stroke="#333" stroke-width="2" rx="10"/>
+  <text x="220" y="100" font-size="20" text-anchor="middle" font-weight="bold">White Box Testing</text>
+  
+  <!-- Black Box Testing -->
+  <rect x="410" y="70" width="340" height="400" fill="#333" stroke="#333" stroke-width="2" rx="10"/>
+  <text x="580" y="100" font-size="20" text-anchor="middle" font-weight="bold" fill="white">Black Box Testing</text>
+  
+  <!-- White Box Testing Details -->
+  <text x="70" y="140" font-size="16" fill="#333">• Full access to model internals</text>
+  <text x="70" y="180" font-size="16" fill="#333">• Highly effective attacks</text>
+  <text x="70" y="220" font-size="16" fill="#333">• Slower and model-specific</text>
+  <text x="70" y="260" font-size="16" fill="#333">• Uncovers structural vulnerabilities</text>
+  <text x="70" y="300" font-size="16" fill="#333">• Technically complex</text>
+  <text x="70" y="340" font-size="16" fill="#333">• Useful for model developers</text>
+  <text x="70" y="380" font-size="16" fill="#333">• Can target specific model layers</text>
+  
+  <!-- Black Box Testing Details -->
+  <text x="430" y="140" font-size="16" fill="white">• Only inputs/outputs observable</text>
+  <text x="430" y="180" font-size="16" fill="white">• Simulates real-world scenarios</text>
+  <text x="430" y="220" font-size="16" fill="white">• More practical for most teams</text>
+  <text x="430" y="260" font-size="16" fill="white">• Reveals unexpected behaviors</text>
+  <text x="430" y="300" font-size="16" fill="white">• Accessible to non-experts</text>
+  <text x="430" y="340" font-size="16" fill="white">• Useful for end-users/testers</text>
+  <text x="430" y="380" font-size="16" fill="white">• Tests overall system behavior</text>
+  
+  <!-- Divider -->
+  <line x1="400" y1="70" x2="400" y2="470" stroke="#666" stroke-width="2" stroke-dasharray="5,5"/>
+</svg>

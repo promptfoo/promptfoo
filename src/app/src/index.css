@@ -1,0 +1,141 @@
+/* This CSS is common to all pages */
+
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-style: normal;
+  font-weight-normal: 400;
+  font-weight-bold: 700;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+
+  /* Light mode colors */
+  --background-color: #f5f5f5;
+  --text-color: #404040;
+  --link-color: #2e6585;
+  --border-color: lightgray;
+  --table-border-color: lightgray;
+  --pass-color: green;
+  --fail-color: #ad0000;
+  --success-background-color: #d1ffd7;
+  --fail-background-color: #ffd1d1;
+  --neutral-background-color: #eee;
+  --variable-background-color: #f7f7f7;
+  --header-background-color: #fffdf7;
+  --insert-highlight-color: #d4fcbc;
+  --delete-highlight-color: #fbb6c2;
+  --prompt-highlight-color: linen;
+  --textarea-background-color: #ffffff;
+  --textarea-color: #404040;
+  --search-highlight-color: #ffff00;
+  --search-text-color: inherit;
+  --cell-highlight-color: #ffffeb;
+  --cell-highlight-text-color: inherit;
+}
+
+/* Dark mode colors */
+[data-theme='dark'] {
+  /* Keep synced with prefers-color-scheme above */
+  --background-color: #1a1a1a;
+  --text-color: #f0f0f0;
+  --link-color: #6fcaff;
+  --border-color: #444444;
+  --table-border-color: #444444;
+  --pass-color: #b1e9b3;
+  --fail-color: #ee726a;
+  --success-background-color: #216d2b;
+  --fail-background-color: #6d2121;
+  --neutral-background-color: #424242;
+  --variable-background-color: #333;
+  --header-background-color: #333;
+  --insert-highlight-color: #4f8a34;
+  --delete-highlight-color: #8a3434;
+  --prompt-highlight-color: #67605a;
+  --textarea-background-color: #2d2d2d;
+  --textarea-color: #fff;
+  --search-highlight-color: #ffff00;
+  --search-text-color: #404040;
+  --cell-highlight-color: #2c4a6b;
+  --cell-highlight-text-color: #e8f4fd;
+}
+
+html {
+  font-size: 16px;
+  background-color: var(--background-color);
+  color: var(--text-color);
+}
+
+body {
+  margin: 0;
+}
+
+a {
+  color: var(--link-color);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+textarea {
+  background-color: var(--textarea-background-color);
+  color: var(--textarea-color);
+  padding: 0.5em;
+  border: 1px solid var(--border-color);
+  border-radius: 0.25em;
+  resize: vertical;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+@media print {
+  header,
+  footer,
+  .MuiAppBar-root,
+  .MuiToolbar-root,
+  .MuiContainer-root nav,
+  [role='navigation'],
+  .MuiAppBar-positionStatic,
+  .print-hide {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  @page {
+    size: A4;
+    margin: 0.25in;
+  }
+
+  /* Body and container styles */
+  body {
+    -webkit-print-color-adjust: exact;
+    color-adjust: exact;
+    background-color: white !important;
+  }
+
+  .report-header {
+    padding-right: 24px !important;
+  }
+
+  /* Target main container backgrounds */
+  .MuiContainer-root,
+  .MuiBox-root,
+  .MuiPaper-root {
+    background-color: white !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  .MuiContainer-root {
+    max-width: 100% !important;
+  }
+}

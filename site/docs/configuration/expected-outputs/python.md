@@ -39,11 +39,10 @@ assert:
             'pass': True,
             'score': 0.5,
           }
-      else:
-          return {
-            'pass': False,
-            'score': 0,
-          }
+      return {
+        'pass': False,
+        'score': 0,
+      }
 ```
 
 ## Using test context
@@ -51,9 +50,29 @@ assert:
 A `context` object is available in the Python function. Here is its type definition:
 
 ```py
-class AssertContext:
-    prompt: str
+from typing import Any, Dict, Optional, TypedDict, Union
+
+class AssertionValueFunctionContext(TypedDict):
+    # Raw prompt sent to LLM
+    prompt: Optional[str]
+
+    # Test case variables
     vars: Dict[str, Union[str, object]]
+
+    # The complete test case
+    test: Dict[str, Any]  # Contains keys like "vars", "assert", "options"
+
+    # Log probabilities from the LLM response, if available
+    logProbs: Optional[list[float]]
+
+    # Configuration passed to the assertion
+    config: Optional[Dict[str, Any]]
+
+    # The provider that generated the response
+    provider: Optional[Any]  # ApiProvider type
+
+    # The complete provider response
+    providerResponse: Optional[Any]  # ProviderResponse type
 ```
 
 For example, if the test case has a var `example`, access it in Python like this:
@@ -65,7 +84,7 @@ tests:
       example: 'Example text'
     assert:
       - type: python
-        value: 'context['vars']['example'] in output'
+        value: 'context["vars"]["example"] in output'
 ```
 
 ## External .py
@@ -76,28 +95,95 @@ To reference an external file, use the `file://` prefix:
 assert:
   - type: python
     value: file://relative/path/to/script.py
+    config:
+      outputLengthLimit: 10
 ```
 
-This file will be called with an `output` string and an `AssertContext` object. It expects that either a bool (pass/fail), float (score), or `GradingResult` will be returned.
+You can specify a particular function to use by appending it after a colon:
 
-Here's an example assert.py:
+```yaml
+assert:
+  - type: python
+    value: file://relative/path/to/script.py:custom_assert
+```
+
+If no function is specified, it defaults to `get_assert`.
+
+This file will be called with an `output` string and an `AssertionValueFunctionContext` object (see above).
+It expects that either a `bool` (pass/fail), `float` (score), or `GradingResult` will be returned.
+
+Here's an example `assert.py`:
 
 ```py
-def get_assert(output, context) -> Union[bool, float, Dict[str, Any]]
+from typing import Dict, TypedDict, Union
+
+# Default function name
+def get_assert(output: str, context) -> Union[bool, float, Dict[str, Any]]:
     print('Prompt:', context['prompt'])
-    print('Vars', context['vars']['topic']
+    print('Vars', context['vars']['topic'])
 
-    # Determine the result...
-    result = test_output(output)
-
-    # Here's an example GradingResult dict
-    result = {
+    # This return is an example GradingResult dict
+    return {
       'pass': True,
       'score': 0.6,
       'reason': 'Looks good to me',
     }
-    return result
+
+# Custom function name
+def custom_assert(output: str, context) -> Union[bool, float, Dict[str, Any]]:
+    return len(output) > 10
 ```
+
+This is an example of an assertion that uses data from a configuration defined in the assertion's YML file:
+
+```py
+from typing import Dict, Union
+
+def get_assert(output: str, context) -> Union[bool, float, Dict[str, Any]]:
+    return len(output) <= context.get('config', {}).get('outputLengthLimit', 0)
+```
+
+You can also return nested metrics and assertions via a `GradingResult` object:
+
+```py
+{
+    'pass': True,
+    'score': 0.75,
+    'reason': 'Looks good to me',
+    'componentResults': [{
+        'pass': 'bananas' in output.lower(),
+        'score': 0.5,
+        'reason': 'Contains banana',
+    }, {
+        'pass': 'yellow' in output.lower(),
+        'score': 0.5,
+        'reason': 'Contains yellow',
+    }]
+}
+```
+
+### GradingResult types
+
+Here's a Python type definition you can use for the [`GradingResult`](/docs/configuration/reference/#gradingresult) object:
+
+```py
+@dataclass
+class GradingResult:
+    pass_: bool  # 'pass' is a reserved keyword in Python
+    score: float
+    reason: str
+    component_results: Optional[List['GradingResult']] = None
+    named_scores: Optional[Dict[str, float]] = None  # Appear as metrics in the UI
+```
+
+:::tip Snake case support
+Python snake_case fields are automatically mapped to camelCase:
+
+- `pass_` → `pass` (or just use `"pass"` as a dictionary key)
+- `named_scores` → `namedScores`
+- `component_results` → `componentResults`
+- `tokens_used` → `tokensUsed`
+  :::
 
 ## Overriding the Python binary
 

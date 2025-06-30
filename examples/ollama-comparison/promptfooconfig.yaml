@@ -1,6 +1,11 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Comparing local Ollama models with different prompts
+
 prompts:
-  prompts/openai_prompt.json: openai_prompt
-  prompts/llama_prompt.txt: llama_prompt
+  - id: file://prompts/openai_prompt.json
+    label: openai_prompt
+  - id: file://prompts/llama_prompt.txt
+    label: llama_prompt
 
 providers:
   - id: ollama:llama2
@@ -13,7 +18,7 @@ providers:
       - llama_prompt
     config:
       num_predict: 1024
-  - id: openai:gpt-3.5-turbo
+  - id: openai:gpt-4.1-mini
     prompts:
       - openai_prompt
 

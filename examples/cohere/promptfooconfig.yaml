@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Cohere Command with web search and similarity embeddings
+
+prompts:
+  - 'Write a tweet about {{topic}}'
+
+providers:
+  - id: cohere:command
+    config:
+      temperature: 0.5
+      prompt_truncation: AUTO
+      connectors:
+        - id: web-search
+      showSearchQueries: true
+
+defaultTest:
+  options:
+    provider:
+      embedding: cohere:embedding:embed-english-v3.0
+
+tests:
+  - vars:
+      topic: the person who discovered gravity
+    assert:
+      - type: similar
+        value: isaac newton

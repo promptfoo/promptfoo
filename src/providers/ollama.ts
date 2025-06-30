@@ -1,8 +1,14 @@
-import logger from '../logger';
 import { fetchWithCache } from '../cache';
+import { getEnvString } from '../envars';
+import logger from '../logger';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ProviderEmbeddingResponse,
+  ProviderResponse,
+} from '../types';
+import { maybeLoadToolsFromExternalFile } from '../util';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
-
-import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types.js';
 
 interface OllamaCompletionOptions {
   // From https://github.com/jmorganca/ollama/blob/v0.1.0/api/types.go#L161
@@ -39,6 +45,7 @@ interface OllamaCompletionOptions {
   penalize_newline?: boolean;
   stop?: string[];
   num_thread?: number;
+  tools?: any[]; // Support for function calling/tools
 }
 
 const OllamaCompletionOptionKeys = new Set<keyof OllamaCompletionOptions>([
@@ -75,6 +82,7 @@ const OllamaCompletionOptionKeys = new Set<keyof OllamaCompletionOptions>([
   'penalize_newline',
   'stop',
   'num_thread',
+  'tools',
 ]);
 
 interface OllamaCompletionJsonL {
@@ -137,24 +145,33 @@ export class OllamaCompletionProvider implements ApiProvider {
     const params = {
       model: this.modelName,
       prompt,
-      options: Object.keys(this.config).reduce((options, key) => {
-        const optionName = key as keyof OllamaCompletionOptions;
-        if (OllamaCompletionOptionKeys.has(optionName)) {
-          options[optionName] = this.config[optionName];
-        }
-        return options;
-      }, {} as Partial<Record<keyof OllamaCompletionOptions, number | boolean | string[] | undefined>>),
+      stream: false,
+      options: Object.keys(this.config).reduce(
+        (options, key) => {
+          const optionName = key as keyof OllamaCompletionOptions;
+          if (OllamaCompletionOptionKeys.has(optionName)) {
+            options[optionName] = this.config[optionName];
+          }
+          return options;
+        },
+        {} as Partial<
+          Record<keyof OllamaCompletionOptions, number | boolean | string[] | undefined>
+        >,
+      ),
     };
 
     logger.debug(`Calling Ollama API: ${JSON.stringify(params)}`);
     let response;
     try {
       response = await fetchWithCache(
-        `${process.env.OLLAMA_BASE_URL || 'http://localhost:11434'}/api/generate`,
+        `${getEnvString('OLLAMA_BASE_URL') || 'http://localhost:11434'}/api/generate`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            ...(getEnvString('OLLAMA_API_KEY')
+              ? { Authorization: `Bearer ${getEnvString('OLLAMA_API_KEY')}` }
+              : {}),
           },
           body: JSON.stringify(params),
         },
@@ -217,35 +234,49 @@ export class OllamaChatProvider implements ApiProvider {
     return `[Ollama Chat Provider ${this.modelName}]`;
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
-    const params = {
+    const params: any = {
       model: this.modelName,
       messages,
-      options: Object.keys(this.config).reduce((options, key) => {
-        const optionName = key as keyof OllamaCompletionOptions;
-        if (OllamaCompletionOptionKeys.has(optionName)) {
-          options[optionName] = this.config[optionName];
-        }
-        return options;
-      }, {} as Partial<Record<keyof OllamaCompletionOptions, number | boolean | string[] | undefined>>),
+      options: Object.keys(this.config).reduce(
+        (options, key) => {
+          const optionName = key as keyof OllamaCompletionOptions;
+          if (OllamaCompletionOptionKeys.has(optionName) && optionName !== 'tools') {
+            options[optionName] = this.config[optionName];
+          }
+          return options;
+        },
+        {} as Partial<
+          Record<keyof OllamaCompletionOptions, number | boolean | string[] | undefined>
+        >,
+      ),
     };
+
+    // Handle tools if configured
+    if (this.config.tools) {
+      params.tools = maybeLoadToolsFromExternalFile(this.config.tools, context?.vars);
+    }
 
     logger.debug(`Calling Ollama API: ${JSON.stringify(params)}`);
     let response;
     try {
       response = await fetchWithCache(
-        `${process.env.OLLAMA_BASE_URL || 'http://localhost:11434'}/api/chat`,
+        `${getEnvString('OLLAMA_BASE_URL') || 'http://localhost:11434'}/api/chat`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            ...(getEnvString('OLLAMA_API_KEY')
+              ? { Authorization: `Bearer ${getEnvString('OLLAMA_API_KEY')}` }
+              : {}),
           },
           body: JSON.stringify(params),
         },
         REQUEST_TIMEOUT_MS,
         'text',
+        context?.bustCache ?? context?.debug,
       );
     } catch (err) {
       return {
@@ -295,11 +326,14 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
     let response;
     try {
       response = await fetchWithCache(
-        `${process.env.OLLAMA_BASE_URL || 'http://localhost:11434'}/api/embeddings`,
+        `${getEnvString('OLLAMA_BASE_URL') || 'http://localhost:11434'}/api/embeddings`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            ...(getEnvString('OLLAMA_API_KEY')
+              ? { Authorization: `Bearer ${getEnvString('OLLAMA_API_KEY')}` }
+              : {}),
           },
           body: JSON.stringify(params),
         },
@@ -314,7 +348,7 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
     logger.debug(`\tOllama embeddings API response: ${JSON.stringify(response.data)}`);
 
     try {
-      const embedding = response.data.embeddings as number[];
+      const embedding = response.data.embedding as number[];
       if (!embedding) {
         throw new Error('No embedding found in Ollama embeddings API response');
       }

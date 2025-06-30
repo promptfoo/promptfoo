@@ -1,723 +1,693 @@
-import * as fs from 'fs';
-import fetch from 'node-fetch';
-import child_process from 'child_process';
-import Stream from 'stream';
-
-import { AwsBedrockCompletionProvider } from '../src/providers/bedrock';
-import {
-  OpenAiAssistantProvider,
-  OpenAiCompletionProvider,
-  OpenAiChatCompletionProvider,
-} from '../src/providers/openai';
-import { AnthropicCompletionProvider } from '../src/providers/anthropic';
-import { LlamaProvider } from '../src/providers/llama';
-
-import { clearCache, disableCache, enableCache } from '../src/cache';
+import fs from 'fs';
+import yaml from 'js-yaml';
+import path from 'path';
+import cliState from '../src/cliState';
+import { CLOUD_PROVIDER_PREFIX } from '../src/constants';
 import { loadApiProvider, loadApiProviders } from '../src/providers';
-import {
-  AzureOpenAiChatCompletionProvider,
-  AzureOpenAiCompletionProvider,
-} from '../src/providers/azureopenai';
-import { OllamaChatProvider, OllamaCompletionProvider } from '../src/providers/ollama';
-import { WebhookProvider } from '../src/providers/webhook';
-import {
-  HuggingfaceTextGenerationProvider,
-  HuggingfaceFeatureExtractionProvider,
-  HuggingfaceTextClassificationProvider,
-} from '../src/providers/huggingface';
+import { HttpProvider } from '../src/providers/http';
+import { OpenAiChatCompletionProvider } from '../src/providers/openai/chat';
+import { OpenAiEmbeddingProvider } from '../src/providers/openai/embedding';
+import { PythonProvider } from '../src/providers/pythonCompletion';
 import { ScriptCompletionProvider } from '../src/providers/scriptCompletion';
+import { WebSocketProvider } from '../src/providers/websocket';
+import type { ProviderOptions } from '../src/types';
+import { getProviderFromCloud, isCloudProvider, getCloudDatabaseId } from '../src/util/cloud';
 
-import type { ProviderOptionsMap, ProviderFunction } from '../src/types';
+jest.mock('fs');
+jest.mock('js-yaml');
+jest.mock('../src/fetch');
+jest.mock('../src/providers/http');
+jest.mock('../src/providers/openai/chat');
+jest.mock('../src/providers/openai/embedding');
+jest.mock('../src/providers/pythonCompletion');
+jest.mock('../src/providers/scriptCompletion');
+jest.mock('../src/providers/websocket');
+jest.mock('../src/util/cloud');
 
-jest.mock('fs', () => ({
-  readFileSync: jest.fn(),
-  writeFileSync: jest.fn(),
-  statSync: jest.fn(),
-  readdirSync: jest.fn(),
-  existsSync: jest.fn(),
-  mkdirSync: jest.fn(),
-  promises: {
-    readFile: jest.fn(),
-  },
-}));
+describe('loadApiProvider', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    jest.spyOn(process, 'exit').mockImplementation((() => {}) as any);
 
-jest.mock('glob', () => ({
-  globSync: jest.fn(),
-}));
-
-jest.mock('node-fetch', () => jest.fn());
-jest.mock('proxy-agent', () => ({
-  ProxyAgent: jest.fn().mockImplementation(() => ({})),
-}));
-
-jest.mock('../src/esm');
-
-jest.mock('fs', () => ({
-  readFileSync: jest.fn(),
-  existsSync: jest.fn(),
-  mkdirSync: jest.fn(),
-}));
-
-jest.mock('glob', () => ({
-  globSync: jest.fn(),
-}));
-
-jest.mock('../src/database');
-
-describe('call provider apis', () => {
-  afterEach(async () => {
-    jest.clearAllMocks();
-    await clearCache();
+    // Mock the cloud utility functions
+    jest
+      .mocked(isCloudProvider)
+      .mockImplementation((path: string) => path.startsWith('promptfoo://provider/'));
+    jest
+      .mocked(getCloudDatabaseId)
+      .mockImplementation((path: string) => path.slice('promptfoo://provider/'.length));
   });
 
-  test('OpenAiCompletionProvider callApi', async () => {
-    const mockResponse = {
-      text: jest.fn().mockResolvedValue(
-        JSON.stringify({
-          choices: [{ text: 'Test output' }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        }),
-      ),
-    };
-    (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
-
-    const provider = new OpenAiCompletionProvider('text-davinci-003');
-    const result = await provider.callApi('Test prompt');
-
-    expect(fetch).toHaveBeenCalledTimes(1);
-    expect(result.output).toBe('Test output');
-    expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+  it('should load echo provider', async () => {
+    const provider = await loadApiProvider('echo');
+    expect(provider.id()).toBe('echo');
+    await expect(provider.callApi('test')).resolves.toEqual({
+      output: 'test',
+      raw: 'test',
+      cost: 0,
+      cached: false,
+      isRefusal: false,
+      tokenUsage: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+      },
+      metadata: {},
+    });
   });
 
-  test('OpenAiChatCompletionProvider callApi', async () => {
-    const mockResponse = {
-      text: jest.fn().mockResolvedValue(
-        JSON.stringify({
-          choices: [{ message: { content: 'Test output' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        }),
-      ),
-      ok: true,
+  it('should load file provider from yaml', async () => {
+    const yamlContent: ProviderOptions = {
+      id: 'openai:chat:gpt-4',
+      config: {
+        apiKey: 'test-key',
+        temperature: 0.7,
+      },
     };
-    (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
+    jest.mocked(fs.readFileSync).mockReturnValue('yaml content');
+    jest.mocked(yaml.load).mockReturnValue(yamlContent);
 
-    const provider = new OpenAiChatCompletionProvider('gpt-3.5-turbo');
-    const result = await provider.callApi(
-      JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
-    );
+    const provider = await loadApiProvider('file://test.yaml', {
+      basePath: '/test',
+    });
 
-    expect(fetch).toHaveBeenCalledTimes(1);
-    expect(result.output).toBe('Test output');
-    expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+    expect(fs.readFileSync).toHaveBeenCalledWith(path.join('/test', 'test.yaml'), 'utf8');
+    expect(yaml.load).toHaveBeenCalledWith('yaml content');
+    expect(provider).toBeDefined();
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-4', expect.any(Object));
   });
 
-  test('OpenAiChatCompletionProvider callApi with caching', async () => {
-    const mockResponse = {
-      text: jest.fn().mockResolvedValue(
-        JSON.stringify({
-          choices: [{ message: { content: 'Test output 2' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        }),
-      ),
-      ok: true,
+  it('should load file provider from json', async () => {
+    const jsonContent: ProviderOptions = {
+      id: 'openai:chat:gpt-4',
+      config: {
+        apiKey: 'test-key',
+      },
     };
-    (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
+    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(jsonContent));
+    jest.mocked(yaml.load).mockReturnValue(jsonContent);
 
-    const provider = new OpenAiChatCompletionProvider('gpt-3.5-turbo');
-    const result = await provider.callApi(
-      JSON.stringify([{ role: 'user', content: 'Test prompt 2' }]),
-    );
+    const provider = await loadApiProvider('file://test.json', {
+      basePath: '/test',
+    });
 
-    expect(fetch).toHaveBeenCalledTimes(1);
-    expect(result.output).toBe('Test output 2');
-    expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
-
-    const result2 = await provider.callApi(
-      JSON.stringify([{ role: 'user', content: 'Test prompt 2' }]),
-    );
-
-    expect(fetch).toHaveBeenCalledTimes(1);
-    expect(result2.output).toBe('Test output 2');
-    expect(result2.tokenUsage).toEqual({ total: 10, cached: 10 });
+    expect(fs.readFileSync).toHaveBeenCalledWith(path.join('/test', 'test.json'), 'utf8');
+    expect(yaml.load).toHaveBeenCalledWith(JSON.stringify(jsonContent));
+    expect(provider).toBeDefined();
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-4', expect.any(Object));
   });
 
-  test('OpenAiChatCompletionProvider callApi with cache disabled', async () => {
-    const mockResponse = {
-      text: jest.fn().mockResolvedValue(
-        JSON.stringify({
-          choices: [{ message: { content: 'Test output' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        }),
-      ),
-      ok: true,
-    };
-    (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
+  it('should load Provider from cloud', async () => {
+    jest.mocked(getProviderFromCloud).mockResolvedValue({
+      id: 'openai:chat:gpt-4',
+      config: {
+        apiKey: 'test-key',
+        temperature: 0.7,
+      },
+    });
+    const provider = await loadApiProvider(`${CLOUD_PROVIDER_PREFIX}123`);
 
-    const provider = new OpenAiChatCompletionProvider('gpt-3.5-turbo');
-    const result = await provider.callApi(
-      JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
-    );
-
-    expect(fetch).toHaveBeenCalledTimes(1);
-    expect(result.output).toBe('Test output');
-    expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
-
-    disableCache();
-
-    const result2 = await provider.callApi(
-      JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
-    );
-
-    expect(fetch).toHaveBeenCalledTimes(2);
-    expect(result2.output).toBe('Test output');
-    expect(result2.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
-
-    enableCache();
-  });
-
-  test('OpenAiChatCompletionProvider constructor with config', async () => {
-    const config = {
-      temperature: 3.1415926,
-      max_tokens: 201,
-    };
-    const provider = new OpenAiChatCompletionProvider('gpt-3.5-turbo', { config });
-    const prompt = 'Test prompt';
-    await provider.callApi(prompt);
-
-    expect(fetch).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({
-        body: expect.stringMatching(`temperature\":3.1415926`),
+    expect(provider).toBeDefined();
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-4', {
+      config: expect.objectContaining({
+        apiKey: 'test-key',
+        temperature: 0.7,
       }),
+      id: 'openai:chat:gpt-4',
+    });
+  });
+
+  it('should load OpenAI chat provider', async () => {
+    const provider = await loadApiProvider('openai:chat:gpt-4.1');
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-4.1', expect.any(Object));
+    expect(provider).toBeDefined();
+  });
+
+  it('should load OpenAI chat provider with default model', async () => {
+    const provider = await loadApiProvider('openai:chat');
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
+      'gpt-4.1-2025-04-14',
+      expect.any(Object),
     );
-    expect(provider.config.temperature).toBe(config.temperature);
-    expect(provider.config.max_tokens).toBe(config.max_tokens);
+    expect(provider).toBeDefined();
   });
 
-  test('AzureOpenAiCompletionProvider callApi', async () => {
-    const mockResponse = {
-      text: jest.fn().mockResolvedValue(
-        JSON.stringify({
-          choices: [{ text: 'Test output' }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        }),
-      ),
-    };
-    (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
-
-    const provider = new AzureOpenAiCompletionProvider('text-davinci-003');
-    const result = await provider.callApi('Test prompt');
-
-    expect(fetch).toHaveBeenCalledTimes(1);
-    expect(result.output).toBe('Test output');
-    expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
-  });
-
-  test('AzureOpenAiChatCompletionProvider callApi', async () => {
-    const mockResponse = {
-      text: jest.fn().mockResolvedValue(
-        JSON.stringify({
-          choices: [{ message: { content: 'Test output' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        }),
-      ),
-    };
-    (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
-
-    const provider = new AzureOpenAiChatCompletionProvider('gpt-3.5-turbo');
-    const result = await provider.callApi(
-      JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
+  it('should load OpenAI embedding provider', async () => {
+    const provider = await loadApiProvider('openai:embedding');
+    expect(OpenAiEmbeddingProvider).toHaveBeenCalledWith(
+      'text-embedding-3-large',
+      expect.any(Object),
     );
-
-    expect(fetch).toHaveBeenCalledTimes(1);
-    expect(result.output).toBe('Test output');
-    expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+    expect(provider).toBeDefined();
   });
 
-  test('AzureOpenAiChatCompletionProvider callApi with dataSources', async () => {
-    const dataSources = [
+  it('should load DeepSeek provider with default model', async () => {
+    const provider = await loadApiProvider('deepseek:');
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('deepseek-chat', {
+      config: expect.objectContaining({
+        apiBaseUrl: 'https://api.deepseek.com/v1',
+        apiKeyEnvar: 'DEEPSEEK_API_KEY',
+      }),
+    });
+    expect(provider).toBeDefined();
+  });
+
+  it('should load DeepSeek provider with specific model', async () => {
+    const provider = await loadApiProvider('deepseek:deepseek-coder');
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('deepseek-coder', {
+      config: expect.objectContaining({
+        apiBaseUrl: 'https://api.deepseek.com/v1',
+        apiKeyEnvar: 'DEEPSEEK_API_KEY',
+      }),
+    });
+    expect(provider).toBeDefined();
+  });
+
+  it('should load Hyperbolic provider with specific model', async () => {
+    const provider = await loadApiProvider('hyperbolic:meta-llama/Meta-Llama-3-8B-Instruct-Turbo');
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
+      'meta-llama/Meta-Llama-3-8B-Instruct-Turbo',
       {
-        type: 'AzureCognitiveSearch',
-        endpoint: 'https://search.windows.net',
-        indexName: 'search-test',
-        semanticConfiguration: 'default',
-        queryType: 'vectorSimpleHybrid',
+        config: expect.objectContaining({
+          apiBaseUrl: 'https://api.hyperbolic.xyz/v1',
+          apiKeyEnvar: 'HYPERBOLIC_API_KEY',
+        }),
+      },
+    );
+    expect(provider).toBeDefined();
+  });
+
+  it('should load HTTP provider', async () => {
+    const provider = await loadApiProvider('http://test.com');
+    expect(HttpProvider).toHaveBeenCalledWith('http://test.com', expect.any(Object));
+    expect(provider).toBeDefined();
+  });
+
+  it('should load HTTPS provider', async () => {
+    const provider = await loadApiProvider('https://test.com');
+    expect(HttpProvider).toHaveBeenCalledWith('https://test.com', expect.any(Object));
+    expect(provider).toBeDefined();
+  });
+
+  it('should load WebSocket provider', async () => {
+    const provider = await loadApiProvider('ws://test.com');
+    expect(WebSocketProvider).toHaveBeenCalledWith('ws://test.com', expect.any(Object));
+    expect(provider).toBeDefined();
+  });
+
+  it('should load script provider', async () => {
+    const provider = await loadApiProvider('exec:test.sh');
+    expect(ScriptCompletionProvider).toHaveBeenCalledWith(
+      expect.stringMatching(/test\.sh$/),
+      expect.any(Object),
+    );
+    expect(provider).toBeDefined();
+  });
+
+  it('should load Python provider', async () => {
+    const provider = await loadApiProvider('python:test.py');
+    expect(PythonProvider).toHaveBeenCalledWith(
+      expect.stringMatching(/test\.py$/),
+      expect.any(Object),
+    );
+    expect(provider).toBeDefined();
+  });
+
+  it('should load Python provider from file path', async () => {
+    const provider = await loadApiProvider('file://test.py');
+    expect(PythonProvider).toHaveBeenCalledWith(
+      expect.stringMatching(/test\.py$/),
+      expect.any(Object),
+    );
+    expect(provider).toBeDefined();
+  });
+
+  it('should handle unidentified provider', async () => {
+    await expect(loadApiProvider('unknown:provider')).rejects.toThrow(
+      'Could not identify provider',
+    );
+  });
+
+  it('should load JFrog ML provider', async () => {
+    const provider = await loadApiProvider('jfrog:test-model');
+    expect(provider).toBeDefined();
+  });
+
+  it('should handle invalid file path for yaml/json config', async () => {
+    jest.mocked(fs.readFileSync).mockImplementation(() => {
+      throw new Error('File not found');
+    });
+    await expect(loadApiProvider('file://invalid.yaml')).rejects.toThrow('File not found');
+  });
+
+  it('should handle invalid yaml content', async () => {
+    jest.mocked(fs.readFileSync).mockReturnValue('invalid: yaml: content:');
+    jest.mocked(yaml.load).mockReturnValue(null);
+    await expect(loadApiProvider('file://invalid.yaml')).rejects.toThrow('Provider config');
+  });
+
+  it('should handle yaml config without id', async () => {
+    jest.mocked(fs.readFileSync).mockReturnValue('config:\n  key: value');
+    jest.mocked(yaml.load).mockReturnValue({ config: { key: 'value' } });
+    await expect(loadApiProvider('file://invalid.yaml')).rejects.toThrow('must have an id');
+  });
+
+  it('should handle provider with custom base path', async () => {
+    const mockProvider = {
+      id: () => 'python:script.py',
+      config: {
+        basePath: '/custom/path',
+      },
+      callApi: async (input: string) => ({ output: input }),
+    };
+    jest.mocked(PythonProvider).mockImplementation(() => mockProvider as any);
+
+    const provider = await loadApiProvider('python:script.py', {
+      basePath: '/custom/path',
+      options: {
+        config: {},
+      },
+    });
+    expect(provider.config.basePath).toBe('/custom/path');
+  });
+
+  it('should handle provider with delay', async () => {
+    const provider = await loadApiProvider('echo', {
+      options: {
+        delay: 1000,
+      },
+    });
+    expect(provider.delay).toBe(1000);
+  });
+
+  it('should handle provider with custom label template', async () => {
+    process.env.CUSTOM_LABEL = 'my-label';
+    const provider = await loadApiProvider('echo', {
+      options: {
+        label: '{{ env.CUSTOM_LABEL }}',
+      },
+    });
+    expect(provider.label).toBe('my-label');
+    delete process.env.CUSTOM_LABEL;
+  });
+
+  it('should throw error when file provider array is loaded with loadApiProvider', async () => {
+    const yamlContent = [
+      {
+        id: 'openai:chat:gpt-4',
+        config: { apiKey: 'test-key1' },
+      },
+      {
+        id: 'anthropic:claude-2',
+        config: { apiKey: 'test-key2' },
       },
     ];
-    const mockResponse = {
-      text: jest.fn().mockResolvedValue(
-        JSON.stringify({
-          choices: [
-            { message: { role: 'system', content: 'System prompt' } },
-            { message: { role: 'user', content: 'Test prompt' } },
-            { message: { role: 'assistant', content: 'Test response' } },
-          ],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        }),
-      ),
-    };
-    (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
+    jest.mocked(fs.readFileSync).mockReturnValue('yaml content');
+    jest.mocked(yaml.load).mockReturnValue(yamlContent);
 
-    const provider = new AzureOpenAiChatCompletionProvider('gpt-3.5-turbo', {
-      config: { dataSources },
-    });
-    const result = await provider.callApi(
-      JSON.stringify([
-        { role: 'system', content: 'System prompt' },
-        { role: 'user', content: 'Test prompt' },
-      ]),
+    await expect(loadApiProvider('file://test.yaml')).rejects.toThrow(
+      'Multiple providers found in test.yaml. Use loadApiProviders instead of loadApiProvider.',
     );
-
-    expect(fetch).toHaveBeenCalledTimes(1);
-    expect(result.output).toBe('Test response');
-    expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
   });
 
-  test('AzureOpenAiChatCompletionProvider callApi with cache disabled', async () => {
-    disableCache();
-
-    const mockResponse = {
-      text: jest.fn().mockResolvedValue(
-        JSON.stringify({
-          choices: [{ message: { content: 'Test output' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        }),
-      ),
+  it('should handle file provider with environment variables', async () => {
+    process.env.OPENAI_API_KEY = 'test-key-from-env';
+    const yamlContent: ProviderOptions = {
+      id: 'openai:chat:gpt-4',
+      config: {
+        apiKey: '{{ env.OPENAI_API_KEY }}',
+      },
+      env: {
+        OPENAI_API_KEY: 'override-key',
+      },
     };
-    (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
+    jest.mocked(fs.readFileSync).mockReturnValue('yaml content');
+    jest.mocked(yaml.load).mockReturnValue(yamlContent);
 
-    const provider = new AzureOpenAiChatCompletionProvider('gpt-3.5-turbo');
-    const result = await provider.callApi(
-      JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
+    const provider = await loadApiProvider('file://test.yaml', {
+      basePath: '/test',
+      env: { OPENAI_API_KEY: 'final-override-key' },
+    });
+
+    expect(provider).toBeDefined();
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
+      'gpt-4',
+      expect.objectContaining({
+        config: expect.objectContaining({
+          apiKey: expect.any(String),
+        }),
+        env: expect.objectContaining({
+          OPENAI_API_KEY: 'final-override-key',
+        }),
+      }),
     );
-
-    expect(fetch).toHaveBeenCalledTimes(1);
-    expect(result.output).toBe('Test output');
-    expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
-
-    enableCache();
+    delete process.env.OPENAI_API_KEY;
   });
 
-  test('AnthropicCompletionProvider callApi', async () => {
-    const provider = new AnthropicCompletionProvider('claude-1');
-    provider.anthropic.completions.create = jest.fn().mockResolvedValue({
-      completion: 'Test output',
-    });
-    const result = await provider.callApi('Test prompt');
-
-    expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(1);
-    expect(result.output).toBe('Test output');
-    expect(result.tokenUsage).toEqual({});
-  });
-
-  test('AnthropicCompletionProvider callApi with caching', async () => {
-    const provider = new AnthropicCompletionProvider('claude-1');
-    provider.anthropic.completions.create = jest.fn().mockResolvedValue({
-      completion: 'Test output',
-    });
-    const result = await provider.callApi('Test prompt');
-
-    expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(1);
-    expect(result.output).toBe('Test output');
-    expect(result.tokenUsage).toEqual({});
-
-    (provider.anthropic.completions.create as jest.Mock).mockClear();
-    const result2 = await provider.callApi('Test prompt');
-
-    expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(0);
-    expect(result2.output).toBe('Test output');
-    expect(result2.tokenUsage).toEqual({});
-  });
-
-  test('AnthropicCompletionProvider callApi with caching disabled', async () => {
-    const provider = new AnthropicCompletionProvider('claude-1');
-    provider.anthropic.completions.create = jest.fn().mockResolvedValue({
-      completion: 'Test output',
-    });
-    const result = await provider.callApi('Test prompt');
-
-    expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(1);
-    expect(result.output).toBe('Test output');
-    expect(result.tokenUsage).toEqual({});
-
-    (provider.anthropic.completions.create as jest.Mock).mockClear();
-
-    disableCache();
-
-    const result2 = await provider.callApi('Test prompt');
-
-    expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(1);
-    expect(result2.output).toBe('Test output');
-    expect(result2.tokenUsage).toEqual({});
-  });
-
-  test('LlamaProvider callApi', async () => {
-    const mockResponse = {
-      text: jest.fn().mockResolvedValue(
-        JSON.stringify({
-          content: 'Test output',
-        }),
-      ),
-    };
-    (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
-
-    const provider = new LlamaProvider('llama.cpp');
-    const result = await provider.callApi('Test prompt');
-
-    expect(fetch).toHaveBeenCalledTimes(1);
-    expect(result.output).toBe('Test output');
-  });
-
-  test('OllamaCompletionProvider callApi', async () => {
-    const mockResponse = {
-      text: jest.fn()
-        .mockResolvedValue(`{"model":"llama2:13b","created_at":"2023-08-08T21:50:34.898068Z","response":"Gre","done":false}
-{"model":"llama2:13b","created_at":"2023-08-08T21:50:34.929199Z","response":"at","done":false}
-{"model":"llama2:13b","created_at":"2023-08-08T21:50:34.959989Z","response":" question","done":false}
-{"model":"llama2:13b","created_at":"2023-08-08T21:50:34.992117Z","response":"!","done":false}
-{"model":"llama2:13b","created_at":"2023-08-08T21:50:35.023658Z","response":" The","done":false}
-{"model":"llama2:13b","created_at":"2023-08-08T21:50:35.0551Z","response":" sky","done":false}
-{"model":"llama2:13b","created_at":"2023-08-08T21:50:35.086103Z","response":" appears","done":false}
-{"model":"llama2:13b","created_at":"2023-08-08T21:50:35.117166Z","response":" blue","done":false}
-{"model":"llama2:13b","created_at":"2023-08-08T21:50:41.695299Z","done":true,"context":[1,29871,1,13,9314],"total_duration":10411943458,"load_duration":458333,"sample_count":217,"sample_duration":154566000,"prompt_eval_count":11,"prompt_eval_duration":3334582000,"eval_count":216,"eval_duration":6905134000}`),
-    };
-    (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
-
-    const provider = new OllamaCompletionProvider('llama');
-    const result = await provider.callApi('Test prompt');
-
-    expect(fetch).toHaveBeenCalledTimes(1);
-    expect(result.output).toBe('Great question! The sky appears blue');
-  });
-
-  test('OllamaChatProvider callApi', async () => {
-    const mockResponse = {
-      text: jest.fn()
-        .mockResolvedValue(`{"model":"orca-mini","created_at":"2023-12-16T01:46:19.263682972Z","message":{"role":"assistant","content":" Because","images":null},"done":false}
-{"model":"orca-mini","created_at":"2023-12-16T01:46:19.275143974Z","message":{"role":"assistant","content":" of","images":null},"done":false}
-{"model":"orca-mini","created_at":"2023-12-16T01:46:19.288137727Z","message":{"role":"assistant","content":" Ray","images":null},"done":false}
-{"model":"orca-mini","created_at":"2023-12-16T01:46:19.301139709Z","message":{"role":"assistant","content":"leigh","images":null},"done":false}
-{"model":"orca-mini","created_at":"2023-12-16T01:46:19.311364699Z","message":{"role":"assistant","content":" scattering","images":null},"done":false}
-{"model":"orca-mini","created_at":"2023-12-16T01:46:19.324309782Z","message":{"role":"assistant","content":".","images":null},"done":false}
-{"model":"orca-mini","created_at":"2023-12-16T01:46:19.337165395Z","done":true,"total_duration":1486443841,"load_duration":1280794143,"prompt_eval_count":35,"prompt_eval_duration":142384000,"eval_count":6,"eval_duration":61912000}`),
-    };
-    (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
-
-    const provider = new OllamaChatProvider('llama');
-    const result = await provider.callApi('Test prompt');
-
-    expect(fetch).toHaveBeenCalledTimes(1);
-    expect(result.output).toBe(' Because of Rayleigh scattering.');
-  });
-
-  test('WebhookProvider callApi', async () => {
-    const mockResponse = {
-      text: jest.fn().mockResolvedValue(
-        JSON.stringify({
-          output: 'Test output',
-        }),
-      ),
-    };
-    (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
-
-    const provider = new WebhookProvider('http://example.com/webhook');
-    const result = await provider.callApi('Test prompt');
-
-    expect(fetch).toHaveBeenCalledTimes(1);
-    expect(result.output).toBe('Test output');
-  });
-
-  describe.each([
-    ['Array format', [{ generated_text: 'Test output' }]], // Array format
-    ['Object format', { generated_text: 'Test output' }], // Object format
-  ])('HuggingfaceTextGenerationProvider callApi with %s', (format, mockedData) => {
-    test('returns expected output', async () => {
-      const mockResponse = {
-        text: jest.fn().mockResolvedValue(JSON.stringify(mockedData)),
-      };
-      (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
-
-      const provider = new HuggingfaceTextGenerationProvider('gpt2');
-      const result = await provider.callApi('Test prompt');
-
-      expect(fetch).toHaveBeenCalledTimes(1);
-      expect(result.output).toBe('Test output');
-    });
-  });
-
-  test('HuggingfaceFeatureExtractionProvider callEmbeddingApi', async () => {
-    const mockResponse = {
-      text: jest.fn().mockResolvedValue(JSON.stringify([0.1, 0.2, 0.3, 0.4, 0.5])),
-    };
-    (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
-
-    const provider = new HuggingfaceFeatureExtractionProvider('distilbert-base-uncased');
-    const result = await provider.callEmbeddingApi('Test text');
-
-    expect(fetch).toHaveBeenCalledTimes(1);
-    expect(result.embedding).toEqual([0.1, 0.2, 0.3, 0.4, 0.5]);
-  });
-
-  test('HuggingfaceTextClassificationProvider callClassificationApi', async () => {
-    const mockClassification = [
-      [
-        {
-          label: 'nothate',
-          score: 0.9,
-        },
-        {
-          label: 'hate',
-          score: 0.1,
-        },
-      ],
+  it('should load multiple providers from yaml file using loadApiProviders', async () => {
+    const yamlContent = [
+      {
+        id: 'openai:chat:gpt-4o-mini',
+        config: { apiKey: 'test-key1' },
+      },
+      {
+        id: 'anthropic:claude-3-7-sonnet-20250219',
+        config: { apiKey: 'test-key2' },
+      },
     ];
-    const mockResponse = {
-      text: jest.fn().mockResolvedValue(JSON.stringify(mockClassification)),
-    };
-    (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
+    jest.mocked(fs.readFileSync).mockReturnValue('yaml content');
+    jest.mocked(yaml.load).mockReturnValue(yamlContent);
 
-    const provider = new HuggingfaceTextClassificationProvider('foo');
-    const result = await provider.callClassificationApi('Test text');
-
-    expect(fetch).toHaveBeenCalledTimes(1);
-    expect(result.classification).toEqual({
-      nothate: 0.9,
-      hate: 0.1,
-    });
+    const providers = await loadApiProviders('file://test.yaml');
+    expect(providers).toHaveLength(2);
+    expect(providers[0]).toBeDefined();
+    expect(providers[1]).toBeDefined();
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('test.yaml'), 'utf8');
+    expect(yaml.load).toHaveBeenCalledWith('yaml content');
   });
 
-  describe.each([
-    ['python rag.py', 'python', ['rag.py']],
-    ['echo "hello world"', 'echo', ['hello world']],
-    ['./path/to/file.py run', './path/to/file.py', ['run']],
-    ['"/Path/To/My File.py"', '/Path/To/My File.py', []],
-  ])('ScriptCompletionProvider callApi with script %s', (script, inputFile, inputArgs) => {
-    test('returns expected output', async () => {
-      const mockResponse = 'Test script output';
-      const mockChildProcess = {
-        stdout: new Stream.Readable(),
-        stderr: new Stream.Readable(),
-      } as child_process.ChildProcess;
-      jest
-        .spyOn(child_process, 'execFile')
-        .mockImplementation(
-          (
-            file: string,
-            args: readonly string[] | null | undefined,
-            options: child_process.ExecFileOptions | null | undefined,
-            callback?:
-              | null
-              | ((
-                  error: child_process.ExecFileException | null,
-                  stdout: string | Buffer,
-                  stderr: string | Buffer,
-                ) => void),
-          ) => {
-            expect(callback).toBeTruthy();
-            if (callback) {
-              expect(file).toContain(inputFile);
-              expect(args).toEqual(
-                expect.arrayContaining(
-                  inputArgs.concat([
-                    'Test prompt',
-                    '{"config":{"some_config_val":42}}',
-                    '{"vars":{"var1":"value 1","var2":"value 2 \\"with some double \\"quotes\\"\\""}}',
-                  ]),
-                ),
-              );
-              process.nextTick(() => callback(null, Buffer.from(mockResponse), Buffer.from('')));
-            }
-            return mockChildProcess;
-          },
-        );
+  it('should handle absolute file paths', async () => {
+    const yamlContent: ProviderOptions = {
+      id: 'openai:chat:gpt-4',
+      config: { apiKey: 'test-key' },
+    };
+    jest.mocked(fs.readFileSync).mockReturnValue('yaml content');
+    jest.mocked(yaml.load).mockReturnValue(yamlContent);
 
-      const provider = new ScriptCompletionProvider(script, {
-        config: {
-          some_config_val: 42,
-        },
-      });
-      const result = await provider.callApi('Test prompt', {
-        vars: {
-          var1: 'value 1',
-          var2: 'value 2 "with some double "quotes""',
-        },
-      });
+    const absolutePath = path.resolve('/absolute/path/to/providers.yaml');
+    const provider = await loadApiProvider(`file://${absolutePath}`);
 
-      expect(result.output).toBe(mockResponse);
-      expect(child_process.execFile).toHaveBeenCalledTimes(1);
+    expect(provider).toBeDefined();
+    expect(fs.readFileSync).toHaveBeenCalledWith(absolutePath, 'utf8');
+  });
 
-      jest.restoreAllMocks();
+  it('should handle provider with null or undefined config values', async () => {
+    const yamlContent: ProviderOptions = {
+      id: 'openai:chat:gpt-4',
+      config: {
+        apiKey: 'test-key',
+        nullValue: null,
+        undefinedValue: undefined,
+      },
+    };
+    jest.mocked(fs.readFileSync).mockReturnValue('yaml content');
+    jest.mocked(yaml.load).mockReturnValue(yamlContent);
+
+    const provider = await loadApiProvider('file://test.yaml');
+    expect(provider).toBeDefined();
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
+      'gpt-4',
+      expect.objectContaining({
+        config: expect.objectContaining({
+          apiKey: 'test-key',
+        }),
+      }),
+    );
+  });
+
+  it('should handle provider with undefined options', async () => {
+    const provider = await loadApiProvider('echo', {
+      options: undefined,
     });
+    expect(provider).toBeDefined();
+  });
+
+  it('should throw error for invalid providerPaths type', async () => {
+    // Test with a number, which is an invalid type
+    await expect(loadApiProviders(42 as any)).rejects.toThrow('Invalid providers list');
+
+    // Test with an object that doesn't match any valid format
+    await expect(loadApiProviders({ foo: 'bar' } as any)).rejects.toThrow('Invalid providers list');
+  });
+
+  it('should handle non-yaml/json file paths', async () => {
+    // Test with a text file path
+    await expect(loadApiProviders('file://test.txt')).rejects.toThrow(
+      /Could not identify provider/,
+    );
   });
 });
 
-describe('loadApiProvider', () => {
-  test('loadApiProvider with filepath', async () => {
-    const mockYamlContent = `id: 'openai:gpt-4'
-config:
-  key: 'value'`;
-    (fs.readFileSync as jest.Mock).mockReturnValueOnce(mockYamlContent);
-
-    const provider = await loadApiProvider('file://path/to/mock-provider-file.yaml');
-    expect(provider.id()).toBe('openai:gpt-4');
-    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
-    expect(fs.readFileSync).toHaveBeenCalledWith('path/to/mock-provider-file.yaml', 'utf8');
+describe('loadApiProviders', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    cliState.config = undefined;
   });
 
-  test('loadApiProvider with openai:chat', async () => {
-    const provider = await loadApiProvider('openai:chat');
-    expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+  it('should load single provider from string', async () => {
+    const providers = await loadApiProviders('echo');
+    expect(providers).toHaveLength(1);
+    expect(providers[0].id()).toBe('echo');
   });
 
-  test('loadApiProvider with openai:completion', async () => {
-    const provider = await loadApiProvider('openai:completion');
-    expect(provider).toBeInstanceOf(OpenAiCompletionProvider);
+  it('should load multiple providers from array of strings', async () => {
+    const providers = await loadApiProviders(['echo', 'openai:chat:gpt-4']);
+    expect(providers).toHaveLength(2);
+    expect(providers[0].id()).toBe('echo');
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-4', expect.any(Object));
   });
 
-  test('loadApiProvider with openai:assistant', async () => {
-    const provider = await loadApiProvider('openai:assistant:foobar');
-    expect(provider).toBeInstanceOf(OpenAiAssistantProvider);
-  });
-
-  test('loadApiProvider with openai:chat:modelName', async () => {
-    const provider = await loadApiProvider('openai:chat:gpt-3.5-turbo');
-    expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
-  });
-
-  test('loadApiProvider with openai:completion:modelName', async () => {
-    const provider = await loadApiProvider('openai:completion:text-davinci-003');
-    expect(provider).toBeInstanceOf(OpenAiCompletionProvider);
-  });
-
-  test('loadApiProvider with OpenAI finetuned model', async () => {
-    const provider = await loadApiProvider('openai:chat:ft:gpt-3.5-turbo-0613:company-name::ID:');
-    expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
-    expect(provider.id()).toBe('openai:ft:gpt-3.5-turbo-0613:company-name::ID:');
-  });
-
-  test('loadApiProvider with azureopenai:completion:modelName', async () => {
-    const provider = await loadApiProvider('azureopenai:completion:text-davinci-003');
-    expect(provider).toBeInstanceOf(AzureOpenAiCompletionProvider);
-  });
-
-  test('loadApiProvider with azureopenai:chat:modelName', async () => {
-    const provider = await loadApiProvider('azureopenai:chat:gpt-3.5-turbo');
-    expect(provider).toBeInstanceOf(AzureOpenAiChatCompletionProvider);
-  });
-
-  test('loadApiProvider with anthropic:completion', async () => {
-    const provider = await loadApiProvider('anthropic:completion');
-    expect(provider).toBeInstanceOf(AnthropicCompletionProvider);
-  });
-
-  test('loadApiProvider with anthropic:completion:modelName', async () => {
-    const provider = await loadApiProvider('anthropic:completion:claude-1');
-    expect(provider).toBeInstanceOf(AnthropicCompletionProvider);
-  });
-
-  test('loadApiProvider with ollama:modelName', async () => {
-    const provider = await loadApiProvider('ollama:llama2:13b');
-    expect(provider).toBeInstanceOf(OllamaCompletionProvider);
-    expect(provider.id()).toBe('ollama:completion:llama2:13b');
-  });
-
-  test('loadApiProvider with ollama:completion:modelName', async () => {
-    const provider = await loadApiProvider('ollama:completion:llama2:13b');
-    expect(provider).toBeInstanceOf(OllamaCompletionProvider);
-    expect(provider.id()).toBe('ollama:completion:llama2:13b');
-  });
-
-  test('loadApiProvider with ollama:chat:modelName', async () => {
-    const provider = await loadApiProvider('ollama:chat:llama2:13b');
-    expect(provider).toBeInstanceOf(OllamaChatProvider);
-    expect(provider.id()).toBe('ollama:chat:llama2:13b');
-  });
-
-  test('loadApiProvider with llama:modelName', async () => {
-    const provider = await loadApiProvider('llama');
-    expect(provider).toBeInstanceOf(LlamaProvider);
-  });
-
-  test('loadApiProvider with webhook', async () => {
-    const provider = await loadApiProvider('webhook:http://example.com/webhook');
-    expect(provider).toBeInstanceOf(WebhookProvider);
-  });
-
-  test('loadApiProvider with huggingface:text-generation', async () => {
-    const provider = await loadApiProvider('huggingface:text-generation:foobar/baz');
-    expect(provider).toBeInstanceOf(HuggingfaceTextGenerationProvider);
-  });
-
-  test('loadApiProvider with huggingface:feature-extraction', async () => {
-    const provider = await loadApiProvider('huggingface:feature-extraction:foobar/baz');
-    expect(provider).toBeInstanceOf(HuggingfaceFeatureExtractionProvider);
-  });
-
-  test('loadApiProvider with huggingface:text-classification', async () => {
-    const provider = await loadApiProvider('huggingface:text-classification:foobar/baz');
-    expect(provider).toBeInstanceOf(HuggingfaceTextClassificationProvider);
-  });
-
-  test('loadApiProvider with hf:text-classification', async () => {
-    const provider = await loadApiProvider('hf:text-classification:foobar/baz');
-    expect(provider).toBeInstanceOf(HuggingfaceTextClassificationProvider);
-  });
-
-  test('loadApiProvider with bedrock:completion', async () => {
-    const provider = await loadApiProvider('bedrock:completion:anthropic.claude-v2:1');
-    expect(provider).toBeInstanceOf(AwsBedrockCompletionProvider);
-  });
-
-  test('loadApiProvider with RawProviderConfig', async () => {
-    const rawProviderConfig = {
-      'openai:chat': {
-        id: 'test',
-        config: { foo: 'bar' },
-      },
-    };
-    const provider = await loadApiProvider('openai:chat', {
-      options: rawProviderConfig['openai:chat'],
-    });
-    expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
-  });
-
-  test('loadApiProviders with ProviderFunction', async () => {
-    const providerFunction: ProviderFunction = async (prompt: string) => {
-      return {
-        output: `Output for ${prompt}`,
-        tokenUsage: { total: 10, prompt: 5, completion: 5 },
-      };
-    };
-    const providers = await loadApiProviders(providerFunction);
+  it('should load provider from function', async () => {
+    const customFunction = async (prompt: string) => ({ output: prompt });
+    const providers = await loadApiProviders(customFunction);
     expect(providers).toHaveLength(1);
     expect(providers[0].id()).toBe('custom-function');
-    const response = await providers[0].callApi('Test prompt');
-    expect(response.output).toBe('Output for Test prompt');
-    expect(response.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+    await expect(providers[0].callApi('test')).resolves.toEqual({ output: 'test' });
   });
 
-  test('loadApiProviders with RawProviderConfig[]', async () => {
-    const rawProviderConfigs: ProviderOptionsMap[] = [
+  it('should load provider from function with label', async () => {
+    const customFunction = async (prompt: string) => ({ output: prompt });
+    customFunction.label = 'custom-label';
+    const providers = await loadApiProviders([customFunction]);
+    expect(providers).toHaveLength(1);
+    expect(providers[0].id()).toBe('custom-label');
+  });
+
+  it('should load provider from options object', async () => {
+    const options: ProviderOptions = {
+      id: 'openai:chat:gpt-4',
+      config: {
+        apiKey: 'test-key',
+      },
+    };
+    const providers = await loadApiProviders([options]);
+    expect(providers).toHaveLength(1);
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-4', expect.any(Object));
+  });
+
+  it('should load provider from options map', async () => {
+    const providers = await loadApiProviders([
       {
-        'openai:chat:abc123': {
-          config: { foo: 'bar' },
+        'openai:chat:gpt-4': {
+          config: {
+            apiKey: 'test-key',
+          },
         },
       },
+    ]);
+    expect(providers).toHaveLength(1);
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-4', expect.any(Object));
+  });
+
+  it('should throw error for invalid providers list', async () => {
+    await expect(loadApiProviders({} as any)).rejects.toThrow('Invalid providers list');
+  });
+
+  it('should handle loadApiProviders with empty array', async () => {
+    const providers = await loadApiProviders([]);
+    expect(providers).toHaveLength(0);
+  });
+
+  it('should handle loadApiProviders with mixed provider types', async () => {
+    const customFunction = async (prompt: string) => ({ output: prompt });
+    const providers = await loadApiProviders([
+      'echo',
+      customFunction,
+      { id: 'openai:chat', config: {} },
+      { 'openai:completion': { config: {} } },
+    ]);
+    expect(providers).toHaveLength(4);
+  });
+
+  it('should handle provider with null config', async () => {
+    const provider = await loadApiProvider('echo', {
+      options: {
+        config: null,
+      },
+    });
+    expect(provider).toBeDefined();
+  });
+
+  it('should handle provider with undefined options', async () => {
+    const provider = await loadApiProvider('echo', {
+      options: undefined,
+    });
+    expect(provider).toBeDefined();
+  });
+
+  it('should handle relative file paths', async () => {
+    const yamlContent: ProviderOptions = {
+      id: 'openai:chat:gpt-4',
+      config: { apiKey: 'test-key' },
+    };
+    jest.mocked(fs.readFileSync).mockReturnValue('yaml content');
+    jest.mocked(yaml.load).mockReturnValue(yamlContent);
+
+    const relativePath = 'relative/path/to/providers.yaml';
+    const providers = await loadApiProviders(`file://${relativePath}`, {
+      basePath: '/test/base/path',
+    });
+
+    expect(providers).toHaveLength(1);
+    expect(fs.readFileSync).toHaveBeenCalledWith(
+      path.join('/test/base/path', relativePath),
+      'utf8',
+    );
+  });
+
+  it('should handle absolute file paths in loadApiProviders', async () => {
+    const yamlContent: ProviderOptions = {
+      id: 'openai:chat:gpt-4',
+      config: { apiKey: 'test-key' },
+    };
+    jest.mocked(fs.readFileSync).mockReturnValue('yaml content');
+    jest.mocked(yaml.load).mockReturnValue(yamlContent);
+
+    const absolutePath = path.resolve('/absolute/path/to/providers.yaml');
+    const providers = await loadApiProviders(`file://${absolutePath}`);
+
+    expect(providers).toHaveLength(1);
+    expect(fs.readFileSync).toHaveBeenCalledWith(absolutePath, 'utf8');
+    expect(yaml.load).toHaveBeenCalledWith('yaml content');
+  });
+
+  it('should load multiple providers from a file specified in a providers array', async () => {
+    // Setup mock file with multiple providers
+    const yamlContent = [
       {
-        'openai:completion:def456': {
-          config: { foo: 'bar' },
-        },
+        id: 'echo',
+        config: { prefix: 'Echo Provider: ' },
       },
       {
-        'anthropic:completion:ghi789': {
-          config: { foo: 'bar' },
-        },
+        id: 'openai:gpt-4o-mini',
+        config: { temperature: 0.1 },
       },
     ];
-    const providers = await loadApiProviders(rawProviderConfigs);
+    jest.mocked(fs.readFileSync).mockReturnValue('yaml content');
+    jest.mocked(yaml.load).mockReturnValue(yamlContent);
+
+    // Create provider array with a mix of direct provider and file reference
+    const providerArray = [
+      'anthropic:claude-3-5-sonnet-20241022',
+      'file://./providers.yaml', // This should expand to the two providers above
+    ];
+
+    const providers = await loadApiProviders(providerArray);
+
+    // We should get 3 providers: 1 direct + 2 from file
     expect(providers).toHaveLength(3);
-    expect(providers[0]).toBeInstanceOf(OpenAiChatCompletionProvider);
-    expect(providers[1]).toBeInstanceOf(OpenAiCompletionProvider);
-    expect(providers[2]).toBeInstanceOf(AnthropicCompletionProvider);
+
+    // Just verify that all providers are defined
+    providers.forEach((provider) => {
+      expect(provider).toBeDefined();
+    });
+
+    // Verify file was read correctly
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('providers.yaml'), 'utf8');
+    expect(yaml.load).toHaveBeenCalledWith('yaml content');
+  });
+
+  it('should handle nested arrays of providers from multiple file references', async () => {
+    // First file
+    const firstFileContent = [
+      {
+        id: 'echo',
+        config: { prefix: 'First file: ' },
+      },
+    ];
+
+    // Second file
+    const secondFileContent = [
+      {
+        id: 'openai:gpt-4o-mini',
+        config: { temperature: 0.1 },
+      },
+      {
+        id: 'anthropic:claude-3-5-sonnet-20241022',
+        config: { temperature: 0.7 },
+      },
+    ];
+
+    // Mock the file system read for different paths
+    jest.mocked(fs.readFileSync).mockImplementation((filePath) => {
+      if (filePath.toString().includes('first.yaml')) {
+        return 'first file content';
+      } else if (filePath.toString().includes('second.yaml')) {
+        return 'second file content';
+      }
+      return '';
+    });
+
+    // Mock yaml loading based on different file contents
+    jest.mocked(yaml.load).mockImplementation((content) => {
+      if (content === 'first file content') {
+        return firstFileContent;
+      } else if (content === 'second file content') {
+        return secondFileContent;
+      }
+      return null;
+    });
+
+    // Provider array with multiple file references
+    const providerArray = ['file://./first.yaml', 'file://./second.yaml'];
+
+    const providers = await loadApiProviders(providerArray);
+
+    // We should get 3 providers total: 1 from first file + 2 from second file
+    expect(providers).toHaveLength(3);
+
+    // Just verify all providers are defined
+    providers.forEach((provider) => {
+      expect(provider).toBeDefined();
+    });
+
+    // Verify both files were read
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('first.yaml'), 'utf8');
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('second.yaml'), 'utf8');
+  });
+
+  it('should use env values from cliState.config', async () => {
+    // Set up dummy config with env block
+    cliState.config = {
+      env: {
+        TEST_API_KEY: 'test-key-from-cli-state',
+        OTHER_VAR: 'other-value',
+      },
+    };
+
+    const yamlContent: ProviderOptions = {
+      id: 'openai:chat:gpt-4',
+      config: {
+        apiKey: '{{ env.TEST_API_KEY }}',
+      },
+    };
+    jest.mocked(fs.readFileSync).mockReturnValue('yaml content');
+    jest.mocked(yaml.load).mockReturnValue(yamlContent);
+
+    const providers = await loadApiProviders('file://test.yaml');
+
+    expect(providers).toHaveLength(1);
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
+      'gpt-4',
+      expect.objectContaining({
+        config: expect.objectContaining({
+          apiKey: expect.any(String),
+        }),
+        env: expect.objectContaining({
+          TEST_API_KEY: 'test-key-from-cli-state',
+          OTHER_VAR: 'other-value',
+        }),
+      }),
+    );
   });
 });

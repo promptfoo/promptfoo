@@ -1,3 +1,7 @@
+---
+sidebar_label: vllm
+---
+
 # vllm
 
 vllm's [OpenAI-compatible server](https://docs.vllm.ai/en/latest/getting_started/quickstart.html#openai-compatible-server) offers access to many [supported models](https://docs.vllm.ai/en/latest/models/supported_models.html) for local inference from Huggingface Transformers.
@@ -13,4 +17,4 @@ providers:
       apiBaseUrl: http://localhost:8080/v1
 ```
 
-If desired, you can instead use the `OPENAI_API_BASE_URL` environment variable instead of the `apiBaseUrl` config.
+If desired, you can instead use the `OPENAI_BASE_URL` environment variable instead of the `apiBaseUrl` config.

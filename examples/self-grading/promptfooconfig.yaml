@@ -1,5 +1,10 @@
-prompts: [prompts.txt]
-providers: [openai:gpt-4-0613]
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Automatic response evaluation using LLM rubric scoring
+
+prompts:
+  - file://prompts.txt
+providers:
+  - openai:chat:gpt-4o
 defaultTest:
   assert:
     - type: llm-rubric

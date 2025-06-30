@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'RAG - End to end test'
+
+prompts:
+  - '{{question}}'
+
+providers:
+  - file://retrieve.py
+
+tests:
+  - vars:
+      question: How has Apple's total net sales changed over time?
+  - vars:
+      question: What are the major factors contributing to the change in Apple's gross margin in the most recent 10-Q compared to the previous quarters?
+  - vars:
+      question: Has there been any significant change in Apple's operating expenses over the reported quarters? If so, what are the key drivers for this change?
+  - vars:
+      question: How has Apple's revenue from iPhone sales fluctuated across quarters?
+  - vars:
+      question: Can any trends be identified in Apple's Services segment revenue over the reported periods?
+  - vars:
+      question: What is the impact of foreign exchange rates on Apple's financial performance? List this out separately for each reported period.
+  - vars:
+      question: Are there any notable changes in Apple's liquidity position or cash flows as reported in these 10-Qs?
+  - vars:
+      question: Examine how Intel's effective tax rate in the most recent 10-Q compares with the tax-related discussions in the notes section.
+  - vars:
+      question: In Amazon's latest 10-Q, how does the revenue distribution across its diverse business segments like e-commerce, AWS, and others compare to the costs incurred in these segments?

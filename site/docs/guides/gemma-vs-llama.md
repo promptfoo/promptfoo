@@ -96,13 +96,10 @@ prompts:
   - '{{message}}'
 
 providers:
-  - id: replicate:meta/llama-2-7b-chat
+  - id: replicate:meta/meta-llama-3.1-405b-instruct
     config:
       temperature: 0.01
       max_new_tokens: 128
-      prompt:
-        prefix: '[INST] '
-        suffix: '[/INST] '
 
   - id: replicate:google-deepmind/gemma-7b-it:2790a695e5dcae15506138cc4718d1106d0d475e6dca4b1d43f42414647993d5
     config:
@@ -181,13 +178,13 @@ tests:
       message: what are the most common non-investor roles at early stage venture capital firms?
 ```
 
-(Note that `llm-rubric` uses GPT-4 by default, which requires the `OPENAI_API_KEY` environment variable. You can [override the grader](/docs/configuration/expected-outputs/model-graded#overriding-the-llm-grader) to a model of your choice.
+(Note that `llm-rubric` uses GPT-4o by default, which requires the `OPENAI_API_KEY` environment variable. You can [override the grader](/docs/configuration/expected-outputs/model-graded#overriding-the-llm-grader) to a model of your choice.
 
 ## Step 3: Running the Comparison
 
 With your configuration and test cases set up, you're ready to run the comparison. Use the following command to start the evaluation:
 
-```bash
+```
 npx promptfoo@latest eval
 ```
 
@@ -195,7 +192,7 @@ This command will process each test case through both Gemma and Llama, allowing 
 
 Then open the viewer:
 
-```bash
+```sh
 npx promptfoo@latest view
 ```
 

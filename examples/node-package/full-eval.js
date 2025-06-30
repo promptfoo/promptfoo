@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-
 import promptfoo from '../../dist/src/index.js';
 
 const prompts = [
@@ -45,17 +44,21 @@ const prompts = [
   },
 ];
 
-const providers = [
-  // Call the OpenAI API GPT 3.5
-  'openai:gpt-3.5-turbo',
+const customFunction = (prompt, context) => {
+  // Call an LLM API in this function, or any other logic.
+  console.log(`Prompt: ${prompt}, vars: ${JSON.stringify(context.vars)}`);
+  return {
+    output: '<LLM output>',
+  };
+};
+customFunction.label = 'My custom function';
 
-  // Or use a custom function. Call an LLM API in this function, or any other logic.
-  (prompt, context) => {
-    console.log(`Prompt: ${prompt}, vars: ${JSON.stringify(context.vars)}`);
-    return {
-      output: '<LLM output>',
-    };
-  },
+const providers = [
+  // Call the OpenAI API GPT 4o Mini
+  'openai:gpt-4.1-mini',
+
+  // Or use a custom function.
+  customFunction,
 ];
 
 const tests = [

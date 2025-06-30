@@ -1,61 +1,327 @@
+:root {
+  --transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-duration: 0.2s;
+  --border-radius-sm: 6px;
+  --border-radius-md: 8px;
+  --border-radius-lg: 12px;
+  --border-radius-pill: 100px;
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.2);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.25);
+  --blue-primary: #1890ff;
+  --blue-hover: #40a9ff;
+}
+
+.infoContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  margin: 4rem 0 6rem 0;
+}
+
+.infoContainer h2 {
+  font-size: 2rem;
+}
+
 .section {
-  padding: 4rem 0 0 0;
   text-align: center;
 }
 
-.logoContainer {
-  display: flex;
-  flex-wrap: nowrap;
-  column-gap: 4rem;
-  align-items: center;
-  justify-content: center;
-  overflow-x: auto;
+.blurb {
+  font-size: 2.5rem;
+  margin-bottom: 2rem;
+  color: #333;
 }
 
-.logoContainer img {
-  max-width: 150px;
+.codeExample,
+.webviewExample {
+  flex: 1;
+  max-width: 48%;
+  background: white;
+  border-radius: var(--border-radius-lg);
+  overflow: hidden;
+  transition: all var(--transition-duration) var(--transition-timing);
 }
 
 .codeExample {
-  flex: 1;
-  max-width: 50%;
-}
-
-.codeExample div {
-  text-align: left;
-}
-
-.codeBlock {
-  font-size: 0.8rem;
+  padding: 1.5rem;
 }
 
 .webviewExample {
-  flex: 1;
-  justify-self: start;
+  padding: 1.5rem;
+}
+
+.codeBlock {
+  text-align: left;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  border-radius: 8px;
 }
 
 .configToWebview {
   display: flex;
-  flex-wrap: wrap;
-  flex-direction: row;
-  align-items: start;
-  margin-top: 4rem;
-  margin-bottom: 2rem;
-  gap: 1rem;
-
-  font-size: var(--ifm-h2-font-size);
+  justify-content: center;
+  align-items: stretch;
+  margin-top: 3rem;
+  gap: 2rem;
+  padding: 0 1rem;
 }
 
-@media (max-width: 723px) {
-  .logoContainer {
-    margin-top: 4rem;
-  }
+.featureTitle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 1.5rem;
+  color: #2c3e50;
+  letter-spacing: -0.02em;
+}
 
+.featureTitle svg {
+  margin-right: 0.75rem;
+  font-size: 1.5rem;
+}
+
+.resultImage {
+  max-width: 100%;
+  border-radius: var(--border-radius-md);
+  box-shadow: var(--shadow-sm);
+  transition: all var(--transition-duration) var(--transition-timing);
+}
+
+@media (max-width: 768px) {
   .configToWebview {
     flex-direction: column;
+    gap: 2rem;
   }
 
-  .codeExample {
+  .codeExample,
+  .webviewExample {
     max-width: 100%;
+    padding: 1.25rem;
+  }
+
+  [data-theme='dark'] .codeExample,
+  [data-theme='dark'] .webviewExample {
+    backdrop-filter: none;
+    background: rgba(22, 27, 34, 0.95);
+  }
+
+  [data-theme='dark'] .configToWebview {
+    padding: 1rem;
+  }
+
+  .exampleTabs {
+    width: 100%;
+    max-width: 100%;
+    padding: 0.25rem;
+    gap: 0.25rem;
+  }
+
+  .exampleTab {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.9rem;
+    flex: 1;
+    text-align: center;
+  }
+
+  .tabLabelDesktop {
+    display: none;
+  }
+
+  .tabLabelMobile {
+    display: block;
+  }
+}
+
+@media (max-width: 480px) {
+  .exampleTab {
+    padding: 0.5rem;
+    font-size: 0.85rem;
+  }
+}
+
+.exampleTabs {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  margin: 2.5rem 0 2rem;
+  padding: 0.375rem;
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: var(--border-radius-pill);
+  width: fit-content;
+  margin-inline: auto;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.exampleTab {
+  padding: 0.75rem 1.25rem;
+  border: none;
+  background: none;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-duration) var(--transition-timing);
+  border-radius: var(--border-radius-pill);
+  color: #666;
+  position: relative;
+}
+
+.tabLabelDesktop {
+  display: block;
+}
+
+.tabLabelMobile {
+  display: none;
+}
+
+.exampleTabActive {
+  background: white;
+  color: var(--blue-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+[data-theme='dark'] {
+  --shadow-sm: 0 2px 8px rgba(24, 144, 255, 0.2);
+  --shadow-md: 0 4px 24px rgba(0, 0, 0, 0.2);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.25);
+}
+
+[data-theme='dark'] .exampleTabs {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(8px);
+}
+
+[data-theme='dark'] .exampleTab {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+[data-theme='dark'] .exampleTabActive {
+  background: rgba(24, 144, 255, 0.1);
+  color: var(--blue-hover);
+  box-shadow:
+    var(--shadow-sm),
+    inset 0 0 0 1px rgba(64, 169, 255, 0.2);
+}
+
+[data-theme='dark'] .codeExample,
+[data-theme='dark'] .webviewExample {
+  background: rgba(22, 27, 34, 0.8);
+  border: 1px solid rgba(99, 99, 99, 0.15);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--shadow-md);
+}
+
+[data-theme='dark'] .codeExample {
+  background: rgba(13, 17, 23, 0.8);
+}
+
+[data-theme='dark'] .codeExample:hover,
+[data-theme='dark'] .webviewExample:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+  border-color: rgba(99, 99, 99, 0.25);
+}
+
+[data-theme='dark'] .featureTitle {
+  color: rgba(255, 255, 255, 0.95);
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+[data-theme='dark'] .featureTitle svg {
+  color: #40a9ff;
+  filter: drop-shadow(0 2px 8px rgba(64, 169, 255, 0.3));
+}
+
+[data-theme='dark'] .resultImage {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(99, 99, 99, 0.2);
+  filter: brightness(0.95) contrast(1.05);
+  transition: all 0.3s ease;
+}
+
+[data-theme='dark'] .resultImage:hover {
+  filter: brightness(1) contrast(1.05);
+  transform: scale(1.01);
+}
+
+[data-theme='dark'] .codeBlock {
+  background: rgba(13, 17, 23, 0.6) !important;
+  border: 1px solid rgba(99, 99, 99, 0.15);
+}
+
+[data-theme='dark'] .exampleTabs {
+  border-bottom-color: rgba(99, 99, 99, 0.2);
+  background: rgba(30, 30, 30, 0.3);
+  border-radius: 8px 8px 0 0;
+  padding: 0.5rem;
+}
+
+[data-theme='dark'] .exampleTab {
+  color: #a0a0a0;
+  border-radius: 6px;
+  padding: 0.75rem 1.25rem;
+  transition: all 0.2s ease;
+}
+
+[data-theme='dark'] .exampleTabActive {
+  background: rgba(64, 169, 255, 0.1);
+  border-bottom: 2px solid #40a9ff;
+  color: #40a9ff;
+  font-weight: 500;
+}
+
+[data-theme='dark'] .exampleTab:hover:not(.exampleTabActive) {
+  color: #40a9ff;
+  background: rgba(64, 169, 255, 0.05);
+}
+
+@media (max-width: 768px) {
+  [data-theme='dark'] .codeExample,
+  [data-theme='dark'] .webviewExample {
+    backdrop-filter: none;
+    background: rgba(30, 30, 30, 0.9);
+  }
+}
+
+/* ... rest of the existing styles ... */
+
+/* Responsive improvements */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .configToWebview {
+    gap: 1.5rem;
+  }
+
+  .codeExample,
+  .webviewExample {
+    max-width: 49%;
+  }
+
+  .featureTitle {
+    font-size: 1.1rem;
+  }
+}
+
+/* Performance optimizations */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Remove backdrop-filter on lower-end devices */
+@media (max-width: 768px) and (prefers-reduced-transparency: reduce) {
+  [data-theme='dark'] .exampleTabs,
+  [data-theme='dark'] .codeExample,
+  [data-theme='dark'] .webviewExample {
+    backdrop-filter: none;
+    background: rgba(22, 27, 34, 0.95);
   }
 }

@@ -1,3 +1,7 @@
+---
+sidebar_label: Cohere
+---
+
 # Cohere
 
 The `cohere` provider is an interface to Cohere AI's [chat inference API](https://docs.cohere.com/reference/chat), with models such as Command R that are optimized for RAG and tool usage.
@@ -11,6 +15,7 @@ Next, edit the promptfoo configuration file to point to the Cohere provider.
 - `cohere:<model name>` - uses the specified Cohere model (e.g., `command`, `command-light`).
 
 The following models are confirmed supported. For an up-to-date list of supported models, see [Cohere Models](https://docs.cohere.com/docs/models).
+
 - command-light
 - command-light-nightly
 - command
@@ -74,6 +79,46 @@ chat_history:
 message: '{{question}}'
 connectors:
   - id: web-search
+```
+
+## Embedding Configuration
+
+Cohere provides embedding capabilities that can be used for various natural language processing tasks, including similarity comparisons. To use Cohere's embedding model in your evaluations, you can configure it as follows:
+
+1. In your `promptfooconfig.yaml` file, add the embedding configuration under the `defaultTest` section:
+
+```yaml
+defaultTest:
+  options:
+    provider:
+      embedding:
+        id: cohere:embedding:embed-english-v3.0
+```
+
+This configuration sets the default embedding provider for all tests that require embeddings (such as similarity assertions) to use Cohere's `embed-english-v3.0` model.
+
+2. You can also specify the embedding provider for individual assertions:
+
+```yaml
+assert:
+  - type: similar
+    value: Some reference text
+    provider:
+      embedding:
+        id: cohere:embedding:embed-english-v3.0
+```
+
+3. Additional configuration options can be passed to the embedding provider:
+
+```yaml
+defaultTest:
+  options:
+    provider:
+      embedding:
+        id: cohere:embedding:embed-english-v3.0
+        config:
+          apiKey: your_api_key_here # If not set via environment variable
+          truncate: NONE # Options: NONE, START, END
 ```
 
 ## Displaying searches and documents

@@ -1,0 +1,49 @@
+.logoContainer {
+  display: flex;
+  flex-wrap: nowrap;
+  column-gap: 4rem;
+  align-items: center;
+  justify-content: center;
+  overflow-x: auto;
+  padding: 2rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+}
+
+.noBackground {
+  background: none !important;
+}
+
+.noBorder {
+  box-shadow: none !important;
+}
+
+.logoContainer img {
+  max-width: 150px;
+  transition: all 0.3s ease;
+  opacity: 0.9;
+}
+
+.logoContainer img:hover {
+  opacity: 1;
+  transform: translateY(-2px);
+}
+
+[data-theme='dark'] .logoContainer {
+  background: rgba(255, 255, 255, 0.02);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+[data-theme='dark'] .logoContainer img {
+  opacity: 0.85;
+}
+
+[data-theme='dark'] .logoContainer img:hover {
+  opacity: 1;
+}
+
+/* Some logos need special treatment in dark mode */
+[data-theme='dark'] .shopify,
+[data-theme='dark'] .anthropic {
+  filter: brightness(0) invert(0.9);
+}

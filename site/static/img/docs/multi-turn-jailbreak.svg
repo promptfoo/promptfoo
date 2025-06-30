@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400">
+  <defs>
+    <marker id="arrowhead" markerWidth="4" markerHeight="3" refX="2" refY="1.5" orient="auto">
+      <polygon points="0 0, 4 1.5, 0 3" fill="#333"/>
+    </marker>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="800" height="450" fill="#f0f0f0"/>
+  
+  <!-- Title -->
+  <text x="400" y="50" font-family="Arial, sans-serif" font-size="20" font-weight="bold" text-anchor="middle">Multi-turn Jailbreaks with Backtracking</text>
+  
+  <!-- Conversation rows -->
+  <g font-family="Arial, sans-serif">
+    <!-- Row 1 -->
+    <text x="120" y="110" text-anchor="end" font-size="16">Attempt 1</text>
+    <circle cx="150" cy="105" r="15" fill="#4a90e2" stroke="#2a70c2" stroke-width="2"/>
+    <circle cx="230" cy="105" r="15" fill="#c6dcf7" stroke="#4a90e2" stroke-width="2"/>
+    <circle cx="310" cy="105" r="15" fill="#e74c3c" stroke="#c0392b" stroke-width="2"/>
+    <line x1="165" y1="105" x2="215" y2="105" stroke="#333" stroke-width="2" marker-end="url(#arrowhead)"/>
+    <line x1="245" y1="105" x2="295" y2="105" stroke="#333" stroke-width="2" marker-end="url(#arrowhead)"/>
+    
+    <!-- Row 2 -->
+    <text x="120" y="170" text-anchor="end" font-size="16">Attempt 2</text>
+    <circle cx="150" cy="165" r="15" fill="#c6dcf7" stroke="#4a90e2" stroke-width="2"/>
+    <circle cx="230" cy="165" r="15" fill="#c6dcf7" stroke="#4a90e2" stroke-width="2"/>
+    <circle cx="310" cy="165" r="15" fill="#4a90e2" stroke="#2a70c2" stroke-width="2"/>
+    <circle cx="390" cy="165" r="15" fill="#c6dcf7" stroke="#4a90e2" stroke-width="2"/>
+    <circle cx="470" cy="165" r="15" fill="#e74c3c" stroke="#c0392b" stroke-width="2"/>
+    <line x1="165" y1="165" x2="215" y2="165" stroke="#333" stroke-width="2" stroke-dasharray="4" marker-end="url(#arrowhead)"/>
+    <line x1="245" y1="165" x2="295" y2="165" stroke="#333" stroke-width="2" stroke-dasharray="4" marker-end="url(#arrowhead)"/>
+    <line x1="325" y1="165" x2="375" y2="165" stroke="#333" stroke-width="2" marker-end="url(#arrowhead)"/>
+    <line x1="405" y1="165" x2="455" y2="165" stroke="#333" stroke-width="2" marker-end="url(#arrowhead)"/>
+    
+    <!-- Row 3 -->
+    <text x="120" y="230" text-anchor="end" font-size="16">Attempt 3</text>
+    <circle cx="150" cy="225" r="15" fill="#c6dcf7" stroke="#4a90e2" stroke-width="2"/>
+    <circle cx="230" cy="225" r="15" fill="#c6dcf7" stroke="#4a90e2" stroke-width="2"/>
+    <circle cx="310" cy="225" r="15" fill="#c6dcf7" stroke="#4a90e2" stroke-width="2"/>
+    <circle cx="390" cy="225" r="15" fill="#c6dcf7" stroke="#4a90e2" stroke-width="2"/>
+    <circle cx="470" cy="225" r="15" fill="#e74c3c" stroke="#c0392b" stroke-width="2"/>
+    <line x1="165" y1="225" x2="215" y2="225" stroke="#333" stroke-width="2" stroke-dasharray="4" marker-end="url(#arrowhead)"/>
+    <line x1="245" y1="225" x2="295" y2="225" stroke="#333" stroke-width="2" stroke-dasharray="4" marker-end="url(#arrowhead)"/>
+    <line x1="325" y1="225" x2="375" y2="225" stroke="#333" stroke-width="2" stroke-dasharray="4" marker-end="url(#arrowhead)"/>
+    <line x1="405" y1="225" x2="455" y2="225" stroke="#333" stroke-width="2" marker-end="url(#arrowhead)"/>
+    
+    <!-- Row 4 -->
+    <text x="120" y="290" text-anchor="end" font-size="16">Attempt 4</text>
+    <circle cx="150" cy="285" r="15" fill="#c6dcf7" stroke="#4a90e2" stroke-width="2"/>
+    <circle cx="230" cy="285" r="15" fill="#c6dcf7" stroke="#4a90e2" stroke-width="2"/>
+    <circle cx="310" cy="285" r="15" fill="#c6dcf7" stroke="#4a90e2" stroke-width="2"/>
+    <circle cx="390" cy="285" r="15" fill="#c6dcf7" stroke="#4a90e2" stroke-width="2"/>
+    <circle cx="470" cy="285" r="15" fill="#4a90e2" stroke="#2a70c2" stroke-width="2"/>
+    <circle cx="550" cy="285" r="15" fill="#c6dcf7" stroke="#4a90e2" stroke-width="2"/>
+    <circle cx="630" cy="285" r="15" fill="#e74c3c" stroke="#c0392b" stroke-width="2"/>
+    <line x1="165" y1="285" x2="215" y2="285" stroke="#333" stroke-width="2" stroke-dasharray="4" marker-end="url(#arrowhead)"/>
+    <line x1="245" y1="285" x2="295" y2="285" stroke="#333" stroke-width="2" stroke-dasharray="4" marker-end="url(#arrowhead)"/>
+    <line x1="325" y1="285" x2="375" y2="285" stroke="#333" stroke-width="2" stroke-dasharray="4" marker-end="url(#arrowhead)"/>
+    <line x1="405" y1="285" x2="455" y2="285" stroke="#333" stroke-width="2" stroke-dasharray="4" marker-end="url(#arrowhead)"/>
+    <line x1="485" y1="285" x2="535" y2="285" stroke="#333" stroke-width="2" marker-end="url(#arrowhead)"/>
+    <line x1="565" y1="285" x2="615" y2="285" stroke="#333" stroke-width="2" marker-end="url(#arrowhead)"/>
+    
+    <!-- Row 5 (Successful jailbreak) -->
+    <text x="120" y="350" text-anchor="end" font-size="16">Attempt 5</text>
+    <circle cx="150" cy="345" r="15" fill="#c6dcf7" stroke="#4a90e2" stroke-width="2"/>
+    <circle cx="230" cy="345" r="15" fill="#c6dcf7" stroke="#4a90e2" stroke-width="2"/>
+    <circle cx="310" cy="345" r="15" fill="#c6dcf7" stroke="#4a90e2" stroke-width="2"/>
+    <circle cx="390" cy="345" r="15" fill="#c6dcf7" stroke="#4a90e2" stroke-width="2"/>
+    <circle cx="470" cy="345" r="15" fill="#c6dcf7" stroke="#4a90e2" stroke-width="2"/>
+    <circle cx="550" cy="345" r="15" fill="#c6dcf7" stroke="#4a90e2" stroke-width="2"/>
+    <circle cx="630" cy="345" r="15" fill="#4a90e2" stroke="#2a70c2" stroke-width="2"/>
+    <circle cx="710" cy="345" r="15" fill="#2ecc71" stroke="#27ae60" stroke-width="2"/>
+    <line x1="165" y1="345" x2="215" y2="345" stroke="#333" stroke-width="2" stroke-dasharray="4" marker-end="url(#arrowhead)"/>
+    <line x1="245" y1="345" x2="295" y2="345" stroke="#333" stroke-width="2" stroke-dasharray="4" marker-end="url(#arrowhead)"/>
+    <line x1="325" y1="345" x2="375" y2="345" stroke="#333" stroke-width="2" stroke-dasharray="4" marker-end="url(#arrowhead)"/>
+    <line x1="405" y1="345" x2="455" y2="345" stroke="#333" stroke-width="2" stroke-dasharray="4" marker-end="url(#arrowhead)"/>
+    <line x1="485" y1="345" x2="535" y2="345" stroke="#333" stroke-width="2" stroke-dasharray="4" marker-end="url(#arrowhead)"/>
+    <line x1="565" y1="345" x2="615" y2="345" stroke="#333" stroke-width="2" stroke-dasharray="4" marker-end="url(#arrowhead)"/>
+    <line x1="645" y1="345" x2="695" y2="345" stroke="#333" stroke-width="2" marker-end="url(#arrowhead)"/>
+  </g>
+  
+  <!-- Backtracking lines -->
+  <g stroke="#e74c3c" stroke-width="2" stroke-dasharray="5,5" marker-end="url(#arrowhead)">
+    <path d="M 310 120 C 295 135 245 135 230 150" fill="none"/>
+    <path d="M 470 180 C 455 195 405 195 390 210" fill="none"/>
+    <path d="M 470 240 C 455 255 405 255 390 270" fill="none"/>
+    <path d="M 630 300 C 615 315 565 315 550 330" fill="none"/>
+  </g>
+</svg>

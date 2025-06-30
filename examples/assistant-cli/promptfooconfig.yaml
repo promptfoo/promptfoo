@@ -1,3 +1,8 @@
-prompts: [file://prompts.txt]
-providers: [openai:gpt-3.5-turbo]
-tests: tests.csv
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Basic LLM evaluation using CSV test cases
+
+prompts:
+  - file://prompts.txt
+providers:
+  - openai:gpt-4.1-mini
+tests: file://tests.csv

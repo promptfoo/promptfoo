@@ -1,0 +1,9 @@
+{
+  "position": 1001,
+  "label": "Strategies",
+  "collapsed": true,
+  "link": {
+    "type": "doc",
+    "id": "red-team/strategies/index"
+  }
+}

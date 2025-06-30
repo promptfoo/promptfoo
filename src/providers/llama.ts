@@ -1,7 +1,8 @@
 import { fetchWithCache } from '../cache';
+import { getEnvString } from '../envars';
+import logger from '../logger';
+import type { ApiProvider, ProviderResponse } from '../types';
 import { REQUEST_TIMEOUT_MS } from './shared';
-
-import type { ApiProvider, ProviderResponse } from '../types.js';
 
 interface LlamaCompletionOptions {
   n_predict?: number;
@@ -64,10 +65,14 @@ export class LlamaProvider implements ApiProvider {
       logit_bias: this.config?.logit_bias,
     };
 
+    const url = getEnvString('LLAMA_BASE_URL') || 'http://localhost:8080';
+
+    logger.debug(`[llama] Calling API at ${url} with body ${JSON.stringify(body)}`);
+
     let response;
     try {
       response = await fetchWithCache(
-        `${process.env.LLAMA_BASE_URL || 'http://localhost:8080'}/completion`,
+        `${url}/completion`,
         {
           method: 'POST',
           headers: {
@@ -82,6 +87,8 @@ export class LlamaProvider implements ApiProvider {
         error: `API call error: ${String(err)}`,
       };
     }
+
+    logger.debug(`[llama] API call response: ${JSON.stringify(response)}`);
 
     try {
       return {

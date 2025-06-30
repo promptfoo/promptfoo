@@ -1,3 +1,14 @@
-prompts: [prompts.txt]
-providers: [openai:gpt-3.5-turbo-0613]
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Using Google Sheets for LLM test inputs and outputs
+
+prompts:
+  - file://prompts.txt
+
+providers:
+  - openai:gpt-4.1-mini
+
+# Public sheet, or requires a service account with read access
 tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
+# Writing output to a sheet requires a service account with write access
+# Remove the line below if you just want to use Web UI, CSV, or other standard output formats.
+outputPath: https://docs.google.com/spreadsheets/d/15X1jSsgaiebh9gD2OPiYh5IkLAawXAgIrF2uMGAU7uE/edit#gid=0

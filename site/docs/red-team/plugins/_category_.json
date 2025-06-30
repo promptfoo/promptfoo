@@ -1,0 +1,9 @@
+{
+  "position": 1000,
+  "label": "Plugins",
+  "collapsed": true,
+  "link": {
+    "type": "doc",
+    "id": "red-team/plugins/index"
+  }
+}

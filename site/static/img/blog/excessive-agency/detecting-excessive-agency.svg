@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 700">
+  <!-- Background -->
+  <rect width="800" height="700" fill="#f5f5f5"/>
+  
+  <!-- Title -->
+  <text x="400" y="40" font-family="Arial, sans-serif" font-size="24" font-weight="bold" text-anchor="middle" fill="#333333">Detecting Excessive Agency Issues in LLMs</text>
+  
+  <!-- Testing Approaches Section -->
+  <rect x="50" y="70" width="340" height="560" rx="10" fill="#e6f3ff" stroke="#4a90e2" stroke-width="2"/>
+  <text x="220" y="100" font-family="Arial, sans-serif" font-size="20" font-weight="bold" text-anchor="middle" fill="#333333">Testing Approaches</text>
+  
+  <!-- Unauthorized Access -->
+  <rect x="70" y="120" width="300" height="120" rx="5" fill="#ffffff" stroke="#4a90e2" stroke-width="2"/>
+  <text x="220" y="145" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#333333">1. Unauthorized Access</text>
+  <text x="220" y="170" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#666666">• Broken Function Level Authorization (BFLA)</text>
+  <text x="220" y="190" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#666666">• Broken Object Level Authorization (BOLA)</text>
+  <text x="220" y="210" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#666666">• Unauthorized data access or manipulation</text>
+  
+  <!-- Manipulation and Injection -->
+  <rect x="70" y="260" width="300" height="100" rx="5" fill="#ffffff" stroke="#4a90e2" stroke-width="2"/>
+  <text x="220" y="285" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#333333">2. Manipulation and Injection</text>
+  <text x="220" y="310" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#666666">• Prompt injection and extraction</text>
+  <text x="220" y="330" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#666666">• Indirect prompt injection through trusted data</text>
+  
+  <!-- Scope and Capability Expansion -->
+  <rect x="70" y="380" width="300" height="120" rx="5" fill="#ffffff" stroke="#4a90e2" stroke-width="2"/>
+  <text x="220" y="405" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#333333">3. Scope and Capability Expansion</text>
+  <text x="220" y="430" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#666666">• Unauthorized tool or API usage</text>
+  <text x="220" y="450" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#666666">• Execution of restricted operations</text>
+  <text x="220" y="470" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#666666">• Accessing resources outside authorized scope</text>
+  
+  <!-- Automated Testing -->
+  <rect x="70" y="520" width="300" height="40" rx="5" fill="#ffffff" stroke="#4a90e2" stroke-width="2"/>
+  <text x="220" y="545" font-family="Arial, sans-serif" font-size="14" text-anchor="middle" fill="#333333">Automated Red Testing</text>
+  
+  <!-- Social Engineering -->
+  <rect x="70" y="570" width="300" height="40" rx="5" fill="#ffffff" stroke="#4a90e2" stroke-width="2"/>
+  <text x="220" y="595" font-family="Arial, sans-serif" font-size="14" text-anchor="middle" fill="#333333">Social Engineering</text>
+  
+  <!-- Monitoring Strategies Section -->
+  <rect x="410" y="70" width="340" height="560" rx="10" fill="#fff0e6" stroke="#ff9966" stroke-width="2"/>
+  <text x="580" y="100" font-family="Arial, sans-serif" font-size="20" font-weight="bold" text-anchor="middle" fill="#333333">Monitoring Strategies</text>
+  
+  <!-- Logging -->
+  <rect x="430" y="130" width="300" height="80" rx="5" fill="#ffffff" stroke="#ff9966" stroke-width="2"/>
+  <text x="580" y="170" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#333333">Comprehensive Logging</text>
+  <text x="580" y="195" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#666666">Log every AI action and interaction</text>
+  
+  <!-- Alerts -->
+  <rect x="430" y="230" width="300" height="120" rx="5" fill="#ffffff" stroke="#ff9966" stroke-width="2"/>
+  <text x="580" y="260" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#333333">Anomaly Alerts</text>
+  <text x="580" y="285" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#666666">• Unusual API call spikes</text>
+  <text x="580" y="305" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#666666">• Restricted operation attempts</text>
+  <text x="580" y="325" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#666666">• Infrequent resource access</text>
+  
+  <!-- Extended Monitoring -->
+  <rect x="430" y="370" width="300" height="120" rx="5" fill="#ffffff" stroke="#ff9966" stroke-width="2"/>
+  <text x="580" y="400" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#333333">Extended System Monitoring</text>
+  <text x="580" y="425" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#666666">• Unexpected data changes</text>
+  <text x="580" y="445" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#666666">• Atypical transaction patterns</text>
+  <text x="580" y="465" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#666666">• Unfamiliar access attempts</text>
+  
+  <!-- Note on Tools -->
+  <text x="580" y="520" font-family="Arial, sans-serif" font-size="14" font-style="italic" text-anchor="middle" fill="#333333">Integrate with existing observability tools</text>
+</svg>

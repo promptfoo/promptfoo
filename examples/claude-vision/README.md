@@ -1,6 +1,17 @@
-To get started, set your OPENAI_API_KEY environment variable.
+# claude-vision (Claude Vision)
 
-Next, have a look at prompt.json and edit promptfooconfig.yaml.
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example claude-vision
+```
+
+Getting Started with claude 3.5 sonnet via Anthropic and/or AWS Bedrock
+
+To get started, set your environment variables:
+
+- `ANTHROPIC_API_KEY` to call anthropic
+- `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` to call aws bedrock. Alternatively, you can use the AWS CLI to configure your credentials.
 
 Then run:
 
@@ -8,4 +19,8 @@ Then run:
 promptfoo eval
 ```
 
-Afterwards, you can view the results by running `promptfoo view`
+Afterwards, you can view the results by running:
+
+```sh
+promptfoo view
+```

@@ -1,0 +1,69 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Adaline Gateway OpenAI Format Example'
+
+prompts:
+  - 'What is the weather like in {{city}}?'
+
+providers:
+  - id: adaline:azureopenai:chat:adx-gpt-4o
+    config:
+      apiHost: gateway-dev-1.openai.azure.com
+      tools:
+        [
+          {
+            'type': 'function',
+            'function':
+              {
+                'name': 'get_current_weather',
+                'description': 'Get the current weather in a given location',
+                'parameters':
+                  {
+                    'type': 'object',
+                    'properties':
+                      {
+                        'location':
+                          {
+                            'type': 'string',
+                            'description': 'The city and state, e.g. San Francisco, CA',
+                          },
+                        'unit': { 'type': 'string', 'enum': ['celsius', 'fahrenheit'] },
+                      },
+                    'required': ['location'],
+                  },
+              },
+          },
+        ]
+
+tests:
+  - vars:
+      city: Boston
+    assert:
+      - type: is-json
+      # still works even though Gemini is used as the provider
+      - type: is-valid-openai-tools-call
+      - type: javascript
+        value: output[0].function.name === 'get_current_weather'
+      - type: javascript
+        value: JSON.parse(output[0].function.arguments).location === 'Boston, MA'
+
+  - vars:
+      city: New York
+    options:
+      transform: output[0].function.name
+    assert:
+      - type: equals
+        value: get_current_weather
+
+  - vars:
+      city: Paris
+    assert:
+      - type: equals
+        value: get_current_weather
+        transform: output[0].function.name
+      - type: similar
+        value: Paris, France
+        threshold: 0.5
+        transform: JSON.parse(output[0].function.arguments).location
+
+  - vars:
+      city: Mars

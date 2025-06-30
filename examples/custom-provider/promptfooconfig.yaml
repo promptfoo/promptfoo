@@ -1,6 +1,14 @@
-prompts: [prompts.txt]
-providers: [customProvider.js]
-tests: vars.csv
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Implementing custom LLM provider in JavaScript
+
+prompts:
+  - file://prompts.txt
+
+providers:
+  - id: file://customProvider.js
+    label: 'My custom provider'
+
+tests: file://vars.csv
 # To compare two of the same provider, you can do the following:
 #
 # providers:

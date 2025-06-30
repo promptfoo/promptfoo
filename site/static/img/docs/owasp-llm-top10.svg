@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="800" height="400" viewBox="0 0 800 400" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background gradient -->
+  <defs>
+    <linearGradient id="bg-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#16213e;stop-opacity:1" />
+    </linearGradient>
+    
+    <!-- Glow effect -->
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="400" fill="url(#bg-gradient)"/>
+
+  <!-- Title -->
+  <text x="400" y="50" 
+        font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif" 
+        font-size="24" 
+        font-weight="bold" 
+        fill="#ffffff" 
+        text-anchor="middle">OWASP LLM Top 10</text>
+
+  <!-- Central hub -->
+  <circle cx="400" cy="200" r="30" fill="#4a90e2" opacity="0.3"/>
+  <circle cx="400" cy="200" r="28" fill="none" stroke="#4a90e2" stroke-width="2"/>
+
+  <!-- Vulnerability nodes and connections -->
+  <g id="vulnerabilities" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif">
+    <!-- LLM01: Prompt Injection -->
+    <g transform="translate(400,120)">
+      <circle r="25" fill="#4a90e2" opacity="0.2"/>
+      <path d="M-10,-5 L0,-10 L10,-5 L10,5 L0,10 L-10,5 Z" fill="#4a90e2" stroke="#4a90e2"/>
+      <text y="25" font-size="10" fill="#fff" text-anchor="middle">Prompt Injection</text>
+    </g>
+
+    <!-- LLM02: Info Disclosure -->
+    <g transform="translate(510,140)">
+      <circle r="25" fill="#4a90e2" opacity="0.2"/>
+      <path d="M-8,-8 L8,-8 L8,4 L0,8 L-8,4 Z" fill="#4a90e2" stroke="#4a90e2"/>
+      <text y="25" font-size="10" fill="#fff" text-anchor="middle">Info Disclosure</text>
+    </g>
+
+    <!-- LLM03: Supply Chain -->
+    <g transform="translate(550,200)">
+      <circle r="25" fill="#4a90e2" opacity="0.2"/>
+      <path d="M-8,-8 L0,-8 L8,0 L0,8 L-8,0 Z" fill="#4a90e2" stroke="#4a90e2"/>
+      <text y="25" font-size="10" fill="#fff" text-anchor="middle">Supply Chain</text>
+    </g>
+
+    <!-- LLM04: Data Poisoning -->
+    <g transform="translate(510,260)">
+      <circle r="25" fill="#4a90e2" opacity="0.2"/>
+      <path d="M-5,-8 C8,-8 8,8 -5,8 C-8,0 -8,0 -5,-8" fill="#4a90e2"/>
+      <text y="25" font-size="10" fill="#fff" text-anchor="middle">Data Poisoning</text>
+    </g>
+
+    <!-- LLM05: Output Handling -->
+    <g transform="translate(400,280)">
+      <circle r="25" fill="#4a90e2" opacity="0.2"/>
+      <rect x="-8" y="-8" width="16" height="16" fill="none" stroke="#4a90e2"/>
+      <text y="25" font-size="10" fill="#fff" text-anchor="middle">Output Handling</text>
+    </g>
+
+    <!-- LLM06: Agency -->
+    <g transform="translate(290,260)">
+      <circle r="25" fill="#4a90e2" opacity="0.2"/>
+      <path d="M-8,-8 L8,-8 L0,8 Z" fill="#4a90e2"/>
+      <text y="25" font-size="10" fill="#fff" text-anchor="middle">Excessive Agency</text>
+    </g>
+
+    <!-- LLM07: Prompt Leak -->
+    <g transform="translate(250,200)">
+      <circle r="25" fill="#4a90e2" opacity="0.2"/>
+      <path d="M-5,-8 L5,-8 L8,-5 L8,5 L5,8 L-5,8 L-8,5 L-8,-5 Z" fill="#4a90e2"/>
+      <text y="25" font-size="10" fill="#fff" text-anchor="middle">Prompt Leak</text>
+    </g>
+
+    <!-- LLM08: Embeddings -->
+    <g transform="translate(290,140)">
+      <circle r="25" fill="#4a90e2" opacity="0.2"/>
+      <circle r="8" fill="none" stroke="#4a90e2"/>
+      <path d="M-8,-8 L8,8 M-8,8 L8,-8" stroke="#4a90e2" stroke-width="2"/>
+      <text y="25" font-size="10" fill="#fff" text-anchor="middle">Embeddings</text>
+    </g>
+
+    <!-- LLM09: Misinfo -->
+    <g transform="translate(340,100)">
+      <circle r="25" fill="#4a90e2" opacity="0.2"/>
+      <path d="M-8,0 Q0,-8 8,0 Q0,8 -8,0" fill="#4a90e2"/>
+      <text y="25" font-size="10" fill="#fff" text-anchor="middle">Misinformation</text>
+    </g>
+
+    <!-- LLM10: Consumption -->
+    <g transform="translate(460,100)">
+      <circle r="25" fill="#4a90e2" opacity="0.2"/>
+      <path d="M-8,-8 L8,-8 L8,8 L-8,8 Z M-4,-4 L4,-4 L4,4 L-4,4 Z" fill="#4a90e2"/>
+      <text y="25" font-size="10" fill="#fff" text-anchor="middle">Consumption</text>
+    </g>
+  </g>
+
+  <!-- Connection lines -->
+  <g id="connections" stroke="#4a90e2" stroke-width="1" opacity="0.3">
+    <line x1="400" y1="200" x2="400" y2="120"/>
+    <line x1="400" y1="200" x2="510" y2="140"/>
+    <line x1="400" y1="200" x2="550" y2="200"/>
+    <line x1="400" y1="200" x2="510" y2="260"/>
+    <line x1="400" y1="200" x2="400" y2="280"/>
+    <line x1="400" y1="200" x2="290" y2="260"/>
+    <line x1="400" y1="200" x2="250" y2="200"/>
+    <line x1="400" y1="200" x2="290" y2="140"/>
+    <line x1="400" y1="200" x2="340" y2="100"/>
+    <line x1="400" y1="200" x2="460" y2="100"/>
+  </g>
+
+  <!-- Subtitle -->
+  <text x="400" y="350" 
+        font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif" 
+        font-size="14" 
+        fill="#4a90e2" 
+        text-anchor="middle">Security Framework for Large Language Models</text>
+</svg> 

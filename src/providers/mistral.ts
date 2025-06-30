@@ -1,8 +1,141 @@
+import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
+import type { EnvVarKey } from '../envars';
+import { getEnvString } from '../envars';
 import logger from '../logger';
-import { fetchWithCache } from '../cache';
+import type {
+  ApiProvider,
+  ProviderEmbeddingResponse,
+  ProviderResponse,
+  TokenUsage,
+} from '../types';
+import type { EnvOverrides } from '../types/env';
+import { calculateCost, REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
-import { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types';
-import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
+const MISTRAL_CHAT_MODELS = [
+  ...['open-mistral-7b', 'mistral-tiny', 'mistral-tiny-2312'].map((id) => ({
+    id,
+    cost: {
+      input: 0.25 / 1000000,
+      output: 0.25 / 1000000,
+    },
+  })),
+  ...[
+    'open-mistral-nemo',
+    'open-mistral-nemo-2407',
+    'mistral-tiny-2407',
+    'mistral-tiny-latest',
+  ].map((id) => ({
+    id,
+    cost: {
+      input: 0.3 / 1000000,
+      output: 0.3 / 1000000,
+    },
+  })),
+  ...['mistral-small-2402', 'mistral-small-latest'].map((id) => ({
+    id,
+    cost: {
+      input: 1 / 1000000,
+      output: 3 / 1000000,
+    },
+  })),
+  ...['mistral-medium-2312', 'mistral-medium', 'mistral-medium-latest'].map((id) => ({
+    id,
+    cost: {
+      input: 2.7 / 1000000,
+      output: 8.1 / 1000000,
+    },
+  })),
+  {
+    id: 'mistral-large-2402',
+    cost: {
+      input: 4 / 1000000,
+      output: 12 / 1000000,
+    },
+  },
+  ...['mistral-large-2407', 'mistral-large-latest'].map((id) => ({
+    id,
+    cost: {
+      input: 3 / 1000000,
+      output: 9 / 1000000,
+    },
+  })),
+  ...['codestral-2405', 'codestral-latest'].map((id) => ({
+    id,
+    cost: {
+      input: 1 / 1000000,
+      output: 3 / 1000000,
+    },
+  })),
+  ...['codestral-mamba-2407', 'open-codestral-mamba', 'codestral-mamba-latest'].map((id) => ({
+    id,
+    cost: {
+      input: 0.25 / 1000000,
+      output: 0.25 / 1000000,
+    },
+  })),
+  ...['open-mixtral-8x7b', 'mistral-small', 'mistral-small-2312'].map((id) => ({
+    id,
+    cost: {
+      input: 0.7 / 1000000,
+      output: 0.7 / 1000000,
+    },
+  })),
+  ...['open-mixtral-8x22b', 'open-mixtral-8x22b-2404'].map((id) => ({
+    id,
+    cost: {
+      input: 2 / 1000000,
+      output: 6 / 1000000,
+    },
+  })),
+  // New Magistral models - reasoning models announced June 2025
+  {
+    id: 'magistral-small-2506',
+    cost: {
+      input: 0.5 / 1000000,
+      output: 1.5 / 1000000,
+    },
+  },
+  {
+    id: 'magistral-medium-2506',
+    cost: {
+      input: 2 / 1000000,
+      output: 5 / 1000000,
+    },
+  },
+  // Also support latest aliases
+  {
+    id: 'magistral-small-latest',
+    cost: {
+      input: 0.5 / 1000000,
+      output: 1.5 / 1000000,
+    },
+  },
+  {
+    id: 'magistral-medium-latest',
+    cost: {
+      input: 2 / 1000000,
+      output: 5 / 1000000,
+    },
+  },
+  // Multimodal model
+  {
+    id: 'pixtral-12b',
+    cost: {
+      input: 0.15 / 1000000,
+      output: 0.15 / 1000000,
+    },
+  },
+];
+
+const MISTRAL_EMBEDDING_MODELS = [
+  {
+    id: 'mistral-embed',
+    cost: {
+      input: 0.1 / 1000000,
+      output: 0.1 / 1000000,
+    },
+  },
+];
 
 interface MistralChatCompletionOptions {
   apiKey?: string;
@@ -33,26 +166,16 @@ function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
   return {};
 }
 
-function calculateCost(
+function calculateMistralCost(
   modelName: string,
   config: MistralChatCompletionOptions,
   promptTokens?: number,
   completionTokens?: number,
 ): number | undefined {
-  if (!promptTokens || !completionTokens) {
-    return undefined;
-  }
-
-  const model = [...MistralChatCompletionProvider.MISTRAL_CHAT_MODELS].find(
-    (m) => m.id === modelName,
-  );
-  if (!model || !model.cost) {
-    return undefined;
-  }
-
-  const inputCost = config.cost ?? model.cost.input;
-  const outputCost = config.cost ?? model.cost.output;
-  return inputCost * promptTokens + outputCost * completionTokens || undefined;
+  return calculateCost(modelName, config, promptTokens, completionTokens, [
+    ...MISTRAL_CHAT_MODELS,
+    ...MISTRAL_EMBEDDING_MODELS,
+  ]);
 }
 
 export class MistralChatCompletionProvider implements ApiProvider {
@@ -60,47 +183,9 @@ export class MistralChatCompletionProvider implements ApiProvider {
   config: MistralChatCompletionOptions;
   env?: EnvOverrides;
 
-  static MISTRAL_CHAT_MODELS = [
-    ...['open-mistral-7b'].map((model) => ({
-      id: model,
-      cost: {
-        input: 0.00025 / 1000,
-        output: 0.00025 / 1000,
-      },
-    })),
-    ...['open-mixtral-8x7b'].map((model) => ({
-      id: model,
-      cost: {
-        input: 0.0007 / 1000,
-        output: 0.0007 / 1000,
-      },
-    })),
-    ...['mistral-small-latest'].map((model) => ({
-      id: model,
-      cost: {
-        input: 0.002 / 1000,
-        output: 0.006 / 1000,
-      },
-    })),
-    ...['mistral-medium-latest'].map((model) => ({
-      id: model,
-      cost: {
-        input: 0.0027 / 1000,
-        output: 0.0081 / 1000,
-      },
-    })),
-    ...['mistral-large-latest'].map((model) => ({
-      id: model,
-      cost: {
-        input: 0.008 / 1000,
-        output: 0.024 / 1000,
-      },
-    })),
-  ];
+  static MISTRAL_CHAT_MODELS = MISTRAL_CHAT_MODELS;
 
-  static MISTRAL_CHAT_MODELS_NAMES = MistralChatCompletionProvider.MISTRAL_CHAT_MODELS.map(
-    (model) => model.id,
-  );
+  static MISTRAL_CHAT_MODELS_NAMES = MISTRAL_CHAT_MODELS.map((model) => model.id);
 
   constructor(
     modelName: string,
@@ -130,29 +215,29 @@ export class MistralChatCompletionProvider implements ApiProvider {
 
   getApiUrl(): string {
     const apiHost =
-      this.config.apiHost || this.env?.MISTRAL_API_HOST || process.env.MISTRAL_API_HOST;
+      this.config.apiHost || this.env?.MISTRAL_API_HOST || getEnvString('MISTRAL_API_HOST');
     if (apiHost) {
       return `https://${apiHost}/v1`;
     }
     return (
       this.config.apiBaseUrl ||
       this.env?.MISTRAL_API_BASE_URL ||
-      process.env.MISTRAL_API_BASE_URL ||
+      getEnvString('MISTRAL_API_BASE_URL') ||
       this.getApiUrlDefault()
     );
   }
 
   getApiKey(): string | undefined {
     logger.debug(`Mistral apiKeyenvar: ${this.config.apiKeyEnvar}`);
-    return (
-      this.config.apiKey ||
+    const apiKeyCandidate =
+      this.config?.apiKey ||
       (this.config?.apiKeyEnvar
-        ? process.env[this.config.apiKeyEnvar] ||
+        ? getEnvString(this.config.apiKeyEnvar as EnvVarKey) ||
           this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
         : undefined) ||
       this.env?.MISTRAL_API_KEY ||
-      process.env.MISTRAL_API_KEY
-    );
+      getEnvString('MISTRAL_API_KEY');
+    return apiKeyCandidate;
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {
@@ -164,9 +249,9 @@ export class MistralChatCompletionProvider implements ApiProvider {
 
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
-    const body = {
+    const params = {
       model: this.modelName,
-      messages: messages,
+      messages,
       temperature: this.config?.temperature,
       top_p: this.config?.top_p || 1,
       max_tokens: this.config?.max_tokens || 1024,
@@ -175,8 +260,26 @@ export class MistralChatCompletionProvider implements ApiProvider {
       ...(this.config.response_format ? { response_format: this.config.response_format } : {}),
     };
 
+    const cacheKey = `mistral:${JSON.stringify(params)}`;
+    if (isCacheEnabled()) {
+      const cache = getCache();
+      if (cache) {
+        const cachedResult = await cache.get<ProviderResponse>(cacheKey);
+        if (cachedResult) {
+          logger.debug(`Returning cached response for ${prompt}: ${JSON.stringify(cachedResult)}`);
+          return {
+            ...cachedResult,
+            tokenUsage: {
+              ...cachedResult.tokenUsage,
+              cached: cachedResult.tokenUsage?.total,
+            },
+          };
+        }
+      }
+    }
+
     const url = `${this.getApiUrl()}/chat/completions`;
-    logger.debug(`Mistral API request: ${url} ${JSON.stringify(body)}`);
+    logger.debug(`Mistral API request: ${url} ${JSON.stringify(params)}`);
 
     let data,
       cached = false;
@@ -190,7 +293,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.getApiKey()}`,
           },
-          body: JSON.stringify(body),
+          body: JSON.stringify(params),
         },
         REQUEST_TIMEOUT_MS,
       )) as unknown as { data: any; cached: boolean });
@@ -207,22 +310,159 @@ export class MistralChatCompletionProvider implements ApiProvider {
         error: `API call error: ${data.error}`,
       };
     }
-    if (!data.choices[0] && !data.choices[0].message.content) {
+    if (!data.choices || !data.choices[0] || !data.choices[0].message.content) {
       return {
         error: `Malformed response data: ${JSON.stringify(data)}`,
       };
     }
 
-    return {
+    const result: ProviderResponse = {
       output: data.choices[0].message.content,
       tokenUsage: getTokenUsage(data, cached),
       cached,
-      cost: calculateCost(
+      cost: calculateMistralCost(
         this.modelName,
         this.config,
         data.usage?.prompt_tokens,
         data.usage?.completion_tokens,
       ),
     };
+
+    if (isCacheEnabled()) {
+      try {
+        await getCache().set(cacheKey, result);
+      } catch (err) {
+        logger.error(`Failed to cache response: ${String(err)}`);
+      }
+    }
+
+    return result;
+  }
+}
+
+export class MistralEmbeddingProvider implements ApiProvider {
+  modelName: string;
+  config: MistralChatCompletionOptions;
+  env?: EnvOverrides;
+
+  constructor(
+    options: { config?: MistralChatCompletionOptions; id?: string; env?: EnvOverrides } = {},
+  ) {
+    const { config, env } = options;
+    this.modelName = 'mistral-embed';
+    this.config = config || {};
+    this.env = env;
+  }
+
+  id(): string {
+    return `mistral:embedding:${this.modelName}`;
+  }
+
+  toString(): string {
+    return `[Mistral Embedding Provider ${this.modelName}]`;
+  }
+
+  getApiUrlDefault(): string {
+    return 'https://api.mistral.ai/v1';
+  }
+
+  getApiUrl(): string {
+    const apiHost =
+      this.config.apiHost || this.env?.MISTRAL_API_HOST || getEnvString('MISTRAL_API_HOST');
+    if (apiHost) {
+      return `https://${apiHost}/v1`;
+    }
+    return (
+      this.config.apiBaseUrl ||
+      this.env?.MISTRAL_API_BASE_URL ||
+      getEnvString('MISTRAL_API_BASE_URL') ||
+      this.getApiUrlDefault()
+    );
+  }
+
+  getApiKey(): string | undefined {
+    logger.debug(`Mistral apiKeyenvar: ${this.config.apiKeyEnvar}`);
+    const apiKeyCandidate =
+      this.config?.apiKey ||
+      (this.config?.apiKeyEnvar
+        ? getEnvString(this.config.apiKeyEnvar as EnvVarKey) ||
+          this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
+        : undefined) ||
+      this.env?.MISTRAL_API_KEY ||
+      getEnvString('MISTRAL_API_KEY');
+    return apiKeyCandidate;
+  }
+
+  async callApi(text: string): Promise<ProviderResponse> {
+    try {
+      const embeddingResponse = await this.callEmbeddingApi(text);
+      return {
+        output: JSON.stringify(embeddingResponse.embedding),
+        tokenUsage: embeddingResponse.tokenUsage,
+        cost: embeddingResponse.cost,
+      };
+    } catch (err) {
+      return {
+        error: `Embedding API call error: ${String(err)}`,
+      };
+    }
+  }
+
+  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+    if (!this.getApiKey()) {
+      throw new Error('Mistral API key must be set for embedding');
+    }
+
+    const body = {
+      model: this.modelName,
+      input: text,
+    };
+
+    const url = `${this.getApiUrl()}/embeddings`;
+    logger.debug(`Mistral Embedding API request: ${url} ${JSON.stringify(body)}`);
+
+    let data;
+    let cached = false;
+
+    try {
+      ({ data, cached } = (await fetchWithCache(
+        url,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.getApiKey()}`,
+          },
+          body: JSON.stringify(body),
+        },
+        REQUEST_TIMEOUT_MS,
+      )) as unknown as { data: any; cached: boolean });
+    } catch (err) {
+      logger.error(`API call error: ${err}`);
+      throw err;
+    }
+
+    logger.debug(`Mistral Embedding API response: ${JSON.stringify(data)}`);
+
+    try {
+      const embedding = data?.data?.[0]?.embedding;
+      if (!embedding) {
+        throw new Error('No embedding found in Mistral Embedding API response');
+      }
+      const tokenUsage = getTokenUsage(data, cached);
+      const promptTokens = tokenUsage.prompt || 0;
+      const completionTokens = 0; // Embeddings don't have completion tokens
+      return {
+        embedding,
+        tokenUsage: {
+          ...tokenUsage,
+          completion: completionTokens,
+        },
+        cost: calculateMistralCost(this.modelName, this.config, promptTokens, completionTokens),
+      };
+    } catch (err) {
+      logger.error(data.error?.message || 'Unknown error');
+      throw err;
+    }
   }
 }

@@ -1,0 +1,81 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Structured prompts'
+
+prompts:
+  # Schema output with `steps` array
+  - label: 'With step-by-step'
+    raw: 'You are a helpful math tutor. Solve {{problem}}'
+    config:
+      response_format:
+        type: json_schema
+        json_schema:
+          name: math_response
+          strict: true
+          schema:
+            type: object
+            properties:
+              steps:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    explanation:
+                      type: string
+                    output:
+                      type: string
+                  required:
+                    - explanation
+                    - output
+                  additionalProperties: false
+              final_answer:
+                type: string
+            required:
+              - steps
+              - final_answer
+            additionalProperties: false
+
+  # Schema output without `steps` array
+  - label: 'Without step-by-step'
+    raw: 'You are a helpful math tutor. Solve {{problem}}'
+    config:
+      response_format:
+        type: json_schema
+        json_schema:
+          name: math_response
+          strict: true
+          schema:
+            type: object
+            properties:
+              final_answer:
+                type: string
+            required:
+              - final_answer
+            additionalProperties: false
+
+providers:
+  - openai:chat:gpt-4o-2024-11-20
+  - id: azure:chat:gpt-4o-2024-08-06
+    config:
+      apiHost: 'YOUR_ORG.openai.azure.com'
+      apiVersion: '2024-08-01-preview'
+      deploymentName: 'YOUR_DEPLOYMENT_NAME'
+
+defaultTest:
+  assert:
+    - type: is-json
+    - type: javascript
+      value: typeof output === 'object'
+
+tests:
+  - vars:
+      problem: '8x + 31 = 2'
+    assert:
+      - type: contains-any
+        value:
+          - -3.625
+          - -29/8
+  - vars:
+      problem: 'sqrt(x) = 4.9'
+    assert:
+      - type: contains
+        value: 24.01

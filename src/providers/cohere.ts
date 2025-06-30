@@ -1,7 +1,14 @@
 import { fetchWithCache } from '../cache';
+import { getEnvString } from '../envars';
 import logger from '../logger';
-
-import type { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types';
+import type {
+  ApiProvider,
+  ProviderResponse,
+  TokenUsage,
+  ApiEmbeddingProvider,
+  ProviderEmbeddingResponse,
+} from '../types';
+import type { EnvOverrides } from '../types/env';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
 interface CohereChatOptions {
@@ -42,20 +49,24 @@ export class CohereChatCompletionProvider implements ApiProvider {
   static COHERE_CHAT_MODELS = [
     'command',
     'command-light',
-    'command-nightly',
     'command-light-nightly',
+    'command-nightly',
+    'command-r',
+    'command-r-plus',
+    'command-r-v1',
   ];
+
+  config: CohereChatOptions;
 
   private apiKey: string;
   private modelName: string;
-  private config: CohereChatOptions;
 
   constructor(
     modelName: string,
     options: { config?: CohereChatOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     const { config, id, env } = options;
-    this.apiKey = config?.apiKey || env?.COHERE_API_KEY || process.env.COHERE_API_KEY || '';
+    this.apiKey = config?.apiKey || env?.COHERE_API_KEY || getEnvString('COHERE_API_KEY') || '';
     this.modelName = modelName;
     if (!CohereChatCompletionProvider.COHERE_CHAT_MODELS.includes(this.modelName)) {
       logger.warn(`Using unknown Cohere chat model: ${this.modelName}`);
@@ -100,7 +111,7 @@ export class CohereChatCompletionProvider implements ApiProvider {
       } else {
         throw new Error('Prompt is not a JSON object');
       }
-    } catch (error) {
+    } catch {
       body = {
         message: prompt,
         ...params,
@@ -120,7 +131,7 @@ export class CohereChatCompletionProvider implements ApiProvider {
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.apiKey}`,
-            'X-Client-Name': process.env.COHERE_CLIENT_NAME || 'promptfoo',
+            'X-Client-Name': getEnvString('COHERE_CLIENT_NAME') || 'promptfoo',
           },
           body: JSON.stringify(body),
         },
@@ -164,5 +175,87 @@ export class CohereChatCompletionProvider implements ApiProvider {
       logger.error(`API call error: ${error}`);
       return { error: `API call error: ${error}` };
     }
+  }
+}
+
+export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
+  modelName: string;
+  config: any;
+  env?: any;
+
+  constructor(modelName: string, config: any = {}, env?: any) {
+    this.modelName = modelName;
+    this.config = config;
+    this.env = env;
+  }
+
+  id() {
+    return `cohere:${this.modelName}`;
+  }
+
+  getApiKey(): string | undefined {
+    return (
+      this.config.apiKey ||
+      (this.config?.apiKeyEnvar
+        ? getEnvString(this.config.apiKeyEnvar) ||
+          this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
+        : undefined) ||
+      this.env?.COHERE_API_KEY ||
+      getEnvString('COHERE_API_KEY')
+    );
+  }
+
+  getApiUrl(): string {
+    return this.config.apiBaseUrl || 'https://api.cohere.com/v1';
+  }
+
+  async callApi(): Promise<ProviderResponse> {
+    throw new Error('Cohere API does not provide text inference.');
+  }
+
+  async callEmbeddingApi(input: string): Promise<ProviderEmbeddingResponse> {
+    if (!this.getApiKey()) {
+      throw new Error('Cohere API key must be set for embedding');
+    }
+
+    const body = {
+      model: this.modelName,
+      texts: [input],
+      input_type: 'classification',
+      truncate: this.config.truncate || 'NONE',
+    };
+
+    let data;
+    try {
+      ({ data } = (await fetchWithCache(
+        `${this.getApiUrl()}/embed`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.getApiKey()}`,
+            'X-Client-Name': getEnvString('COHERE_CLIENT_NAME') || 'promptfoo',
+          },
+          body: JSON.stringify(body),
+        },
+        REQUEST_TIMEOUT_MS,
+      )) as unknown as any);
+    } catch (err) {
+      logger.error(`API call error: ${err}`);
+      throw err;
+    }
+    logger.debug(`\tCohere embeddings API response: ${JSON.stringify(data)}`);
+
+    const embedding = data?.embeddings?.[0];
+    if (!embedding) {
+      throw new Error('No embedding found in Cohere embeddings API response');
+    }
+    return {
+      embedding,
+      tokenUsage: {
+        prompt: data.meta?.billed_units?.input_tokens || 0,
+        total: data.meta?.billed_units?.input_tokens || 0,
+      },
+    };
   }
 }

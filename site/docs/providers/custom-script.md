@@ -1,6 +1,5 @@
 ---
 sidebar_label: Custom scripts
-sidebar_position: 52
 ---
 
 # Custom scripts
@@ -20,12 +19,13 @@ To use a script provider, you need to create an executable that takes a prompt a
 Here is an example of how to use a script provider:
 
 ```yaml
-providers: ['exec: python chain.py']
+providers:
+  - 'exec: python chain.py'
 ```
 
 Or in the CLI:
 
-```bash
+```
 promptfoo eval -p prompt1.txt prompt2.txt -o results.csv  -v vars.csv -r 'exec: python chain.py'
 ```
 

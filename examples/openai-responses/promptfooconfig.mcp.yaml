@@ -1,0 +1,42 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: OpenAI MCP integration example
+
+prompts:
+  - 'Can you search for information about {{topic}} in the {{repo}} repository?'
+
+providers:
+  - id: openai:responses:gpt-4.1-2025-04-14
+    config:
+      tools:
+        - type: mcp
+          server_label: deepwiki
+          server_url: https://mcp.deepwiki.com/mcp
+          require_approval: never
+          allowed_tools: ['ask_question']
+      max_output_tokens: 1000
+      temperature: 0.3
+
+tests:
+  - vars:
+      repo: modelcontextprotocol/modelcontextprotocol
+      topic: transport protocols
+    assert:
+      - type: contains
+        value: 'transport'
+      - type: contains
+        value: 'protocol'
+
+  - vars:
+      repo: facebook/react
+      topic: hooks
+    assert:
+      - type: contains
+        value: 'hook'
+
+  - vars:
+      repo: microsoft/typescript
+      topic: type system
+    assert:
+      - type: contains
+        value: 'type'

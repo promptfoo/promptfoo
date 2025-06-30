@@ -1,23 +1,22 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Comparing Llama and GPT model performance
+
 prompts:
-  prompts/chat_prompt.json: chat_prompt
-  prompts/completion_prompt.txt: completion_prompt
+  - file://prompts/chat_prompt.json
 
 providers:
-  - id: openai:gpt-3.5-turbo-0613
-    label: openai-gpt-3.5-turbo-lowtemp
-    prompts: chat_prompt
+  - id: openai:gpt-4o
+    label: GPT 4o
     config:
       temperature: 0
       max_tokens: 128
-  - id: openai:gpt-3.5-turbo-0613
-    label: openai-gpt-3.5-turbo-hightemp
-    prompts: chat_prompt
+  - id: openai:gpt-4.1-mini
+    label: GPT 4.1-mini
     config:
       temperature: 1
       max_tokens: 128
-  - id: replicate:meta/llama70b-v2-chat:02e509c789964a7ea8736978a43525956ef40397be9033abf9fd2badfe68c9e3
-    label: llama70b-v2-chat
-    prompts: completion_prompt
+  - id: replicate:meta/meta-llama-3.1-405b-instruct
+    label: Llama
     config:
       temperature: 0.01 # minimum temperature
       max_length: 128

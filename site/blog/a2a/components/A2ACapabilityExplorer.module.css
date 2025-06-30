@@ -1,0 +1,823 @@
+.container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
+}
+
+.tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 10px;
+}
+
+.tab {
+  padding: 8px 16px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 1rem;
+  color: #6b7280;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.tab:hover {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.tab.active {
+  background: #e5e7eb;
+  color: #111827;
+  font-weight: 500;
+}
+
+.content {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* Card View Styles */
+.cardView {
+  padding: 20px;
+}
+
+.agentSelector {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.agentButton {
+  padding: 8px 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s;
+}
+
+.agentButton:hover {
+  background: #f3f4f6;
+}
+
+.agentButton.active {
+  border-color: #3b82f6;
+  background: #eff6ff;
+}
+
+.agentStatus {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #10b981;
+}
+
+.agentStatus[data-status='maintenance'] {
+  background: #f59e0b;
+}
+
+.agentStatus[data-status='deprecated'] {
+  background: #ef4444;
+}
+
+.cardContent {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.cardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+
+.cardHeader h4 {
+  margin: 0;
+  font-size: 1.25rem;
+  color: #111827;
+}
+
+.agentDescription {
+  margin: 4px 0 0;
+  color: #6b7280;
+}
+
+.version {
+  padding: 4px 8px;
+  background: #f3f4f6;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+.cardSection {
+  margin-bottom: 24px;
+}
+
+.cardSection h5 {
+  margin: 0 0 12px;
+  font-size: 1rem;
+  color: #374151;
+}
+
+.cardSection code {
+  display: block;
+  padding: 8px;
+  background: #f3f4f6;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 0.875rem;
+}
+
+.authMethods {
+  display: flex;
+  gap: 8px;
+}
+
+.authMethod {
+  padding: 4px 8px;
+  background: #eff6ff;
+  color: #3b82f6;
+  border-radius: 4px;
+  font-size: 0.875rem;
+}
+
+.agentDetails {
+  display: grid;
+  gap: 12px;
+}
+
+.detailItem {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px;
+  background: #f9fafb;
+  border-radius: 4px;
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tag {
+  padding: 2px 8px;
+  background: #f3f4f6;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  color: #374151;
+}
+
+.capabilities {
+  display: grid;
+  gap: 12px;
+}
+
+.capability {
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.capability:hover {
+  border-color: #3b82f6;
+  background: #f8fafc;
+}
+
+.capabilityHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.capabilityName {
+  font-weight: 500;
+  color: #111827;
+}
+
+.authRequired {
+  font-size: 1rem;
+}
+
+.performanceMetrics {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+/* Registration View Styles */
+.registrationView {
+  padding: 20px;
+}
+
+.registrationDemo {
+  display: grid;
+  gap: 24px;
+}
+
+.step {
+  display: flex;
+  gap: 16px;
+}
+
+.stepNumber {
+  width: 32px;
+  height: 32px;
+  background: #3b82f6;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 500;
+}
+
+.stepContent h5 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+  color: #111827;
+}
+
+.stepContent p {
+  margin: 0 0 12px;
+  color: #6b7280;
+}
+
+.jsonPreview {
+  padding: 16px;
+  background: #1e293b;
+  color: #e2e8f0;
+  border-radius: 8px;
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  white-space: pre;
+  overflow-x: auto;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border: 1px solid #2d3748;
+}
+
+.jsonPreview .key {
+  color: #60a5fa;
+}
+
+.jsonPreview .string {
+  color: #34d399;
+}
+
+.jsonPreview .number {
+  color: #f472b6;
+}
+
+.updateSimulator {
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 6px;
+}
+
+.updateIndicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  background: #10b981;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+.discoveryFlow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.flowStep {
+  padding: 8px 16px;
+  background: #f3f4f6;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  color: #374151;
+}
+
+.flowArrow {
+  color: #9ca3af;
+}
+
+/* Query View Styles */
+.queryView {
+  padding: 20px;
+}
+
+.queryControls {
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 24px;
+}
+
+.searchBar {
+  margin-bottom: 20px;
+}
+
+.searchInput {
+  width: 100%;
+  padding: 12px 16px;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 1rem;
+  background: white;
+  transition: all 0.2s;
+}
+
+.searchInput:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+  padding: 16px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+}
+
+.filterItem {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.filterItem label {
+  font-weight: 500;
+  color: #374151;
+  font-size: 0.875rem;
+}
+
+.filterItem select {
+  padding: 8px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: white;
+  font-size: 0.875rem;
+  color: #111827;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.filterItem select:hover {
+  border-color: #3b82f6;
+}
+
+.filterItem input[type='range'] {
+  width: 100%;
+  height: 6px;
+  background: #e5e7eb;
+  border-radius: 3px;
+  -webkit-appearance: none;
+}
+
+.filterItem input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  background: #3b82f6;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.filterItem input[type='range']::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+}
+
+.filterValue {
+  font-size: 0.875rem;
+  color: #6b7280;
+  text-align: right;
+}
+
+.queryResults {
+  display: grid;
+  gap: 20px;
+}
+
+.queryResult {
+  padding: 20px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: white;
+  transition: all 0.2s;
+}
+
+.queryResult:hover {
+  border-color: #3b82f6;
+  box-shadow: 0 4px 6px rgba(59, 130, 246, 0.1);
+}
+
+.queryResult h5 {
+  margin: 0 0 12px;
+  font-size: 1.125rem;
+  color: #111827;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.queryResult h5::before {
+  content: '⚡';
+  font-size: 1rem;
+}
+
+.queryResult p {
+  margin: 0 0 16px;
+  color: #4b5563;
+  line-height: 1.5;
+}
+
+.resultDetails {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 16px;
+  align-items: center;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.resultMetrics {
+  display: flex;
+  gap: 16px;
+  margin-left: auto;
+}
+
+.metricItem {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+.metricValue {
+  font-weight: 500;
+  color: #111827;
+}
+
+.successRate {
+  color: #059669;
+}
+
+/* Modal Styles */
+.capabilityModal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modalContent {
+  background: white;
+  padding: 24px;
+  border-radius: 8px;
+  max-width: 500px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modalContent h4 {
+  margin: 0 0 12px;
+  font-size: 1.25rem;
+  color: #111827;
+}
+
+.modalSection {
+  margin: 20px 0;
+}
+
+.modalSection h5 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+  color: #374151;
+}
+
+.formatInfo {
+  margin: 8px 0;
+  color: #6b7280;
+}
+
+.performanceDetails {
+  display: grid;
+  gap: 12px;
+}
+
+.metric {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px;
+  background: #f9fafb;
+  border-radius: 4px;
+}
+
+.closeButton {
+  width: 100%;
+  padding: 8px;
+  margin-top: 20px;
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.closeButton:hover {
+  background: #dc2626;
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.agentSelector {
+  margin-bottom: 24px;
+}
+
+.agentSelector h4 {
+  margin: 0 0 12px;
+  font-size: 1.125rem;
+  color: #111827;
+}
+
+.agentButtons {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.noResults {
+  padding: 40px;
+  text-align: center;
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 1px dashed #e5e7eb;
+}
+
+.noResults p {
+  margin: 0;
+  color: #6b7280;
+  font-size: 0.875rem;
+}
+
+/* Dark mode adjustments */
+html[data-theme='dark'] .container {
+  background: var(--ifm-background-surface-color);
+}
+
+html[data-theme='dark'] .tab {
+  color: var(--ifm-color-emphasis-600);
+}
+
+html[data-theme='dark'] .tab:hover {
+  background: var(--ifm-color-emphasis-100);
+  color: var(--ifm-color-emphasis-900);
+}
+
+html[data-theme='dark'] .tab.active {
+  background: var(--ifm-color-primary);
+  color: var(--ifm-color-white);
+}
+
+html[data-theme='dark'] .content {
+  background: var(--ifm-background-surface-color);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+html[data-theme='dark'] .cardContent {
+  border-color: var(--ifm-color-emphasis-300);
+  background: var(--ifm-card-background-color);
+}
+
+html[data-theme='dark'] .cardHeader h4 {
+  color: var(--ifm-color-white);
+}
+
+html[data-theme='dark'] .agentDescription {
+  color: var(--ifm-color-emphasis-600);
+}
+
+html[data-theme='dark'] .version {
+  background: var(--ifm-color-emphasis-100);
+  color: var(--ifm-color-emphasis-600);
+}
+
+html[data-theme='dark'] .cardSection h5 {
+  color: var(--ifm-color-white);
+}
+
+html[data-theme='dark'] .cardSection code {
+  background: var(--ifm-color-emphasis-100);
+  color: var(--ifm-color-emphasis-900);
+}
+
+html[data-theme='dark'] .capability {
+  border-color: var(--ifm-color-emphasis-300);
+  background: var(--ifm-card-background-color);
+}
+
+html[data-theme='dark'] .capability:hover {
+  border-color: var(--ifm-color-primary);
+  background: var(--ifm-color-emphasis-100);
+}
+
+html[data-theme='dark'] .capabilityName {
+  color: var(--ifm-color-white);
+}
+
+html[data-theme='dark'] .performanceMetrics {
+  color: var(--ifm-color-emphasis-600);
+}
+
+html[data-theme='dark'] .agentButton {
+  background: var(--ifm-card-background-color);
+  border-color: var(--ifm-color-emphasis-300);
+  color: var(--ifm-color-emphasis-900);
+}
+
+html[data-theme='dark'] .agentButton:hover {
+  background: var(--ifm-color-emphasis-100);
+}
+
+html[data-theme='dark'] .agentButton.active {
+  border-color: var(--ifm-color-primary);
+  background: var(--ifm-color-primary);
+  color: var(--ifm-color-white);
+}
+
+html[data-theme='dark'] .detailItem {
+  background: var(--ifm-color-emphasis-100);
+  color: var(--ifm-color-emphasis-900);
+}
+
+html[data-theme='dark'] .tag {
+  background: var(--ifm-color-emphasis-200);
+  color: var(--ifm-color-emphasis-800);
+}
+
+html[data-theme='dark'] .jsonPreview {
+  background: var(--ifm-color-emphasis-900);
+  border-color: var(--ifm-color-emphasis-300);
+}
+
+html[data-theme='dark'] .jsonPreview .key {
+  color: var(--ifm-color-primary-lighter);
+}
+
+html[data-theme='dark'] .jsonPreview .string {
+  color: var(--ifm-color-success-lighter);
+}
+
+html[data-theme='dark'] .jsonPreview .number {
+  color: var(--ifm-color-info-lighter);
+}
+
+html[data-theme='dark'] .updateSimulator {
+  background: var(--ifm-color-emphasis-100);
+}
+
+html[data-theme='dark'] .flowStep {
+  background: var(--ifm-color-emphasis-100);
+  color: var(--ifm-color-emphasis-900);
+}
+
+html[data-theme='dark'] .queryControls {
+  background: var(--ifm-card-background-color);
+  border-color: var(--ifm-color-emphasis-300);
+}
+
+html[data-theme='dark'] .searchInput {
+  background: var(--ifm-background-surface-color);
+  border-color: var(--ifm-color-emphasis-300);
+  color: var(--ifm-color-white);
+}
+
+html[data-theme='dark'] .searchInput:focus {
+  border-color: var(--ifm-color-primary);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+html[data-theme='dark'] .filters {
+  background: var(--ifm-card-background-color);
+  border-color: var(--ifm-color-emphasis-300);
+}
+
+html[data-theme='dark'] .filterItem label {
+  color: var(--ifm-color-emphasis-900);
+}
+
+html[data-theme='dark'] .filterItem select {
+  background: var(--ifm-background-surface-color);
+  border-color: var(--ifm-color-emphasis-300);
+  color: var(--ifm-color-white);
+}
+
+html[data-theme='dark'] .filterItem select:hover {
+  border-color: var(--ifm-color-primary);
+}
+
+html[data-theme='dark'] .filterItem input[type='range'] {
+  background: var(--ifm-color-emphasis-200);
+}
+
+html[data-theme='dark'] .filterItem input[type='range']::-webkit-slider-thumb {
+  background: var(--ifm-color-primary);
+}
+
+html[data-theme='dark'] .queryResult {
+  background: var(--ifm-card-background-color);
+  border-color: var(--ifm-color-emphasis-300);
+}
+
+html[data-theme='dark'] .queryResult:hover {
+  border-color: var(--ifm-color-primary);
+  box-shadow: 0 4px 6px rgba(59, 130, 246, 0.2);
+}
+
+html[data-theme='dark'] .queryResult h5 {
+  color: var(--ifm-color-white);
+}
+
+html[data-theme='dark'] .queryResult p {
+  color: var(--ifm-color-emphasis-600);
+}
+
+html[data-theme='dark'] .resultDetails {
+  border-color: var(--ifm-color-emphasis-300);
+}
+
+html[data-theme='dark'] .metricItem {
+  color: var(--ifm-color-emphasis-600);
+}
+
+html[data-theme='dark'] .metricValue {
+  color: var(--ifm-color-white);
+}
+
+html[data-theme='dark'] .modalContent {
+  background: var(--ifm-background-surface-color);
+}
+
+html[data-theme='dark'] .metric {
+  background: var(--ifm-color-emphasis-100);
+}
+
+html[data-theme='dark'] .noResults {
+  background: var(--ifm-color-emphasis-100);
+  border-color: var(--ifm-color-emphasis-300);
+  color: var(--ifm-color-emphasis-600);
+}

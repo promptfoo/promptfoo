@@ -1,0 +1,46 @@
+.nav {
+  padding: 0.25rem 0 0.25rem 1rem;
+  gap: 1rem;
+  background-color: #333;
+  margin-bottom: 1rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+[data-theme='dark'] .nav {
+  background-color: #121212;
+}
+
+.nav a {
+  text-decoration: none;
+  align-self: center;
+}
+
+@media (max-width: 760px) {
+  .nav {
+    font-size: 0.75rem;
+  }
+}
+
+.nav .active {
+  font-weight: bold;
+}
+
+.nav a {
+  color: #f0f0f0;
+}
+
+.nav .right-aligned {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-left: auto;
+  margin-right: 0.5rem;
+}
+
+.nav a:hover {
+  text-decoration: underline;
+}
+
+.nav a:hover {
+  color: #ddd;
+}

@@ -1,0 +1,142 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Mistral AI model comparison and evaluation
+
+prompts:
+  - '{{message}}'
+
+providers:
+  # Reasoning models - specialized for complex problems
+  - id: mistral:magistral-medium-latest
+    label: magistral-medium
+    config:
+      temperature: 0.7
+      top_p: 0.95
+      max_tokens: 40960
+
+  - id: mistral:magistral-small-latest
+    label: magistral-small
+    config:
+      temperature: 0.7
+      top_p: 0.95
+      max_tokens: 40960
+
+  # Traditional chat models
+  - id: mistral:mistral-large-latest
+    label: large
+    config:
+      temperature: 0.7
+
+  - id: mistral:mistral-medium-latest
+    label: medium
+    config:
+      temperature: 0.7
+
+  - id: mistral:mistral-small-latest
+    label: small
+    config:
+      temperature: 0.7
+
+# Use Mistral models for evaluation instead of OpenAI
+defaultTest:
+  options:
+    # Use Mistral Large for grading and Mistral embeddings for similarity
+    provider:
+      id: mistral:mistral-large-latest
+      embedding:
+        id: mistral:embedding:mistral-embed
+
+tests:
+  # Simple chat scenarios
+  - description: Casual greeting
+    vars:
+      message: 'Hello! How are you today?'
+    assert:
+      - type: llm-rubric
+        value: Responds in a friendly, conversational manner
+      - type: similar
+        value: "Hi there! I'm doing well, thanks for asking."
+        threshold: 0.7
+
+  - description: Creative writing request
+    vars:
+      message: 'Write a short story about a robot learning to paint'
+    assert:
+      - type: llm-rubric
+        value: Creates an engaging creative story with clear narrative structure
+      - type: contains
+        value: robot
+      - type: contains
+        value: paint
+
+  # Reasoning scenarios - where Magistral models should excel
+  - description: Mathematical reasoning
+    vars:
+      message: 'Solve this step by step: If a pizza has 8 slices and you eat 3 slices, then your friend eats twice as many slices as you did, how many slices are left?'
+    assert:
+      - type: contains
+        value: '2'
+      - type: llm-rubric
+        value: Shows clear step-by-step mathematical reasoning and arrives at the correct answer
+
+  - description: Logical reasoning
+    vars:
+      message: 'If all roses are flowers, and some flowers are red, can we conclude that some roses are red? Explain your reasoning.'
+    assert:
+      - type: icontains
+        value: 'cannot'
+      - type: llm-rubric
+        value: Correctly identifies the logical fallacy and explains why the conclusion doesn't follow
+
+  - description: Complex problem solving
+    vars:
+      message: 'You have a 3-gallon jug and a 5-gallon jug. How do you measure exactly 4 gallons of water? Show your steps.'
+    assert:
+      - type: llm-rubric
+        value: Provides a correct step-by-step solution to the water jug problem
+      - type: similar
+        value: 'Fill the 5-gallon jug, pour into 3-gallon jug, empty 3-gallon jug, pour remaining 2 gallons from 5-gallon into 3-gallon, fill 5-gallon again, pour into 3-gallon until full'
+        threshold: 0.6
+
+  # Multi-language capabilities
+  - description: French conversation
+    vars:
+      message: 'Bonjour! Comment allez-vous? Pouvez-vous me parler de Paris?'
+    assert:
+      - type: llm-rubric
+        value: Responds appropriately in French and provides information about Paris
+      - type: contains
+        value: Paris
+
+  # Technical explanations
+  - description: Technical concept explanation
+    vars:
+      message: 'Explain how machine learning works in simple terms that a 10-year-old could understand'
+    assert:
+      - type: llm-rubric
+        value: Explains machine learning concepts clearly and appropriately for a young audience
+      - type: similar
+        value: 'Machine learning is like teaching a computer to recognize patterns and make predictions by showing it lots of examples'
+        threshold: 0.5
+
+  # Code generation
+  - description: Code writing task
+    vars:
+      message: 'Write a Python function that takes a list of numbers and returns the average'
+    assert:
+      - type: contains
+        value: 'def'
+      - type: contains
+        value: 'sum'
+      - type: llm-rubric
+        value: Provides correct Python code for calculating an average
+
+  # Ethical reasoning
+  - description: Ethical discussion
+    vars:
+      message: 'What are the ethical considerations when developing AI systems?'
+    assert:
+      - type: llm-rubric
+        value: Discusses important ethical considerations like bias, privacy, transparency, and societal impact
+      - type: similar
+        value: 'Key ethical considerations include preventing bias, protecting privacy, ensuring transparency, and considering societal impact'
+        threshold: 0.6

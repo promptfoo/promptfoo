@@ -17,14 +17,14 @@ The end result will be a custom benchmark that looks similar to this:
 ## Requirements
 
 - OpenRouter API key for DBRX and Mixtral.
-- OpenAI API key for GPT-3.5.
-- Node 16+
+- OpenAI API key for gpt-4.1-mini
+- Node 18+
 
 ## Step 1: Initial Setup
 
 Create a new directory for your comparison project and initialize it with `promptfoo init`.
 
-```bash
+```sh
 npx promptfoo@latest init dbrx-benchmark
 ```
 
@@ -36,7 +36,7 @@ After entering the `dbrx-benchmark` directory, edit the `promptfooconfig.yaml` t
 
 OpenRouter uses the OpenAI format, so we'll just override the base URL of the OpenAI provider. Here's an example configuration with DBRX, Mixtral, and GPT-3.5:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: openai:chat:databricks/dbrx-instruct
     config:
@@ -48,12 +48,12 @@ providers:
       apiBaseUrl: https://openrouter.ai/api/v1
       apiKeyEnvar: OPENROUTER_API_KEY
       temperature: 0
-  - id: openai:gpt-3.5-turbo-0613
+  - id: openai:gpt-4.1-mini
 ```
 
 Set your API keys as environment variables:
 
-```bash
+```sh
 export OPENROUTER_API_KEY=your_openrouter_api_key
 export OPENAI_API_KEY=your_openai_api_key
 ```
@@ -78,7 +78,7 @@ providers:
       // highlight-start
       temperature: 0
       // highlight-end
-  - id: openai:gpt-3.5-turbo-0613
+  - id: openai:gpt-4.1-mini
     // highlight-start
     config:
       temperature: 0
@@ -95,12 +95,12 @@ If you're locally hosting, you can use [ollama](/docs/providers/ollama/), [Local
 
 Set up the prompts that you want to run for each model. In this case, we'll just use a simple prompt, because we want to compare model performance.
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 prompts:
   - 'Think deeply and answer concisely: {{query}}'
 ```
 
-If desired, you can test multiple prompts (just add more to the list), test [different prompts for each model](/docs/configuration/parameters#different-prompts-per-model), send [custom JSON](/docs/providers/openai/#formatting-chat-messages), or [call your own application logic](/docs/configuration/parameters#prompt-functions).
+If desired, you can test multiple prompts (just add more to the list), test [different prompts for each model](/docs/configuration/prompts#model-specific-prompts), send [custom JSON](/docs/providers/openai/#formatting-chat-messages), or [call your own application logic](/docs/configuration/prompts#dynamic-prompts-functions).
 
 ## Step 4: Add test cases
 
@@ -179,7 +179,7 @@ Many types of assertions are supported, both deterministic and LLM-graded. See [
 
 With everything configured, run the evaluation using the `promptfoo` CLI:
 
-```bash
+```
 npx promptfoo@latest eval
 ```
 
@@ -187,7 +187,7 @@ This command will execute each test case against each configured model and recor
 
 To visualize the results, use the `promptfoo` viewer:
 
-```bash
+```sh
 npx promptfoo@latest view
 ```
 
@@ -201,7 +201,7 @@ Clicking into a specific output will show details on the assertions:
 
 You can also output the results to a file in various formats, such as JSON, YAML, or CSV:
 
-```bash
+```
 npx promptfoo@latest eval -o results.csv
 ```
 

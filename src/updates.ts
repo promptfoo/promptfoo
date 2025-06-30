@@ -1,11 +1,9 @@
 import chalk from 'chalk';
 import semverGt from 'semver/functions/gt';
-
-import logger from './logger';
+import { TERMINAL_MAX_WIDTH, VERSION } from './constants';
+import { getEnvBool } from './envars';
 import { fetchWithTimeout } from './fetch';
-import packageJson from '../package.json';
-
-const VERSION = packageJson.version;
+import logger from './logger';
 
 export async function getLatestVersion() {
   const response = await fetchWithTimeout(`https://api.promptfoo.dev/api/latestVersion`, {}, 1000);
@@ -17,7 +15,7 @@ export async function getLatestVersion() {
 }
 
 export async function checkForUpdates(): Promise<boolean> {
-  if (process.env.PROMPTFOO_DISABLE_UPDATE) {
+  if (getEnvBool('PROMPTFOO_DISABLE_UPDATE')) {
     return false;
   }
 
@@ -28,7 +26,7 @@ export async function checkForUpdates(): Promise<boolean> {
     return false;
   }
   if (semverGt(latestVersion, VERSION)) {
-    const border = '='.repeat(process.stdout.columns - 10);
+    const border = '='.repeat(TERMINAL_MAX_WIDTH);
     logger.info(
       `\n${border}
 ${chalk.yellow('⚠️')} The current version of promptfoo ${chalk.yellow(
