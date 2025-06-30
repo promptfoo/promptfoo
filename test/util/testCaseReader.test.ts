@@ -61,6 +61,10 @@ jest.mock('../../src/integrations/huggingfaceDatasets', () => ({
   fetchHuggingFaceDataset: jest.fn(),
 }));
 
+jest.mock('../../src/esm', () => ({
+  importModule: jest.fn(),
+}));
+
 describe('readStandaloneTestsFile', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -212,14 +216,11 @@ describe('readStandaloneTestsFile', () => {
   });
 
   it('should read JS file and return test cases', async () => {
-    jest.mock(
-      '../../test.js',
-      () => [
-        { vars: { var1: 'value1', var2: 'value2' } },
-        { vars: { var1: 'value3', var2: 'value4' } },
-      ],
-      { virtual: true },
-    );
+    const mockImportModule = jest.requireMock('../../src/esm').importModule;
+    mockImportModule.mockResolvedValue([
+      { vars: { var1: 'value1', var2: 'value2' } },
+      { vars: { var1: 'value3', var2: 'value4' } },
+    ]);
 
     const result = await readStandaloneTestsFile('test.js');
     expect(result).toEqual([
@@ -234,7 +235,8 @@ describe('readStandaloneTestsFile', () => {
 
   it('should pass config to JS test generator function', async () => {
     const mockFn = jest.fn().mockResolvedValue([{ vars: { a: 1 } }]);
-    jest.mock('../../test_gen.js', () => mockFn, { virtual: true });
+    const mockImportModule = jest.requireMock('../../src/esm').importModule;
+    mockImportModule.mockResolvedValue(mockFn);
 
     const config = { foo: 'bar' };
     const result = await readStandaloneTestsFile('test_gen.js', '', config);
@@ -246,7 +248,8 @@ describe('readStandaloneTestsFile', () => {
   it('should load file references in config for JS generator', async () => {
     const mockResult = [{ vars: { a: 1 } }];
     const mockFn = jest.fn().mockResolvedValue(mockResult);
-    jest.mock('../../test_config_gen.js', () => mockFn, { virtual: true });
+    const mockImportModule = jest.requireMock('../../src/esm').importModule;
+    mockImportModule.mockResolvedValue(mockFn);
 
     jest.mocked(fs.existsSync).mockReturnValueOnce(true);
     jest.mocked(fs.readFileSync).mockReturnValueOnce('{"foo": "bar"}');

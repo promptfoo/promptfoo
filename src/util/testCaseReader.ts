@@ -2,6 +2,7 @@ import $RefParser from '@apidevtools/json-schema-ref-parser';
 import { parse as parseCsv } from 'csv-parse/sync';
 import dedent from 'dedent';
 import * as fs from 'fs';
+import { readFile } from 'fs/promises';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import * as path from 'path';
@@ -353,8 +354,8 @@ export async function loadTestsFromGlob(
         .map((line) => JSON.parse(line));
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.json')) {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      testCases = await _deref(require(testFile), testFile);
+      const jsonContent = JSON.parse(await readFile(testFile, 'utf8'));
+      testCases = await _deref(jsonContent, testFile);
     } else {
       throw new Error(`Unsupported file type for test file: ${testFile}`);
     }

@@ -1,7 +1,12 @@
+import { fileURLToPath } from 'node:url';
+import * as path from 'path';
 import packageJson from '../package.json';
 import { getEnvInt, getEnvString } from './envars';
 
 export const VERSION = packageJson.version;
+
+// Source directory path - where the compiled JS files are located
+export const SRC_DIR = path.dirname(fileURLToPath(import.meta.url));
 
 export const DEFAULT_QUERY_LIMIT = 100;
 

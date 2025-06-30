@@ -419,7 +419,7 @@ describe('readPrompts', () => {
 
     await expect(readPrompts(promptPath)).resolves.toEqual([
       {
-        raw: "()=>console.log('dummy prompt')",
+        raw: expect.stringMatching(/\(\)\s*=>\s*console\.log\('dummy prompt'\)/),
         label: 'prompt.js',
         function: expect.any(Function),
         config: {},
