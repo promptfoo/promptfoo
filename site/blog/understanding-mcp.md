@@ -144,6 +144,7 @@ MCP defines three key message types that enable these integrations:
 But the real power of MCP comes from how these pieces work together. For example, when you're adding user authentication:
 
 1. The AI assistant can:
+
    - Create a new branch in GitHub
    - Add auth tables in Supabase
    - Generate API endpoints

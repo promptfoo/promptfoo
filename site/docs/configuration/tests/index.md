@@ -253,17 +253,20 @@ promptfoo eval --output results.html     # HTML format
 ## Best Practices
 
 1. **Version Control**
+
    - Keep test files in version control
    - Use meaningful file names
    - Document test purposes
 
 2. **Test Organization**
+
    - Start with small test sets
    - Group related tests
    - Use clear descriptions
    - Include edge cases
 
 3. **Performance**
+
    - Enable caching
    - Split large test suites
    - Use appropriate formats
@@ -278,6 +281,7 @@ promptfoo eval --output results.html     # HTML format
 Common issues and solutions:
 
 1. **File Loading Issues**
+
    - Check relative paths
    - Verify file permissions
    - Validate syntax

@@ -285,10 +285,12 @@ This attack aims to push out the system's risk warnings from the context window,
 #### Mitigations
 
 1. Implement strict input length limits
+
    - Set a maximum token count for user inputs
    - Truncate or reject inputs exceeding the limit
 
 1. Use dynamic context window management techniques that prioritize instructions and critical context
+
    - Prioritize recent and relevant information
    - Implement sliding window approaches for long conversations
 

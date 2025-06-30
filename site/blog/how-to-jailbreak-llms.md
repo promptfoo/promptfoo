@@ -658,6 +658,7 @@ The first line of defense is careful preprocessing of all user inputs before the
 
 - **Character Normalization**
   All text input needs to be standardized through:
+
   - Converting all Unicode to a canonical form
   - Removing or escaping zero-width and special characters that could be used for hiding content
   - Standardizing whitespace and control characters
