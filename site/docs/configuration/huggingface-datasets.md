@@ -1,0 +1,148 @@
+---
+title: Loading Test Cases from HuggingFace Datasets
+description: Import test cases directly from HuggingFace datasets using the huggingface://datasets/ prefix with query parameters for splits and configurations
+sidebar_label: HuggingFace Datasets
+keywords: [huggingface datasets, test cases, dataset integration, promptfoo datasets, ml evaluation]
+---
+
+# Loading Test Cases from HuggingFace Datasets
+
+Promptfoo can import test cases directly from [HuggingFace datasets](https://huggingface.co/docs/datasets) using the `huggingface://datasets/` prefix.
+
+## Basic usage
+
+To load an entire dataset:
+
+```yaml
+tests: huggingface://datasets/fka/awesome-chatgpt-prompts
+```
+
+Run the evaluation:
+
+```bash
+npx promptfoo eval
+```
+
+Each dataset row becomes a test case with all dataset fields available as variables.
+
+## Dataset splits
+
+Load specific portions of datasets using query parameters:
+
+```yaml
+# Load from training split
+tests: huggingface://datasets/fka/awesome-chatgpt-prompts?split=train
+
+# Load from validation split with custom configuration
+tests: huggingface://datasets/fka/awesome-chatgpt-prompts?split=validation&config=custom
+```
+
+## Use dataset fields in prompts
+
+Dataset fields automatically become prompt variables. Here's how:
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - "Question: {{question}}\nAnswer:"
+
+tests: huggingface://datasets/rajpurkar/squad
+```
+
+## Query parameters
+
+| Parameter | Description                                   | Default     |
+| --------- | --------------------------------------------- | ----------- |
+| `split`   | Dataset split to load (train/test/validation) | `test`      |
+| `config`  | Dataset configuration name                    | `default`   |
+| `limit`   | Maximum number of test cases to load          | `unlimited` |
+
+To limit the number of test cases:
+
+```yaml
+tests: huggingface://datasets/fka/awesome-chatgpt-prompts?split=train&limit=50
+```
+
+## Authentication
+
+For private datasets or increased rate limits, authenticate using your HuggingFace token. Set one of these environment variables:
+
+```bash
+# Any of these environment variables will work:
+export HF_TOKEN=your_token_here
+export HF_API_TOKEN=your_token_here
+export HUGGING_FACE_HUB_TOKEN=your_token_here
+```
+
+## Implementation details
+
+- Each dataset row becomes a test case
+- All dataset fields are available as prompt variables
+- Large datasets are automatically paginated (100 rows per request)
+- Variable expansion is disabled to preserve original data
+
+## Example configurations
+
+### Basic chatbot evaluation
+
+```yaml title="promptfooconfig.yaml"
+description: Testing with HuggingFace dataset
+
+prompts:
+  - 'Act as {{act}}. {{prompt}}'
+
+providers:
+  - openai:gpt-4.1-mini
+
+tests: huggingface://datasets/fka/awesome-chatgpt-prompts?split=train
+```
+
+### Question answering with limits
+
+```yaml title="promptfooconfig.yaml"
+description: SQUAD evaluation with authentication
+
+prompts:
+  - 'Question: {{question}}\nContext: {{context}}\nAnswer:'
+
+providers:
+  - openai:gpt-4.1-mini
+
+tests: huggingface://datasets/rajpurkar/squad?split=validation&limit=100
+
+env:
+  HF_TOKEN: your_token_here
+```
+
+## Example projects
+
+| Project                                                                                                    | Description                            | Dataset     |
+| ---------------------------------------------------------------------------------------------------------- | -------------------------------------- | ----------- |
+| [Basic Setup](https://github.com/promptfoo/promptfoo/tree/main/examples/huggingface-dataset)               | Simple evaluation setup                | BeaverTails |
+| [MMLU Comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-gpt-4.1-vs-gpt-4o-mmlu) | Model comparison with query parameters | MMLU        |
+| [Red Team Evaluation](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-beavertails)       | Safety testing                         | BeaverTails |
+| [Model Benchmarking](https://github.com/promptfoo/promptfoo/tree/main/examples/deepseek-r1-vs-openai-o1)   | Advanced model comparison              | MMLU        |
+
+## Troubleshooting
+
+### Authentication errors
+
+Ensure your HuggingFace token is set correctly: `export HF_TOKEN=your_token`
+
+### Dataset not found
+
+Verify the dataset path format: `owner/repo` (e.g., `rajpurkar/squad`)
+
+### Empty results
+
+Check that the specified split exists for the dataset. Try `split=train` if `split=test` returns no results.
+
+### Performance issues
+
+Add the `limit` parameter to reduce the number of rows loaded: `&limit=100`
+
+## See Also
+
+- [Test Case Configuration](/docs/configuration/test-cases) - Complete guide to configuring test cases
+- [HuggingFace Provider](/docs/providers/huggingface) - Using HuggingFace models for inference
+- [CSV Test Cases](/docs/configuration/test-cases#csv-format) - Loading test cases from CSV files
+- [Red Team Configuration](/docs/red-team/configuration) - Using datasets in red team evaluations
