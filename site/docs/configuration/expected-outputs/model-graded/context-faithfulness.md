@@ -76,6 +76,22 @@ tests:
 
 The assertion will pass if the AI's response about France's capital is faithful to the provided context and doesn't include unsupported information.
 
+### Troubleshooting
+
+**Error: "contextTransform must return a string"**
+Your expression returned `undefined` or `null`. Add a fallback:
+
+```yaml
+contextTransform: 'output.context || "No context found"'
+```
+
+**Error: "Context is required for context-based assertions"**
+Your contextTransform returned an empty string. Check your provider response structure or add debugging:
+
+```yaml
+contextTransform: 'JSON.stringify(output, null, 2)' # Temporary: see full response
+```
+
 ### Overriding the Grader
 
 Like other model-graded assertions, you can override the default grader:

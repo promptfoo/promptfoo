@@ -62,4 +62,4 @@ The context relevance checker:
 
 # Further reading
 
-See [model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more options.
+See [model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more options and the [RAG Evaluation Guide](/docs/guides/evaluate-rag) for complete examples.

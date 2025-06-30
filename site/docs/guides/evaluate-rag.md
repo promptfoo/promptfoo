@@ -387,3 +387,18 @@ assert:
   - type: context-relevance
     contextTransform: 'output.sources.filter(s => s.relevance > 0.7).map(s => s.text).join("\n\n")'
 ```
+
+#### Common patterns
+
+```yaml
+# Extract from array of objects
+contextTransform: 'output.documents.map(d => d.content).join("\n")'
+
+# Handle missing data with fallback
+contextTransform: 'output.context || output.retrieved_content || "No context"'
+
+# Extract from nested metadata (e.g., AWS Bedrock Knowledge Base)
+contextTransform: 'output.citations?.[0]?.content?.text || ""'
+```
+
+For more examples, see the [AWS Bedrock Knowledge Base documentation](../providers/aws-bedrock.md#context-evaluation-with-contexttransform) and [context assertion reference](../configuration/expected-outputs/model-graded/context-faithfulness.md).
