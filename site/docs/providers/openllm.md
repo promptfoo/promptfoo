@@ -9,7 +9,6 @@ To use [OpenLLM](https://github.com/bentoml/OpenLLM) with promptfoo, we take adv
 1. Start the server using the `openllm start` command.
 
 2. Set environment variables:
-
    - Set `OPENAI_BASE_URL` to `http://localhost:8001/v1`
    - Set `OPENAI_API_KEY` to a dummy value `foo`.
 

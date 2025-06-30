@@ -9,7 +9,6 @@ sidebar_label: WatsonX
 ## Supported Models
 
 - **Granite Series**
-
   - `granite-20b-multilingual`
   - `granite-34b-code-instruct`
   - `granite-20b-code-instruct`
@@ -19,7 +18,6 @@ sidebar_label: WatsonX
   - `granite-7b-lab`
 
 - **Llama Series**
-
   - `llama-3-2-90b-vision-instruct`
   - `llama-3-2-11b-vision-instruct`
   - `llama-3-2-3b-instruct`

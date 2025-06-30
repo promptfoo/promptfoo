@@ -15,7 +15,6 @@ This method can be used for prompt injections, exfiltration, and other potential
 ## How it works
 
 1. The plugin generates prompts that contain two parts:
-
    - A visible, innocent-looking text
    - A hidden instruction using Unicode tag characters
 

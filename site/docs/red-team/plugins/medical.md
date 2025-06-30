@@ -1,12 +1,10 @@
 ---
 sidebar_label: Medical Plugins
-title: Medical Red-Teaming Plugins - AI Healthcare Safety Testing
+title: Medical Red-Teaming Plugins - AI Security for Healthcare
 description: Comprehensive guide to medical red-teaming plugins for testing AI systems in healthcare contexts. Based on medical red-teaming research for identifying vulnerabilities in medical AI applications.
 ---
 
 # Medical Red-Teaming Plugins
-
-## Overview
 
 The Medical Red-Teaming Plugins are a comprehensive suite of tests designed specifically for AI systems operating in healthcare contexts. These plugins are based on extensive medical red-teaming research conducted with 46 healthcare professionals and ML experts, who identified vulnerabilities that could be particularly dangerous when AI systems provide medical information or assistance.
 

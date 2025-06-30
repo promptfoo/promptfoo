@@ -1,6 +1,18 @@
 ---
-sidebar_position: 5
-sidebar_label: Overview
+sidebar_position: 22
+sidebar_label: Assertions & metrics
+title: Assertions and Metrics - LLM Output Validation
+description: Configure assertions and metrics to validate LLM outputs. Learn deterministic tests, model-graded evaluation, custom scoring, and performance metrics.
+keywords:
+  [
+    LLM assertions,
+    evaluation metrics,
+    output validation,
+    model grading,
+    deterministic testing,
+    performance metrics,
+    accuracy measurement,
+  ]
 ---
 
 # Assertions & metrics

@@ -1,5 +1,5 @@
 ---
-title: ToxicChat Plugin
+title: ToxicChat
 description: Test model behavior against toxic and jailbreaking prompts using the ToxicChat dataset
 ---
 

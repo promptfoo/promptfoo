@@ -132,13 +132,11 @@ After the evaluation runs, you'll see:
 Common issues and solutions:
 
 1. **Cache not working:**
-
    - Verify the cache key matches your configuration
    - Check that the cache path exists
    - Ensure file permissions are correct
 
 2. **API key errors:**
-
    - Confirm environment variables are set in CircleCI
    - Check for typos in variable names
    - Verify API key permissions

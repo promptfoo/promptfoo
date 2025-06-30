@@ -16,7 +16,6 @@ This example demonstrates how to use Promptfoo with LM Studio for prompt evaluat
 ## Setup
 
 1. **Start LM Studio Server**:
-
    - Open LM Studio and load the `bartowski/gemma-2-9b-it-GGUF` model.
    - Start a local server to host the model (usually at `http://localhost:1234`).
 

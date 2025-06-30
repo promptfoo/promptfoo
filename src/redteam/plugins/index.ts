@@ -46,7 +46,7 @@ import { RbacPlugin } from './rbac';
 import { ShellInjectionPlugin } from './shellInjection';
 import { SqlInjectionPlugin } from './sqlInjection';
 import { ToolDiscoveryPlugin } from './toolDiscovery';
-import { ToxicChatPlugin } from './toxicchat';
+import { ToxicChatPlugin } from './toxicChat';
 import { UnsafeBenchPlugin } from './unsafebench';
 import { XSTestPlugin } from './xstest';
 
@@ -286,6 +286,11 @@ const remotePlugins: PluginFactory[] = [
   'medical:incorrect-knowledge',
   'medical:prioritization-error',
   'medical:sycophancy',
+  'financial:calculation-error',
+  'financial:compliance-violation',
+  'financial:data-leakage',
+  'financial:hallucination',
+  'financial:sycophancy',
   'off-topic',
   'rag-document-exfiltration',
   'rag-poisoning',

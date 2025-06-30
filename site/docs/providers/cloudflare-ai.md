@@ -4,53 +4,181 @@ sidebar_label: Cloudflare Workers AI
 
 # Cloudflare Workers AI
 
-This provider supports the [models](https://developers.cloudflare.com/workers-ai/models/) provided by Cloudflare Workers AI, a serverless edge embedding and inference runtime.
+This provider supports the [models](https://developers.cloudflare.com/workers-ai/models/) provided by Cloudflare Workers AI, a serverless edge inference platform that runs AI models closer to users for low-latency responses.
+
+The provider uses Cloudflare's OpenAI-compatible API endpoints, making it easy to migrate between OpenAI and Cloudflare AI or use them interchangeably.
 
 ## Required Configuration
 
-Calling the Workers AI requires the user to supply a Cloudflare account ID and API key with sufficient permissions to invoke the Workers AI REST endpoints.
+Set your Cloudflare account ID and API key as environment variables:
 
 ```sh
-export CLOUDFLARE_ACCOUNT_ID=YOUR_ACCOUNT_ID_HERE
-export CLOUDFLARE_API_KEY=YOUR_API_KEY_HERE
+export CLOUDFLARE_ACCOUNT_ID=your_account_id_here
+export CLOUDFLARE_API_KEY=your_api_key_here
 ```
 
-The Cloudflare account ID is not secret and therefore it is safe to put it in your `promptfoo` configuration file. The Cloudflare API key is secret, so while you can provide it in the config, this is **HIGHLY NOT RECOMMENDED** as it might lead to abuse. See below for an example safe configuration:
+The Cloudflare account ID is not secret and can be included in your promptfoo configuration file. The API key is secret, so use environment variables instead of hardcoding it in config files.
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 prompts:
-  - Tell me a really funny joke about {{topic}}. The joke should contain the word {{topic}}
+  - Tell me a funny joke about {{topic}}
 
 providers:
-  - id: cloudflare-ai:chat:@cf/meta/llama-3-8b-instruct
+  - id: cloudflare-ai:chat:@cf/deepseek-ai/deepseek-r1-distill-qwen-32b
     config:
-      accountId: YOUR_ACCOUNT_ID_HERE
-      # It is not recommended to keep your API key on the config file since it is a secret value.
-      # Use the CLOUDFLARE_API_KEY environment variable or set the apiKeyEnvar value
-      # in the config
-      # apiKey: YOUR_API_KEY_HERE
-      # apiKeyEnvar: SOME_ENV_HAR_CONTAINING_THE_API_KEY
+      accountId: your_account_id_here
+      # API key is loaded from CLOUDFLARE_API_KEY environment variable
 
 tests:
   - vars:
-      topic: birds
+      topic: programming
     assert:
       - type: icontains
         value: '{{topic}}'
 ```
 
-In addition to `apiKeyEnvar` allowed environment variable redirection for the `CLOUDFLARE_API_KEY` value, the `accountIdEnvar` can be used to similarly redirect to a value for the `CLOUDFLARE_ACCOUNT_ID`.
+### Alternative Environment Variable Names
 
-## Available Models and Model Parameters
+Use custom environment variable names with `apiKeyEnvar` and `accountIdEnvar`:
 
-Cloudflare is constantly adding new models to its inventory. See their [official list of models](https://developers.cloudflare.com/workers-ai/models/) for a list of supported models. Different models support different parameters, which is supported by supplying those parameters as additional keys of the config object in the `promptfoo` config file.
+```yaml
+providers:
+  - id: cloudflare-ai:chat:@cf/qwen/qwen2.5-coder-32b-instruct
+    config:
+      accountId: your_account_id_here
+      apiKeyEnvar: CUSTOM_CLOUDFLARE_KEY
+      accountIdEnvar: CUSTOM_CLOUDFLARE_ACCOUNT
+```
 
-For an example of how advanced embedding configuration should be supplied, see `examples/cloudflare-ai/embedding_configuration.yaml`
+## OpenAI Compatibility
 
-For an example of how advanced completion/chat configuration should be supplied, see `examples/cloudflare-ai/chat_advanced_configuration.yaml`
+This provider leverages Cloudflare's OpenAI-compatible endpoints:
 
-Different models support different parameters. While this provider strives to be relatively flexible, it is possible that not all possible parameters have been added. If you need support for a parameter that is not yet supported, please open up a PR to add support.
+- **Chat completions**: `https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1/chat/completions`
+- **Text completions**: `https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1/completions`
+- **Embeddings**: `https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1/embeddings`
 
-## Future Improvements
+All standard OpenAI parameters work with Cloudflare AI models: `temperature`, `max_tokens`, `top_p`, `frequency_penalty`, and `presence_penalty`.
 
-- [ ] Allow for the pass through of all generic configuration parameters for Cloudflare REST API
+## Provider Types
+
+The Cloudflare AI provider supports three different provider types:
+
+### Chat Completion
+
+For conversational AI and instruction-following models:
+
+```yaml
+providers:
+  - cloudflare-ai:chat:@cf/deepseek-ai/deepseek-r1-distill-qwen-32b
+  - cloudflare-ai:chat:@cf/google/gemma-3-12b-it
+  - cloudflare-ai:chat:@hf/nousresearch/hermes-2-pro-mistral-7b
+```
+
+### Text Completion
+
+For completion-style tasks:
+
+```yaml
+providers:
+  - cloudflare-ai:completion:@cf/qwen/qwen2.5-coder-32b-instruct
+  - cloudflare-ai:completion:@cf/microsoft/phi-2
+```
+
+### Embeddings
+
+For generating text embeddings:
+
+```yaml
+providers:
+  - cloudflare-ai:embedding:@cf/baai/bge-large-en-v1.5
+  - cloudflare-ai:embedding:@cf/baai/bge-base-en-v1.5
+```
+
+## Current Model Examples
+
+Here are some of the latest models available on Cloudflare Workers AI:
+
+### State-of-the-Art Models
+
+**Reasoning & Problem Solving:**
+
+- `@cf/deepseek-ai/deepseek-r1-distill-qwen-32b` - Advanced reasoning model distilled from DeepSeek R1
+- `@cf/qwen/qwq-32b` - Medium-sized reasoning model competitive with o1-mini
+
+**Code Generation:**
+
+- `@cf/qwen/qwen2.5-coder-32b-instruct` - Current state-of-the-art open-source code model
+- `@hf/thebloke/deepseek-coder-6.7b-instruct-awq` - Efficient coding model
+
+**General Purpose:**
+
+- `@cf/google/gemma-3-12b-it` - Latest Gemma model with 128K context and multilingual support
+- `@hf/nousresearch/hermes-2-pro-mistral-7b` - Function calling and JSON mode support
+
+:::tip
+
+Cloudflare is constantly adding new models. See their [official model catalog](https://developers.cloudflare.com/workers-ai/models/) for the complete list of available models.
+
+:::
+
+## Configuration Examples
+
+### Basic Chat Configuration
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: cloudflare-ai:chat:@cf/deepseek-ai/deepseek-r1-distill-qwen-32b
+    config:
+      accountId: your_account_id_here
+      temperature: 0.7
+      max_tokens: 1000
+```
+
+### Advanced Configuration with Multiple Models
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: cloudflare-ai:chat:@cf/google/gemma-3-12b-it
+    config:
+      accountId: your_account_id_here
+      temperature: 0.8
+      max_tokens: 500
+      top_p: 0.9
+      frequency_penalty: 0.1
+      presence_penalty: 0.1
+
+  - id: cloudflare-ai:completion:@cf/qwen/qwen2.5-coder-32b-instruct
+    config:
+      accountId: your_account_id_here
+      temperature: 0.2
+      max_tokens: 2000
+```
+
+### Embedding Configuration
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: cloudflare-ai:embedding:@cf/baai/bge-large-en-v1.5
+    config:
+      accountId: your_account_id_here
+```
+
+## Custom API Base URL
+
+Override the default API base URL for custom deployments or specific regions:
+
+```yaml
+providers:
+  - id: cloudflare-ai:chat:@cf/deepseek-ai/deepseek-r1-distill-qwen-32b
+    config:
+      accountId: your_account_id_here
+      apiBaseUrl: https://api.cloudflare.com/client/v4/accounts/your_account_id/ai/v1
+```
+
+## See Also
+
+- [Cloudflare Workers AI Models](https://developers.cloudflare.com/workers-ai/models/) - Complete model catalog
+- [Cloudflare Workers AI OpenAI Compatibility](https://developers.cloudflare.com/workers-ai/configuration/open-ai-compatibility/) - OpenAI-compatible endpoints
+- [OpenAI Provider](./openai.md) - For comparison with OpenAI models
+- [Getting Started with Promptfoo](../getting-started.md) - Basic setup guide

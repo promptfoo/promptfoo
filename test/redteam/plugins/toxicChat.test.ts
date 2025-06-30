@@ -4,7 +4,7 @@ import {
   ToxicChatGrader,
   fetchDataset,
   PLUGIN_ID,
-} from '../../../src/redteam/plugins/toxicchat';
+} from '../../../src/redteam/plugins/toxicChat';
 import type { TestCase } from '../../../src/types';
 
 jest.mock('../../../src/integrations/huggingfaceDatasets');

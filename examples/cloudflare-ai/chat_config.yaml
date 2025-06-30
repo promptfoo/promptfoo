@@ -3,8 +3,8 @@ prompts:
   - What is the capital of the {{country}}?
 
 providers:
-  - cloudflare-ai:completion:@cf/meta/llama-3-8b-instruct
-  - cloudflare-ai:chat:@cf/meta/llama-3-8b-instruct
+  - cloudflare-ai:completion:@cf/qwen/qwen2.5-coder-32b-instruct
+  - cloudflare-ai:chat:@cf/deepseek-ai/deepseek-r1-distill-qwen-32b
 
 tests:
   - vars:

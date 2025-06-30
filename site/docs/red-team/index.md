@@ -204,7 +204,6 @@ Before running a red team, define a systematic process that encompasses:
 1. **Vulnerability focus**: Identify which types of vulnerabilities are most critical for your application. This will depend on your use case (e.g., [RAG](/docs/red-team/rag/), [agents](/docs/red-team/agents/), chatbots) and industry.
 
 2. **Timing in development cycle**: Decide where in your process red teaming will occur. Checkpoints to consider include:
-
    - **Model testing**, which can happen even before you start building the application, and is especially important when fine tuning.
    - **Pre-deployment testing**, once the model has been hooked up to the application, tools, databases, etc.
    - **Continuous integration/deployment (CI/CD) checks** to catch regressions and anomalies.
@@ -219,17 +218,14 @@ Before running a red team, define a systematic process that encompasses:
 Once you've defined your objectives, your process will probably look like this:
 
 1. **Generate diverse adversarial inputs**:
-
    - Create a wide range of inputs targeting your identified vulnerability types.
    - Automated generation tools are a huge help, especially to cover a breadth of use cases. But human ingenuity is still useful, especially for known problem areas.
 
 2. **Set up evaluation framework**:
-
    - Choose or develop a tool for systematic LLM testing.
    - Integrate with your development pipeline if applicable.
 
 3. **Execute tests**:
-
    - Run your adversarial inputs through your LLM application.
    - Ensure you're testing in an environment that closely mimics production. It's best to test end-to-end - so you can stress-test full tool access and/or guardrails.
 
@@ -239,21 +235,17 @@ Once you've defined your objectives, your process will probably look like this:
 ### Step 3: Analysis and remediation
 
 1. **Review flagged outputs**:
-
    - Set a regular cadence for reviewing test results. This could involve both the security and development teams in the review process.
 
 2. **Prioritize vulnerabilities**:
-
    - Not all issues are created equal. There's a fuzzy line between AI security and AI safety issues, and as alluded to above, some fall on the model side versus the application side.
    - Most teams we talk to find it most productive to focus on technical security vulnerabilities, as the foundation model problems are improving over time as AI research advances and tend to have smaller impact.
 
 3. **Develop mitigation strategies**:
-
    - For each priority vulnerability, brainstorm potential fixes.
    - This might include prompt engineering, additional safeguards, or architectural changes.
 
 4. **Implement and verify fixes**:
-
    - Apply chosen mitigations and re-run the evaluation suite to confirm the effectiveness of your solutions.
 
 5. **Continuous improvement**:
