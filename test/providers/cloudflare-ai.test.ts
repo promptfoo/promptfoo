@@ -328,6 +328,145 @@ describe('CloudflareAi Provider', () => {
       expect(requestBody.apiKeyEnvar).toBeUndefined();
       expect(requestBody.apiBaseUrl).toBeUndefined();
     });
+
+    it('Should return proper provider identification methods', () => {
+      const provider = new CloudflareAiChatCompletionProvider(testModelName, {
+        config: cloudflareMinimumConfig,
+      });
+
+      expect(provider.id()).toBe(`cloudflare-ai:chat:${testModelName}`);
+      expect(provider.toString()).toBe(`[Cloudflare AI chat Provider ${testModelName}]`);
+      expect(provider.getApiKey()).toBe('testApiKey');
+    });
+
+    it('Should serialize to JSON properly', () => {
+      const provider = new CloudflareAiChatCompletionProvider(testModelName, {
+        config: cloudflareMinimumConfig,
+      });
+
+      const jsonOutput = provider.toJSON();
+      expect(jsonOutput).toEqual({
+        provider: 'cloudflare-ai',
+        model: testModelName,
+        modelType: 'chat',
+        config: expect.objectContaining({
+          apiKeyEnvar: 'CLOUDFLARE_API_KEY',
+          apiBaseUrl: expect.stringContaining('cloudflare.com'),
+        }),
+      });
+      // Verify API key is not included in JSON output for security
+      expect(jsonOutput.config.apiKey).toBeUndefined();
+    });
+
+    it('Should use custom environment variable names', () => {
+      process.env.CUSTOM_CF_ACCOUNT = 'custom-account-id';
+      process.env.CUSTOM_CF_KEY = 'custom-api-key';
+
+      const provider = new CloudflareAiChatCompletionProvider(testModelName, {
+        config: {
+          accountIdEnvar: 'CUSTOM_CF_ACCOUNT',
+          apiKeyEnvar: 'CUSTOM_CF_KEY',
+        },
+      });
+
+      expect(provider.getApiKey()).toBe('custom-api-key');
+
+      // Clean up
+      delete process.env.CUSTOM_CF_ACCOUNT;
+      delete process.env.CUSTOM_CF_KEY;
+    });
+
+    it('requires API key', () => {
+      expect(
+        () =>
+          new CloudflareAiChatCompletionProvider(testModelName, {
+            config: { accountId: 'test-account' },
+          }),
+      ).toThrow('Cloudflare API token required');
+    });
+
+    it('uses accountIdEnvar when accountId not provided', () => {
+      process.env.CUSTOM_ACCOUNT_VAR = 'env-account-from-custom-var';
+      process.env.CLOUDFLARE_API_KEY = 'default-api-key';
+
+      const provider = new CloudflareAiChatCompletionProvider(testModelName, {
+        config: {
+          accountIdEnvar: 'CUSTOM_ACCOUNT_VAR',
+        },
+      });
+
+      expect(provider.id()).toBe(`cloudflare-ai:chat:${testModelName}`);
+
+      // Clean up
+      delete process.env.CUSTOM_ACCOUNT_VAR;
+      delete process.env.CLOUDFLARE_API_KEY;
+    });
+
+    it('throws error when account ID environment variable does not exist', () => {
+      expect(
+        () =>
+          new CloudflareAiChatCompletionProvider(testModelName, {
+            config: {
+              accountIdEnvar: 'NONEXISTENT_ACCOUNT_VAR',
+              apiKey: 'test-key',
+            },
+          }),
+      ).toThrow('Cloudflare account ID required');
+    });
+
+    it('throws error when API key environment variable does not exist', () => {
+      expect(
+        () =>
+          new CloudflareAiChatCompletionProvider(testModelName, {
+            config: {
+              accountId: 'test-account',
+              apiKeyEnvar: 'NONEXISTENT_KEY_VAR',
+            },
+          }),
+      ).toThrow('Cloudflare API token required');
+    });
+
+    it('prioritizes explicit config over environment variables', () => {
+      process.env.CLOUDFLARE_ACCOUNT_ID = 'env-account';
+      process.env.CLOUDFLARE_API_KEY = 'env-key';
+
+      const provider = new CloudflareAiChatCompletionProvider(testModelName, {
+        config: {
+          accountId: 'explicit-account',
+          apiKey: 'explicit-key',
+        },
+      });
+
+      expect(provider.getApiKey()).toBe('explicit-key');
+
+      // Clean up
+      delete process.env.CLOUDFLARE_ACCOUNT_ID;
+      delete process.env.CLOUDFLARE_API_KEY;
+    });
+
+    it('handles missing config gracefully with environment fallback', () => {
+      process.env.CLOUDFLARE_ACCOUNT_ID = 'fallback-account';
+      process.env.CLOUDFLARE_API_KEY = 'fallback-key';
+
+      const provider = new CloudflareAiChatCompletionProvider(testModelName, {});
+
+      expect(provider.getApiKey()).toBe('fallback-key');
+      expect(provider.id()).toBe(`cloudflare-ai:chat:${testModelName}`);
+
+      // Clean up
+      delete process.env.CLOUDFLARE_ACCOUNT_ID;
+      delete process.env.CLOUDFLARE_API_KEY;
+    });
+
+    it('throws error when no configuration and no environment variables', () => {
+      // Ensure environment variables are not set
+      delete process.env.CLOUDFLARE_ACCOUNT_ID;
+      delete process.env.CLOUDFLARE_API_KEY;
+
+      expect(() => new CloudflareAiChatCompletionProvider(testModelName, {})).toThrow(
+        'Cloudflare API token required',
+      );
+    });
   });
 
   describe('CloudflareAiCompletionProvider', () => {
@@ -376,6 +515,70 @@ describe('CloudflareAi Provider', () => {
         }),
       );
     });
+
+    it('Should return proper provider identification methods', () => {
+      const provider = new CloudflareAiCompletionProvider(testModelName, {
+        config: cloudflareMinimumConfig,
+      });
+
+      expect(provider.id()).toBe(`cloudflare-ai:completion:${testModelName}`);
+      expect(provider.toString()).toBe(`[Cloudflare AI completion Provider ${testModelName}]`);
+      expect(provider.getApiKey()).toBe('testApiKey');
+    });
+
+    it('Should serialize to JSON properly', () => {
+      const provider = new CloudflareAiCompletionProvider(testModelName, {
+        config: cloudflareMinimumConfig,
+      });
+
+      const jsonOutput = provider.toJSON();
+      expect(jsonOutput).toEqual({
+        provider: 'cloudflare-ai',
+        model: testModelName,
+        modelType: 'completion',
+        config: expect.objectContaining({
+          apiKeyEnvar: 'CLOUDFLARE_API_KEY',
+          apiBaseUrl: expect.stringContaining('cloudflare.com'),
+        }),
+      });
+      // Verify API key is not included in JSON output for security
+      expect(jsonOutput.config.apiKey).toBeUndefined();
+    });
+
+    it('Should handle passthrough parameters correctly', async () => {
+      const configWithPassthrough = {
+        accountId: 'test-account',
+        apiKey: 'test-key',
+        temperature: 0.5,
+        max_tokens: 500,
+        custom_completion_param: 'test_value',
+      } as CloudflareAiConfig;
+
+      const provider = new CloudflareAiCompletionProvider(testModelName, {
+        config: configWithPassthrough,
+      });
+
+      const responsePayload = {
+        choices: [{ text: 'Test completion with passthrough' }],
+        usage: { total_tokens: 30, prompt_tokens: 15, completion_tokens: 15 },
+      };
+      const mockResponse = {
+        ...defaultMockResponse,
+        text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
+        ok: true,
+      };
+
+      mockFetch.mockResolvedValue(mockResponse);
+      await provider.callApi('Test completion passthrough');
+
+      const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(requestBody.temperature).toBe(0.5);
+      expect(requestBody.max_tokens).toBe(500);
+      expect(requestBody.custom_completion_param).toBe('test_value');
+      // Verify provider-specific config is excluded
+      expect(requestBody.accountId).toBeUndefined();
+      expect(requestBody.apiKey).toBeUndefined();
+    });
   });
 
   describe('CloudflareAiEmbeddingProvider', () => {
@@ -414,6 +617,111 @@ describe('CloudflareAi Provider', () => {
         cached: undefined,
       });
     });
+
+    it('Should return proper provider identification methods', () => {
+      const provider = new CloudflareAiEmbeddingProvider(testModelName, {
+        config: cloudflareMinimumConfig,
+      });
+
+      expect(provider.id()).toBe(`cloudflare-ai:embedding:${testModelName}`);
+      expect(provider.toString()).toBe(`[Cloudflare AI embedding Provider ${testModelName}]`);
+      expect(provider.getApiKey()).toBe('testApiKey');
+    });
+
+    it('Should serialize to JSON properly', () => {
+      const provider = new CloudflareAiEmbeddingProvider(testModelName, {
+        config: cloudflareMinimumConfig,
+      });
+
+      const jsonOutput = provider.toJSON();
+      expect(jsonOutput).toEqual({
+        provider: 'cloudflare-ai',
+        model: testModelName,
+        modelType: 'embedding',
+        config: expect.objectContaining({
+          apiKeyEnvar: 'CLOUDFLARE_API_KEY',
+          apiBaseUrl: expect.stringContaining('cloudflare.com'),
+        }),
+      });
+      // Verify API key is not included in JSON output for security
+      expect(jsonOutput.config.apiKey).toBeUndefined();
+    });
+
+    it('Should handle passthrough parameters correctly', async () => {
+      const configWithPassthrough = {
+        accountId: 'test-account',
+        apiKey: 'test-key',
+        custom_embedding_param: 'embedding_value',
+        pooling: 'mean',
+      } as CloudflareAiConfig;
+
+      const provider = new CloudflareAiEmbeddingProvider(testModelName, {
+        config: configWithPassthrough,
+      });
+
+      const responsePayload = {
+        data: [{ embedding: [0.1, 0.2, 0.3] }],
+        usage: { total_tokens: 20, prompt_tokens: 20 },
+      };
+      const mockResponse = {
+        ...defaultMockResponse,
+        text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
+        ok: true,
+      };
+
+      mockFetch.mockResolvedValue(mockResponse);
+      await provider.callEmbeddingApi('Test embedding passthrough');
+
+      // Verify the basic request structure
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('embeddings'),
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer test-key',
+          }),
+        }),
+      );
+
+      const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      // Verify base embedding parameters are present
+      expect(requestBody.input).toBe('Test embedding passthrough');
+      expect(requestBody.model).toBe(testModelName);
+      // Verify provider-specific config is excluded
+      expect(requestBody.accountId).toBeUndefined();
+      expect(requestBody.apiKey).toBeUndefined();
+    });
+
+    it('Should use embeddings endpoint correctly', async () => {
+      const provider = new CloudflareAiEmbeddingProvider(testModelName, {
+        config: cloudflareMinimumConfig,
+      });
+
+      const responsePayload = {
+        data: [{ embedding: [0.1, 0.2, 0.3] }],
+        usage: { total_tokens: 15, prompt_tokens: 15 },
+      };
+      const mockResponse = {
+        ...defaultMockResponse,
+        text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
+        ok: true,
+      };
+
+      mockFetch.mockResolvedValue(mockResponse);
+      await provider.callEmbeddingApi('Test embedding endpoint');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('embeddings'),
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer testApiKey',
+          }),
+        }),
+      );
+    });
   });
 
   describe('createCloudflareAiProvider', () => {
@@ -451,6 +759,56 @@ describe('CloudflareAi Provider', () => {
           config: cloudflareMinimumConfig,
         }),
       ).toThrow('Unknown Cloudflare AI model type: unknown');
+    });
+
+    it('handles empty model name after splitting', () => {
+      expect(() => createCloudflareAiProvider('cloudflare-ai:chat:', {})).toThrow(
+        'Model name is required',
+      );
+    });
+
+    it('handles model names with multiple colons correctly', () => {
+      const provider = createCloudflareAiProvider('cloudflare-ai:chat:@cf/meta/llama-3:latest', {
+        config: cloudflareMinimumConfig,
+      });
+      expect(provider).toBeInstanceOf(CloudflareAiChatCompletionProvider);
+      expect(provider.id()).toBe('cloudflare-ai:chat:@cf/meta/llama-3:latest');
+    });
+
+    it('works with undefined options when environment variables are set', () => {
+      process.env.CLOUDFLARE_ACCOUNT_ID = 'env-account';
+      process.env.CLOUDFLARE_API_KEY = 'env-key';
+
+      const provider = createCloudflareAiProvider('cloudflare-ai:chat:test-model', undefined);
+      expect(provider).toBeInstanceOf(CloudflareAiChatCompletionProvider);
+
+      // Clean up
+      delete process.env.CLOUDFLARE_ACCOUNT_ID;
+      delete process.env.CLOUDFLARE_API_KEY;
+    });
+
+    it('works with empty options object when environment variables are set', () => {
+      process.env.CLOUDFLARE_ACCOUNT_ID = 'env-account';
+      process.env.CLOUDFLARE_API_KEY = 'env-key';
+
+      const provider = createCloudflareAiProvider('cloudflare-ai:chat:test-model', {});
+      expect(provider).toBeInstanceOf(CloudflareAiChatCompletionProvider);
+
+      // Clean up
+      delete process.env.CLOUDFLARE_ACCOUNT_ID;
+      delete process.env.CLOUDFLARE_API_KEY;
+    });
+
+    it('passes through provider options correctly', () => {
+      const customOptions = {
+        id: 'custom-provider-id',
+        env: { CLOUDFLARE_API_KEY: 'custom-key' },
+        config: cloudflareMinimumConfig,
+      };
+
+      const provider = createCloudflareAiProvider('cloudflare-ai:chat:test-model', customOptions);
+      expect(provider).toBeInstanceOf(CloudflareAiChatCompletionProvider);
+      expect(provider.id()).toBe('custom-provider-id');
     });
   });
 

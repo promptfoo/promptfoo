@@ -71,7 +71,14 @@ function getApiBaseUrl(config?: CloudflareAiConfig, env?: EnvOverrides): string 
 
 function getPassthroughConfig(config?: CloudflareAiConfig) {
   // Extract Cloudflare-specific config keys that shouldn't be passed through
-  const { accountId: _accountId, accountIdEnvar: _accountIdEnvar, apiKey: _apiKey, apiKeyEnvar: _apiKeyEnvar, apiBaseUrl: _apiBaseUrl, ...passthrough } = config || {};
+  const {
+    accountId: _accountId,
+    accountIdEnvar: _accountIdEnvar,
+    apiKey: _apiKey,
+    apiKeyEnvar: _apiKeyEnvar,
+    apiBaseUrl: _apiBaseUrl,
+    ...passthrough
+  } = config || {};
   return passthrough;
 }
 
