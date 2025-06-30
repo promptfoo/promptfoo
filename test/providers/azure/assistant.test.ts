@@ -275,8 +275,8 @@ describe('Azure Assistant Provider', () => {
 
       // Verify the callback was only stored once but called twice
       expect(mockCallback).toHaveBeenCalledTimes(2);
-      expect(mockCallback).toHaveBeenNthCalledWith(1, '{"test":"value"}');
-      expect(mockCallback).toHaveBeenNthCalledWith(2, '{"test":"value2"}');
+      expect(mockCallback).toHaveBeenNthCalledWith(1, '{"test":"value"}', undefined);
+      expect(mockCallback).toHaveBeenNthCalledWith(2, '{"test":"value2"}', undefined);
     });
 
     it('should handle errors when loading external functions', async () => {
@@ -384,8 +384,16 @@ describe('Azure Assistant Provider', () => {
       // Assert on the entire result object
       expect(result).toEqual({ output: 'Function called successfully' });
 
-      // Verify the function was called with the correct arguments
-      expect(functionCallbacks.testFunction).toHaveBeenCalledWith('{"param": "value"}');
+      // Verify the function was called with the correct arguments and context
+      expect(functionCallbacks.testFunction).toHaveBeenCalledWith(
+        '{"param": "value"}',
+        expect.objectContaining({
+          threadId: 'thread-123',
+          runId: 'run-123',
+          assistantId: 'test-deployment',
+          provider: 'azure',
+        }),
+      );
 
       // Verify the API requests were made correctly
       expect((provider as any).makeRequest).toHaveBeenCalledTimes(6);
@@ -624,7 +632,15 @@ describe('Azure Assistant Provider', () => {
 
       await provider.callApi('test prompt');
 
-      expect(functionCallbacks.testFunction).toHaveBeenCalledWith('{"param": "value"}');
+      expect(functionCallbacks.testFunction).toHaveBeenCalledWith(
+        '{"param": "value"}',
+        expect.objectContaining({
+          threadId: 'thread-123',
+          runId: 'run-123',
+          assistantId: 'test-deployment',
+          provider: 'azure',
+        }),
+      );
 
       expect((provider as any).makeRequest).toHaveBeenCalledTimes(6);
       expect((provider as any).makeRequest.mock.calls[4][0]).toContain('submit_tool_outputs');
@@ -1183,6 +1199,52 @@ describe('Azure Assistant Provider', () => {
       expect((provider as any).isRetryableError(undefined, 'Invalid request')).toBe(false);
       expect((provider as any).isRetryableError('invalid_request')).toBe(false);
       expect((provider as any).isRetryableError()).toBe(false);
+    });
+  });
+
+  describe('Function Callbacks with Context', () => {
+    it('should pass context to function callbacks', async () => {
+      const mockCallback = jest.fn().mockResolvedValue('test result');
+
+      const provider = new AzureAssistantProvider('test-deployment', {
+        config: {
+          apiKey: 'test-key',
+          apiHost: 'test.azure.com',
+          functionToolCallbacks: {
+            test_function: mockCallback,
+          },
+        },
+      });
+
+      // Mock required methods
+      jest.spyOn(provider as any, 'getHeaders').mockResolvedValue({
+        'Content-Type': 'application/json',
+        'api-key': 'test-key',
+      });
+      jest.spyOn(provider as any, 'getApiKey').mockReturnValue('test-key');
+      jest.spyOn(provider as any, 'getApiBaseUrl').mockReturnValue('https://test.azure.com');
+      jest.spyOn(provider as any, 'ensureInitialized').mockResolvedValue(undefined);
+
+      // Test the executeFunctionCallback method directly with context
+      const result = await (provider as any).executeFunctionCallback(
+        'test_function',
+        '{"param": "value"}',
+        {
+          threadId: 'thread-123',
+          runId: 'run-456',
+          assistantId: 'test-deployment',
+          provider: 'azure',
+        },
+      );
+
+      // Verify the callback was called with the correct context
+      expect(mockCallback).toHaveBeenCalledWith('{"param": "value"}', {
+        threadId: 'thread-123',
+        runId: 'run-456',
+        assistantId: 'test-deployment',
+        provider: 'azure',
+      });
+      expect(result).toBe('test result');
     });
   });
 });
