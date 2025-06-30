@@ -498,10 +498,10 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
     // Since it's inside the component, we'll capture it through the setTable calls
     render(<ResultsTable {...defaultProps} />);
 
-        // The handleRating function is created in the component
+    // The handleRating function is created in the component
     // We need to trigger it through the component's internal logic
     // For now, let's verify the behavior by checking what setTable would be called with
-    
+
     // Simulate calling handleRating for highlight toggle (isPass and score are undefined)
     const _updatedTable = {
       ...mockTable,
