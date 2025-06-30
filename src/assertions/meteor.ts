@@ -1,24 +1,7 @@
 import type { AssertionParams, GradingResult } from '../types';
+import type { DataRecord, Stemmer, WordNetStatic } from '../types/natural';
 import invariant from '../util/invariant';
-
-// Types for natural module (optional dependency)
-interface DataRecord {
-  [key: string]: any;
-}
-
-interface _Stemmer {
-  stem(token: string): string;
-}
-
-interface PorterStemmerStatic {
-  stem(token: string): string;
-}
-
-interface WordNetStatic {
-  new (): {
-    lookup(word: string, callback: (results: any[]) => void): void;
-  };
-}
+import { getNaturalModule } from '../util/naturalImport';
 
 type WordPair = [number, string];
 type MatchPair = [number, number];
@@ -82,14 +65,15 @@ function matchExactEnums(
 async function matchStemEnums(
   enumCandidateList: WordPair[],
   enumReferenceList: WordPair[],
+  stemmer?: Stemmer,
 ): Promise<[MatchPair[], WordPair[], WordPair[]]> {
-  let PorterStemmer: PorterStemmerStatic;
-  try {
-    const getModuleName = () => 'natural';
-    const natural = await import(getModuleName());
+  let PorterStemmer: Stemmer;
+  
+  if (stemmer) {
+    PorterStemmer = stemmer;
+  } else {
+    const natural = await getNaturalModule();
     PorterStemmer = natural.PorterStemmer;
-  } catch {
-    throw new Error('natural is not installed. Please install it first');
   }
   const candidateCopy = [...enumCandidateList];
   const referenceCopy = [...enumReferenceList];
@@ -111,16 +95,16 @@ async function matchStemEnums(
 async function matchSynonymEnums(
   enumCandidateList: WordPair[],
   enumReferenceList: WordPair[],
+  wordnetInstance?: InstanceType<WordNetStatic>,
 ): Promise<[MatchPair[], WordPair[], WordPair[]]> {
-  let WordNet: WordNetStatic;
-  try {
-    const getModuleName = () => 'natural';
-    const natural = await import(getModuleName());
-    WordNet = natural.WordNet;
-  } catch {
-    throw new Error('natural is not installed. Please install it first');
+  let wordnet: InstanceType<WordNetStatic>;
+  
+  if (wordnetInstance) {
+    wordnet = wordnetInstance;
+  } else {
+    const natural = await getNaturalModule();
+    wordnet = new natural.WordNet();
   }
-  const wordnet = new WordNet();
   const wordMatch: MatchPair[] = [];
   const candidateCopy = [...enumCandidateList];
   const referenceCopy = [...enumReferenceList];
