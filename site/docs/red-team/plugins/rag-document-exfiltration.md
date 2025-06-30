@@ -1,5 +1,5 @@
 ---
-sidebar_label: RAG Document Exfiltration Plugin
+sidebar_label: RAG Document Exfiltration
 ---
 
 # RAG Document Exfiltration Plugin
