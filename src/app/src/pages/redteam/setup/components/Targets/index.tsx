@@ -286,19 +286,63 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
     setTestResult(null);
     recordEvent('feature_used', { feature: 'redteam_config_target_test' });
     try {
+      const abortController = new AbortController();
+      const timeoutId = setTimeout(() => abortController.abort(), 30000);
+
       const response = await callApi('/providers/test', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(selectedTarget),
+        signal: abortController.signal,
       });
 
+      clearTimeout(timeoutId);
+
+      // Handle PF Server Errors:
       if (!response.ok) {
-        throw new Error('Network response was not ok');
+        let errorMessage = 'Network response was not ok';
+        try {
+          const errorData = (await response.json()) as { error?: string };
+          if (errorData.error) {
+            errorMessage = errorData.error;
+          }
+        } catch {
+          // ignore json parsing errors
+        }
+        throw new Error(errorMessage);
       }
 
       const data = (await response.json()) as ProviderTestResponse;
+
+      // Handle Target Server Errors:
+      if (data.providerResponse?.metadata?.http?.status !== 200) {
+        let errorMessage = 'Target Server Error: ';
+
+        if (data.providerResponse.raw) {
+          try {
+            // Attempt to parse the raw response as JSON
+            const parsedResponse = JSON.parse(data.providerResponse.raw);
+            if (parsedResponse.error) {
+              // Check for an error property on the JSON
+              errorMessage += parsedResponse.error;
+            } else {
+              // Fallback: render the raw response
+              errorMessage += data.providerResponse.raw;
+            }
+          } catch {
+            // Fallback: render the raw response
+            errorMessage += data.providerResponse.raw;
+          }
+        } else {
+          // If there's no raw response, render the metadata.statusText
+          errorMessage += data.providerResponse?.metadata?.statusText || 'Unknown error';
+        }
+
+        throw new Error(errorMessage);
+      }
+
       const result = data.testResult;
 
       if (result.error) {
@@ -321,9 +365,17 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
       }
     } catch (error) {
       console.error('Error testing target:', error);
+      let message: string;
+
+      if (error instanceof Error && error.name === 'AbortError') {
+        message = 'Request timed out after 30 seconds';
+      } else {
+        message = error instanceof Error ? error.message : String(error);
+      }
+
       setTestResult({
         success: false,
-        message: 'An error occurred while testing the target.',
+        message,
       });
     } finally {
       setTestingTarget(false);
