@@ -164,7 +164,7 @@
     "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^8.35.0",
     "@typescript-eslint/parser": "^8.35.0",
-    "axios": "^1.10.0",
+    "axios": "^1.7.9",
     "check-dependency-version-consistency": "^5.0.1",
     "concurrently": "^9.2.0",
     "drizzle-kit": "^0.31.4",
