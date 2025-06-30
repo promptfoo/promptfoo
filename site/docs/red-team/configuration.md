@@ -906,4 +906,4 @@ prompts:
 tests: huggingface://datasets/rajpurkar/squad
 ```
 
-For detailed information about query parameters, dataset configuration, and more examples, see the [HuggingFace provider documentation](/docs/providers/huggingface/#datasets).
+For detailed information about query parameters, dataset configuration, and more examples, see [Loading Test Cases from HuggingFace Datasets](/docs/configuration/huggingface-datasets).
