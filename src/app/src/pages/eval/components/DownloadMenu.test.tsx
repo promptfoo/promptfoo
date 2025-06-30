@@ -281,6 +281,27 @@ describe('DownloadMenu', () => {
     expect(failedTestsButton.closest('button')).toBeDisabled();
   });
 
+  it('handles rows with missing outputs without crashing', async () => {
+    (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      table: {
+        ...mockTable,
+        body: [
+          {
+            test: { vars: { testVar: 'value' } },
+            vars: ['value1'],
+            outputs: [null as any],
+          },
+        ],
+      },
+      config: mockConfig,
+      evalId: mockEvalId,
+    });
+
+    expect(() => {
+      render(<DownloadMenu />);
+    }).not.toThrow();
+  });
+
   it('downloads Burp Suite Payloads when clicking the button', async () => {
     render(<DownloadMenu />);
     await userEvent.click(screen.getByText('Download'));
