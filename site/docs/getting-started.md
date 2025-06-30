@@ -93,7 +93,6 @@ Next, we can review the example configuration file and make changes to it.
    ```
 
    Each provider is specified using a simple format: `provider_name:model_name`. For example:
-
    - `openai:gpt-4.1` for GPT-4.1
    - `openai:o4-mini` for OpenAI's o4-mini
    - `anthropic:messages:claude-sonnet-4-20250514` for Anthropic's Claude
@@ -106,7 +105,6 @@ Next, we can review the example configuration file and make changes to it.
    ```
 
    You can use:
-
    - **Cloud APIs**: [OpenAI](/docs/providers/openai), [Anthropic](/docs/providers/anthropic), [Google](/docs/providers/google), [Mistral](/docs/providers/mistral), and [many more](/docs/providers)
    - **Local Models**: [Ollama](/docs/providers/ollama), [llama.cpp](/docs/providers/llama.cpp), [LocalAI](/docs/providers/localai)
    - **Custom Code**: [Python](/docs/providers/python), [JavaScript](/docs/providers/custom-api), or any [executable](/docs/providers/custom-script)
