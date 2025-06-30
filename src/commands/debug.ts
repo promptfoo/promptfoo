@@ -82,3 +82,5 @@ export function debugCommand(
     .option('-c, --config [path]', 'Path to configuration file. Defaults to promptfooconfig.yaml')
     .action((opts) => doDebug({ ...opts, defaultConfig, defaultConfigPath }));
 }
+
+export { doDebug };
