@@ -69,7 +69,7 @@ describe('finishReason assertion', () => {
     };
 
     expect(() => handleFinishReason(params as AssertionParams)).toThrow(
-      '"finish-reason" assertion type must have a string value'
+      '"finish-reason" assertion type must have a string value',
     );
   });
 
@@ -81,7 +81,7 @@ describe('finishReason assertion', () => {
     };
 
     expect(() => handleFinishReason(params as AssertionParams)).toThrow(
-      '"finish-reason" assertion type must have a string value'
+      '"finish-reason" assertion type must have a string value',
     );
   });
 

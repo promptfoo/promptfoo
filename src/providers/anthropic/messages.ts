@@ -174,7 +174,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
           output: 'Streaming response not supported in this context',
           error: 'Streaming should be disabled for this use case',
         };
-            }
+      }
 
       const finishReason = normalizeFinishReason(response.stop_reason);
       return {

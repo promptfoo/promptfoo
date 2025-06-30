@@ -685,11 +685,14 @@ describe('AnthropicMessagesProvider', () => {
         const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022');
 
         const cacheKey = expect.stringContaining('anthropic:');
-        await getCache().set(cacheKey, JSON.stringify({
-          content: [{ type: 'text', text: 'Cached response' }],
-          stop_reason: 'end_turn',
-          usage: { input_tokens: 5, output_tokens: 5, server_tool_use: null },
-        }));
+        await getCache().set(
+          cacheKey,
+          JSON.stringify({
+            content: [{ type: 'text', text: 'Cached response' }],
+            stop_reason: 'end_turn',
+            usage: { input_tokens: 5, output_tokens: 5, server_tool_use: null },
+          }),
+        );
 
         // Set up specific cache key for our test
         jest
@@ -697,19 +700,24 @@ describe('AnthropicMessagesProvider', () => {
           .mockImplementation()
           .mockResolvedValue({} as any);
 
-        const specificCacheKey = 'anthropic:' + JSON.stringify({
-          model: 'claude-3-5-sonnet-20241022',
-          max_tokens: 1024,
-          messages: [{ role: 'user', content: [{ type: 'text', text: 'Test prompt' }] }],
-          stream: false,
-          temperature: 0,
-        });
+        const specificCacheKey =
+          'anthropic:' +
+          JSON.stringify({
+            model: 'claude-3-5-sonnet-20241022',
+            max_tokens: 1024,
+            messages: [{ role: 'user', content: [{ type: 'text', text: 'Test prompt' }] }],
+            stream: false,
+            temperature: 0,
+          });
 
-        await getCache().set(specificCacheKey, JSON.stringify({
-          content: [{ type: 'text', text: 'Cached response' }],
-          stop_reason: 'end_turn',
-          usage: { input_tokens: 5, output_tokens: 5, server_tool_use: null },
-        }));
+        await getCache().set(
+          specificCacheKey,
+          JSON.stringify({
+            content: [{ type: 'text', text: 'Cached response' }],
+            stop_reason: 'end_turn',
+            usage: { input_tokens: 5, output_tokens: 5, server_tool_use: null },
+          }),
+        );
 
         const result = await provider.callApi('Test prompt');
         expect(result.finishReason).toBe('stop');

@@ -21,17 +21,17 @@ export function normalizeFinishReason(raw?: string | null): string | undefined {
   if (raw == null) {
     return undefined;
   }
-  
+
   // Handle edge cases
   if (typeof raw !== 'string') {
     return undefined;
   }
-  
+
   const trimmed = raw.trim();
   if (trimmed === '') {
     return undefined;
   }
-  
+
   // Normalize to lowercase for consistent mapping
   const key = trimmed.toLowerCase();
   return FINISH_REASON_MAP[key] ?? key;

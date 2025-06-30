@@ -72,4 +72,4 @@ describe('normalizeFinishReason', () => {
       expect(normalizeFinishReason('CUSTOM_REASON')).toBe('custom_reason');
     });
   });
-}); 
+});
