@@ -314,6 +314,12 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     [config.strategies],
   );
 
+  // Check if any multi-turn strategies are selected (for both preset and custom configs)
+  const hasMultiTurnStrategies = useMemo(
+    () => config.strategies.some((s) => MULTI_TURN_STRATEGIES.includes(getStrategyId(s) as any)),
+    [config.strategies],
+  );
+
   const hasSessionParser = Boolean(
     config.target.config?.sessionParser || config.target.config?.sessionSource === 'client',
   );
@@ -360,14 +366,11 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         onSelect={handlePresetSelect}
       />
 
-      {/* Recommended-specific options */}
+      {/* Recommended Options - only for preset-specific multi-turn enablement */}
       {(selectedPreset === PRESET_IDS.MEDIUM || selectedPreset === PRESET_IDS.LARGE) && (
         <RecommendedOptions
           isMultiTurnEnabled={isMultiTurnEnabled}
-          isStatefulValue={isStatefulValue}
           onMultiTurnChange={handleMultiTurnChange}
-          onStatefulChange={handleStatefulChange}
-          hasSessionParser={hasSessionParser}
         />
       )}
 
@@ -389,6 +392,10 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         onToggle={handleStrategyToggle}
         onConfigClick={handleConfigClick}
         onSelectNone={handleSelectNoneInSection}
+        showMultiTurnConfig={hasMultiTurnStrategies}
+        isStatefulValue={isStatefulValue}
+        onStatefulChange={handleStatefulChange}
+        hasSessionParser={hasSessionParser}
       />
 
       {/* Footer Buttons */}

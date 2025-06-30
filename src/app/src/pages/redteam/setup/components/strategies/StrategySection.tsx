@@ -1,5 +1,14 @@
 import React from 'react';
-import { Typography, Box, Button } from '@mui/material';
+import {
+  Typography,
+  Box,
+  Button,
+  FormControl,
+  FormControlLabel,
+  Radio,
+  RadioGroup,
+  Alert,
+} from '@mui/material';
 import { StrategyItem } from './StrategyItem';
 import type { StrategyCardData } from './types';
 
@@ -10,6 +19,11 @@ interface StrategySectionProps {
   onToggle: (id: string) => void;
   onConfigClick: (id: string) => void;
   onSelectNone?: (strategyIds: string[]) => void;
+  // Multi-turn specific props
+  showMultiTurnConfig?: boolean;
+  isStatefulValue?: boolean;
+  onStatefulChange?: (val: boolean) => void;
+  hasSessionParser?: boolean;
 }
 
 export function StrategySection({
@@ -19,6 +33,10 @@ export function StrategySection({
   onToggle,
   onConfigClick,
   onSelectNone,
+  showMultiTurnConfig,
+  isStatefulValue,
+  onStatefulChange,
+  hasSessionParser,
 }: StrategySectionProps) {
   const selectedStrategiesInSection = strategies
     .map((strategy) => strategy.id)
@@ -58,6 +76,7 @@ export function StrategySection({
           </Button>
         )}
       </Box>
+
       <Box
         sx={{
           display: 'grid',
@@ -79,6 +98,32 @@ export function StrategySection({
           />
         ))}
       </Box>
+
+      {/* Simple, direct question about system statefulness */}
+      {showMultiTurnConfig && (
+        <Box sx={{ mt: 2, p: 2, backgroundColor: 'background.default', borderRadius: 1 }}>
+          <FormControl component="fieldset">
+            <Typography variant="body2" sx={{ mb: 1.5, fontWeight: 500 }}>
+              Does your target system remember conversation history?
+            </Typography>
+            <RadioGroup
+              row
+              value={String(isStatefulValue)}
+              onChange={(e) => onStatefulChange?.(e.target.value === 'true')}
+            >
+              <FormControlLabel value="true" control={<Radio size="small" />} label="Yes" />
+              <FormControlLabel value="false" control={<Radio size="small" />} label="No" />
+            </RadioGroup>
+            {!hasSessionParser && isStatefulValue && (
+              <Alert severity="warning" sx={{ mt: 1.5, py: 1 }}>
+                <Typography variant="body2">
+                  Configure session handling in your Target setup.
+                </Typography>
+              </Alert>
+            )}
+          </FormControl>
+        </Box>
+      )}
     </Box>
   );
 }
