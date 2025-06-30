@@ -12,7 +12,7 @@ import { MedicalHallucinationPluginGrader } from '../../src/redteam/plugins/medi
 import { OffTopicPluginGrader } from '../../src/redteam/plugins/offTopic';
 import { PlinyGrader } from '../../src/redteam/plugins/pliny';
 import { ToolDiscoveryGrader } from '../../src/redteam/plugins/toolDiscovery';
-import { ToxicChatGrader } from '../../src/redteam/plugins/toxicchat';
+import { ToxicChatGrader } from '../../src/redteam/plugins/toxicChat';
 import { UnsafeBenchGrader } from '../../src/redteam/plugins/unsafebench';
 
 describe('getGraderById', () => {
