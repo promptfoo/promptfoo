@@ -83,9 +83,8 @@ The example configuration includes:
 
 ```yaml
 providers:
-  - id: helicone-openai
+  - id: helicone:openai/gpt-4o-mini
     label: 'OpenAI via Helicone Gateway'
-    provider: helicone:openai/gpt-4o-mini
     config:
       temperature: 0.7
       max_tokens: 500
@@ -111,8 +110,8 @@ You can modify the configuration to:
 
 ```yaml
 providers:
-  - id: custom-helicone-provider
-    helicone:openai/gpt-4o:
+  - id: helicone:openai/gpt-4o
+    config:
       baseUrl: http://my-gateway.company.com:8080
       router: production
       temperature: 0.5
@@ -126,12 +125,12 @@ Route to different environments using routers:
 
 ```yaml
 providers:
-  - id: production-gateway
-    helicone:openai/gpt-4o:
+  - id: helicone:openai/gpt-4o
+    config:
       router: production
 
-  - id: development-gateway
-    helicone:openai/gpt-3.5-turbo:
+  - id: helicone:openai/gpt-3.5-turbo
+    config:
       router: development
 ```
 
@@ -141,8 +140,8 @@ If you're running your own Helicone AI Gateway with custom configuration:
 
 ```yaml
 providers:
-  - id: my-helicone-gateway
-    helicone:custom-provider/custom-model:
+  - id: helicone:custom-provider/custom-model
+    config:
       baseUrl: http://localhost:9000
       headers:
         Custom-Header: value

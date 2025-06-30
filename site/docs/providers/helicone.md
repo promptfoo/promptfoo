@@ -58,8 +58,8 @@ For more advanced configuration:
 
 ```yaml
 providers:
-  - id: helicone-custom
-    helicone:openai/gpt-4o:
+  - id: helicone:openai/gpt-4o
+    config:
       # Gateway configuration
       baseUrl: http://localhost:8080 # Custom gateway URL
       router: production # Use specific router
@@ -76,11 +76,11 @@ If your Helicone AI Gateway is configured with custom routers:
 
 ```yaml
 providers:
-  - id: helicone-production
-    helicone:openai/gpt-4o:
+  - id: helicone:openai/gpt-4o
+    config:
       router: production
-  - id: helicone-development
-    helicone:openai/gpt-3.5-turbo:
+  - id: helicone:openai/gpt-3.5-turbo
+    config:
       router: development
 ```
 
@@ -137,7 +137,7 @@ Since the provider extends OpenAI's chat completion provider, all standard OpenA
 
 ```yaml
 providers:
-  - helicone:openai:gpt-4o-mini
+  - helicone:openai/gpt-4o-mini
 
 prompts:
   - "Translate '{{text}}' to French"
@@ -154,13 +154,13 @@ tests:
 
 ```yaml
 providers:
-  - id: helicone:openai:gpt-4o
+  - id: helicone:openai/gpt-4o
     config:
       tags: ['openai', 'gpt4']
       properties:
         model_family: 'gpt-4'
 
-  - id: helicone:anthropic:claude-3-5-sonnet-20241022
+  - id: helicone:anthropic/claude-3-5-sonnet-20241022
     config:
       tags: ['anthropic', 'claude']
       properties:
@@ -178,23 +178,13 @@ tests:
 
 ```yaml
 providers:
-  - id: custom-helicone-provider
+  - id: helicone:openai/gpt-4o
     config:
-      targetUrl: https://api.custom-llm.com
-      targetProvider: custom-llm
-      apiKey: your_helicone_api_key
-      cache: true
-      user: test-user
-      session: evaluation-session
-      tags: ['custom', 'evaluation', 'test']
-      properties:
-        experiment_id: 'exp-001'
-        model_version: 'v2.1'
-        dataset: 'test-dataset'
-      promptTemplate: 'qa-template'
-      promptInputs:
-        format: 'json'
-        max_length: 500
+      baseUrl: https://custom-gateway.example.com:8080
+      router: production
+      apiKey: your_custom_api_key
+      temperature: 0.7
+      max_tokens: 1000
       headers:
         Authorization: Bearer your_target_provider_api_key
         Custom-Header: custom-value
@@ -211,7 +201,7 @@ tests:
 
 ```yaml
 providers:
-  - id: helicone:openai:gpt-3.5-turbo
+  - id: helicone:openai/gpt-3.5-turbo
     config:
       cache: true
       properties:
