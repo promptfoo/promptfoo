@@ -54,7 +54,7 @@ const AboutPageContent = () => {
             <Grid size={{ xs: 12, md: 6 }}>
               <Box display="flex" justifyContent="center" alignItems="center" height="100%">
                 <img
-                  src="/img/logo.svg"
+                  src="/img/logo-panda.svg"
                   alt="Promptfoo Logo"
                   style={{ maxWidth: '100%', maxHeight: '150px', height: 'auto' }}
                 />
