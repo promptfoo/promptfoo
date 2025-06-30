@@ -3,11 +3,9 @@ import { getAuthor, getUserEmail } from '../../../src/globalConfig/accounts';
 import { cloudConfig } from '../../../src/globalConfig/cloud';
 import logger from '../../../src/logger';
 import { synthesize } from '../../../src/redteam';
-import {
-  doTargetPurposeDiscovery,
-  mergeTargetPurposeDiscoveryResults,
-} from '../../../src/redteam/commands/discover';
+import { doTargetPurposeDiscovery } from '../../../src/redteam/commands/discover';
 import { doGenerateRedteam } from '../../../src/redteam/commands/generate';
+import { Severity } from '../../../src/redteam/constants';
 import type { RedteamCliGenerateOptions, RedteamPluginObject } from '../../../src/redteam/types';
 import type { ApiProvider } from '../../../src/types';
 import * as configModule from '../../../src/util/config/load';
@@ -43,7 +41,6 @@ jest.mock('../../../src/globalConfig/cloud', () => ({
 
 jest.mock('../../../src/redteam/commands/discover', () => ({
   doTargetPurposeDiscovery: jest.fn(),
-  mergeTargetPurposeDiscoveryResults: jest.fn(),
 }));
 
 jest.mock('../../../src/redteam/remoteGeneration', () => ({
@@ -65,6 +62,7 @@ jest.mock('../../../src/providers', () => ({
       cleanup: jest.fn(),
     },
   ]),
+  getProviderIds: jest.fn().mockReturnValue(['test-provider']),
 }));
 
 describe('doGenerateRedteam', () => {
@@ -253,16 +251,12 @@ describe('doGenerateRedteam', () => {
       injectVar: 'input',
     });
 
-    jest.mocked(mergeTargetPurposeDiscoveryResults).mockReturnValue('MERGED(Test purpose)');
-
     await doGenerateRedteam(options);
-
-    expect(mergeTargetPurposeDiscoveryResults).toHaveBeenCalledWith('Test purpose', undefined);
 
     expect(synthesize).toHaveBeenCalledWith({
       language: undefined,
       numTests: undefined,
-      purpose: 'MERGED(Test purpose)',
+      purpose: 'Test purpose',
       plugins: expect.any(Array),
       prompts: expect.any(Array),
       strategies: expect.any(Array),
@@ -351,6 +345,81 @@ describe('doGenerateRedteam', () => {
           expect.objectContaining({ id: 'competitors', numTests: 1 }),
           expect.objectContaining({ id: 'contracts', numTests: 1 }),
           expect.objectContaining({ id: 'overreliance', numTests: 3 }),
+        ]),
+        prompts: ['Test prompt'],
+        strategies: [],
+      }),
+    );
+  });
+
+  it('should properly handle severity property in plugin objects', async () => {
+    jest.mocked(configModule.resolveConfigs).mockResolvedValue({
+      basePath: '/mock/path',
+      testSuite: {
+        prompts: [{ raw: 'Test prompt', label: 'Test label' }],
+        providers: [],
+      },
+      config: {
+        redteam: {
+          numTests: 5,
+          plugins: [
+            'contracts' as unknown as RedteamPluginObject,
+            { id: 'competitors', severity: Severity.Low },
+            { id: 'overreliance', numTests: 3, severity: Severity.High },
+            { id: 'harmful:hate', config: { customOption: true }, severity: Severity.Medium },
+          ],
+          strategies: [],
+        },
+      },
+    });
+
+    jest.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        prompts: [{ raw: 'Test prompt' }],
+        providers: [],
+        tests: [],
+      }),
+    );
+
+    jest.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        {
+          vars: { input: 'Test input' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+          metadata: { pluginId: 'redteam' },
+        },
+      ],
+      purpose: 'Test purpose',
+      entities: ['Test entity'],
+      injectVar: 'input',
+    });
+
+    const options: RedteamCliGenerateOptions = {
+      output: 'output.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: true,
+      force: true,
+      purpose: 'Test purpose',
+      config: 'config.yaml',
+    };
+
+    await doGenerateRedteam(options);
+
+    expect(synthesize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        language: undefined,
+        numTests: 5,
+        plugins: expect.arrayContaining([
+          expect.objectContaining({ id: 'contracts', numTests: 5 }), // string plugin without severity
+          expect.objectContaining({ id: 'competitors', numTests: 5, severity: Severity.Low }),
+          expect.objectContaining({ id: 'overreliance', numTests: 3, severity: Severity.High }),
+          expect.objectContaining({
+            id: 'harmful:hate',
+            numTests: 5,
+            severity: Severity.Medium,
+            config: { customOption: true },
+          }),
         ]),
         prompts: ['Test prompt'],
         strategies: [],
@@ -628,322 +697,6 @@ describe('doGenerateRedteam', () => {
     expect(mockProvider.cleanup).not.toHaveBeenCalled();
   });
 
-  it('should handle errors during purpose discovery', async () => {
-    jest.mocked(configModule.resolveConfigs).mockResolvedValue({
-      basePath: '/mock/path',
-      testSuite: {
-        providers: [mockProvider],
-        prompts: [],
-        tests: [],
-      },
-      config: {
-        redteam: {
-          purpose: 'Existing purpose',
-        },
-        providers: ['test-provider'],
-      },
-    });
-
-    const options: RedteamCliGenerateOptions = {
-      output: 'output.yaml',
-      config: 'config.yaml',
-      cache: true,
-      defaultConfig: {},
-      write: true,
-    };
-
-    const mockError = new Error('Purpose discovery failed');
-    jest.mocked(doTargetPurposeDiscovery).mockRejectedValue(mockError);
-
-    await doGenerateRedteam(options);
-
-    expect(logger.error).toHaveBeenCalledWith(
-      'Target Discovery Agent failed from error, skipping: Purpose discovery failed',
-    );
-  });
-
-  it('should call doTargetPurposeDiscovery and mergeTargetPurposeDiscoveryResults', async () => {
-    jest.mocked(configModule.resolveConfigs).mockResolvedValue({
-      basePath: '/mock/path',
-      testSuite: {
-        providers: [mockProvider],
-        prompts: [],
-        tests: [],
-      },
-      config: {
-        redteam: {},
-        providers: ['test-provider'],
-      },
-    });
-
-    const options: RedteamCliGenerateOptions = {
-      output: 'output.yaml',
-      config: 'config.yaml',
-      cache: true,
-      defaultConfig: {},
-      purpose: 'CLI purpose',
-      write: true,
-    };
-
-    const mockedPurpose = {
-      purpose: 'Generated purpose',
-      limitations: 'Generated limitations',
-      tools: [
-        {
-          name: 'search',
-          description: 'search(query: string)',
-          arguments: [{ name: 'query', description: 'query', type: 'string' }],
-        },
-      ],
-      user: 'Generated user',
-    };
-
-    jest.mocked(doTargetPurposeDiscovery).mockResolvedValue(mockedPurpose);
-
-    jest.mocked(synthesize).mockResolvedValue({
-      testCases: [],
-      purpose: 'CLI purpose merged with Generated purpose',
-      entities: [],
-      injectVar: 'injected',
-    });
-
-    await doGenerateRedteam(options);
-
-    expect(mergeTargetPurposeDiscoveryResults).toHaveBeenCalledWith('CLI purpose', mockedPurpose);
-  });
-
-  it('should call doTargetPurposeDiscovery with the first prompt', async () => {
-    jest.mocked(configModule.resolveConfigs).mockResolvedValue({
-      basePath: '/mock/path',
-      testSuite: {
-        providers: [mockProvider],
-        prompts: [{ raw: 'Test prompt', label: 'Test label' }],
-        tests: [],
-      },
-      config: {
-        redteam: {},
-        providers: ['test-provider'],
-      },
-    });
-
-    const options: RedteamCliGenerateOptions = {
-      output: 'output.yaml',
-      config: 'config.yaml',
-      cache: true,
-      defaultConfig: {},
-      purpose: 'CLI purpose',
-      write: true,
-    };
-
-    const mockedPurpose = {
-      purpose: 'Generated purpose',
-      limitations: 'Generated limitations',
-      tools: [
-        {
-          name: 'search',
-          description: 'search(query: string)',
-          arguments: [{ name: 'query', description: 'query', type: 'string' }],
-        },
-      ],
-      user: 'Generated user',
-    };
-    jest.mocked(doTargetPurposeDiscovery).mockResolvedValue(mockedPurpose);
-    jest.mocked(synthesize).mockResolvedValue({
-      testCases: [],
-      purpose: 'CLI purpose merged with Generated purpose',
-      entities: [],
-      injectVar: 'injected',
-    });
-
-    await doGenerateRedteam(options);
-
-    expect(doTargetPurposeDiscovery).toHaveBeenCalledWith(expect.any(Object), {
-      raw: 'Test prompt',
-      label: 'Test label',
-    });
-  });
-
-  it('should handle purpose discovery error with specific error message', async () => {
-    jest.mocked(configModule.resolveConfigs).mockResolvedValue({
-      basePath: '/mock/path',
-      testSuite: {
-        providers: [mockProvider],
-        prompts: [],
-        tests: [],
-      },
-      config: {
-        redteam: {},
-        providers: ['test-provider'],
-      },
-    });
-
-    const options: RedteamCliGenerateOptions = {
-      output: 'output.yaml',
-      config: 'config.yaml',
-      cache: true,
-      defaultConfig: {},
-      write: true,
-    };
-
-    const customError = new Error('Custom purpose discovery error');
-    jest.mocked(doTargetPurposeDiscovery).mockRejectedValue(customError);
-
-    await doGenerateRedteam(options);
-
-    expect(logger.error).toHaveBeenCalledWith(
-      'Target Discovery Agent failed from error, skipping: Custom purpose discovery error',
-    );
-  });
-
-  it('should properly merge purposes when both exist', async () => {
-    jest.mocked(configModule.resolveConfigs).mockResolvedValue({
-      basePath: '/mock/path',
-      testSuite: {
-        providers: [mockProvider],
-        prompts: [],
-        tests: [],
-      },
-      config: {
-        redteam: {
-          purpose: 'Config purpose',
-        },
-        providers: ['test-provider'],
-      },
-    });
-
-    const options: RedteamCliGenerateOptions = {
-      output: 'output.yaml',
-      config: 'config.yaml',
-      cache: true,
-      defaultConfig: {},
-      purpose: 'CLI purpose',
-      write: true,
-    };
-
-    const mockedPurpose = {
-      purpose: 'Generated purpose',
-      limitations: 'Generated limitations',
-      tools: [
-        {
-          name: 'search',
-          description: 'search(query: string)',
-          arguments: [{ name: 'query', description: 'query', type: 'string' }],
-        },
-      ],
-      user: 'Generated user',
-    };
-    jest.mocked(doTargetPurposeDiscovery).mockResolvedValue(mockedPurpose);
-    jest
-      .mocked(mergeTargetPurposeDiscoveryResults)
-      .mockImplementation((a, b) => `${a} + ${JSON.stringify(b)}`);
-    jest.mocked(synthesize).mockResolvedValue({
-      testCases: [],
-      purpose: 'CLI purpose + Generated purpose',
-      entities: [],
-      injectVar: 'x',
-    });
-
-    await doGenerateRedteam(options);
-
-    expect(mergeTargetPurposeDiscoveryResults).toHaveBeenCalledWith(
-      'Config purpose',
-      mockedPurpose,
-    );
-    expect(synthesize).toHaveBeenCalledWith(
-      expect.objectContaining({
-        purpose: `Config purpose + ${JSON.stringify(mockedPurpose)}`,
-      }),
-    );
-  });
-
-  it('should call mergeTargetPurposeDiscoveryResults even if no existing purpose', async () => {
-    jest.mocked(configModule.resolveConfigs).mockResolvedValue({
-      basePath: '/mock/path',
-      testSuite: {
-        providers: [mockProvider],
-        prompts: [],
-        tests: [],
-      },
-      config: {
-        redteam: {},
-        providers: ['test-provider'],
-      },
-    });
-
-    const options: RedteamCliGenerateOptions = {
-      output: 'output.yaml',
-      config: 'config.yaml',
-      cache: true,
-      defaultConfig: {},
-      write: true,
-    };
-    const mockedPurpose = {
-      purpose: 'Generated purpose',
-      limitations: 'Generated limitations',
-      tools: [
-        {
-          name: 'search',
-          description: 'search(query: string)',
-          arguments: [{ name: 'query', description: 'query', type: 'string' }],
-        },
-      ],
-      user: 'Generated user',
-    };
-    jest.mocked(doTargetPurposeDiscovery).mockResolvedValue(mockedPurpose);
-    jest.mocked(synthesize).mockResolvedValue({
-      testCases: [],
-      purpose: 'Generated purpose',
-      entities: [],
-      injectVar: 'input',
-    });
-
-    await doGenerateRedteam(options);
-
-    expect(mergeTargetPurposeDiscoveryResults).toHaveBeenCalledWith(undefined, mockedPurpose);
-    expect(synthesize).toHaveBeenCalledWith(
-      expect.objectContaining({
-        purpose: expect.stringContaining(`undefined + ${JSON.stringify(mockedPurpose)}`),
-      }),
-    );
-  });
-
-  it('should log error if doTargetPurposeDiscovery throws non-Error', async () => {
-    jest.mocked(configModule.resolveConfigs).mockResolvedValue({
-      basePath: '/mock/path',
-      testSuite: {
-        providers: [mockProvider],
-        prompts: [],
-        tests: [],
-      },
-      config: {
-        redteam: {},
-        providers: ['test-provider'],
-      },
-    });
-
-    const options: RedteamCliGenerateOptions = {
-      output: 'output.yaml',
-      config: 'config.yaml',
-      cache: true,
-      defaultConfig: {},
-      write: true,
-    };
-
-    jest.mocked(doTargetPurposeDiscovery).mockRejectedValue('Some string error');
-    jest.mocked(synthesize).mockResolvedValue({
-      testCases: [],
-      purpose: '',
-      entities: [],
-      injectVar: 'input',
-    });
-
-    await doGenerateRedteam(options);
-
-    expect(logger.error).toHaveBeenCalledWith(
-      'Target Discovery Agent failed from error, skipping: Some string error',
-    );
-  });
-
   it('should warn and not fail if no plugins are specified (uses default plugins)', async () => {
     jest.mocked(configModule.resolveConfigs).mockResolvedValue({
       basePath: '/mock/path',
@@ -999,68 +752,6 @@ describe('doGenerateRedteam', () => {
       expect.objectContaining({
         plugins: expect.any(Array),
       }),
-    );
-  });
-
-  it('should write targetPurposeDiscoveryResult to metadata', async () => {
-    jest.mocked(configModule.resolveConfigs).mockResolvedValue({
-      basePath: '/mock/path',
-      testSuite: {
-        providers: [mockProvider],
-        prompts: [],
-        tests: [],
-      },
-      config: {
-        redteam: {},
-        providers: ['test-provider'],
-      },
-    });
-
-    const options: RedteamCliGenerateOptions = {
-      output: 'output.yaml',
-      config: 'config.yaml',
-      cache: true,
-      defaultConfig: {},
-      write: true,
-    };
-
-    const mockedPurpose = {
-      purpose: 'Generated purpose',
-      limitations: 'Generated limitations',
-      tools: [
-        {
-          name: 'search',
-          description: 'search(query: string)',
-          arguments: [{ name: 'query', description: 'query', type: 'string' }],
-        },
-      ],
-      user: 'Generated user',
-    };
-    jest.mocked(doTargetPurposeDiscovery).mockResolvedValue(mockedPurpose);
-    jest.mocked(mergeTargetPurposeDiscoveryResults).mockReturnValue('merged purpose');
-    jest.mocked(synthesize).mockResolvedValue({
-      testCases: [
-        {
-          vars: { input: 'Test input' },
-          assert: [{ type: 'equals', value: 'Test output' }],
-          metadata: { pluginId: 'redteam' },
-        },
-      ],
-      purpose: 'merged purpose',
-      entities: [],
-      injectVar: 'input',
-    });
-
-    await doGenerateRedteam(options);
-
-    expect(writePromptfooConfig).toHaveBeenCalledWith(
-      expect.objectContaining({
-        metadata: expect.objectContaining({
-          targetPurposeDiscoveryResult: mockedPurpose,
-        }),
-      }),
-      'output.yaml',
-      expect.any(Array),
     );
   });
 

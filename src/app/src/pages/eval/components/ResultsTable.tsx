@@ -7,12 +7,13 @@ import {
 import React, { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Link } from 'react-router-dom';
+import ErrorBoundary from '@app/components/ErrorBoundary';
 import { useToast } from '@app/hooks/useToast';
 import {
-  type EvaluateTableRow,
-  type EvaluateTableOutput,
-  type FilterMode,
   type EvaluateTable,
+  type EvaluateTableOutput,
+  type EvaluateTableRow,
+  type FilterMode,
 } from '@app/pages/eval/components/types';
 import { callApi } from '@app/utils/api';
 import CloseIcon from '@mui/icons-material/Close';
@@ -40,7 +41,7 @@ import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
 import type { TruncatedTextProps } from './TruncatedText';
 import TruncatedText from './TruncatedText';
-import { useTableStore, useResultsViewSettingsStore } from './store';
+import { useResultsViewSettingsStore, useTableStore } from './store';
 import './ResultsTable.css';
 
 function formatRowOutput(output: EvaluateTableOutput | string) {
@@ -524,6 +525,14 @@ function ResultsTable({
   );
 
   const metricTotals = React.useMemo(() => {
+    // Use the backend's already-correct namedScoresCount instead of recalculating
+    const firstProvider = table?.head?.prompts?.[0];
+    const backendCounts = firstProvider?.metrics?.namedScoresCount;
+
+    if (backendCounts) {
+      return backendCounts;
+    }
+
     const totals: Record<string, number> = {};
     table?.body.forEach((row) => {
       row.test.assert?.forEach((assertion) => {
@@ -540,7 +549,7 @@ function ResultsTable({
       });
     });
     return totals;
-  }, [table]);
+  }, [table?.head?.prompts, table?.body]);
 
   const handleMetricFilter = React.useCallback(
     (metric: string | null) => {
@@ -732,22 +741,33 @@ function ResultsTable({
             cell: (info: CellContext<EvaluateTableRow, EvaluateTableOutput>) => {
               const output = getOutput(info.row.index, idx);
               return output ? (
-                <EvalOutputCell
-                  output={output}
-                  maxTextLength={maxTextLength}
-                  rowIndex={info.row.index}
-                  promptIndex={idx}
-                  onRating={handleRating.bind(
-                    null,
-                    output.originalRowIndex ?? info.row.index,
-                    output.originalPromptIndex ?? idx,
-                    output.id,
-                  )}
-                  firstOutput={getFirstOutput(info.row.index)}
-                  showDiffs={filterMode === 'different' && visiblePromptCount > 1}
-                  searchText={debouncedSearchText}
-                  showStats={showStats}
-                />
+                <ErrorBoundary
+                  name={`EvalOutputCell-${info.row.index}-${idx}`}
+                  fallback={
+                    <div style={{ padding: '20px', color: 'red', fontSize: '12px' }}>
+                      Error loading cell
+                    </div>
+                  }
+                >
+                  <EvalOutputCell
+                    output={output}
+                    maxTextLength={maxTextLength}
+                    rowIndex={info.row.index}
+                    promptIndex={idx}
+                    onRating={handleRating.bind(
+                      null,
+                      output.originalRowIndex ?? info.row.index,
+                      output.originalPromptIndex ?? idx,
+                      output.id,
+                    )}
+                    firstOutput={getFirstOutput(info.row.index)}
+                    showDiffs={filterMode === 'different' && visiblePromptCount > 1}
+                    searchText={debouncedSearchText}
+                    showStats={showStats}
+                    evaluationId={evalId || undefined}
+                    testCaseId={info.row.original.test?.metadata?.testCaseId || output.id}
+                  />
+                </ErrorBoundary>
               ) : (
                 <div style={{ padding: '20px' }}>'Test still in progress...'</div>
               );

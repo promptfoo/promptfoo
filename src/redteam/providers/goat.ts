@@ -4,7 +4,6 @@ import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import telemetry from '../../telemetry';
 import type { Assertion, AssertionSet, AtomicTestCase } from '../../types';
 import type {
   ApiProvider,
@@ -27,6 +26,12 @@ import { getLastMessageContent, messagesToRedteamHistory } from './shared';
 export interface GoatMetadata extends BaseRedteamMetadata {
   redteamFinalPrompt?: string;
   stopReason: 'Grader failed' | 'Max turns reached';
+  successfulAttacks?: Array<{
+    turn: number;
+    prompt: string;
+    response: string;
+  }>;
+  totalSuccessfulAttacks?: number;
 }
 
 /**
@@ -41,11 +46,21 @@ export interface ExtractAttackFailureResponse {
   task: string;
 }
 
+interface GoatConfig {
+  injectVar: string;
+  maxTurns: number;
+  excludeTargetOutputFromAgenticAttackGeneration: boolean;
+  stateful: boolean;
+  continueAfterSuccess: boolean;
+}
+
 export default class GoatProvider implements ApiProvider {
-  private maxTurns: number;
-  private readonly injectVar: string;
-  private readonly stateful: boolean;
-  private readonly excludeTargetOutputFromAgenticAttackGeneration: boolean;
+  readonly config: GoatConfig;
+  private successfulAttacks: Array<{
+    turn: number;
+    prompt: string;
+    response: string;
+  }> = [];
 
   id() {
     return 'promptfoo:redteam:goat';
@@ -55,34 +70,30 @@ export default class GoatProvider implements ApiProvider {
     options: ProviderOptions & {
       maxTurns?: number;
       injectVar?: string;
-      // @deprecated
-      stateless?: boolean;
       stateful?: boolean;
       excludeTargetOutputFromAgenticAttackGeneration?: boolean;
+      continueAfterSuccess?: boolean;
     } = {},
   ) {
     if (neverGenerateRemote()) {
       throw new Error(`GOAT strategy requires remote grading to be enabled`);
     }
-    this.stateful = options.stateful ?? (options.stateless == null ? true : !options.stateless);
+    invariant(typeof options.injectVar === 'string', 'Expected injectVar to be set');
+    this.config = {
+      maxTurns: options.maxTurns || 5,
+      injectVar: options.injectVar,
+      stateful: options.stateful ?? false,
+      excludeTargetOutputFromAgenticAttackGeneration:
+        options.excludeTargetOutputFromAgenticAttackGeneration ?? false,
+      continueAfterSuccess: options.continueAfterSuccess ?? false,
+    };
     logger.debug(
       `[GOAT] Constructor options: ${JSON.stringify({
         injectVar: options.injectVar,
         maxTurns: options.maxTurns,
         stateful: options.stateful,
+        continueAfterSuccess: options.continueAfterSuccess,
       })}`,
-    );
-    if (options.stateless !== undefined) {
-      telemetry.recordOnce('feature_used', {
-        feature: 'stateless',
-        state: String(options.stateless),
-      });
-    }
-    invariant(typeof options.injectVar === 'string', 'Expected injectVar to be set');
-    this.injectVar = options.injectVar;
-    this.maxTurns = options.maxTurns || 5;
-    this.excludeTargetOutputFromAgenticAttackGeneration = Boolean(
-      options.excludeTargetOutputFromAgenticAttackGeneration,
     );
   }
 
@@ -91,6 +102,9 @@ export default class GoatProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<GoatResponse> {
+    // Reset successful attacks array for each new call
+    this.successfulAttacks = [];
+
     let response: Response | undefined = undefined;
     logger.debug(`[GOAT] callApi context: ${safeJsonStringify(context)}`);
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
@@ -123,13 +137,13 @@ export default class GoatProvider implements ApiProvider {
     let previousAttackerMessage = '';
     let previousTargetOutput = '';
 
-    for (let turn = 0; turn < this.maxTurns; turn++) {
+    for (let turn = 0; turn < this.config.maxTurns; turn++) {
       try {
         let body: string;
         let failureReason: string | undefined;
-        if (this.excludeTargetOutputFromAgenticAttackGeneration && turn > 0) {
+        if (this.config.excludeTargetOutputFromAgenticAttackGeneration && turn > 0) {
           body = JSON.stringify({
-            goal: context?.test?.metadata?.goal || context?.vars[this.injectVar],
+            goal: context?.test?.metadata?.goal || context?.vars[this.config.injectVar],
             targetOutput: previousTargetOutput,
             attackAttempt: previousAttackerMessage,
             task: 'extract-goat-failure',
@@ -153,9 +167,9 @@ export default class GoatProvider implements ApiProvider {
         }
 
         body = JSON.stringify({
-          goal: context?.test?.metadata?.goal || context?.vars[this.injectVar],
+          goal: context?.test?.metadata?.goal || context?.vars[this.config.injectVar],
           i: turn,
-          messages: this.excludeTargetOutputFromAgenticAttackGeneration
+          messages: this.config.excludeTargetOutputFromAgenticAttackGeneration
             ? messages.filter((m) => m.role !== 'assistant')
             : messages,
           prompt: context?.prompt?.raw,
@@ -163,7 +177,7 @@ export default class GoatProvider implements ApiProvider {
           version: VERSION,
           email: getUserEmail(),
           excludeTargetOutputFromAgenticAttackGeneration:
-            this.excludeTargetOutputFromAgenticAttackGeneration,
+            this.config.excludeTargetOutputFromAgenticAttackGeneration,
           failureReason,
           purpose: context?.test?.metadata?.purpose,
         });
@@ -187,7 +201,7 @@ export default class GoatProvider implements ApiProvider {
 
         const targetVars = {
           ...context.vars,
-          [this.injectVar]: attackerMessage.content,
+          [this.config.injectVar]: attackerMessage.content,
         };
 
         const renderedAttackerPrompt = await renderPrompt(
@@ -216,7 +230,7 @@ export default class GoatProvider implements ApiProvider {
         `,
         );
 
-        const targetPrompt = this.stateful
+        const targetPrompt = this.config.stateful
           ? messages[messages.length - 1].content
           : JSON.stringify(messages);
         logger.debug(`GOAT turn ${turn} target prompt: ${renderedAttackerPrompt}`);
@@ -292,21 +306,37 @@ export default class GoatProvider implements ApiProvider {
         }
 
         if (graderPassed === false) {
-          break;
+          // Record successful attack
+          this.successfulAttacks.push({
+            turn,
+            prompt: attackerMessage.content,
+            response: stringifiedOutput,
+          });
+
+          // Only break early if continueAfterSuccess is false
+          if (this.config.continueAfterSuccess) {
+            // Continue to next turn
+          } else {
+            break;
+          }
         }
       } catch (err) {
         logger.error(`Error in GOAT turn ${turn}: ${err}`);
       }
     }
-    delete context?.vars?.sessionId;
 
     return {
       output: getLastMessageContent(messages, 'assistant') || '',
       metadata: {
         redteamFinalPrompt: getLastMessageContent(messages, 'user') || '',
         messages: messages as Record<string, any>[],
-        stopReason: graderPassed === false ? 'Grader failed' : 'Max turns reached',
+        stopReason:
+          this.successfulAttacks.length > 0 && !this.config.continueAfterSuccess
+            ? 'Grader failed'
+            : 'Max turns reached',
         redteamHistory: messagesToRedteamHistory(messages),
+        successfulAttacks: this.successfulAttacks,
+        totalSuccessfulAttacks: this.successfulAttacks.length,
       },
       tokenUsage: totalTokenUsage,
       guardrails: lastTargetResponse?.guardrails,

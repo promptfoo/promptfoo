@@ -2,7 +2,7 @@ import { fetchWithProxy } from '../../../src/fetch';
 import {
   ArgsSchema,
   doTargetPurposeDiscovery,
-  mergeTargetPurposeDiscoveryResults,
+  normalizeTargetPurposeDiscoveryResult,
 } from '../../../src/redteam/commands/discover';
 
 jest.mock('../../../src/fetch');
@@ -24,93 +24,77 @@ describe('ArgsSchema', () => {
   });
 });
 
-describe('mergeTargetPurposeDiscoveryResults', () => {
-  it('should correctly merge human-defined and discovered purposes', () => {
-    const humanDefined = 'This is a human defined purpose';
-    const discovered = {
-      purpose: 'This is a discovered purpose',
-      limitations: 'This is a discovered limitation',
+describe('normalizeTargetPurposeDiscoveryResult', () => {
+  it('should handle null-like values', () => {
+    const result = normalizeTargetPurposeDiscoveryResult({
+      purpose: null,
+      limitations: '',
+      user: 'null',
+      tools: [],
+    });
+
+    expect(result).toEqual({
+      purpose: null,
+      limitations: null,
+      user: null,
+      tools: [],
+    });
+  });
+
+  it('should handle string "null" values', () => {
+    const result = normalizeTargetPurposeDiscoveryResult({
+      purpose: 'null',
+      limitations: 'null',
+      user: 'null',
+      tools: [],
+    });
+
+    expect(result).toEqual({
+      purpose: null,
+      limitations: null,
+      user: null,
+      tools: [],
+    });
+  });
+
+  it('should handle invalid tools array', () => {
+    const result = normalizeTargetPurposeDiscoveryResult({
+      purpose: 'test',
+      limitations: 'test',
+      user: 'test',
+      tools: null as any,
+    });
+
+    expect(result).toEqual({
+      purpose: 'test',
+      limitations: 'test',
+      user: 'test',
+      tools: [],
+    });
+  });
+
+  it('should filter invalid tools from array', () => {
+    const result = normalizeTargetPurposeDiscoveryResult({
+      purpose: 'test',
+      limitations: 'test',
+      user: 'test',
       tools: [
-        {
-          name: 'tool1',
-          description: 'desc1',
-          arguments: [{ name: 'arg1', description: 'desc arg1', type: 'string' }],
-        },
+        null,
+        { name: 'tool1', description: 'desc1', arguments: [] },
+        null,
+        { name: 'tool2', description: 'desc2', arguments: [] },
       ],
-      user: 'This is a discovered user',
-    };
+    });
 
-    const mergedPurpose = mergeTargetPurposeDiscoveryResults(humanDefined, discovered);
-
-    expect(mergedPurpose).toContain(humanDefined);
-    expect(mergedPurpose).toContain(discovered.purpose);
-    expect(mergedPurpose).toContain(discovered.limitations);
-    expect(mergedPurpose).toContain('tool1');
-    expect(mergedPurpose).toContain('desc1');
-    expect(mergedPurpose).toContain('arg1');
-    expect(mergedPurpose).toContain(discovered.user);
-  });
-
-  it('should handle only human-defined purpose', () => {
-    const humanDefined = 'This is a human defined purpose';
-    const mergedPurpose = mergeTargetPurposeDiscoveryResults(humanDefined, undefined);
-
-    expect(mergedPurpose).toContain(humanDefined);
-  });
-
-  it('should handle only discovered purpose', () => {
-    const discovered = {
-      purpose: 'This is a discovered purpose',
-      limitations: 'These are limitations',
+    expect(result).toEqual({
+      purpose: 'test',
+      limitations: 'test',
+      user: 'test',
       tools: [
         { name: 'tool1', description: 'desc1', arguments: [] },
         { name: 'tool2', description: 'desc2', arguments: [] },
       ],
-      user: 'This is a discovered user',
-    };
-    const mergedPurpose = mergeTargetPurposeDiscoveryResults(undefined, discovered);
-
-    expect(mergedPurpose).toContain(discovered.purpose);
-    expect(mergedPurpose).toContain(discovered.limitations);
-    expect(mergedPurpose).toContain('tool1');
-    expect(mergedPurpose).toContain('tool2');
-    expect(mergedPurpose).toContain(discovered.user);
-  });
-
-  it('should handle neither purpose being defined', () => {
-    const mergedPurpose = mergeTargetPurposeDiscoveryResults(undefined, undefined);
-    expect(mergedPurpose).toBe('');
-  });
-
-  it('should properly format complex tool structures', () => {
-    const discovered = {
-      purpose: 'purpose',
-      limitations: 'limitations',
-      tools: [
-        {
-          name: 'tool1',
-          description: 'desc1',
-          arguments: [{ name: 'a', description: 'd', type: 'string' }],
-        },
-        {
-          name: 'tool2',
-          description: 'desc2',
-          arguments: [{ name: 'b', description: 'e', type: 'number' }],
-        },
-      ],
-      user: 'user',
-    };
-    const mergedPurpose = mergeTargetPurposeDiscoveryResults(undefined, discovered);
-
-    expect(mergedPurpose).toContain('purpose');
-    expect(mergedPurpose).toContain('limitations');
-    expect(mergedPurpose).toContain('tool1');
-    expect(mergedPurpose).toContain('tool2');
-    expect(mergedPurpose).toContain('desc1');
-    expect(mergedPurpose).toContain('desc2');
-    expect(mergedPurpose).toContain('a');
-    expect(mergedPurpose).toContain('b');
-    expect(mergedPurpose).toContain('user');
+    });
   });
 });
 
@@ -166,16 +150,14 @@ describe('doTargetPurposeDiscovery', () => {
 
     const discoveredPurpose = await doTargetPurposeDiscovery(target);
 
-    // Verify the target was called with the rendered prompt
     expect(target.callApi).toHaveBeenCalledWith('What is your purpose?', {
       prompt: { raw: 'What is your purpose?', label: 'Target Discovery Question' },
       vars: { sessionId: expect.any(String) },
+      bustCache: true,
     });
 
-    // Verify fetchWithProxy was called twice
     expect(mockedFetchWithProxy).toHaveBeenCalledTimes(2);
 
-    // Verify the discovered purpose matches expected output
     expect(discoveredPurpose).toEqual({
       purpose: 'Test purpose',
       limitations: 'Test limitations',
@@ -240,16 +222,14 @@ describe('doTargetPurposeDiscovery', () => {
     };
     const discoveredPurpose = await doTargetPurposeDiscovery(target, prompt);
 
-    // Verify the target was called with the rendered prompt
     expect(target.callApi).toHaveBeenCalledWith('This is a test prompt What is your purpose?', {
       prompt: { raw: 'What is your purpose?', label: 'Target Discovery Question' },
       vars: { sessionId: expect.any(String) },
+      bustCache: true,
     });
 
-    // Verify fetchWithProxy was called twice
     expect(mockedFetchWithProxy).toHaveBeenCalledTimes(2);
 
-    // Verify the discovered purpose matches expected output
     expect(discoveredPurpose).toEqual({
       purpose: 'Test purpose',
       limitations: 'Test limitations',
@@ -259,6 +239,112 @@ describe('doTargetPurposeDiscovery', () => {
           description: 'desc1',
           arguments: [{ name: 'a', description: 'd', type: 'string' }],
         },
+      ],
+      user: 'Test user',
+    });
+  });
+
+  it('should normalize string "null" values from server response', async () => {
+    const mockResponses = [
+      {
+        done: false,
+        question: 'What is your purpose?',
+        state: {
+          currentQuestionIndex: 0,
+          answers: [],
+        },
+      },
+      {
+        done: true,
+        purpose: {
+          purpose: 'null',
+          limitations: 'null',
+          tools: [],
+          user: 'null',
+        },
+        state: {
+          currentQuestionIndex: 1,
+          answers: ['I cannot provide that information'],
+        },
+      },
+    ];
+
+    mockedFetchWithProxy.mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify(mockResponses.shift()), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    );
+
+    const target = {
+      id: () => 'test',
+      callApi: jest.fn().mockResolvedValue({ output: 'I cannot provide that information' }),
+    };
+
+    const discoveredPurpose = await doTargetPurposeDiscovery(target);
+
+    expect(discoveredPurpose).toEqual({
+      purpose: null,
+      limitations: null,
+      tools: [],
+      user: null,
+    });
+  });
+
+  it('should handle mixed valid/invalid tools from server', async () => {
+    const mockResponses = [
+      {
+        done: false,
+        question: 'What is your purpose?',
+        state: {
+          currentQuestionIndex: 0,
+          answers: [],
+        },
+      },
+      {
+        done: true,
+        purpose: {
+          purpose: 'Test purpose',
+          limitations: 'Test limitations',
+          tools: [
+            null,
+            { name: 'tool1', description: 'desc1', arguments: [] },
+            null,
+            { name: 'tool2', description: 'desc2', arguments: [] },
+          ],
+          user: 'Test user',
+        },
+        state: {
+          currentQuestionIndex: 1,
+          answers: ['Test response'],
+        },
+      },
+    ];
+
+    mockedFetchWithProxy.mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify(mockResponses.shift()), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    );
+
+    const target = {
+      id: () => 'test',
+      callApi: jest.fn().mockResolvedValue({ output: 'Test response' }),
+    };
+
+    const discoveredPurpose = await doTargetPurposeDiscovery(target);
+
+    expect(discoveredPurpose).toEqual({
+      purpose: 'Test purpose',
+      limitations: 'Test limitations',
+      tools: [
+        { name: 'tool1', description: 'desc1', arguments: [] },
+        { name: 'tool2', description: 'desc2', arguments: [] },
       ],
       user: 'Test user',
     });

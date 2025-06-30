@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { desc, eq, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
 import { getDb } from '../database';
+import { updateSignalFile } from '../database/signal';
 import {
   datasetsTable,
   evalsTable,
@@ -157,7 +158,7 @@ export default class Eval {
     }
 
     // backfill vars
-    if (!eval_.vars) {
+    if (!eval_.vars || eval_.vars.length === 0) {
       const vars = await EvalQueries.getVarsFromEval(id);
       evalInstance.setVars(vars);
       await EvalQueries.setVars(id, vars);
@@ -196,6 +197,7 @@ export default class Eval {
       author?: string;
       // Be wary, this is EvalResult[] and not EvaluateResult[]
       results?: EvalResult[];
+      vars?: string[];
     },
   ): Promise<Eval> {
     const createdAt = opts?.createdAt || new Date();
@@ -214,6 +216,7 @@ export default class Eval {
           description: config.description,
           config,
           results: {},
+          vars: opts?.vars || [],
         })
         .run();
 
@@ -389,6 +392,10 @@ export default class Eval {
       // We're only going to keep results in memory if the eval isn't persisted in the database
       // This is to avoid memory issues when running large evaluations
       this.results.push(newResult);
+    }
+    if (this.persisted) {
+      // Notify watchers that new results are available
+      updateSignalFile();
     }
   }
 
@@ -653,20 +660,36 @@ export default class Eval {
       stats.tokenUsage.total += prompt.metrics?.tokenUsage.total || 0;
       stats.tokenUsage.numRequests += prompt.metrics?.tokenUsage.numRequests || 0;
 
-      stats.tokenUsage.completionDetails.reasoning! +=
-        prompt.metrics?.tokenUsage.completionDetails?.reasoning || 0;
-      stats.tokenUsage.completionDetails.acceptedPrediction! +=
-        prompt.metrics?.tokenUsage.completionDetails?.acceptedPrediction || 0;
-      stats.tokenUsage.completionDetails.rejectedPrediction! +=
-        prompt.metrics?.tokenUsage.completionDetails?.rejectedPrediction || 0;
+      if (prompt.metrics?.tokenUsage.completionDetails && stats.tokenUsage.completionDetails) {
+        if (stats.tokenUsage.completionDetails.reasoning !== undefined) {
+          stats.tokenUsage.completionDetails.reasoning +=
+            prompt.metrics?.tokenUsage.completionDetails?.reasoning || 0;
+        }
+        if (stats.tokenUsage.completionDetails.acceptedPrediction !== undefined) {
+          stats.tokenUsage.completionDetails.acceptedPrediction +=
+            prompt.metrics?.tokenUsage.completionDetails?.acceptedPrediction || 0;
+        }
+        if (stats.tokenUsage.completionDetails.rejectedPrediction !== undefined) {
+          stats.tokenUsage.completionDetails.rejectedPrediction +=
+            prompt.metrics?.tokenUsage.completionDetails?.rejectedPrediction || 0;
+        }
+      }
 
       // Add assertion token usage from prompt metrics
-      if (prompt.metrics?.tokenUsage.assertions) {
-        stats.tokenUsage.assertions.total! += prompt.metrics.tokenUsage.assertions.total || 0;
-        stats.tokenUsage.assertions.prompt! += prompt.metrics.tokenUsage.assertions.prompt || 0;
-        stats.tokenUsage.assertions.completion! +=
-          prompt.metrics.tokenUsage.assertions.completion || 0;
-        stats.tokenUsage.assertions.cached! += prompt.metrics.tokenUsage.assertions.cached || 0;
+      if (prompt.metrics?.tokenUsage.assertions && stats.tokenUsage.assertions) {
+        if (stats.tokenUsage.assertions.total !== undefined) {
+          stats.tokenUsage.assertions.total += prompt.metrics.tokenUsage.assertions.total || 0;
+        }
+        if (stats.tokenUsage.assertions.prompt !== undefined) {
+          stats.tokenUsage.assertions.prompt += prompt.metrics.tokenUsage.assertions.prompt || 0;
+        }
+        if (stats.tokenUsage.assertions.completion !== undefined) {
+          stats.tokenUsage.assertions.completion +=
+            prompt.metrics.tokenUsage.assertions.completion || 0;
+        }
+        if (stats.tokenUsage.assertions.cached !== undefined) {
+          stats.tokenUsage.assertions.cached += prompt.metrics.tokenUsage.assertions.cached || 0;
+        }
       }
     }
 
@@ -766,9 +789,7 @@ export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[
   return results.map((result) => {
     const passCount =
       result.prompts?.reduce((memo, prompt) => {
-        // TODO(will): Verify whether prompt.metrics *should* be required.
-        invariant(!!prompt.metrics, 'Prompt metrics are required');
-        return memo + prompt.metrics!.testPassCount;
+        return memo + (prompt.metrics?.testPassCount ?? 0);
       }, 0) ?? 0;
 
     // All prompts should have the same number of test cases:
@@ -779,11 +800,6 @@ export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[
         (p.metrics?.testErrorCount ?? 0)
       );
     }) ?? [0];
-
-    invariant(
-      testCounts.every((t) => t === testCounts[0]),
-      'All prompts must have the same number of test cases',
-    );
 
     // Derive the number of tests from the first prompt.
     const testCount = testCounts.length > 0 ? testCounts[0] : 0;

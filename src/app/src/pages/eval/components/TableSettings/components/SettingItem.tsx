@@ -19,7 +19,7 @@ interface SettingItemProps {
   label: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
-  icon?: React.ReactNode;
+  icon?: JSX.Element | null;
   tooltipText?: string;
   disabled?: boolean;
   component?: 'checkbox' | 'switch';

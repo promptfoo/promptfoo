@@ -13,6 +13,7 @@ import type {
   CallApiContextParams,
   ProviderOptions,
   ProviderResponse,
+  TokenUsage,
 } from '../types';
 import { renderVarsInObject } from '../util';
 import { maybeLoadFromExternalFile } from '../util/file';
@@ -112,6 +113,13 @@ export function needsSignatureRefresh(
   return timeElapsed + effectiveBufferMs >= validityMs;
 }
 
+export const TokenEstimationConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  multiplier: z.number().min(0.01).default(1.3),
+});
+
+export type TokenEstimationConfig = z.infer<typeof TokenEstimationConfigSchema>;
+
 export const HttpProviderConfigSchema = z.object({
   body: z.union([z.record(z.any()), z.string(), z.array(z.any())]).optional(),
   headers: z.record(z.string()).optional(),
@@ -134,6 +142,8 @@ export const HttpProviderConfigSchema = z.object({
    * @deprecated use transformResponse instead
    */
   responseParser: z.union([z.string(), z.function()]).optional(),
+  // Token estimation configuration
+  tokenEstimation: TokenEstimationConfigSchema.optional(),
   // Digital Signature Authentication
   signatureAuth: z
     .object({
@@ -564,6 +574,22 @@ export async function createValidateStatus(
   );
 }
 
+/**
+ * Estimates token count for a given text using word-based counting
+ */
+export function estimateTokenCount(text: string, multiplier: number = 1.3): number {
+  if (!text || typeof text !== 'string') {
+    return 0;
+  }
+
+  // Split by whitespace and filter out empty strings
+  const words = text
+    .trim()
+    .split(/\s+/)
+    .filter((word) => word.length > 0);
+  return Math.ceil(words.length * multiplier);
+}
+
 export class HttpProvider implements ApiProvider {
   url: string;
   config: HttpProviderConfig;
@@ -578,6 +604,9 @@ export class HttpProvider implements ApiProvider {
 
   constructor(url: string, options: ProviderOptions) {
     this.config = HttpProviderConfigSchema.parse(options.config);
+    if (!this.config.tokenEstimation && cliState.config?.redteam) {
+      this.config.tokenEstimation = { enabled: true, multiplier: 1.3 };
+    }
     this.url = this.config.url || url;
     this.transformResponse = createTransformResponse(
       this.config.transformResponse || this.config.responseParser,
@@ -585,6 +614,7 @@ export class HttpProvider implements ApiProvider {
     this.sessionParser = createSessionParser(this.config.sessionParser);
     this.transformRequest = createTransformRequest(this.config.transformRequest);
     this.validateStatus = createValidateStatus(this.config.validateStatus);
+
     if (this.config.request) {
       this.config.request = maybeLoadFromExternalFile(this.config.request) as string;
     } else {
@@ -603,6 +633,36 @@ export class HttpProvider implements ApiProvider {
 
   toString(): string {
     return `[HTTP Provider ${this.url}]`;
+  }
+
+  /**
+   * Estimates token usage for prompt and completion text
+   */
+  private async estimateTokenUsage(
+    promptText: string,
+    completionText: string,
+  ): Promise<Partial<TokenUsage> | undefined> {
+    if (!this.config.tokenEstimation?.enabled) {
+      return undefined;
+    }
+
+    try {
+      const config = this.config.tokenEstimation;
+
+      const promptTokens = estimateTokenCount(promptText, config.multiplier);
+      const completionTokens = estimateTokenCount(completionText, config.multiplier);
+      const totalTokens = promptTokens + completionTokens;
+
+      return {
+        prompt: promptTokens,
+        completion: completionTokens,
+        total: totalTokens,
+        numRequests: 1,
+      };
+    } catch (err) {
+      logger.warn(`Failed to estimate tokens: ${String(err)}`);
+      return undefined;
+    }
   }
 
   private async refreshSignatureIfNeeded(): Promise<void> {
@@ -801,7 +861,7 @@ export class HttpProvider implements ApiProvider {
       },
       REQUEST_TIMEOUT_MS,
       'text',
-      context?.debug,
+      context?.bustCache ?? context?.debug,
       this.config.maxRetries,
     );
 
@@ -848,16 +908,14 @@ export class HttpProvider implements ApiProvider {
       throw err;
     }
     const parsedOutput = (await this.transformResponse)(parsedData, rawText, { response });
-    if (parsedOutput?.output) {
-      return {
-        ...ret,
-        ...parsedOutput,
-      };
-    }
-    return {
-      ...ret,
-      output: parsedOutput,
-    };
+
+    return this.processResponseWithTokenEstimation(
+      ret,
+      parsedOutput,
+      rawText,
+      transformedPrompt,
+      prompt,
+    );
   }
 
   private async callApiWithRawRequest(
@@ -929,16 +987,67 @@ export class HttpProvider implements ApiProvider {
     }
 
     const parsedOutput = (await this.transformResponse)(parsedData, rawText, { response });
+
+    return this.processResponseWithTokenEstimation(
+      ret,
+      parsedOutput,
+      rawText,
+      transformedPrompt,
+      prompt,
+    );
+  }
+
+  /**
+   * Extracts completion text from parsed output with fallback to raw text
+   */
+  private getCompletionText(parsedOutput: any, rawText: string): string {
+    if (typeof parsedOutput === 'string') {
+      return parsedOutput;
+    }
+    if (parsedOutput?.output && typeof parsedOutput.output === 'string') {
+      return parsedOutput.output;
+    }
+    return rawText;
+  }
+
+  /**
+   * Processes response and adds token estimation if enabled
+   */
+  private async processResponseWithTokenEstimation(
+    ret: ProviderResponse,
+    parsedOutput: any,
+    rawText: string,
+    transformedPrompt: any,
+    prompt: string,
+  ): Promise<ProviderResponse> {
+    // Estimate tokens if enabled
+    let estimatedTokenUsage: Partial<TokenUsage> | undefined;
+    if (this.config.tokenEstimation?.enabled) {
+      const promptText = typeof transformedPrompt === 'string' ? transformedPrompt : prompt;
+      const completionText = this.getCompletionText(parsedOutput, rawText);
+      estimatedTokenUsage = await this.estimateTokenUsage(promptText, completionText);
+    }
+
     if (parsedOutput?.output) {
-      return {
+      const result = {
         ...ret,
         ...parsedOutput,
       };
+      // Add estimated token usage if available and not already present
+      if (estimatedTokenUsage && !result.tokenUsage) {
+        result.tokenUsage = estimatedTokenUsage;
+      }
+      return result;
     }
 
-    return {
+    const result = {
       ...ret,
       output: parsedOutput,
     };
+    // Add estimated token usage if available
+    if (estimatedTokenUsage && !result.tokenUsage) {
+      result.tokenUsage = estimatedTokenUsage;
+    }
+    return result;
   }
 }

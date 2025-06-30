@@ -186,6 +186,11 @@ const EvaluateOptionsSchema = z.object({
    * Timeout in milliseconds for each evaluation step. Default is 0 (no timeout).
    */
   timeoutMs: z.number().optional(),
+  /**
+   * Maximum runtime in milliseconds for the entire evaluation. Default is 0 (no limit).
+   */
+  maxEvalTimeMs: z.number().optional(),
+  isRedteam: z.boolean().optional(),
 });
 export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & { abortSignal?: AbortSignal };
 
@@ -718,6 +723,52 @@ export type AtomicTestCase<vars = Record<string, string | object>> = z.infer<
   typeof AtomicTestCaseSchema
 >;
 
+/**
+ * Configuration schema for test generators that accept parameters
+ *
+ * @example
+ * ```yaml
+ * tests:
+ *   - path: file://test_cases.py:generate_tests
+ *     config:
+ *       dataset: truthfulqa
+ *       split: validation
+ *       max_rows: 100
+ * ```
+ */
+export const TestGeneratorConfigSchema = z.object({
+  /** Path to the test generator function (e.g., file://path/to/tests.py:function_name) */
+  path: z.string(),
+  /**
+   * Configuration object passed to the generator function
+   * Common configuration options include:
+   * - dataset: string - Dataset identifier
+   * - split: string - Dataset split (train/validation/test)
+   * - max_rows: number - Maximum number of test cases to generate
+   * - languages: string[] - Array of target languages
+   * - difficulty: string - Difficulty level (basic/intermediate/advanced)
+   * - categories: string[] - Array of test categories
+   * - data: object - Custom data configuration
+   *
+   * Values can reference external files using file:// paths
+   */
+  config: z
+    .record(
+      z.string(),
+      z.union([
+        z.string(),
+        z.number(),
+        z.boolean(),
+        z.array(z.union([z.string(), z.number(), z.boolean()])),
+        z.record(z.string(), z.any()),
+        z.any(), // Allow for complex nested structures and file:// references
+      ]),
+    )
+    .optional(),
+});
+
+export type TestGeneratorConfig = z.infer<typeof TestGeneratorConfigSchema>;
+
 export const DerivedMetricSchema = z.object({
   // The name of this metric
   name: z.string(),
@@ -804,6 +855,44 @@ export const TestSuiteSchema = z.object({
 
   // Redteam configuration - used only when generating redteam tests
   redteam: z.custom<RedteamFileConfig>().optional(),
+
+  // Tracing configuration (simplified version for parsed TestSuite)
+  tracing: z
+    .object({
+      enabled: z.boolean(),
+      otlp: z
+        .object({
+          http: z
+            .object({
+              enabled: z.boolean(),
+              port: z.number(),
+              host: z.string().optional(),
+              acceptFormats: z.array(z.string()),
+            })
+            .optional(),
+          grpc: z
+            .object({
+              enabled: z.boolean(),
+              port: z.number(),
+            })
+            .optional(),
+        })
+        .optional(),
+      storage: z
+        .object({
+          type: z.string(),
+          retentionDays: z.number(),
+        })
+        .optional(),
+      forwarding: z
+        .object({
+          enabled: z.boolean(),
+          endpoint: z.string(),
+          headers: z.record(z.string()).optional(),
+        })
+        .optional(),
+    })
+    .optional(),
 });
 
 export type TestSuite = z.infer<typeof TestSuiteSchema>;
@@ -837,7 +926,13 @@ export const TestSuiteConfigSchema = z.object({
   ]),
 
   // Path to a test file, OR list of LLM prompt variations (aka "test case")
-  tests: z.union([z.string(), z.array(z.union([z.string(), TestCaseSchema]))]).optional(),
+  tests: z
+    .union([
+      z.string(),
+      z.array(z.union([z.string(), TestCaseSchema, TestGeneratorConfigSchema])),
+      TestGeneratorConfigSchema,
+    ])
+    .optional(),
 
   // Scenarios, groupings of data and tests to be evaluated
   scenarios: z.array(z.union([z.string(), ScenarioSchema])).optional(),
@@ -891,6 +986,50 @@ export const TestSuiteConfigSchema = z.object({
 
   // Write results to disk so they can be viewed in web viewer
   writeLatestResults: z.boolean().optional(),
+
+  // Tracing configuration
+  tracing: z
+    .object({
+      enabled: z.boolean().default(false),
+
+      // OTLP receiver configuration
+      otlp: z
+        .object({
+          http: z
+            .object({
+              enabled: z.boolean().default(true),
+              port: z.number().default(4318),
+              host: z.string().default('0.0.0.0'),
+              acceptFormats: z.array(z.enum(['protobuf', 'json'])).default(['json']),
+            })
+            .optional(),
+          grpc: z
+            .object({
+              enabled: z.boolean().default(false),
+              port: z.number().default(4317),
+            })
+            .optional(),
+        })
+        .optional(),
+
+      // Storage configuration
+      storage: z
+        .object({
+          type: z.enum(['sqlite']).default('sqlite'),
+          retentionDays: z.number().default(30),
+        })
+        .optional(),
+
+      // Optional: Forward traces to another collector
+      forwarding: z
+        .object({
+          enabled: z.boolean().default(false),
+          endpoint: z.string(),
+          headers: z.record(z.string()).optional(),
+        })
+        .optional(),
+    })
+    .optional(),
 });
 
 export type TestSuiteConfig = z.infer<typeof TestSuiteConfigSchema>;

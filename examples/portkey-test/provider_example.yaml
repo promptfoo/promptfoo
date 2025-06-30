@@ -5,7 +5,7 @@ prompts:
   - 'Write a short tweet about {{topic}}'
 
 providers:
-  - id: portkey:gpt-4o-mini
+  - id: portkey:gpt-4.1-mini
     config:
       portkeyProvider: openai
 

@@ -96,29 +96,63 @@ const COMMAND = 'discover';
 // Utils
 // ========================================================
 
+// Helper function to check if a string value should be considered null
+const isNullLike = (value: string | null | undefined): boolean => {
+  return !value || value === 'null' || value.trim() === '';
+};
+
+// Helper function to clean tools array
+const cleanTools = (tools: Array<any> | null | undefined): Array<any> => {
+  if (!tools || !Array.isArray(tools)) {
+    return [];
+  }
+  return tools.filter((tool) => tool !== null && typeof tool === 'object');
+};
+
+/**
+ * Normalizes a TargetPurposeDiscoveryResult by converting null-like values to actual null
+ * and cleaning up empty or meaningless content.
+ */
+export function normalizeTargetPurposeDiscoveryResult(
+  result: TargetPurposeDiscoveryResult,
+): TargetPurposeDiscoveryResult {
+  return {
+    purpose: isNullLike(result.purpose) ? null : result.purpose,
+    limitations: isNullLike(result.limitations) ? null : result.limitations,
+    user: isNullLike(result.user) ? null : result.user,
+    tools: cleanTools(result.tools),
+  };
+}
+
 /**
  * Queries Cloud for the purpose-discovery logic, sends each logic to the target,
  * and summarizes the results.
  *
  * @param target - The target API provider.
  * @param prompt - The prompt to use for the discovery.
+ * @param showProgress - Whether to show the progress bar.
  * @returns The discovery result.
  */
 export async function doTargetPurposeDiscovery(
   target: ApiProvider,
   prompt?: Prompt,
+  showProgress: boolean = true,
 ): Promise<TargetPurposeDiscoveryResult | undefined> {
   // Generate a unique session id to pass to the target across all turns.
   const sessionId = randomUUID();
 
-  const pbar = new cliProgress.SingleBar({
-    format: `Mapping the target {bar} {percentage}% | {value}${DEFAULT_TURN_COUNT ? '/{total}' : ''} turns`,
-    barCompleteChar: '\u2588',
-    barIncompleteChar: '\u2591',
-    hideCursor: true,
-  });
+  let pbar: cliProgress.SingleBar | undefined;
+  if (showProgress) {
+    pbar = new cliProgress.SingleBar({
+      format: `Mapping the target {bar} {percentage}% | {value}${DEFAULT_TURN_COUNT ? '/{total}' : ''} turns`,
+      barCompleteChar: '\u2588',
+      barIncompleteChar: '\u2591',
+      hideCursor: true,
+      gracefulExit: true,
+    });
 
-  pbar.start(DEFAULT_TURN_COUNT, 0);
+    pbar.start(DEFAULT_TURN_COUNT, 0);
+  }
 
   let done = false;
   let question: string | undefined;
@@ -173,7 +207,9 @@ export async function doTargetPurposeDiscovery(
       state = data.state;
 
       if (data.error) {
-        logger.error(`${LOG_PREFIX} Error from remote server: ${data.error}`);
+        const errorMessage = `Error from remote server: ${data.error}`;
+        logger.error(`${LOG_PREFIX} ${errorMessage}`);
+        throw new Error(errorMessage);
       }
       // Should another question be asked?
       else if (!done) {
@@ -186,15 +222,19 @@ export async function doTargetPurposeDiscovery(
         const targetResponse = await target.callApi(renderedPrompt, {
           prompt: { raw: question, label: 'Target Discovery Question' },
           vars: { sessionId },
+          bustCache: true,
         });
 
         if (targetResponse.error) {
-          logger.error(`${LOG_PREFIX} Error from target: ${targetResponse.error}`);
-          if (turn > MAX_TURN_COUNT) {
-            logger.error(`${LOG_PREFIX} Too many retries, giving up.`);
-            return undefined;
-          }
-          continue;
+          const errorMessage = `Error from target: ${targetResponse.error}`;
+          logger.error(`${LOG_PREFIX} ${errorMessage}`);
+          throw new Error(errorMessage);
+        }
+
+        if (turn > MAX_TURN_COUNT) {
+          const errorMessage = `Too many retries, giving up.`;
+          logger.error(`${LOG_PREFIX} ${errorMessage}`);
+          throw new Error(errorMessage);
         }
 
         logger.debug(
@@ -203,85 +243,17 @@ export async function doTargetPurposeDiscovery(
 
         state.answers.push(targetResponse.output);
       }
-    } catch (error) {
-      logger.error(
-        `An unexpected error occurred during target discovery: ${error instanceof Error ? error.message : String(error)}\n${
-          error instanceof Error ? error.stack : ''
-        }`,
-      );
     } finally {
-      pbar.increment(1);
+      if (showProgress) {
+        pbar?.increment(1);
+      }
     }
   }
-  pbar.stop();
+  if (showProgress) {
+    pbar?.stop();
+  }
 
-  return discoveryResult;
-}
-
-/**
- * Merges the human-defined purpose with the discovered information, structuring these as markdown to be used by test generation.
- * @param humanDefinedPurpose - The human-defined purpose.
- * @param discoveryResult - The discovery result.
- * @returns The merged purpose as markdown.
- */
-export function mergeTargetPurposeDiscoveryResults(
-  humanDefinedPurpose?: string,
-  discoveryResult?: TargetPurposeDiscoveryResult,
-): string {
-  return [
-    humanDefinedPurpose &&
-      dedent`
-      # Human Defined Target Purpose
-
-      This purpose was defined by the user and should be trusted and treated as absolute truth:
-
-      ${humanDefinedPurpose}
-    `,
-    discoveryResult &&
-      dedent`
-      # Agent Discovered Target Purpose
-
-      The following information was discovered by the agent through conversations with the target.
-
-      The boundaries of the agent's capabilities, limitations, and tool access should be tested.
-
-      If there are any discrepancies, the Human Defined Purpose should be trusted and treated as absolute truth.
-    `,
-    discoveryResult?.purpose &&
-      dedent`
-      ## Purpose
-
-      The target believes its purpose is:
-
-      ${discoveryResult.purpose}
-    `,
-    discoveryResult?.limitations &&
-      dedent`
-      ## Limitations
-
-      The target believes its limitations are:
-
-      ${discoveryResult.limitations}
-    `,
-    discoveryResult?.tools &&
-      dedent`
-      ## Tools
-
-      The target believes it has access to these tools:
-
-      ${JSON.stringify(discoveryResult.tools, null)}
-    `,
-    discoveryResult?.user &&
-      dedent`
-      ## User
-
-      The target believes the user of the application is:
-
-      ${discoveryResult.user}
-    `,
-  ]
-    .filter(Boolean)
-    .join('\n');
+  return discoveryResult ? normalizeTargetPurposeDiscoveryResult(discoveryResult) : undefined;
 }
 
 // ========================================================
@@ -397,22 +369,38 @@ export function discoverCommand(
 
         if (discoveryResult) {
           if (discoveryResult.purpose) {
-            logger.info(chalk.bold(chalk.green('\nThe target believes its purpose is:\n')));
+            logger.info(chalk.bold(chalk.green('\n1. The target believes its purpose is:\n')));
             logger.info(discoveryResult.purpose);
           }
           if (discoveryResult.limitations) {
-            logger.info(chalk.bold(chalk.green('\nThe target believes its limitations to be:\n')));
+            logger.info(
+              chalk.bold(chalk.green('\n2. The target believes its limitations to be:\n')),
+            );
             logger.info(discoveryResult.limitations);
           }
-          if (discoveryResult.tools) {
-            logger.info(chalk.bold(chalk.green('\nThe target divulged access to these tools:\n')));
+          if (discoveryResult.tools && discoveryResult.tools.length > 0) {
+            logger.info(
+              chalk.bold(chalk.green('\n3. The target divulged access to these tools:\n')),
+            );
             logger.info(JSON.stringify(discoveryResult.tools, null, 2));
           }
           if (discoveryResult.user) {
             logger.info(
-              chalk.bold(chalk.green('\nThe target believes the user of the application is:\n')),
+              chalk.bold(chalk.green('\n4. The target believes the user of the application is:\n')),
             );
             logger.info(discoveryResult.user);
+          }
+
+          // If no meaningful information was discovered, inform the user
+          if (
+            !discoveryResult.purpose &&
+            !discoveryResult.limitations &&
+            (!discoveryResult.tools || discoveryResult.tools.length === 0) &&
+            !discoveryResult.user
+          ) {
+            logger.info(
+              chalk.yellow('\nNo meaningful information was discovered about the target.'),
+            );
           }
         }
       } catch (error) {

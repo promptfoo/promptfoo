@@ -1,9 +1,17 @@
 import opener from 'opener';
-import { VERSION, getDefaultPort } from '../../src/constants';
+import * as cache from '../../src/cache';
+import { getDefaultPort, VERSION } from '../../src/constants';
 import logger from '../../src/logger';
+import * as remoteGeneration from '../../src/redteam/remoteGeneration';
 import * as readlineUtils from '../../src/util/readline';
 // Import the module under test after mocks are set up
-import { BrowserBehavior, checkServerRunning, openBrowser } from '../../src/util/server';
+import {
+  __clearFeatureCache,
+  BrowserBehavior,
+  checkServerFeatureSupport,
+  checkServerRunning,
+  openBrowser,
+} from '../../src/util/server';
 
 // Mock opener
 jest.mock('opener', () => jest.fn());
@@ -20,6 +28,16 @@ jest.mock('../../src/util/readline', () => ({
   promptYesNo: jest.fn(),
   promptUser: jest.fn(),
   createReadlineInterface: jest.fn(),
+}));
+
+// Mock fetchWithCache
+jest.mock('../../src/cache', () => ({
+  fetchWithCache: jest.fn(),
+}));
+
+// Mock remoteGeneration
+jest.mock('../../src/redteam/remoteGeneration', () => ({
+  getRemoteVersionUrl: jest.fn(),
 }));
 
 // Properly mock fetch
@@ -155,6 +173,180 @@ describe('Server Utilities', () => {
       await openBrowser(BrowserBehavior.OPEN, customPort);
 
       expect(opener).toHaveBeenCalledWith(`http://localhost:${customPort}`);
+    });
+  });
+
+  describe('checkServerFeatureSupport', () => {
+    const featureName = 'test-feature';
+
+    beforeEach(() => {
+      // Clear the feature cache before each test to ensure isolation
+      __clearFeatureCache();
+      jest.clearAllMocks();
+      // Setup default mock for getRemoteVersionUrl to return a valid URL
+      jest
+        .mocked(remoteGeneration.getRemoteVersionUrl)
+        .mockReturnValue('https://api.promptfoo.app/version');
+    });
+
+    it('should return true when server buildDate is after required date', async () => {
+      const requiredDate = '2024-01-01T00:00:00Z';
+      const serverBuildDate = '2024-06-15T10:30:00Z';
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: { buildDate: serverBuildDate, version: '1.0.0' },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await checkServerFeatureSupport(featureName, requiredDate);
+
+      expect(cache.fetchWithCache).toHaveBeenCalledWith(
+        'https://api.promptfoo.app/version',
+        {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+        },
+        5000,
+      );
+      expect(result).toBe(true);
+      expect(logger.debug).toHaveBeenCalledWith(
+        expect.stringContaining(
+          `${featureName}: buildDate=${serverBuildDate}, required=${requiredDate}, supported=true`,
+        ),
+      );
+    });
+
+    it('should return false when server buildDate is before required date', async () => {
+      const requiredDate = '2024-06-01T00:00:00Z';
+      const serverBuildDate = '2024-01-15T10:30:00Z';
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: { buildDate: serverBuildDate, version: '1.0.0' },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await checkServerFeatureSupport(featureName, requiredDate);
+
+      expect(result).toBe(false);
+      expect(logger.debug).toHaveBeenCalledWith(
+        expect.stringContaining(
+          `${featureName}: buildDate=${serverBuildDate}, required=${requiredDate}, supported=false`,
+        ),
+      );
+    });
+
+    it('should return false when no version info available', async () => {
+      jest.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {},
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await checkServerFeatureSupport(featureName, '2024-01-01T00:00:00Z');
+
+      expect(result).toBe(false);
+      expect(logger.debug).toHaveBeenCalledWith(
+        expect.stringContaining(`${featureName}: no version info, assuming not supported`),
+      );
+    });
+
+    it('should return true when no remote URL is available (local server assumption)', async () => {
+      // Mock getRemoteVersionUrl to return null for this specific test
+      jest.mocked(remoteGeneration.getRemoteVersionUrl).mockReturnValueOnce(null);
+
+      const result = await checkServerFeatureSupport(featureName, '2024-01-01T00:00:00Z');
+
+      expect(result).toBe(true);
+      expect(cache.fetchWithCache).not.toHaveBeenCalled();
+      expect(logger.debug).toHaveBeenCalledWith(
+        expect.stringContaining(
+          `No remote URL available for ${featureName}, assuming local server supports it`,
+        ),
+      );
+    });
+
+    it('should return false when fetchWithCache throws an error', async () => {
+      jest.mocked(cache.fetchWithCache).mockRejectedValueOnce(new Error('Network error'));
+
+      const result = await checkServerFeatureSupport(featureName, '2024-01-01T00:00:00Z');
+
+      expect(result).toBe(false);
+      expect(logger.debug).toHaveBeenCalledWith(
+        expect.stringContaining(
+          `Version check failed for ${featureName}, assuming not supported: Error: Network error`,
+        ),
+      );
+    });
+
+    it('should cache results to avoid repeated API calls', async () => {
+      const requiredDate = '2024-01-01T00:00:00Z';
+      const serverBuildDate = '2024-06-15T10:30:00Z';
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: { buildDate: serverBuildDate, version: '1.0.0' },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      // First call
+      const result1 = await checkServerFeatureSupport(featureName, requiredDate);
+      // Second call with same parameters
+      const result2 = await checkServerFeatureSupport(featureName, requiredDate);
+
+      expect(result1).toBe(true);
+      expect(result2).toBe(true);
+      // fetchWithCache should only be called once due to caching
+      expect(cache.fetchWithCache).toHaveBeenCalledTimes(1);
+    });
+
+    it('should handle different feature names with separate cache entries', async () => {
+      const feature1 = 'feature-one';
+      const feature2 = 'feature-two';
+      const requiredDate = '2024-01-01T00:00:00Z';
+
+      jest
+        .mocked(cache.fetchWithCache)
+        .mockResolvedValueOnce({
+          data: { buildDate: '2024-06-15T10:30:00Z', version: '1.0.0' },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        })
+        .mockResolvedValueOnce({
+          data: { buildDate: '2023-12-15T10:30:00Z', version: '1.0.0' },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+      const result1 = await checkServerFeatureSupport(feature1, requiredDate);
+      const result2 = await checkServerFeatureSupport(feature2, requiredDate);
+
+      expect(result1).toBe(true);
+      expect(result2).toBe(false);
+      expect(cache.fetchWithCache).toHaveBeenCalledTimes(2);
+    });
+
+    it('should handle timezone differences correctly', async () => {
+      const requiredDate = '2024-06-01T00:00:00Z'; // UTC
+      const serverBuildDate = '2024-06-01T08:00:00+08:00'; // Same moment in different timezone
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: { buildDate: serverBuildDate, version: '1.0.0' },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await checkServerFeatureSupport(featureName, requiredDate);
+
+      expect(result).toBe(true);
     });
   });
 });

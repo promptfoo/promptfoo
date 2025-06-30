@@ -505,9 +505,13 @@ describe('EvalOutputCell highlight toggle functionality', () => {
     const cellElement = container.querySelector('.cell');
     expect(cellElement).toBeInTheDocument();
 
-    // Check that the cell has highlight styling applied
+    // Check that the cell has highlight background but NOT text color (to avoid pill conflicts)
     expect(cellElement).toHaveStyle({
       backgroundColor: 'var(--cell-highlight-color)',
+    });
+
+    // The cell should NOT have text color applied directly to prevent pill text issues
+    expect(cellElement).not.toHaveStyle({
       color: 'var(--cell-highlight-text-color)',
     });
   });
@@ -520,9 +524,8 @@ describe('EvalOutputCell highlight toggle functionality', () => {
     expect(cellElement).toBeInTheDocument();
 
     // Check that the cell does not have highlight background color
-    expect(cellElement).not.toHaveStyle({
-      backgroundColor: 'var(--cell-highlight-color)',
-    });
+    const style = cellElement!.getAttribute('style') || '';
+    expect(style).not.toContain('var(--cell-highlight-color)');
   });
 
   it('displays comment text without !highlight prefix in comment display', () => {
@@ -654,5 +657,291 @@ describe('EvalOutputCell provider override', () => {
 
     const { container } = renderWithProviders(<EvalOutputCell {...props} />);
     expect(container.querySelector('.provider.pill')).not.toBeInTheDocument();
+  });
+});
+
+describe('EvalOutputCell cell highlighting styling', () => {
+  const mockOnRating = vi.fn();
+
+  const createPropsWithComment = (comment: string): MockEvalOutputCellProps => ({
+    firstOutput: {
+      cost: 0,
+      id: 'test-id',
+      latencyMs: 100,
+      namedScores: {},
+      pass: true,
+      failureReason: ResultFailureReason.NONE,
+      prompt: 'Test prompt',
+      provider: 'test-provider',
+      score: 0.8,
+      text: 'Test output text',
+      testCase: {},
+    },
+    maxTextLength: 100,
+    onRating: mockOnRating,
+    output: {
+      cost: 0,
+      gradingResult: {
+        comment,
+        componentResults: [],
+        pass: true,
+        reason: 'Test reason',
+        score: 0.8,
+      },
+      id: 'test-id',
+      latencyMs: 100,
+      namedScores: {},
+      pass: true,
+      failureReason: ResultFailureReason.NONE,
+      prompt: 'Test prompt',
+      provider: 'test-provider',
+      score: 0.8,
+      text: 'Test output text',
+      testCase: {},
+    },
+    promptIndex: 0,
+    rowIndex: 0,
+    searchText: '',
+    showDiffs: false,
+    showStats: true,
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('applies only background color to cell when highlighted, not text color', () => {
+    const props = createPropsWithComment('!highlight This cell should be highlighted');
+    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+
+    const cellElement = container.querySelector('.cell');
+    expect(cellElement).toBeInTheDocument();
+
+    // Check that the cell has highlight background but NO text color override
+    expect(cellElement).toHaveStyle({
+      backgroundColor: 'var(--cell-highlight-color)',
+    });
+
+    // The cell itself should NOT have the highlight text color applied directly
+    expect(cellElement).not.toHaveStyle({
+      color: 'var(--cell-highlight-text-color)',
+    });
+  });
+
+  it('applies text color only to content areas when highlighted', () => {
+    const props = createPropsWithComment('!highlight Content should be highlighted');
+    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+
+    // Find the content wrapper div that should have the text color
+    const contentElements = container.querySelectorAll(
+      'div[style*="color: var(--cell-highlight-text-color)"]',
+    );
+    expect(contentElements.length).toBeGreaterThan(0);
+
+    // Verify that main content area has the highlight text color
+    const hasContentWithHighlightColor = Array.from(contentElements).some(
+      (element) =>
+        element.textContent?.includes('Content should be highlighted') ||
+        element.querySelector('*')?.textContent?.includes('Test output text'),
+    );
+    expect(hasContentWithHighlightColor).toBe(true);
+  });
+
+  it('preserves status pill visibility and styling when cell is highlighted', () => {
+    const props = createPropsWithComment('!highlight Highlighted cell');
+    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+
+    // Find the status pill
+    const pillElement = container.querySelector('.pill');
+    expect(pillElement).toBeInTheDocument();
+    expect(pillElement).toBeVisible();
+
+    // Verify pill text is present and visible
+    expect(pillElement?.textContent).toBeTruthy();
+
+    // The pill should NOT have the cell highlight text color applied
+    expect(pillElement).not.toHaveStyle({
+      color: 'var(--cell-highlight-text-color)',
+    });
+
+    // Verify the cell has highlight background but pill maintains its own styling
+    const cellElement = container.querySelector('.cell');
+    expect(cellElement).toHaveStyle({
+      backgroundColor: 'var(--cell-highlight-color)',
+    });
+  });
+
+  it('preserves pass/fail pill colors when cell is highlighted', () => {
+    const passProps = createPropsWithComment('!highlight Pass case');
+    const { container: passContainer } = renderWithProviders(<EvalOutputCell {...passProps} />);
+
+    const passStatus = passContainer.querySelector('.status.pass');
+    expect(passStatus).toBeInTheDocument();
+
+    const passPill = passContainer.querySelector('.pill');
+    expect(passPill).toBeInTheDocument();
+    expect(passPill).toBeVisible();
+
+    // Test with fail case
+    const failProps = {
+      ...createPropsWithComment('!highlight Fail case'),
+      output: {
+        ...createPropsWithComment('!highlight Fail case').output,
+        pass: false,
+        gradingResult: {
+          comment: '!highlight Fail case',
+          componentResults: [],
+          pass: false,
+          reason: 'Test fail reason',
+          score: 0.2,
+        },
+      },
+    };
+
+    const { container: failContainer } = renderWithProviders(<EvalOutputCell {...failProps} />);
+    const failStatus = failContainer.querySelector('.status.fail');
+    expect(failStatus).toBeInTheDocument();
+
+    const failPill = failContainer.querySelector('.pill');
+    expect(failPill).toBeInTheDocument();
+    expect(failPill).toBeVisible();
+  });
+
+  it('preserves provider pill styling when cell is highlighted', () => {
+    const propsWithProvider = {
+      ...createPropsWithComment('!highlight Provider override test'),
+      output: {
+        ...createPropsWithComment('!highlight Provider override test').output,
+        testCase: {
+          provider: 'openai:gpt-4-mini',
+        },
+      },
+    };
+
+    const { container } = renderWithProviders(<EvalOutputCell {...propsWithProvider} />);
+
+    // Find the provider pill
+    const providerPill = container.querySelector('.provider.pill');
+    expect(providerPill).toBeInTheDocument();
+    expect(providerPill).toBeVisible();
+    expect(providerPill?.textContent).toBe('openai:gpt-4-mini');
+
+    // Provider pill should maintain its own styling even with cell highlighting
+    expect(providerPill).not.toHaveStyle({
+      color: 'var(--cell-highlight-text-color)',
+    });
+  });
+
+  it('applies highlight text color to comment when highlighted', () => {
+    const props = createPropsWithComment('!highlight This is a comment');
+    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+
+    // Find the comment element
+    const commentElement = container.querySelector('.comment');
+    expect(commentElement).toBeInTheDocument();
+    expect(commentElement?.textContent).toBe('This is a comment');
+
+    // Comment should have the highlight text color applied
+    expect(commentElement).toHaveStyle({
+      color: 'var(--cell-highlight-text-color)',
+    });
+  });
+
+  it('does not apply text color when not highlighted', () => {
+    const props = createPropsWithComment('Regular comment');
+    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+
+    // No elements should have the highlight text color when not highlighted
+    const elementsWithHighlightColor = container.querySelectorAll(
+      '[style*="var(--cell-highlight-text-color)"]',
+    );
+    expect(elementsWithHighlightColor.length).toBe(0);
+
+    // Cell should not have highlight background
+    const cellElement = container.querySelector('.cell');
+    const style = cellElement!.getAttribute('style') || '';
+    expect(style).not.toContain('var(--cell-highlight-color)');
+  });
+
+  it('maintains text visibility during highlight state transitions', async () => {
+    let currentComment = 'Regular comment';
+    const props = createPropsWithComment(currentComment);
+    const { container, rerender } = renderWithProviders(<EvalOutputCell {...props} />);
+
+    // Initial state - no highlighting
+    let pillElement = container.querySelector('.pill');
+    expect(pillElement).toBeVisible();
+    expect(pillElement?.textContent).toBeTruthy();
+
+    // Toggle highlight ON
+    const highlightButton = screen.getByLabelText('Toggle test highlight');
+    await userEvent.click(highlightButton);
+
+    // Simulate the state change by re-rendering with highlighted comment
+    currentComment = '!highlight Regular comment';
+    const highlightedProps = createPropsWithComment(currentComment);
+    rerender(<EvalOutputCell {...highlightedProps} />);
+
+    // Verify pill is still visible with highlighting applied
+    pillElement = container.querySelector('.pill');
+    expect(pillElement).toBeVisible();
+    expect(pillElement?.textContent).toBeTruthy();
+
+    // Verify cell has highlight background
+    const cellElement = container.querySelector('.cell');
+    expect(cellElement).toHaveStyle({
+      backgroundColor: 'var(--cell-highlight-color)',
+    });
+
+    // Toggle highlight OFF
+    const newHighlightButton = screen.getByLabelText('Toggle test highlight');
+    await userEvent.click(newHighlightButton);
+
+    // Simulate state change back to non-highlighted
+    const unhighlightedProps = createPropsWithComment('Regular comment');
+    rerender(<EvalOutputCell {...unhighlightedProps} />);
+
+    // Verify pill is still visible without highlighting
+    pillElement = container.querySelector('.pill');
+    expect(pillElement).toBeVisible();
+    expect(pillElement?.textContent).toBeTruthy();
+  });
+
+  it('uses CSS variables for highlighting colors', () => {
+    const props = createPropsWithComment('!highlight CSS variables test');
+    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+
+    const cellElement = container.querySelector('.cell');
+    expect(cellElement).toHaveStyle({
+      backgroundColor: 'var(--cell-highlight-color)',
+    });
+
+    const contentElements = container.querySelectorAll(
+      '[style*="var(--cell-highlight-text-color)"]',
+    );
+    expect(contentElements.length).toBeGreaterThan(0);
+  });
+
+  it('maintains proper DOM structure with highlighting applied', () => {
+    const props = createPropsWithComment('!highlight DOM structure test');
+    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+
+    // Verify key elements are present and properly structured
+    const cellElement = container.querySelector('.cell');
+    expect(cellElement).toBeInTheDocument();
+
+    const statusElement = container.querySelector('.status');
+    expect(statusElement).toBeInTheDocument();
+
+    const statusRowElement = container.querySelector('.status-row');
+    expect(statusRowElement).toBeInTheDocument();
+
+    const pillElement = container.querySelector('.pill');
+    expect(pillElement).toBeInTheDocument();
+
+    // Verify highlighting doesn't break the DOM hierarchy
+    expect(statusElement?.contains(statusRowElement)).toBe(true);
+    expect(statusRowElement?.contains(pillElement)).toBe(true);
+    expect(cellElement?.contains(statusElement)).toBe(true);
   });
 });

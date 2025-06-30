@@ -525,6 +525,186 @@ providers:
         }
 ```
 
+## Token Estimation
+
+By default, the HTTP provider does not provide token usage statistics since it's designed for general HTTP APIs that may not return token information. However, you can enable optional token estimation to get approximate token counts for cost tracking and analysis. Token estimation is automatically enabled when running redteam scans so you can track approximate costs without additional configuration.
+
+Token estimation uses a simple word-based counting method with configurable multipliers. This provides a rough approximation that's useful for basic cost estimation and usage tracking.
+
+:::note Accuracy
+Word-based estimation provides approximate token counts. For precise token counting, implement custom logic in your `transformResponse` function using a proper tokenizer library.
+:::
+
+### When to Use Token Estimation
+
+Token estimation is useful when:
+
+- Your API doesn't return token usage information
+- You need basic cost estimates for budget tracking
+- You want to monitor usage patterns across different prompts
+- You're migrating from an API that provides token counts
+
+Don't use token estimation when:
+
+- Your API already provides accurate token counts (use `transformResponse` instead)
+- You need precise token counts for billing
+- You're working with non-English text where word counting is less accurate
+
+### Basic Token Estimation
+
+Enable basic token estimation with default settings:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://example.com/api'
+      body:
+        prompt: '{{prompt}}'
+      tokenEstimation:
+        enabled: true
+```
+
+This will use word-based estimation with a multiplier of 1.3 for both prompt and completion tokens.
+
+### Custom Multipliers
+
+Configure a custom multiplier for more accurate estimation based on your specific use case:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://example.com/api'
+      body:
+        prompt: '{{prompt}}'
+      tokenEstimation:
+        enabled: true
+        multiplier: 1.5 # Adjust based on your content complexity
+```
+
+**Multiplier Guidelines:**
+
+- Start with default `1.3` and adjust based on actual usage
+- Technical/code content may need higher multipliers (1.5-2.0)
+- Simple conversational text may work with lower multipliers (1.1-1.3)
+- Monitor actual vs. estimated usage to calibrate
+
+### Integration with Transform Response
+
+Token estimation works alongside response transforms. If your `transformResponse` returns token usage information, the estimation will be skipped:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://example.com/api'
+      tokenEstimation:
+        enabled: true # Will be ignored if transformResponse provides tokenUsage
+      transformResponse: |
+        {
+          output: json.choices[0].message.content,
+          tokenUsage: {
+            prompt: json.usage.prompt_tokens,
+            completion: json.usage.completion_tokens,
+            total: json.usage.total_tokens
+          }
+        }
+```
+
+### Custom Token Counting
+
+For sophisticated token counting, implement it in your `transformResponse` function:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://example.com/api'
+      transformResponse: |
+        (json, text, context) => {
+          // Use a proper tokenizer library for accuracy
+          const promptTokens = customTokenizer.encode(context.vars.prompt).length;
+          const completionTokens = customTokenizer.encode(json.response).length;
+          
+          return {
+            output: json.response,
+            tokenUsage: {
+              prompt: promptTokens,
+              completion: completionTokens,
+              total: promptTokens + completionTokens,
+              numRequests: 1
+            }
+          };
+        }
+```
+
+You can also load custom logic from a file:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://example.com/api'
+      transformResponse: 'file://token-counter.js'
+```
+
+Example `token-counter.js`:
+
+```javascript
+// Using a tokenizer library like 'tiktoken' or 'gpt-tokenizer'
+const { encode } = require('gpt-tokenizer');
+
+module.exports = (json, text, context) => {
+  const promptText = context.vars.prompt || '';
+  const responseText = json.response || text;
+
+  return {
+    output: responseText,
+    tokenUsage: {
+      prompt: encode(promptText).length,
+      completion: encode(responseText).length,
+      total: encode(promptText).length + encode(responseText).length,
+      numRequests: 1,
+    },
+  };
+};
+```
+
+### Configuration Options
+
+| Option     | Type    | Default                      | Description                                              |
+| ---------- | ------- | ---------------------------- | -------------------------------------------------------- |
+| enabled    | boolean | false (true in redteam mode) | Enable or disable token estimation                       |
+| multiplier | number  | 1.3                          | Multiplier applied to word count (adjust for complexity) |
+
+### Example: Cost Tracking
+
+Here's a complete example for cost tracking with token estimation:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://api.example.com/v1/generate'
+      method: POST
+      headers:
+        Authorization: 'Bearer {{env.API_KEY}}'
+        Content-Type: 'application/json'
+      body:
+        model: 'custom-model'
+        prompt: '{{prompt}}'
+        max_tokens: 100
+      tokenEstimation:
+        enabled: true
+        multiplier: 1.4 # Adjusted based on testing
+      transformResponse: |
+        {
+          output: json.generated_text,
+          cost: (json.usage?.total_tokens || 0) * 0.0001 // $0.0001 per token
+        }
+```
+
 ## Session management
 
 ### Server-side session management
@@ -592,7 +772,7 @@ providers:
 Accessing the headers or body:
 
 ```yaml
-sessionParser: data.body.sessionId'
+sessionParser: 'data.body.sessionId'
 ```
 
 ```yaml
@@ -730,6 +910,7 @@ Supported config options:
 | queryParams       | Record\<string, string> | Key-value pairs of query parameters to append to the URL.                                                                                                                           |
 | transformRequest  | string \| Function      | A function, string template, or file path to transform the prompt before sending it to the API.                                                                                     |
 | transformResponse | string \| Function      | Transforms the API response using a JavaScript expression (e.g., 'json.result'), function, or file path (e.g., 'file://parser.js'). Replaces the deprecated `responseParser` field. |
+| tokenEstimation   | object                  | Configuration for optional token usage estimation. See Token Estimation section above for details.                                                                                  |
 | maxRetries        | number                  | Maximum number of retry attempts for failed requests. Defaults to 4.                                                                                                                |
 | validateStatus    | Function                | A function that takes a status code and returns a boolean indicating if the response should be treated as successful. By default, accepts all status codes.                         |
 | signatureAuth     | object                  | Configuration for digital signature authentication. See Signature Auth Options below.                                                                                               |

@@ -52,15 +52,86 @@ pip install modelaudit[all]
 
 ModelAudit has different dependencies depending on which model formats you want to scan:
 
-| Model Format          | Required Packages                     |
-| --------------------- | ------------------------------------- |
-| Pickle files          | Built-in (no additional dependencies) |
-| TensorFlow SavedModel | `tensorflow`                          |
-| Keras H5              | `h5py`, `tensorflow`                  |
-| PyTorch               | `zipfile` (built-in)                  |
-| YAML manifests        | `pyyaml`                              |
+| Model Format          | Required Packages                                          |
+| --------------------- | ---------------------------------------------------------- |
+| Pickle files          | Built-in (no additional dependencies)                      |
+| TensorFlow SavedModel | `tensorflow`                                               |
+| TensorFlow Lite       | `tensorflow` (for tflite runtime)                          |
+| Keras H5              | `h5py`, `tensorflow`                                       |
+| PyTorch               | `zipfile` (built-in), `torch` for weight analysis          |
+| ONNX                  | `onnx`                                                     |
+| GGUF/GGML             | Built-in (no additional dependencies)                      |
+| Joblib                | `joblib`                                                   |
+| Flax/JAX              | `msgpack`                                                  |
+| NumPy arrays          | `numpy` (built-in)                                         |
+| SafeTensors           | `safetensors`                                              |
+| OCI/Docker containers | Built-in (no additional dependencies)                      |
+| YAML manifests        | `pyyaml`                                                   |
+| ZIP archives          | Built-in (no additional dependencies)                      |
+| Weight Distribution   | `numpy`, `scipy`, format-specific libs (torch, h5py, etc.) |
+| HuggingFace URLs      | `huggingface-hub`                                          |
 
 ## Advanced Usage
+
+### HuggingFace URL Scanning
+
+ModelAudit can scan models directly from HuggingFace without requiring manual downloads. This feature automatically handles model downloading, scanning, and cleanup.
+
+#### Supported URL Formats
+
+```bash
+# Standard HuggingFace URL
+modelaudit scan https://huggingface.co/bert-base-uncased
+
+# Short HuggingFace URL
+modelaudit scan https://hf.co/gpt2
+
+# HuggingFace protocol
+modelaudit scan hf://microsoft/resnet-50
+
+# Organization/model format
+modelaudit scan https://huggingface.co/facebook/bart-large
+
+# Single-component models (no organization)
+modelaudit scan https://huggingface.co/bert-base-uncased
+```
+
+#### How It Works
+
+1. **Automatic Download**: ModelAudit uses the `huggingface-hub` library to download the model to a temporary directory
+2. **Security Scanning**: All model files are scanned with the appropriate scanners based on their format
+3. **Automatic Cleanup**: Downloaded files are automatically removed after scanning completes
+4. **Multi-file Support**: Scans all files in the model repository (config.json, pytorch_model.bin, model.safetensors, etc.)
+
+#### Examples
+
+```bash
+# Scan a BERT model
+promptfoo scan-model https://huggingface.co/bert-base-uncased
+
+# Scan multiple models including HuggingFace URLs
+promptfoo scan-model local_model.pkl https://hf.co/gpt2 ./models/
+
+# Export results to JSON
+promptfoo scan-model hf://microsoft/resnet-50 --format json --output results.json
+
+# Scan with custom timeout (useful for large models)
+promptfoo scan-model https://huggingface.co/meta-llama/Llama-2-7b --timeout 600
+```
+
+#### Requirements
+
+To use HuggingFace URL scanning, install the required dependency:
+
+```bash
+pip install huggingface-hub
+```
+
+Or with ModelAudit's all dependencies:
+
+```bash
+pip install modelaudit[all]
+```
 
 ### Command Line Interface
 
@@ -80,6 +151,11 @@ modelaudit scan [OPTIONS] PATH [PATH...]
 | `--timeout`, `-t`   | Scan timeout in seconds (default: 300)                          |
 | `--verbose`, `-v`   | Enable verbose output                                           |
 | `--max-file-size`   | Maximum file size to scan in bytes                              |
+| `--max-total-size`  | Maximum total bytes to scan before stopping                     |
+
+:::info Feature Parity Achieved
+The Promptfoo CLI wrapper (`promptfoo scan-model`) now provides full feature parity with the standalone `modelaudit` command, including all advanced options.
+:::
 
 ### Configuration File
 
@@ -122,6 +198,38 @@ scanners:
     blacklist_patterns:
       - 'unsafe_model'
 
+  zip:
+    max_zip_depth: 5 # Maximum nesting depth for zip files
+    max_zip_entries: 10000 # Maximum number of entries per zip
+    max_entry_size: 10485760 # 10MB max size per extracted file
+
+  weight_distribution:
+    z_score_threshold: 3.0 # Threshold for outlier detection (higher = less sensitive)
+    cosine_similarity_threshold: 0.7 # Minimum similarity between neuron weight vectors
+    weight_magnitude_threshold: 3.0 # Standard deviations for extreme weight detection
+    llm_vocab_threshold: 10000 # Vocabulary size to identify LLM models
+    enable_llm_checks: false # Whether to scan large language models
+
+  pmml:
+    has_defusedxml: true # Whether defusedxml is available for secure XML parsing
+    max_file_size: 50000000 # 50MB max size for PMML files
+
+  numpy:
+    max_array_bytes: 1073741824 # 1GB max array size
+    max_dimensions: 32 # Maximum number of array dimensions
+    max_dimension_size: 100000000 # Maximum size per dimension
+    max_itemsize: 1024 # Maximum size per array element in bytes
+
+  joblib:
+    max_decompression_ratio: 100.0 # Maximum compression ratio before flagging as bomb
+    max_decompressed_size: 104857600 # 100MB max decompressed size
+    max_file_read_size: 104857600 # 100MB max file read size
+
+  flax_msgpack:
+    max_blob_bytes: 52428800 # 50MB max binary blob size
+    max_recursion_depth: 100 # Maximum nesting depth
+    max_items_per_container: 10000 # Maximum items per container
+
 # Global settings
 max_file_size: 1073741824 # 1GB
 timeout: 600 # 10 minutes
@@ -130,8 +238,71 @@ timeout: 600 # 10 minutes
 Use the configuration file with:
 
 ```bash
+# Standalone command (config files only supported here)
 modelaudit scan --config modelaudit-config.yaml path/to/models/
+
+# Promptfoo CLI (config files not supported - use CLI options instead)
+promptfoo scan-model --verbose --max-file-size 1000000 path/to/models/
 ```
+
+## Promptfoo vs Standalone
+
+When using ModelAudit through Promptfoo, you get additional benefits:
+
+- **Web Interface**: Access via `promptfoo view` at `/model-audit` (see [overview](./index.md#web-interface) for details)
+- **Integrated Workflows**: Seamless integration with Promptfoo evaluation pipelines
+- **Unified Installation**: Single `npm install` gets both Promptfoo and ModelAudit integration
+
+## Advanced Security Features
+
+### File Type Validation
+
+ModelAudit performs comprehensive file type validation as a security measure:
+
+```bash
+# File type mismatches are flagged as potential security issues
+⚠ File type validation failed: extension indicates tensor_binary but magic bytes indicate pickle.
+   This could indicate file spoofing, corruption, or a security threat.
+```
+
+This helps detect:
+
+- **File spoofing attacks** where malicious files masquerade as legitimate model formats
+- **Corruption** that might indicate tampering
+- **Format confusion** that could lead to incorrect handling
+
+### Resource Exhaustion Protection
+
+Built-in protection against various resource exhaustion attacks:
+
+- **Zip bombs**: Detects suspicious compression ratios (>100x) in archives
+- **Decompression bombs**: Limits decompressed file sizes in joblib and other compressed formats
+- **Memory exhaustion**: Enforces limits on array sizes, tensor dimensions, and nested structures
+- **Infinite recursion**: Limits nesting depth in recursive file formats
+- **DoS prevention**: Enforces timeouts and maximum file sizes
+
+### Path Traversal Protection
+
+Automatic protection against path traversal attacks in archives:
+
+```bash
+🔴 Archive entry ../../etc/passwd attempted path traversal outside the archive
+```
+
+All archive scanners (ZIP, model archives, OCI) include path sanitization to prevent:
+
+- Directory traversal attacks (`../../../etc/passwd`)
+- Absolute path exploitation (`/etc/passwd`)
+- Windows path attacks (`C:\Windows\System32\`)
+
+### Executable Detection
+
+Sophisticated detection of embedded executables with validation:
+
+- **Windows PE files**: Detection including DOS stub signature validation
+- **Linux ELF files**: Magic byte verification and structure validation
+- **macOS Mach-O**: Multiple architecture support and validation
+- **Script detection**: Shell script shebangs and interpreter directives
 
 ## Integration with Development Workflows
 
@@ -146,9 +317,9 @@ repos:
     hooks:
       - id: modelaudit
         name: ModelAudit
-        entry: promptfoo scan-model
+        entry: modelaudit scan
         language: system
-        files: '\.(pkl|h5|pb|pt|pth|keras|hdf5|json|yaml|yml)$'
+        files: '\.(pkl|h5|pb|pt|pth|keras|hdf5|json|yaml|yml|zip|onnx|safetensors|bin|tflite|msgpack|pmml|joblib|npy|gguf|ggml)$'
         pass_filenames: true
 ```
 
@@ -169,6 +340,12 @@ on:
       - '**.pb'
       - '**.pt'
       - '**.pth'
+      - '**.zip'
+      - '**.onnx'
+      - '**.safetensors'
+      - '**.bin'
+      - '**.tflite'
+      - '**.msgpack'
 
 jobs:
   scan:
@@ -189,10 +366,10 @@ jobs:
       - name: Scan models
         run: modelaudit scan models/ --format json --output scan-results.json
 
-      - name: Check for errors
+      - name: Check for critical issues
         run: |
-          if grep -q '"severity":"error"' scan-results.json; then
-            echo "Security issues found in models!"
+          if grep -q '"severity":"critical"' scan-results.json; then
+            echo "Critical security issues found in models!"
             exit 1
           fi
 
@@ -213,7 +390,7 @@ model_security_scan:
   script:
     - pip install modelaudit[all]
     - modelaudit scan models/ --format json --output scan-results.json
-    - if grep -q '"severity":"error"' scan-results.json; then echo "Security issues found!"; exit 1; fi
+    - if grep -q '"severity":"critical"' scan-results.json; then echo "Critical security issues found!"; exit 1; fi
   artifacts:
     paths:
       - scan-results.json
@@ -226,6 +403,12 @@ model_security_scan:
       - '**/*.pb'
       - '**/*.pt'
       - '**/*.pth'
+      - '**/*.zip'
+      - '**/*.onnx'
+      - '**/*.safetensors'
+      - '**/*.bin'
+      - '**/*.tflite'
+      - '**/*.msgpack'
 ```
 
 ## Programmatic Usage
@@ -237,6 +420,9 @@ from modelaudit.core import scan_model_directory_or_file
 
 # Scan a single model
 results = scan_model_directory_or_file("path/to/model.pkl")
+
+# Scan a HuggingFace model URL
+results = scan_model_directory_or_file("https://huggingface.co/bert-base-uncased")
 
 # Check for issues
 if results["issues"]:
@@ -254,6 +440,27 @@ config = {
 }
 
 results = scan_model_directory_or_file("path/to/models/", **config)
+
+# Scan multiple sources including HuggingFace URLs
+sources = [
+    "local_model.pkl",
+    "https://hf.co/gpt2",
+    "hf://microsoft/resnet-50",
+    "./models/"
+]
+
+for source in sources:
+    results = scan_model_directory_or_file(source)
+    print(f"Scanning {source}: {len(results['issues'])} issues found")
+
+# Scan a ZIP archive with custom settings
+zip_config = {
+    "max_zip_depth": 3,  # Limit nesting depth
+    "max_zip_entries": 1000,  # Limit number of files
+    "max_entry_size": 5242880  # 5MB per file
+}
+
+results = scan_model_directory_or_file("dataset.zip", **zip_config)
 ```
 
 ## Extending ModelAudit
@@ -301,7 +508,7 @@ class CustomModelScanner(BaseScanner):
         except Exception as e:
             result.add_issue(
                 f"Error scanning file: {str(e)}",
-                severity=IssueSeverity.ERROR,
+                severity=IssueSeverity.CRITICAL,
                 location=path,
                 details={"exception": str(e)}
             )
@@ -371,3 +578,11 @@ results = scan_model_directory_or_file("path/to/custom_model.mymodel")
    ```
 
    Solution: Ensure the file is in a supported format or create a custom scanner for the format.
+
+5. **Binary File Format Detection**
+
+   ```
+   Info: Detected safetensors format in .bin file
+   ```
+
+   Note: ModelAudit automatically detects the actual format of `.bin` files and applies the appropriate scanner. Supported formats include pickle, SafeTensors, ONNX, and raw tensor data. The binary scanner also detects embedded executables with PE file detection.

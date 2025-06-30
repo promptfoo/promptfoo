@@ -16,6 +16,8 @@ This is a simple example that demonstrates the basic functionality of promptfoo.
 export OPENAI_API_KEY=your-key-here
 ```
 
+_Tip: you can also put this key in a `.env` file. Be sure not to commit it to git._
+
 2. Run the evaluation:
 
 ```bash
@@ -27,7 +29,7 @@ promptfoo eval
 This example:
 
 - Tests two different ways to phrase a translation prompt
-- Compares outputs between GPT-4o and GPT-4o-mini
+- Compares outputs between GPT-4.1 and o4-mini
 - Uses two test cases with different languages and inputs
 
 The configuration in `promptfooconfig.yaml` shows:

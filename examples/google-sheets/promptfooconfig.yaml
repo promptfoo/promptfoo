@@ -5,7 +5,7 @@ prompts:
   - file://prompts.txt
 
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
 
 # Public sheet, or requires a service account with read access
 tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing

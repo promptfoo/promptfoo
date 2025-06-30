@@ -3,6 +3,7 @@ import dedent from 'dedent';
 import fs from 'fs';
 import path from 'path';
 import { fetchWithCache } from '../../src/cache';
+import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
 import {
@@ -15,6 +16,7 @@ import {
   processJsonBody,
   urlEncodeRawRequestPath,
   processTextBody,
+  estimateTokenCount,
 } from '../../src/providers/http';
 import { REQUEST_TIMEOUT_MS } from '../../src/providers/shared';
 import { maybeLoadFromExternalFile } from '../../src/util/file';
@@ -50,6 +52,7 @@ jest.mock('../../src/esm', () => ({
 
 jest.mock('../../src/cliState', () => ({
   basePath: '/mock/base/path',
+  config: {},
 }));
 
 describe('HttpProvider', () => {
@@ -3281,5 +3284,268 @@ describe('urlEncodeRawRequestPath', () => {
       const result = urlEncodeRawRequestPath(rawRequest);
       expect(result).toBe(expected);
     }
+  });
+});
+
+describe('Token Estimation', () => {
+  describe('estimateTokenCount', () => {
+    it('should count tokens using word-based method', () => {
+      const text = 'Hello world this is a test';
+      const result = estimateTokenCount(text, 1.3);
+      expect(result).toBe(Math.ceil(6 * 1.3)); // 6 words * 1.3 = 7.8, ceil = 8
+    });
+
+    it('should handle empty text', () => {
+      expect(estimateTokenCount('', 1.3)).toBe(0);
+      expect(estimateTokenCount(null as any, 1.3)).toBe(0);
+      expect(estimateTokenCount(undefined as any, 1.3)).toBe(0);
+    });
+
+    it('should filter out empty words', () => {
+      const text = 'hello   world    test'; // Multiple spaces
+      const result = estimateTokenCount(text, 1.0);
+      expect(result).toBe(3); // Should count 3 words, not split on every space
+    });
+
+    it('should use default multiplier when not provided', () => {
+      const text = 'hello world';
+      const result = estimateTokenCount(text);
+      expect(result).toBe(Math.ceil(2 * 1.3)); // Default multiplier is 1.3
+    });
+  });
+
+  describe('HttpProvider with token estimation', () => {
+    afterEach(() => {
+      delete cliState.config;
+    });
+    it('should not estimate tokens when disabled', async () => {
+      const provider = new HttpProvider('http://test.com', {
+        config: {
+          method: 'POST',
+          body: { prompt: '{{prompt}}' },
+          // tokenEstimation not configured, should be disabled by default
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ result: 'Hello world' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.tokenUsage).toBeUndefined();
+    });
+
+    it('should enable token estimation by default in redteam mode', async () => {
+      cliState.config = { redteam: {} } as any;
+
+      const provider = new HttpProvider('http://test.com', {
+        config: {
+          method: 'POST',
+          body: { prompt: '{{prompt}}' },
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ result: 'Hello world' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.tokenUsage).toBeDefined();
+      expect(result.tokenUsage!.prompt).toBe(Math.ceil(2 * 1.3));
+      expect(result.tokenUsage!.completion).toBe(Math.ceil(2 * 1.3));
+      expect(result.tokenUsage!.total).toBe(
+        result.tokenUsage!.prompt! + result.tokenUsage!.completion!,
+      );
+    });
+
+    it('should estimate tokens when enabled with default settings', async () => {
+      const provider = new HttpProvider('http://test.com', {
+        config: {
+          method: 'POST',
+          body: { prompt: '{{prompt}}' },
+          tokenEstimation: {
+            enabled: true,
+          },
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ result: 'Hello world response' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('Test prompt here');
+
+      expect(result.tokenUsage).toBeDefined();
+      expect(result.tokenUsage!.prompt).toBe(Math.ceil(3 * 1.3)); // "Test prompt here" = 3 words * 1.3
+      expect(result.tokenUsage!.completion).toBe(Math.ceil(3 * 1.3)); // "Hello world response" = 3 words * 1.3
+      expect(result.tokenUsage!.total).toBe(
+        result.tokenUsage!.prompt! + result.tokenUsage!.completion!,
+      );
+      expect(result.tokenUsage!.numRequests).toBe(1);
+    });
+
+    it('should use custom multiplier', async () => {
+      const provider = new HttpProvider('http://test.com', {
+        config: {
+          method: 'POST',
+          body: { prompt: '{{prompt}}' },
+          tokenEstimation: {
+            enabled: true,
+            multiplier: 2.0,
+          },
+        },
+      });
+
+      const mockResponse = {
+        data: 'Simple response', // Plain text response
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('Hello world');
+
+      expect(result.tokenUsage!.prompt).toBe(Math.ceil(2 * 2.0)); // 2 words * 2.0 = 4
+      expect(result.tokenUsage!.completion).toBe(Math.ceil(2 * 2.0)); // 2 words * 2.0 = 4
+      expect(result.tokenUsage!.total).toBe(8);
+    });
+
+    it('should not override existing tokenUsage from transformResponse', async () => {
+      const provider = new HttpProvider('http://test.com', {
+        config: {
+          method: 'POST',
+          body: { prompt: '{{prompt}}' },
+          tokenEstimation: {
+            enabled: true,
+          },
+          transformResponse: () => ({
+            output: 'Test response',
+            tokenUsage: {
+              prompt: 100,
+              completion: 200,
+              total: 300,
+            },
+          }),
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ result: 'Hello world' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('Test prompt');
+
+      // Should use the tokenUsage from transformResponse, not estimation
+      expect(result.tokenUsage!.prompt).toBe(100);
+      expect(result.tokenUsage!.completion).toBe(200);
+      expect(result.tokenUsage!.total).toBe(300);
+    });
+
+    it('should work with raw request mode', async () => {
+      const provider = new HttpProvider('http://test.com', {
+        config: {
+          request: dedent`
+            POST /api HTTP/1.1
+            Host: test.com
+            Content-Type: application/json
+
+            {"prompt": "{{prompt}}"}
+          `,
+          tokenEstimation: {
+            enabled: true,
+          },
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ message: 'Success response' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('Hello world');
+
+      expect(result.tokenUsage).toBeDefined();
+      expect(result.tokenUsage!.prompt).toBeGreaterThan(0);
+      expect(result.tokenUsage!.completion).toBeGreaterThan(0);
+      expect(result.tokenUsage!.total).toBe(
+        result.tokenUsage!.prompt! + result.tokenUsage!.completion!,
+      );
+    });
+
+    it('should handle object output from transformResponse', async () => {
+      const provider = new HttpProvider('http://test.com', {
+        config: {
+          method: 'POST',
+          body: { prompt: '{{prompt}}' },
+          tokenEstimation: {
+            enabled: true,
+          },
+          transformResponse: 'json.message',
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ message: 'Hello world' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.tokenUsage).toBeDefined();
+      // Should use raw text when output is not a string
+      expect(result.tokenUsage!.completion).toBeGreaterThan(0);
+    });
+
+    it('should fall back to raw text when transformResponse returns an object', async () => {
+      const provider = new HttpProvider('http://test.com', {
+        config: {
+          method: 'POST',
+          body: { prompt: '{{prompt}}' },
+          tokenEstimation: {
+            enabled: true,
+          },
+          transformResponse: 'json', // returns the whole object, not a string
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ message: 'Hello world' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.tokenUsage).toBeDefined();
+      // Should use raw text when output is not a string
+      expect(result.tokenUsage!.completion).toBeGreaterThan(0);
+    });
   });
 });
