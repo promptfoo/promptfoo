@@ -243,12 +243,10 @@ Providers are defined in TypeScript. We also provide language bindings for Pytho
 Assertions define different ways to compare and validate the output of an LLM against expected results. To contribute a new assertion:
 
 1. **Define the Assertion Type**:
-
    - Add your new assertion type to the `BaseAssertionTypesSchema` enum in `src/types/index.ts`.
    - Run `npm run jsonSchema:generate` to update the JSON schema located at `site/static/config-schema.json`
 
 2. **Implement the Assertion Handler**:
-
    - Create a new file in `src/assertions/` for your assertion logic.
    - Implement a handler function that takes `AssertionParams` and returns a `GradingResult`.
 
@@ -293,7 +291,6 @@ Assertions define different ways to compare and validate the output of an LLM ag
    ```
 
 3. **Register the Assertion Handler**:
-
    - In `src/assertions/index.ts`, import your handler function and add it to the handlers mapping.
 
    ```typescript
@@ -304,9 +301,7 @@ Assertions define different ways to compare and validate the output of an LLM ag
    ```
 
 4. **Document Your Assertion**:
-
    - Update the appropriate documentation files:
-
      - For standard assertions, add details to `site/docs/configuration/expected-outputs/deterministic.md`
      - Include your assertion in the reference table in `site/docs/configuration/expected-outputs/index.md`
 
@@ -437,14 +432,12 @@ Note: releases are only issued by maintainers. If you need to to release a new v
 As a maintainer, when you are ready to release a new version:
 
 1. From main, run `npm version <minor|patch>`. We do not increment the major version per our adoption of [0ver](https://0ver.org/). This will automatically:
-
    - Pull latest changes from main branch
    - Update `package.json`, `package-lock.json` and `CITATION.cff` with the new version
    - Create a new branch named `chore/bump-version-<new-version>`
    - Create a pull request titled `"chore: bump version <new-version>"`
 
    When creating a new release version, please follow these guidelines:
-
    - Patch will bump the version by `0.0.1` and is used for bug fixes and minor features
    - Minor will bump the version by `0.1.0` and is used for major features and breaking changes
 
@@ -457,7 +450,6 @@ As a maintainer, when you are ready to release a new version:
 2. Once your PR is approved and landed, a version tag will be created automatically by a GitHub Action. After the version tag has been created, generate a [new release](https://github.com/promptfoo/promptfoo/releases/new) based on the tagged version.
 
 3. Cleanup the release notes. You can look at [this](https://github.com/promptfoo/promptfoo/releases/tag/0.103.13) release as an example
-
    - Break up each PR in the release into one of the following 5 sections (as applicable)
      - New Features
      - Bug Fixes

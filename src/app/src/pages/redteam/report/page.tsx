@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import CrispChat from '@app/components/CrispChat';
 import { UserProvider } from '@app/contexts/UserContext';
+import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useUserStore } from '@app/stores/userStore';
 import Report from './components/Report';
 import ReportIndex from './components/ReportIndex';
@@ -11,6 +12,10 @@ export default function ReportPage() {
   const { email, isLoading, fetchEmail } = useUserStore();
   const searchParams = new URLSearchParams(window.location.search);
   const evalId = searchParams.get('evalId');
+  usePageMeta({
+    title: evalId ? 'Red team report' : 'Red team reports',
+    description: 'View or browse red team results',
+  });
 
   useEffect(() => {
     fetchEmail();

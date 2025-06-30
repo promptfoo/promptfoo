@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import logoPanda from '@app/assets/logo-panda.svg';
+import { usePageMeta } from '@app/hooks/usePageMeta';
 import useApiConfig from '@app/stores/apiConfig';
 import { Terminal as TerminalIcon } from '@mui/icons-material';
 import LanguageIcon from '@mui/icons-material/Language';
@@ -99,6 +100,7 @@ export default function LauncherPage() {
   const isLargeScreen = useMediaQuery('(min-width:1200px)');
   const { status: healthStatus, checkHealth } = useApiHealth();
   const { apiBaseUrl, setApiBaseUrl, enablePersistApiBaseUrl } = useApiConfig();
+  usePageMeta({ title: 'Launcher', description: 'Connect to your API server' });
 
   useEffect(() => {
     if (!apiBaseUrl) {

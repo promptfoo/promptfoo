@@ -19,7 +19,6 @@ The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to
    ```
 
 3. The AWS SDK will automatically pull credentials from the following locations:
-
    - IAM roles on EC2
    - `~/.aws/credentials`
    - `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` environment variables
