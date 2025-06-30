@@ -139,8 +139,6 @@ promptfoo can load test cases directly from HuggingFace datasets. To use a datas
 tests: huggingface://datasets/fka/awesome-chatgpt-prompts
 ```
 
-> Note: Dataset rows are automatically cached to a local SQLite database for faster subsequent access. The cache is stored in your system's temporary directory.
-
 You can customize the dataset split and other parameters using query parameters:
 
 ```yaml
@@ -167,58 +165,20 @@ tests: huggingface://datasets/rajpurkar/squad
 
 The dataset loader supports all query parameters from the [HuggingFace Datasets API](https://huggingface.co/docs/datasets-server/api_reference#get-apirows). Common parameters include:
 
-| Parameter | Description                                   | Default     |
-| --------- | --------------------------------------------- | ----------- |
-| `split`   | Dataset split to load (train/test/validation) | `test`      |
-| `config`  | Dataset configuration name                    | `default`   |
-| `limit`   | Maximum number of rows to fetch               | (no limit)  |
-| `sql`     | SQL query to filter the dataset               | (no filter) |
+| Parameter | Description                                   | Default    |
+| --------- | --------------------------------------------- | ---------- |
+| `split`   | Dataset split to load (train/test/validation) | `test`     |
+| `config`  | Dataset configuration name                    | `default`  |
+| `limit`   | Maximum number of rows to fetch               | (no limit) |
 
 Any additional query parameters will be passed directly to the HuggingFace Datasets API.
 
-### SQL Filtering
-
-You can filter the dataset using SQL SELECT statements in the `sql` query parameter. The SQL filter is applied after fetching the data and supports basic WHERE clause conditions.
-
-Example queries:
-
-```yaml
-# Filter out rows with images
-tests: huggingface://datasets/example?sql=SELECT * FROM dataset WHERE image IS NULL
-
-# Filter for specific types
-tests: huggingface://datasets/example?sql=SELECT * FROM dataset WHERE type = 'multiple_choice'
-
-# Complex conditions
-tests: huggingface://datasets/example?sql=SELECT * FROM dataset WHERE (type = 'text' OR type = 'mc') AND image IS NULL
-```
-
-Supported SQL features:
-
-- SELECT statements only (the FROM clause is ignored)
-- Basic WHERE conditions with:
-  - Equality (`=`) and inequality (`!=`)
-  - NULL checks (`IS NULL`, `IS NOT NULL`)
-  - AND/OR combinations
-  - Column references and literal values
-
-Note: The SQL query is used only for filtering. The SELECT column list and other clauses (GROUP BY, ORDER BY, etc.) are ignored.
-
-### Caching
-
-To optimize performance and reduce API calls, promptfoo automatically caches downloaded datasets in your system's temporary directory. The cache uses a unique identifier based on the dataset owner, repository, and split. This means:
-
-- Subsequent runs will use the cached data if available
-- The operating system manages cleanup of temporary files
-- No manual cache management is required
-- Cache files are stored with the prefix `promptfoo-dataset-` in your system's temp directory
-
 ### Authentication
 
-If you need to access private datasets or want to increase your rate limits, you can authenticate using your HuggingFace token. Set the `HUGGING_FACE_HUB_TOKEN` environment variable with your token:
+If you need to access private datasets or want to increase your rate limits, you can authenticate using your HuggingFace token. Set the `HF_TOKEN` environment variable with your token:
 
 ```bash
-export HUGGING_FACE_HUB_TOKEN=your_token_here
+export HF_TOKEN=your_token_here
 ```
 
 ### Example Configuration
@@ -232,7 +192,7 @@ prompts:
   - 'Act as {{act}}. {{prompt}}'
 
 providers:
-  - id: openai:gpt-4.1-mini
+  - id: openai:gpt-4o-mini
 
 tests: huggingface://datasets/fka/awesome-chatgpt-prompts?split=train&limit=50
 ```
